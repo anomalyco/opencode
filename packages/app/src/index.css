@@ -5,3 +5,19 @@
     cursor: default;
   }
 }
+
+/* Agent Activity Animations */
+@keyframes slideUpFade {
+    from { 
+        opacity: 0; 
+        transform: translateY(20px) scale(0.96); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1); 
+    }
+}
+
+.animate-in {
+    animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

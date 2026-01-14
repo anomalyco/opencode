@@ -1,122 +1,155 @@
+import { BusinessPulse } from "@/components/business-pulse"
+import { AttentionCard } from "@/components/attention-card"
+import { DecisionItem } from "@/components/decision-item"
 import { useGlobalSync } from "@/context/global-sync"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
-import { Button } from "@opencode-ai/ui/button"
-import { Logo } from "@opencode-ai/ui/logo"
-import { useLayout } from "@/context/layout"
+import { createMemo, Show } from "solid-js"
+import { Icon } from "@opencode-ai/ui/icon"
+import { useServer } from "@/context/server"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { Icon } from "@opencode-ai/ui/icon"
-import { usePlatform } from "@/context/platform"
-import { DateTime } from "luxon"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { DialogSelectDirectory } from "@/components/dialog-select-directory"
-import { DialogSelectServer } from "@/components/dialog-select-server"
-import { useServer } from "@/context/server"
+import { useLayout } from "@/context/layout"
 
 export default function Home() {
   const sync = useGlobalSync()
-  const layout = useLayout()
-  const platform = usePlatform()
-  const dialog = useDialog()
-  const navigate = useNavigate()
   const server = useServer()
-  const homedir = createMemo(() => sync.data.path.home)
+  const navigate = useNavigate()
+  const layout = useLayout()
 
-  function openProject(directory: string) {
-    layout.projects.open(directory)
-    navigate(`/${base64Encode(directory)}`)
-  }
+  const handleAsk = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
+    if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+      const value = e.currentTarget.value.trim()
 
-  async function chooseProject() {
-    function resolve(result: string | string[] | null) {
-      if (Array.isArray(result)) {
-        for (const directory of result) {
-          openProject(directory)
-        }
-      } else if (result) {
-        openProject(result)
+      // Find the most recent project or defalt to first
+      const recentProject = sync.data.project.toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))[0]
+
+      if (recentProject) {
+        layout.projects.open(recentProject.worktree)
+        navigate(`/${base64Encode(recentProject.worktree)}/session/new?prompt=${encodeURIComponent(value)}`)
+      } else {
+        // Fallback if no projects exist (unlikely in this persona flow but safe)
+        alert("Please create a project first to start an agent.")
       }
-    }
-
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
-      const result = await platform.openDirectoryPickerDialog?.({
-        title: "Open project",
-        multiple: true,
-      })
-      resolve(result)
-    } else {
-      dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
-        () => resolve(null),
-      )
     }
   }
 
   return (
-    <div class="mx-auto mt-55 w-full md:w-auto px-4">
-      <Logo class="md:w-xl opacity-12" />
-      <Button
-        size="large"
-        variant="ghost"
-        class="mt-4 mx-auto text-14-regular text-text-weak"
-        onClick={() => dialog.show(() => <DialogSelectServer />)}
-      >
-        <div
-          classList={{
-            "size-2 rounded-full": true,
-            "bg-icon-success-base": server.healthy() === true,
-            "bg-icon-critical-base": server.healthy() === false,
-            "bg-border-weak-base": server.healthy() === undefined,
-          }}
-        />
-        {server.name}
-      </Button>
-      <Switch>
-        <Match when={sync.data.project.length > 0}>
-          <div class="mt-20 w-full flex flex-col gap-4">
-            <div class="flex gap-2 items-center justify-between pl-3">
-              <div class="text-14-medium text-text-strong">Recent projects</div>
-              <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
-                Open project
-              </Button>
+    <div class="bg-white min-h-screen text-black mx-auto mt-16 w-full max-w-2xl px-6 pb-20">
+
+      {/* 1. BUSINESS PULSE */}
+      <BusinessPulse
+        summary="You made ₹4.2L this week. Margins are stable."
+        detail="Amazon volume is up, but D2C conversion slipped slightly."
+        trend="neutral"
+      />
+
+      <div class="w-full h-px bg-border-weak-base my-8 opacity-50" />
+
+      {/* 2. WHAT NEEDS ATTENTION */}
+      <div class="flex flex-col gap-6 mb-12">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-md">
+              <Icon name="bubble-5" size="small" />
             </div>
-            <ul class="flex flex-col gap-2">
-              <For
-                each={sync.data.project
-                  .toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
-                  .slice(0, 5)}
-              >
-                {(project) => (
-                  <Button
-                    size="large"
-                    variant="ghost"
-                    class="text-14-mono text-left justify-between px-3"
-                    onClick={() => openProject(project.worktree)}
-                  >
-                    {project.worktree.replace(homedir(), "~")}
-                    <div class="text-14-regular text-text-weak">
-                      {DateTime.fromMillis(project.time.updated ?? project.time.created).toRelative()}
-                    </div>
-                  </Button>
-                )}
-              </For>
-            </ul>
+            <h3 class="text-xs font-bold tracking-widest uppercase" style={{ color: "#18181b" }}>Needs Attention</h3>
           </div>
-        </Match>
-        <Match when={true}>
-          <div class="mt-30 mx-auto flex flex-col items-center gap-3">
-            <Icon name="folder-add-left" size="large" />
-            <div class="flex flex-col gap-1 items-center justify-center">
-              <div class="text-14-medium text-text-strong">No recent projects</div>
-              <div class="text-12-regular text-text-weak">Get started by opening a local project</div>
+          <span class="text-xs font-bold bg-gradient-to-r from-amber-100 to-orange-100 text-amber-900 px-3 py-1.5 rounded-full border-2 border-amber-400 shadow-sm">3 items</span>
+        </div>
+
+        <div class="flex flex-col gap-4">
+          <AttentionCard
+            title="Margin drop on 'Wool Blend Kurta'"
+            impact="Ad spend increased 15% without sales lift."
+            action="Review Ads"
+            urgency="high"
+          />
+          <AttentionCard
+            title="Competitor Price Match"
+            impact="FabIndia is undercutting you by ₹150 on Amazon."
+            action="Simulate Price Cut"
+            urgency="medium"
+          />
+          <AttentionCard
+            title="Low Inventory Warning"
+            impact="Blue Linen Shirts will stock out in 4 days."
+            action="Restock Strategy"
+            urgency="medium"
+          />
+        </div>
+      </div>
+
+      {/* 3. DECISIONS FOR TODAY */}
+      <div class="flex flex-col gap-4 mb-16">
+        <div class="flex items-center gap-2.5 mb-2">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white shadow-md">
+            <Icon name="brain" size="small" />
+          </div>
+          <h3 class="text-xs font-bold tracking-widest uppercase" style={{ color: "#18181b" }}>Decisions You Can Make Today</h3>
+        </div>
+
+        <div class="flex flex-col divide-y divide-border-weak-base/50 bg-white border border-border-weak-base rounded-xl overflow-hidden shadow-sm">
+          <div class="px-4 hover:bg-surface-base transition-colors">
+            <DecisionItem
+              question="Should I clear out winter inventory?"
+              impact="Calculated Risk: Low revenue impact, releases ₹40k cash flow."
+            />
+          </div>
+          <div class="px-4 hover:bg-surface-base transition-colors">
+            <DecisionItem
+              question="Should I double down on Instagram Ads?"
+              impact="Projected: +20% sales volume, -5% margin."
+            />
+          </div>
+          <div class="px-4 hover:bg-surface-base transition-colors">
+            <DecisionItem
+              question="Why did Flipkart returns spike?"
+              impact="Root cause analysis ready for review."
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Subtle Divider */}
+      <div class="w-full h-px bg-gradient-to-r from-transparent via-zinc-200 to-transparent my-8" />
+
+      {/* 4. SUBTLE ENTRY */}
+      <div class="relative group mt-4">
+        {/* Subtle background glow on focus */}
+        <div class="absolute -inset-1 bg-gradient-to-r from-blue-50 to-emerald-50 rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-sm -z-10" />
+
+        <div class="relative bg-white border border-zinc-200 rounded-xl shadow-sm hover:shadow-md group-focus-within:shadow-lg group-focus-within:border-blue-300 transition-all duration-200">
+          <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+            <Icon name="magnifying-glass" class="text-zinc-400 group-focus-within:text-blue-600 transition-colors" size="small" />
+          </div>
+
+          <input
+            type="text"
+            placeholder="Ask a question about your business..."
+            onKeyDown={handleAsk}
+            style={{ color: "black", opacity: 1 }}
+            class="w-full bg-transparent rounded-xl py-4 pl-12 pr-24 text-black placeholder:text-zinc-400 outline-none text-base font-medium"
+          />
+
+          <div class="absolute inset-y-0 right-4 flex items-center gap-2">
+            <div class="hidden group-focus-within:flex items-center gap-1.5 text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">
+              <div class="px-2 py-1 bg-zinc-100 border border-zinc-200 rounded-md shadow-sm">
+                <span class="text-zinc-700">↵</span>
+              </div>
+              <span>to ask</span>
             </div>
-            <div />
-            <Button class="px-3" onClick={chooseProject}>
-              Open project
-            </Button>
           </div>
-        </Match>
-      </Switch>
+        </div>
+      </div>
+
+      <div class="mt-8 flex justify-center items-center gap-3 text-[10px] text-zinc-400 uppercase tracking-widest font-medium">
+        <span>ShopOS v1.2</span>
+        <span class="w-1 h-1 rounded-full bg-zinc-300" />
+        <span class="flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          {server.name} Active
+        </span>
+      </div>
+
     </div>
   )
 }

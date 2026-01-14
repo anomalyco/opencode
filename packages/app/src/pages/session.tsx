@@ -1,1701 +1,510 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
-import { createMediaQuery } from "@solid-primitives/media"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Dynamic } from "solid-js/web"
-import { useLocal } from "@/context/local"
-import { selectionFromLines, useFile, type SelectedLineRange } from "@/context/file"
-import { createStore } from "solid-js/store"
-import { PromptInput } from "@/components/prompt-input"
-import { SessionContextUsage } from "@/components/session-context-usage"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Button } from "@opencode-ai/ui/button"
+import { createMemo, For, Show, createSignal, onMount } from "solid-js"
+import { useGlobalSync } from "@/context/global-sync"
+import { useParams, useNavigate, useSearchParams } from "@solidjs/router"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { useCodeComponent } from "@opencode-ai/ui/context/code"
-import { SessionTurn } from "@opencode-ai/ui/session-turn"
-import { createAutoScroll } from "@opencode-ai/ui/hooks"
-import { SessionReview } from "@opencode-ai/ui/session-review"
-import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
+import { Button } from "@opencode-ai/ui/button"
 
-import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
-import type { DragEvent } from "@thisbeyond/solid-dnd"
-import { useSync } from "@/context/sync"
-import { useTerminal, type LocalPTY } from "@/context/terminal"
-import { useLayout } from "@/context/layout"
-import { Terminal } from "@/components/terminal"
-import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { DialogSelectFile } from "@/components/dialog-select-file"
-import { DialogSelectModel } from "@/components/dialog-select-model"
-import { DialogSelectMcp } from "@/components/dialog-select-mcp"
-import { DialogFork } from "@/components/dialog-fork"
-import { useCommand } from "@/context/command"
-import { useNavigate, useParams } from "@solidjs/router"
-import { UserMessage } from "@opencode-ai/sdk/v2"
-import type { FileDiff } from "@opencode-ai/sdk/v2/client"
-import { useSDK } from "@/context/sdk"
-import { usePrompt } from "@/context/prompt"
-import { extractPromptFromParts } from "@/utils/prompt"
-import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
-import { usePermission } from "@/context/permission"
-import { showToast } from "@opencode-ai/ui/toast"
-import {
-  SessionHeader,
-  SessionContextTab,
-  SortableTab,
-  FileVisual,
-  SortableTerminalTab,
-  NewSessionView,
-} from "@/components/session"
-import { usePlatform } from "@/context/platform"
-import { navMark, navParams } from "@/utils/perf"
-import { same } from "@/utils/same"
-
-type DiffStyle = "unified" | "split"
-
-const handoff = {
-  prompt: "",
-  terminals: [] as string[],
-  files: {} as Record<string, SelectedLineRange | null>,
+// --- Dynamic Data Types ---
+type AnalysisScenario = {
+  type: 'pricing' | 'inventory' | 'marketing' | 'general'
+  title: string
+  summary: string
+  recommendation: string
+  breakdown: {
+    headers: string[]
+    rows: Array<{
+      label: string
+      values: Array<{ text: string, type: 'positive' | 'negative' | 'neutral', icon?: string, rotate?: boolean }>
+    }>
+  }
+  assumptions: string
+  actions: Array<{
+    id: string
+    title: string
+    badge: string
+    detail: string
+  }>
 }
 
-interface SessionReviewTabProps {
-  diffs: () => FileDiff[]
-  view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
-  diffStyle: DiffStyle
-  onDiffStyleChange?: (style: DiffStyle) => void
-  onViewFile?: (file: string) => void
-  classes?: {
-    root?: string
-    header?: string
-    container?: string
-  }
-}
-
-function SessionReviewTab(props: SessionReviewTabProps) {
-  let scroll: HTMLDivElement | undefined
-  let frame: number | undefined
-  let pending: { x: number; y: number } | undefined
-
-  const restoreScroll = (retries = 0) => {
-    const el = scroll
-    if (!el) return
-
-    const s = props.view().scroll("review")
-    if (!s) return
-
-    // Wait for content to be scrollable - content may not have rendered yet
-    if (el.scrollHeight <= el.clientHeight && retries < 10) {
-      requestAnimationFrame(() => restoreScroll(retries + 1))
-      return
-    }
-
-    if (el.scrollTop !== s.y) el.scrollTop = s.y
-    if (el.scrollLeft !== s.x) el.scrollLeft = s.x
-  }
-
-  const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-    pending = {
-      x: event.currentTarget.scrollLeft,
-      y: event.currentTarget.scrollTop,
-    }
-    if (frame !== undefined) return
-
-    frame = requestAnimationFrame(() => {
-      frame = undefined
-
-      const next = pending
-      pending = undefined
-      if (!next) return
-
-      props.view().setScroll("review", next)
-    })
-  }
-
-  createEffect(
-    on(
-      () => props.diffs().length,
-      () => {
-        requestAnimationFrame(restoreScroll)
-      },
-      { defer: true },
-    ),
-  )
-
-  onCleanup(() => {
-    if (frame === undefined) return
-    cancelAnimationFrame(frame)
-  })
-
-  return (
-    <SessionReview
-      scrollRef={(el) => {
-        scroll = el
-        restoreScroll()
-      }}
-      onScroll={handleScroll}
-      open={props.view().review.open()}
-      onOpenChange={props.view().review.setOpen}
-      classes={{
-        root: props.classes?.root ?? "pb-40",
-        header: props.classes?.header ?? "px-6",
-        container: props.classes?.container ?? "px-6",
-      }}
-      diffs={props.diffs()}
-      diffStyle={props.diffStyle}
-      onDiffStyleChange={props.onDiffStyleChange}
-      onViewFile={props.onViewFile}
-    />
-  )
-}
-
-export default function Page() {
-  const layout = useLayout()
-  const local = useLocal()
-  const file = useFile()
-  const sync = useSync()
-  const terminal = useTerminal()
-  const dialog = useDialog()
-  const codeComponent = useCodeComponent()
-  const command = useCommand()
-  const platform = usePlatform()
+export default function SessionPage() {
   const params = useParams()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const sdk = useSDK()
-  const prompt = usePrompt()
-  const permission = usePermission()
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey()))
-  const view = createMemo(() => layout.view(sessionKey()))
+  const [stage, setStage] = createSignal(0)
+  const [executionStatus, setExecutionStatus] = createSignal<'idle' | 'running' | 'completed'>('idle')
+  const [executedAction, setExecutedAction] = createSignal("")
+  const [executionLog, setExecutionLog] = createSignal<string[]>([])
 
-  if (import.meta.env.DEV) {
-    createEffect(
-      on(
-        () => [params.dir, params.id] as const,
-        ([dir, id], prev) => {
-          if (!id) return
-          navParams({ dir, from: prev?.[1], to: id })
+  // Detailed process steps state
+  type ActivityStep = {
+    id: string
+    type: 'thinking' | 'reading' | 'analyzing' | 'writing' | 'done'
+    label: string
+    detail: string
+    status: 'pending' | 'active' | 'completed'
+  }
+  const [processSteps, setProcessSteps] = createSignal<ActivityStep[]>([])
+
+  // Prioritize search param 'prompt' (from ?prompt=...), fallback to route param, then default
+  const rawPrompt = searchParams.prompt || params.prompt || "Analysis"
+  const promptText = decodeURIComponent(rawPrompt)
+
+  // --- Intelligence Engine (Simulated) ---
+  const data = createMemo<AnalysisScenario>(() => {
+    const p = promptText.toLowerCase()
+
+    // Scenario 1: Inventory / Stock
+    if (p.includes("stock") || p.includes("inventory") || p.includes("restock") || p.includes("running out")) {
+      return {
+        type: 'inventory',
+        title: "Inventory Risk Analysis",
+        summary: "Sales velocity for 'Blue Linen Shirts' has accelerated by 40% in the last 7 days. At this rate, stockout will occur in 4 days, potentially losing ₹85,000 in revenue.",
+        recommendation: "Immediate restock required or price increase to slow velocity.",
+        breakdown: {
+          headers: ["Metric", "Current", "Projected (7 Days)", "Risk Level"],
+          rows: [
+            {
+              label: "Daily Velocity",
+              values: [
+                { text: "12 units/day", type: "neutral" },
+                { text: "18 units/day", type: "negative", icon: "arrow-up" },
+                { text: "High", type: "negative" }
+              ]
+            },
+            {
+              label: "Stock Remaining",
+              values: [
+                { text: "48 units", type: "neutral" },
+                { text: "0 units", type: "negative" },
+                { text: "Critical", type: "negative" }
+              ]
+            }
+          ]
         },
-      ),
-    )
-
-    createEffect(() => {
-      const id = params.id
-      if (!id) return
-      if (!prompt.ready()) return
-      navMark({ dir: params.dir, to: id, name: "storage:prompt-ready" })
-    })
-
-    createEffect(() => {
-      const id = params.id
-      if (!id) return
-      if (!terminal.ready()) return
-      navMark({ dir: params.dir, to: id, name: "storage:terminal-ready" })
-    })
-
-    createEffect(() => {
-      const id = params.id
-      if (!id) return
-      if (!file.ready()) return
-      navMark({ dir: params.dir, to: id, name: "storage:file-view-ready" })
-    })
-
-    createEffect(() => {
-      const id = params.id
-      if (!id) return
-      if (sync.data.message[id] === undefined) return
-      navMark({ dir: params.dir, to: id, name: "session:data-ready" })
-    })
-  }
-
-  const isDesktop = createMediaQuery("(min-width: 768px)")
-
-  function normalizeTab(tab: string) {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
-  }
-
-  function normalizeTabs(list: string[]) {
-    const seen = new Set<string>()
-    const next: string[] = []
-    for (const item of list) {
-      const value = normalizeTab(item)
-      if (seen.has(value)) continue
-      seen.add(value)
-      next.push(value)
+        assumptions: "Assumes consistent demand acceleration. Does not account for potential festive spikes.",
+        actions: [
+          { id: "rush_order", title: "Place Rush Order (Supplier A)", badge: "High Priority", detail: "Generate PO for 200 units. ETA 3 days." },
+          { id: "raise_price", title: "Slow Velocity (Raise Price)", badge: "Temporary Fix", detail: "Increase price by 15% to conserve stock." }
+        ]
+      }
     }
-    return next
-  }
 
-  const openTab = (value: string) => {
-    const next = normalizeTab(value)
-    tabs().open(next)
+    // Scenario 2: Marketing / Ads
+    if (p.includes("ad") || p.includes("marketing") || p.includes("roas") || p.includes("meta") || p.includes("instagram")) {
+      return {
+        type: 'marketing',
+        title: "Ad Performance Review",
+        summary: "ROAS on the 'Summer Collection' campaign has dropped below 2.0. Spend has increased, but conversion rate is down 1.5%.",
+        recommendation: "Pause underperforming ad sets and reallocate budget to retargeting.",
+        breakdown: {
+          headers: ["Channel", "Spend", "ROAS", "Trend"],
+          rows: [
+            {
+              label: "Instagram (Reels)",
+              values: [
+                { text: "₹12,000", type: "neutral" },
+                { text: "1.8", type: "negative" },
+                { text: "Declining", type: "negative", icon: "arrow-down" }
+              ]
+            },
+            {
+              label: "Google Shopping",
+              values: [
+                { text: "₹8,500", type: "neutral" },
+                { text: "4.2", type: "positive" },
+                { text: "Stable", type: "positive", icon: "check" }
+              ]
+            }
+          ]
+        },
+        assumptions: "Attribution window: 7 days click-through. Creative fatigue detected in Reel #4.",
+        actions: [
+          { id: "pause_ads", title: "Pause Low ROAS Ad Sets", badge: "Cost Saving", detail: "Stop spend on sets with ROAS < 2.0." },
+          { id: "rotate_creative", title: "Rotate Creative Assets", badge: "Optimization", detail: "Deploy 'User Testimonial' video variants." }
+        ]
+      }
+    }
 
-    const path = file.pathFromTab(next)
-    if (path) file.load(path)
-  }
-
-  createEffect(() => {
-    const active = tabs().active()
-    if (!active) return
-
-    const path = file.pathFromTab(active)
-    if (path) file.load(path)
-  })
-
-  createEffect(() => {
-    const current = tabs().all()
-    if (current.length === 0) return
-
-    const next = normalizeTabs(current)
-    if (same(current, next)) return
-
-    tabs().setAll(next)
-
-    const active = tabs().active()
-    if (!active) return
-    if (!active.startsWith("file://")) return
-
-    const normalized = normalizeTab(active)
-    if (active === normalized) return
-    tabs().setActive(normalized)
-  })
-
-  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
-  const reviewCount = createMemo(() => info()?.summary?.files ?? 0)
-  const hasReview = createMemo(() => reviewCount() > 0)
-  const revertMessageID = createMemo(() => info()?.revert?.messageID)
-  const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
-  const messagesReady = createMemo(() => {
-    const id = params.id
-    if (!id) return true
-    return sync.data.message[id] !== undefined
-  })
-  const historyMore = createMemo(() => {
-    const id = params.id
-    if (!id) return false
-    return sync.session.history.more(id)
-  })
-  const historyLoading = createMemo(() => {
-    const id = params.id
-    if (!id) return false
-    return sync.session.history.loading(id)
-  })
-  const emptyUserMessages: UserMessage[] = []
-  const userMessages = createMemo(() => messages().filter((m) => m.role === "user") as UserMessage[], emptyUserMessages)
-  const visibleUserMessages = createMemo(() => {
-    const revert = revertMessageID()
-    if (!revert) return userMessages()
-    return userMessages().filter((m) => m.id < revert)
-  }, emptyUserMessages)
-  const lastUserMessage = createMemo(() => visibleUserMessages().at(-1))
-
-  createEffect(
-    on(
-      () => lastUserMessage()?.id,
-      () => {
-        const msg = lastUserMessage()
-        if (!msg) return
-        if (msg.agent) local.agent.set(msg.agent)
-        if (msg.model) local.model.set(msg.model)
+    // Scenario 3: Pricing (Default)
+    return {
+      type: 'pricing',
+      title: "Price Sensitivity Analysis",
+      summary: "Reducing the price by ₹200 increases Amazon sales volume by 12% but reduces overall profit margin. On Flipkart, both volume and profit differ significantly.",
+      recommendation: "Proceed with a targeted drop on Flipkart only to maximize margin safety.",
+      breakdown: {
+        headers: ["Marketplace", "Volume Est.", "Margin Impact", "Net Profit"],
+        rows: [
+          {
+            label: "Amazon",
+            values: [
+              { text: "+12%", type: "positive", icon: "arrow-up" },
+              { text: "-4%", type: "negative", icon: "arrow-up", rotate: true },
+              { text: "-₹12,400", type: "negative" }
+            ]
+          },
+          {
+            label: "Flipkart",
+            values: [
+              { text: "+18%", type: "positive", icon: "arrow-up" },
+              { text: "0%", type: "neutral" },
+              { text: "+₹24,100", type: "positive" }
+            ]
+          }
+        ]
       },
-    ),
-  )
-
-  const [store, setStore] = createStore({
-    activeDraggable: undefined as string | undefined,
-    activeTerminalDraggable: undefined as string | undefined,
-    expanded: {} as Record<string, boolean>,
-    messageId: undefined as string | undefined,
-    turnStart: 0,
-    mobileTab: "session" as "session" | "review",
-    newSessionWorktree: "main",
-    promptHeight: 0,
+      assumptions: "This analysis assumes a moderate price sensitivity (elasticity 1.4) based on your Q4 sales data.",
+      actions: [
+        { id: "price_flipkart", title: "Apply Price Drop on Flipkart", badge: "Low Risk", detail: "Immediate execution. Updates price to ₹1,299." },
+        { id: "simulate_bundle", title: "Simulate Amazon Bundling", badge: "Research", detail: "Explore if bundling can offset margin loss." }
+      ]
+    }
   })
 
-  const renderedUserMessages = createMemo(() => {
-    const msgs = visibleUserMessages()
-    const start = store.turnStart
-    if (start <= 0) return msgs
-    if (start >= msgs.length) return emptyUserMessages
-    return msgs.slice(start)
-  }, emptyUserMessages)
+  // Simulate Report Generation
+  onMount(() => {
+    const scenario = data().type
 
-  const newSessionWorktree = createMemo(() => {
-    if (store.newSessionWorktree === "create") return "create"
-    const project = sync.project
-    if (project && sync.data.path.directory !== project.worktree) return sync.data.path.directory
-    return "main"
+    // Define sequence based on scenario
+    const sequence: ActivityStep[] = [
+      { id: '1', type: 'thinking', label: "Thinking", detail: "Parsing intent & context...", status: 'pending' },
+      { id: '2', type: 'reading', label: "Reading Data", detail: scenario === 'inventory' ? "Reading 'inventory_logs.csv' 1.2MB" : scenario === 'marketing' ? "Fetching Meta Ads API..." : "Accessing Amazon Seller Central...", status: 'pending' },
+      { id: '3', type: 'analyzing', label: "Analyzing", detail: "Correlating metrics...", status: 'pending' },
+      { id: '4', type: 'writing', label: "Writing Report", detail: "Drafting executive summary...", status: 'pending' }
+    ]
+
+    setProcessSteps(sequence)
+
+    // Animation Timeline
+    // T=0: Start Thinking
+    setTimeout(() => setProcessSteps(p => p.map(s => s.id === '1' ? { ...s, status: 'active' } : s)), 100)
+
+    // T=1.5s: Finish Thinking, Start Reading
+    setTimeout(() => setProcessSteps(p => p.map(s => s.id === '1' ? { ...s, status: 'completed' } : s.id === '2' ? { ...s, status: 'active' } : s)), 1500)
+
+    // T=3.0s: Finish Reading, Start Analyzing
+    setTimeout(() => setProcessSteps(p => p.map(s => s.id === '2' ? { ...s, status: 'completed' } : s.id === '3' ? { ...s, status: 'active' } : s)), 3000)
+
+    // T=4.5s: Finish Analyzing, Start Writing
+    setTimeout(() => setProcessSteps(p => p.map(s => s.id === '3' ? { ...s, status: 'completed' } : s.id === '4' ? { ...s, status: 'active' } : s)), 4500)
+
+    // T=6.0s: Finish All, User Stage 1
+    setTimeout(() => {
+      setProcessSteps(p => p.map(s => ({ ...s, status: 'completed' } as ActivityStep)))
+      setStage(1)
+    }, 6000)
+
+    setTimeout(() => setStage(2), 6500)
+    setTimeout(() => setStage(3), 7000)
   })
 
-  const activeMessage = createMemo(() => {
-    if (!store.messageId) return lastUserMessage()
-    const found = visibleUserMessages()?.find((m) => m.id === store.messageId)
-    return found ?? lastUserMessage()
-  })
-  const setActiveMessage = (message: UserMessage | undefined) => {
-    setStore("messageId", message?.id)
-  }
+  // Simulate Action Execution
+  const handleAction = (actionId: string, actionTitle: string) => {
+    setExecutionStatus('running')
+    setExecutedAction(actionTitle)
+    setExecutionLog([])
 
-  function navigateMessageByOffset(offset: number) {
-    const msgs = visibleUserMessages()
-    if (msgs.length === 0) return
+    const startLog = (log: string, delay: number) => setTimeout(() => setExecutionLog(p => [...p, log]), delay)
 
-    const current = activeMessage()
-    const currentIndex = current ? msgs.findIndex((m) => m.id === current.id) : -1
-
-    let targetIndex: number
-    if (currentIndex === -1) {
-      targetIndex = offset > 0 ? 0 : msgs.length - 1
+    if (actionId === 'price_flipkart') {
+      startLog("Initiating 'Price Update' Protocol...", 500)
+      startLog("Validating credentials with Flipkart Seller Hub...", 1500)
+      startLog("Pushing SKU #WBK-2024 update (₹1,499 -> ₹1,299)...", 3000)
+      startLog("Verifying listing status...", 4500)
+    } else if (actionId === 'rush_order') {
+      startLog("Connecting to Supplier Portal...", 500)
+      startLog("Generating Purchase Order #PO-9921...", 1500)
+      startLog("Emailing Supplier A (orders@suppliera.com)...", 3000)
+      startLog("Awaiting acknowledgment...", 4500)
+    } else if (actionId === 'pause_ads') {
+      startLog("Authenticating with Meta Marketing API...", 500)
+      startLog("Identifying Ad Sets with ROAS < 2.0...", 1500)
+      startLog("Pausing 'Summer_Reel_V2'...", 3000)
+      startLog("Pausing 'Static_Carousel_Blue'...", 3500)
+      startLog("Confirming campaign status update...", 4500)
     } else {
-      targetIndex = currentIndex + offset
+      startLog("Initializing workflow...", 500)
+      startLog("Processing request parameters...", 1500)
+      startLog("Executing task agent...", 3000)
+      startLog("Finalizing output...", 4500)
     }
 
-    if (targetIndex < 0 || targetIndex >= msgs.length) return
-
-    scrollToMessage(msgs[targetIndex], "auto")
+    // Complete
+    setTimeout(() => {
+      setExecutionStatus('completed')
+    }, 5500)
   }
-
-  const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
-  const diffsReady = createMemo(() => {
-    const id = params.id
-    if (!id) return true
-    if (!hasReview()) return true
-    return sync.data.session_diff[id] !== undefined
-  })
-
-  const idle = { type: "idle" as const }
-  let inputRef!: HTMLDivElement
-  let promptDock: HTMLDivElement | undefined
-  let scroller: HTMLDivElement | undefined
-
-  createEffect(() => {
-    if (!params.id) return
-    sync.session.sync(params.id)
-  })
-
-  createEffect(() => {
-    if (!view().terminal.opened()) return
-    if (!terminal.ready()) return
-    if (terminal.all().length !== 0) return
-    terminal.new()
-  })
-
-  createEffect(
-    on(
-      () => visibleUserMessages().at(-1)?.id,
-      (lastId, prevLastId) => {
-        if (lastId && prevLastId && lastId > prevLastId) {
-          setStore("messageId", undefined)
-        }
-      },
-      { defer: true },
-    ),
-  )
-
-  const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
-
-  createEffect(
-    on(
-      () => params.id,
-      () => {
-        setStore("messageId", undefined)
-        setStore("expanded", {})
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(() => {
-    const id = lastUserMessage()?.id
-    if (!id) return
-    setStore("expanded", id, status().type !== "idle")
-  })
-
-  command.register(() => [
-    {
-      id: "session.new",
-      title: "New session",
-      description: "Create a new session",
-      category: "Session",
-      keybind: "mod+shift+s",
-      slash: "new",
-      onSelect: () => navigate(`/${params.dir}/session`),
-    },
-    {
-      id: "file.open",
-      title: "Open file",
-      description: "Search and open a file",
-      category: "File",
-      keybind: "mod+p",
-      slash: "open",
-      onSelect: () => dialog.show(() => <DialogSelectFile />),
-    },
-    {
-      id: "terminal.toggle",
-      title: "Toggle terminal",
-      description: "Show or hide the terminal",
-      category: "View",
-      keybind: "ctrl+`",
-      slash: "terminal",
-      onSelect: () => view().terminal.toggle(),
-    },
-    {
-      id: "review.toggle",
-      title: "Toggle review",
-      description: "Show or hide the review panel",
-      category: "View",
-      keybind: "mod+shift+r",
-      onSelect: () => view().reviewPanel.toggle(),
-    },
-    {
-      id: "terminal.new",
-      title: "New terminal",
-      description: "Create a new terminal tab",
-      category: "Terminal",
-      keybind: "ctrl+shift+`",
-      onSelect: () => terminal.new(),
-    },
-    {
-      id: "steps.toggle",
-      title: "Toggle steps",
-      description: "Show or hide steps for the current message",
-      category: "View",
-      keybind: "mod+e",
-      slash: "steps",
-      disabled: !params.id,
-      onSelect: () => {
-        const msg = activeMessage()
-        if (!msg) return
-        setStore("expanded", msg.id, (open: boolean | undefined) => !open)
-      },
-    },
-    {
-      id: "message.previous",
-      title: "Previous message",
-      description: "Go to the previous user message",
-      category: "Session",
-      keybind: "mod+arrowup",
-      disabled: !params.id,
-      onSelect: () => navigateMessageByOffset(-1),
-    },
-    {
-      id: "message.next",
-      title: "Next message",
-      description: "Go to the next user message",
-      category: "Session",
-      keybind: "mod+arrowdown",
-      disabled: !params.id,
-      onSelect: () => navigateMessageByOffset(1),
-    },
-    {
-      id: "model.choose",
-      title: "Choose model",
-      description: "Select a different model",
-      category: "Model",
-      keybind: "mod+'",
-      slash: "model",
-      onSelect: () => dialog.show(() => <DialogSelectModel />),
-    },
-    {
-      id: "mcp.toggle",
-      title: "Toggle MCPs",
-      description: "Toggle MCPs",
-      category: "MCP",
-      keybind: "mod+;",
-      slash: "mcp",
-      onSelect: () => dialog.show(() => <DialogSelectMcp />),
-    },
-    {
-      id: "agent.cycle",
-      title: "Cycle agent",
-      description: "Switch to the next agent",
-      category: "Agent",
-      keybind: "mod+.",
-      slash: "agent",
-      onSelect: () => local.agent.move(1),
-    },
-    {
-      id: "agent.cycle.reverse",
-      title: "Cycle agent backwards",
-      description: "Switch to the previous agent",
-      category: "Agent",
-      keybind: "shift+mod+.",
-      onSelect: () => local.agent.move(-1),
-    },
-    {
-      id: "model.variant.cycle",
-      title: "Cycle thinking effort",
-      description: "Switch to the next effort level",
-      category: "Model",
-      keybind: "shift+mod+t",
-      onSelect: () => {
-        local.model.variant.cycle()
-        showToast({
-          title: "Thinking effort changed",
-          description: "The thinking effort has been changed to " + (local.model.variant.current() ?? "Default"),
-        })
-      },
-    },
-    {
-      id: "permissions.autoaccept",
-      title:
-        params.id && permission.isAutoAccepting(params.id, sdk.directory)
-          ? "Stop auto-accepting edits"
-          : "Auto-accept edits",
-      category: "Permissions",
-      keybind: "mod+shift+a",
-      disabled: !params.id || !permission.permissionsEnabled(),
-      onSelect: () => {
-        const sessionID = params.id
-        if (!sessionID) return
-        permission.toggleAutoAccept(sessionID, sdk.directory)
-        showToast({
-          title: permission.isAutoAccepting(sessionID, sdk.directory)
-            ? "Auto-accepting edits"
-            : "Stopped auto-accepting edits",
-          description: permission.isAutoAccepting(sessionID, sdk.directory)
-            ? "Edit and write permissions will be automatically approved"
-            : "Edit and write permissions will require approval",
-        })
-      },
-    },
-    {
-      id: "session.undo",
-      title: "Undo",
-      description: "Undo the last message",
-      category: "Session",
-      slash: "undo",
-      disabled: !params.id || visibleUserMessages().length === 0,
-      onSelect: async () => {
-        const sessionID = params.id
-        if (!sessionID) return
-        if (status()?.type !== "idle") {
-          await sdk.client.session.abort({ sessionID }).catch(() => {})
-        }
-        const revert = info()?.revert?.messageID
-        // Find the last user message that's not already reverted
-        const message = userMessages().findLast((x) => !revert || x.id < revert)
-        if (!message) return
-        await sdk.client.session.revert({ sessionID, messageID: message.id })
-        // Restore the prompt from the reverted message
-        const parts = sync.data.part[message.id]
-        if (parts) {
-          const restored = extractPromptFromParts(parts, { directory: sdk.directory })
-          prompt.set(restored)
-        }
-        // Navigate to the message before the reverted one (which will be the new last visible message)
-        const priorMessage = userMessages().findLast((x) => x.id < message.id)
-        setActiveMessage(priorMessage)
-      },
-    },
-    {
-      id: "session.redo",
-      title: "Redo",
-      description: "Redo the last undone message",
-      category: "Session",
-      slash: "redo",
-      disabled: !params.id || !info()?.revert?.messageID,
-      onSelect: async () => {
-        const sessionID = params.id
-        if (!sessionID) return
-        const revertMessageID = info()?.revert?.messageID
-        if (!revertMessageID) return
-        const nextMessage = userMessages().find((x) => x.id > revertMessageID)
-        if (!nextMessage) {
-          // Full unrevert - restore all messages and navigate to last
-          await sdk.client.session.unrevert({ sessionID })
-          prompt.reset()
-          // Navigate to the last message (the one that was at the revert point)
-          const lastMsg = userMessages().findLast((x) => x.id >= revertMessageID)
-          setActiveMessage(lastMsg)
-          return
-        }
-        // Partial redo - move forward to next message
-        await sdk.client.session.revert({ sessionID, messageID: nextMessage.id })
-        // Navigate to the message before the new revert point
-        const priorMsg = userMessages().findLast((x) => x.id < nextMessage.id)
-        setActiveMessage(priorMsg)
-      },
-    },
-    {
-      id: "session.compact",
-      title: "Compact session",
-      description: "Summarize the session to reduce context size",
-      category: "Session",
-      slash: "compact",
-      disabled: !params.id || visibleUserMessages().length === 0,
-      onSelect: async () => {
-        const sessionID = params.id
-        if (!sessionID) return
-        const model = local.model.current()
-        if (!model) {
-          showToast({
-            title: "No model selected",
-            description: "Connect a provider to summarize this session",
-          })
-          return
-        }
-        await sdk.client.session.summarize({
-          sessionID,
-          modelID: model.id,
-          providerID: model.provider.id,
-        })
-      },
-    },
-    {
-      id: "session.fork",
-      title: "Fork from message",
-      description: "Create a new session from a previous message",
-      category: "Session",
-      slash: "fork",
-      disabled: !params.id || visibleUserMessages().length === 0,
-      onSelect: () => dialog.show(() => <DialogFork />),
-    },
-  ])
-
-  const handleKeyDown = (event: KeyboardEvent) => {
-    const activeElement = document.activeElement as HTMLElement | undefined
-    if (activeElement) {
-      const isProtected = activeElement.closest("[data-prevent-autofocus]")
-      const isInput = /^(INPUT|TEXTAREA|SELECT)$/.test(activeElement.tagName) || activeElement.isContentEditable
-      if (isProtected || isInput) return
-    }
-    if (dialog.active) return
-
-    if (activeElement === inputRef) {
-      if (event.key === "Escape") inputRef?.blur()
-      return
-    }
-
-    if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
-      inputRef?.focus()
-    }
-  }
-
-  const handleDragStart = (event: unknown) => {
-    const id = getDraggableId(event)
-    if (!id) return
-    setStore("activeDraggable", id)
-  }
-
-  const handleDragOver = (event: DragEvent) => {
-    const { draggable, droppable } = event
-    if (draggable && droppable) {
-      const currentTabs = tabs().all()
-      const fromIndex = currentTabs?.indexOf(draggable.id.toString())
-      const toIndex = currentTabs?.indexOf(droppable.id.toString())
-      if (fromIndex !== toIndex && toIndex !== undefined) {
-        tabs().move(draggable.id.toString(), toIndex)
-      }
-    }
-  }
-
-  const handleDragEnd = () => {
-    setStore("activeDraggable", undefined)
-  }
-
-  const handleTerminalDragStart = (event: unknown) => {
-    const id = getDraggableId(event)
-    if (!id) return
-    setStore("activeTerminalDraggable", id)
-  }
-
-  const handleTerminalDragOver = (event: DragEvent) => {
-    const { draggable, droppable } = event
-    if (draggable && droppable) {
-      const terminals = terminal.all()
-      const fromIndex = terminals.findIndex((t: LocalPTY) => t.id === draggable.id.toString())
-      const toIndex = terminals.findIndex((t: LocalPTY) => t.id === droppable.id.toString())
-      if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
-        terminal.move(draggable.id.toString(), toIndex)
-      }
-    }
-  }
-
-  const handleTerminalDragEnd = () => {
-    setStore("activeTerminalDraggable", undefined)
-  }
-
-  const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
-  const openedTabs = createMemo(() =>
-    tabs()
-      .all()
-      .filter((tab) => tab !== "context"),
-  )
-
-  const reviewTab = createMemo(() => hasReview() || tabs().active() === "review")
-  const mobileReview = createMemo(() => !isDesktop() && hasReview() && store.mobileTab === "review")
-
-  const showTabs = createMemo(
-    () => view().reviewPanel.opened() && (hasReview() || tabs().all().length > 0 || contextOpen()),
-  )
-
-  const activeTab = createMemo(() => {
-    const active = tabs().active()
-    if (active) return active
-    if (reviewTab()) return "review"
-
-    const first = openedTabs()[0]
-    if (first) return first
-    if (contextOpen()) return "context"
-    return "review"
-  })
-
-  createEffect(() => {
-    if (!layout.ready()) return
-    if (tabs().active()) return
-    if (!hasReview() && openedTabs().length === 0 && !contextOpen()) return
-    tabs().setActive(activeTab())
-  })
-
-  createEffect(() => {
-    const id = params.id
-    if (!id) return
-    if (!hasReview()) return
-
-    const wants = isDesktop() ? view().reviewPanel.opened() && activeTab() === "review" : store.mobileTab === "review"
-    if (!wants) return
-    if (diffsReady()) return
-
-    sync.session.diff(id)
-  })
-
-  const isWorking = createMemo(() => status().type !== "idle")
-  const autoScroll = createAutoScroll({
-    working: isWorking,
-  })
-
-  let scrollSpyFrame: number | undefined
-  let scrollSpyTarget: HTMLDivElement | undefined
-
-  const anchor = (id: string) => `message-${id}`
-
-  const setScrollRef = (el: HTMLDivElement | undefined) => {
-    scroller = el
-    autoScroll.scrollRef(el)
-  }
-
-  const turnInit = 20
-  const turnBatch = 20
-  let turnHandle: number | undefined
-  let turnIdle = false
-
-  function cancelTurnBackfill() {
-    const handle = turnHandle
-    if (handle === undefined) return
-    turnHandle = undefined
-
-    if (turnIdle && window.cancelIdleCallback) {
-      window.cancelIdleCallback(handle)
-      return
-    }
-
-    clearTimeout(handle)
-  }
-
-  function scheduleTurnBackfill() {
-    if (turnHandle !== undefined) return
-    if (store.turnStart <= 0) return
-
-    if (window.requestIdleCallback) {
-      turnIdle = true
-      turnHandle = window.requestIdleCallback(() => {
-        turnHandle = undefined
-        backfillTurns()
-      })
-      return
-    }
-
-    turnIdle = false
-    turnHandle = window.setTimeout(() => {
-      turnHandle = undefined
-      backfillTurns()
-    }, 0)
-  }
-
-  function backfillTurns() {
-    const start = store.turnStart
-    if (start <= 0) return
-
-    const next = start - turnBatch
-    const nextStart = next > 0 ? next : 0
-
-    const el = scroller
-    if (!el) {
-      setStore("turnStart", nextStart)
-      scheduleTurnBackfill()
-      return
-    }
-
-    const beforeTop = el.scrollTop
-    const beforeHeight = el.scrollHeight
-
-    setStore("turnStart", nextStart)
-
-    requestAnimationFrame(() => {
-      const delta = el.scrollHeight - beforeHeight
-      if (delta) el.scrollTop = beforeTop + delta
-    })
-
-    scheduleTurnBackfill()
-  }
-
-  createEffect(
-    on(
-      () => [params.id, messagesReady()] as const,
-      ([id, ready]) => {
-        cancelTurnBackfill()
-        setStore("turnStart", 0)
-        if (!id || !ready) return
-
-        const len = visibleUserMessages().length
-        const start = len > turnInit ? len - turnInit : 0
-        setStore("turnStart", start)
-        scheduleTurnBackfill()
-      },
-      { defer: true },
-    ),
-  )
-
-  createResizeObserver(
-    () => promptDock,
-    ({ height }) => {
-      const next = Math.ceil(height)
-
-      if (next === store.promptHeight) return
-
-      const el = scroller
-      const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 : false
-
-      setStore("promptHeight", next)
-
-      if (stick && el) {
-        requestAnimationFrame(() => {
-          el.scrollTo({ top: el.scrollHeight, behavior: "auto" })
-        })
-      }
-    },
-  )
-
-  const updateHash = (id: string) => {
-    window.history.replaceState(null, "", `#${anchor(id)}`)
-  }
-
-  const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
-    setActiveMessage(message)
-
-    const msgs = visibleUserMessages()
-    const index = msgs.findIndex((m) => m.id === message.id)
-    if (index !== -1 && index < store.turnStart) {
-      setStore("turnStart", index)
-      scheduleTurnBackfill()
-
-      requestAnimationFrame(() => {
-        const el = document.getElementById(anchor(message.id))
-        if (el) el.scrollIntoView({ behavior, block: "start" })
-      })
-
-      updateHash(message.id)
-      return
-    }
-
-    const el = document.getElementById(anchor(message.id))
-    if (el) el.scrollIntoView({ behavior, block: "start" })
-    updateHash(message.id)
-  }
-
-  const getActiveMessageId = (container: HTMLDivElement) => {
-    const cutoff = container.scrollTop + 100
-    const nodes = container.querySelectorAll<HTMLElement>("[data-message-id]")
-    let id: string | undefined
-
-    for (const node of nodes) {
-      const next = node.dataset.messageId
-      if (!next) continue
-      if (node.offsetTop > cutoff) break
-      id = next
-    }
-
-    return id
-  }
-
-  const scheduleScrollSpy = (container: HTMLDivElement) => {
-    scrollSpyTarget = container
-    if (scrollSpyFrame !== undefined) return
-
-    scrollSpyFrame = requestAnimationFrame(() => {
-      scrollSpyFrame = undefined
-
-      const target = scrollSpyTarget
-      scrollSpyTarget = undefined
-      if (!target) return
-
-      const id = getActiveMessageId(target)
-      if (!id) return
-      if (id === store.messageId) return
-
-      setStore("messageId", id)
-    })
-  }
-
-  createEffect(() => {
-    const sessionID = params.id
-    const ready = messagesReady()
-    if (!sessionID || !ready) return
-
-    requestAnimationFrame(() => {
-      const hash = window.location.hash.slice(1)
-      if (!hash) {
-        autoScroll.forceScrollToBottom()
-        return
-      }
-
-      const hashTarget = document.getElementById(hash)
-      if (hashTarget) {
-        hashTarget.scrollIntoView({ behavior: "auto", block: "start" })
-        return
-      }
-
-      const match = hash.match(/^message-(.+)$/)
-      if (match) {
-        const msg = visibleUserMessages().find((m) => m.id === match[1])
-        if (msg) {
-          scrollToMessage(msg, "auto")
-          return
-        }
-      }
-
-      autoScroll.forceScrollToBottom()
-    })
-  })
-
-  createEffect(() => {
-    document.addEventListener("keydown", handleKeyDown)
-  })
-
-  const previewPrompt = () =>
-    prompt
-      .current()
-      .map((part) => {
-        if (part.type === "file") return `[file:${part.path}]`
-        if (part.type === "agent") return `@${part.name}`
-        if (part.type === "image") return `[image:${part.filename}]`
-        return part.content
-      })
-      .join("")
-      .trim()
-
-  createEffect(() => {
-    if (!prompt.ready()) return
-    handoff.prompt = previewPrompt()
-  })
-
-  createEffect(() => {
-    if (!terminal.ready()) return
-    handoff.terminals = terminal.all().map((t) => t.title)
-  })
-
-  createEffect(() => {
-    if (!file.ready()) return
-    handoff.files = Object.fromEntries(
-      tabs()
-        .all()
-        .flatMap((tab) => {
-          const path = file.pathFromTab(tab)
-          if (!path) return []
-          return [[path, file.selectedLines(path) ?? null] as const]
-        }),
-    )
-  })
-
-  onCleanup(() => {
-    cancelTurnBackfill()
-    document.removeEventListener("keydown", handleKeyDown)
-    if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
-  })
 
   return (
-    <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
-      <SessionHeader />
-      <div class="flex-1 min-h-0 flex flex-col md:flex-row">
-        {/* Mobile tab bar - only shown on mobile when there are diffs */}
-        <Show when={!isDesktop() && hasReview()}>
-          <Tabs class="h-auto">
-            <Tabs.List>
-              <Tabs.Trigger
-                value="session"
-                class="w-1/2"
-                classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "session")}
-              >
-                Session
-              </Tabs.Trigger>
-              <Tabs.Trigger
-                value="review"
-                class="w-1/2 !border-r-0"
-                classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "review")}
-              >
-                {reviewCount()} Files Changed
-              </Tabs.Trigger>
-            </Tabs.List>
-          </Tabs>
-        </Show>
+    <div class="bg-white min-h-screen text-black w-full flex flex-col items-center">
 
-        {/* Session panel */}
-        <div
-          classList={{
-            "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
-            "flex-1 md:flex-none py-6 md:py-3": true,
-          }}
-          style={{
-            width: isDesktop() && showTabs() ? `${layout.session.width()}px` : "100%",
-            "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
-          }}
-        >
-          <div class="flex-1 min-h-0 overflow-hidden">
-            <Switch>
-              <Match when={params.id}>
-                <Show when={activeMessage()}>
-                  <Show
-                    when={!mobileReview()}
-                    fallback={
-                      <div class="relative h-full overflow-hidden">
-                        <Show
-                          when={diffsReady()}
-                          fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
-                        >
-                          <SessionReviewTab
-                            diffs={diffs}
-                            view={view}
-                            diffStyle="unified"
-                            onViewFile={(path) => {
-                              const value = file.tab(path)
-                              tabs().open(value)
-                              file.load(path)
-                            }}
-                            classes={{
-                              root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
-                              header: "px-4",
-                              container: "px-4",
-                            }}
-                          />
-                        </Show>
-                      </div>
-                    }
-                  >
-                    <div class="relative w-full h-full min-w-0">
-                      <Show when={isDesktop()}>
-                        <div class="absolute inset-0 pointer-events-none z-10">
-                          <SessionMessageRail
-                            messages={visibleUserMessages()}
-                            current={activeMessage()}
-                            onMessageSelect={scrollToMessage}
-                            wide={!showTabs()}
-                            class="pointer-events-auto"
-                          />
-                        </div>
-                      </Show>
-                      <div
-                        ref={setScrollRef}
-                        onScroll={(e) => {
-                          autoScroll.handleScroll()
-                          if (isDesktop()) scheduleScrollSpy(e.currentTarget)
-                        }}
-                        onClick={autoScroll.handleInteraction}
-                        class="relative min-w-0 w-full h-full overflow-y-auto no-scrollbar"
-                      >
-                        <div
-                          ref={autoScroll.contentRef}
-                          class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
-                          classList={{
-                            "mt-0.5": !showTabs(),
-                            "mt-0": showTabs(),
-                          }}
-                        >
-                          <Show when={store.turnStart > 0}>
-                            <div class="w-full flex justify-center">
-                              <Button
-                                variant="ghost"
-                                size="large"
-                                class="text-12-medium opacity-50"
-                                onClick={() => setStore("turnStart", 0)}
-                              >
-                                Render earlier messages
-                              </Button>
-                            </div>
-                          </Show>
-                          <Show when={historyMore()}>
-                            <div class="w-full flex justify-center">
-                              <Button
-                                variant="ghost"
-                                size="large"
-                                class="text-12-medium opacity-50"
-                                disabled={historyLoading()}
-                                onClick={() => {
-                                  const id = params.id
-                                  if (!id) return
-                                  setStore("turnStart", 0)
-                                  sync.session.history.loadMore(id)
-                                }}
-                              >
-                                {historyLoading() ? "Loading earlier messages..." : "Load earlier messages"}
-                              </Button>
-                            </div>
-                          </Show>
-                          <For each={renderedUserMessages()}>
-                            {(message) => {
-                              if (import.meta.env.DEV) {
-                                onMount(() => {
-                                  const id = params.id
-                                  if (!id) return
-                                  navMark({ dir: params.dir, to: id, name: "session:first-turn-mounted" })
-                                })
-                              }
+      <div class="w-full max-w-3xl px-8 py-12 flex flex-col gap-10">
 
-                              return (
-                                <div
-                                  id={anchor(message.id)}
-                                  data-message-id={message.id}
-                                  classList={{
-                                    "min-w-0 w-full max-w-full": true,
-                                    "last:min-h-[calc(100vh-5.5rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-4.5rem-var(--prompt-height,10rem)-64px)]":
-                                      platform.platform !== "desktop",
-                                    "last:min-h-[calc(100vh-7rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-6rem-var(--prompt-height,10rem)-64px)]":
-                                      platform.platform === "desktop",
-                                  }}
-                                >
-                                  <SessionTurn
-                                    sessionID={params.id!}
-                                    messageID={message.id}
-                                    lastUserMessageID={lastUserMessage()?.id}
-                                    stepsExpanded={store.expanded[message.id] ?? false}
-                                    onStepsExpandedToggle={() =>
-                                      setStore("expanded", message.id, (open: boolean | undefined) => !open)
-                                    }
-                                    classes={{
-                                      root: "min-w-0 w-full relative",
-                                      content:
-                                        "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
-                                      container:
-                                        "px-4 md:px-6 " +
-                                        (!showTabs()
-                                          ? "md:max-w-200 md:mx-auto"
-                                          : visibleUserMessages().length > 1
-                                            ? "md:pr-6 md:pl-18"
-                                            : ""),
-                                    }}
-                                  />
-                                </div>
-                              )
-                            }}
-                          </For>
-                        </div>
-                      </div>
-                    </div>
-                  </Show>
-                </Show>
-              </Match>
-              <Match when={true}>
-                <NewSessionView
-                  worktree={newSessionWorktree()}
-                  onWorktreeChange={(value) => {
-                    if (value === "create") {
-                      setStore("newSessionWorktree", value)
-                      return
-                    }
-
-                    setStore("newSessionWorktree", "main")
-
-                    const target = value === "main" ? sync.project?.worktree : value
-                    if (!target) return
-                    if (target === sync.data.path.directory) return
-                    layout.projects.open(target)
-                    navigate(`/${base64Encode(target)}/session`)
-                  }}
-                />
-              </Match>
-            </Switch>
+        {/* 1. Header */}
+        <div class="flex flex-col gap-2 transition-opacity duration-500 ease-out"
+          classList={{ 'opacity-0': stage() < 1, 'opacity-100': stage() >= 1 }}>
+          <h1 class="text-2xl font-semibold tracking-tight text-black first-letter:uppercase">
+            {data().title}
+          </h1>
+          <div class="text-sm text-[#71717a] flex items-center gap-2">
+            <span>Based on prompt: "{promptText}"</span>
+            <span class="w-1 h-1 rounded-full bg-[#d4d4d8]" />
+            <span>Updated just now</span>
           </div>
-
-          {/* Prompt input */}
-          <div
-            ref={(el) => (promptDock = el)}
-            class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-8 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
-          >
-            <div
-              classList={{
-                "w-full md:px-6 pointer-events-auto": true,
-                "md:max-w-200": !showTabs(),
-              }}
-            >
-              <Show
-                when={prompt.ready()}
-                fallback={
-                  <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                    {handoff.prompt || "Loading prompt..."}
-                  </div>
-                }
-              >
-                <PromptInput
-                  ref={(el) => {
-                    inputRef = el
-                  }}
-                  newSessionWorktree={newSessionWorktree()}
-                  onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-                />
-              </Show>
-            </div>
-          </div>
-
-          <Show when={isDesktop() && showTabs()}>
-            <ResizeHandle
-              direction="horizontal"
-              size={layout.session.width()}
-              min={450}
-              max={window.innerWidth * 0.45}
-              onResize={layout.session.resize}
-            />
-          </Show>
         </div>
 
-        {/* Desktop tabs panel (Review + Context + Files) - hidden on mobile */}
-        <Show when={isDesktop() && showTabs()}>
-          <div class="relative flex-1 min-w-0 h-full border-l border-border-weak-base">
-            <DragDropProvider
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onDragOver={handleDragOver}
-              collisionDetector={closestCenter}
-            >
-              <DragDropSensors />
-              <ConstrainDragYAxis />
-              <Tabs value={activeTab()} onChange={openTab}>
-                <div class="sticky top-0 shrink-0 flex">
-                  <Tabs.List>
-                    <Show when={reviewTab()}>
-                      <Tabs.Trigger value="review">
-                        <div class="flex items-center gap-3">
-                          <Show when={diffs()}>
-                            <DiffChanges changes={diffs()} variant="bars" />
-                          </Show>
-                          <div class="flex items-center gap-1.5">
-                            <div>Review</div>
-                            <Show when={info()?.summary?.files}>
-                              <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
-                                {info()?.summary?.files ?? 0}
-                              </div>
-                            </Show>
-                          </div>
-                        </div>
-                      </Tabs.Trigger>
-                    </Show>
-                    <Show when={contextOpen()}>
-                      <Tabs.Trigger
-                        value="context"
-                        closeButton={
-                          <Tooltip value="Close tab" placement="bottom">
-                            <IconButton icon="close" variant="ghost" onClick={() => tabs().close("context")} />
-                          </Tooltip>
-                        }
-                        hideCloseButton
-                        onMiddleClick={() => tabs().close("context")}
-                      >
-                        <div class="flex items-center gap-2">
-                          <SessionContextUsage variant="indicator" />
-                          <div>Context</div>
-                        </div>
-                      </Tabs.Trigger>
-                    </Show>
-                    <SortableProvider ids={openedTabs()}>
-                      <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
-                    </SortableProvider>
-                    <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
-                      <TooltipKeybind
-                        title="Open file"
-                        keybind={command.keybind("file.open")}
-                        class="flex items-center"
-                      >
-                        <IconButton
-                          icon="plus-small"
-                          variant="ghost"
-                          iconSize="large"
-                          onClick={() => dialog.show(() => <DialogSelectFile />)}
-                        />
-                      </TooltipKeybind>
+        {/* Loading State Overlay (Dynamic Activity Modules) */}
+        <Show when={stage() < 1}>
+          <div class="absolute inset-x-0 top-32 flex flex-col items-center justify-start z-10 px-6 gap-3 pointer-events-none">
+
+            <For each={processSteps()}>
+              {(step) => (
+                <Show when={step.status !== 'pending'}>
+                  <div class="pointer-events-auto backdrop-blur-sm p-6 rounded-3xl shadow-2xl min-w-[360px] max-w-md flex flex-col gap-3 animate-in slide-in-from-bottom-8 fade-in duration-700 fill-mode-forwards" style={{
+                    borderColor: step.type === 'thinking' ? '#3b82f6' :
+                      step.type === 'reading' ? '#f59e0b' :
+                        step.type === 'analyzing' ? '#a855f7' :
+                          '#10b981'
+                  }}>
+
+                    {/* Metadata Row */}
+                    <div class="flex justify-between items-center text-[10px] font-mono uppercase tracking-wider px-1" style={{ color: "#71717a" }}>
+                      <span class="flex items-center gap-1.5">
+                        <span class={`w-2 h-2 rounded-full ${step.status === 'active' ? 'bg-green-500 animate-pulse' : 'bg-zinc-300'}`} />
+                        <span style={{ color: "#000000", fontWeight: "bold" }}>{step.status === 'active' ? 'Processing' : 'Completed'}</span>
+                      </span>
+                      <span style={{ color: "#52525b", fontWeight: "600" }}>
+                        {step.type === 'reading' ? 'Data: 1.2MB' : step.type === 'writing' ? 'Gen: 4 Tokens' : 'Agent: v1.0'}
+                      </span>
                     </div>
-                  </Tabs.List>
-                </div>
-                <Show when={reviewTab()}>
-                  <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                    <Show when={activeTab() === "review"}>
-                      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                        <Show
-                          when={diffsReady()}
-                          fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
-                        >
-                          <SessionReviewTab
-                            diffs={diffs}
-                            view={view}
-                            diffStyle={layout.review.diffStyle()}
-                            onDiffStyleChange={layout.review.setDiffStyle}
-                            onViewFile={(path) => {
-                              const value = file.tab(path)
-                              tabs().open(value)
-                              file.load(path)
-                            }}
-                          />
+
+                    {/* Main Content */}
+                    <div class="flex items-center gap-4">
+                      {/* Icon */}
+                      <div class={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 shadow-md ${step.type === 'thinking' ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white" :
+                        step.type === 'reading' ? "bg-gradient-to-br from-amber-500 to-orange-500 text-white" :
+                          step.type === 'analyzing' ? "bg-gradient-to-br from-purple-500 to-pink-500 text-white" :
+                            "bg-gradient-to-br from-emerald-500 to-green-500 text-white"
+                        }`}>
+                        <Show when={step.status === 'active'}>
+                          <Icon name={
+                            step.type === 'thinking' ? 'brain' :
+                              step.type === 'reading' ? 'archive' :
+                                step.type === 'writing' ? 'code' :
+                                  'magnifying-glass'
+                          } class="animate-pulse" size="large" />
+                        </Show>
+                        <Show when={step.status === 'completed'}>
+                          <Icon name="check" class="w-7 h-7" />
                         </Show>
                       </div>
-                    </Show>
-                  </Tabs.Content>
-                </Show>
-                <Show when={contextOpen()}>
-                  <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
-                    <Show when={activeTab() === "context"}>
-                      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                        <SessionContextTab
-                          messages={messages}
-                          visibleUserMessages={visibleUserMessages}
-                          view={view}
-                          info={info}
-                        />
+
+                      {/* Text */}
+                      <div class="flex flex-col gap-1.5">
+                        <span class="text-xl font-bold leading-none tracking-tight" style={{ color: "#000000" }}>
+                          {step.label}
+                        </span>
+                        <span class="text-sm font-medium leading-relaxed" style={{ color: "#52525b" }}>
+                          {step.detail}
+                        </span>
                       </div>
-                    </Show>
-                  </Tabs.Content>
+                    </div>
+                  </div>
                 </Show>
-                <For each={openedTabs()}>
-                  {(tab) => {
-                    let scroll: HTMLDivElement | undefined
-                    let scrollFrame: number | undefined
-                    let pending: { x: number; y: number } | undefined
+              )}
+            </For>
 
-                    const path = createMemo(() => file.pathFromTab(tab))
-                    const state = createMemo(() => {
-                      const p = path()
-                      if (!p) return
-                      return file.get(p)
-                    })
-                    const contents = createMemo(() => state()?.content?.content ?? "")
-                    const cacheKey = createMemo(() => checksum(contents()))
-                    const isImage = createMemo(() => {
-                      const c = state()?.content
-                      return (
-                        c?.encoding === "base64" && c?.mimeType?.startsWith("image/") && c?.mimeType !== "image/svg+xml"
-                      )
-                    })
-                    const isSvg = createMemo(() => {
-                      const c = state()?.content
-                      return c?.mimeType === "image/svg+xml"
-                    })
-                    const svgContent = createMemo(() => {
-                      if (!isSvg()) return
-                      const c = state()?.content
-                      if (!c) return
-                      if (c.encoding === "base64") return base64Decode(c.content)
-                      return c.content
-                    })
-                    const svgPreviewUrl = createMemo(() => {
-                      if (!isSvg()) return
-                      const c = state()?.content
-                      if (!c) return
-                      if (c.encoding === "base64") return `data:image/svg+xml;base64,${c.content}`
-                      return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(c.content)}`
-                    })
-                    const imageDataUrl = createMemo(() => {
-                      if (!isImage()) return
-                      const c = state()?.content
-                      return `data:${c?.mimeType};base64,${c?.content}`
-                    })
-                    const selectedLines = createMemo(() => {
-                      const p = path()
-                      if (!p) return null
-                      if (file.ready()) return file.selectedLines(p) ?? null
-                      return handoff.files[p] ?? null
-                    })
-                    const selection = createMemo(() => {
-                      const range = selectedLines()
-                      if (!range) return
-                      return selectionFromLines(range)
-                    })
-                    const selectionLabel = createMemo(() => {
-                      const sel = selection()
-                      if (!sel) return
-                      if (sel.startLine === sel.endLine) return `L${sel.startLine}`
-                      return `L${sel.startLine}-${sel.endLine}`
-                    })
-
-                    const restoreScroll = (retries = 0) => {
-                      const el = scroll
-                      if (!el) return
-
-                      const s = view()?.scroll(tab)
-                      if (!s) return
-
-                      // Wait for content to be scrollable - content may not have rendered yet
-                      if (el.scrollHeight <= el.clientHeight && retries < 10) {
-                        requestAnimationFrame(() => restoreScroll(retries + 1))
-                        return
-                      }
-
-                      if (el.scrollTop !== s.y) el.scrollTop = s.y
-                      if (el.scrollLeft !== s.x) el.scrollLeft = s.x
-                    }
-
-                    const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-                      pending = {
-                        x: event.currentTarget.scrollLeft,
-                        y: event.currentTarget.scrollTop,
-                      }
-                      if (scrollFrame !== undefined) return
-
-                      scrollFrame = requestAnimationFrame(() => {
-                        scrollFrame = undefined
-
-                        const next = pending
-                        pending = undefined
-                        if (!next) return
-
-                        view().setScroll(tab, next)
-                      })
-                    }
-
-                    createEffect(
-                      on(
-                        () => state()?.loaded,
-                        (loaded) => {
-                          if (!loaded) return
-                          requestAnimationFrame(restoreScroll)
-                        },
-                        { defer: true },
-                      ),
-                    )
-
-                    createEffect(
-                      on(
-                        () => file.ready(),
-                        (ready) => {
-                          if (!ready) return
-                          requestAnimationFrame(restoreScroll)
-                        },
-                        { defer: true },
-                      ),
-                    )
-
-                    createEffect(
-                      on(
-                        () => tabs().active() === tab,
-                        (active) => {
-                          if (!active) return
-                          if (!state()?.loaded) return
-                          requestAnimationFrame(restoreScroll)
-                        },
-                      ),
-                    )
-
-                    onCleanup(() => {
-                      if (scrollFrame === undefined) return
-                      cancelAnimationFrame(scrollFrame)
-                    })
-
-                    return (
-                      <Tabs.Content
-                        value={tab}
-                        class="mt-3"
-                        ref={(el: HTMLDivElement) => {
-                          scroll = el
-                          restoreScroll()
-                        }}
-                        onScroll={handleScroll}
-                      >
-                        <Show when={activeTab() === tab}>
-                          <Show when={selection()}>
-                            {(sel) => (
-                              <div class="hidden sticky top-0 z-10 px-6 py-2 _flex justify-end bg-background-base border-b border-border-weak-base">
-                                <button
-                                  type="button"
-                                  class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base text-12-regular text-text-strong hover:bg-surface-raised-base-hover"
-                                  onClick={() => {
-                                    const p = path()
-                                    if (!p) return
-                                    prompt.context.add({ type: "file", path: p, selection: sel() })
-                                  }}
-                                >
-                                  <Icon name="plus-small" size="small" />
-                                  <span>Add {selectionLabel()} to context</span>
-                                </button>
-                              </div>
-                            )}
-                          </Show>
-                          <Switch>
-                            <Match when={state()?.loaded && isImage()}>
-                              <div class="px-6 py-4 pb-40">
-                                <img src={imageDataUrl()} alt={path()} class="max-w-full" />
-                              </div>
-                            </Match>
-                            <Match when={state()?.loaded && isSvg()}>
-                              <div class="flex flex-col gap-4 px-6 py-4">
-                                <Dynamic
-                                  component={codeComponent}
-                                  file={{
-                                    name: path() ?? "",
-                                    contents: svgContent() ?? "",
-                                    cacheKey: cacheKey(),
-                                  }}
-                                  enableLineSelection
-                                  selectedLines={selectedLines()}
-                                  onLineSelected={(range: SelectedLineRange | null) => {
-                                    const p = path()
-                                    if (!p) return
-                                    file.setSelectedLines(p, range)
-                                  }}
-                                  overflow="scroll"
-                                  class="select-text"
-                                />
-                                <Show when={svgPreviewUrl()}>
-                                  <div class="flex justify-center pb-40">
-                                    <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
-                                  </div>
-                                </Show>
-                              </div>
-                            </Match>
-                            <Match when={state()?.loaded}>
-                              <Dynamic
-                                component={codeComponent}
-                                file={{
-                                  name: path() ?? "",
-                                  contents: contents(),
-                                  cacheKey: cacheKey(),
-                                }}
-                                enableLineSelection
-                                selectedLines={selectedLines()}
-                                onLineSelected={(range: SelectedLineRange | null) => {
-                                  const p = path()
-                                  if (!p) return
-                                  file.setSelectedLines(p, range)
-                                }}
-                                overflow="scroll"
-                                class="select-text pb-40"
-                              />
-                            </Match>
-                            <Match when={state()?.loading}>
-                              <div class="px-6 py-4 text-text-weak">Loading...</div>
-                            </Match>
-                            <Match when={state()?.error}>
-                              {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
-                            </Match>
-                          </Switch>
-                        </Show>
-                      </Tabs.Content>
-                    )
-                  }}
-                </For>
-              </Tabs>
-              <DragOverlay>
-                <Show when={store.activeDraggable}>
-                  {(tab) => {
-                    const path = createMemo(() => file.pathFromTab(tab()))
-                    return (
-                      <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
-                        <Show when={path()}>{(p) => <FileVisual active path={p()} />}</Show>
-                      </div>
-                    )
-                  }}
-                </Show>
-              </DragOverlay>
-            </DragDropProvider>
           </div>
         </Show>
-      </div>
 
-      <Show when={isDesktop() && view().terminal.opened()}>
-        <div
-          class="relative w-full flex-col shrink-0 border-t border-border-weak-base"
-          style={{ height: `${layout.terminal.height()}px` }}
-        >
-          <ResizeHandle
-            direction="vertical"
-            size={layout.terminal.height()}
-            min={100}
-            max={window.innerHeight * 0.6}
-            collapseThreshold={50}
-            onResize={layout.terminal.resize}
-            onCollapse={view().terminal.close}
-          />
-          <Show
-            when={terminal.ready()}
-            fallback={
-              <div class="flex flex-col h-full pointer-events-none">
-                <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weak-base bg-background-stronger overflow-hidden">
-                  <For each={handoff.terminals}>
-                    {(title) => (
-                      <div class="px-2 py-1 rounded-md bg-surface-base text-14-regular text-text-weak truncate max-w-40">
-                        {title}
-                      </div>
-                    )}
+        {/* Main Report Content (Hidden when executing) */}
+        <Show when={executionStatus() === 'idle'}>
+          <Show when={stage() >= 1}>
+            <div class="bg-[#fafafa] p-6 rounded-xl border border-[#e4e4e7] animate-in">
+              <h2 class="text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-3">Executive Summary</h2>
+              <p class="text-lg leading-relaxed text-black">
+                {data().summary}
+                <br /><br />
+                <span class="font-medium">Recommendation:</span> {data().recommendation}
+              </p>
+            </div>
+          </Show>
+
+          <Show when={stage() >= 2}>
+            <div class="flex flex-col gap-4 animate-in" style={{ "animation-delay": "100ms" }}>
+              <h2 class="text-xs font-semibold text-[#71717a] uppercase tracking-wider">Analysis Breakdown</h2>
+
+              <div class="w-full border-t border-b border-[#e4e4e7]">
+                <div class="grid gap-2 py-3 text-xs font-semibold text-[#71717a] uppercase tracking-wider"
+                  style={{ "grid-template-columns": `repeat(${data().breakdown.headers.length}, 1fr)` }}>
+                  <For each={data().breakdown.headers}>
+                    {(h, i) => <span class={i() === data().breakdown.headers.length - 1 ? "text-right" : ""}>{h}</span>}
                   </For>
-                  <div class="flex-1" />
-                  <div class="text-text-weak pr-2">Loading...</div>
                 </div>
-                <div class="flex-1 flex items-center justify-center text-text-weak">Loading terminal...</div>
-              </div>
-            }
-          >
-            <DragDropProvider
-              onDragStart={handleTerminalDragStart}
-              onDragEnd={handleTerminalDragEnd}
-              onDragOver={handleTerminalDragOver}
-              collisionDetector={closestCenter}
-            >
-              <DragDropSensors />
-              <ConstrainDragYAxis />
-              <Tabs variant="alt" value={terminal.active()} onChange={terminal.open}>
-                <Tabs.List class="h-10">
-                  <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
-                    <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
-                  </SortableProvider>
-                  <div class="h-full flex items-center justify-center">
-                    <TooltipKeybind
-                      title="New terminal"
-                      keybind={command.keybind("terminal.new")}
-                      class="flex items-center"
-                    >
-                      <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
-                    </TooltipKeybind>
-                  </div>
-                </Tabs.List>
-                <For each={terminal.all()}>
-                  {(pty) => (
-                    <Tabs.Content value={pty.id}>
-                      <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
-                    </Tabs.Content>
+
+                <For each={data().breakdown.rows}>
+                  {(row) => (
+                    <div class="grid gap-2 py-4 border-t border-[#f4f4f5] items-center"
+                      style={{ "grid-template-columns": `repeat(${data().breakdown.headers.length}, 1fr)` }}>
+                      <span class="font-medium text-black">{row.label}</span>
+
+                      <For each={row.values}>
+                        {(val, i) => (
+                          <span class={`flex items-center gap-1 font-medium ${val.type === 'positive' ? 'text-[#22c55e]' :
+                            val.type === 'negative' ? 'text-[#ef4444]' : 'text-black'
+                            } ${i() === row.values.length && i() > 0 ? "justify-end" : ""}`}>
+                            <Show when={val.icon}>
+                              <Icon name={val.icon as any} size="small" style={val.rotate ? { transform: "rotate(180deg)" } : {}} />
+                            </Show>
+                            {val.text}
+                          </span>
+                        )}
+                      </For>
+                    </div>
                   )}
                 </For>
-              </Tabs>
-              <DragOverlay>
-                <Show when={store.activeTerminalDraggable}>
-                  {(draggedId) => {
-                    const pty = createMemo(() => terminal.all().find((t: LocalPTY) => t.id === draggedId()))
+              </div>
+            </div>
+          </Show>
+
+          <Show when={stage() >= 2}>
+            <div class="flex flex-col gap-2 animate-in" style={{ "animation-delay": "200ms" }}>
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-[#22c55e]" />
+                <span class="text-sm font-medium text-black">High Confidence Analysis</span>
+              </div>
+              <p class="text-sm text-[#71717a] leading-relaxed max-w-xl">
+                {data().assumptions}
+              </p>
+            </div>
+          </Show>
+
+          <Show when={stage() >= 3}>
+            <div class="flex flex-col gap-4 pt-4 animate-in" style={{ "animation-delay": "300ms" }}>
+              <h2 class="text-xs font-semibold text-[#71717a] uppercase tracking-wider">Recommended Decisions</h2>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <For each={data().actions}>
+                  {(action) => {
+                    // Determine color scheme based on badge/priority
+                    const isHighPriority = action.badge.toLowerCase().includes('high') || action.badge.toLowerCase().includes('priority')
+                    const isRisk = action.badge.toLowerCase().includes('risk')
+                    const isOptimization = action.badge.toLowerCase().includes('optim') || action.badge.toLowerCase().includes('cost')
+
+                    const accentColor = isHighPriority || isRisk ? '#ef4444' : isOptimization ? '#22c55e' : '#3b82f6'
+                    const bgGradient = isHighPriority || isRisk
+                      ? 'from-red-50/80 to-rose-50/80'
+                      : isOptimization
+                        ? 'from-emerald-50/80 to-green-50/80'
+                        : 'from-blue-50/80 to-indigo-50/80'
+                    const badgeBg = isHighPriority || isRisk
+                      ? 'bg-red-100/70 text-red-700'
+                      : isOptimization
+                        ? 'bg-emerald-100/70 text-emerald-700'
+                        : 'bg-blue-100/70 text-blue-700'
+
                     return (
-                      <Show when={pty()}>
-                        {(t) => (
-                          <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
-                            {t().title}
-                          </div>
-                        )}
-                      </Show>
+                      <div onClick={() => handleAction(action.id, action.title)}
+                        class={`relative overflow-hidden p-5 rounded-2xl cursor-pointer group bg-gradient-to-br ${bgGradient} backdrop-blur-sm hover:shadow-xl transition-all duration-300 active:scale-[0.98] border-0`}
+                        style={{
+                          "box-shadow": "0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03)"
+                        }}>
+                        {/* Accent border on left */}
+                        <div class="absolute left-0 top-0 bottom-0 w-1 transition-all duration-300 group-hover:w-1.5"
+                          style={{ "background-color": accentColor }} />
+
+                        {/* Subtle top glow */}
+                        <div class="absolute top-0 left-0 right-0 h-px opacity-50"
+                          style={{ "background": `linear-gradient(90deg, transparent, ${accentColor}, transparent)` }} />
+
+                        <div class="flex justify-between items-start mb-3">
+                          <span class="font-bold text-black group-hover:translate-x-0.5 transition-transform duration-200 pr-2 leading-tight">{action.title}</span>
+                          <span class={`${badgeBg} text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-semibold shrink-0 shadow-sm`}>
+                            {action.badge}
+                          </span>
+                        </div>
+                        <p class="text-sm text-zinc-600 leading-relaxed">{action.detail}</p>
+
+                        {/* Hover indicator */}
+                        <div class="mt-3 flex items-center gap-1.5 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                          style={{ color: accentColor }}>
+                          <span>Click to execute</span>
+                          <Icon name="chevron-right" size="small" />
+                        </div>
+                      </div>
                     )
                   }}
-                </Show>
-              </DragOverlay>
-            </DragDropProvider>
+                </For>
+              </div>
+            </div>
           </Show>
-        </div>
-      </Show>
+
+          <Show when={stage() >= 3}>
+            <div class="pt-8 flex justify-center animate-in" style={{ "animation-delay": "400ms" }}>
+              <Button variant="ghost" class="text-[#a1a1aa] hover:text-black text-xs uppercase tracking-widest gap-2">
+                <Icon name="archive" size="small" /> View Detailed Logs
+              </Button>
+            </div>
+          </Show>
+        </Show>
+
+        {/* Execution State */}
+        <Show when={executionStatus() !== 'idle'}>
+          <div class="flex flex-col gap-6 animate-in">
+            <div class="flex items-center gap-3 pb-4 border-b border-[#e4e4e7]">
+              <Show when={executionStatus() === 'running'}>
+                <div class="w-5 h-5 border-2 border-[#e4e4e7] border-t-black rounded-full animate-spin" />
+              </Show>
+              <Show when={executionStatus() === 'completed'}>
+                <div class="w-5 h-5 bg-[#22c55e] rounded-full flex items-center justify-center">
+                  <Icon name="check" size="small" class="text-white" />
+                </div>
+              </Show>
+              <h2 class="text-lg font-medium text-black">
+                {executionStatus() === 'running' ? `Executing: ${executedAction()}` : `Completed: ${executedAction()}`}
+              </h2>
+            </div>
+
+            {/* Live Logs */}
+            <div class="flex flex-col gap-3 font-mono text-sm max-h-[300px] overflow-y-auto">
+              <For each={executionLog()}>
+                {(log) => (
+                  <div class="flex items-center gap-3 animate-in">
+                    <span class="text-[#a1a1aa]">{new Date().toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit" })}</span>
+                    <span class="text-[#3f3f46]">&gt; {log}</span>
+                  </div>
+                )}
+              </For>
+              <Show when={executionStatus() === 'running'}>
+                <div class="w-2 h-4 bg-black/50 animate-pulse ml-[60px]" />
+              </Show>
+            </div>
+
+            {/* Success Card with Details */}
+            <Show when={executionStatus() === 'completed'}>
+              <div class="mt-8 overflow-hidden rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] animate-in shadow-sm">
+                <div class="p-6 border-b border-[#bbf7d0]/50 flex items-start gap-4">
+                  <div class="p-2 bg-[#dcfce7] rounded-full text-[#15803d]">
+                    <Icon name="check" />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <h3 class="font-semibold text-lg text-[#166534]">Execution Successful</h3>
+                    <p class="text-[#15803d] text-sm leading-relaxed">
+                      The requested action has been processed and synchronized with the relevant business systems.
+                    </p>
+                  </div>
+                </div>
+                <div class="p-4 bg-[#dcfce7]/30 flex justify-end">
+                  <Button onClick={() => navigate("/")}
+                    class="bg-white border border-[#bbf7d0] text-[#166534] hover:bg-[#166534] hover:text-white transition-colors shadow-sm font-medium">
+                    Return to Dashboard
+                  </Button>
+                </div>
+              </div>
+            </Show>
+          </div>
+        </Show>
+
+      </div>
     </div>
   )
 }

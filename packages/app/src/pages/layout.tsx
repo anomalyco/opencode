@@ -894,14 +894,14 @@ export default function Layout(props: ParentProps) {
                         {Math.abs(updated().diffNow().as("seconds")) < 60
                           ? "Now"
                           : updated()
-                              .toRelative({
-                                style: "short",
-                                unit: ["days", "hours", "minutes"],
-                              })
-                              ?.replace(" ago", "")
-                              ?.replace(/ days?/, "d")
-                              ?.replace(" min.", "m")
-                              ?.replace(" hr.", "h")}
+                            .toRelative({
+                              style: "short",
+                              unit: ["days", "hours", "minutes"],
+                            })
+                            ?.replace(" ago", "")
+                            ?.replace(/ days?/, "d")
+                            ?.replace(" min.", "m")
+                            ?.replace(" hr.", "h")}
                       </span>
                     </Match>
                   </Switch>
@@ -1011,6 +1011,26 @@ export default function Layout(props: ParentProps) {
               </Button>
               <Collapsible.Content>
                 <nav class="hidden @[4rem]:flex w-full flex-col gap-1.5">
+                  {/* ShopOS OS Features */}
+                  <div class="flex flex-col gap-0.5 pb-2 border-b border-border-weak-base mb-2">
+                    <A
+                      href={`${defaultWorktree()}/brand`}
+                      class="flex items-center gap-3 px-4 py-1.5 rounded-md hover:bg-surface-raised-base-hover text-text-secondary hover:text-text-strong transition-colors"
+                      activeClass="bg-surface-raised-base-hover text-text-strong font-medium"
+                    >
+                      <Icon name="check-small" class="text-text-weak" size="small" />
+                      <span class="text-14-regular">Brand Ground Truth</span>
+                    </A>
+                    <A
+                      href={`${defaultWorktree()}/commerce`}
+                      class="flex items-center gap-3 px-4 py-1.5 rounded-md hover:bg-surface-raised-base-hover text-text-secondary hover:text-text-strong transition-colors"
+                      activeClass="bg-surface-raised-base-hover text-text-strong font-medium"
+                    >
+                      <Icon name="server" class="text-text-weak" size="small" />
+                      <span class="text-14-regular">Commerce Substrate</span>
+                    </A>
+                  </div>
+
                   <For each={rootSessions()}>
                     {(session) => (
                       <SessionItem
