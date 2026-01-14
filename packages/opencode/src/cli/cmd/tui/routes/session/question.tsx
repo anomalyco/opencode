@@ -6,15 +6,17 @@ import { useKeybind } from "../../context/keybind"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
-import { SplitBorder } from "../../component/border"
+import { getSplitBorderChars } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
+import { useAccessibility } from "@tui/util/accessibility"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
   const { theme } = useTheme()
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
+  const accessibility = useAccessibility()
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -42,6 +44,9 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     if (!value) return false
     return store.answers[store.tab]?.includes(value) ?? false
   })
+  const checkMark = createMemo(() => (accessibility() ? "x" : "✓"))
+  const tabHint = createMemo(() => (accessibility() ? "tab" : "⇆"))
+  const navHint = createMemo(() => (accessibility() ? "up/down" : "↑↓"))
 
   function submit() {
     const answers = questions().map((_, i) => store.answers[i] ?? [])
@@ -255,7 +260,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       backgroundColor={theme.backgroundPanel}
       border={["left"]}
       borderColor={theme.accent}
-      customBorderChars={SplitBorder.customBorderChars}
+      customBorderChars={getSplitBorderChars(accessibility())}
     >
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <Show when={!single()}>
@@ -338,11 +343,11 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                         </box>
                         <box backgroundColor={active() ? theme.backgroundElement : undefined}>
                           <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
-                            {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
+                            {multi() ? `[${picked() ? checkMark() : " "}] ${opt.label}` : opt.label}
                           </text>
                         </box>
                         <Show when={!multi()}>
-                          <text fg={theme.success}>{picked() ? "✓" : ""}</text>
+                          <text fg={theme.success}>{picked() ? checkMark() : ""}</text>
                         </Show>
                       </box>
 
@@ -367,12 +372,14 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                     </box>
                     <box backgroundColor={other() ? theme.backgroundElement : undefined}>
                       <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                        {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
+                        {multi()
+                          ? `[${customPicked() ? checkMark() : " "}] Type your own answer`
+                          : "Type your own answer"}
                       </text>
                     </box>
 
                     <Show when={!multi()}>
-                      <text fg={theme.success}>{customPicked() ? "✓" : ""}</text>
+                      <text fg={theme.success}>{customPicked() ? checkMark() : ""}</text>
                     </Show>
                   </box>
                   <Show when={store.editing}>
@@ -441,12 +448,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         <box flexDirection="row" gap={2}>
           <Show when={!single()}>
             <text fg={theme.text}>
-              {"⇆"} <span style={{ fg: theme.textMuted }}>tab</span>
+              {tabHint()} <span style={{ fg: theme.textMuted }}>tab</span>
             </text>
           </Show>
           <Show when={!confirm()}>
             <text fg={theme.text}>
-              {"↑↓"} <span style={{ fg: theme.textMuted }}>select</span>
+              {navHint()} <span style={{ fg: theme.textMuted }}>select</span>
             </text>
           </Show>
           <text fg={theme.text}>

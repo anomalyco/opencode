@@ -8,9 +8,9 @@ import { useKeybind } from "../context/keybind"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
 import { DialogSessionRename } from "./dialog-session-rename"
-import { useKV } from "../context/kv"
 import { createDebouncedSignal } from "../util/signal"
 import { Spinner } from "./spinner"
+import { useAccessibility } from "@tui/util/accessibility"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -19,7 +19,7 @@ export function DialogSessionList() {
   const keybind = useKeybind()
   const { theme } = useTheme()
   const sdk = useSDK()
-  const kv = useKV()
+  const accessibility = useAccessibility()
 
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
@@ -54,7 +54,11 @@ export function DialogSessionList() {
           value: x.id,
           category,
           footer: Locale.time(x.time.updated),
-          gutter: isWorking ? <Spinner /> : undefined,
+          gutter: isWorking ? (
+            <Show when={!accessibility()} fallback={<text fg={theme.textMuted}>[busy]</text>}>
+              <Spinner />
+            </Show>
+          ) : undefined,
         }
       })
   })

@@ -3,11 +3,12 @@ import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
-import { SplitBorder } from "@tui/component/border"
+import { getSplitBorder } from "@tui/component/border"
 import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { useTerminalDimensions } from "@opentui/solid"
+import { useAccessibility } from "@tui/util/accessibility"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -65,6 +66,7 @@ export function Header() {
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
+  const accessibility = useAccessibility()
 
   return (
     <box flexShrink={0}>
@@ -73,7 +75,7 @@ export function Header() {
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={1}
-        {...SplitBorder}
+        {...getSplitBorder(accessibility())}
         border={["left"]}
         borderColor={theme.border}
         flexShrink={0}

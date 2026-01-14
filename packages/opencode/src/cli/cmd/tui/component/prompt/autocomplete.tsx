@@ -7,12 +7,13 @@ import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
 import { useTheme, selectedForeground } from "@tui/context/theme"
-import { SplitBorder } from "@tui/component/border"
+import { getSplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
+import { useAccessibility } from "@tui/util/accessibility"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -79,6 +80,7 @@ export function Autocomplete(props: {
   const sync = useSync()
   const command = useCommandDialog()
   const { theme } = useTheme()
+  const accessibility = useAccessibility()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
 
@@ -614,7 +616,7 @@ export function Autocomplete(props: {
       left={position().x}
       width={position().width}
       zIndex={100}
-      {...SplitBorder}
+      {...getSplitBorder(accessibility())}
       borderColor={theme.border}
     >
       <scrollbox

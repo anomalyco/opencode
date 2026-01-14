@@ -4,6 +4,7 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
+import { useAccessibility } from "@tui/util/accessibility"
 
 export type DialogStatusProps = {}
 
@@ -11,6 +12,8 @@ export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()
   const dialog = useDialog()
+  const accessibility = useAccessibility()
+  const bullet = createMemo(() => (accessibility() ? "-" : "•"))
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
@@ -69,7 +72,7 @@ export function DialogStatus() {
                     )[item.status],
                   }}
                 >
-                  •
+                  {bullet()}
                 </text>
                 <text fg={theme.text} wrapMode="word">
                   <b>{key}</b>{" "}
@@ -107,7 +110,7 @@ export function DialogStatus() {
                     }[item.status],
                   }}
                 >
-                  •
+                  {bullet()}
                 </text>
                 <text fg={theme.text} wrapMode="word">
                   <b>{item.id}</b> <span style={{ fg: theme.textMuted }}>{item.root}</span>
@@ -129,7 +132,7 @@ export function DialogStatus() {
                     fg: theme.success,
                   }}
                 >
-                  •
+                  {bullet()}
                 </text>
                 <text wrapMode="word" fg={theme.text}>
                   <b>{item.name}</b>
@@ -151,7 +154,7 @@ export function DialogStatus() {
                     fg: theme.success,
                   }}
                 >
-                  •
+                  {bullet()}
                 </text>
                 <text wrapMode="word" fg={theme.text}>
                   <b>{item.name}</b>

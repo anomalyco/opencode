@@ -1,4 +1,5 @@
 import { useTheme } from "../context/theme"
+import { useAccessibility } from "@tui/util/accessibility"
 
 export interface TodoItemProps {
   status: string
@@ -7,6 +8,15 @@ export interface TodoItemProps {
 
 export function TodoItem(props: TodoItemProps) {
   const { theme } = useTheme()
+  const accessibility = useAccessibility()
+  const marker = () => {
+    if (!accessibility()) {
+      return props.status === "completed" ? "✓" : props.status === "in_progress" ? "•" : " "
+    }
+    if (props.status === "completed") return "x"
+    if (props.status === "in_progress") return "~"
+    return " "
+  }
 
   return (
     <box flexDirection="row" gap={0}>
@@ -16,7 +26,7 @@ export function TodoItem(props: TodoItemProps) {
           fg: props.status === "in_progress" ? theme.warning : theme.textMuted,
         }}
       >
-        [{props.status === "completed" ? "✓" : props.status === "in_progress" ? "•" : " "}]{" "}
+        [{marker()}]{" "}
       </text>
       <text
         flexGrow={1}

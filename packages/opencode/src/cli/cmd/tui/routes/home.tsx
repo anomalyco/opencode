@@ -14,6 +14,7 @@ import { usePromptRef } from "../context/prompt"
 import { Installation } from "@/installation"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
+import { useAccessibility } from "@tui/util/accessibility"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -25,6 +26,7 @@ export function Home() {
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const command = useCommandDialog()
+  const accessibility = useAccessibility()
   const mcp = createMemo(() => Object.keys(sync.data.mcp).length > 0)
   const mcpError = createMemo(() => {
     return Object.values(sync.data.mcp).some((x) => x.status === "failed")
@@ -61,11 +63,16 @@ export function Home() {
         <text fg={theme.text}>
           <Switch>
             <Match when={mcpError()}>
-              <span style={{ fg: theme.error }}>•</span> mcp errors{" "}
+              <Show when={!accessibility()}>
+                <span style={{ fg: theme.error }}>•</span>{" "}
+              </Show>
+              mcp errors{" "}
               <span style={{ fg: theme.textMuted }}>ctrl+x s</span>
             </Match>
             <Match when={true}>
-              <span style={{ fg: theme.success }}>•</span>{" "}
+              <Show when={!accessibility()}>
+                <span style={{ fg: theme.success }}>•</span>{" "}
+              </Show>
               {Locale.pluralize(connectedMcpCount(), "{} mcp server", "{} mcp servers")}
             </Match>
           </Switch>
@@ -90,6 +97,12 @@ export function Home() {
   const directory = useDirectory()
 
   const keybind = useKeybind()
+  const mcpTextColor = createMemo(() => {
+    if (!accessibility()) return theme.text
+    if (mcpError()) return theme.error
+    if (connectedMcpCount() > 0) return theme.success
+    return theme.textMuted
+  })
 
   return (
     <>
@@ -121,15 +134,17 @@ export function Home() {
         <text fg={theme.textMuted}>{directory()}</text>
         <box gap={1} flexDirection="row" flexShrink={0}>
           <Show when={mcp()}>
-            <text fg={theme.text}>
-              <Switch>
-                <Match when={mcpError()}>
-                  <span style={{ fg: theme.error }}>⊙ </span>
-                </Match>
-                <Match when={true}>
-                  <span style={{ fg: connectedMcpCount() > 0 ? theme.success : theme.textMuted }}>⊙ </span>
-                </Match>
-              </Switch>
+            <text fg={mcpTextColor()}>
+              <Show when={!accessibility()}>
+                <Switch>
+                  <Match when={mcpError()}>
+                    <span style={{ fg: theme.error }}>⊙ </span>
+                  </Match>
+                  <Match when={true}>
+                    <span style={{ fg: connectedMcpCount() > 0 ? theme.success : theme.textMuted }}>⊙ </span>
+                  </Match>
+                </Switch>
+              </Show>
               {connectedMcpCount()} MCP
             </text>
             <text fg={theme.textMuted}>/status</text>

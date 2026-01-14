@@ -1,5 +1,6 @@
 import { createMemo, createSignal, For } from "solid-js"
 import { DEFAULT_THEMES, useTheme } from "@tui/context/theme"
+import { useAccessibility } from "@tui/util/accessibility"
 
 const themeCount = Object.keys(DEFAULT_THEMES).length
 const themeTip = `Use {highlight}/themes{/highlight} or {highlight}Ctrl+X T{/highlight} to switch between ${themeCount} built-in themes`
@@ -32,12 +33,13 @@ function parse(tip: string): TipPart[] {
 
 export function Tips() {
   const theme = useTheme().theme
+  const accessibility = useAccessibility()
   const parts = parse(TIPS[Math.floor(Math.random() * TIPS.length)])
 
   return (
     <box flexDirection="row" maxWidth="100%">
       <text flexShrink={0} style={{ fg: theme.warning }}>
-        ● Tip{" "}
+        {accessibility() ? "Tip:" : "● Tip"}{" "}
       </text>
       <text flexShrink={1}>
         <For each={parts}>

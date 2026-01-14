@@ -11,6 +11,7 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { useAccessibility } from "@tui/util/accessibility"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -62,11 +63,14 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 
   const directory = useDirectory()
   const kv = useKV()
+  const accessibility = useAccessibility()
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
   )
   const gettingStartedDismissed = createMemo(() => kv.get("dismissed_getting_started", false))
+  const bullet = createMemo(() => (accessibility() ? "-" : "•"))
+  const toggleIcon = (expanded: boolean) => (accessibility() ? (expanded ? "v" : ">") : expanded ? "▼" : "▶")
 
   return (
     <Show when={session()}>
@@ -114,7 +118,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   onMouseDown={() => mcpEntries().length > 2 && setExpanded("mcp", !expanded.mcp)}
                 >
                   <Show when={mcpEntries().length > 2}>
-                    <text fg={theme.text}>{expanded.mcp ? "▼" : "▶"}</text>
+                    <text fg={theme.text}>{toggleIcon(expanded.mcp)}</text>
                   </Show>
                   <text fg={theme.text}>
                     <b>MCP</b>
@@ -145,7 +149,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                             )[item.status],
                           }}
                         >
-                          •
+                          {bullet()}
                         </text>
                         <text fg={theme.text} wrapMode="word">
                           {key}{" "}
@@ -174,7 +178,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 onMouseDown={() => sync.data.lsp.length > 2 && setExpanded("lsp", !expanded.lsp)}
               >
                 <Show when={sync.data.lsp.length > 2}>
-                  <text fg={theme.text}>{expanded.lsp ? "▼" : "▶"}</text>
+                  <text fg={theme.text}>{toggleIcon(expanded.lsp)}</text>
                 </Show>
                 <text fg={theme.text}>
                   <b>LSP</b>
@@ -200,7 +204,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                           }[item.status],
                         }}
                       >
-                        •
+                        {bullet()}
                       </text>
                       <text fg={theme.textMuted}>
                         {item.id} {item.root}
@@ -218,7 +222,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   onMouseDown={() => todo().length > 2 && setExpanded("todo", !expanded.todo)}
                 >
                   <Show when={todo().length > 2}>
-                    <text fg={theme.text}>{expanded.todo ? "▼" : "▶"}</text>
+                    <text fg={theme.text}>{toggleIcon(expanded.todo)}</text>
                   </Show>
                   <text fg={theme.text}>
                     <b>Todo</b>
@@ -237,7 +241,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   onMouseDown={() => diff().length > 2 && setExpanded("diff", !expanded.diff)}
                 >
                   <Show when={diff().length > 2}>
-                    <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
+                    <text fg={theme.text}>{toggleIcon(expanded.diff)}</text>
                   </Show>
                   <text fg={theme.text}>
                     <b>Modified Files</b>
@@ -281,7 +285,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               gap={1}
             >
               <text flexShrink={0} fg={theme.text}>
-                ⬖
+                {accessibility() ? "!" : "⬖"}
               </text>
               <box flexGrow={1} gap={1}>
                 <box flexDirection="row" justifyContent="space-between">
@@ -289,7 +293,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     <b>Getting started</b>
                   </text>
                   <text fg={theme.textMuted} onMouseDown={() => kv.set("dismissed_getting_started", true)}>
-                    ✕
+                    {accessibility() ? "x" : "✕"}
                   </text>
                 </box>
                 <text fg={theme.textMuted}>OpenCode includes free models so you can start immediately.</text>
@@ -308,7 +312,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             <span style={{ fg: theme.text }}>{directory().split("/").at(-1)}</span>
           </text>
           <text fg={theme.textMuted}>
-            <span style={{ fg: theme.success }}>•</span> <b>Open</b>
+            <span style={{ fg: theme.success }}>{bullet()}</span> <b>Open</b>
             <span style={{ fg: theme.text }}>
               <b>Code</b>
             </span>{" "}

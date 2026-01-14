@@ -941,6 +941,15 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    accessibility: z
+      .object({
+        numbered_menus: z
+          .boolean()
+          .optional()
+          .describe("Enable numbered selection and slash-to-search in TUI dialogs"),
+      })
+      .optional()
+      .describe("Accessibility settings"),
   })
 
   export const Server = z

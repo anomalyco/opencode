@@ -34,6 +34,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { useAccessibility } from "@tui/util/accessibility"
 
 export type PromptProps = {
   sessionID?: string
@@ -77,6 +78,7 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const accessibility = useAccessibility()
 
   function promptModelWarning() {
     toast.show({
@@ -777,6 +779,22 @@ export function Prompt(props: PromptProps) {
       }),
     }
   })
+  const showSpinner = createMemo(() => kv.get("animations_enabled", true) && !accessibility())
+  const busyFallback = createMemo(() => (accessibility() ? "[busy]" : "[⋯]"))
+  const separator = createMemo(() => (accessibility() ? "-" : "·"))
+  const promptBorderChars = createMemo(() => ({
+    ...EmptyBorder,
+    vertical: accessibility() ? "|" : "┃",
+    bottomLeft: accessibility() ? "|" : "╹",
+  }))
+  const dividerBorderChars = createMemo(() => ({
+    ...EmptyBorder,
+    vertical: theme.backgroundElement.a !== 0 ? (accessibility() ? "|" : "╹") : " ",
+  }))
+  const dividerHorizontalChars = createMemo(() => ({
+    ...EmptyBorder,
+    horizontal: theme.backgroundElement.a !== 0 ? (accessibility() ? "-" : "▀") : " ",
+  }))
 
   return (
     <>
@@ -804,11 +822,7 @@ export function Prompt(props: PromptProps) {
         <box
           border={["left"]}
           borderColor={highlight()}
-          customBorderChars={{
-            ...EmptyBorder,
-            vertical: "┃",
-            bottomLeft: "╹",
-          }}
+          customBorderChars={promptBorderChars()}
         >
           <box
             paddingLeft={2}
@@ -1007,7 +1021,7 @@ export function Prompt(props: PromptProps) {
                   </text>
                   <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
                   <Show when={showVariant()}>
-                    <text fg={theme.textMuted}>·</text>
+                    <text fg={theme.textMuted}>{separator()}</text>
                     <text>
                       <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
                     </text>
@@ -1021,26 +1035,13 @@ export function Prompt(props: PromptProps) {
           height={1}
           border={["left"]}
           borderColor={highlight()}
-          customBorderChars={{
-            ...EmptyBorder,
-            vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
-          }}
+          customBorderChars={dividerBorderChars()}
         >
           <box
             height={1}
             border={["bottom"]}
             borderColor={theme.backgroundElement}
-            customBorderChars={
-              theme.backgroundElement.a !== 0
-                ? {
-                    ...EmptyBorder,
-                    horizontal: "▀",
-                  }
-                : {
-                    ...EmptyBorder,
-                    horizontal: " ",
-                  }
-            }
+            customBorderChars={dividerHorizontalChars()}
           />
         </box>
         <box flexDirection="row" justifyContent="space-between">
@@ -1053,7 +1054,7 @@ export function Prompt(props: PromptProps) {
             >
               <box flexShrink={0} flexDirection="row" gap={1}>
                 <box marginLeft={1}>
-                  <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+                  <Show when={showSpinner()} fallback={<text fg={theme.textMuted}>{busyFallback()}</text>}>
                     <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                   </Show>
                 </box>

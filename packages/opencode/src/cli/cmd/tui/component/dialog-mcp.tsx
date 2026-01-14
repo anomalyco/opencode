@@ -7,16 +7,22 @@ import { useTheme } from "../context/theme"
 import { Keybind } from "@/util/keybind"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "@tui/context/sdk"
+import { useAccessibility } from "@tui/util/accessibility"
 
 function Status(props: { enabled: boolean; loading: boolean }) {
   const { theme } = useTheme()
+  const accessibility = useAccessibility()
   if (props.loading) {
-    return <span style={{ fg: theme.textMuted }}>⋯ Loading</span>
+    return <span style={{ fg: theme.textMuted }}>{accessibility() ? "Loading" : "⋯ Loading"}</span>
   }
   if (props.enabled) {
-    return <span style={{ fg: theme.success, attributes: TextAttributes.BOLD }}>✓ Enabled</span>
+    return (
+      <span style={{ fg: theme.success, attributes: TextAttributes.BOLD }}>
+        {accessibility() ? "Enabled" : "✓ Enabled"}
+      </span>
+    )
   }
-  return <span style={{ fg: theme.textMuted }}>○ Disabled</span>
+  return <span style={{ fg: theme.textMuted }}>{accessibility() ? "Disabled" : "○ Disabled"}</span>
 }
 
 export function DialogMcp() {
