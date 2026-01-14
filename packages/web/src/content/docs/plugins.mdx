@@ -11,7 +11,7 @@ For examples, check out the [plugins](/docs/ecosystem#plugins) created by the co
 
 ## Use a plugin
 
-There are two ways to load plugins.
+There are three ways to load plugins.
 
 ---
 
@@ -38,6 +38,29 @@ Specify npm packages in your config file.
 ```
 
 Both regular and scoped npm packages are supported.
+
+---
+
+### From GitHub
+
+Install plugins directly from GitHub repositories using the `github:` prefix.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["github:eznix86/myfancyplugin#main"]
+}
+```
+
+The format is `github:owner/repo#ref` where `ref` can be:
+
+- A branch (e.g., `#main`, `#develop`)
+- A tag (e.g., `#v1.0.0`)
+- A commit hash (e.g., `#abc123def`)
+
+If no ref is specified, it defaults to `#main`.
+
+GitHub plugins are installed using Bun's [add-git](https://bun.com/docs/guides/install/add-git) command.
 
 Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
