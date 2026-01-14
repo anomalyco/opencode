@@ -1,9 +1,9 @@
 ---
-description: "Find issue(s) on github"
+description: "find issue(s) on github"
 model: opencode/claude-haiku-4-5
 ---
 
-Search through existing issues in sst/opencode using the gh cli to find issues matching this query:
+Search through existing issues in anomalyco/opencode using the gh cli to find issues matching this query:
 
 $ARGUMENTS
 

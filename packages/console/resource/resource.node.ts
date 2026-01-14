@@ -2,8 +2,8 @@ import type { KVNamespaceListOptions, KVNamespaceListResult, KVNamespacePutOptio
 import { Resource as ResourceBase } from "sst"
 import Cloudflare from "cloudflare"
 
-export const waitUntil = async (fn: () => Promise<void>) => {
-  await fn()
+export const waitUntil = async (promise: Promise<any>) => {
+  await promise
 }
 
 export const Resource = new Proxy(

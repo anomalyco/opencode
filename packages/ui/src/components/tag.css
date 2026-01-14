@@ -1,0 +1,37 @@
+[data-component="tag"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+
+  border-radius: var(--radius-xs);
+  border: 0.5px solid var(--border-weak-base);
+  background: var(--surface-raised-base);
+  color: var(--text-base);
+
+  &[data-size="normal"] {
+    height: 18px;
+    padding: 0 6px;
+
+    /* text-12-medium */
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large); /* 166.667% */
+    letter-spacing: var(--letter-spacing-normal);
+  }
+
+  &[data-size="large"] {
+    height: 22px;
+    padding: 0 8px;
+
+    /* text-14-medium */
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large); /* 142.857% */
+    letter-spacing: var(--letter-spacing-normal);
+  }
+}

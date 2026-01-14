@@ -1,0 +1,62 @@
+{
+  "name": "@opencode-ai/app",
+  "version": "1.1.19",
+  "description": "",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./vite": "./vite.js"
+  },
+  "scripts": {
+    "typecheck": "tsgo -b",
+    "start": "vite",
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@happy-dom/global-registrator": "20.0.11",
+    "@tailwindcss/vite": "catalog:",
+    "@tsconfig/bun": "1.0.9",
+    "@types/bun": "catalog:",
+    "@types/luxon": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-icons-spritesheet": "3.0.1",
+    "vite-plugin-solid": "catalog:"
+  },
+  "dependencies": {
+    "@kobalte/core": "catalog:",
+    "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/ui": "workspace:*",
+    "@opencode-ai/util": "workspace:*",
+    "@shikijs/transformers": "3.9.2",
+    "@solid-primitives/active-element": "2.1.3",
+    "@solid-primitives/audio": "1.4.2",
+    "@solid-primitives/event-bus": "1.1.2",
+    "@solid-primitives/media": "2.3.3",
+    "@solid-primitives/resize-observer": "2.1.3",
+    "@solid-primitives/scroll": "2.1.3",
+    "@solid-primitives/storage": "catalog:",
+    "@solid-primitives/websocket": "1.3.1",
+    "@solidjs/meta": "catalog:",
+    "@solidjs/router": "catalog:",
+    "@thisbeyond/solid-dnd": "0.7.5",
+    "diff": "catalog:",
+    "fuzzysort": "catalog:",
+    "ghostty-web": "0.3.0",
+    "luxon": "catalog:",
+    "marked": "catalog:",
+    "marked-shiki": "catalog:",
+    "remeda": "catalog:",
+    "shiki": "catalog:",
+    "solid-js": "catalog:",
+    "solid-list": "catalog:",
+    "tailwindcss": "catalog:",
+    "virtua": "catalog:",
+    "zod": "catalog:"
+  }
+}

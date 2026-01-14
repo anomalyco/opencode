@@ -1,13 +1,15 @@
+import { Slug } from "@opencode-ai/util/slug"
+import pat from "path"
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
 import { type LanguageModelUsage, type ProviderMetadata } from "ai"
-import { Bus } from "../bus"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
-import type { ModelsDev } from "../provider/models"
-import { Share } from "../share/share"
+
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
@@ -16,7 +18,10 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
-import { ShareNext } from "@/share/share-next"
+
+import type { Provider } from "@/provider/provider"
+import { PermissionNext } from "@/permission/next"
+import path from "path"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -37,6 +42,7 @@ export namespace Session {
   export const Info = z
     .object({
       id: Identifier.schema("session"),
+      slug: z.string(),
       projectID: z.string(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
@@ -59,7 +65,9 @@ export namespace Session {
         created: z.number(),
         updated: z.number(),
         compacting: z.number().optional(),
+        archived: z.number().optional(),
       }),
+      permission: PermissionNext.Ruleset.optional(),
       revert: z
         .object({
           messageID: z.string(),
@@ -85,32 +93,32 @@ export namespace Session {
   export type ShareInfo = z.output<typeof ShareInfo>
 
   export const Event = {
-    Created: Bus.event(
+    Created: BusEvent.define(
       "session.created",
       z.object({
         info: Info,
       }),
     ),
-    Updated: Bus.event(
+    Updated: BusEvent.define(
       "session.updated",
       z.object({
         info: Info,
       }),
     ),
-    Deleted: Bus.event(
+    Deleted: BusEvent.define(
       "session.deleted",
       z.object({
         info: Info,
       }),
     ),
-    Diff: Bus.event(
+    Diff: BusEvent.define(
       "session.diff",
       z.object({
         sessionID: z.string(),
         diff: Snapshot.FileDiff.array(),
       }),
     ),
-    Error: Bus.event(
+    Error: BusEvent.define(
       "session.error",
       z.object({
         sessionID: z.string().optional(),
@@ -124,6 +132,7 @@ export namespace Session {
       .object({
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
+        permission: Info.shape.permission,
       })
       .optional(),
     async (input) => {
@@ -131,6 +140,7 @@ export namespace Session {
         parentID: input?.parentID,
         directory: Instance.directory,
         title: input?.title,
+        permission: input?.permission,
       })
     },
   )
@@ -145,12 +155,19 @@ export namespace Session {
         directory: Instance.directory,
       })
       const msgs = await messages({ sessionID: input.sessionID })
+      const idMap = new Map<string, string>()
+
       for (const msg of msgs) {
         if (input.messageID && msg.info.id >= input.messageID) break
+        const newID = Identifier.ascending("message")
+        idMap.set(msg.info.id, newID)
+
+        const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
         const cloned = await updateMessage({
           ...msg.info,
           sessionID: session.id,
-          id: Identifier.ascending("message"),
+          id: newID,
+          ...(parentID && { parentID }),
         })
 
         for (const part of msg.parts) {
@@ -172,14 +189,22 @@ export namespace Session {
     })
   })
 
-  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
+  export async function createNext(input: {
+    id?: string
+    title?: string
+    parentID?: string
+    directory: string
+    permission?: PermissionNext.Ruleset
+  }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
+      slug: Slug.create(),
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory: input.directory,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
+      permission: input.permission,
       time: {
         created: Date.now(),
         updated: Date.now(),
@@ -207,6 +232,10 @@ export namespace Session {
     return result
   }
 
+  export function plan(input: { slug: string; time: { created: number } }) {
+    return path.join(Instance.worktree, ".opencode", "plans", [input.time.created, input.slug].join("-") + ".md")
+  }
+
   export const get = fn(Identifier.schema("session"), async (id) => {
     const read = await Storage.read<Info>(["session", Instance.project.id, id])
     return read as Info
@@ -221,50 +250,23 @@ export namespace Session {
     if (cfg.share === "disabled") {
       throw new Error("Sharing is disabled in configuration")
     }
-
-    if (cfg.enterprise?.url) {
-      const share = await ShareNext.create(id)
-      await update(id, (draft) => {
-        draft.share = {
-          url: share.url,
-        }
-      })
-    }
-
-    const session = await get(id)
-    if (session.share) return session.share
-    const share = await Share.create(id)
+    const { ShareNext } = await import("@/share/share-next")
+    const share = await ShareNext.create(id)
     await update(id, (draft) => {
       draft.share = {
         url: share.url,
       }
     })
-    await Storage.write(["share", id], share)
-    await Share.sync("session/info/" + id, session)
-    for (const msg of await messages({ sessionID: id })) {
-      await Share.sync("session/message/" + id + "/" + msg.info.id, msg.info)
-      for (const part of msg.parts) {
-        await Share.sync("session/part/" + id + "/" + msg.info.id + "/" + part.id, part)
-      }
-    }
     return share
   })
 
   export const unshare = fn(Identifier.schema("session"), async (id) => {
-    const cfg = await Config.get()
-    if (cfg.enterprise?.url) {
-      await ShareNext.remove(id)
-      await update(id, (draft) => {
-        draft.share = undefined
-      })
-    }
-    const share = await getShare(id)
-    if (!share) return
-    await Storage.remove(["share", id])
+    // Use ShareNext to remove the share (same as share function uses ShareNext to create)
+    const { ShareNext } = await import("@/share/share-next")
+    await ShareNext.remove(id)
     await update(id, (draft) => {
       draft.share = undefined
     })
-    await Share.remove(id, share.secret)
   })
 
   export async function update(id: string, editor: (session: Info) => void) {
@@ -364,6 +366,23 @@ export namespace Session {
     },
   )
 
+  export const removePart = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message"),
+      partID: Identifier.schema("part"),
+    }),
+    async (input) => {
+      await Storage.remove(["part", input.messageID, input.partID])
+      Bus.publish(MessageV2.Event.PartRemoved, {
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        partID: input.partID,
+      })
+      return input.partID
+    },
+  )
+
   const UpdatePartInput = z.union([
     MessageV2.Part,
     z.object({
@@ -389,7 +408,7 @@ export namespace Session {
 
   export const getUsage = fn(
     z.object({
-      model: z.custom<ModelsDev.Model>(),
+      model: z.custom<Provider.Model>(),
       usage: z.custom<LanguageModelUsage>(),
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
@@ -420,16 +439,16 @@ export namespace Session {
       }
 
       const costInfo =
-        input.model.cost?.context_over_200k && tokens.input + tokens.cache.read > 200_000
-          ? input.model.cost.context_over_200k
+        input.model.cost?.experimentalOver200K && tokens.input + tokens.cache.read > 200_000
+          ? input.model.cost.experimentalOver200K
           : input.model.cost
       return {
         cost: safe(
           new Decimal(0)
             .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
             .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.cache.read).mul(costInfo?.cache_read ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.cache.write).mul(costInfo?.cache_write ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
             // TODO: update models.dev to have better pricing model, for now:
             // charge reasoning tokens at the same rate as output tokens
             .add(new Decimal(tokens.reasoning).mul(costInfo?.output ?? 0).div(1_000_000))

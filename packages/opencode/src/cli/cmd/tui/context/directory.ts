@@ -5,7 +5,8 @@ import { Global } from "@/global"
 export function useDirectory() {
   const sync = useSync()
   return createMemo(() => {
-    const result = process.cwd().replace(Global.Path.home, "~")
+    const directory = sync.data.path.directory || process.cwd()
+    const result = directory.replace(Global.Path.home, "~")
     if (sync.data.vcs?.branch) return result + ":" + sync.data.vcs.branch
     return result
   })

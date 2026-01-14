@@ -46,7 +46,7 @@ If you're experiencing issues with OpenCode:
 
    The best way to report bugs or request features is through our GitHub repository:
 
-   [**github.com/sst/opencode/issues**](https://github.com/sst/opencode/issues)
+   [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
 
    Before creating a new issue, search existing issues to see if your problem has already been reported.
 
@@ -64,7 +64,7 @@ Here are some common issues and how to resolve them.
 
 ---
 
-### opencode won't start
+### OpenCode won't start
 
 1. Check the logs for error messages
 2. Try running with `--print-logs` to see output in the terminal
@@ -74,7 +74,7 @@ Here are some common issues and how to resolve them.
 
 ### Authentication issues
 
-1. Try re-authenticating with `opencode auth login <provider>`
+1. Try re-authenticating with the `/connect` command in the TUI
 2. Check that your API keys are valid
 3. Ensure your network allows connections to the provider's API
 
@@ -113,10 +113,7 @@ To resolve this:
    rm -rf ~/.local/share/opencode
    ```
 
-3. Re-authenticate with your provider:
-   ```bash
-   opencode auth login <provider>
-   ```
+3. Re-authenticate with your provider using the `/connect` command in the TUI.
 
 ---
 

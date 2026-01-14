@@ -1,0 +1,205 @@
+[data-component="toast-region"] {
+  position: fixed;
+  bottom: 48px;
+  right: 32px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 400px;
+  width: 100%;
+  pointer-events: none;
+
+  [data-slot="toast-list"] {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+[data-component="toast"] {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 16px 20px;
+  pointer-events: auto;
+  transition: all 150ms ease-out;
+
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-weak-base);
+  background: var(--surface-float-base);
+  color: var(--text-invert-base);
+  box-shadow: var(--shadow-md);
+
+  [data-slot="toast-inner"] {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  &[data-opened] {
+    animation: toastPopIn 150ms ease-out;
+  }
+
+  &[data-closed] {
+    animation: toastPopOut 100ms ease-in forwards;
+  }
+
+  &[data-swipe="move"] {
+    transform: translateX(var(--kb-toast-swipe-move-x));
+  }
+
+  &[data-swipe="cancel"] {
+    transform: translateX(0);
+    transition: transform 200ms ease-out;
+  }
+
+  &[data-swipe="end"] {
+    animation: toastSwipeOut 100ms ease-out forwards;
+  }
+
+  /* &[data-variant="success"] { */
+  /*   border-color: var(--color-semantic-positive); */
+  /* } */
+  /**/
+  /* &[data-variant="error"] { */
+  /*   border-color: var(--color-semantic-danger); */
+  /* } */
+  /**/
+  /* &[data-variant="loading"] { */
+  /*   border-color: var(--color-semantic-info); */
+  /* } */
+
+  [data-slot="toast-icon"] {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    [data-component="icon"] {
+      color: var(--text-invert-stronger);
+      /* color: var(--icon-invert-base); */
+    }
+  }
+
+  [data-slot="toast-content"] {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  [data-slot="toast-title"] {
+    color: var(--text-invert-strong);
+
+    /* text-14-medium */
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large); /* 142.857% */
+    letter-spacing: var(--letter-spacing-normal);
+
+    margin: 0;
+  }
+
+  [data-slot="toast-description"] {
+    color: var(--text-invert-base);
+    text-wrap-style: pretty;
+
+    /* text-14-regular */
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-x-large); /* 171.429% */
+    letter-spacing: var(--letter-spacing-normal);
+
+    margin: 0;
+  }
+
+  [data-slot="toast-actions"] {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+  }
+
+  [data-slot="toast-action"] {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+
+    color: var(--text-invert-weak);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+
+    &:hover {
+      text-decoration: underline;
+    }
+
+    &:first-child {
+      color: var(--text-invert-strong);
+    }
+  }
+
+  [data-slot="toast-close-button"] {
+    flex-shrink: 0;
+  }
+
+  [data-slot="toast-progress-track"] {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background-color: var(--surface-base);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    overflow: hidden;
+  }
+
+  [data-slot="toast-progress-fill"] {
+    height: 100%;
+    width: var(--kb-toast-progress-fill-width);
+    background-color: var(--color-primary);
+    transition: width 250ms linear;
+  }
+}
+
+@keyframes toastPopIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastPopOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+@keyframes toastSwipeOut {
+  from {
+    transform: translateX(var(--kb-toast-swipe-end-x));
+  }
+  to {
+    transform: translateX(100%);
+  }
+}

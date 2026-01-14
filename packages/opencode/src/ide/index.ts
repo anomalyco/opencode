@@ -1,8 +1,9 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { spawn } from "bun"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
-import { Bus } from "../bus"
 
 const SUPPORTED_IDES = [
   { name: "Windsurf" as const, cmd: "windsurf" },
@@ -16,7 +17,7 @@ export namespace Ide {
   const log = Log.create({ service: "ide" })
 
   export const Event = {
-    Installed: Bus.event(
+    Installed: BusEvent.define(
       "ide.installed",
       z.object({
         ide: z.string(),

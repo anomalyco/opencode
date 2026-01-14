@@ -1,8 +1,8 @@
+import { QuestionTool } from "./question"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
-import { ListTool } from "./ls"
 import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
@@ -10,6 +10,7 @@ import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
+import { SkillTool } from "./skill"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
@@ -21,11 +22,17 @@ import { Plugin } from "../plugin"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
+import { Log } from "@/util/log"
+import { LspTool } from "./lsp"
+import { Truncate } from "./truncation"
+import { PlanExitTool, PlanEnterTool } from "./plan"
 
 export namespace ToolRegistry {
+  const log = Log.create({ service: "tool.registry" })
+
   export const state = Instance.state(async () => {
     const custom = [] as Tool.Info[]
-    const glob = new Bun.Glob("tool/*.{js,ts}")
+    const glob = new Bun.Glob("{tool,tools}/*.{js,ts}")
 
     for (const dir of await Config.directories()) {
       for await (const match of glob.scan({
@@ -55,15 +62,16 @@ export namespace ToolRegistry {
   function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
     return {
       id,
-      init: async () => ({
+      init: async (initCtx) => ({
         parameters: z.object(def.args),
         description: def.description,
         execute: async (args, ctx) => {
           const result = await def.execute(args as any, ctx)
+          const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
             title: "",
-            output: result,
-            metadata: {},
+            output: out.truncated ? out.content : result,
+            metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
           }
         },
       }),
@@ -86,11 +94,11 @@ export namespace ToolRegistry {
 
     return [
       InvalidTool,
+      ...(["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) ? [QuestionTool] : []),
       BashTool,
       ReadTool,
       GlobTool,
       GrepTool,
-      ListTool,
       EditTool,
       WriteTool,
       TaskTool,
@@ -99,7 +107,10 @@ export namespace ToolRegistry {
       TodoReadTool,
       WebSearchTool,
       CodeSearchTool,
+      SkillTool,
+      ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
+      ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool, PlanEnterTool] : []),
       ...custom,
     ]
   }
@@ -108,42 +119,25 @@ export namespace ToolRegistry {
     return all().then((x) => x.map((t) => t.id))
   }
 
-  export async function tools(providerID: string, _modelID: string) {
+  export async function tools(providerID: string, agent?: Agent.Info) {
     const tools = await all()
     const result = await Promise.all(
       tools
         .filter((t) => {
-          if (t.id === "codesearch" || t.id === "websearch") return providerID === "opencode"
+          // Enable websearch/codesearch for zen users OR via enable flag
+          if (t.id === "codesearch" || t.id === "websearch") {
+            return providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
+          }
           return true
         })
-        .map(async (t) => ({
-          id: t.id,
-          ...(await t.init()),
-        })),
+        .map(async (t) => {
+          using _ = log.time(t.id)
+          return {
+            id: t.id,
+            ...(await t.init({ agent })),
+          }
+        }),
     )
-    return result
-  }
-
-  export async function enabled(
-    _providerID: string,
-    _modelID: string,
-    agent: Agent.Info,
-  ): Promise<Record<string, boolean>> {
-    const result: Record<string, boolean> = {}
-
-    if (agent.permission.edit === "deny") {
-      result["edit"] = false
-      result["write"] = false
-    }
-    if (agent.permission.bash["*"] === "deny" && Object.keys(agent.permission.bash).length === 1) {
-      result["bash"] = false
-    }
-    if (agent.permission.webfetch === "deny") {
-      result["webfetch"] = false
-      result["codesearch"] = false
-      result["websearch"] = false
-    }
-
     return result
   }
 }

@@ -1,16 +1,35 @@
 import { isDeepEqual } from "remeda"
+import type { ParsedKey } from "@opentui/core"
 
 export namespace Keybind {
-  export type Info = {
-    ctrl: boolean
-    meta: boolean
-    shift: boolean
-    leader: boolean
-    name: string
+  /**
+   * Keybind info derived from OpenTUI's ParsedKey with our custom `leader` field.
+   * This ensures type compatibility and catches missing fields at compile time.
+   */
+  export type Info = Pick<ParsedKey, "name" | "ctrl" | "meta" | "shift" | "super"> & {
+    leader: boolean // our custom field
   }
 
   export function match(a: Info, b: Info): boolean {
-    return isDeepEqual(a, b)
+    // Normalize super field (undefined and false are equivalent)
+    const normalizedA = { ...a, super: a.super ?? false }
+    const normalizedB = { ...b, super: b.super ?? false }
+    return isDeepEqual(normalizedA, normalizedB)
+  }
+
+  /**
+   * Convert OpenTUI's ParsedKey to our Keybind.Info format.
+   * This helper ensures all required fields are present and avoids manual object creation.
+   */
+  export function fromParsedKey(key: ParsedKey, leader = false): Info {
+    return {
+      name: key.name,
+      ctrl: key.ctrl,
+      meta: key.meta,
+      shift: key.shift,
+      super: key.super ?? false,
+      leader,
+    }
   }
 
   export function toString(info: Info): string {
@@ -18,6 +37,7 @@ export namespace Keybind {
 
     if (info.ctrl) parts.push("ctrl")
     if (info.meta) parts.push("alt")
+    if (info.super) parts.push("super")
     if (info.shift) parts.push("shift")
     if (info.name) {
       if (info.name === "delete") parts.push("del")
@@ -57,6 +77,9 @@ export namespace Keybind {
           case "meta":
           case "option":
             info.meta = true
+            break
+          case "super":
+            info.super = true
             break
           case "shift":
             info.shift = true

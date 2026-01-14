@@ -1,13 +1,16 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
+import type { PromptInfo } from "../component/prompt/history"
 
 export type HomeRoute = {
   type: "home"
+  initialPrompt?: PromptInfo
 }
 
 export type SessionRoute = {
   type: "session"
   sessionID: string
+  initialPrompt?: PromptInfo
 }
 
 export type Route = HomeRoute | SessionRoute

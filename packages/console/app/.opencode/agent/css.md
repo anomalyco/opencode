@@ -49,7 +49,7 @@ use data attributes to represent different states of the component
 }
 ```
 
-this will allow jsx to control the syling
+this will allow jsx to control the styling
 
 avoid selectors that just target an element type like `> span` you should assign
 it a slot name. it's ok to do this sometimes where it makes sense semantically
