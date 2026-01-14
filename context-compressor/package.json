@@ -1,0 +1,52 @@
+{
+  "name": "@ai-context/compressor",
+  "version": "0.1.0",
+  "description": "A TypeScript context compression library for AI code assistants",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "node --test tests/**/*.test.ts",
+    "example:basic": "tsx examples/basic-usage.ts",
+    "example:custom-provider": "tsx examples/custom-provider.ts",
+    "example:persistent": "tsx examples/persistent-storage.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "context",
+    "compression",
+    "llm",
+    "ai",
+    "typescript",
+    "code-assistant"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ai-context/compressor"
+  },
+  "bugs": {
+    "url": "https://github.com/ai-context/compressor/issues"
+  },
+  "homepage": "https://github.com/ai-context/compressor#readme"
+}

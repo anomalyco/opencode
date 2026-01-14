@@ -3,7 +3,20 @@
     "allow": [
       "Bash(find:*)",
       "Bash(done:*)",
-      "Bash(for:*)"
+      "Bash(for:*)",
+      "Bash(tsx:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run test)",
+      "Bash(echo:*)",
+      "Bash(npm run build:*)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "sequential-thinking",
+    "context7",
+    "tavily",
+    "shadcn"
+  ]
 }

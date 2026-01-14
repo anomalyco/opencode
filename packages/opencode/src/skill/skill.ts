@@ -34,9 +34,9 @@
  *   - all()：获取所有技能
  *
  * 技能定义位置：
- * - OpenCode 格式：.opencode/skill/**/SKILL.md 或 .opencode/skills/**/SKILL.md
- * - Claude 格式：.claude/skills/**/SKILL.md
- * - 全局位置：~/.claude/skills/**/SKILL.md
+ * - OpenCode 格式：.opencode/skill\/**\/SKILL.md 或 .opencode/skills\/**\/SKILL.md
+ * - Claude 格式：.claude/skills\/**\/SKILL.md
+ * - 全局位置：~/.claude/skills\/**\/SKILL.md
  *
  * 技能 Markdown 格式：
  * ```markdown
