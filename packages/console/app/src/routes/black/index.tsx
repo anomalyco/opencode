@@ -22,7 +22,7 @@ export default function Black() {
                       <PlanIcon plan={plan.id} />
                     </div>
                     <p data-slot="price">
-                      <span data-slot="amount">${plan.amount}</span> <span data-slot="period">per month</span>
+                      <span data-slot="amount">${plan.id}</span> <span data-slot="period">per month</span>
                       <Show when={plan.multiplier}>
                         <span data-slot="multiplier">{plan.multiplier}</span>
                       </Show>
@@ -43,7 +43,7 @@ export default function Black() {
                     <PlanIcon plan={plan().id} />
                   </div>
                   <p data-slot="price">
-                    <span data-slot="amount">${plan().amount}</span>{" "}
+                    <span data-slot="amount">${plan().id}</span>{" "}
                     <span data-slot="period">per person billed monthly</span>
                     <Show when={plan().multiplier}>
                       <span data-slot="multiplier">{plan().multiplier}</span>
