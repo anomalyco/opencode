@@ -113,7 +113,7 @@ Within each permission object, **the last matching pattern wins**. Put catch-all
     }
   }
 }
-````
+```
 
 :::warning
 **Never place `"*": "allow"` at the end** — it would match everything and override all previous rules!
@@ -148,13 +148,14 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 
 If you don't specify anything, OpenCode starts from these defaults:
 
-```json
+```json title="opencode.json"
 {
   "permission": {
     "*": "allow",
     "doom_loop": "ask",
     "external_directory": {
-      "*": "ask"
+      "*": "ask",
+      /* tool output allow, see implementation */
     },
     "question": "deny",
     "plan_enter": "deny",
@@ -170,7 +171,7 @@ If you don't specify anything, OpenCode starts from these defaults:
 ```
 
 - Most tools default to `"allow"`.
-- `read` defaults to `"allow"`, but `.env` files require approval `"ask"`.
+- `read` defaults to `"allow"`, but `.env` default to `"ask"`.
 - `doom_loop` and `external_directory` default to `"ask"`.
 - `question`, `plan_enter`, and `plan_exit` default to `"deny"`.
 
