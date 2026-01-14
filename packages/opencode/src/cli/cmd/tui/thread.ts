@@ -125,9 +125,6 @@ export const TuiThreadCommand = cmd({
       networkOpts.port !== 0 ||
       networkOpts.hostname !== "127.0.0.1"
 
-    // Subscribe to events from worker
-    await client.call("subscribe", { directory: cwd })
-
     let url: string
     let customFetch: typeof fetch | undefined
     let events: EventSource | undefined

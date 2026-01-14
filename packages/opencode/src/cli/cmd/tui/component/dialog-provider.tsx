@@ -36,6 +36,7 @@ export function createDialogProviderOptions() {
         description: {
           opencode: "(Recommended)",
           anthropic: "(Claude Max or API key)",
+          openai: "(ChatGPT Plus/Pro or API key)",
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
@@ -111,8 +112,7 @@ function AutoMethod(props: AutoMethodProps) {
 
   useKeyboard((evt) => {
     if (evt.name === "c" && !evt.ctrl && !evt.meta) {
-      const code =
-        props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4}/)?.[0] ?? props.authorization.instructions
+      const code = props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4}/)?.[0] ?? props.authorization.url
       Clipboard.copy(code)
         .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
         .catch(toast.error)
@@ -225,7 +225,7 @@ function ApiMethod(props: ApiMethodProps) {
       }
       onConfirm={async (value) => {
         if (!value) return
-        sdk.client.auth.set({
+        await sdk.client.auth.set({
           providerID: props.providerID,
           auth: {
             type: "api",

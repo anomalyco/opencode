@@ -545,6 +545,10 @@ export type QuestionInfo = {
    * Allow selecting multiple choices
    */
   multiple?: boolean
+  /**
+   * Allow typing a custom answer (default: true)
+   */
+  custom?: boolean
 }
 
 export type QuestionRequest = {
@@ -706,6 +710,7 @@ export type PermissionRuleset = Array<PermissionRule>
 
 export type Session = {
   id: string
+  slug: string
   projectID: string
   directory: string
   parentID?: string
@@ -2062,6 +2067,7 @@ export type OAuth = {
   refresh: string
   access: string
   expires: number
+  accountId?: string
   enterpriseUrl?: string
 }
 
