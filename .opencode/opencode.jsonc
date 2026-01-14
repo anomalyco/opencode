@@ -16,15 +16,20 @@
       "type": "remote",
       "url": "https://mcp.context7.com/mcp",
     },
-    // ShopifyMockMCP - Uses Mock.shop free public API
-    // No authentication required - uses Shopify's official mock data
-    // Tools: search_shop_catalog, search_shop_policies_and_faqs, get_cart, update_cart
+    // Shopify Storefront MCP - Uses Mock.shop free public API
+    // No authentication required - uses Shopify's official mock product data
+    // Tools provided by MCP:
+    //   - shopify-mock_search_shop_catalog: Search products by keyword, category, filters
+    //   - shopify-mock_search_shop_policies_and_faqs: Query store policies, FAQs, shipping info
+    //   - shopify-mock_get_cart: Retrieve cart contents
+    //   - shopify-mock_update_cart: Modify cart (add/update/remove items)
     // Location: /tmp/ShopifyMockMCP (installed locally)
+    // Data source: https://mock.shop (Shopify's official demo GraphQL API)
     "shopify-mock": {
       "type": "local",
       "command": ["node", "/tmp/ShopifyMockMCP/dist/server.js"],
       "enabled": true,
-      "timeout": 10000,
+      "timeout": 15000, // Increased for API latency
     },
   },
   "tools": {

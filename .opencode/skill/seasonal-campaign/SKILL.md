@@ -16,13 +16,35 @@ This Plan generates a complete seasonal campaign package with 100+ assets.
 ## Required Inputs
 
 Collect before starting:
-1. **Existing product catalog** (hero products to feature)
+1. **Brand ID** (nike, luxebags, freshfoods)
 2. **Campaign theme** (e.g., "Holiday 2025 — Cozy Luxe")
 3. **Channels** (Meta, Google, Instagram, TikTok, Pinterest)
 4. **Budget** (for ad recommendations)
-5. **Key products** (which SKUs to prioritize)
+5. **Product selection** (specific products, collections, or "all hero products")
 
 ## Execution Chain
+
+### ⓪ Product Catalog Loading (NEW)
+
+**IMPORTANT**: Always load real product data from Shopify before starting creative work.
+
+```
+get_brand_context(brand_id) → Load brand preferences and Shopify connection
+query_collections(brand_id, collection_query="seasonal" or "best sellers") → Browse available collections
+query_products(brand_id, limit=10-20, available_only=true) → Get hero products for campaign
+```
+
+Output:
+- Real product names, prices, variants from Shopify Storefront
+- Product images to reference in creative generation
+- Current inventory status (prioritize in-stock items)
+- Product categories and collections
+
+**Why this matters**:
+- Use REAL product names in copy (not placeholders)
+- Reference ACTUAL pricing in ads
+- Feature only AVAILABLE products (avoid out-of-stock items)
+- Match creative to product categories (running shoes vs handbags require different styles)
 
 ### ① Trend Intelligence
 
@@ -30,7 +52,7 @@ Collect before starting:
 run_space(research) inputs: {
   topic: "seasonal_trends",
   sources: ["tiktok", "pinterest", "instagram"],
-  category: "[product_category]"
+  category: "[product_category from Shopify data]"
 }
 ```
 
@@ -38,12 +60,16 @@ Output:
 - Trending themes from TikTok, Pinterest, Instagram
 - Color palettes and design trends
 - Messaging hooks matched to brand tone
+- Trend alignment with actual product catalog
 
 ### ② Campaign Creative Generation
 
-Run in PARALLEL for each hero product:
+Run in PARALLEL for each hero product (using real product data from Shopify):
 ```
 run_space(ad_creation) inputs: {
+  product: "[real product name from query_products]",
+  price: "[actual price from Shopify]",
+  variants: "[available sizes/colors from Shopify]",
   variations: 15,
   styles: ["bold", "minimal", "editorial"],
   seasonal_overlay: true,
@@ -52,9 +78,11 @@ run_space(ad_creation) inputs: {
 ```
 
 Output per product:
-- 15 ad variations (static + video)
+- 15 ad variations (static + video) featuring real product details
 - Seasonal overlays (holiday props, backgrounds, lighting)
 - 3 creative styles: Bold, Minimal, Editorial
+- Copy includes actual product names and pricing
+- Variants referenced in ad copy (e.g., "Available in 5 colors")
 
 ### ③ Social Content Pack
 
@@ -147,8 +175,35 @@ Pre-configured tests:
 
 ## Important Notes
 
+- **Always start with Shopify product loading** to use real catalog data
 - Start with trend intelligence to inform creative direction
 - Generate MORE variations than needed (100+) to enable testing
 - Include deployment structure for fast launch
 - Pre-configure A/B tests - don't leave as manual step
 - Calendar should account for key dates (Black Friday, Cyber Monday, etc.)
+
+## Shopify Integration Benefits
+
+**Before (Manual)**:
+- Guess which products are in stock
+- Use placeholder product names
+- Manually find product images and pricing
+- Risk featuring out-of-stock items in campaigns
+- Creative team waits for product data
+
+**After (With Shopify MCP)**:
+- Real-time product availability
+- Actual product names, prices, and variants
+- Direct access to product images from catalog
+- Automatically prioritize in-stock items
+- Parallel execution (product data + creative generation)
+
+**Result**: Accurate campaigns with real products, zero guesswork, faster execution.
+
+## Tool Reference
+
+**Shopify Product Tools Used**:
+- `query_products` - Get hero products for campaign
+- `query_collections` - Browse seasonal collections
+- `get_product_details` - Deep dive on specific products
+- `get_store_policies` - Include shipping/return info in campaign materials

@@ -74,9 +74,9 @@ You're the default for:
 user: How did Nike do last quarter in Delhi-NCR?
 assistant: I'll analyze Nike's Q4 performance in Delhi-NCR.
 
-[Calls get_brand_context with brand_id="nike"]
-[Calls query_sales with brand_id="nike", region="Delhi-NCR", start_date="2024-10-01", end_date="2024-12-31"]
-[Calls query_campaigns with brand_id="nike", start_date="2024-10-01", end_date="2024-12-31"]
+[Calls get-brand-context({ brand_id: "nike" })]
+[Calls query-sales({ brand_id: "nike", region: "Delhi-NCR", start_date: "2024-10-01", end_date: "2024-12-31" })]
+[Calls query-campaigns({ brand_id: "nike", start_date: "2024-10-01", end_date: "2024-12-31" })]
 
 ## Nike Performance: Delhi-NCR (Q4 2024)
 
@@ -105,7 +105,7 @@ assistant: I'll analyze Nike's Q4 performance in Delhi-NCR.
 user: Launch the new Nike Air Max
 assistant: I'll run the Product Launch Plan for Nike Air Max.
 
-[Calls get_brand_context with brand_id="nike"]
+[Calls get-brand-context({ brand_id: "nike" })]
 
 Before I execute the full launch, I need a few details:
 
@@ -124,10 +124,10 @@ Creating launch todo list:
 4. ⏳ Marketing assets (ads, social)
 5. ⏳ Copy generation (titles, descriptions, bullets)
 
-[Calls run_space with space="image_generation", brand_id="nike", inputs={product: "Air Max", style: "studio"}]
-[Calls run_space with space="image_generation", brand_id="nike", inputs={product: "Air Max", style: "lifestyle"}]
-[Calls run_space with space="copy_generation", brand_id="nike", inputs={product: "Air Max", features: [...]}]
-[Calls run_space with space="ad_creation", brand_id="nike", inputs={product: "Air Max", platforms: ["meta", "google"]}]
+[Calls run-space({ space: "image_generation", brand_id: "nike", inputs: {product: "Air Max", style: "studio"} })]
+[Calls run-space({ space: "image_generation", brand_id: "nike", inputs: {product: "Air Max", style: "lifestyle"} })]
+[Calls run-space({ space: "copy_generation", brand_id: "nike", inputs: {product: "Air Max", features: [...]} })]
+[Calls run-space({ space: "ad_creation", brand_id: "nike", inputs: {product: "Air Max", platforms: ["meta", "google"]} })]
 
 ## Product Launch Complete: Nike Air Max
 

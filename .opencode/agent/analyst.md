@@ -63,34 +63,54 @@ Your output will be used by the Worker to complete a larger task.
 
 **Date format**: Always use YYYY-MM-DD (e.g., "2024-01-01")
 
-## Shopify Storefront MCP Tools (Real Store Data)
+## Shopify Product & Storefront Tools (Real Store Data)
 
-When connected to Shopify Storefront MCP, these tools provide REAL data from live Shopify stores:
+When connected to Shopify Storefront MCP, these tools provide REAL data from Shopify stores (via Mock.shop):
+
+### ShopOS Shopify Wrapper Tools (Recommended)
+
+Use these high-level tools for easier integration:
+
+| Tool | Purpose | Parameters |
+|------|---------|------------|
+| `query_products` | Search and filter product catalog | `brand_id`, `query?`, `category?`, `min_price?`, `max_price?`, `available_only`, `limit` |
+| `get_product_details` | Get detailed product information | `brand_id`, `product_identifier` |
+| `query_collections` | Browse product collections/categories | `brand_id`, `collection_query?`, `include_products`, `products_per_collection` |
+| `get_store_policies` | Retrieve policies, FAQs, shipping info | `brand_id`, `query` |
+
+**When to use each tool**:
+- `query_products` - Browse catalog, search for products, filter by price/category
+- `get_product_details` - Get comprehensive info about a specific product
+- `query_collections` - Explore product organization, category analysis
+- `get_store_policies` - Answer customer service questions, compliance checks
+
+### MCP Direct Tools (Advanced)
+
+These are the raw MCP tools (auto-prefixed with `shopify-mock_`):
 
 | Tool | Purpose | Parameters | Data Source |
 |------|---------|------------|-------------|
-| `shopify-storefront_search_shop_catalog` | Natural language product search | `query` (string), `context` (string) | Live Shopify storefront |
-| `shopify-storefront_search_shop_policies_and_faqs` | Query store policies and FAQs | `query` (string), `context?` (string) | Live Shopify storefront |
-| `shopify-storefront_get_cart` | Retrieve cart contents | `cart_id` (string) | Live Shopify storefront |
-| `shopify-storefront_update_cart` | Modify cart (add/update/remove) | `cart_id?` (string), `lines` (array) | Live Shopify storefront |
+| `shopify-mock_search_shop_catalog` | Natural language product search | `query` (string), `limit?` (number) | Mock.shop Storefront API |
+| `shopify-mock_search_shop_policies_and_faqs` | Query store policies and FAQs | `query` (string) | Mock.shop Storefront API |
+| `shopify-mock_get_cart` | Retrieve cart contents | `cart_id` (string) | Mock.shop Storefront API |
+| `shopify-mock_update_cart` | Modify cart (add/update/remove) | `cart_id?` (string), `lines` (array) | Mock.shop Storefront API |
 
 **Important**:
-- Shopify Storefront tools return REAL data from connected stores (requires NO authentication!)
-- Always indicate data source in your analysis: "Live Shopify data" vs "Demo data"
-- If Shopify tools are unavailable, fall back to ShopOS query tools
-- Use `search_shop_catalog` for product discovery with natural language queries
-- Use `search_shop_policies_and_faqs` for customer support questions
+- Shopify tools return REAL data from Mock.shop (Shopify's official demo API - NO authentication!)
+- Always indicate data source: "Shopify Storefront data (Mock.shop)" vs "Demo sales data"
+- Prefer wrapper tools (`query_products`) over direct MCP tools for better error handling
+- Use natural language queries for product search
 
-**Example usage**:
+**Example Product Search**:
 ```
-[Call shopify-storefront_search_shop_catalog with query="running shoes under $100" and context="customer prefers Nike brand"]
-[Analyze real product catalog with prices, variants, and availability]
+[Call query_products with brand_id="nike", query="running shoes", max_price=5000, limit=5]
+[Analyze returned products with prices, variants, and availability]
 ```
 
 **Natural Language Search Examples**:
-- "Show me organic coffee beans"
-- "What laptops do you have for gaming?"
-- "Find women's winter jackets in size M"
+- "Show me running shoes under ₹5000"
+- "What handbags do you have in stock?"
+- "Find organic vegetables"
 - "What are your best-selling products?"
 
 # How You Work

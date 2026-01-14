@@ -130,6 +130,29 @@ export default tool({
       return `Brand '${args.brand_id}' not found. Available brands: ${available}`
     }
 
+    const shopifyInfo = brand.shopify
+      ? `
+## Shopify Storefront
+- **Store URL**: ${brand.shopify.store_url}
+- **MCP Server**: ${brand.shopify.mcp_endpoint}
+- **API Type**: ${brand.shopify.mcp_type}
+- **Authentication**: ${brand.shopify.auth_required ? "Required" : "Not required"}
+- **Note**: ${brand.shopify.note}
+
+### Available Shopify Tools
+- \`query-products\` - Search and filter product catalog
+- \`get-product-details\` - Get detailed product information
+- \`query-collections\` - Browse product collections/categories
+- \`get-store-policies\` - Retrieve policies, FAQs, shipping info
+
+### MCP Direct Tools
+- \`shopify-mock_search_shop_catalog\` - Direct MCP catalog search
+- \`shopify-mock_search_shop_policies_and_faqs\` - Direct MCP policy search
+- \`shopify-mock_get_cart\` - Retrieve cart contents
+- \`shopify-mock_update_cart\` - Modify cart items
+`
+      : ""
+
     return `# Brand Context: ${brand.name}
 
 ## Basic Info
@@ -153,7 +176,15 @@ ${brand.spaces.map(s => `- ${s}`).join("\n")}
 - **Top Region**: ${brand.performance.top_region}
 - **Top Category**: ${brand.performance.top_category}
 - **YoY Growth**: ${brand.performance.yoy_growth}%
+${shopifyInfo}
+---
 
-Brand context loaded successfully. You can now query data and run Spaces for ${brand.name}.`
+**Next Steps**:
+1. Use \`query-sales\`, \`query-campaigns\`, or \`query-inventory\` to analyze data
+2. Use \`query-products\` or \`get-product-details\` to browse Shopify catalog
+3. Use \`run-space\` to generate creative assets
+4. Use available skills for complex workflows
+
+Brand context loaded successfully. You can now operate ${brand.name}.`
   },
 })

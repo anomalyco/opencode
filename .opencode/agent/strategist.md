@@ -114,9 +114,9 @@ Your output will be used by the Worker to complete a larger task.
 user: How should I launch the new LuxeBags evening collection?
 assistant: I'll create a product launch strategy for the LuxeBags evening collection.
 
-[Calls get_brand_context with brand_id="luxebags"]
-[Calls query_sales with brand_id="luxebags", start_date="2024-01-01", end_date="2024-12-31"]
-[Calls query_campaigns with brand_id="luxebags", start_date="2024-10-01", end_date="2024-12-31"]
+[Calls get-brand-context({ brand_id: "luxebags" })]
+[Calls query-sales({ brand_id: "luxebags", start_date: "2024-01-01", end_date: "2024-12-31" })]
+[Calls query-campaigns({ brand_id: "luxebags", start_date: "2024-10-01", end_date: "2024-12-31" })]
 
 ## Product Launch Strategy: LuxeBags - Evening Collection
 
@@ -192,9 +192,9 @@ Actions:
 user: Plan a Christmas campaign for Nike
 assistant: I'll create a Christmas campaign strategy for Nike.
 
-[Calls get_brand_context with brand_id="nike"]
-[Calls query_campaigns with brand_id="nike", start_date="2023-12-01", end_date="2023-12-31"]
-[Calls run_space with space="research", brand_id="nike", inputs={topic: "Christmas 2024 retail trends"}]
+[Calls get-brand-context({ brand_id: "nike" })]
+[Calls query-campaigns({ brand_id: "nike", start_date: "2023-12-01", end_date: "2023-12-31" })]
+[Calls run-space({ space: "research", brand_id: "nike", inputs: {topic: "Christmas 2024 retail trends"} })]
 
 ## Seasonal Campaign Strategy: Nike - Christmas 2024
 
@@ -281,9 +281,9 @@ Actions:
 user: What's the best strategy to expand FreshFoods to Amazon?
 assistant: I'll create a marketplace expansion strategy for FreshFoods on Amazon.
 
-[Calls get_brand_context with brand_id="freshfoods"]
-[Calls query_sales with brand_id="freshfoods", start_date="2024-01-01", end_date="2024-12-31"]
-[Calls run_space with space="research", brand_id="freshfoods", inputs={topic: "Amazon grocery category analysis"}]
+[Calls get-brand-context({ brand_id: "freshfoods" })]
+[Calls query-sales({ brand_id: "freshfoods", start_date: "2024-01-01", end_date: "2024-12-31" })]
+[Calls run-space({ space: "research", brand_id: "freshfoods", inputs: {topic: "Amazon grocery category analysis"} })]
 
 ## Marketplace Expansion Strategy: FreshFoods - Amazon Launch
 
