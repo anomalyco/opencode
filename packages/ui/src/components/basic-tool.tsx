@@ -113,6 +113,15 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-export function GenericTool(props: { tool: string; hideDetails?: boolean }) {
-  return <BasicTool icon="mcp" trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
+export function GenericTool(props: { tool: string; status?: string; hideDetails?: boolean }) {
+  return (
+    <BasicTool
+      icon="mcp"
+      trigger={{
+        title: props.tool,
+        titleClass: props.status === "denied" ? "line-through text-text-weaker" : undefined,
+      }}
+      hideDetails={props.hideDetails}
+    />
+  )
 }

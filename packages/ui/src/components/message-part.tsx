@@ -544,6 +544,26 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
       <Switch>
         <Match when={part.state.status === "error" && part.state.error}>
           {(error) => {
+            const err = error()
+            const denied =
+              err.includes("rejected permission") || err.includes("specified a rule") || err.includes("user dismissed")
+            if (denied) {
+              return (
+                <Dynamic
+                  component={render}
+                  input={input()}
+                  tool={part.tool}
+                  metadata={metadata()}
+                  // @ts-expect-error
+                  output={part.state.output}
+                  status="denied"
+                  hideDetails={props.hideDetails}
+                  forceOpen={forceOpen()}
+                  locked={showPermission() || showQuestion()}
+                  defaultOpen={props.defaultOpen}
+                />
+              )
+            }
             const cleaned = error().replace("Error: ", "")
             const [title, ...rest] = cleaned.split(": ")
             return (
