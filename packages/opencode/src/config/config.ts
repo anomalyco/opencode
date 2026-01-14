@@ -947,6 +947,7 @@ export namespace Config {
           .boolean()
           .optional()
           .describe("Enable numbered selection and slash-to-search in TUI dialogs"),
+        ascii: z.boolean().optional().describe("Use ASCII-only text mode in the TUI"),
       })
       .optional()
       .describe("Accessibility settings"),
