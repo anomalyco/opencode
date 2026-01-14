@@ -2816,6 +2816,7 @@ dependencies = [
  "tokio",
  "uuid",
  "webkit2gtk",
+ "windows",
 ]
 
 [[package]]

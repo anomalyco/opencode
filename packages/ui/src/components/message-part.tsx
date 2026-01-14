@@ -22,7 +22,11 @@ import {
   ToolPart,
   UserMessage,
   Todo,
+  QuestionRequest,
+  QuestionAnswer,
+  QuestionInfo,
 } from "@opencode-ai/sdk/v2"
+import { createStore } from "solid-js/store"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { useCodeComponent } from "../context/code"
@@ -238,6 +242,11 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         icon: "checklist",
         title: "Read to-dos",
       }
+    case "question":
+      return {
+        icon: "bubble-5",
+        title: "Questions",
+      }
     default:
       return {
         icon: "mcp",
@@ -438,6 +447,7 @@ export interface ToolProps {
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
+  locked?: boolean
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -475,7 +485,15 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     return next
   })
 
+  const questionRequest = createMemo(() => {
+    const next = data.store.question?.[props.message.sessionID]?.[0]
+    if (!next || !next.tool) return undefined
+    if (next.tool!.callID !== part.callID) return undefined
+    return next
+  })
+
   const [showPermission, setShowPermission] = createSignal(false)
+  const [showQuestion, setShowQuestion] = createSignal(false)
 
   createEffect(() => {
     const perm = permission()
@@ -487,9 +505,19 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     }
   })
 
+  createEffect(() => {
+    const question = questionRequest()
+    if (question) {
+      const timeout = setTimeout(() => setShowQuestion(true), 50)
+      onCleanup(() => clearTimeout(timeout))
+    } else {
+      setShowQuestion(false)
+    }
+  })
+
   const [forceOpen, setForceOpen] = createSignal(false)
   createEffect(() => {
-    if (permission()) setForceOpen(true)
+    if (permission() || questionRequest()) setForceOpen(true)
   })
 
   const respond = (response: "once" | "always" | "reject") => {
@@ -512,7 +540,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const render = ToolRegistry.render(part.tool) ?? GenericTool
 
   return (
-    <div data-component="tool-part-wrapper" data-permission={showPermission()}>
+    <div data-component="tool-part-wrapper" data-permission={showPermission()} data-question={showQuestion()}>
       <Switch>
         <Match when={part.state.status === "error" && part.state.error}>
           {(error) => {
@@ -549,6 +577,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             status={part.state.status}
             hideDetails={props.hideDetails}
             forceOpen={forceOpen()}
+            locked={showPermission() || showQuestion()}
             defaultOpen={props.defaultOpen}
           />
         </Match>
@@ -568,6 +597,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
           </div>
         </div>
       </Show>
+      <Show when={showQuestion() && questionRequest()}>{(request) => <QuestionPrompt request={request()} />}</Show>
     </div>
   )
 }
@@ -1042,3 +1072,288 @@ ToolRegistry.register({
     )
   },
 })
+
+ToolRegistry.register({
+  name: "question",
+  render(props) {
+    const questions = createMemo(() => (props.input.questions ?? []) as QuestionInfo[])
+    const answers = createMemo(() => (props.metadata.answers ?? []) as QuestionAnswer[])
+    const completed = createMemo(() => answers().length > 0)
+
+    const subtitle = createMemo(() => {
+      const count = questions().length
+      if (count === 0) return ""
+      if (completed()) return `${count} answered`
+      return `${count} question${count > 1 ? "s" : ""}`
+    })
+
+    return (
+      <BasicTool
+        {...props}
+        defaultOpen={completed()}
+        icon="bubble-5"
+        trigger={{
+          title: "Questions",
+          subtitle: subtitle(),
+        }}
+      >
+        <Show when={completed()}>
+          <div data-component="question-answers">
+            <For each={questions()}>
+              {(q, i) => {
+                const answer = () => answers()[i()] ?? []
+                return (
+                  <div data-slot="question-answer-item">
+                    <div data-slot="question-text">{q.question}</div>
+                    <div data-slot="answer-text">{answer().join(", ") || "(no answer)"}</div>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+function QuestionPrompt(props: { request: QuestionRequest }) {
+  const data = useData()
+  const questions = createMemo(() => props.request.questions)
+  const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
+
+  const [store, setStore] = createStore({
+    tab: 0,
+    answers: [] as QuestionAnswer[],
+    custom: [] as string[],
+    editing: false,
+  })
+
+  const question = createMemo(() => questions()[store.tab])
+  const confirm = createMemo(() => !single() && store.tab === questions().length)
+  const options = createMemo(() => question()?.options ?? [])
+  const input = createMemo(() => store.custom[store.tab] ?? "")
+  const multi = createMemo(() => question()?.multiple === true)
+  const customPicked = createMemo(() => {
+    const value = input()
+    if (!value) return false
+    return store.answers[store.tab]?.includes(value) ?? false
+  })
+
+  function submit() {
+    const answers = questions().map((_, i) => store.answers[i] ?? [])
+    data.replyToQuestion?.({
+      requestID: props.request.id,
+      answers,
+    })
+  }
+
+  function reject() {
+    data.rejectQuestion?.({
+      requestID: props.request.id,
+    })
+  }
+
+  function pick(answer: string, custom: boolean = false) {
+    const answers = [...store.answers]
+    answers[store.tab] = [answer]
+    setStore("answers", answers)
+    if (custom) {
+      const inputs = [...store.custom]
+      inputs[store.tab] = answer
+      setStore("custom", inputs)
+    }
+    if (single()) {
+      data.replyToQuestion?.({
+        requestID: props.request.id,
+        answers: [[answer]],
+      })
+      return
+    }
+    setStore("tab", store.tab + 1)
+  }
+
+  function toggle(answer: string) {
+    const existing = store.answers[store.tab] ?? []
+    const next = [...existing]
+    const index = next.indexOf(answer)
+    if (index === -1) next.push(answer)
+    if (index !== -1) next.splice(index, 1)
+    const answers = [...store.answers]
+    answers[store.tab] = next
+    setStore("answers", answers)
+  }
+
+  function selectTab(index: number) {
+    setStore("tab", index)
+    setStore("editing", false)
+  }
+
+  function selectOption(optIndex: number) {
+    if (optIndex === options().length) {
+      setStore("editing", true)
+      return
+    }
+    const opt = options()[optIndex]
+    if (!opt) return
+    if (multi()) {
+      toggle(opt.label)
+      return
+    }
+    pick(opt.label)
+  }
+
+  function handleCustomSubmit(e: Event) {
+    e.preventDefault()
+    const value = input().trim()
+    if (!value) {
+      setStore("editing", false)
+      return
+    }
+    if (multi()) {
+      const existing = store.answers[store.tab] ?? []
+      const next = [...existing]
+      if (!next.includes(value)) next.push(value)
+      const answers = [...store.answers]
+      answers[store.tab] = next
+      setStore("answers", answers)
+      setStore("editing", false)
+      return
+    }
+    pick(value, true)
+    setStore("editing", false)
+  }
+
+  return (
+    <div data-component="question-prompt">
+      <Show when={!single()}>
+        <div data-slot="question-tabs">
+          <For each={questions()}>
+            {(q, index) => {
+              const active = () => index() === store.tab
+              const answered = () => (store.answers[index()]?.length ?? 0) > 0
+              return (
+                <button
+                  data-slot="question-tab"
+                  data-active={active()}
+                  data-answered={answered()}
+                  onClick={() => selectTab(index())}
+                >
+                  {q.header}
+                </button>
+              )
+            }}
+          </For>
+          <button data-slot="question-tab" data-active={confirm()} onClick={() => selectTab(questions().length)}>
+            Confirm
+          </button>
+        </div>
+      </Show>
+
+      <Show when={!confirm()}>
+        <div data-slot="question-content">
+          <div data-slot="question-text">
+            {question()?.question}
+            {multi() ? " (select all that apply)" : ""}
+          </div>
+          <div data-slot="question-options">
+            <For each={options()}>
+              {(opt, i) => {
+                const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
+                return (
+                  <button data-slot="question-option" data-picked={picked()} onClick={() => selectOption(i())}>
+                    <span data-slot="option-label">{opt.label}</span>
+                    <Show when={opt.description}>
+                      <span data-slot="option-description">{opt.description}</span>
+                    </Show>
+                    <Show when={picked()}>
+                      <Icon name="check-small" size="normal" />
+                    </Show>
+                  </button>
+                )
+              }}
+            </For>
+            <button
+              data-slot="question-option"
+              data-picked={customPicked()}
+              onClick={() => selectOption(options().length)}
+            >
+              <span data-slot="option-label">Type your own answer</span>
+              <Show when={!store.editing && input()}>
+                <span data-slot="option-description">{input()}</span>
+              </Show>
+              <Show when={customPicked()}>
+                <Icon name="check-small" size="normal" />
+              </Show>
+            </button>
+            <Show when={store.editing}>
+              <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
+                <input
+                  ref={(el) => setTimeout(() => el.focus(), 0)}
+                  type="text"
+                  data-slot="custom-input"
+                  placeholder="Type your answer..."
+                  value={input()}
+                  onInput={(e) => {
+                    const inputs = [...store.custom]
+                    inputs[store.tab] = e.currentTarget.value
+                    setStore("custom", inputs)
+                  }}
+                />
+                <Button type="submit" variant="primary" size="small">
+                  {multi() ? "Add" : "Submit"}
+                </Button>
+                <Button type="button" variant="ghost" size="small" onClick={() => setStore("editing", false)}>
+                  Cancel
+                </Button>
+              </form>
+            </Show>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={confirm()}>
+        <div data-slot="question-review">
+          <div data-slot="review-title">Review your answers</div>
+          <For each={questions()}>
+            {(q, index) => {
+              const value = () => store.answers[index()]?.join(", ") ?? ""
+              const answered = () => Boolean(value())
+              return (
+                <div data-slot="review-item">
+                  <span data-slot="review-label">{q.question}</span>
+                  <span data-slot="review-value" data-answered={answered()}>
+                    {answered() ? value() : "(not answered)"}
+                  </span>
+                </div>
+              )
+            }}
+          </For>
+        </div>
+      </Show>
+
+      <div data-slot="question-actions">
+        <Button variant="ghost" size="small" onClick={reject}>
+          Dismiss
+        </Button>
+        <Show when={!single()}>
+          <Show when={confirm()}>
+            <Button variant="primary" size="small" onClick={submit}>
+              Submit
+            </Button>
+          </Show>
+          <Show when={!confirm() && multi()}>
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={() => selectTab(store.tab + 1)}
+              disabled={(store.answers[store.tab]?.length ?? 0) === 0}
+            >
+              Next
+            </Button>
+          </Show>
+        </Show>
+      </div>
+    </div>
+  )
+}
