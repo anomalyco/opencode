@@ -512,3 +512,53 @@ test("explicit Truncate.DIR deny is respected", async () => {
     },
   })
 })
+
+test("custom agent with fallback models parses correctly", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        fallback_agent: {
+          models: ["anthropic/claude-3-sonnet", "openai/gpt-4o"],
+          description: "Agent with fallback",
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("fallback_agent")
+      expect(agent).toBeDefined()
+      expect(agent?.models).toHaveLength(2)
+      expect(agent?.models?.[0].providerID).toBe("anthropic")
+      expect(agent?.models?.[0].modelID).toBe("claude-3-sonnet")
+      expect(agent?.models?.[1].providerID).toBe("openai")
+      expect(agent?.models?.[1].modelID).toBe("gpt-4o")
+      // Primary model should default to first in models list if not set
+      expect(agent?.model?.providerID).toBe("anthropic")
+      expect(agent?.model?.modelID).toBe("claude-3-sonnet")
+    },
+  })
+})
+
+test("custom agent with model and fallback models preserves specific primary", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        fallback_agent: {
+          model: "google/gemini-pro",
+          models: ["anthropic/claude-3-sonnet", "openai/gpt-4o"],
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("fallback_agent")
+      expect(agent?.model?.providerID).toBe("google")
+      expect(agent?.model?.modelID).toBe("gemini-pro")
+      expect(agent?.models).toHaveLength(2)
+    },
+  })
+})

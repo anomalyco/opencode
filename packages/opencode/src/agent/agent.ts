@@ -32,6 +32,14 @@ export namespace Agent {
           providerID: z.string(),
         })
         .optional(),
+      models: z
+        .array(
+          z.object({
+            modelID: z.string(),
+            providerID: z.string(),
+          }),
+        )
+        .optional(),
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
@@ -203,6 +211,12 @@ export namespace Agent {
           native: false,
         }
       if (value.model) item.model = Provider.parseModel(value.model)
+      if (value.models) {
+        item.models = value.models.map((m) => Provider.parseModel(m))
+        if (!item.model && item.models.length > 0) {
+          item.model = item.models[0]
+        }
+      }
       item.prompt = value.prompt ?? item.prompt
       item.description = value.description ?? item.description
       item.temperature = value.temperature ?? item.temperature

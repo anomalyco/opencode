@@ -9,7 +9,7 @@ import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { Plugin } from "@/plugin"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
@@ -46,6 +46,10 @@ export namespace SessionProcessor {
         log.info("process")
         needsCompaction = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
+        let fallbackIndex =
+          streamInput.agent.models?.findIndex(
+            (m) => m.modelID === streamInput.model.id && m.providerID === streamInput.model.providerID,
+          ) ?? -1
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
@@ -343,6 +347,24 @@ export namespace SessionProcessor {
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
             const retry = SessionRetry.retryable(error)
+
+            if (streamInput.agent.models && fallbackIndex < streamInput.agent.models.length - 1) {
+              fallbackIndex++
+              const next = streamInput.agent.models[fallbackIndex]
+              try {
+                const nextModel = await Provider.getModel(next.providerID, next.modelID)
+                streamInput.model = nextModel
+                log.info("switching to fallback model", {
+                  to: nextModel.id,
+                  provider: nextModel.providerID,
+                })
+                attempt = 0
+                continue
+              } catch (loadError) {
+                log.error("failed to load fallback model", { error: loadError, model: next })
+              }
+            }
+
             if (retry !== undefined) {
               attempt++
               const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)

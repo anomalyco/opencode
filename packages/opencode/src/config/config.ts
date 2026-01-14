@@ -527,6 +527,7 @@ export namespace Config {
   export const Agent = z
     .object({
       model: z.string().optional(),
+      models: z.string().array().optional(),
       temperature: z.number().optional(),
       top_p: z.number().optional(),
       prompt: z.string().optional(),
