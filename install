@@ -428,6 +428,7 @@ if [[ "$no_modify_path" != "true" ]] && [[ -n $config_file ]] && [[ ":$PATH:" !=
     echo -e ""
     echo -e "${ORANGE}To use opencode, reload your shell configuration:${NC}"
     echo -e "$ source $config_file"
+    echo -e "${MUTED}Or restart your terminal${NC}"
     echo -e ""
 fi
 
