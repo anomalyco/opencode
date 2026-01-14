@@ -142,6 +142,13 @@ export const TuiThreadCommand = cmd({
       })
       url = server.url
       password = serverOpts.auth.password
+      // Create fetch with auth header for external server
+      const authHeader = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
+      customFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        request.headers.set("Authorization", authHeader)
+        return fetch(request)
+      }) as typeof fetch
     } else {
       // Use direct RPC communication (no HTTP)
       url = "http://opencode.internal"
