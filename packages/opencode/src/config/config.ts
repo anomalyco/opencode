@@ -938,6 +938,7 @@ export namespace Config {
 
   export const Server = z
     .object({
+      enabled: z.boolean().optional().describe("Enable HTTP server for TUI (allows external connections)"),
       port: z.number().int().positive().optional().describe("Port to listen on"),
       hostname: z.string().optional().describe("Hostname to listen on"),
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),

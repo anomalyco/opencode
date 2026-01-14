@@ -22,6 +22,11 @@ const options = {
     describe: "custom domain name for mDNS service (default: opencode.local)",
     default: "opencode.local",
   },
+  "enable-server": {
+    type: "boolean" as const,
+    describe: "enable HTTP server for external connections",
+    default: false,
+  },
   cors: {
     type: "string" as const,
     array: true,
@@ -55,6 +60,8 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const configCors = config?.server?.cors ?? []
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
+  const enableServerExplicitlySet = process.argv.includes("--enable-server")
+  const enabled = enableServerExplicitlySet ? args["enable-server"] : (config?.server?.enabled ?? false)
 
-  return { hostname, port, mdns, mdnsDomain, cors }
+  return { hostname, port, mdns, mdnsDomain, cors, enabled }
 }
