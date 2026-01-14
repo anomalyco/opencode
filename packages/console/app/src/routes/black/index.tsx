@@ -117,13 +117,13 @@ export default function Black() {
                   <Show when={isSelected()}>
                     <div data-slot="content">
                       <ul data-slot="terms">
-                        <li>Your subscription will not start immediately</li>
-                        <li>You will be added to the waitlist and activated soon</li>
-                        <li>Your card will be only charged when your subscription is activated</li>
-                        <li>Usage limits apply, heavily automated use may reach limits sooner</li>
-                        <li>Subscriptions for individuals, contact Enterprise for teams</li>
-                        <li>Limits may be adjusted and plans may be discontinued in the future</li>
-                        <li>Cancel your subscription at anytime</li>
+                        <li>You will be added to the waitlist and activated in batches</li>
+                        <li>Card won't be charged until subscription is active</li>
+                        <li>Not unlimited - limits apply and may be adjusted dynamically</li>
+                        <li>Heavily automated usage will hit limits quickly</li>
+                        <li>Plans may be discontinued</li>
+                        <li>Can cancel subscription at anytime</li>
+                        <li>Cannot issue refunds for consumed subscriptions</li>
                       </ul>
                       <div data-slot="actions">
                         <button type="button" onClick={cancel} data-slot="cancel">
