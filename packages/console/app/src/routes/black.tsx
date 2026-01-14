@@ -19,7 +19,7 @@ export default function BlackLayout(props: RouteSectionProps) {
     <div data-page="black">
       <div data-component="header-gradient" />
       <header data-component="header">
-        <div data-component="header-logo">
+        <A href="/" data-component="header-logo">
           <svg xmlns="http://www.w3.org/2000/svg" width="179" height="32" viewBox="0 0 179 32" fill="none">
             <title>opencode</title>
             <g clip-path="url(#clip0_3654_210259)">
@@ -83,7 +83,7 @@ export default function BlackLayout(props: RouteSectionProps) {
               </clipPath>
             </defs>
           </svg>
-        </div>
+        </A>
       </header>
       <main data-component="content">
         <div data-slot="hero">
