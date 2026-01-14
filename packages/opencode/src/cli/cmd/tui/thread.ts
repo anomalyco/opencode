@@ -9,6 +9,7 @@ import { Log } from "@/util/log"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
+import { Flag } from "@/flag/flag"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -71,8 +72,16 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("dangerously-skip-permissions", {
+        type: "boolean",
+        describe: "Skip all permission prompts (use with extreme caution)",
       }),
   handler: async (args) => {
+    if (args.dangerouslySkipPermissions || Flag.OPENCODE_DANGEROUSLY_SKIP_PERMISSIONS) {
+      process.env.OPENCODE_DANGEROUSLY_SKIP_PERMISSIONS = "true"
+    }
+
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
     const baseCwd = process.env.PWD ?? process.cwd()
     const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
@@ -150,6 +159,7 @@ export const TuiThreadCommand = cmd({
         agent: args.agent,
         model: args.model,
         prompt,
+        dangerouslySkipPermissions: args.dangerouslySkipPermissions || Flag.OPENCODE_DANGEROUSLY_SKIP_PERMISSIONS,
       },
       onExit: async () => {
         await client.call("shutdown", undefined)

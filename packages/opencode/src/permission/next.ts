@@ -8,9 +8,16 @@ import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
 import z from "zod"
+import { Flag } from "@/flag/flag"
 
 export namespace PermissionNext {
   const log = Log.create({ service: "permission" })
+
+  let skipPermissions = Flag.OPENCODE_DANGEROUSLY_SKIP_PERMISSIONS
+
+  export function setSkipPermissions(value: boolean) {
+    skipPermissions = value
+  }
 
   export const Action = z.enum(["allow", "deny", "ask"]).meta({
     ref: "PermissionAction",
@@ -126,6 +133,7 @@ export namespace PermissionNext {
         if (rule.action === "deny")
           throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
         if (rule.action === "ask") {
+          if (skipPermissions) continue
           const id = input.id ?? Identifier.ascending("permission")
           return new Promise<void>((resolve, reject) => {
             const info: Request = {

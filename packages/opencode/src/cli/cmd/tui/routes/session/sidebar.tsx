@@ -11,10 +11,12 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { useArgs } from "../../context/args"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
+  const args = useArgs()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
@@ -312,6 +314,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             </span>{" "}
             <span>{Installation.VERSION}</span>
           </text>
+          <Show when={args.dangerouslySkipPermissions}>
+            <text fg={theme.warning}>△ YOLO mode</text>
+          </Show>
         </box>
       </box>
     </Show>

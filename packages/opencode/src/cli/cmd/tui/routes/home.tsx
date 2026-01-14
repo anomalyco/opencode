@@ -110,6 +110,9 @@ export function Home() {
             <Tips />
           </Show>
         </box>
+        <Show when={args.dangerouslySkipPermissions}>
+          <text fg={theme.warning}>△ YOLO mode</text>
+        </Show>
         <Toast />
       </box>
       <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
