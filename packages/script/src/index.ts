@@ -9,8 +9,18 @@ if (!expectedBunVersion) {
   throw new Error("packageManager field not found in root package.json")
 }
 
-if (process.versions.bun !== expectedBunVersion) {
-  throw new Error(`This script requires bun@${expectedBunVersion}, but you are using bun@${process.versions.bun}`)
+const currentVersion = process.versions.bun
+const [currentMajor, currentMinor, currentPatch] = currentVersion.split(".").map(Number)
+const [expectedMajor, expectedMinor, expectedPatch] = expectedBunVersion.split(".").map(Number)
+
+if (currentMajor !== expectedMajor || currentMinor !== expectedMinor) {
+  throw new Error(`This script requires bun@${expectedBunVersion}, but you are using bun@${currentVersion}`)
+}
+
+if (currentPatch !== expectedPatch) {
+  console.warn(
+    `Warning: This script expects bun@${expectedBunVersion}, but you are using bun@${currentVersion}. Patch version difference detected.`,
+  )
 }
 
 const env = {
