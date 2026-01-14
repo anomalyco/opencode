@@ -545,6 +545,10 @@ export type QuestionInfo = {
    * Allow selecting multiple choices
    */
   multiple?: boolean
+  /**
+   * Allow typing a custom answer (default: true)
+   */
+  custom?: boolean
 }
 
 export type QuestionRequest = {
@@ -706,6 +710,7 @@ export type PermissionRuleset = Array<PermissionRule>
 
 export type Session = {
   id: string
+  slug: string
   projectID: string
   directory: string
   parentID?: string
@@ -2584,7 +2589,14 @@ export type SessionListData = {
   body?: never
   path?: never
   query?: {
+    /**
+     * Filter sessions by project directory
+     */
     directory?: string
+    /**
+     * Only return root sessions (no parentID)
+     */
+    roots?: boolean
     /**
      * Filter sessions updated on or after this timestamp (milliseconds since epoch)
      */
