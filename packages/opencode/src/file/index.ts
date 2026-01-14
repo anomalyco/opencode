@@ -408,4 +408,69 @@ export namespace File {
     log.info("search", { query, kind, results: output.length })
     return output
   }
+
+  export async function searchDirectory(input: {
+    directory: string
+    query: string
+    limit?: number
+    type?: "file" | "directory"
+  }) {
+    const query = input.query.trim()
+    const limit = input.limit ?? 100
+    const kind = input.type ?? "directory"
+    const directory = input.directory
+
+    log.info("searchDirectory", { directory, query, kind })
+
+    const dirs: string[] = []
+    const ignore = new Set<string>()
+
+    if (process.platform === "darwin") ignore.add("Library")
+    if (process.platform === "win32") ignore.add("AppData")
+
+    const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
+    const shouldIgnore = (name: string) => name.startsWith(".") || ignore.has(name)
+    const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
+
+    const top = await fs.promises.readdir(directory, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
+
+    for (const entry of top) {
+      if (!entry.isDirectory()) continue
+      if (shouldIgnore(entry.name)) continue
+      dirs.push(entry.name + "/")
+
+      const base = path.join(directory, entry.name)
+      const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
+      for (const child of children) {
+        if (!child.isDirectory()) continue
+        if (shouldIgnoreNested(child.name)) continue
+        dirs.push(entry.name + "/" + child.name + "/")
+      }
+    }
+
+    const hidden = (item: string) => {
+      const normalized = item.replaceAll("\\", "/").replace(/\/+$/, "")
+      return normalized.split("/").some((p) => p.startsWith(".") && p.length > 1)
+    }
+    const preferHidden = query.startsWith(".") || query.includes("/.")
+    const sortHiddenLast = (items: string[]) => {
+      if (preferHidden) return items
+      const visible: string[] = []
+      const hiddenItems: string[] = []
+      for (const item of items) {
+        const isHidden = hidden(item)
+        if (isHidden) hiddenItems.push(item)
+        if (!isHidden) visible.push(item)
+      }
+      return [...visible, ...hiddenItems]
+    }
+
+    if (!query) {
+      return sortHiddenLast(dirs.toSorted()).slice(0, limit)
+    }
+
+    const searchLimit = !preferHidden ? limit * 20 : limit
+    const sorted = fuzzysort.go(query, dirs, { limit: searchLimit }).map((r) => r.target)
+    return sortHiddenLast(sorted).slice(0, limit)
+  }
 }
