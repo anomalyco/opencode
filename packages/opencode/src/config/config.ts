@@ -765,6 +765,10 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    transparent_background: z
+      .boolean()
+      .optional()
+      .describe("Use a transparent background for the TUI"),
   })
 
   export const Server = z

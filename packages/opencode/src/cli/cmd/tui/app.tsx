@@ -619,7 +619,7 @@ function App() {
     <box
       width={dimensions().width}
       height={dimensions().height}
-      backgroundColor={theme.background}
+      backgroundColor={theme.background.a === 0 ? undefined : theme.background}
       onMouseUp={async () => {
         if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
           renderer.clearSelection()
