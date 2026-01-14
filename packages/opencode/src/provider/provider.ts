@@ -552,6 +552,7 @@ export namespace Provider {
       }),
       limit: z.object({
         context: z.number(),
+        input: z.number().optional(),
         output: z.number(),
       }),
       status: z.enum(["alpha", "beta", "deprecated", "active"]),
@@ -614,6 +615,7 @@ export namespace Provider {
       },
       limit: {
         context: model.limit.context,
+        input: model.limit.input,
         output: model.limit.output,
       },
       capabilities: {
