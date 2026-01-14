@@ -78,6 +78,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "STRIPE_PUBLISHABLE_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "STRIPE_SECRET_KEY": {
       "type": "sst.sst.Secret"
       "value": string
@@ -127,6 +131,10 @@ declare module "sst" {
       "value": string
     }
     "ZEN_MODELS7": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_SESSION_SECRET": {
       "type": "sst.sst.Secret"
       "value": string
     }

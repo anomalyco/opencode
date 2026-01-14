@@ -159,6 +159,26 @@ export function Autocomplete(props: {
     })
 
     props.setPrompt((draft) => {
+      if (part.type === "file") {
+        const existingIndex = draft.parts.findIndex((p) => p.type === "file" && "url" in p && p.url === part.url)
+        if (existingIndex !== -1) {
+          const existing = draft.parts[existingIndex]
+          if (
+            part.source?.text &&
+            existing &&
+            "source" in existing &&
+            existing.source &&
+            "text" in existing.source &&
+            existing.source.text
+          ) {
+            existing.source.text.start = extmarkStart
+            existing.source.text.end = extmarkEnd
+            existing.source.text.value = virtualText
+          }
+          return
+        }
+      }
+
       if (part.type === "file" && part.source?.text) {
         part.source.text.start = extmarkStart
         part.source.text.end = extmarkEnd
