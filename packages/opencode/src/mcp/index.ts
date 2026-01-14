@@ -318,38 +318,59 @@ export namespace MCP {
         )
       }
 
-      const transports: Array<{ name: string; transport: TransportWithAuth }> = [
+      const streamableAbort = new AbortController()
+      const sseAbort = new AbortController()
+
+      const transports: Array<{ name: string; transport: TransportWithAuth; abort: AbortController }> = [
         {
           name: "StreamableHTTP",
+          abort: streamableAbort,
           transport: new StreamableHTTPClientTransport(new URL(mcp.url), {
             authProvider,
-            requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            requestInit: mcp.headers
+              ? { headers: mcp.headers, signal: streamableAbort.signal }
+              : { signal: streamableAbort.signal },
           }),
         },
         {
           name: "SSE",
+          abort: sseAbort,
           transport: new SSEClientTransport(new URL(mcp.url), {
             authProvider,
-            requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            requestInit: mcp.headers
+              ? { headers: mcp.headers, signal: sseAbort.signal }
+              : { signal: sseAbort.signal },
           }),
         },
       ]
 
       let lastError: Error | undefined
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
-      for (const { name, transport } of transports) {
+      for (const { name, transport, abort } of transports) {
         try {
           const client = new Client({
             name: "opencode",
             version: Installation.VERSION,
           })
+          const timer = setTimeout(() => {
+            log.debug("connection timeout, aborting transport", { key, transport: name })
+            abort.abort()
+          }, connectTimeout)
+
           await withTimeout(client.connect(transport), connectTimeout)
+            .then(() => clearTimeout(timer))
+            .catch((error) => {
+              clearTimeout(timer)
+              abort.abort()
+              throw error
+            })
           registerNotificationHandlers(client, key)
           mcpClient = client
           log.info("connected", { key, transport: name })
           status = { status: "connected" }
           break
         } catch (error) {
+          abort.abort()
           lastError = error instanceof Error ? error : new Error(String(error))
 
           // Handle OAuth-specific errors
