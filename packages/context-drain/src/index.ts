@@ -3480,13 +3480,13 @@ function extractFilePath(toolOutput: string, toolArgs?: Record<string, unknown>)
 
 export default async function contextDrain(input: {
   client: unknown
-  project: string
+  project: { id: string; worktree: string; [key: string]: unknown }
   worktree: string
   directory: string
   serverUrl: string
   $: unknown
 }) {
-  const projectID = input.project
+  const projectID = input.project.id
   const database = getDB()
 
   return {
