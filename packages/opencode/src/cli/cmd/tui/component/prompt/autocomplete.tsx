@@ -159,6 +159,26 @@ export function Autocomplete(props: {
     })
 
     props.setPrompt((draft) => {
+      if (part.type === "file") {
+        const existingIndex = draft.parts.findIndex((p) => p.type === "file" && "url" in p && p.url === part.url)
+        if (existingIndex !== -1) {
+          const existing = draft.parts[existingIndex]
+          if (
+            part.source?.text &&
+            existing &&
+            "source" in existing &&
+            existing.source &&
+            "text" in existing.source &&
+            existing.source.text
+          ) {
+            existing.source.text.start = extmarkStart
+            existing.source.text.end = extmarkEnd
+            existing.source.text.value = virtualText
+          }
+          return
+        }
+      }
+
       if (part.type === "file" && part.source?.text) {
         part.source.text.start = extmarkStart
         part.source.text.end = extmarkEnd
@@ -606,8 +626,31 @@ export function Autocomplete(props: {
             (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
           ) {
             hide()
-            return
           }
+          return
+        }
+
+        // Check if autocomplete should reopen (e.g., after backspace deleted a space)
+        const offset = props.input().cursorOffset
+        if (offset === 0) return
+
+        // Check for "/" at position 0 - reopen slash commands
+        if (value.startsWith("/") && !value.slice(0, offset).match(/\s/)) {
+          show("/")
+          setStore("index", 0)
+          return
+        }
+
+        // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
+        const text = value.slice(0, offset)
+        const idx = text.lastIndexOf("@")
+        if (idx === -1) return
+
+        const between = text.slice(idx)
+        const before = idx === 0 ? undefined : value[idx - 1]
+        if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+          show("@")
+          setStore("index", idx)
         }
       },
       onKeyDown(e: KeyEvent) {
