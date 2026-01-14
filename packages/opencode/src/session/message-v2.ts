@@ -602,6 +602,22 @@ export namespace MessageV2 {
   }
 
   export function fromError(e: unknown, ctx: { providerID: string }) {
+    // Some providers (notably ACP subprocess backends) wrap network errors (e.g. `ConnectError: ... ECONNRESET`)
+    // and/or bury the original `SystemError` under `cause` chains, so we detect ECONNRESET by both `code` and message.
+    const errors = [
+      e,
+      (e as { cause?: unknown } | undefined)?.cause,
+      ((e as { cause?: unknown } | undefined)?.cause as { cause?: unknown } | undefined)?.cause,
+      (((e as { cause?: unknown } | undefined)?.cause as { cause?: unknown } | undefined)?.cause as
+        | { cause?: unknown }
+        | undefined)?.cause,
+    ]
+    const system = errors.find((x) => (x as SystemError | undefined)?.code === "ECONNRESET") as SystemError | undefined
+    const resetMessage = errors
+      .map((x) => (x as { message?: unknown } | undefined)?.message)
+      .find((x) => typeof x === "string" && x.includes("ECONNRESET")) as string | undefined
+    const reset = system !== undefined || resetMessage !== undefined
+
     switch (true) {
       case e instanceof DOMException && e.name === "AbortError":
         return new MessageV2.AbortedError(
@@ -620,15 +636,15 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
-      case (e as SystemError)?.code === "ECONNRESET":
+      case reset:
         return new MessageV2.APIError(
           {
             message: "Connection reset by server",
             isRetryable: true,
             metadata: {
-              code: (e as SystemError).code ?? "",
-              syscall: (e as SystemError).syscall ?? "",
-              message: (e as SystemError).message ?? "",
+              code: system?.code ?? "ECONNRESET",
+              syscall: system?.syscall ?? "",
+              message: system?.message ?? resetMessage ?? "",
             },
           },
           { cause: e },
