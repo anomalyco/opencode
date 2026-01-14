@@ -32,7 +32,7 @@ export namespace Clipboard {
     if (os === "win32" || release().includes("WSL")) {
       const script =
         "Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [System.Convert]::ToBase64String($ms.ToArray()) }"
-      const base64 = await $`powershell.exe -command "${script}"`.nothrow().text()
+      const base64 = await $`powershell.exe -NonInteractive -NoProfile -command "${script}"`.nothrow().text()
       if (base64) {
         const imageBuffer = Buffer.from(base64.trim(), "base64")
         if (imageBuffer.length > 0) {
@@ -110,8 +110,9 @@ export namespace Clipboard {
     if (os === "win32") {
       console.log("clipboard: using powershell")
       return async (text: string) => {
-        const escaped = text.replace(/"/g, '""')
-        await $`powershell -command "Set-Clipboard -Value \"${escaped}\""`.nothrow().quiet()
+        // need to escape backticks because powershell uses them as escape code
+        const escaped = text.replace(/"/g, '""').replace(/`/g, "``")
+        await $`powershell -NonInteractive -NoProfile -Command "Set-Clipboard -Value \"${escaped}\""`.nothrow().quiet()
       }
     }
 

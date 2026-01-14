@@ -14,6 +14,7 @@ import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
+import { Question } from "@/question"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -208,7 +209,10 @@ export namespace SessionProcessor {
                       },
                     })
 
-                    if (value.error instanceof PermissionNext.RejectedError) {
+                    if (
+                      value.error instanceof PermissionNext.RejectedError ||
+                      value.error instanceof Question.RejectedError
+                    ) {
                       blocked = shouldBreak
                     }
                     delete toolcalls[value.toolCallId]

@@ -33,16 +33,19 @@ import { useSync } from "@/context/sync"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
-import { persisted } from "@/utils/persist"
+import { Persist, persisted } from "@/utils/persist"
 import { Identifier } from "@/utils/id"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { usePermission } from "@/context/permission"
@@ -189,7 +192,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const MAX_HISTORY = 100
   const [history, setHistory] = persisted(
-    "prompt-history.v1",
+    Persist.global("prompt-history", ["prompt-history.v1"]),
     createStore<{
       entries: Prompt[]
     }>({
@@ -197,7 +200,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }),
   )
   const [shellHistory, setShellHistory] = persisted(
-    "prompt-history-shell.v1",
+    Persist.global("prompt-history-shell", ["prompt-history-shell.v1"]),
     createStore<{
       entries: Prompt[]
     }>({
@@ -248,6 +251,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
+  const isFocused = createFocusSignal(() => editorRef)
+
   createEffect(() => {
     params.id
     editorRef.focus()
@@ -258,7 +263,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onCleanup(() => clearInterval(interval))
   })
 
-  const isFocused = createFocusSignal(() => editorRef)
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
@@ -292,12 +296,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const clipboardData = event.clipboardData
     if (!clipboardData) return
 
+    event.preventDefault()
+    event.stopPropagation()
+
     const items = Array.from(clipboardData.items)
     const imageItems = items.filter((item) => ACCEPTED_FILE_TYPES.includes(item.type))
 
     if (imageItems.length > 0) {
-      event.preventDefault()
-      event.stopPropagation()
       for (const item of imageItems) {
         const file = item.getAsFile()
         if (file) await addImageAttachment(file)
@@ -305,8 +310,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    event.preventDefault()
-    event.stopPropagation()
     const plainText = clipboardData.getData("text/plain") ?? ""
     addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }
@@ -347,13 +350,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   onMount(() => {
-    editorRef.addEventListener("paste", handlePaste)
     document.addEventListener("dragover", handleGlobalDragOver)
     document.addEventListener("dragleave", handleGlobalDragLeave)
     document.addEventListener("drop", handleGlobalDrop)
   })
   onCleanup(() => {
-    editorRef.removeEventListener("paste", handlePaste)
     document.removeEventListener("dragover", handleGlobalDragOver)
     document.removeEventListener("dragleave", handleGlobalDragLeave)
     document.removeEventListener("drop", handleGlobalDrop)
@@ -361,6 +362,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   createEffect(() => {
     if (!isFocused()) setStore("popover", null)
+  })
+
+  // Safety: reset composing state on focus change to prevent stuck state
+  // This handles edge cases where compositionend event may not fire
+  createEffect(() => {
+    if (!isFocused()) setComposing(false)
   })
 
   type AtOption = { type: "agent"; name: string; display: string } | { type: "file"; path: string; display: string }
@@ -388,6 +395,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const {
     flat: atFlat,
     active: atActive,
+    setActive: setAtActive,
     onInput: atOnInput,
     onKeyDown: atOnKeyDown,
   } = useFilteredList<AtOption>({
@@ -454,6 +462,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const {
     flat: slashFlat,
     active: slashActive,
+    setActive: setSlashActive,
     onInput: slashOnInput,
     onKeyDown: slashOnKeyDown,
     refetch: slashRefetch,
@@ -878,6 +887,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
+    // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
+    // and should always insert a newline regardless of composition state
+    if (event.key === "Enter" && event.shiftKey) {
+      addPart({ type: "text", content: "\n", start: 0, end: 0 })
+      event.preventDefault()
+      return
+    }
+
     if (event.key === "Enter" && isImeComposing(event)) {
       return
     }
@@ -941,11 +958,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    if (event.key === "Enter" && event.shiftKey) {
-      addPart({ type: "text", content: "\n", start: 0, end: 0 })
-      event.preventDefault()
-      return
-    }
+    // Note: Shift+Enter is handled earlier, before IME check
     if (event.key === "Enter" && !event.shiftKey) {
       handleSubmit(event)
     }
@@ -1301,6 +1314,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-80 min-h-10
                  overflow-auto no-scrollbar flex flex-col p-2 rounded-md
                  border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
+          onMouseDown={(e) => e.preventDefault()}
         >
           <Switch>
             <Match when={store.popover === "at"}>
@@ -1316,6 +1330,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         "bg-surface-raised-base-hover": atActive() === atKey(item),
                       }}
                       onClick={() => handleAtSelect(item)}
+                      onMouseEnter={() => setAtActive(atKey(item))}
                     >
                       <Show
                         when={item.type === "agent"}
@@ -1362,6 +1377,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         "bg-surface-raised-base-hover": slashActive() === cmd.id,
                       }}
                       onClick={() => handleSlashSelect(cmd)}
+                      onMouseEnter={() => setSlashActive(cmd.id)}
                     >
                       <div class="flex items-center gap-2 min-w-0">
                         <span class="text-14-regular text-text-strong whitespace-nowrap">/{cmd.trigger}</span>
@@ -1481,7 +1497,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <img
                       src={attachment.dataUrl}
                       alt={attachment.filename}
-                      class="size-16 rounded-md object-cover border border-border-base"
+                      class="size-16 rounded-md object-cover border border-border-base hover:border-border-strong-base transition-colors"
+                      onClick={() =>
+                        dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
+                      }
                     />
                   </Show>
                   <button
@@ -1508,6 +1527,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }}
             contenteditable="true"
             onInput={handleInput}
+            onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}
             onCompositionEnd={() => setComposing(false)}
             onKeyDown={handleKeyDown}
@@ -1552,6 +1572,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   fallback={
                     <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
                       <Button as="div" variant="ghost" onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}>
+                        <Show when={local.model.current()?.provider?.id}>
+                          <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
+                        </Show>
                         {local.model.current()?.name ?? "Select model"}
                         <Icon name="chevron-down" size="small" />
                       </Button>
@@ -1561,6 +1584,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <ModelSelectorPopover>
                     <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
                       <Button as="div" variant="ghost">
+                        <Show when={local.model.current()?.provider?.id}>
+                          <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
+                        </Show>
                         {local.model.current()?.name ?? "Select model"}
                         <Icon name="chevron-down" size="small" />
                       </Button>
@@ -1575,10 +1601,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <Button
                       variant="ghost"
-                      class="text-text-base _hidden group-hover/prompt-input:inline-block"
+                      class="text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-12-regular"
                       onClick={() => local.model.variant.cycle()}
                     >
-                      <span class="capitalize text-12-regular">{local.model.variant.current() ?? "Default"}</span>
+                      {local.model.variant.current() ?? "Default"}
                     </Button>
                   </TooltipKeybind>
                 </Show>
@@ -1593,14 +1619,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       onClick={() => permission.toggleAutoAccept(params.id!, sdk.directory)}
                       classList={{
                         "_hidden group-hover/prompt-input:flex size-6 items-center justify-center": true,
-                        "text-text-base": !permission.isAutoAccepting(params.id!),
-                        "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!),
+                        "text-text-base": !permission.isAutoAccepting(params.id!, sdk.directory),
+                        "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!, sdk.directory),
                       }}
                     >
                       <Icon
                         name="chevron-double-right"
                         size="small"
-                        classList={{ "text-icon-success-base": permission.isAutoAccepting(params.id!) }}
+                        classList={{ "text-icon-success-base": permission.isAutoAccepting(params.id!, sdk.directory) }}
                       />
                     </Button>
                   </TooltipKeybind>

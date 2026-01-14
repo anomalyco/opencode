@@ -3,7 +3,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
-import { persisted } from "@/utils/persist"
+import { Persist, persisted } from "@/utils/persist"
 
 type StoredProject = { worktree: string; expanded: boolean }
 
@@ -16,10 +16,7 @@ export function normalizeServerUrl(input: string) {
 
 export function serverDisplayName(url: string) {
   if (!url) return ""
-  return url
-    .replace(/^https?:\/\//, "")
-    .replace(/\/+$/, "")
-    .split("/")[0]
+  return url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
 function projectsKey(url: string) {
@@ -35,7 +32,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const platform = usePlatform()
 
     const [store, setStore, _, ready] = persisted(
-      "server.v3",
+      Persist.global("server", ["server.v3"]),
       createStore({
         list: [] as string[],
         projects: {} as Record<string, StoredProject[]>,

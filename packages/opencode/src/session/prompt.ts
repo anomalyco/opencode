@@ -382,6 +382,7 @@ export namespace SessionPrompt {
           messageID: assistantMessage.id,
           sessionID: sessionID,
           abort,
+          callID: part.callID,
           extra: { bypassAgentCheck: true },
           async metadata(input) {
             await Session.updatePart({
@@ -509,9 +510,10 @@ export namespace SessionPrompt {
       const agent = await Agent.get(lastUser.agent)
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
-      msgs = insertReminders({
+      msgs = await insertReminders({
         messages: msgs,
         agent,
+        session,
       })
 
       const processor = SessionProcessor.create({
@@ -543,12 +545,18 @@ export namespace SessionPrompt {
         model,
         abort,
       })
+
+      // Check if user explicitly invoked an agent via @ in this turn
+      const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+      const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+
       const tools = await resolveTools({
         agent,
         session,
         model,
         tools: lastUser.tools,
         processor,
+        bypassAgentCheck,
       })
 
       if (step === 1) {
@@ -637,6 +645,7 @@ export namespace SessionPrompt {
     session: Session.Info
     tools?: Record<string, boolean>
     processor: SessionProcessor.Info
+    bypassAgentCheck: boolean
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
@@ -646,7 +655,7 @@ export namespace SessionPrompt {
       abort: options.abortSignal!,
       messageID: input.processor.message.id,
       callID: options.toolCallId,
-      extra: { model: input.model },
+      extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
       agent: input.agent.name,
       metadata: async (val: { title?: string; metadata?: any }) => {
         const match = input.processor.partFromToolCall(options.toolCallId)
@@ -769,8 +778,23 @@ export namespace SessionPrompt {
               mime: contentItem.mimeType,
               url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
             })
+          } else if (contentItem.type === "resource") {
+            const { resource } = contentItem
+            if (resource.text) {
+              textParts.push(resource.text)
+            }
+            if (resource.blob) {
+              attachments.push({
+                id: Identifier.ascending("part"),
+                sessionID: input.session.id,
+                messageID: input.processor.message.id,
+                type: "file",
+                mime: resource.mimeType ?? "application/octet-stream",
+                url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
+                filename: resource.uri,
+              })
+            }
           }
-          // Add support for other types if needed
         }
 
         return {
@@ -789,6 +813,7 @@ export namespace SessionPrompt {
       }
       tools[key] = item
     }
+
     return tools
   }
 
@@ -1098,6 +1123,9 @@ export namespace SessionPrompt {
         }
 
         if (part.type === "agent") {
+          // Check if this agent would be denied by task permission
+          const perm = PermissionNext.evaluate("task", part.name, agent.permission)
+          const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
           return [
             {
               id: Identifier.ascending("part"),
@@ -1111,9 +1139,12 @@ export namespace SessionPrompt {
               sessionID: input.sessionID,
               type: "text",
               synthetic: true,
+              // An extra space is added here. Otherwise the 'Use' gets appended
+              // to user's last word; making a combined word
               text:
-                "Use the above message and context to generate a prompt and call the task tool with subagent: " +
-                part.name,
+                " Use the above message and context to generate a prompt and call the task tool with subagent: " +
+                part.name +
+                hint,
             },
           ]
         }
@@ -1155,30 +1186,142 @@ export namespace SessionPrompt {
     }
   }
 
-  function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info }) {
+  async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {
     const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
     if (!userMessage) return input.messages
-    if (input.agent.name === "plan") {
-      userMessage.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        // TODO (for mr dax): update to use the anthropic full fledged one (see plan-reminder-anthropic.txt)
-        text: PROMPT_PLAN,
-        synthetic: true,
-      })
+
+    // Original logic when experimental plan mode is disabled
+    if (!Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE) {
+      if (input.agent.name === "plan") {
+        userMessage.parts.push({
+          id: Identifier.ascending("part"),
+          messageID: userMessage.info.id,
+          sessionID: userMessage.info.sessionID,
+          type: "text",
+          text: PROMPT_PLAN,
+          synthetic: true,
+        })
+      }
+      const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
+      if (wasPlan && input.agent.name === "build") {
+        userMessage.parts.push({
+          id: Identifier.ascending("part"),
+          messageID: userMessage.info.id,
+          sessionID: userMessage.info.sessionID,
+          type: "text",
+          text: BUILD_SWITCH,
+          synthetic: true,
+        })
+      }
+      return input.messages
     }
-    const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
-    if (wasPlan && input.agent.name === "build") {
-      userMessage.parts.push({
+
+    // New plan mode logic when flag is enabled
+    const assistantMessage = input.messages.findLast((msg) => msg.info.role === "assistant")
+
+    // Switching from plan mode to build mode
+    if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
+      const plan = Session.plan(input.session)
+      const exists = await Bun.file(plan).exists()
+      if (exists) {
+        const part = await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: userMessage.info.id,
+          sessionID: userMessage.info.sessionID,
+          type: "text",
+          text:
+            BUILD_SWITCH + "\n\n" + `A plan file exists at ${plan}. You should execute on the plan defined within it`,
+          synthetic: true,
+        })
+        userMessage.parts.push(part)
+      }
+      return input.messages
+    }
+
+    // Entering plan mode
+    if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
+      const plan = Session.plan(input.session)
+      const exists = await Bun.file(plan).exists()
+      if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
+      const part = await Session.updatePart({
         id: Identifier.ascending("part"),
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
         type: "text",
-        text: BUILD_SWITCH,
+        text: `<system-reminder>
+Plan mode is active. The user indicated that they do not want you to execute yet -- you MUST NOT make any edits (with the exception of the plan file mentioned below), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supercedes any other instructions you have received.
+
+## Plan File Info:
+${exists ? `A plan file already exists at ${plan}. You can read it and make incremental edits using the edit tool.` : `No plan file exists yet. You should create your plan at ${plan} using the write tool.`}
+You should build your plan incrementally by writing to or editing this file. NOTE that this is the only file you are allowed to edit - other than this you are only allowed to take READ-ONLY actions.
+
+## Plan Workflow
+
+### Phase 1: Initial Understanding
+Goal: Gain a comprehensive understanding of the user's request by reading through code and asking them questions. Critical: In this phase you should only use the explore subagent type.
+
+1. Focus on understanding the user's request and the code associated with their request
+
+2. **Launch up to 3 explore agents IN PARALLEL** (single message, multiple tool calls) to efficiently explore the codebase.
+   - Use 1 agent when the task is isolated to known files, the user provided specific file paths, or you're making a small targeted change.
+   - Use multiple agents when: the scope is uncertain, multiple areas of the codebase are involved, or you need to understand existing patterns before planning.
+   - Quality over quantity - 3 agents maximum, but you should try to use the minimum number of agents necessary (usually just 1)
+   - If using multiple agents: Provide each agent with a specific search focus or area to explore. Example: One agent searches for existing implementations, another explores related components, a third investigates testing patterns
+
+3. After exploring the code, use the question tool to clarify ambiguities in the user request up front.
+
+### Phase 2: Design
+Goal: Design an implementation approach.
+
+Launch general agent(s) to design the implementation based on the user's intent and your exploration results from Phase 1.
+
+You can launch up to 1 agent(s) in parallel.
+
+**Guidelines:**
+- **Default**: Launch at least 1 Plan agent for most tasks - it helps validate your understanding and consider alternatives
+- **Skip agents**: Only for truly trivial tasks (typo fixes, single-line changes, simple renames)
+
+Examples of when to use multiple agents:
+- The task touches multiple parts of the codebase
+- It's a large refactor or architectural change
+- There are many edge cases to consider
+- You'd benefit from exploring different approaches
+
+Example perspectives by task type:
+- New feature: simplicity vs performance vs maintainability
+- Bug fix: root cause vs workaround vs prevention
+- Refactoring: minimal change vs clean architecture
+
+In the agent prompt:
+- Provide comprehensive background context from Phase 1 exploration including filenames and code path traces
+- Describe requirements and constraints
+- Request a detailed implementation plan
+
+### Phase 3: Review
+Goal: Review the plan(s) from Phase 2 and ensure alignment with the user's intentions.
+1. Read the critical files identified by agents to deepen your understanding
+2. Ensure that the plans align with the user's original request
+3. Use question tool to clarify any remaining questions with the user
+
+### Phase 4: Final Plan
+Goal: Write your final plan to the plan file (the only file you can edit).
+- Include only your recommended approach, not all alternatives
+- Ensure that the plan file is concise enough to scan quickly, but detailed enough to execute effectively
+- Include the paths of critical files to be modified
+- Include a verification section describing how to test the changes end-to-end (run the code, use MCP tools, run tests)
+
+### Phase 5: Call plan_exit tool
+At the very end of your turn, once you have asked the user questions and are happy with your final plan file - you should always call plan_exit to indicate to the user that you are done planning.
+This is critical - your turn should only end with either asking the user a question or calling plan_exit. Do not stop unless it's for these 2 reasons.
+
+**Important:** Use question tool to clarify requirements/approach, use plan_exit to request plan approval. Do NOT use question tool to ask "Is this plan okay?" - that's what plan_exit does.
+
+NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
+</system-reminder>`,
         synthetic: true,
       })
+      userMessage.parts.push(part)
+      return input.messages
     }
     return input.messages
   }

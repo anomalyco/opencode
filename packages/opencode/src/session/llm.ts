@@ -1,3 +1,5 @@
+import os from "os"
+import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
 import {
@@ -19,6 +21,7 @@ import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
+import { Auth } from "@/auth"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -52,13 +55,20 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [language, cfg] = await Promise.all([Provider.getLanguage(input.model), Config.get()])
+    const [language, cfg, provider, auth] = await Promise.all([
+      Provider.getLanguage(input.model),
+      Config.get(),
+      Provider.getProvider(input.model.providerID),
+      Auth.get(input.model.providerID),
+    ])
+    const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
     const system = SystemPrompt.header(input.model.providerID)
     system.push(
       [
         // use agent prompt otherwise provider prompt
-        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+        // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
+        ...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message
@@ -70,7 +80,7 @@ export namespace LLM {
 
     const header = system[0]
     const original = clone(system)
-    await Plugin.trigger("experimental.chat.system.transform", {}, { system })
+    await Plugin.trigger("experimental.chat.system.transform", { sessionID: input.sessionID }, { system })
     if (system.length === 0) {
       system.push(...original)
     }
@@ -81,17 +91,21 @@ export namespace LLM {
       system.push(header, rest.join("\n"))
     }
 
-    const provider = await Provider.getProvider(input.model.providerID)
-    const small = input.small ? ProviderTransform.smallOptions(input.model) : {}
     const variant =
       !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
-    const options = pipe(
-      ProviderTransform.options(input.model, input.sessionID, provider.options),
-      mergeDeep(small),
+    const base = input.small
+      ? ProviderTransform.smallOptions(input.model)
+      : ProviderTransform.options(input.model, input.sessionID, provider.options)
+    const options: Record<string, any> = pipe(
+      base,
       mergeDeep(input.model.options),
       mergeDeep(input.agent.options),
       mergeDeep(variant),
     )
+    if (isCodex) {
+      options.instructions = SystemPrompt.instructions()
+      options.store = false
+    }
 
     const params = await Plugin.trigger(
       "chat.params",
@@ -99,7 +113,7 @@ export namespace LLM {
         sessionID: input.sessionID,
         agent: input.agent,
         model: input.model,
-        provider: Provider.getProvider(input.model.providerID),
+        provider,
         message: input.user,
       },
       {
@@ -112,16 +126,14 @@ export namespace LLM {
       },
     )
 
-    l.info("params", {
-      params,
-    })
-
-    const maxOutputTokens = ProviderTransform.maxOutputTokens(
-      input.model.api.npm,
-      params.options,
-      input.model.limit.output,
-      OUTPUT_TOKEN_MAX,
-    )
+    const maxOutputTokens = isCodex
+      ? undefined
+      : ProviderTransform.maxOutputTokens(
+          input.model.api.npm,
+          params.options,
+          input.model.limit.output,
+          OUTPUT_TOKEN_MAX,
+        )
 
     const tools = await resolveTools(input)
 
@@ -161,6 +173,13 @@ export namespace LLM {
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {
+        ...(isCodex
+          ? {
+              originator: "opencode",
+              "User-Agent": `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
+              session_id: input.sessionID,
+            }
+          : undefined),
         ...(input.model.providerID.startsWith("opencode")
           ? {
               "x-opencode-project": Instance.project.id,
@@ -173,12 +192,19 @@ export namespace LLM {
       },
       maxRetries: input.retries ?? 0,
       messages: [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
+        ...(isCodex
+          ? [
+              {
+                role: "user",
+                content: system.join("\n\n"),
+              } as ModelMessage,
+            ]
+          : system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            )),
         ...input.messages,
       ],
       model: wrapLanguageModel({
