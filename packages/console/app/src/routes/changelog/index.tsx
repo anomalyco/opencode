@@ -22,7 +22,11 @@ const getReleases = query(async () => {
       Accept: "application/vnd.github.v3+json",
       "User-Agent": "OpenCode-Console",
     },
-  })
+    cf: {
+      cacheTtl: 60 * 5,
+      cacheEverything: true,
+    },
+  } as any)
   if (!response.ok) return []
   return response.json() as Promise<Release[]>
 }, "releases.get")
