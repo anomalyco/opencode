@@ -1,14 +1,16 @@
-[data-component="agent-card"] {
-  position: relative;
+[data-component="flow-card"] {
   display: flex;
   flex-direction: column;
-  min-height: 200px;
+  width: 260px;
+  min-height: 180px;
   background: #FFFBF5;
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 16px;
   overflow: hidden;
   cursor: pointer;
   transition: all 0.2s ease;
+  position: relative;
+  flex-shrink: 0;
 
   &:hover {
     border-color: rgba(0, 0, 0, 0.12);
@@ -16,61 +18,78 @@
     transform: translateY(-2px);
   }
 
-  /* Background preview area */
-  [data-slot="preview"] {
+  /* Status-based border colors */
+  &[data-status="running"] {
+    border-color: #FFE082;
+  }
+
+  &[data-status="complete"] {
+    border-color: #A5D6A7;
+  }
+
+  &[data-status="failed"] {
+    border-color: #EF9A9A;
+  }
+
+  /* Thumbnail area - now full card background */
+  [data-slot="thumbnail"] {
     position: absolute;
     inset: 0;
     padding: 1rem;
     padding-top: 3rem;
-    padding-bottom: 4rem;
+    padding-bottom: 3.5rem;
     overflow: hidden;
   }
 
-  [data-slot="preview-content"] {
+  [data-slot="thumbnail-content"] {
     font-family: var(--font-family-mono);
-    font-size: 11px;
-    line-height: 1.6;
-    color: rgba(0, 0, 0, 0.35);
+    font-size: 10px;
+    line-height: 1.5;
+    color: rgba(0, 0, 0, 0.3);
+    margin: 0;
     white-space: pre-wrap;
-    word-break: break-word;
-    max-height: 100%;
     overflow: hidden;
+    max-height: 100%;
   }
 
-  /* Status pill at top-right */
-  [data-slot="status-pill"] {
+  [data-slot="thumbnail-overlay"] {
+    display: none;
+  }
+
+  /* Status section - top right */
+  [data-slot="status-section"] {
     position: absolute;
     top: 0.75rem;
     right: 0.75rem;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 0.375rem;
+    gap: 0.25rem;
     z-index: 2;
   }
 
   [data-slot="previous-action"] {
-    font-size: 11px;
+    font-size: 10px;
     color: rgba(0, 0, 0, 0.4);
     text-align: right;
-    max-width: 180px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  }
+
+  [data-slot="action-dot"] {
+    display: none;
   }
 
   [data-slot="current-action"] {
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
-    padding: 0.375rem 0.75rem;
+    padding: 0.375rem 0.625rem;
     background: rgba(0, 0, 0, 0.75);
     border-radius: 999px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
     color: white;
     white-space: nowrap;
-    max-width: 200px;
+    max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -79,13 +98,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     flex-shrink: 0;
     color: white;
   }
 
-  /* Status colors - all use dark pill now */
   &[data-status="running"] [data-slot="current-action"] {
     background: rgba(0, 0, 0, 0.8);
   }
@@ -98,10 +116,6 @@
     background: #C62828;
   }
 
-  &[data-status="pending"] [data-slot="current-action"] {
-    background: rgba(0, 0, 0, 0.5);
-  }
-
   /* Footer */
   [data-slot="footer"] {
     position: absolute;
@@ -111,64 +125,20 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.875rem 1rem;
+    padding: 0.75rem 1rem;
     background: linear-gradient(to top, #FFFBF5 60%, transparent 100%);
     z-index: 1;
   }
 
-  [data-slot="info"] {
-    display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
-  }
-
   [data-slot="agent-badge"] {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--agent-color);
   }
 
-  [data-slot="title"] {
-    font-size: 14px;
-    font-weight: 500;
-    color: rgba(0, 0, 0, 0.8);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 200px;
-  }
-
-  [data-slot="timestamp"] {
-    font-size: 11px;
+  [data-slot="duration"] {
+    font-size: 10px;
+    font-family: var(--font-family-mono);
     color: rgba(0, 0, 0, 0.4);
-  }
-
-  /* Menu button */
-  [data-slot="menu-button"] {
-    position: absolute;
-    bottom: 0.875rem;
-    right: 0.75rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.5rem;
-    height: 1.5rem;
-    background: transparent;
-    border: none;
-    border-radius: 4px;
-    color: rgba(0, 0, 0, 0.4);
-    cursor: pointer;
-    opacity: 0;
-    transition: all 0.15s ease;
-    z-index: 2;
-
-    &:hover {
-      background: rgba(0, 0, 0, 0.05);
-      color: rgba(0, 0, 0, 0.7);
-    }
-  }
-
-  &:hover [data-slot="menu-button"] {
-    opacity: 1;
   }
 }
