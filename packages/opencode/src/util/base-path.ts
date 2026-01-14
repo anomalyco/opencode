@@ -89,10 +89,12 @@ export function rewriteJsForBasePath(js: string, basePath: string): string {
   let result = js
 
   // Replace the pattern where the app determines the server URL
-  // In minified code it appears as: :window.location.origin)
+  // In minified code it can appear as either:
+  //   :window.location.origin)  (inside function call)
+  //   :window.location.origin;  (end of ternary expression)
   result = result.replace(
-    /:window\.location\.origin\)/g,
-    `:window.location.origin+(window.__OPENCODE_BASE_PATH__||""))`,
+    /:window\.location\.origin([;)])/g,
+    `:window.location.origin+(window.__OPENCODE_BASE_PATH__||"")$1`,
   )
 
   // Patch Vite's base path function to use our basePath instead of "/"

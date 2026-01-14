@@ -146,10 +146,16 @@ describe("util.base-path", () => {
       expect(rewriteJsForBasePath(js, "")).toBe(js)
     })
 
-    test("patches window.location.origin references", () => {
-      const js = 'const url = :window.location.origin)'
+    test("patches window.location.origin with closing paren", () => {
+      const js = "const url = :window.location.origin)"
       const result = rewriteJsForBasePath(js, "/myapp")
       expect(result).toContain(':window.location.origin+(window.__OPENCODE_BASE_PATH__||""))')
+    })
+
+    test("patches window.location.origin with semicolon (ternary ending)", () => {
+      const js = 'location.hostname.includes("opencode.ai")?"http://localhost:4096":window.location.origin;return'
+      const result = rewriteJsForBasePath(js, "/myapp")
+      expect(result).toContain(':window.location.origin+(window.__OPENCODE_BASE_PATH__||"");return')
     })
 
     test("patches Vite base path function", () => {
