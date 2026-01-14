@@ -34,6 +34,8 @@ import { createStore } from "solid-js/store"
 import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
 
+import { DropdownMenu } from "./dropdown-menu"
+
 function computeStatusFromPart(part: PartType | undefined): string | undefined {
   if (!part) return undefined
 
@@ -124,6 +126,7 @@ export function SessionTurn(
     stepsExpanded?: boolean
     onStepsExpandedToggle?: () => void
     onUserInteracted?: () => void
+    onRevert?: (messageID: string) => void
     classes?: {
       root?: string
       content?: string
@@ -514,7 +517,42 @@ export function SessionTurn(
                     </div>
                     {/* User Message */}
                     <div data-slot="session-turn-message-content">
-                      <Message message={msg()} parts={parts()} />
+                      <DropdownMenu placement="bottom-start" gutter={0}>
+                        <DropdownMenu.Trigger
+                          as={(p: any) => (
+                            <div
+                              {...p}
+                              onContextMenu={(e) => {
+                                e.preventDefault()
+                                p.onClick(e)
+                              }}
+                            >
+                              <Message message={msg()} parts={parts()} />
+                            </div>
+                          )}
+                        />
+                        <DropdownMenu.Portal>
+                          <DropdownMenu.Content>
+                            <Show when={props.onRevert}>
+                              <DropdownMenu.Item onSelect={() => props.onRevert?.(msg().id)}>
+                                <Icon name="undo" size="small" />
+                                <DropdownMenu.ItemLabel>Undo from here</DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
+                            </Show>
+                            <DropdownMenu.Item
+                              onSelect={() => {
+                                const text = parts()
+                                  .map((p) => (p?.type === "text" ? (p as TextPart).text : ""))
+                                  .join("")
+                                navigator.clipboard.writeText(text)
+                              }}
+                            >
+                              <Icon name="copy" size="small" />
+                              <DropdownMenu.ItemLabel>Copy message</DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                      </DropdownMenu>
                     </div>
                     {/* Trigger (sticky) */}
                     <Show when={working() || hasSteps()}>

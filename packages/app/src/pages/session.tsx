@@ -1177,6 +1177,33 @@ export default function Page() {
                                     onStepsExpandedToggle={() =>
                                       setStore("expanded", message.id, (open: boolean | undefined) => !open)
                                     }
+                                    onRevert={async (messageID) => {
+                                      const sessionID = params.id
+                                      if (!sessionID) return
+                                      if (status()?.type !== "idle") {
+                                        await sdk.client.session.abort({ sessionID }).catch(() => {})
+                                      }
+                                      // Find the message in the list
+                                      const msgs = userMessages()
+                                      const idx = msgs.findIndex((m) => m.id === messageID)
+                                      if (idx === -1) return
+
+                                      // If there's a next message, revert to that (keeping this message)
+                                      // If this is the last message, revert this message itself (classic undo)
+                                      const targetID = idx < msgs.length - 1 ? msgs[idx + 1].id : messageID
+
+                                      await sdk.client.session.revert({ sessionID, messageID: targetID })
+
+                                      // Restore prompt from the target message
+                                      const parts = sync.data.part[targetID]
+                                      if (parts) {
+                                        const restored = extractPromptFromParts(parts, { directory: sdk.directory })
+                                        prompt.set(restored)
+                                      }
+
+                                      // Update active message to the one we reverted to or the one before
+                                      setActiveMessage(idx < msgs.length - 1 ? msgs[idx] : msgs[idx - 1])
+                                    }}
                                     classes={{
                                       root: "min-w-0 w-full relative",
                                       content:
