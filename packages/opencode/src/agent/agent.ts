@@ -4,6 +4,7 @@ import { Provider } from "../provider/provider"
 import { generateObject, type ModelMessage } from "ai"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
+import { Truncate } from "../tool/truncation"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
@@ -46,12 +47,19 @@ export namespace Agent {
     const defaults = PermissionNext.fromConfig({
       "*": "allow",
       doom_loop: "ask",
-      external_directory: "ask",
+      external_directory: {
+        "*": "ask",
+        [Truncate.DIR]: "allow",
+        [Truncate.GLOB]: "allow",
+      },
+      question: "deny",
+      plan_enter: "deny",
+      plan_exit: "deny",
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
       read: {
         "*": "allow",
-        "*.env": "deny",
-        "*.env.*": "deny",
+        "*.env": "ask",
+        "*.env.*": "ask",
         "*.env.example": "allow",
       },
     })
@@ -61,7 +69,14 @@ export namespace Agent {
       build: {
         name: "build",
         options: {},
-        permission: PermissionNext.merge(defaults, user),
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+            plan_enter: "allow",
+          }),
+          user,
+        ),
         mode: "primary",
         native: true,
       },
@@ -71,9 +86,11 @@ export namespace Agent {
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
+            question: "allow",
+            plan_exit: "allow",
             edit: {
               "*": "deny",
-              ".opencode/plan/*.md": "allow",
+              ".opencode/plans/*.md": "allow",
             },
           }),
           user,
@@ -110,6 +127,10 @@ export namespace Agent {
             websearch: "allow",
             codesearch: "allow",
             read: "allow",
+            external_directory: {
+              [Truncate.DIR]: "allow",
+              [Truncate.GLOB]: "allow",
+            },
           }),
           user,
         ),
@@ -194,6 +215,23 @@ export namespace Agent {
       item.options = mergeDeep(item.options, value.options ?? {})
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
     }
+
+    // Ensure Truncate.DIR is allowed unless explicitly configured
+    for (const name in result) {
+      const agent = result[name]
+      const explicit = agent.permission.some((r) => {
+        if (r.permission !== "external_directory") return false
+        if (r.action !== "deny") return false
+        return r.pattern === Truncate.DIR || r.pattern === Truncate.GLOB
+      })
+      if (explicit) continue
+
+      result[name].permission = PermissionNext.merge(
+        result[name].permission,
+        PermissionNext.fromConfig({ external_directory: { [Truncate.DIR]: "allow", [Truncate.GLOB]: "allow" } }),
+      )
+    }
+
     return result
   })
 

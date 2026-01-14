@@ -45,6 +45,8 @@ export const Terminal = (props: TerminalProps) => {
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
   let handleResize: () => void
+  let handleTextareaFocus: () => void
+  let handleTextareaBlur: () => void
   let reconnect: number | undefined
   let disposed = false
 
@@ -98,13 +100,17 @@ export const Terminal = (props: TerminalProps) => {
     const mod = await import("ghostty-web")
     ghostty = await mod.Ghostty.load()
 
-    const socket = new WebSocket(
-      sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`,
-    )
+    const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+    if (window.__OPENCODE__?.serverPassword) {
+      url.username = "opencode"
+      url.password = window.__OPENCODE__?.serverPassword
+    }
+    const socket = new WebSocket(url)
     ws = socket
 
     const t = new mod.Terminal({
       cursorBlink: true,
+      cursorStyle: "bar",
       fontSize: 14,
       fontFamily: "IBM Plex Mono, monospace",
       allowTransparency: true,
@@ -170,6 +176,17 @@ export const Terminal = (props: TerminalProps) => {
 
     t.open(container)
     container.addEventListener("pointerdown", handlePointerDown)
+
+    handleTextareaFocus = () => {
+      t.options.cursorBlink = true
+    }
+    handleTextareaBlur = () => {
+      t.options.cursorBlink = false
+    }
+
+    t.textarea?.addEventListener("focus", handleTextareaFocus)
+    t.textarea?.addEventListener("blur", handleTextareaBlur)
+
     focusTerminal()
 
     if (local.pty.buffer) {
@@ -242,6 +259,8 @@ export const Terminal = (props: TerminalProps) => {
       window.removeEventListener("resize", handleResize)
     }
     container.removeEventListener("pointerdown", handlePointerDown)
+    term?.textarea?.removeEventListener("focus", handleTextareaFocus)
+    term?.textarea?.removeEventListener("blur", handleTextareaBlur)
 
     const t = term
     if (serializeAddon && props.onCleanup && t) {

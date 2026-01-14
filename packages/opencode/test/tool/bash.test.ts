@@ -4,6 +4,7 @@ import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import type { PermissionNext } from "../../src/permission/next"
+import { Truncate } from "../../src/tool/truncation"
 
 const ctx = {
   sessionID: "test",
@@ -226,6 +227,93 @@ describe("tool.bash permissions", () => {
         )
         const bashReq = requests.find((r) => r.permission === "bash")
         expect(bashReq).toBeUndefined()
+      },
+    })
+  })
+})
+
+describe("tool.bash truncation", () => {
+  test("truncates output exceeding line limit", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const lineCount = Truncate.MAX_LINES + 500
+        const result = await bash.execute(
+          {
+            command: `seq 1 ${lineCount}`,
+            description: "Generate lines exceeding limit",
+          },
+          ctx,
+        )
+        expect((result.metadata as any).truncated).toBe(true)
+        expect(result.output).toContain("truncated")
+        expect(result.output).toContain("The tool call succeeded but the output was truncated")
+      },
+    })
+  })
+
+  test("truncates output exceeding byte limit", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const byteCount = Truncate.MAX_BYTES + 10000
+        const result = await bash.execute(
+          {
+            command: `head -c ${byteCount} /dev/zero | tr '\\0' 'a'`,
+            description: "Generate bytes exceeding limit",
+          },
+          ctx,
+        )
+        expect((result.metadata as any).truncated).toBe(true)
+        expect(result.output).toContain("truncated")
+        expect(result.output).toContain("The tool call succeeded but the output was truncated")
+      },
+    })
+  })
+
+  test("does not truncate small output", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "echo hello",
+            description: "Echo hello",
+          },
+          ctx,
+        )
+        expect((result.metadata as any).truncated).toBe(false)
+        expect(result.output).toBe("hello\n")
+      },
+    })
+  })
+
+  test("full output is saved to file when truncated", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const lineCount = Truncate.MAX_LINES + 100
+        const result = await bash.execute(
+          {
+            command: `seq 1 ${lineCount}`,
+            description: "Generate lines for file check",
+          },
+          ctx,
+        )
+        expect((result.metadata as any).truncated).toBe(true)
+
+        const filepath = (result.metadata as any).outputPath
+        expect(filepath).toBeTruthy()
+
+        const saved = await Bun.file(filepath).text()
+        const lines = saved.trim().split("\n")
+        expect(lines.length).toBe(lineCount)
+        expect(lines[0]).toBe("1")
+        expect(lines[lineCount - 1]).toBe(String(lineCount))
       },
     })
   })
