@@ -99,16 +99,13 @@ export namespace ProviderAuth {
           })
         }
         if ("refresh" in result) {
-          const info: Auth.Info = {
-            type: "oauth",
-            access: result.access,
+          await Auth.addOAuth(input.providerID, {
             refresh: result.refresh,
+            access: result.access,
             expires: result.expires,
-          }
-          if (result.accountId) {
-            info.accountId = result.accountId
-          }
-          await Auth.set(input.providerID, info)
+            accountId: result.accountId,
+            enterpriseUrl: result.enterpriseUrl,
+          })
         }
         return
       }

@@ -82,13 +82,12 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
       if (result.type === "success") {
         const saveProvider = result.provider ?? provider
         if ("refresh" in result) {
-          const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
-            type: "oauth",
-            refresh,
-            access,
-            expires,
-            ...extraFields,
+          await Auth.addOAuth(saveProvider, {
+            refresh: result.refresh,
+            access: result.access,
+            expires: result.expires,
+            accountId: result.accountId,
+            enterpriseUrl: result.enterpriseUrl,
           })
         }
         if ("key" in result) {
@@ -114,13 +113,12 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
       if (result.type === "success") {
         const saveProvider = result.provider ?? provider
         if ("refresh" in result) {
-          const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
-            type: "oauth",
-            refresh,
-            access,
-            expires,
-            ...extraFields,
+          await Auth.addOAuth(saveProvider, {
+            refresh: result.refresh,
+            access: result.access,
+            expires: result.expires,
+            accountId: result.accountId,
+            enterpriseUrl: result.enterpriseUrl,
           })
         }
         if ("key" in result) {
@@ -182,7 +180,12 @@ export const AuthListCommand = cmd({
 
     for (const [providerID, result] of results) {
       const name = database[providerID]?.name || providerID
-      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+      if (result.type === "oauth") {
+        const count = await Auth.OAuthPool.list(providerID).then((accounts) => accounts.length)
+        prompts.log.info(`${name} ${UI.Style.TEXT_DIM}oauth${count > 1 ? ` (${count} accounts)` : ""}`)
+      } else {
+        prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+      }
     }
 
     prompts.outro(`${results.length} credentials`)
