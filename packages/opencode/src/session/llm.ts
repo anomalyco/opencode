@@ -130,6 +130,8 @@ export namespace LLM {
           params.options,
           input.model.limit.output,
           OUTPUT_TOKEN_MAX,
+          input.model.providerID,
+          input.model.api.id,
         )
 
     const tools = await resolveTools(input)
