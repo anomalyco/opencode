@@ -206,11 +206,55 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
   return false
 }
 
+export const AuthSwitchCommand = cmd({
+  command: "switch",
+  describe: "switch active OpenAI OAuth account",
+  async handler() {
+    UI.empty()
+    prompts.intro("Switch account")
+
+    const codexAccounts = await Auth.getCodexAccounts()
+    if (codexAccounts.length === 0) {
+      prompts.log.error("No ChatGPT accounts found")
+      prompts.outro("Done")
+      return
+    }
+
+    const codexAuth = await Auth.getCodexAuth()
+    const activeIndex = codexAuth?.activeIndex ?? 0
+
+    const selected = await prompts.select({
+      message: "Select active ChatGPT account",
+      options: codexAccounts.map((account, index) => {
+        const isActive = index === activeIndex
+        const status = account.rateLimit?.limited ? " [rate limited]" : ""
+        return {
+          label: `ChatGPT (${account.email})${status}` + (isActive ? " *" : ""),
+          value: index.toString(),
+        }
+      }),
+    })
+    if (prompts.isCancel(selected)) throw new UI.CancelledError()
+
+    const nextIndex = Number.parseInt(selected, 10)
+    if (!Number.isNaN(nextIndex)) {
+      await Auth.setActiveCodexIndex(nextIndex)
+    }
+
+    prompts.outro("Active account updated")
+  },
+})
+
 export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
   builder: (yargs) =>
-    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
+    yargs
+      .command(AuthLoginCommand)
+      .command(AuthLogoutCommand)
+      .command(AuthListCommand)
+      .command(AuthSwitchCommand)
+      .demandCommand(),
   async handler() {},
 })
 
