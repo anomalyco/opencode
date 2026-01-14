@@ -38,6 +38,7 @@ type State = {
   config: Config
   path: Path
   session: Session[]
+  sessionTotal: number
   session_status: {
     [sessionID: string]: SessionStatus
   }
@@ -98,6 +99,7 @@ function createGlobalSync() {
         agent: [],
         command: [],
         session: [],
+        sessionTotal: 0,
         session_status: {},
         session_diff: {},
         todo: {},
@@ -126,6 +128,8 @@ function createGlobalSync() {
           .filter((s) => !s.time?.archived)
           .slice()
           .sort((a, b) => a.id.localeCompare(b.id))
+        // Store total session count before filtering (used for "load more" functionality)
+        setStore("sessionTotal", nonArchived.length)
         // Include up to the limit, plus any updated in the last 4 hours
         const sessions = nonArchived.filter((s, i) => {
           if (i < store.limit) return true

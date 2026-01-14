@@ -724,6 +724,7 @@ export namespace Server {
           validator(
             "query",
             z.object({
+              directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
               start: z.coerce
                 .number()
                 .optional()
@@ -737,6 +738,7 @@ export namespace Server {
             const term = query.search?.toLowerCase()
             const sessions: Session.Info[] = []
             for await (const session of Session.list()) {
+              if (query.directory !== undefined && session.directory !== query.directory) continue
               if (query.start !== undefined && session.time.updated < query.start) continue
               if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
               sessions.push(session)
