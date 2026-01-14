@@ -37,6 +37,7 @@ import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
+import { ProviderModelDetection } from "./model-detection"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -736,6 +737,25 @@ export namespace Provider {
         options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
         source: "config",
         models: existing?.models ?? {},
+      }
+
+      // (local providers only) auto-detect models and extend config
+      if (provider.options?.autoDetectModels) {
+        const providerNPM = provider.npm ?? modelsDev[providerID]?.npm ?? "@ai-sdk/openai-compatible"
+        const providerBaseURL = provider.options?.baseURL ?? provider.api ?? modelsDev[providerID]?.api
+        if (providerNPM === "@ai-sdk/openai-compatible" && providerBaseURL) {
+          try {
+            const modelIDs = await ProviderModelDetection.OpenAICompatible.getModelIDs(providerBaseURL)
+            const providerModels = provider.models ?? {}
+            modelIDs.forEach((modelID) => {
+              if (!(modelID in providerModels)) providerModels[modelID] = {}
+            })
+            provider.models = providerModels
+            parsed.models = {}
+          } catch (error) {
+            log.warn("failed to auto-detect models", { providerID, error })
+          }
+        }
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {

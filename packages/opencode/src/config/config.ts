@@ -872,6 +872,10 @@ export namespace Config {
             .describe(
               "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
             ),
+          autoDetectModels: z
+            .boolean()
+            .optional()
+            .describe("Enable auto-detection of models. Default is false. Currently only support local providers that use OpenAI-compatible APIs.")
         })
         .catchall(z.any())
         .optional(),
