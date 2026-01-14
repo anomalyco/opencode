@@ -56,17 +56,17 @@ async function listSharesWithSessions(): Promise<ShareWithSession[]> {
 function formatSharesTable(shares: ShareWithSession[]): string {
   const lines: string[] = []
 
-  const maxUrlWidth = Math.max(30, ...shares.map((s) => s.share.url.length))
-  const maxTitleWidth = Math.max(20, ...shares.map((s) => (s.session?.title ?? "Unknown").length))
+  const maxIdWidth = Math.max(12, ...shares.map((s) => s.sessionID.length))
+  const maxTitleWidth = Math.max(20, ...shares.map((s) => (s.session?.title ?? "(orphan)").length))
+  const maxUrlWidth = Math.max(20, ...shares.map((s) => s.share.url.length))
 
-  const header = `URL${" ".repeat(maxUrlWidth - 3)}  Title${" ".repeat(maxTitleWidth - 5)}  Directory`
+  const header = `${"Session ID".padEnd(maxIdWidth)}  ${"Title".padEnd(maxTitleWidth)}  URL`
   lines.push(header)
-  lines.push("─".repeat(header.length))
+  lines.push("─".repeat(maxIdWidth + maxTitleWidth + maxUrlWidth + 4))
 
   for (const item of shares) {
     const title = Locale.truncate(item.session?.title ?? "(orphan)", maxTitleWidth)
-    const dir = item.session?.directory ?? "n/a"
-    const line = `${item.share.url.padEnd(maxUrlWidth)}  ${title.padEnd(maxTitleWidth)}  ${dir}`
+    const line = `${item.sessionID.padEnd(maxIdWidth)}  ${title.padEnd(maxTitleWidth)}  ${item.share.url}`
     lines.push(line)
   }
 
