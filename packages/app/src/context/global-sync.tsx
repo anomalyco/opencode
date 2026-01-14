@@ -119,8 +119,10 @@ function createGlobalSync() {
 
   async function loadSessions(directory: string) {
     const [store, setStore] = child(directory)
-    globalSDK.client.session
-      .list({ directory })
+    const limit = store.limit
+
+    return globalSDK.client.session
+      .list({ directory, roots: true })
       .then((x) => {
         const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000
         const nonArchived = (x.data ?? [])
@@ -128,14 +130,14 @@ function createGlobalSync() {
           .filter((s) => !s.time?.archived)
           .slice()
           .sort((a, b) => a.id.localeCompare(b.id))
-        // Store total session count before filtering (used for "load more" functionality)
-        setStore("sessionTotal", nonArchived.length)
         // Include up to the limit, plus any updated in the last 4 hours
         const sessions = nonArchived.filter((s, i) => {
-          if (i < store.limit) return true
+          if (i < limit) return true
           const updated = new Date(s.time?.updated ?? s.time?.created).getTime()
           return updated > fourHoursAgo
         })
+        // Store total session count (used for "load more" pagination)
+        setStore("sessionTotal", nonArchived.length)
         setStore("session", reconcile(sessions, { key: "id" }))
       })
       .catch((err) => {
