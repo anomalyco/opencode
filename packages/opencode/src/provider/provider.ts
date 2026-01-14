@@ -197,16 +197,23 @@ export namespace Provider {
         return undefined
       })
 
-      if (!profile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
+      const awsWebIdentityTokenFile = Env.get("AWS_WEB_IDENTITY_TOKEN_FILE")
 
-      const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
-
-      // Build credential provider options (only pass profile if specified)
-      const credentialProviderOptions = profile ? { profile } : {}
+      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile) return { autoload: false }
 
       const providerOptions: AmazonBedrockProviderSettings = {
         region: defaultRegion,
-        credentialProvider: fromNodeProviderChain(credentialProviderOptions),
+      }
+
+      // Only use credential chain if no bearer token exists
+      // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
+      if (!awsBearerToken) {
+        const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
+
+        // Build credential provider options (only pass profile if specified)
+        const credentialProviderOptions = profile ? { profile } : {}
+
+        providerOptions.credentialProvider = fromNodeProviderChain(credentialProviderOptions)
       }
 
       // Add custom endpoint if specified (endpoint takes precedence over baseURL)
@@ -416,10 +423,8 @@ export namespace Provider {
             ...(providerConfig?.options?.featureFlags || {}),
           },
         },
-        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string, options?: { anthropicModel?: string }) {
-          const anthropicModel = options?.anthropicModel
+        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
           return sdk.agenticChat(modelID, {
-            anthropicModel,
             featureFlags: {
               duo_agent_platform_agentic_chat: true,
               duo_agent_platform: true,
