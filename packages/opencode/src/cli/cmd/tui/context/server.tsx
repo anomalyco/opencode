@@ -1,11 +1,10 @@
 import { createSimpleContext } from "./helper"
 import { createSignal } from "solid-js"
 
-export type PasswordSource = "env" | "config" | "generated"
 export type StartServerResult = {
   url: string
   password: string
-  passwordSource: PasswordSource
+  passwordFromEnv: boolean
 }
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({

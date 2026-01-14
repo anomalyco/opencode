@@ -177,7 +177,7 @@ export const TuiThreadCommand = cmd({
           return {
             url,
             password,
-            passwordSource: serverOpts.auth.source,
+            passwordFromEnv: serverOpts.auth.passwordFromEnv,
           }
         }
         const result = await client.call("server", {
@@ -193,7 +193,7 @@ export const TuiThreadCommand = cmd({
         return {
           url: result.url,
           password: serverOpts.auth.password,
-          passwordSource: serverOpts.auth.source,
+          passwordFromEnv: serverOpts.auth.passwordFromEnv,
         }
       },
       onStopServer: async () => {

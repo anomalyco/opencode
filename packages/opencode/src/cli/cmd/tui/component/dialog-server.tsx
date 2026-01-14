@@ -10,17 +10,16 @@ import { createStore } from "solid-js/store"
 import open from "open"
 
 type Action = "toggle" | "copy" | "open" | "dismiss"
-type PasswordSource = "env" | "config" | "generated"
 
 export function DialogServer(props: {
   password?: string
-  passwordSource?: PasswordSource
+  passwordFromEnv?: boolean
   justStarted?: boolean
   onStartServer?: () => Promise<
     | {
         url: string
         password: string
-        passwordSource: PasswordSource
+        passwordFromEnv: boolean
       }
     | undefined
   >
@@ -34,7 +33,7 @@ export function DialogServer(props: {
   const [flash, setFlash] = createSignal(false)
   const [localUrl, setLocalUrl] = createSignal<string>()
   const [localPassword, setLocalPassword] = createSignal(props.password)
-  const [localPasswordSource, setLocalPasswordSource] = createSignal(props.passwordSource)
+  const [localPasswordFromEnv, setLocalPasswordFromEnv] = createSignal(props.passwordFromEnv)
   const [starting, setStarting] = createSignal(false)
 
   onMount(() => {
@@ -49,7 +48,7 @@ export function DialogServer(props: {
 
   const url = createMemo(() => localUrl() ?? sync.data.server)
   const password = createMemo(() => localPassword())
-  const passwordSource = createMemo(() => localPasswordSource())
+  const passwordFromEnv = createMemo(() => localPasswordFromEnv())
   const running = createMemo(() => !!url())
 
   const actions = createMemo(() => {
@@ -98,7 +97,7 @@ export function DialogServer(props: {
       if (!result) return
       setLocalUrl(result.url)
       setLocalPassword(result.password)
-      setLocalPasswordSource(result.passwordSource)
+      setLocalPasswordFromEnv(result.passwordFromEnv)
       sync.set("server", result.url)
       toast.show({ message: "Server started", variant: "success" })
       setFlash(true)
@@ -116,7 +115,7 @@ export function DialogServer(props: {
     await props.onStopServer?.()
     setLocalUrl(undefined)
     setLocalPassword(undefined)
-    setLocalPasswordSource(undefined)
+    setLocalPasswordFromEnv(undefined)
     sync.set("server", undefined)
     toast.show({ message: "Server stopped", variant: "success" })
     setStore("active", "toggle")
@@ -201,18 +200,12 @@ export function DialogServer(props: {
               <text fg={theme.textMuted}>Username</text>
               <text fg={theme.text}>opencode</text>
             </box>
-            <Show when={passwordSource()}>
-              <box>
-                <text fg={theme.textMuted}>Password</text>
-                <text fg={passwordSource() === "generated" ? theme.warning : theme.text}>
-                  {passwordSource() === "generated"
-                    ? "randomly generated"
-                    : passwordSource() === "env"
-                      ? "from environment variable"
-                      : "from config file"}
-                </text>
-              </box>
-            </Show>
+            <box>
+              <text fg={theme.textMuted}>Password</text>
+              <text fg={passwordFromEnv() ? theme.text : theme.warning}>
+                {passwordFromEnv() ? "from environment variable" : "randomly generated"}
+              </text>
+            </box>
             <box flexDirection="row" gap={2} marginTop={1}>
               <box paddingLeft={2} paddingRight={2} backgroundColor={buttonBg("toggle")} onMouseUp={toggleServer}>
                 <text fg={buttonFg("toggle")}>{toggleLabel()}</text>

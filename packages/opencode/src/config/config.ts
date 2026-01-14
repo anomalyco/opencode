@@ -773,8 +773,6 @@ export namespace Config {
       hostname: z.string().optional().describe("Hostname to listen on"),
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
       cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
-      username: z.string().optional().describe("Username for server basic auth"),
-      password: z.string().optional().describe("Password for server basic auth"),
     })
     .strict()
     .meta({

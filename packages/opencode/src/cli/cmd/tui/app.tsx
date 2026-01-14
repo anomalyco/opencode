@@ -101,11 +101,10 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 
 import type { EventSource } from "./context/sdk"
 
-export type PasswordSource = "env" | "config" | "generated"
 export type StartServerResult = {
   url: string
   password: string
-  passwordSource: PasswordSource
+  passwordFromEnv: boolean
 }
 
 export function tui(input: {

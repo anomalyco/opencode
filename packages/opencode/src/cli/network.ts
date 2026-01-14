@@ -27,7 +27,7 @@ const options = {
 }
 
 export type NetworkOptions = InferredOptionTypes<typeof options>
-export type ServerAuth = { username: string; password: string; source: "env" | "config" | "generated" }
+export type ServerAuth = { username: string; password: string; passwordFromEnv: boolean }
 export type ServerOptions = {
   hostname: string
   port: number
@@ -75,9 +75,9 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
 export async function resolveServerOptions(args: NetworkOptions): Promise<ServerOptions> {
   const config = await Config.global()
   const network = resolveNetwork(args, config)
-  const username = Flag.OPENCODE_SERVER_USERNAME ?? config?.server?.username ?? "opencode"
-  const password = Flag.OPENCODE_SERVER_PASSWORD ?? config?.server?.password ?? crypto.randomUUID()
-  const source = Flag.OPENCODE_SERVER_PASSWORD ? "env" : config?.server?.password ? "config" : "generated"
+  const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+  const password = Flag.OPENCODE_SERVER_PASSWORD ?? crypto.randomUUID()
+  const passwordFromEnv = !!Flag.OPENCODE_SERVER_PASSWORD
   const randomPort = network.port === 0 && (network.portExplicitlySet || !network.configPort)
 
   return {
@@ -89,7 +89,7 @@ export async function resolveServerOptions(args: NetworkOptions): Promise<Server
     auth: {
       username,
       password,
-      source,
+      passwordFromEnv,
     },
   }
 }
