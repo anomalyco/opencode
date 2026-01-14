@@ -1,14 +1,14 @@
 import fs from "fs/promises"
-import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
+import envPaths from "env-paths"
 import path from "path"
 import os from "os"
 
-const app = "opencode"
+const paths = envPaths("opencode", { suffix: "" })
 
-const data = path.join(xdgData!, app)
-const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
-const state = path.join(xdgState!, app)
+const data = paths.data
+const cache = paths.cache
+const config = paths.config
+const state = paths.log
 
 export namespace Global {
   export const Path = {

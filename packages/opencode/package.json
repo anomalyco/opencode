@@ -114,7 +114,7 @@
     "ulid": "catalog:",
     "vscode-jsonrpc": "8.2.1",
     "web-tree-sitter": "0.25.10",
-    "xdg-basedir": "5.1.0",
+    "env-paths": "3.0.0",
     "yargs": "18.0.0",
     "zod": "catalog:",
     "zod-to-json-schema": "3.24.5"
