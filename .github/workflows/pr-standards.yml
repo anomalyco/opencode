@@ -5,6 +5,37 @@ on:
     types: [opened, edited, synchronize]
 
 jobs:
+  check-format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Check Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run format script and check for changes
+        run: |
+          bun run script/format.ts
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "❌ Files were modified by the format script"
+            echo "Please run 'bun run script/format.ts' locally and commit the changes"
+            git diff --name-only
+            exit 1
+          else
+            echo "✅ All files are properly formatted"
+          fi
+
   check-standards:
     if: |
       github.event.pull_request.user.login != 'actions-user' &&
