@@ -46,6 +46,7 @@ export namespace Session {
       projectID: z.string(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
+      childrenIDs: Identifier.schema("session").array().optional(),
       summary: z
         .object({
           additions: z.number(),
@@ -203,6 +204,7 @@ export namespace Session {
       projectID: Instance.project.id,
       directory: input.directory,
       parentID: input.parentID,
+      childrenIDs: [],
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
       time: {
@@ -215,6 +217,14 @@ export namespace Session {
     Bus.publish(Event.Created, {
       info: result,
     })
+
+    if (input.parentID) {
+      await update(input.parentID, (draft) => {
+        if (!draft.childrenIDs) draft.childrenIDs = []
+        draft.childrenIDs.push(result.id)
+      })
+    }
+
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id)
@@ -310,6 +320,21 @@ export namespace Session {
   }
 
   export const children = fn(Identifier.schema("session"), async (parentID) => {
+    const parentSession = await get(parentID)
+
+    // If the parent session has childrenIDs field initialized,
+    // use them to get the children sessions (fast)
+    if (parentSession && Array.isArray(parentSession.childrenIDs)) {
+      return await Promise.all(
+        parentSession.childrenIDs.map((childID) => get(childID).catch((err) => {
+          log.warn(`Failed to get child session ${childID} of parent ${parentID}:`, err)
+          return null
+        }))
+      ).then(sessions => sessions.filter(Boolean) as Session.Info[])
+    }
+
+    // else, fall back to scanning all sessions
+    // (slower, but ensures we get all children even if childrenIDs is missing/outdated)
     const project = Instance.project
     const result = [] as Session.Info[]
     for (const item of await Storage.list(["session", project.id])) {
@@ -327,7 +352,7 @@ export namespace Session {
       for (const child of await children(sessionID)) {
         await remove(child.id)
       }
-      await unshare(sessionID).catch(() => {})
+      await unshare(sessionID).catch(() => { })
       for (const msg of await Storage.list(["message", sessionID])) {
         for (const part of await Storage.list(["part", msg.at(-1)!])) {
           await Storage.remove(part)
