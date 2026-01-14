@@ -70,8 +70,23 @@ export namespace Shell {
    */
   export function isPowerShellCommand(command: string): boolean {
     const trimmed = command.trim()
-    return /^powershell(\.exe)?\s/i.test(trimmed)
+    return /^(?:powershell|pwsh)(\.exe)?\s/i.test(trimmed)
   }
+
+  /**
+   * Detects if PowerShell arguments contain debug or verbose flags
+   * @param argsString - The PowerShell arguments string to analyze
+   * @returns Object with hasDebug and hasVerbose boolean properties
+   */
+   function detectDebugAndVerboseFlags(argsString: string): { hasDebug: boolean, hasVerbose: boolean } {
+     // Check for -Debug and -Verbose flags in the arguments string
+     const debugMatch = argsString.match(/(^|\s)-Debug(\s|$)/i)
+     const verboseMatch = argsString.match(/(^|\s)-Verbose(\s|$)/i)
+     return {
+       hasDebug: !!debugMatch,
+       hasVerbose: !!verboseMatch
+     }
+   }
 
   /**
    * Detects if a command is a CMD command
@@ -133,33 +148,70 @@ export namespace Shell {
     // Check for PowerShell commands
     if (isPowerShellCommand(command)) {
       // Extract the powershell executable and arguments
-      // Match pattern: powershell[.exe] <args>
-      const match = command.match(/^(powershell(?:\.exe)?)\s+(.*)$/i)
+      // Match pattern: powershell[.exe] or pwsh[.exe] <args>
+      const match = command.match(/^(powershell|pwsh)(?:\.exe)?\s+(.*)$/i)
       if (match) {
         const [, , argsString] = match
+        
+        // Check for debug/verbose flags in the arguments
+        const { hasDebug, hasVerbose } = detectDebugAndVerboseFlags(argsString)
+        
         // Parse PowerShell arguments - split on -Command, -File, etc. but keep quoted strings intact
         // For -Command, we want: ["-Command", "the command string"]
         // For -NoProfile -Command, we want: ["-NoProfile", "-Command", "the command string"]
         const args: string[] = []
         let current = argsString.trim()
-        
+
         while (current.length > 0) {
-          // Match a flag (starts with -) or a quoted string or a word
+          // Check for -Command or -c flag - everything after is a single argument
+          const commandFlagMatch = current.match(/^(-Command|-c)(?:\s+|$)/i)
+          if (commandFlagMatch) {
+            args.push(commandFlagMatch[1])
+            current = current.slice(commandFlagMatch[0].length).trim()
+            // Everything remaining is the command argument
+            if (current.length > 0) {
+              // Remove surrounding quotes if present
+              let commandArg = current;
+              if ((commandArg.startsWith('"') && commandArg.endsWith('"')) ||
+                  (commandArg.startsWith("'") && commandArg.endsWith("'"))) {
+                commandArg = commandArg.slice(1, -1);
+              }
+              
+              // Prepend appropriate preference variables if debug/verbose flags were detected
+              const preferenceStatements = []
+              if (hasDebug) {
+                preferenceStatements.push(`$DebugPreference='Continue'`)
+              }
+              if (hasVerbose) {
+                preferenceStatements.push(`$VerbosePreference='Continue'`)
+              }
+              if (preferenceStatements.length > 0) {
+                commandArg = `${preferenceStatements.join('; ')}; ${commandArg}`
+              }
+              
+              args.push(commandArg)
+            }
+            break
+          }
+
+          // Match other flags (starts with -)
           const flagMatch = current.match(/^(-\w+)(?:\s+|$)/)
           if (flagMatch) {
-            args.push(flagMatch[1])
+            // Preserve all flags including -Debug and -Verbose since we handle them via preference variables
+            const flag = flagMatch[1]
+            args.push(flag)
             current = current.slice(flagMatch[0].length).trim()
             continue
           }
-          
-          // Match quoted string (double quotes) - this is typically the -Command argument
+
+          // Match quoted string (double quotes)
           const quotedMatch = current.match(/^"((?:[^"\\]|\\.)*)"/s)
           if (quotedMatch) {
             args.push(quotedMatch[1])
             current = current.slice(quotedMatch[0].length).trim()
             continue
           }
-          
+
           // Match single quoted string
           const singleQuotedMatch = current.match(/^'((?:[^'\\]|\\.)*)'/s)
           if (singleQuotedMatch) {
@@ -167,7 +219,7 @@ export namespace Shell {
             current = current.slice(singleQuotedMatch[0].length).trim()
             continue
           }
-          
+
           // Match unquoted word
           const wordMatch = current.match(/^(\S+)/)
           if (wordMatch) {
@@ -175,13 +227,13 @@ export namespace Shell {
             current = current.slice(wordMatch[0].length).trim()
             continue
           }
-          
+
           // Should not reach here, but break to prevent infinite loop
           break
         }
         
         return {
-          executable: "powershell.exe",
+          executable: match[1].toLowerCase() === "pwsh" ? "pwsh.exe" : "powershell.exe",
           args,
           useShellFlag: false,
         }
