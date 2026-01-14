@@ -31,6 +31,24 @@
       "enabled": true,
       "timeout": 15000, // Increased for API latency
     },
+    // Hydrogen Demo Store MCP - Uses Shopify's Hydrogen preview store
+    // Public Storefront API token provided
+    // Tools provided by MCP:
+    //   - hydrogen-mcp_findProducts: Search products (snowboards, apparel, accessories)
+    //   - hydrogen-mcp_getProductById: Get detailed product info by ID
+    //   - hydrogen-mcp_getCollectionById: Get collection details
+    //   - hydrogen-mcp_findCollections: Browse collections
+    //   - hydrogen-mcp_cartCreate: Create shopping cart
+    //   - hydrogen-mcp_getCart: Retrieve cart contents
+    // Location: /tmp/HydrogenMCP (installed locally)
+    // Data source: https://hydrogen-preview.myshopify.com (Shopify's Hydrogen Demo Store)
+    // Access Token: 3b580e70970c4528da70c98e097c2fa0
+    "hydrogen-store": {
+      "type": "local",
+      "command": ["node", "/tmp/HydrogenMCP/dist/server.js"],
+      "enabled": true,
+      "timeout": 15000, // Increased for API latency
+    },
   },
   "tools": {
     "github-triage": false,

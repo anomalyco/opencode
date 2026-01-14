@@ -85,6 +85,32 @@ const BRANDS: Record<string, BrandContext> = {
       note: "Using Mock.shop via ShopifyMockMCP server. Free public API with sample commerce data. No credentials needed! See SHOPIFY_MCP_SETUP.md",
     },
   },
+  hydrogenstore: {
+    id: "hydrogenstore",
+    name: "Hydrogen Demo Store",
+    industry: "Multi-category Retail",
+    databases: ["sales_db", "inventory_db", "campaigns_db"],
+    spaces: ["image_generation", "copy_generation", "ad_creation", "research", "email_generation"],
+    regions: ["North America", "Global"],
+    preferences: {
+      voice: "Modern, clean, innovative",
+      colors: ["#000000", "#FFFFFF", "#6366F1"],
+      avoid: ["outdated terminology", "overly technical jargon"],
+    },
+    performance: {
+      avg_roas: 3.5,
+      top_region: "North America",
+      top_category: "Snowboarding",
+      yoy_growth: 22.8,
+    },
+    shopify: {
+      store_url: "hydrogen-preview.myshopify.com",
+      mcp_endpoint: "direct (Shopify Storefront API)",
+      mcp_type: "storefront",
+      auth_required: true,
+      note: "Using Shopify's official Hydrogen demo store. Public Storefront API token: 3b580e70970c4528da70c98e097c2fa0",
+    },
+  },
 }
 
 interface BrandContext {
@@ -119,7 +145,7 @@ export default tool({
   args: {
     brand_id: tool.schema
       .string()
-      .describe("Brand identifier (e.g., 'nike', 'luxebags', 'freshfoods')")
+      .describe("Brand identifier (e.g., 'nike', 'luxebags', 'freshfoods', 'hydrogenstore')")
       .default("nike"),
   },
   async execute(args) {

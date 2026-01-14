@@ -12,14 +12,36 @@ Use this when agents need to:
 - Check product availability and pricing
 - Get product data for campaign creative generation
 
-Data source: Mock.shop (Shopify's official demo GraphQL API)`
+Data sources:
+- nike, luxebags, freshfoods: Mock.shop (Shopify's official demo GraphQL API)
+- hydrogenstore: Hydrogen Demo Store (Shopify's Hydrogen framework demo)`
+
+const BRAND_CONFIG: Record<string, { endpoint: string; token?: string; source: string }> = {
+  nike: {
+    endpoint: "https://mock.shop/api/2024-07/graphql.json",
+    source: "Mock.shop",
+  },
+  luxebags: {
+    endpoint: "https://mock.shop/api/2024-07/graphql.json",
+    source: "Mock.shop",
+  },
+  freshfoods: {
+    endpoint: "https://mock.shop/api/2024-07/graphql.json",
+    source: "Mock.shop",
+  },
+  hydrogenstore: {
+    endpoint: "https://hydrogen-preview.myshopify.com/api/2026-01/graphql.json",
+    token: "3b580e70970c4528da70c98e097c2fa0",
+    source: "Hydrogen Demo Store",
+  },
+}
 
 export default tool({
   description: DESCRIPTION,
   args: {
     brand_id: tool.schema
       .string()
-      .describe("Brand identifier (nike, luxebags, freshfoods)")
+      .describe("Brand identifier (nike, luxebags, freshfoods, hydrogenstore)")
       .default("nike"),
     query: tool.schema
       .string()
@@ -47,74 +69,128 @@ export default tool({
       .default(10),
   },
   async execute(args) {
-    // Build search query
+    const config = BRAND_CONFIG[args.brand_id.toLowerCase()]
+    if (!config) {
+      return `Brand '${args.brand_id}' not configured. Available brands: ${Object.keys(BRAND_CONFIG).join(", ")}`
+    }
+
     const searchTerms = []
     if (args.query) searchTerms.push(args.query)
     if (args.category) searchTerms.push(args.category)
 
     const searchQuery = searchTerms.join(" ") || "products"
 
-    // This tool provides guidance for querying products via Shopify MCP
-    return `# Product Query Helper: ${args.brand_id.toUpperCase()}
+    // Shopify Storefront API Query
+    const GRAPHQL_QUERY = `
+      query SearchProducts($query: String!, $first: Int!) {
+        products(query: $query, first: $first) {
+          edges {
+            node {
+              id
+              title
+              description
+              vendor
+              productType
+              handle
+              availableForSale
+              priceRange {
+                minVariantPrice {
+                  amount
+                  currencyCode
+                }
+              }
+              images(first: 1) {
+                edges {
+                  node {
+                    url
+                    altText
+                  }
+                }
+              }
+              variants(first: 5) {
+                edges {
+                  node {
+                    id
+                    title
+                    price {
+                      amount
+                      currencyCode
+                    }
+                    availableForSale
+                    sku
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
 
-## Requested Search
-- **Keywords**: ${searchQuery}
-- **Category**: ${args.category || "All Categories"}
-- **Price Range**: ₹${args.min_price || 0} - ₹${args.max_price || "∞"}
-- **Available Only**: ${args.available_only ? "Yes" : "No"}
-- **Limit**: ${args.limit} products
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      }
 
----
+      if (config.token) {
+        headers["X-Shopify-Storefront-Access-Token"] = config.token
+      }
 
-## How to Query Products
+      const response = await fetch(config.endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          query: GRAPHQL_QUERY,
+          variables: {
+            query: searchQuery,
+            first: args.limit,
+          },
+        }),
+      });
 
-To search the Shopify product catalog, use the **Shopify MCP tool** directly:
+      if (!response.ok) {
+        throw new Error(`Shopify API error: ${response.status} ${response.statusText}`);
+      }
 
-\`\`\`
-Use tool: shopify-mock_search_shop_catalog
-Parameters:
-{
-  "query": "${searchQuery}",
-  "limit": ${args.limit}
-}
-\`\`\`
+      const { data, errors } = (await response.json()) as { data: any; errors?: { message: string }[] };
 
-This will return real product data from Mock.shop including:
-- Product names and descriptions
-- Pricing and variants (sizes, colors)
-- Availability status
-- Product images
-- SKU information
+      if (errors && errors.length > 0) {
+        return `Error from Shopify API: ${errors.map((e: { message: string }) => e.message).join(", ")}`;
+      }
 
----
+      const products = data?.products?.edges || [];
 
-## MCP Server Status
+      if (products.length === 0) {
+        return `No products found for "${searchQuery}" in ${args.brand_id}.`;
+      }
 
-To verify the Shopify MCP is connected:
-1. Check server status: \`opencode mcp list\`
-2. Ensure 'shopify-mock' shows as 'connected'
-3. If not connected, check \`.opencode/opencode.jsonc\` configuration
+      let output = `# Product Search Results: ${args.brand_id.toUpperCase()}\n\n`;
+      output += `Found ${products.length} products matching "${searchQuery}":\n\n`;
 
----
+      products.forEach(({ node: p }: { node: any }) => {
+        const price = p.priceRange.minVariantPrice;
+        output += `### ${p.title}\n`;
+        output += `- **ID**: ${p.id}\n`;
+        output += `- **Price**: ${price.amount} ${price.currencyCode}\n`;
+        output += `- **Status**: ${p.availableForSale ? "In Stock" : "Out of Stock"}\n`;
+        output += `- **Description**: ${p.description.slice(0, 150)}${p.description.length > 150 ? "..." : ""}\n`;
 
-## Alternative: Demo Data
+        if (p.images.edges.length > 0) {
+          output += `![${p.title}](${p.images.edges[0].node.url})\n`;
+        }
 
-If Shopify MCP is not available, the following demo product categories are available for "${args.brand_id}":
+        output += `\n**Variants:**\n`;
+        p.variants.edges.forEach(({ node: v }: { node: any }) => {
+          output += `- ${v.title}: ${v.price.amount} ${v.price.currencyCode} (${v.availableForSale ? "Available" : "Sold Out"})\n`;
+        });
+        output += `\n---\n`;
+      });
 
-${args.brand_id === "nike" ? `- Running Shoes (₹3,000 - ₹8,000)
-- Training Shoes (₹2,500 - ₹6,500)
-- Apparel (₹1,200 - ₹4,500)
-- Accessories (₹500 - ₹2,000)` : args.brand_id === "luxebags" ? `- Handbags (₹8,000 - ₹25,000)
-- Clutches (₹5,000 - ₹15,000)
-- Totes (₹6,000 - ₹18,000)
-- Accessories (₹2,000 - ₹8,000)` : `- Organic Vegetables (₹50 - ₹500/kg)
-- Organic Fruits (₹80 - ₹600/kg)
-- Dairy Products (₹40 - ₹300)
-- Packaged Goods (₹100 - ₹800)`}
+      output += `\n*Data source: ${config.source}*`;
 
-*Use the MCP tool for actual Shopify product data with real names, prices, and availability.*
-
----
-*Generated at ${new Date().toISOString()}*`
+      return output;
+    } catch (error) {
+      return `Failed to query products: ${error instanceof Error ? error.message : String(error)}`;
+    }
   },
 })

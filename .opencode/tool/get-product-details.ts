@@ -16,110 +16,159 @@ Use this when you need complete product details for:
 - Analyzing product variants and pricing
 - Checking detailed inventory status
 
-Data source: Mock.shop (Shopify's official demo GraphQL API)`
+Data sources:
+- nike, luxebags, freshfoods: Mock.shop (Shopify's official demo GraphQL API)
+- hydrogenstore: Hydrogen Demo Store (Shopify's Hydrogen framework demo)`
+
+const BRAND_CONFIG: Record<string, { endpoint: string; token?: string; source: string }> = {
+  nike: {
+    endpoint: "https://mock.shop/api/2024-07/graphql.json",
+    source: "Mock.shop",
+  },
+  luxebags: {
+    endpoint: "https://mock.shop/api/2024-07/graphql.json",
+    source: "Mock.shop",
+  },
+  freshfoods: {
+    endpoint: "https://mock.shop/api/2024-07/graphql.json",
+    source: "Mock.shop",
+  },
+  hydrogenstore: {
+    endpoint: "https://hydrogen-preview.myshopify.com/api/2026-01/graphql.json",
+    token: "3b580e70970c4528da70c98e097c2fa0",
+    source: "Hydrogen Demo Store",
+  },
+}
 
 export default tool({
   description: DESCRIPTION,
   args: {
     brand_id: tool.schema
       .string()
-      .describe("Brand identifier (nike, luxebags, freshfoods)")
+      .describe("Brand identifier (nike, luxebags, freshfoods, hydrogenstore)")
       .default("nike"),
     product_identifier: tool.schema
       .string()
       .describe("Product name, SKU, or unique identifier to search for"),
   },
   async execute(args) {
-    // This tool provides guidance for getting detailed product information via Shopify MCP
-    return `# Product Details Helper: ${args.brand_id.toUpperCase()}
+    const config = BRAND_CONFIG[args.brand_id.toLowerCase()]
+    if (!config) {
+      return `Brand '${args.brand_id}' not configured. Available brands: ${Object.keys(BRAND_CONFIG).join(", ")}`
+    }
 
-## Requested Product
-**Identifier**: "${args.product_identifier}"
+    // Shopify Storefront API Query for specific product details
+    const GRAPHQL_QUERY = `
+      query GetProductDetails($query: String!) {
+        products(query: $query, first: 1) {
+          edges {
+            node {
+              id
+              title
+              description
+              vendor
+              productType
+              handle
+              availableForSale
+              priceRange {
+                minVariantPrice {
+                  amount
+                  currencyCode
+                }
+              }
+              images(first: 10) {
+                edges {
+                  node {
+                    url
+                    altText
+                  }
+                }
+              }
+              variants(first: 20) {
+                edges {
+                  node {
+                    id
+                    title
+                    price {
+                      amount
+                      currencyCode
+                    }
+                    availableForSale
+                    sku
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
 
----
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      }
 
-## How to Get Product Details
+      if (config.token) {
+        headers["X-Shopify-Storefront-Access-Token"] = config.token
+      }
 
-To retrieve detailed information about this product, use the **Shopify MCP tool** directly:
+      const response = await fetch(config.endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          query: GRAPHQL_QUERY,
+          variables: {
+            query: args.product_identifier,
+          },
+        }),
+      });
 
-\`\`\`
-Use tool: shopify-mock_search_shop_catalog
-Parameters:
-{
-  "query": "${args.product_identifier}",
-  "limit": 1
-}
-\`\`\`
+      if (!response.ok) {
+        throw new Error(`Shopify API error: ${response.status} ${response.statusText}`);
+      }
 
-This will return comprehensive product information including:
+      const { data, errors } = (await response.json()) as { data: any; errors?: { message: string }[] };
 
-### Product Information
-- Full product name and description
-- SKU and product ID
-- Product category and tags
-- SEO metadata
+      if (errors && errors.length > 0) {
+        return `Error from Shopify API: ${errors.map((e: { message: string }) => e.message).join(", ")}`;
+      }
 
-### Pricing
-- Current price
-- Compare-at price (original/MSRP)
-- Discount percentage (if on sale)
+      const products = data?.products?.edges || [];
 
-### Variants
-- All available sizes, colors, materials
-- Variant-specific pricing
-- Variant SKUs
+      if (products.length === 0) {
+        return `Product "${args.product_identifier}" not found in ${args.brand_id} catalog.`;
+      }
 
-### Inventory
-- Stock status for each variant
-- Availability by location (if applicable)
+      const p = products[0].node;
+      const price = p.priceRange.minVariantPrice;
 
-### Media
-- Product images (all angles)
-- Lifestyle images
-- Video content (if available)
+      let output = `# Product Details: ${p.title}\n\n`;
+      output += `- **ID**: ${p.id}\n`;
+      output += `- **Brand**: ${p.vendor}\n`;
+      output += `- **Type**: ${p.productType}\n`;
+      output += `- **Starting Price**: ${price.amount} ${price.currencyCode}\n`;
+      output += `- **Availability**: ${p.availableForSale ? "In Stock" : "Out of Stock"}\n\n`;
 
----
+      output += `## Description\n${p.description}\n\n`;
 
-## Usage Notes
+      output += `## Available Variants\n`;
+      p.variants.edges.forEach(({ node: v }: { node: any }) => {
+        output += `- ${v.title}: ${v.price.amount} ${v.price.currencyCode} (${v.availableForSale ? "Available" : "Sold Out"}, SKU: ${v.sku || "N/A"})\n`;
+      });
 
-**For Campaign Creation**:
-- Use product images and titles from the MCP response
-- Reference actual pricing in ad copy
-- Mention available variants ("Available in 5 colors")
+      if (p.images.edges.length > 0) {
+        output += `\n## Product Images\n`;
+        p.images.edges.forEach(({ node: img }: { node: any }) => {
+          output += `![${img.altText || p.title}](${img.url})\n`;
+        });
+      }
 
-**For Inventory Checks**:
-- Check variant-level availability
-- Prioritize in-stock variants in campaigns
+      output += `\n---\n*Data source: ${config.source} Storefront API*`;
 
-**For Pricing Analysis**:
-- Compare regular price vs compare-at price
-- Calculate discount percentage for promotions
-
-**For SEO/Marketing**:
-- Use product tags for keyword targeting
-- Reference product categories for collection pages
-
----
-
-## MCP Server Status
-
-To verify the Shopify MCP is connected:
-1. Check server status: \`opencode mcp list\`
-2. Ensure 'shopify-mock' shows as 'connected'
-3. If not connected, check \`.opencode/opencode.jsonc\` configuration
-
----
-
-## Alternative Approach
-
-If you don't know the exact product name, use \`query_products\` first to browse:
-\`\`\`
-query_products(brand_id="${args.brand_id}", query="[category or keyword]", limit=10)
-\`\`\`
-
-Then use the specific product name from those results to get full details.
-
----
-*Generated at ${new Date().toISOString()}*`
+      return output;
+    } catch (error) {
+      return `Failed to fetch product details: ${error instanceof Error ? error.message : String(error)}`;
+    }
   },
 })
