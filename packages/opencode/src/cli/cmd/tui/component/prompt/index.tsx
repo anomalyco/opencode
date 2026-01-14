@@ -486,6 +486,14 @@ export function Prompt(props: PromptProps) {
     if (autocomplete?.visible) return
     if (!store.prompt.input) return
     const trimmed = store.prompt.input.trim()
+    if (!trimmed) {
+      toast.show({
+        variant: "warning",
+        message: "Message cannot be empty",
+        duration: 2000,
+      })
+      return
+    }
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       exit()
       return
