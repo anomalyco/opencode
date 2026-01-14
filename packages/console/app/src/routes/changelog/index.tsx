@@ -41,50 +41,44 @@ function parseMarkdown(body: string) {
   const lines = body.split("\n")
   const sections: { title: string; items: string[] }[] = []
   let current: { title: string; items: string[] } | null = null
-  const contributors: string[] = []
-  let inContributors = false
+  let skip = false
 
   for (const line of lines) {
     if (line.startsWith("## ")) {
       if (current) sections.push(current)
       const title = line.slice(3).trim()
-      if (title.toLowerCase().includes("contributor")) {
-        inContributors = true
-        current = null
-      } else {
-        inContributors = false
-        current = { title, items: [] }
-      }
-    } else if (line.startsWith("- ") && !inContributors) {
-      current?.items.push(line.slice(2).trim())
-    } else if (line.startsWith("- @") && inContributors) {
-      contributors.push(line.slice(2).trim())
+      current = { title, items: [] }
+      skip = false
     } else if (line.startsWith("**Thank you")) {
-      inContributors = true
+      skip = true
+    } else if (line.startsWith("- ") && !skip) {
+      current?.items.push(line.slice(2).trim())
     }
   }
   if (current) sections.push(current)
 
-  return { sections, contributors }
+  return { sections }
 }
 
 function ReleaseItem(props: { item: string }) {
   const parts = () => {
-    const match = props.item.match(/^(.+?)(\s*\(@[\w-]+\))?$/)
+    const match = props.item.match(/^(.+?)(\s*\(@([\w-]+)\))?$/)
     if (match) {
       return {
         text: match[1],
-        author: match[2]?.trim(),
+        username: match[3],
       }
     }
-    return { text: props.item, author: undefined }
+    return { text: props.item, username: undefined }
   }
 
   return (
     <li>
       <span>{parts().text}</span>
-      <Show when={parts().author}>
-        <span data-slot="author">{parts().author}</span>
+      <Show when={parts().username}>
+        <a data-slot="author" href={`https://github.com/${parts().username}`} target="_blank" rel="noopener noreferrer">
+          (@{parts().username})
+        </a>
       </Show>
     </li>
   )
@@ -133,25 +127,6 @@ export default function Changelog() {
                           </div>
                         )}
                       </For>
-                      <Show when={parsed().contributors.length > 0}>
-                        <div data-component="contributors">
-                          <span>Contributors: </span>
-                          <For each={parsed().contributors}>
-                            {(contributor, i) => (
-                              <>
-                                <a
-                                  href={`https://github.com/${contributor.replace("@", "").split(":")[0]}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  {contributor.split(":")[0]}
-                                </a>
-                                <Show when={i() < parsed().contributors.length - 1}>, </Show>
-                              </>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
                     </div>
                   </article>
                 )

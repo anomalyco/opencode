@@ -430,6 +430,14 @@
           [data-slot="author"] {
             color: var(--color-text-weak);
             font-size: 13px;
+            margin-left: 4px;
+            text-decoration: none;
+
+            &:hover {
+              text-decoration: underline;
+              text-underline-offset: 2px;
+              text-decoration-thickness: 1px;
+            }
           }
         }
       }
