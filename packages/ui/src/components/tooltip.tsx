@@ -34,6 +34,17 @@ export function Tooltip(props: TooltipProps) {
 
   const c = children(() => local.children)
 
+  // Treat empty/falsy values as inactive to prevent ghost tooltips
+  const isInactive = () => {
+    if (local.inactive) return true
+    const value = others.value
+    // Check for falsy values (null, undefined, empty string, false)
+    if (!value) return true
+    // Check for empty string specifically
+    if (typeof value === "string" && value.trim() === "") return true
+    return false
+  }
+
   onMount(() => {
     const childElements = c()
     if (childElements instanceof HTMLElement) {
@@ -51,7 +62,7 @@ export function Tooltip(props: TooltipProps) {
 
   return (
     <Switch>
-      <Match when={local.inactive}>{local.children}</Match>
+      <Match when={isInactive()}>{local.children}</Match>
       <Match when={true}>
         <KobalteTooltip forceMount gutter={4} {...others} open={open()} onOpenChange={setOpen}>
           <KobalteTooltip.Trigger as={"div"} data-component="tooltip-trigger" class={local.class}>

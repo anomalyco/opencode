@@ -1,6 +1,7 @@
 import { Show, createSignal, createEffect, on, createMemo, onCleanup } from "solid-js"
 import { useLayout } from "@/context/layout"
 import { useLocal, type LocalFile } from "@/context/local"
+import { useFileActivity } from "@/context/file-activity"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Markdown } from "@opencode-ai/ui/markdown"
 import { getPreviewType, validateContent } from "./file-preview"
@@ -16,10 +17,12 @@ import "./file-preview/file-preview.css"
 export function FilePreviewPanel() {
   const layout = useLayout()
   const local = useLocal()
+  const fileActivity = useFileActivity()
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal<PreviewError | null>(null)
   const [showSizeWarning, setShowSizeWarning] = createSignal(false)
   const [file, setFile] = createSignal<LocalFile | null>(null)
+  const [refreshCounter, setRefreshCounter] = createSignal(0)
 
   // Get the file path from layout context
   const filePath = createMemo(() => layout.filePreview.filePath())
@@ -31,11 +34,29 @@ export function FilePreviewPanel() {
     return getPreviewType(f.name)
   })
 
-  // Load file when path changes
+  // Subscribe to file activity events to refresh content when the current file is modified
+  createEffect(() => {
+    const unsub = fileActivity.subscribe((event) => {
+      const currentPath = filePath()
+      if (!currentPath) return
+
+      // Get relative path for comparison
+      const relativePath = local.file.relative(event.path)
+
+      // If the currently previewed file was edited or created, trigger a refresh
+      if (relativePath === currentPath && (event.activityType === "edited" || event.activityType === "created")) {
+        // Increment refresh counter to trigger re-load
+        setRefreshCounter((c) => c + 1)
+      }
+    })
+    onCleanup(unsub)
+  })
+
+  // Load file when path changes or when refresh is triggered
   createEffect(
     on(
-      filePath,
-      async (path) => {
+      () => [filePath(), refreshCounter()] as const,
+      async ([path, _refresh]) => {
         if (!path) {
           setFile(null)
           setError(null)
@@ -48,19 +69,13 @@ export function FilePreviewPanel() {
         setLoading(true)
 
         try {
-          // Get node from local file system
+          // Force reload the file content from server
+          await local.file.load(path)
+
+          // Get updated node from local file system
           const node = await local.file.node(path)
           if (node) {
             setFile(node as LocalFile)
-            // Load content if not already loaded
-            if (!node.content) {
-              await local.file.load(path)
-              // Re-fetch after load
-              const updatedNode = await local.file.node(path)
-              if (updatedNode) {
-                setFile(updatedNode as LocalFile)
-              }
-            }
           } else {
             setError({
               type: "not_found",

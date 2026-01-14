@@ -503,6 +503,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           rootLoaded = true
           list("")
         },
+        // Refresh a directory listing (force re-fetch from server)
+        refreshDir(path: string) {
+          list(path)
+        },
         expand(path: string) {
           setStore("node", path, "expanded", true)
           if (store.node[path]?.loaded) return

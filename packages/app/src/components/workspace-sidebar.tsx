@@ -1,7 +1,9 @@
-import { Show, createSignal, createEffect, on } from "solid-js"
+import { Show, createSignal, createEffect, on, onCleanup, createMemo } from "solid-js"
 import { useLayout } from "@/context/layout"
 import { useLocal, type LocalFile } from "@/context/local"
+import { useFileActivity } from "@/context/file-activity"
 import FileTree from "./file-tree"
+import { FileActivitySection } from "./file-activity-section"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { getPreviewType } from "./file-preview"
 
@@ -14,6 +16,7 @@ export interface WorkspaceSidebarProps {
 export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
   const layout = useLayout()
   const local = useLocal()
+  const fileActivity = useFileActivity()
   const [selectedFile, setSelectedFile] = createSignal<LocalFile | null>(null)
 
   // Load root directory files when workspace path changes or component mounts
@@ -29,6 +32,22 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
       { defer: false }
     )
   )
+
+  // Subscribe to file activity events to refresh the file tree
+  createEffect(() => {
+    const unsub = fileActivity.subscribe((event) => {
+      // When a file is created or edited, refresh the parent directory
+      if (event.activityType === "created" || event.activityType === "edited") {
+        // Get the relative path from the absolute path
+        const relativePath = local.file.relative(event.path)
+        const parentPath = relativePath.split("/").slice(0, -1).join("/")
+
+        // Refresh the parent directory to show the new/updated file
+        local.file.refreshDir(parentPath)
+      }
+    })
+    onCleanup(unsub)
+  })
 
   const handleFileClick = (file: LocalFile) => {
     setSelectedFile(file)
@@ -55,6 +74,11 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
     return !visibleChildren || visibleChildren.length === 0
   }
 
+  // Check if there are any activity files to show
+  const hasActivityFiles = createMemo(() => {
+    return fileActivity.getAllPaths().length > 0
+  })
+
   return (
     <div
       class={`flex flex-col border-l border-border-weak-base glass-sidebar ${props.class ?? ""}`}
@@ -76,6 +100,25 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
 
       {/* File Tree Content */}
       <div class="flex-1 overflow-y-auto min-h-0">
+        {/* Activity Sections - Show changed and referenced files */}
+        <Show when={hasActivityFiles()}>
+          <div class="py-2 px-1 border-b border-border-weak-base">
+            <FileActivitySection
+              type="changed"
+              selectedPath={selectedFile()?.path}
+              onFileClick={handleFileClick}
+              onFileActivate={(file) => props.onFileActivate?.(file.path)}
+            />
+            <FileActivitySection
+              type="referenced"
+              selectedPath={selectedFile()?.path}
+              onFileClick={handleFileClick}
+              onFileActivate={(file) => props.onFileActivate?.(file.path)}
+            />
+          </div>
+        </Show>
+
+        {/* Full File Tree */}
         <Show
           when={!isEmpty()}
           fallback={
@@ -88,6 +131,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
             path={rootPath}
             workspacePath={props.workspacePath}
             selectedPath={selectedFile()?.path}
+            hideActivityFiles={hasActivityFiles()}
             onFileClick={handleFileClick}
             onFileActivate={(file) => props.onFileActivate?.(file.path)}
             class="py-2 px-1"
