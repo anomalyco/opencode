@@ -123,15 +123,15 @@ export function FilePreviewPanel() {
   return (
     <div
       data-component="file-preview-panel"
-      class="flex flex-col h-full bg-background-base flex-1 min-w-0 border-l border-border-weak-base"
+      class="flex flex-col h-full flex-1 min-w-0 border-l border-border-weak-base glass-panel"
     >
         {/* Header */}
         <div
           data-slot="preview-header"
-          class="h-12 px-3 flex items-center justify-between shrink-0 border-b border-border-weak-base"
+          class="h-12 px-3 flex items-center justify-between shrink-0 border-b border-border-weak-base vibrancy"
         >
           <div class="flex items-center gap-2 min-w-0">
-            <span class="text-12-medium text-text-weak truncate">
+            <span class="text-12-medium text-text-base font-medium truncate">
               {file()?.name ?? "Preview"}
             </span>
             <Show when={showSizeWarning()}>

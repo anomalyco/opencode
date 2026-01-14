@@ -26,7 +26,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
-import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
+import { checksum, base64Decode } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
@@ -405,6 +405,17 @@ export default function Page() {
       () => {
         setStore("messageId", undefined)
         setStore("expanded", {})
+      },
+      { defer: true },
+    ),
+  )
+
+  // Close file preview when switching sessions/projects
+  createEffect(
+    on(
+      () => [params.dir, params.id] as const,
+      () => {
+        layout.filePreview.close()
       },
       { defer: true },
     ),
@@ -1202,23 +1213,7 @@ export default function Page() {
                 </Show>
               </Match>
               <Match when={true}>
-                <NewSessionView
-                  worktree={newSessionWorktree()}
-                  onWorktreeChange={(value) => {
-                    if (value === "create") {
-                      setStore("newSessionWorktree", value)
-                      return
-                    }
-
-                    setStore("newSessionWorktree", "main")
-
-                    const target = value === "main" ? sync.project?.worktree : value
-                    if (!target) return
-                    if (target === sync.data.path.directory) return
-                    layout.projects.open(target)
-                    navigate(`/${base64Encode(target)}/session`)
-                  }}
-                />
+                <NewSessionView />
               </Match>
             </Switch>
           </div>
@@ -1271,7 +1266,7 @@ export default function Page() {
 
         {/* Desktop tabs panel (Review + Context + Files) - hidden on mobile */}
         <Show when={isDesktop() && showTabs()}>
-          <div class="relative flex-1 min-w-0 h-full border-l border-border-weak-base">
+          <div class="relative flex-1 min-w-0 h-full border-l border-border-weak-base glass-sidebar">
             <DragDropProvider
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}

@@ -57,14 +57,14 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
 
   return (
     <div
-      class={`flex flex-col border-l border-border-weak-base bg-background-base ${props.class ?? ""}`}
+      class={`flex flex-col border-l border-border-weak-base glass-sidebar ${props.class ?? ""}`}
       onKeyDown={handleKeyDown}
       role="tree"
       aria-label="Workspace files"
     >
       {/* Header - h-12 to match main header */}
-      <div class="h-12 px-3 border-b border-border-weak-base flex items-center justify-between shrink-0">
-        <span class="text-12-medium text-text-weak">Files</span>
+      <div class="h-12 px-3 border-b border-border-weak-base flex items-center justify-between shrink-0 vibrancy">
+        <span class="text-12-medium text-text-base font-medium">Files</span>
         <IconButton
           icon="close"
           size="normal"
@@ -90,7 +90,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
             selectedPath={selectedFile()?.path}
             onFileClick={handleFileClick}
             onFileActivate={(file) => props.onFileActivate?.(file.path)}
-            class="py-1"
+            class="py-2 px-1"
           />
         </Show>
       </div>

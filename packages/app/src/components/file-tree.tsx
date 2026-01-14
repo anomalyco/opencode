@@ -51,12 +51,12 @@ export default function FileTree(props: {
     <Dynamic
       component={p.as ?? "div"}
       classList={{
-        "py-1 px-2 w-full flex items-center gap-x-2 rounded-sm cursor-pointer transition-colors": true,
+        "py-1 px-3 w-full flex items-center gap-x-2.5 rounded-md cursor-pointer transition-all duration-150": true,
         "hover:bg-surface-raised-base-hover": props.selectedPath !== p.node.path,
-        "bg-surface-raised-base": props.selectedPath === p.node.path,
+        "bg-surface-interactive-base border border-border-weak-selected": props.selectedPath === p.node.path,
         [props.nodeClass ?? ""]: !!props.nodeClass,
       }}
-      style={`padding-left: ${8 + level * 12}px`}
+      style={`padding-left: ${level * 16}px`}
       draggable={true}
       onDragStart={(e: any) => {
         const evt = e as globalThis.DragEvent
@@ -86,7 +86,7 @@ export default function FileTree(props: {
       {p.children}
       <span
         classList={{
-          "text-13-regular whitespace-nowrap truncate": true,
+          "text-14-regular whitespace-nowrap truncate": true,
           "text-text-subtle": p.node.ignored && props.selectedPath !== p.node.path,
           "text-text-base": !p.node.ignored && props.selectedPath !== p.node.path,
           "text-text-strong": props.selectedPath === p.node.path,
@@ -98,7 +98,7 @@ export default function FileTree(props: {
   )
 
   return (
-    <div class={`flex flex-col gap-0.5 ${props.class ?? ""}`} role="group">
+    <div class={`flex flex-col ${props.class ?? ""}`} role="group">
       <For each={sortedChildren()}>
         {(node) => (
           <Tooltip forceMount={false} openDelay={1000} value={getRelativePath(node.path)} placement="right">
@@ -113,8 +113,8 @@ export default function FileTree(props: {
                   >
                     <Collapsible.Trigger>
                       <Node node={node}>
-                        <Collapsible.Arrow class="text-icon-base size-3" />
-                        <FileIcon node={node} class="text-icon-base size-4" />
+                        <Collapsible.Arrow class="text-icon-base size-4" />
+                        <FileIcon node={node} class="text-icon-base size-5" />
                       </Node>
                     </Collapsible.Trigger>
                     <Collapsible.Content>
@@ -140,8 +140,8 @@ export default function FileTree(props: {
                   onClick={() => props.onFileClick?.(node)}
                   onDblClick={() => props.onFileActivate?.(node)}
                 >
-                  <div class="size-3 shrink-0" />
-                  <FileIcon node={node} class="text-icon-base size-4" />
+                  <div class="size-4 shrink-0" />
+                  <FileIcon node={node} class="text-icon-base size-5" />
                 </Node>
               </Match>
             </Switch>

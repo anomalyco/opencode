@@ -5,13 +5,21 @@
   &::after {
     content: "";
     position: absolute;
-    background-color: var(--color-border-strong-base);
+    background: linear-gradient(
+      to bottom,
+      var(--color-border-interactive-base),
+      var(--color-border-interactive-hover)
+    );
     opacity: 0;
-    transition: opacity 0.15s ease-in-out;
-    border-radius: 2px;
+    transition: opacity 0.2s ease-out;
+    border-radius: 3px;
+    box-shadow: 0 0 8px rgba(0, 122, 255, 0.25);
   }
 
-  &:hover::after,
+  &:hover::after {
+    opacity: 0.7;
+  }
+
   &:active::after {
     opacity: 1;
   }

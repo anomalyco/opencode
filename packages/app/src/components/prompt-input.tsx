@@ -351,6 +351,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     document.addEventListener("dragover", handleGlobalDragOver)
     document.addEventListener("dragleave", handleGlobalDragLeave)
     document.addEventListener("drop", handleGlobalDrop)
+    // Ensure root files are loaded for @ mention autocomplete
+    local.file.loadRoot()
   })
   onCleanup(() => {
     document.removeEventListener("dragover", handleGlobalDragOver)
@@ -393,7 +395,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   } = useFilteredList<AtOption>({
     items: async (query) => {
       const agents = agentList()
-      const paths = await files.searchFilesAndDirectories(query)
+      // For empty query, use already-loaded root files from local store
+      // For non-empty query, use the search API
+      const paths = query
+        ? await files.searchFilesAndDirectories(query)
+        : local.file.children("").map((f) => local.file.relative(f.path))
       const fileOptions: AtOption[] = paths.map((path) => ({ type: "file", path, display: path }))
       return [...agents, ...fileOptions]
     },
@@ -1546,15 +1552,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </div>
               </Match>
               <Match when={store.mode === "normal"}>
-                <TooltipKeybind placement="top" title="Cycle agent" keybind={command.keybind("agent.cycle")}>
-                  <Select
-                    options={local.agent.list().map((agent) => agent.name)}
-                    current={local.agent.current()?.name ?? ""}
-                    onSelect={local.agent.set}
-                    class="capitalize"
-                    variant="ghost"
-                  />
-                </TooltipKeybind>
                 <Show
                   when={providers.paid().length > 0}
                   fallback={
@@ -1574,21 +1571,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       </Button>
                     </TooltipKeybind>
                   </ModelSelectorPopover>
-                </Show>
-                <Show when={local.model.variant.list().length > 0}>
-                  <TooltipKeybind
-                    placement="top"
-                    title="Thinking effort"
-                    keybind={command.keybind("model.variant.cycle")}
-                  >
-                    <Button
-                      variant="ghost"
-                      class="text-text-base _hidden group-hover/prompt-input:inline-block"
-                      onClick={() => local.model.variant.cycle()}
-                    >
-                      <span class="capitalize text-12-regular">{local.model.variant.current() ?? "Default"}</span>
-                    </Button>
-                  </TooltipKeybind>
                 </Show>
                 <Show when={permission.permissionsEnabled() && params.id}>
                   <TooltipKeybind

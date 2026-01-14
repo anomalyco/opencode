@@ -181,7 +181,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
             </div>
           }
         >
-          <For each={grouped.latest}>
+          <For each={grouped.latest ?? []}>
             {(group) => (
               <div data-slot="list-group">
                 <Show when={group.category}>
