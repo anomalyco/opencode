@@ -27,7 +27,7 @@ const TOOL: Record<string, [string, string]> = {
 
 export const RunCommand = cmd({
   command: "run [message..]",
-  describe: "run opencode with a message",
+  describe: "run shopos with a message",
   builder: (yargs: Argv) => {
     return yargs
       .positional("message", {
@@ -81,7 +81,7 @@ export const RunCommand = cmd({
       })
       .option("attach", {
         type: "string",
-        describe: "attach to a running opencode server (e.g., http://localhost:4096)",
+        describe: "attach to a running shopos server (e.g., http://localhost:4096)",
       })
       .option("port", {
         type: "number",
@@ -104,7 +104,7 @@ export const RunCommand = cmd({
       for (const filePath of files) {
         const resolvedPath = path.resolve(process.cwd(), filePath)
         const file = Bun.file(resolvedPath)
-        const stats = await file.stat().catch(() => {})
+        const stats = await file.stat().catch(() => { })
         if (!stats) {
           UI.error(`File not found: ${filePath}`)
           process.exit(1)
@@ -295,24 +295,24 @@ export const RunCommand = cmd({
         const result = await sdk.session.create(
           title
             ? {
-                title,
-                permission: [
-                  {
-                    permission: "question",
-                    action: "deny",
-                    pattern: "*",
-                  },
-                ],
-              }
+              title,
+              permission: [
+                {
+                  permission: "question",
+                  action: "deny",
+                  pattern: "*",
+                },
+              ],
+            }
             : {
-                permission: [
-                  {
-                    permission: "question",
-                    action: "deny",
-                    pattern: "*",
-                  },
-                ],
-              },
+              permission: [
+                {
+                  permission: "question",
+                  action: "deny",
+                  pattern: "*",
+                },
+              ],
+            },
         )
         return result.data?.id
       })()

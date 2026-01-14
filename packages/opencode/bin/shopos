@@ -17,7 +17,7 @@ function run(target) {
   process.exit(code)
 }
 
-const envPath = process.env.OPENCODE_BIN_PATH
+const envPath = process.env.SHOPOS_BIN_PATH
 if (envPath) {
   run(envPath)
 }
@@ -45,11 +45,11 @@ if (!arch) {
   arch = os.arch()
 }
 const base = "opencode-" + platform + "-" + arch
-const binary = platform === "windows" ? "opencode.exe" : "opencode"
+const binary = platform === "windows" ? "shopos.exe" : "shopos"
 
 function findBinary(startDir) {
   let current = startDir
-  for (;;) {
+  for (; ;) {
     const modules = path.join(current, "node_modules")
     if (fs.existsSync(modules)) {
       const entries = fs.readdirSync(modules)
@@ -74,9 +74,9 @@ function findBinary(startDir) {
 const resolved = findBinary(scriptDir)
 if (!resolved) {
   console.error(
-    'It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing the "' +
-      base +
-      '" package',
+    'It seems that your package manager failed to install the right version of the ShopOS CLI for your platform. You can try manually installing the "' +
+    base +
+    '" package',
   )
   process.exit(1)
 }
