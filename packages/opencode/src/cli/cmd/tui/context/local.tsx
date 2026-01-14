@@ -113,8 +113,34 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const file = Bun.file(path.join(Global.Path.state, "model.json"))
+      let pendingSave = false
+
+      function isModelEntry(value: unknown): value is { providerID: string; modelID: string } {
+        if (!value || typeof value !== "object") return false
+        const item = value as { providerID?: unknown; modelID?: unknown }
+        return typeof item.providerID === "string" && typeof item.modelID === "string"
+      }
+
+      function normalizeModelList(value: unknown) {
+        if (!Array.isArray(value)) return []
+        return value
+          .filter(isModelEntry)
+          .map((item) => ({ providerID: item.providerID, modelID: item.modelID }))
+      }
+
+      function normalizeVariant(value: unknown) {
+        if (!value || typeof value !== "object") return {}
+        return Object.fromEntries(
+          Object.entries(value as Record<string, unknown>).filter(([, variant]) => typeof variant === "string"),
+        ) as Record<string, string>
+      }
 
       function save() {
+        if (!modelStore.ready) {
+          pendingSave = true
+          return
+        }
+        pendingSave = false
         Bun.write(
           file,
           JSON.stringify({
@@ -127,14 +153,36 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       file
         .json()
-        .then((x) => {
-          if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
-          if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
-          if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
+        .then((value) => {
+          if (!value || typeof value !== "object") return
+          const data = value as { recent?: unknown; favorite?: unknown; variant?: unknown }
+          const recent = normalizeModelList(data.recent)
+          const favorite = normalizeModelList(data.favorite)
+          const variant = normalizeVariant(data.variant)
+          const mergedRecent = uniqueBy(
+            [...modelStore.recent, ...recent],
+            (item) => `${item.providerID}/${item.modelID}`,
+          )
+          if (mergedRecent.length > 10) mergedRecent.length = 10
+          const mergedFavorite = uniqueBy(
+            [...modelStore.favorite, ...favorite],
+            (item) => `${item.providerID}/${item.modelID}`,
+          )
+
+          setModelStore(
+            "recent",
+            mergedRecent.map((item) => ({ providerID: item.providerID, modelID: item.modelID })),
+          )
+          setModelStore(
+            "favorite",
+            mergedFavorite.map((item) => ({ providerID: item.providerID, modelID: item.modelID })),
+          )
+          setModelStore("variant", { ...variant, ...modelStore.variant })
         })
         .catch(() => {})
         .finally(() => {
           setModelStore("ready", true)
+          if (pendingSave) save()
         })
 
       const args = useArgs()
