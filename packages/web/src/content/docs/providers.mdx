@@ -1314,6 +1314,56 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### Portkey
+
+1. Head over to the [Portkey dashboard](https://app.portkey.ai/api-keys), click **Create API Key** with completions.create permission, and copy the key.
+
+2. Configure portkey in your opencode config.
+```json title="~/.config/opencode/config.json"
+{
+   "$schema": "https://opencode.ai/config.json",
+   "provider": {
+     "portkey": {
+       "npm": "@ai-sdk/openai-compatible",
+       "name": "Portkey",
+       "options": {
+         "baseURL": "https://api.portkey.ai/v1"
+       },
+       "models": {
+         "@your-integration-name/your-model-name": {
+           "name": "gemini 2.5 flash enterprise team"
+         }
+       }
+     }
+   }
+}
+```
+
+:::note
+You can also use "npm": "@ai-sdk/openai" if you'd like to use the /responses api instead of the chat/completions api.
+:::
+
+3. Run the `/connect` command and search for Portkey.
+
+   ```txt
+   /connect
+   ```
+
+4. Enter the API key for portkey.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. You can add further models in the opencode config. (checkout https://github.com/Portkey-AI/models for all available models)
+
+5. You can specify fallbacks, rate limits and more in the portkey config so your requests never fail! (https://portkey.ai/docs/product/ai-gateway/configs)
+
+---
+
 ### SAP AI Core
 
 SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon, Meta, Mistral, and AI21 through a unified platform.
