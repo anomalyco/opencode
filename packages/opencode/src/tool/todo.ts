@@ -16,15 +16,17 @@ export const TodoWriteTool = Tool.define("todowrite", {
       metadata: {},
     })
 
+    const todosArray = Array.isArray(params.todos) ? params.todos : []
+
     await Todo.update({
       sessionID: ctx.sessionID,
-      todos: params.todos,
+      todos: todosArray,
     })
     return {
-      title: `${params.todos.filter((x) => x.status !== "completed").length} todos`,
-      output: JSON.stringify(params.todos, null, 2),
+      title: `${todosArray.filter((x) => x.status !== "completed").length} todos`,
+      output: JSON.stringify(todosArray, null, 2),
       metadata: {
-        todos: params.todos,
+        todos: todosArray,
       },
     }
   },
@@ -42,12 +44,13 @@ export const TodoReadTool = Tool.define("todoread", {
     })
 
     const todos = await Todo.get(ctx.sessionID)
+    const todosArray = Array.isArray(todos) ? todos : []
     return {
-      title: `${todos.filter((x) => x.status !== "completed").length} todos`,
+      title: `${todosArray.filter((x) => x.status !== "completed").length} todos`,
       metadata: {
-        todos,
+        todos: todosArray,
       },
-      output: JSON.stringify(todos, null, 2),
+      output: JSON.stringify(todosArray, null, 2),
     }
   },
 })
