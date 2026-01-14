@@ -900,6 +900,64 @@ export namespace Provider {
         }))
       }
 
+      // Add missing models to OpenRouter that exist in OpenRouter's API but not in models.dev
+      if (providerID === "openrouter" && !provider.models["openai/gpt-5.1-codex-max"]) {
+        const codexBase = provider.models["openai/gpt-5.1-codex"]
+        if (codexBase) {
+          const codexMaxModel: Model = {
+            id: "openai/gpt-5.1-codex-max",
+            providerID: "openrouter",
+            name: "GPT-5.1 Codex Max",
+            family: "gpt-5-codex-max",
+            api: {
+              id: "openai/gpt-5.1-codex-max",
+              url: codexBase.api.url,
+              npm: codexBase.api.npm,
+            },
+            status: "active",
+            headers: {},
+            options: {},
+            cost: {
+              input: 1.1,
+              output: 9,
+              cache: {
+                read: 0.11,
+                write: 0,
+              },
+            },
+            limit: {
+              context: 400000,
+              output: 128000,
+            },
+            capabilities: {
+              temperature: false,
+              reasoning: true,
+              attachment: true,
+              toolcall: true,
+              input: {
+                text: true,
+                audio: false,
+                image: true,
+                video: false,
+                pdf: false,
+              },
+              output: {
+                text: true,
+                audio: false,
+                image: false,
+                video: false,
+                pdf: false,
+              },
+              interleaved: false,
+            },
+            release_date: "2025-12-08",
+            variants: {},
+          }
+          codexMaxModel.variants = ProviderTransform.variants(codexMaxModel)
+          provider.models["openai/gpt-5.1-codex-max"] = codexMaxModel
+        }
+      }
+
       const configProvider = config.provider?.[providerID]
 
       for (const [modelID, model] of Object.entries(provider.models)) {
