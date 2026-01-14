@@ -31,6 +31,7 @@ export namespace SessionProcessor {
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
+    let gitHead: string | undefined
     let blocked = false
     let attempt = 0
     let needsCompaction = false
@@ -224,11 +225,13 @@ export namespace SessionProcessor {
 
                 case "start-step":
                   snapshot = await Snapshot.track()
+                  gitHead = await Snapshot.getProjectHead()
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
                     sessionID: input.sessionID,
                     snapshot,
+                    gitHead,
                     type: "step-start",
                   })
                   break
@@ -242,10 +245,12 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
+                  const finishGitHead = await Snapshot.getProjectHead()
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,
                     snapshot: await Snapshot.track(),
+                    gitHead: finishGitHead,
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
                     type: "step-finish",

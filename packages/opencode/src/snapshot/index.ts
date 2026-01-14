@@ -196,4 +196,27 @@ export namespace Snapshot {
     const project = Instance.project
     return path.join(Global.Path.data, "snapshot", project.id)
   }
+
+  /**
+   * Get the current HEAD commit of the project's actual git repository.
+   * This is used to detect when external git operations (pull, merge, etc.)
+   * modify the working tree.
+   */
+  export async function getProjectHead(): Promise<string | undefined> {
+    if (Instance.project.vcs !== "git") return undefined
+    const result = await $`git rev-parse HEAD`.cwd(Instance.worktree).quiet().nothrow().text()
+    return result.trim() || undefined
+  }
+
+  /**
+   * Get the list of files that changed between two commits in the project's git repo.
+   * Used to identify files modified by git operations (pull, merge, checkout, etc.)
+   */
+  export async function getProjectChangedFiles(fromHead: string, toHead: string): Promise<string[]> {
+    if (fromHead === toHead) return []
+    const result = await $`git diff --name-only ${fromHead} ${toHead}`.cwd(Instance.worktree).quiet().nothrow().text()
+
+    if (!result.trim()) return []
+    return result.trim().split("\n").filter(Boolean)
+  }
 }

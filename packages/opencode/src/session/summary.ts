@@ -16,6 +16,7 @@ import { Bus } from "@/bus"
 
 import { LLM } from "./llm"
 import { Agent } from "@/agent/agent"
+import { FileTracking } from "./file-tracking"
 
 export namespace SessionSummary {
   const log = Log.create({ service: "session.summary" })
@@ -35,16 +36,40 @@ export namespace SessionSummary {
   )
 
   async function summarizeSession(input: { sessionID: string; messages: MessageV2.WithParts[] }) {
-    const files = new Set(
+    // Get files modified by patch operations (edit/write/patch tools)
+    const patchedFiles = new Set(
       input.messages
         .flatMap((x) => x.parts)
         .filter((x) => x.type === "patch")
         .flatMap((x) => x.files)
         .map((x) => path.relative(Instance.worktree, x)),
     )
+
+    // Compute files modified by git operations by looking at gitHead changes between steps
+    // This detects both internal (via bash tool) and external (user's terminal) git operations
+    const gitModifiedFromHeads = await computeGitModifiedFiles({ messages: input.messages })
+
+    // Also include files tracked via the bash tool (for immediate detection during the session)
+    const gitModifiedFromTracking = FileTracking.getGitModified(input.sessionID)
+
+    // Combine both sources of git-modified files
+    const gitModifiedRelative = new Set([
+      ...gitModifiedFromHeads,
+      ...Array.from(gitModifiedFromTracking).map((x) => path.relative(Instance.worktree, x)),
+    ])
+
     const diffs = await computeDiff({ messages: input.messages }).then((x) =>
-      x.filter((x) => {
-        return files.has(x.file)
+      x.filter((diff) => {
+        // Include file if it was patched by a tool AND not modified by a git operation
+        // This allows user external edits to show (they appear in snapshot diff but NOT in gitModifiedFiles)
+        // while excluding files pulled in by git operations
+        if (gitModifiedRelative.has(diff.file)) {
+          // File was modified by git - only include if also explicitly patched by a tool
+          // This handles the case where user does `git pull` then edits a file that was in the pull
+          return patchedFiles.has(diff.file)
+        }
+        // File was not modified by git - include if it was in a patch
+        return patchedFiles.has(diff.file)
       }),
     )
     await Session.update(input.sessionID, (draft) => {
@@ -145,5 +170,40 @@ export namespace SessionSummary {
 
     if (from && to) return Snapshot.diffFull(from, to)
     return []
+  }
+
+  /**
+   * Compute files that were modified by git operations (pull, merge, checkout, etc.)
+   * by comparing gitHead values between step-start and step-finish parts.
+   * This detects both internal (via bash tool) and external (user's terminal) git operations.
+   */
+  async function computeGitModifiedFiles(input: { messages: MessageV2.WithParts[] }): Promise<string[]> {
+    const allGitModified: string[] = []
+
+    // Find pairs of step-start and step-finish to detect git HEAD changes
+    for (const msg of input.messages) {
+      let stepStartHead: string | undefined
+
+      for (const part of msg.parts) {
+        if (part.type === "step-start" && part.gitHead) {
+          stepStartHead = part.gitHead
+        }
+        if (part.type === "step-finish" && part.gitHead && stepStartHead) {
+          // If HEAD changed between step-start and step-finish, get the changed files
+          if (stepStartHead !== part.gitHead) {
+            const files = await Snapshot.getProjectChangedFiles(stepStartHead, part.gitHead)
+            allGitModified.push(...files)
+            log.info("detected git HEAD change", {
+              from: stepStartHead.slice(0, 8),
+              to: part.gitHead.slice(0, 8),
+              files: files.length,
+            })
+          }
+          stepStartHead = undefined
+        }
+      }
+    }
+
+    return allGitModified
   }
 }

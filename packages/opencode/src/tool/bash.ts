@@ -16,11 +16,67 @@ import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
+import { FileTracking } from "@/session/file-tracking"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
 export const log = Log.create({ service: "bash-tool" })
+
+// Git commands that can modify the working tree by pulling in external changes
+const GIT_WORKTREE_MODIFYING_COMMANDS = [
+  "pull",
+  "merge",
+  "checkout",
+  "rebase",
+  "reset",
+  "stash",
+  "cherry-pick",
+  "revert",
+  "switch",
+  "restore",
+]
+
+/**
+ * Detect if a command is a git operation that modifies the working tree
+ */
+function detectGitWorktreeOperation(commands: string[][]): boolean {
+  for (const cmd of commands) {
+    if (cmd[0] !== "git") continue
+    // Find the git subcommand (skip flags like -C)
+    for (let i = 1; i < cmd.length; i++) {
+      const arg = cmd[i]
+      if (arg.startsWith("-")) continue
+      if (GIT_WORKTREE_MODIFYING_COMMANDS.includes(arg)) return true
+      break
+    }
+  }
+  return false
+}
+
+/**
+ * Get list of files that changed between two git states
+ */
+async function getGitChangedFiles(cwd: string, beforeHead: string): Promise<string[]> {
+  // Get files that changed between the old HEAD and current state
+  const result = await $`git diff --name-only ${beforeHead} HEAD`.cwd(cwd).quiet().nothrow().text()
+
+  if (!result.trim()) return []
+
+  return result
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((f) => path.join(cwd, f))
+}
+
+/**
+ * Get current HEAD commit hash
+ */
+async function getGitHead(cwd: string): Promise<string | undefined> {
+  const result = await $`git rev-parse HEAD`.cwd(cwd).quiet().nothrow().text()
+  return result.trim() || undefined
+}
 
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
@@ -88,6 +144,7 @@ export const BashTool = Tool.define("bash", async () => {
       if (!Instance.containsPath(cwd)) directories.add(cwd)
       const patterns = new Set<string>()
       const always = new Set<string>()
+      const parsedCommands: string[][] = []
 
       for (const node of tree.rootNode.descendantsOfType("command")) {
         if (!node) continue
@@ -106,6 +163,8 @@ export const BashTool = Tool.define("bash", async () => {
           }
           command.push(child.text)
         }
+
+        if (command.length) parsedCommands.push(command)
 
         // not an exhaustive list, but covers most common cases
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown"].includes(command[0])) {
@@ -134,6 +193,14 @@ export const BashTool = Tool.define("bash", async () => {
           patterns.add(command.join(" "))
           always.add(BashArity.prefix(command).join(" ") + "*")
         }
+      }
+
+      // Detect if this is a git operation that modifies the working tree
+      const isGitWorktreeOp = detectGitWorktreeOperation(parsedCommands)
+      let beforeHead: string | undefined
+      if (isGitWorktreeOp) {
+        beforeHead = await getGitHead(cwd)
+        log.info("detected git worktree operation", { beforeHead })
       }
 
       if (directories.size > 0) {
@@ -242,6 +309,15 @@ export const BashTool = Tool.define("bash", async () => {
 
       if (resultMetadata.length > 0) {
         output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
+      }
+
+      // Track files modified by git operations so they can be excluded from session diffs
+      if (isGitWorktreeOp && beforeHead && proc.exitCode === 0) {
+        const changedFiles = await getGitChangedFiles(cwd, beforeHead)
+        if (changedFiles.length) {
+          FileTracking.addGitModified(ctx.sessionID, changedFiles)
+          log.info("tracked git-modified files", { count: changedFiles.length })
+        }
       }
 
       return {

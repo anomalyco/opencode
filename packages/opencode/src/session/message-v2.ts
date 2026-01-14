@@ -187,6 +187,8 @@ export namespace MessageV2 {
   export const StepStartPart = PartBase.extend({
     type: z.literal("step-start"),
     snapshot: z.string().optional(),
+    /** The project's git HEAD at step start, used to detect external git operations */
+    gitHead: z.string().optional(),
   }).meta({
     ref: "StepStartPart",
   })
@@ -196,6 +198,8 @@ export namespace MessageV2 {
     type: z.literal("step-finish"),
     reason: z.string(),
     snapshot: z.string().optional(),
+    /** The project's git HEAD at step finish, used to detect external git operations */
+    gitHead: z.string().optional(),
     cost: z.number(),
     tokens: z.object({
       input: z.number(),
