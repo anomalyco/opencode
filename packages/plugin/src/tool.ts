@@ -2,11 +2,11 @@ import { z } from "zod"
 import type { FilePart } from "@opencode-ai/sdk"
 
 
-type Metadata = {
+export type Metadata = {
   [key: string]: any
 }
 
-type AskInput<M extends Metadata = Metadata> = {
+export type AskInput<M extends Metadata = Metadata> = {
   permission: string
   patterns: string[]
   always: string[]
