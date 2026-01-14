@@ -25,6 +25,13 @@ const BRANDS: Record<string, BrandContext> = {
       top_category: "Running Shoes",
       yoy_growth: 18.5,
     },
+    shopify: {
+      store_url: "mock.shop",
+      mcp_endpoint: "local (ShopifyMockMCP)",
+      mcp_type: "storefront",
+      auth_required: false,
+      note: "Using Mock.shop via ShopifyMockMCP server. Free public API with sample commerce data. No credentials needed! See SHOPIFY_MCP_SETUP.md",
+    },
   },
   luxebags: {
     id: "luxebags",
@@ -44,6 +51,13 @@ const BRANDS: Record<string, BrandContext> = {
       top_category: "Handbags",
       yoy_growth: 12.3,
     },
+    shopify: {
+      store_url: "mock.shop",
+      mcp_endpoint: "local (ShopifyMockMCP)",
+      mcp_type: "storefront",
+      auth_required: false,
+      note: "Using Mock.shop via ShopifyMockMCP server. Free public API with sample commerce data. No credentials needed! See SHOPIFY_MCP_SETUP.md",
+    },
   },
   freshfoods: {
     id: "freshfoods",
@@ -62,6 +76,13 @@ const BRANDS: Record<string, BrandContext> = {
       top_region: "Bangalore",
       top_category: "Organic Vegetables",
       yoy_growth: 45.2,
+    },
+    shopify: {
+      store_url: "mock.shop",
+      mcp_endpoint: "local (ShopifyMockMCP)",
+      mcp_type: "storefront",
+      auth_required: false,
+      note: "Using Mock.shop via ShopifyMockMCP server. Free public API with sample commerce data. No credentials needed! See SHOPIFY_MCP_SETUP.md",
     },
   },
 }
@@ -83,6 +104,13 @@ interface BrandContext {
     top_region: string
     top_category: string
     yoy_growth: number
+  }
+  shopify?: {
+    store_url: string
+    mcp_endpoint: string
+    mcp_type: "storefront" | "admin"
+    auth_required: boolean
+    note: string
   }
 }
 

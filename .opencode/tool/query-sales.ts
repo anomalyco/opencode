@@ -3,7 +3,16 @@ import { tool } from "@opencode-ai/plugin"
 
 const DESCRIPTION = `Query sales and revenue data from the brand's database.
 Returns sales figures, units sold, AOV, and breakdowns by region/product/time.
-Use this for ROI calculations, trend analysis, and performance reporting.`
+Use this for ROI calculations, trend analysis, and performance reporting.
+
+NOTE: This tool currently returns MOCK/DEMO data for demonstration purposes.
+To integrate with real Shopify data:
+1. Ensure Shopify MCP server is connected (check with 'shopify_get_product_list' tool)
+2. Call 'shopify_get_product_list' to get real product data
+3. Transform Shopify data format to match this tool's output format
+4. Fall back to mock data if Shopify is unavailable
+
+See SHOPIFY_MCP_SETUP.md for integration instructions.`
 
 // Mock sales data generator
 function generateSalesData(args: {

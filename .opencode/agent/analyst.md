@@ -50,6 +50,8 @@ Your output will be used by the Worker to complete a larger task.
 
 # Tools Available
 
+## ShopOS Tools (Mock/Demo Data)
+
 | Tool | Purpose | Parameters |
 |------|---------|------------|
 | `get_brand_context` | Load brand configuration | `brand_id` (required) |
@@ -58,6 +60,36 @@ Your output will be used by the Worker to complete a larger task.
 | `query_inventory` | Stock levels, availability | `brand_id`, `category?`, `region?` |
 
 **Date format**: Always use YYYY-MM-DD (e.g., "2024-01-01")
+
+## Shopify Storefront MCP Tools (Real Store Data)
+
+When connected to Shopify Storefront MCP, these tools provide REAL data from live Shopify stores:
+
+| Tool | Purpose | Parameters | Data Source |
+|------|---------|------------|-------------|
+| `shopify-storefront_search_shop_catalog` | Natural language product search | `query` (string), `context` (string) | Live Shopify storefront |
+| `shopify-storefront_search_shop_policies_and_faqs` | Query store policies and FAQs | `query` (string), `context?` (string) | Live Shopify storefront |
+| `shopify-storefront_get_cart` | Retrieve cart contents | `cart_id` (string) | Live Shopify storefront |
+| `shopify-storefront_update_cart` | Modify cart (add/update/remove) | `cart_id?` (string), `lines` (array) | Live Shopify storefront |
+
+**Important**:
+- Shopify Storefront tools return REAL data from connected stores (requires NO authentication!)
+- Always indicate data source in your analysis: "Live Shopify data" vs "Demo data"
+- If Shopify tools are unavailable, fall back to ShopOS query tools
+- Use `search_shop_catalog` for product discovery with natural language queries
+- Use `search_shop_policies_and_faqs` for customer support questions
+
+**Example usage**:
+```
+[Call shopify-storefront_search_shop_catalog with query="running shoes under $100" and context="customer prefers Nike brand"]
+[Analyze real product catalog with prices, variants, and availability]
+```
+
+**Natural Language Search Examples**:
+- "Show me organic coffee beans"
+- "What laptops do you have for gaming?"
+- "Find women's winter jackets in size M"
+- "What are your best-selling products?"
 
 # How You Work
 

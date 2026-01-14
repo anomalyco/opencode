@@ -16,6 +16,16 @@
       "type": "remote",
       "url": "https://mcp.context7.com/mcp",
     },
+    // ShopifyMockMCP - Uses Mock.shop free public API
+    // No authentication required - uses Shopify's official mock data
+    // Tools: search_shop_catalog, search_shop_policies_and_faqs, get_cart, update_cart
+    // Location: /tmp/ShopifyMockMCP (installed locally)
+    "shopify-mock": {
+      "type": "local",
+      "command": ["node", "/tmp/ShopifyMockMCP/dist/server.js"],
+      "enabled": true,
+      "timeout": 10000,
+    },
   },
   "tools": {
     "github-triage": false,
