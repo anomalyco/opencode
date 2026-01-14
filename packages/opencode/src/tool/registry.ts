@@ -65,7 +65,12 @@ export namespace ToolRegistry {
         parameters: z.object(def.args),
         description: def.description,
         execute: async (args, ctx) => {
-          const result = await def.execute(args as any, ctx)
+          let result = await def.execute(args as any, ctx)
+
+          if (typeof result !== 'string') {
+            return result
+          }
+
           const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
             title: "",
