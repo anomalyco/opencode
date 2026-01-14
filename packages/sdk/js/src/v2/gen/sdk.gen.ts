@@ -19,6 +19,8 @@ import type {
   EventSubscribeResponses,
   EventTuiCommandExecute,
   EventTuiPromptAppend,
+  EventTuiServerStart,
+  EventTuiServerStarted,
   EventTuiSessionSelect,
   EventTuiToastShow,
   ExperimentalResourceListResponses,
@@ -90,6 +92,7 @@ import type {
   QuestionRejectResponses,
   QuestionReplyErrors,
   QuestionReplyResponses,
+  ServerStatusResponses,
   SessionAbortErrors,
   SessionAbortResponses,
   SessionChildrenErrors,
@@ -240,6 +243,20 @@ export class Global extends HeyApiClient {
   public dispose<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).post<GlobalDisposeResponses, unknown, ThrowOnError>({
       url: "/global/dispose",
+      ...options,
+    })
+  }
+}
+
+export class Server extends HeyApiClient {
+  /**
+   * Get server status
+   *
+   * Get the current server URL.
+   */
+  public status<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<ServerStatusResponses, unknown, ThrowOnError>({
+      url: "/server/status",
       ...options,
     })
   }
@@ -2900,7 +2917,13 @@ export class Tui extends HeyApiClient {
   public publish<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
-      body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+      body?:
+        | EventTuiPromptAppend
+        | EventTuiCommandExecute
+        | EventTuiToastShow
+        | EventTuiSessionSelect
+        | EventTuiServerStart
+        | EventTuiServerStarted
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2985,6 +3008,8 @@ export class OpencodeClient extends HeyApiClient {
   }
 
   global = new Global({ client: this.client })
+
+  server = new Server({ client: this.client })
 
   project = new Project({ client: this.client })
 

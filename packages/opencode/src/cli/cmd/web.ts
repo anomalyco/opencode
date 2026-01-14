@@ -1,10 +1,11 @@
 import { Server } from "../../server/server"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
-import { withNetworkOptions, resolveNetworkOptions } from "../network"
-import { Flag } from "../../flag/flag"
+import { withNetworkOptions, resolveServerOptions } from "../network"
 import open from "open"
 import { networkInterfaces } from "os"
+import * as prompts from "@clack/prompts"
+import { Clipboard } from "../../util/clipboard"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -28,16 +29,40 @@ function getNetworkIPs() {
   return results
 }
 
+async function showServerDialog(input: { hostname: string; port: number; password: string }) {
+  const address = `http://${input.hostname}:${input.port}`
+  const action = await prompts.select({
+    message: `Server running at ${address}`,
+    options: [
+      { label: "Copy password", value: "copy" },
+      { label: "Dismiss", value: "dismiss" },
+    ],
+  })
+  if (prompts.isCancel(action)) return
+  if (action === "copy") {
+    await Clipboard.copy(input.password)
+      .then(() => prompts.log.success("Password copied to clipboard"))
+      .catch(() => prompts.log.error("Failed to copy password"))
+  }
+}
+
 export const WebCommand = cmd({
   command: "web",
   builder: (yargs) => withNetworkOptions(yargs),
   describe: "start opencode server and open web interface",
   handler: async (args) => {
-    if (!Flag.OPENCODE_SERVER_PASSWORD) {
-      UI.println(UI.Style.TEXT_WARNING_BOLD + "!  " + "OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
-    }
-    const opts = await resolveNetworkOptions(args)
-    const server = Server.listen(opts)
+    const opts = await resolveServerOptions(args)
+    const server = Server.listen({
+      hostname: opts.hostname,
+      port: opts.port,
+      mdns: opts.mdns,
+      cors: opts.cors,
+      random: opts.random,
+      auth: {
+        username: opts.auth.username,
+        password: opts.auth.password,
+      },
+    })
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
@@ -71,6 +96,11 @@ export const WebCommand = cmd({
       open(displayUrl).catch(() => {})
     }
 
+    await showServerDialog({
+      hostname: server.hostname ?? "localhost",
+      port: server.port ?? 4096,
+      password: opts.auth.password,
+    })
     await new Promise(() => {})
     await server.stop()
   },

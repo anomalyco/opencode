@@ -63,15 +63,28 @@ export namespace Server {
   const log = Log.create({ service: "server" })
 
   let _url: URL | undefined
+  let _info: { hostname: string; port: number } | undefined
+  let _auth: { username: string; password: string } | undefined
   let _corsWhitelist: string[] = []
 
   export function url(): URL {
     return _url ?? new URL("http://localhost:4096")
   }
 
+  export function info() {
+    return _info
+  }
+
   export const Event = {
     Connected: BusEvent.define("server.connected", z.object({})),
     Disposed: BusEvent.define("global.disposed", z.object({})),
+  }
+
+  function envAuth() {
+    const password = Flag.OPENCODE_SERVER_PASSWORD
+    if (!password) return
+    const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+    return { username, password }
   }
 
   const app = new Hono()
@@ -98,10 +111,9 @@ export namespace Server {
           })
         })
         .use((c, next) => {
-          const password = Flag.OPENCODE_SERVER_PASSWORD
-          if (!password) return next()
-          const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-          return basicAuth({ username, password })(c, next)
+          const auth = _auth
+          if (!auth) return next()
+          return basicAuth({ username: auth.username, password: auth.password })(c, next)
         })
         .use(async (c, next) => {
           const skipLogging = c.req.path === "/log"
@@ -160,6 +172,29 @@ export namespace Server {
           }),
           async (c) => {
             return c.json({ healthy: true, version: Installation.VERSION })
+          },
+        )
+        .get(
+          "/server/status",
+          describeRoute({
+            summary: "Get server status",
+            description: "Get the current server URL.",
+            operationId: "server.status",
+            responses: {
+              200: {
+                description: "Server status",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.string().optional()),
+                  },
+                },
+              },
+            },
+          }),
+          async (c) => {
+            const info = Server.info()
+            if (!info) return c.json(null)
+            return c.json(Server.url().toString())
           },
         )
         .get(
@@ -2864,8 +2899,16 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+  export function listen(opts: {
+    port: number
+    hostname: string
+    mdns?: boolean
+    cors?: string[]
+    random?: boolean
+    auth?: { username: string; password: string }
+  }) {
     _corsWhitelist = opts.cors ?? []
+    _auth = opts.auth ?? envAuth()
 
     const args = {
       hostname: opts.hostname,
@@ -2880,10 +2923,12 @@ export namespace Server {
         return undefined
       }
     }
-    const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
+    const random = opts.random ?? false
+    const server = random ? tryServe(0) : opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
     _url = server.url
+    _info = { hostname: server.hostname ?? "localhost", port: server.port ?? 4096 }
 
     const shouldPublishMDNS =
       opts.mdns &&

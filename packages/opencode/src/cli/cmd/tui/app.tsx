@@ -13,6 +13,7 @@ import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
+import { DialogServer } from "@tui/component/dialog-server"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
@@ -33,6 +34,7 @@ import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
+import { ServerProvider, useServer } from "./context/server"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
@@ -99,13 +101,23 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 
 import type { EventSource } from "./context/sdk"
 
+export type PasswordSource = "env" | "config" | "generated"
+export type StartServerResult = {
+  url: string
+  password: string
+  passwordSource: PasswordSource
+}
+
 export function tui(input: {
   url: string
   args: Args
   directory?: string
   fetch?: typeof fetch
   events?: EventSource
+  password?: string
   onExit?: () => Promise<void>
+  onStartServer?: () => Promise<StartServerResult>
+  onStopServer?: () => Promise<void>
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
@@ -142,7 +154,13 @@ export function tui(input: {
                                       <FrecencyProvider>
                                         <PromptHistoryProvider>
                                           <PromptRefProvider>
-                                            <App />
+                                            <ServerProvider
+                                              password={input.password}
+                                              onStartServer={input.onStartServer}
+                                              onStopServer={input.onStopServer}
+                                            >
+                                              <App />
+                                            </ServerProvider>
                                           </PromptRefProvider>
                                         </PromptHistoryProvider>
                                       </FrecencyProvider>
@@ -195,6 +213,7 @@ function App() {
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+  const server = useServer()
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
@@ -462,11 +481,12 @@ function App() {
       category: "System",
     },
     {
-      title: "Open WebUI",
-      value: "webui.open",
+      title: "Server",
+      value: "server.dialog",
       onSelect: () => {
-        open(sdk.url).catch(() => {})
-        dialog.clear()
+        dialog.replace(() => (
+          <DialogServer password={server.password} onStartServer={server.start} onStopServer={() => server.stop()} />
+        ))
       },
       category: "System",
     },

@@ -6,7 +6,7 @@ import path from "path"
 import { UI } from "@/cli/ui"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
-import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
+import { withNetworkOptions, resolveServerOptions } from "@/cli/network"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 
@@ -116,23 +116,32 @@ export const TuiThreadCommand = cmd({
     })
 
     // Check if server should be started (port or hostname explicitly set in CLI or config)
-    const networkOpts = await resolveNetworkOptions(args)
+    const serverOpts = await resolveServerOptions(args)
     const shouldStartServer =
       process.argv.includes("--port") ||
       process.argv.includes("--hostname") ||
       process.argv.includes("--mdns") ||
-      networkOpts.mdns ||
-      networkOpts.port !== 0 ||
-      networkOpts.hostname !== "127.0.0.1"
+      serverOpts.mdns ||
+      serverOpts.port !== 0 ||
+      serverOpts.hostname !== "127.0.0.1"
 
     let url: string
     let customFetch: typeof fetch | undefined
     let events: EventSource | undefined
+    let password: string | undefined
 
     if (shouldStartServer) {
       // Start HTTP server for external access
-      const server = await client.call("server", networkOpts)
+      const server = await client.call("server", {
+        hostname: serverOpts.hostname,
+        port: serverOpts.port,
+        mdns: serverOpts.mdns,
+        cors: serverOpts.cors,
+        random: serverOpts.random,
+        auth: serverOpts.auth,
+      })
       url = server.url
+      password = serverOpts.auth.password
     } else {
       // Use direct RPC communication (no HTTP)
       url = "http://opencode.internal"
@@ -144,6 +153,7 @@ export const TuiThreadCommand = cmd({
       url,
       fetch: customFetch,
       events,
+      password,
       args: {
         continue: args.continue,
         sessionID: args.session,
@@ -153,6 +163,35 @@ export const TuiThreadCommand = cmd({
       },
       onExit: async () => {
         await client.call("shutdown", undefined)
+      },
+      onStartServer: async () => {
+        if (password && url !== "http://opencode.internal") {
+          // Server already running
+          return {
+            url,
+            password,
+            passwordSource: serverOpts.auth.source,
+          }
+        }
+        const result = await client.call("server", {
+          hostname: serverOpts.hostname,
+          port: serverOpts.port,
+          mdns: serverOpts.mdns,
+          cors: serverOpts.cors,
+          random: serverOpts.random,
+          auth: serverOpts.auth,
+        })
+        url = result.url
+        password = serverOpts.auth.password
+        return {
+          url: result.url,
+          password: serverOpts.auth.password,
+          passwordSource: serverOpts.auth.source,
+        }
+      },
+      onStopServer: async () => {
+        await client.call("serverStop", undefined)
+        password = undefined
       },
     })
 

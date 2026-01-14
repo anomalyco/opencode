@@ -43,4 +43,19 @@ export const TuiEvent = {
       sessionID: z.string().regex(/^ses/).describe("Session ID to navigate to"),
     }),
   ),
+  ServerStart: BusEvent.define(
+    "tui.server.start",
+    z.object({
+      openBrowser: z.boolean().optional().describe("Open browser after starting"),
+    }),
+  ),
+  ServerStarted: BusEvent.define(
+    "tui.server.started",
+    z.object({
+      url: z.string(),
+      hostname: z.string(),
+      port: z.number(),
+      password: z.string(),
+    }),
+  ),
 }
