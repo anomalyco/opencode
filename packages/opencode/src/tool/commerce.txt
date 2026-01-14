@@ -1,0 +1,14 @@
+Query the Phase 2 Commerce Substrate for marketplace data.
+This tool allows you to:
+1. List supported marketplaces and their rules (commission, fees).
+2. Get the Ground Truth Product Catalog.
+3. correct query comprehensive, labeled performance data (Sales, Revenue, ROI) across all marketplaces.
+
+The data returned is "Decision Grade" - meaning it identifies its source (Real vs Synthetic) and includes fully calculated unit economics.
+
+Usage:
+- Use `action="marketplaces"` to see available platforms.
+- Use `action="catalog"` to see products.
+- Use `action="performance"` with `start` and `end` dates to get sales data.
+
+If data is missing, the tool will automatically generate comprehensive synthetic data for the requesting period.
