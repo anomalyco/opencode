@@ -41,6 +41,10 @@ export namespace Config {
     if (target.instructions && source.instructions) {
       merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
     }
+    if (target.skill?.paths && source.skill?.paths) {
+      merged.skill = merged.skill || {}
+      merged.skill.paths = Array.from(new Set([...target.skill.paths, ...source.skill.paths]))
+    }
     return merged
   }
 
@@ -900,6 +904,12 @@ export namespace Config {
         })
         .optional(),
       plugin: z.string().array().optional(),
+      skill: z
+        .object({
+          paths: z.string().array().optional().describe("Additional directories to search for SKILL.md files"),
+        })
+        .optional()
+        .describe("Skill configuration"),
       snapshot: z.boolean().optional(),
       share: z
         .enum(["manual", "auto", "disabled"])

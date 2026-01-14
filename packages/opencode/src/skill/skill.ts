@@ -122,6 +122,34 @@ export namespace Skill {
       }
     }
 
+    // Scan custom skill paths from config
+    const cfg = await Config.get()
+    for (const raw of cfg.skill?.paths ?? []) {
+      const resolved = raw.startsWith("~")
+        ? path.join(Global.Path.home, raw.slice(1))
+        : path.isAbsolute(raw)
+          ? raw
+          : path.resolve(Instance.directory, raw)
+
+      if (!(await Filesystem.isDir(resolved))) continue
+
+      const matches = await Array.fromAsync(
+        OPENCODE_SKILL_GLOB.scan({
+          cwd: resolved,
+          absolute: true,
+          onlyFiles: true,
+          followSymlinks: true,
+        }),
+      ).catch((error) => {
+        log.error("failed custom skill directory scan", { dir: resolved, error })
+        return []
+      })
+
+      for (const match of matches) {
+        await addSkill(match)
+      }
+    }
+
     return skills
   })
 
