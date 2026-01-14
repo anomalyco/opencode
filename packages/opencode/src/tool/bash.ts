@@ -52,9 +52,6 @@ const parser = lazy(async () => {
 
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
-  const shell = Shell.acceptable()
-  log.info("bash tool using shell", { shell })
-
   return {
     description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
       .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
@@ -154,15 +151,34 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
-      const proc = spawn(params.command, {
-        shell,
-        cwd,
-        env: {
-          ...process.env,
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-        detached: process.platform !== "win32",
+      // Get the appropriate spawn configuration for this command
+      const spawnConfig = Shell.getSpawnConfig(params.command)
+      
+      log.info("bash tool spawn config", { 
+        command: params.command.substring(0, 100),
+        executable: spawnConfig.executable.substring(0, 50),
+        useShellFlag: spawnConfig.useShellFlag,
+        platform: process.platform
       })
+
+      const proc = spawnConfig.useShellFlag
+        ? spawn(spawnConfig.executable, {
+            shell: spawnConfig.shell,
+            cwd,
+            env: {
+              ...process.env,
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+            detached: process.platform !== "win32",
+          })
+        : spawn(spawnConfig.executable, spawnConfig.args, {
+            cwd,
+            env: {
+              ...process.env,
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+            detached: false, // Don't use detached for direct PowerShell/CMD spawns
+          })
 
       let output = ""
 

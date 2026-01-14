@@ -64,4 +64,178 @@ export namespace Shell {
     if (s && !BLACKLIST.has(process.platform === "win32" ? path.win32.basename(s) : path.basename(s))) return s
     return fallback()
   })
+
+  /**
+   * Detects if a command is a PowerShell command
+   */
+  export function isPowerShellCommand(command: string): boolean {
+    const trimmed = command.trim()
+    return /^powershell(\.exe)?\s/i.test(trimmed)
+  }
+
+  /**
+   * Detects if a command is a CMD command
+   */
+  export function isCmdCommand(command: string): boolean {
+    const trimmed = command.trim()
+    return /^cmd(\.exe)?\s/i.test(trimmed)
+  }
+
+  /**
+   * Detects if a CMD command string contains dynamic environment variables
+   * that might change during command execution (e.g., %cd%, %temp%, %random%)
+   */
+  export function hasDynamicEnvVars(command: string): boolean {
+    return /%(cd|temp|tmp|random|time|date)%/i.test(command)
+  }
+
+  /**
+   * Converts CMD immediate expansion syntax (%var%) to delayed expansion syntax (!var!)
+   * for dynamic environment variables
+   */
+  function convertToDelayedExpansion(command: string): string {
+    return command.replace(/%(cd|temp|tmp|random|time|date)%/gi, (match) => {
+      const varName = match.slice(1, -1)
+      return `!${varName}!`
+    })
+  }
+
+  /**
+   * Configuration for spawning a command
+   */
+  export interface SpawnConfig {
+    /** The executable to spawn (e.g., "powershell.exe", "cmd.exe", or the original command) */
+    executable: string
+    /** Arguments to pass to the executable (empty array if using shell flag) */
+    args: string[]
+    /** Whether to use the shell option in spawn */
+    useShellFlag: boolean
+    /** The shell to use if useShellFlag is true */
+    shell?: string
+  }
+
+  /**
+   * Determines the correct spawn configuration for a command on Windows.
+   * Routes PowerShell and CMD commands directly to their executables to avoid
+   * variable corruption when passing through Git Bash.
+   */
+  export function getSpawnConfig(command: string): SpawnConfig {
+    // Only apply special handling on Windows
+    if (process.platform !== "win32") {
+      return {
+        executable: command,
+        args: [],
+        useShellFlag: true,
+        shell: acceptable(),
+      }
+    }
+
+    // Check for PowerShell commands
+    if (isPowerShellCommand(command)) {
+      // Extract the powershell executable and arguments
+      // Match pattern: powershell[.exe] <args>
+      const match = command.match(/^(powershell(?:\.exe)?)\s+(.*)$/i)
+      if (match) {
+        const [, , argsString] = match
+        // Parse PowerShell arguments - split on -Command, -File, etc. but keep quoted strings intact
+        // For -Command, we want: ["-Command", "the command string"]
+        // For -NoProfile -Command, we want: ["-NoProfile", "-Command", "the command string"]
+        const args: string[] = []
+        let current = argsString.trim()
+        
+        while (current.length > 0) {
+          // Match a flag (starts with -) or a quoted string or a word
+          const flagMatch = current.match(/^(-\w+)(?:\s+|$)/)
+          if (flagMatch) {
+            args.push(flagMatch[1])
+            current = current.slice(flagMatch[0].length).trim()
+            continue
+          }
+          
+          // Match quoted string (double quotes) - this is typically the -Command argument
+          const quotedMatch = current.match(/^"((?:[^"\\]|\\.)*)"/s)
+          if (quotedMatch) {
+            args.push(quotedMatch[1])
+            current = current.slice(quotedMatch[0].length).trim()
+            continue
+          }
+          
+          // Match single quoted string
+          const singleQuotedMatch = current.match(/^'((?:[^'\\]|\\.)*)'/s)
+          if (singleQuotedMatch) {
+            args.push(singleQuotedMatch[1])
+            current = current.slice(singleQuotedMatch[0].length).trim()
+            continue
+          }
+          
+          // Match unquoted word
+          const wordMatch = current.match(/^(\S+)/)
+          if (wordMatch) {
+            args.push(wordMatch[1])
+            current = current.slice(wordMatch[0].length).trim()
+            continue
+          }
+          
+          // Should not reach here, but break to prevent infinite loop
+          break
+        }
+        
+        return {
+          executable: "powershell.exe",
+          args,
+          useShellFlag: false,
+        }
+      }
+    }
+
+    // Check for CMD commands
+    if (isCmdCommand(command)) {
+      // Extract the cmd executable and arguments
+      // Match pattern: cmd[.exe] <args>
+      const match = command.match(/^(cmd(?:\.exe)?)\s+(.*)$/i)
+      if (match) {
+        const [, , argsString] = match
+        // For CMD, we want to split on /c or /k but keep the rest as a single argument
+        // e.g., "cmd /c echo hello" -> ["/c", "echo hello"]
+        const cmdArgs: string[] = []
+        const cmdMatch = argsString.match(/^(\/[ck])\s+(.*)$/i)
+        let commandToExecute = argsString
+
+        if (cmdMatch) {
+          cmdArgs.push(cmdMatch[1])
+          commandToExecute = cmdMatch[2]
+        }
+
+        // Fix for chained commands (&& or ||) with dynamic environment variables (e.g., %cd%)
+        // CMD expands %variables% at parse time, not execution time, which breaks `cd /d %temp% && echo %cd%`
+        // We enable delayed expansion (/V:ON) and convert %var% to !var! for dynamic variables.
+        const isChained = /(&&|\|\|)/.test(commandToExecute)
+        const hasDynamicVars = hasDynamicEnvVars(commandToExecute)
+        const hasVOn = argsString.match(/\/V:ON/i)
+
+        if (isChained && hasDynamicVars && !hasVOn) {
+          // Add /V:ON flag for delayed expansion
+          cmdArgs.unshift("/V:ON")
+          // Convert dynamic variables to delayed expansion syntax
+          commandToExecute = convertToDelayedExpansion(commandToExecute)
+        }
+
+        cmdArgs.push(commandToExecute)
+
+        return {
+          executable: process.env.COMSPEC || "cmd.exe",
+          args: cmdArgs,
+          useShellFlag: false,
+        }
+      }
+    }
+
+    // For all other commands (git, npm, etc.), use the shell
+    return {
+      executable: command,
+      args: [],
+      useShellFlag: true,
+      shell: acceptable(),
+    }
+  }
 }
