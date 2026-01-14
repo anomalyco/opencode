@@ -85,6 +85,7 @@ Wildcards work on **both permission names and patterns**. They use simple wildca
     "*": "allow", // allow all tools by default (includes custom tools)
     "web*": "deny", // deny all web tools
     "websearch": "ask", // but ask for websearch
+    "math_add": "ask",  // ask for custom tool
     "bash": {
       "git *": "allow", // allow git commands
       "rm *": "deny" // deny rm commands
@@ -96,8 +97,6 @@ Wildcards work on **both permission names and patterns**. They use simple wildca
 :::note
 [Learn more](/docs/custom-tools) about creating and configuring custom tools.
 :::
-
-````
 
 ---
 
@@ -171,10 +170,9 @@ If you don't specify anything, OpenCode starts from these defaults:
 ```
 
 - Most tools default to `"allow"`.
-- `read` defaults to `"allow"`, but `.env` files require approval (`"ask"`).
+- `read` defaults to `"allow"`, but `.env` files require approval `"ask"`.
 - `doom_loop` and `external_directory` default to `"ask"`.
 - `question`, `plan_enter`, and `plan_exit` default to `"deny"`.
-- `read` defaults to "allow", `.env` defaults to `"ask"`.
 
 ---
 
