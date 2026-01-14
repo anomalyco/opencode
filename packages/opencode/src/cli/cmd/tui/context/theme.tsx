@@ -40,7 +40,6 @@ import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
-import { useSDK } from "./sdk"
 
 type ThemeColors = {
   primary: RGBA
@@ -420,6 +419,7 @@ async function getCustomThemes() {
 function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
+  const transparent = RGBA.fromInts(0, 0, 0, 0)
   const isDark = mode == "dark"
 
   const col = (i: number) => {
@@ -477,8 +477,8 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       textMuted,
       selectedListItemText: bg,
 
-      // Background colors
-      background: bg,
+      // Background colors - use transparent to respect terminal transparency
+      background: transparent,
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
       backgroundMenu: grays[3],
