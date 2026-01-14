@@ -33,7 +33,7 @@ export type ServerOptions = {
   port: number
   mdns: boolean
   cors: string[]
-  random: boolean
+  randomPort: boolean
   auth: ServerAuth
 }
 
@@ -78,14 +78,14 @@ export async function resolveServerOptions(args: NetworkOptions): Promise<Server
   const username = Flag.OPENCODE_SERVER_USERNAME ?? config?.server?.username ?? "opencode"
   const password = Flag.OPENCODE_SERVER_PASSWORD ?? config?.server?.password ?? crypto.randomUUID()
   const source = Flag.OPENCODE_SERVER_PASSWORD ? "env" : config?.server?.password ? "config" : "generated"
-  const random = network.port === 0 && (network.portExplicitlySet || !network.configPort)
+  const randomPort = network.port === 0 && (network.portExplicitlySet || !network.configPort)
 
   return {
     hostname: network.hostname,
     port: network.port,
     mdns: network.mdns,
     cors: network.cors,
-    random,
+    randomPort,
     auth: {
       username,
       password,

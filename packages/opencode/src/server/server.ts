@@ -2904,7 +2904,7 @@ export namespace Server {
     hostname: string
     mdns?: boolean
     cors?: string[]
-    random?: boolean
+    randomPort?: boolean
     auth?: { username: string; password: string }
   }) {
     _corsWhitelist = opts.cors ?? []
@@ -2923,8 +2923,8 @@ export namespace Server {
         return undefined
       }
     }
-    const random = opts.random ?? false
-    const server = random ? tryServe(0) : opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
+    const useRandomPort = opts.randomPort ?? false
+    const server = useRandomPort ? tryServe(0) : opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
     _url = server.url

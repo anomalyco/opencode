@@ -32,7 +32,7 @@ export const ServeCommand = cmd({
       port: opts.port,
       mdns: opts.mdns,
       cors: opts.cors,
-      random: opts.random,
+      randomPort: opts.randomPort,
       auth: {
         username: opts.auth.username,
         password: opts.auth.password,

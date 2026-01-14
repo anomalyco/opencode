@@ -137,7 +137,7 @@ export const TuiThreadCommand = cmd({
         port: serverOpts.port,
         mdns: serverOpts.mdns,
         cors: serverOpts.cors,
-        random: serverOpts.random,
+        randomPort: serverOpts.randomPort,
         auth: serverOpts.auth,
       })
       url = server.url
@@ -185,7 +185,7 @@ export const TuiThreadCommand = cmd({
           port: serverOpts.port,
           mdns: serverOpts.mdns,
           cors: serverOpts.cors,
-          random: serverOpts.random,
+          randomPort: serverOpts.randomPort,
           auth: serverOpts.auth,
         })
         url = result.url

@@ -121,7 +121,7 @@ export const rpc = {
     hostname: string
     mdns?: boolean
     cors?: string[]
-    random?: boolean
+    randomPort?: boolean
     auth?: { username: string; password: string }
   }) {
     if (server) await server.stop(true)
