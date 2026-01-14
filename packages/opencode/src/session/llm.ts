@@ -5,6 +5,7 @@ import { Log } from "@/util/log"
 import {
   streamText,
   wrapLanguageModel,
+  InvalidToolInputError,
   type ModelMessage,
   type StreamTextResult,
   type Tool,
@@ -22,6 +23,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
+import { repairToolCallJson } from "@/util/json-repair"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -141,9 +143,10 @@ export namespace LLM {
         })
       },
       async experimental_repairToolCall(failed) {
+        // Try to repair tool name casing first
         const lower = failed.toolCall.toolName.toLowerCase()
         if (lower !== failed.toolCall.toolName && tools[lower]) {
-          l.info("repairing tool call", {
+          l.info("repairing tool call - fixing case", {
             tool: failed.toolCall.toolName,
             repaired: lower,
           })
@@ -152,6 +155,38 @@ export namespace LLM {
             toolName: lower,
           }
         }
+
+        // Try to repair malformed JSON arguments
+        if (InvalidToolInputError.isInstance(failed.error)) {
+          const rawInput = failed.error.toolInput
+          const schema = failed.inputSchema({ toolName: failed.toolCall.toolName })
+
+          l.info("attempting JSON repair", {
+            tool: failed.toolCall.toolName,
+            rawInput: rawInput.substring(0, 200),
+          })
+
+          const repaired = repairToolCallJson(rawInput, schema)
+
+          // Check if repair produced valid JSON
+          try {
+            JSON.parse(repaired)
+            l.info("JSON repair successful", {
+              tool: failed.toolCall.toolName,
+              repaired: repaired.substring(0, 200),
+            })
+            return {
+              ...failed.toolCall,
+              input: repaired,
+            }
+          } catch {
+            l.info("JSON repair failed", {
+              tool: failed.toolCall.toolName,
+            })
+          }
+        }
+
+        // Fall back to invalid tool call
         return {
           ...failed.toolCall,
           input: JSON.stringify({
