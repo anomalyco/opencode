@@ -77,12 +77,22 @@ export function createDialogProviderOptions() {
               })
               if (result.data?.method === "code") {
                 dialog.replace(() => (
-                  <CodeMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
+                  <CodeMethod
+                    providerID={provider.id}
+                    title={method.label}
+                    index={index}
+                    authorization={result.data!}
+                  />
                 ))
               }
               if (result.data?.method === "auto") {
                 dialog.replace(() => (
-                  <AutoMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
+                  <AutoMethod
+                    providerID={provider.id}
+                    title={method.label}
+                    index={index}
+                    authorization={result.data!}
+                  />
                 ))
               }
             }
