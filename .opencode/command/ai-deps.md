@@ -12,6 +12,7 @@ What would be even better is if you can give me links to the changelog for each 
 Consider using subagents for each dep to save your context window.
 
 Here is a short list of some deps (please be comprehensive tho):
+
 - "ai"
 - "@ai-sdk/openai"
 - "@ai-sdk/anthropic"
