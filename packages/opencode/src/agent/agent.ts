@@ -13,6 +13,8 @@ import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
+import { Global } from "@/global"
+import path from "path"
 
 export namespace Agent {
   export const Info = z
@@ -88,9 +90,13 @@ export namespace Agent {
           PermissionNext.fromConfig({
             question: "allow",
             plan_exit: "allow",
+            external_directory: {
+              [path.join(Global.Path.data, "plans", "*")]: "allow",
+            },
             edit: {
               "*": "deny",
               ".opencode/plans/*.md": "allow",
+              [path.relative(Instance.worktree, path.join(Global.Path.data, "plans/*.md"))]: "allow",
             },
           }),
           user,
