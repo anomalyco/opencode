@@ -11,6 +11,17 @@ import { Identifier } from "@/id/id"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
+import {
+  createPastePlaceholder,
+  shiftRange,
+  rewriteRange,
+  cursorAfterNonText,
+  cursorAfterReplacement,
+  updateTextPart,
+  shiftFilePart,
+  shiftAgentPart,
+  replacePart,
+} from "./paste-summary"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -158,87 +169,6 @@ export function Prompt(props: PromptProps) {
       if (msg.variant) local.model.variant.set(msg.variant)
     }
   })
-
-  function createPastePlaceholder(text: string) {
-    const lineCount = (text.match(/\n/g)?.length ?? 0) + 1
-    return `[Pasted ~${lineCount} lines]`
-  }
-
-  function shiftRange(extmark: { start: number; end: number }, delta: number) {
-    return {
-      start: extmark.start + delta,
-      end: extmark.end + delta,
-    }
-  }
-
-  function rewriteRange(text: string, start: number, end: number, replacement: string) {
-    const nextText = text.slice(0, start) + replacement + text.slice(end)
-    const diff = replacement.length - (end - start)
-    return { nextText, diff }
-  }
-
-  function cursorAfterNonText(cursor: number, start: number, end: number) {
-    if (cursor <= start) return cursor
-    if (cursor >= end) return cursor
-    return start + 1
-  }
-
-  function cursorAfterReplacement(cursor: number, start: number, end: number, diff: number, replacementLength: number) {
-    if (cursor <= start) return cursor
-    if (cursor >= end) return cursor + diff
-    return start + replacementLength
-  }
-
-  function updateTextPart(part: PromptInfo["parts"][number], content: string, start: number, replacement: string) {
-    if (part.type !== "text" || !part.source?.text) return part
-    return {
-      ...part,
-      text: content,
-      source: {
-        ...part.source,
-        text: {
-          ...part.source.text,
-          start,
-          end: start + replacement.length,
-          value: replacement,
-        },
-      },
-    }
-  }
-
-  function shiftFilePart(part: PromptInfo["parts"][number], start: number, end: number) {
-    if (part.type !== "file" || !part.source?.text) return part
-    return {
-      ...part,
-      source: {
-        ...part.source,
-        text: {
-          ...part.source.text,
-          start,
-          end,
-        },
-      },
-    }
-  }
-
-  function shiftAgentPart(part: PromptInfo["parts"][number], start: number, end: number) {
-    if (part.type !== "agent" || !part.source) return part
-    return {
-      ...part,
-      source: {
-        ...part.source,
-        start,
-        end,
-      },
-    }
-  }
-
-  function replacePart(parts: PromptInfo["parts"], index: number, nextPart: PromptInfo["parts"][number]) {
-    if (parts[index] === nextPart) return parts
-    const nextParts = parts.slice()
-    nextParts[index] = nextPart
-    return nextParts
-  }
 
   function applyPasteSummaryMode(summaryDisabled: boolean) {
     if (!store.prompt.parts.length) return
