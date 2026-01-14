@@ -55,13 +55,20 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [language, cfg] = await Promise.all([Provider.getLanguage(input.model), Config.get()])
+    const [language, cfg, provider, auth] = await Promise.all([
+      Provider.getLanguage(input.model),
+      Config.get(),
+      Provider.getProvider(input.model.providerID),
+      Auth.get(input.model.providerID),
+    ])
+    const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
     const system = SystemPrompt.header(input.model.providerID)
     system.push(
       [
         // use agent prompt otherwise provider prompt
-        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+        // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
+        ...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message
@@ -83,10 +90,6 @@ export namespace LLM {
       system.length = 0
       system.push(header, rest.join("\n"))
     }
-
-    const provider = await Provider.getProvider(input.model.providerID)
-    const auth = await Auth.get(input.model.providerID)
-    const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
     const variant =
       !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
@@ -110,7 +113,7 @@ export namespace LLM {
         sessionID: input.sessionID,
         agent: input.agent,
         model: input.model,
-        provider: Provider.getProvider(input.model.providerID),
+        provider,
         message: input.user,
       },
       {
