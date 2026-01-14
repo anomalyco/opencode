@@ -35,6 +35,29 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
   }
   const method = plugin.auth.methods[index]
 
+  // Check for existing Codex accounts if this is an OpenAI OAuth login
+  const isCodexOAuth = provider === "openai" && method.type === "oauth"
+  let shouldReplaceAll = false
+
+  if (isCodexOAuth) {
+    const existingAccounts = await Auth.getCodexAccounts()
+    if (existingAccounts.length > 0) {
+      const emails = existingAccounts.map((a) => a.email).join(", ")
+      const action = await prompts.select({
+        message: `Found ${existingAccounts.length} existing ChatGPT account(s): ${emails}`,
+        options: [
+          { label: "Add new account", value: "add" },
+          { label: "Replace all accounts", value: "replace" },
+        ],
+      })
+      if (prompts.isCancel(action)) throw new UI.CancelledError()
+      shouldReplaceAll = action === "replace"
+      if (shouldReplaceAll) {
+        await Auth.remove("codex")
+      }
+    }
+  }
+
   // Handle prompts for all auth types
   await Bun.sleep(10)
   const inputs: Record<string, string> = {}
@@ -81,7 +104,19 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
       }
       if (result.type === "success") {
         const saveProvider = result.provider ?? provider
-        if ("refresh" in result) {
+
+        // Special handling for Codex multi-account
+        if (isCodexOAuth && "refresh" in result) {
+          const email = (result as any).email || (result as any).accountId || "unknown"
+          await Auth.setCodexAccount({
+            email,
+            refresh: result.refresh,
+            access: result.access,
+            expires: result.expires,
+            accountId: (result as any).accountId,
+          })
+          spinner.stop(`Login successful (${email})`)
+        } else if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
           await Auth.set(saveProvider, {
             type: "oauth",
@@ -90,14 +125,14 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
             expires,
             ...extraFields,
           })
-        }
-        if ("key" in result) {
+          spinner.stop("Login successful")
+        } else if ("key" in result) {
           await Auth.set(saveProvider, {
             type: "api",
             key: result.key,
           })
+          spinner.stop("Login successful")
         }
-        spinner.stop("Login successful")
       }
     }
 
@@ -113,7 +148,19 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
       }
       if (result.type === "success") {
         const saveProvider = result.provider ?? provider
-        if ("refresh" in result) {
+
+        // Special handling for Codex multi-account
+        if (isCodexOAuth && "refresh" in result) {
+          const email = (result as any).email || (result as any).accountId || "unknown"
+          await Auth.setCodexAccount({
+            email,
+            refresh: result.refresh,
+            access: result.access,
+            expires: result.expires,
+            accountId: (result as any).accountId,
+          })
+          prompts.log.success(`Login successful (${email})`)
+        } else if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
           await Auth.set(saveProvider, {
             type: "oauth",
@@ -122,14 +169,14 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
             expires,
             ...extraFields,
           })
-        }
-        if ("key" in result) {
+          prompts.log.success("Login successful")
+        } else if ("key" in result) {
           await Auth.set(saveProvider, {
             type: "api",
             key: result.key,
           })
+          prompts.log.success("Login successful")
         }
-        prompts.log.success("Login successful")
       }
     }
 
@@ -177,15 +224,38 @@ export const AuthListCommand = cmd({
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
+    const codexAccounts = await Auth.getCodexAccounts()
     const results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
 
+    let count = 0
     for (const [providerID, result] of results) {
+      // Skip codex multi-account - we'll show individual accounts
+      if (providerID === "codex" && result.type === "codex-multi") continue
+
       const name = database[providerID]?.name || providerID
       prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+      count++
     }
 
-    prompts.outro(`${results.length} credentials`)
+    // Show individual Codex accounts
+    if (codexAccounts.length > 0) {
+      const codexAuth = await Auth.getCodexAuth()
+      const activeIndex = codexAuth?.activeIndex ?? 0
+
+      for (let i = 0; i < codexAccounts.length; i++) {
+        const account = codexAccounts[i]
+        const isActive = i === activeIndex
+        const status = account.rateLimit?.limited
+          ? ` [rate limited until ${new Date(account.rateLimit.resetAt!).toLocaleTimeString()}]`
+          : ""
+        const activeMarker = isActive ? " *" : ""
+        prompts.log.info(`ChatGPT (${account.email})${activeMarker}${status} ${UI.Style.TEXT_DIM}oauth`)
+        count++
+      }
+    }
+
+    prompts.outro(`${count} credential${count === 1 ? "" : "s"}`)
 
     // Environment variables section
     const activeEnvVars: Array<{ provider: string; envVar: string }> = []
@@ -379,22 +449,56 @@ export const AuthLogoutCommand = cmd({
   describe: "log out from a configured provider",
   async handler() {
     UI.empty()
-    const credentials = await Auth.all().then((x) => Object.entries(x))
     prompts.intro("Remove credential")
-    if (credentials.length === 0) {
+
+    // Build options list with special handling for Codex multi-account
+    const codexAccounts = await Auth.getCodexAccounts()
+    const database = await ModelsDev.get()
+    const credentials = await Auth.all()
+
+    type CredentialOption = { label: string; value: string; isCodexAccount?: boolean; accountId?: string }
+    const options: CredentialOption[] = []
+
+    for (const [key, value] of Object.entries(credentials)) {
+      // Skip codex entry - we'll list individual accounts instead
+      if (key === "codex" && value.type === "codex-multi") continue
+
+      options.push({
+        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
+        value: key,
+      })
+    }
+
+    // Add individual Codex accounts
+    for (const account of codexAccounts) {
+      const status = account.rateLimit?.limited ? " [rate limited]" : ""
+      options.push({
+        label: `ChatGPT (${account.email})${status}` + UI.Style.TEXT_DIM + " (oauth)",
+        value: `codex:${account.id}`,
+        isCodexAccount: true,
+        accountId: account.id,
+      })
+    }
+
+    if (options.length === 0) {
       prompts.log.error("No credentials found")
       return
     }
-    const database = await ModelsDev.get()
-    const providerID = await prompts.select({
-      message: "Select provider",
-      options: credentials.map(([key, value]) => ({
-        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
-        value: key,
-      })),
+
+    const selected = await prompts.select({
+      message: "Select credential to remove",
+      options: options.map((o) => ({ label: o.label, value: o.value })),
     })
-    if (prompts.isCancel(providerID)) throw new UI.CancelledError()
-    await Auth.remove(providerID)
+    if (prompts.isCancel(selected)) throw new UI.CancelledError()
+
+    // Handle Codex account removal
+    if (selected.startsWith("codex:")) {
+      const accountId = selected.replace("codex:", "")
+      await Auth.removeCodexAccount(accountId)
+    } else {
+      await Auth.remove(selected)
+    }
+
     prompts.outro("Logout successful")
   },
 })

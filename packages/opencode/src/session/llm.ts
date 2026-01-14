@@ -61,7 +61,9 @@ export namespace LLM {
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
     ])
-    const isCodex = provider.id === "openai" && auth?.type === "oauth"
+    const codexAuth = provider.id === "openai" ? await Auth.getCodexAuth() : undefined
+    const hasCodexAccounts = provider.id === "openai" && !!codexAuth?.accounts.length
+    const isCodex = provider.id === "openai" && (auth?.type === "oauth" || hasCodexAccounts)
 
     const system = SystemPrompt.header(input.model.providerID)
     system.push(

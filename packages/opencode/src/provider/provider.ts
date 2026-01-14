@@ -828,8 +828,15 @@ export namespace Provider {
 
       // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
       let hasAuth = false
+      let hasCodexAccounts = false
       const auth = await Auth.get(providerID)
       if (auth) hasAuth = true
+
+      if (!hasAuth && providerID === "openai") {
+        const codexAuth = await Auth.getCodexAuth()
+        hasCodexAccounts = !!codexAuth?.accounts.length
+        if (hasCodexAccounts) hasAuth = true
+      }
 
       // Special handling for github-copilot: also check for enterprise auth
       if (providerID === "github-copilot" && !hasAuth) {
@@ -841,7 +848,7 @@ export namespace Provider {
       if (!plugin.auth.loader) continue
 
       // Load for the main provider if auth exists
-      if (auth) {
+      if (auth || hasCodexAccounts) {
         const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
         mergeProvider(plugin.auth.provider, {
           source: "custom",
