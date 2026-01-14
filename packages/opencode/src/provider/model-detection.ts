@@ -24,7 +24,9 @@ export namespace ProviderModelDetection.OpenAICompatible {
     let parsedRes: ListModelResponse
 
     try {
-      res = await fetch(`${baseURL}/models`)
+      res = await fetch(`${baseURL}/models`, {
+        signal: AbortSignal.timeout(5 * 1000),
+      })
     } catch (error) {
       throw new Error(`failed to fetch: ${error}`)
     }
