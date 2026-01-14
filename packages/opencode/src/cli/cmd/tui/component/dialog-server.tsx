@@ -5,7 +5,7 @@ import { useSync } from "@tui/context/sync"
 import { useDialog } from "@tui/ui/dialog"
 import { useToast } from "@tui/ui/toast"
 import { Clipboard } from "@/util/clipboard"
-import { Show, createSignal, createMemo, onMount, createEffect } from "solid-js"
+import { Show, createSignal, createMemo, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import open from "open"
 
