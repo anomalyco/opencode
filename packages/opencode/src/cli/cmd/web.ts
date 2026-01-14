@@ -30,7 +30,12 @@ function getNetworkIPs() {
 
 export const WebCommand = cmd({
   command: "web",
-  builder: (yargs) => withNetworkOptions(yargs),
+  builder: (yargs) =>
+    withNetworkOptions(yargs).option("quiet", {
+      type: "boolean",
+      describe: "minimal output and prevent opening browser",
+      default: false,
+    }),
   describe: "start opencode server and open web interface",
   handler: async (args) => {
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
@@ -38,18 +43,22 @@ export const WebCommand = cmd({
     }
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
-    UI.empty()
-    UI.println(UI.logo("  "))
-    UI.empty()
+    if (!args.quiet) {
+      UI.empty()
+      UI.println(UI.logo("  "))
+      UI.empty()
+    }
 
     if (opts.hostname === "0.0.0.0") {
       // Show localhost for local access
       const localhostUrl = `http://localhost:${server.port}`
-      UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
+      if (!args.quiet) {
+        UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
+      }
 
       // Show network IPs for remote access
       const networkIPs = getNetworkIPs()
-      if (networkIPs.length > 0) {
+      if (!args.quiet && networkIPs.length > 0) {
         for (const ip of networkIPs) {
           UI.println(
             UI.Style.TEXT_INFO_BOLD + "  Network access:    ",
@@ -59,13 +68,15 @@ export const WebCommand = cmd({
         }
       }
 
-      if (opts.mdns) {
+      if (!args.quiet && opts.mdns) {
         UI.println(UI.Style.TEXT_INFO_BOLD + "  mDNS:              ", UI.Style.TEXT_NORMAL, "opencode.local")
       }
 
       // Open localhost in browser
-      open(localhostUrl.toString()).catch(() => {})
-    } else {
+      if (!args.quiet) {
+        open(localhostUrl.toString()).catch(() => {})
+      }
+    } else if (!args.quiet) {
       const displayUrl = server.url.toString()
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
       open(displayUrl).catch(() => {})
