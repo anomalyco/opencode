@@ -22,8 +22,31 @@ export namespace Filesystem {
     return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
   }
 
-  export function contains(parent: string, child: string) {
-    return !relative(parent, child).startsWith("..")
+  /**
+   * Check if a path is within a parent directory, with protection against:
+   * - Symlink escapes: Resolves symlinks to their real paths
+   * - Cross-drive paths on Windows: Checks drive letters match
+   * Returns true if child is within parent, false otherwise.
+   */
+  export function contains(parent: string, child: string): boolean {
+    try {
+      const realParent = realpathSync(parent)
+      const realChild = realpathSync(child)
+
+      if (process.platform === "win32") {
+        const parentDrive = realParent.split(":")[0]?.toLowerCase()
+        const childDrive = realChild.split(":")[0]?.toLowerCase()
+        if (parentDrive !== childDrive) {
+          return false
+        }
+      }
+
+      const rel = relative(realParent, realChild)
+      return !rel.startsWith("..") && rel !== ".."
+    } catch {
+      const rel = relative(parent, child)
+      return !rel.startsWith("..")
+    }
   }
 
   export async function findUp(target: string, start: string, stop?: string) {
