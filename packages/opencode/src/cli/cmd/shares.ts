@@ -3,11 +3,12 @@ import { cmd } from "./cmd"
 import { Storage } from "../../storage/storage"
 import { Project } from "../../project/project"
 import { Session } from "../../session"
-import { ShareNext } from "../../share/share-next"
 import { UI } from "../ui"
 import { Locale } from "../../util/locale"
 import { EOL } from "os"
 import * as prompts from "@clack/prompts"
+
+const SHARE_URL = "https://opncd.ai"
 
 interface ShareWithSession {
   sessionID: string
@@ -164,11 +165,31 @@ export const SharesRemoveCommand = cmd({
       sessionID = selected as string
     }
 
+    const share = await Storage.read<{ id: string; secret: string; url: string }>(["session_share", sessionID]).catch(
+      () => null,
+    )
+
+    if (!share) {
+      prompts.log.warn(`No share found for session ${sessionID}`)
+      prompts.outro("Done")
+      return
+    }
+
     const spinner = prompts.spinner()
     spinner.start("Removing share...")
 
     try {
-      await ShareNext.remove(sessionID)
+      const response = await fetch(`${SHARE_URL}/api/share/${share.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: share.secret }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`)
+      }
+
+      await Storage.remove(["session_share", sessionID])
       spinner.stop("Share removed")
     } catch (e) {
       spinner.stop("Failed to remove share")
