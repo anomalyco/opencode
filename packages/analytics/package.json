@@ -1,0 +1,38 @@
+{
+  "name": "@opencode-ai/analytics",
+  "version": "0.0.1",
+  "description": "Analytics and Prometheus metrics plugin for OpenCode",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target=node",
+    "dev": "bun build ./src/index.ts --outdir ./dist --target=node --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "workspace:*",
+    "@opencode-ai/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "bun": ">=1.0.0"
+  },
+  "keywords": [
+    "opencode",
+    "analytics",
+    "prometheus",
+    "metrics",
+    "telemetry"
+  ],
+  "license": "MIT"
+}
