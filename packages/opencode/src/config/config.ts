@@ -483,7 +483,7 @@ export namespace Config {
     return result
   }
 
-  export const Permission = z
+export const Permission = z
     .preprocess(
       permissionPreprocess,
       z
@@ -504,6 +504,7 @@ export namespace Config {
           websearch: PermissionAction.optional(),
           codesearch: PermissionAction.optional(),
           lsp: PermissionRule.optional(),
+          browser: PermissionAction.optional(),
           doom_loop: PermissionAction.optional(),
         })
         .catchall(PermissionRule)

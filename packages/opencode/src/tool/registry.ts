@@ -26,6 +26,54 @@ import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
+import { BrowserNavigateTool } from "../browser/navigate"
+import { BrowserClickTool } from "../browser/click"
+import { BrowserFillTool } from "../browser/fill"
+import { BrowserScreenshotTool } from "../browser/screenshot"
+import { BrowserEvaluateTool } from "../browser/evaluate"
+import { BrowserCloseTool } from "../browser/close"
+import { BrowserUrlsTool } from "../browser/urls"
+import { BrowserSetTool } from "../browser/browser"
+import { BrowserOpenTool } from "../browser/open"
+import { BrowserHeadedTool } from "../browser/headed"
+import { BrowserSwitchTabTool } from "../browser/switchTab"
+import { BrowserCloseTabTool } from "../browser/closeTab"
+import { BrowserDuplicateTabTool } from "../browser/duplicateTab"
+import { BrowserReopenTabTool } from "../browser/reopenTab"
+import { BrowserHoverTool } from "../browser/hover"
+import { BrowserRightClickTool } from "../browser/rightClick"
+import { BrowserDoubleClickTool } from "../browser/doubleClick"
+import { BrowserDragDropTool } from "../browser/dragDrop"
+import { BrowserScrollTool } from "../browser/scroll"
+import { BrowserScrollToTool } from "../browser/scrollTo"
+import { BrowserScrollTopTool } from "../browser/scrollTop"
+import { BrowserScrollBottomTool } from "../browser/scrollBottom"
+import { BrowserCheckTool } from "../browser/check"
+import { BrowserSelectTool } from "../browser/select"
+import { BrowserClearTool } from "../browser/clear"
+import { BrowserGetValueTool } from "../browser/getValue"
+import { BrowserBackTool } from "../browser/back"
+import { BrowserForwardTool } from "../browser/forward"
+import { BrowserRefreshTool } from "../browser/refresh"
+import { BrowserWaitForElementTool } from "../browser/waitForElement"
+import { BrowserWaitForURLTool } from "../browser/waitForURL"
+import { BrowserGetTextTool } from "../browser/getText"
+import { BrowserGetAttributeTool } from "../browser/getAttribute"
+import { BrowserGetCSSTool } from "../browser/getCSS"
+import { BrowserGetPageSourceTool } from "../browser/getPageSource"
+import { BrowserGetCookiesTool } from "../browser/getCookies"
+import { BrowserSetCookieTool } from "../browser/setCookie"
+import { BrowserDeleteCookieTool } from "../browser/deleteCookie"
+import { BrowserGetLocalStorageTool } from "../browser/getLocalStorage"
+import { BrowserSetLocalStorageTool } from "../browser/setLocalStorage"
+import { BrowserClearStorageTool } from "../browser/clearStorage"
+import { BrowserSetViewportTool } from "../browser/setViewport"
+import { BrowserSetUserAgentTool } from "../browser/setUserAgent"
+import { BrowserSetGeolocationTool } from "../browser/setGeolocation"
+import { BrowserSetTimezoneTool } from "../browser/setTimezone"
+import { BrowserAssertTextTool } from "../browser/assertText"
+import { BrowserAssertVisibleTool } from "../browser/assertVisible"
+import { BrowserAssertURLTool } from "../browser/assertURL"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -108,6 +156,54 @@ export namespace ToolRegistry {
       WebSearchTool,
       CodeSearchTool,
       SkillTool,
+      BrowserNavigateTool,
+      BrowserClickTool,
+      BrowserFillTool,
+      BrowserScreenshotTool,
+      BrowserEvaluateTool,
+      BrowserUrlsTool,
+      BrowserCloseTool,
+      BrowserSetTool,
+      BrowserOpenTool,
+      BrowserHeadedTool,
+      BrowserSwitchTabTool,
+      BrowserCloseTabTool,
+      BrowserDuplicateTabTool,
+      BrowserReopenTabTool,
+      BrowserHoverTool,
+      BrowserRightClickTool,
+      BrowserDoubleClickTool,
+      BrowserDragDropTool,
+      BrowserScrollTool,
+      BrowserScrollToTool,
+      BrowserScrollTopTool,
+      BrowserScrollBottomTool,
+      BrowserCheckTool,
+      BrowserSelectTool,
+      BrowserClearTool,
+      BrowserGetValueTool,
+      BrowserBackTool,
+      BrowserForwardTool,
+      BrowserRefreshTool,
+      BrowserWaitForElementTool,
+      BrowserWaitForURLTool,
+      BrowserGetTextTool,
+      BrowserGetAttributeTool,
+      BrowserGetCSSTool,
+      BrowserGetPageSourceTool,
+      BrowserGetCookiesTool,
+      BrowserSetCookieTool,
+      BrowserDeleteCookieTool,
+      BrowserGetLocalStorageTool,
+      BrowserSetLocalStorageTool,
+      BrowserClearStorageTool,
+      BrowserSetViewportTool,
+      BrowserSetUserAgentTool,
+      BrowserSetGeolocationTool,
+      BrowserSetTimezoneTool,
+      BrowserAssertTextTool,
+      BrowserAssertVisibleTool,
+      BrowserAssertURLTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool, PlanEnterTool] : []),
