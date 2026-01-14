@@ -1,9 +1,9 @@
-import { A, action, createAsync, query, redirect, useParams } from "@solidjs/router"
+import { A, action, createAsync, json, query, redirect, useParams } from "@solidjs/router"
 import { Title } from "@solidjs/meta"
-import { createEffect, createSignal, For, Show } from "solid-js"
+import { createEffect, createSignal, For, Match, Show, Switch } from "solid-js"
 import { type Stripe, type PaymentMethod, loadStripe } from "@stripe/stripe-js"
 import { Elements, PaymentElement, useStripe, useElements, AddressElement } from "solid-stripe"
-import { PlanIcon, plans } from "../common"
+import { PlanID, plans } from "../common"
 import { getActor, useAuthSession } from "~/context/auth"
 import { withActor } from "~/context/auth.withActor"
 import { Actor } from "@opencode-ai/console-core/actor.js"
@@ -15,7 +15,7 @@ import { Modal } from "~/component/modal"
 import { BillingTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 
-const plansMap = Object.fromEntries(plans.map((p) => [p.id, p])) as Record<string, (typeof plans)[number]>
+const plansMap = Object.fromEntries(plans.map((p) => [p.id, p])) as Record<PlanID, (typeof plans)[number]>
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY!)
 
 const getWorkspaces = query(async () => {
@@ -34,6 +34,7 @@ const getWorkspaces = query(async () => {
             paymentMethodID: BillingTable.paymentMethodID,
             paymentMethodType: BillingTable.paymentMethodType,
             paymentMethodLast4: BillingTable.paymentMethodLast4,
+            subscriptionID: BillingTable.subscriptionID,
           },
         })
         .from(UserTable)
@@ -50,85 +51,80 @@ const getWorkspaces = query(async () => {
   })
 }, "black.subscribe.workspaces")
 
-const createSetupIntent = action(async (input: { plan: string; workspaceID: string }) => {
+const createSetupIntent = async (input: { plan: string; workspaceID: string }) => {
   "use server"
   const { plan, workspaceID } = input
 
-  if (!plan || !["20", "100", "200"].includes(plan)) {
-    return { error: "Invalid plan" }
-  }
+  if (!plan || !["20", "100", "200"].includes(plan)) return { error: "Invalid plan" }
+  if (!workspaceID) return { error: "Workspace ID is required" }
 
-  if (!workspaceID) {
-    return { error: "Workspace ID is required" }
-  }
+  return withActor(async () => {
+    const session = await useAuthSession()
+    const account = session.data.account?.[session.data.current ?? ""]
+    const email = account?.email
 
-  const actor = await getActor()
-  if (actor.type === "public") {
-    return { error: "Unauthorized" }
-  }
+    const customer = await Database.use((tx) =>
+      tx
+        .select({
+          customerID: BillingTable.customerID,
+          subscriptionID: BillingTable.subscriptionID,
+        })
+        .from(BillingTable)
+        .where(eq(BillingTable.workspaceID, workspaceID))
+        .then((rows) => rows[0]),
+    )
+    if (customer?.subscriptionID) {
+      return { error: "This workspace already has a subscription" }
+    }
 
-  const session = await useAuthSession()
-  const account = session.data.account?.[session.data.current ?? ""]
-  const email = account?.email
+    let customerID = customer?.customerID
+    if (!customerID) {
+      const customer = await Billing.stripe().customers.create({
+        email,
+        metadata: {
+          workspaceID,
+        },
+      })
+      customerID = customer.id
+    }
 
-  const stripe = Billing.stripe()
-
-  let customerID = await Database.use((tx) =>
-    tx
-      .select({ customerID: BillingTable.customerID })
-      .from(BillingTable)
-      .where(eq(BillingTable.workspaceID, workspaceID))
-      .then((rows) => rows[0].customerID),
-  )
-  if (!customerID) {
-    const customer = await stripe.customers.create({
-      email,
+    const intent = await Billing.stripe().setupIntents.create({
+      customer: customerID,
+      payment_method_types: ["card"],
       metadata: {
         workspaceID,
       },
     })
-    customerID = customer.id
-  }
 
-  const intent = await stripe.setupIntents.create({
-    customer: customerID,
-    payment_method_types: ["card"],
-    metadata: {
-      workspaceID,
-    },
-  })
+    return { clientSecret: intent.client_secret ?? undefined }
+  }, workspaceID)
+}
 
-  return { clientSecret: intent.client_secret }
-})
-
-const bookSubscription = action(
-  async (input: {
-    workspaceID: string
-    paymentMethodID: string
-    paymentMethodType: string
-    paymentMethodLast4?: string
-  }) => {
-    "use server"
-    const actor = await getActor()
-    if (actor.type === "public") {
-      return { error: "Unauthorized" }
-    }
-
-    await Database.use((tx) =>
-      tx
-        .update(BillingTable)
-        .set({
-          paymentMethodID: input.paymentMethodID,
-          paymentMethodType: input.paymentMethodType,
-          paymentMethodLast4: input.paymentMethodLast4,
-          timeSubscriptionBooked: new Date(),
-        })
-        .where(eq(BillingTable.workspaceID, input.workspaceID)),
-    )
-
-    return { success: true }
-  },
-)
+const bookSubscription = async (input: {
+  workspaceID: string
+  plan: PlanID
+  paymentMethodID: string
+  paymentMethodType: string
+  paymentMethodLast4?: string
+}) => {
+  "use server"
+  return withActor(
+    () =>
+      Database.use((tx) =>
+        tx
+          .update(BillingTable)
+          .set({
+            paymentMethodID: input.paymentMethodID,
+            paymentMethodType: input.paymentMethodType,
+            paymentMethodLast4: input.paymentMethodLast4,
+            subscriptionPlan: input.plan,
+            timeSubscriptionBooked: new Date(),
+          })
+          .where(eq(BillingTable.workspaceID, input.workspaceID)),
+      ),
+    input.workspaceID,
+  )
+}
 
 interface SuccessData {
   plan: string
@@ -136,7 +132,16 @@ interface SuccessData {
   paymentMethodLast4?: string
 }
 
-function PaymentSuccess(props: SuccessData) {
+function Failure(props: { message: string }) {
+  return (
+    <div data-slot="failure">
+      <p data-slot="title">Uh oh, something went wrong</p>
+      <p data-slot="message">{props.message}</p>
+    </div>
+  )
+}
+
+function Success(props: SuccessData) {
   return (
     <div data-slot="success">
       <p data-slot="title">You're on the OpenCode Black waitlist</p>
@@ -169,10 +174,10 @@ function PaymentSuccess(props: SuccessData) {
   )
 }
 
-function PaymentForm(props: { plan: string; workspaceID: string; onSuccess: (data: SuccessData) => void }) {
+function IntentForm(props: { plan: PlanID; workspaceID: string; onSuccess: (data: SuccessData) => void }) {
   const stripe = useStripe()
   const elements = useElements()
-  const [error, setError] = createSignal<string | null>(null)
+  const [error, setError] = createSignal<string | undefined>(undefined)
   const [loading, setLoading] = createSignal(false)
 
   const handleSubmit = async (e: Event) => {
@@ -180,7 +185,7 @@ function PaymentForm(props: { plan: string; workspaceID: string; onSuccess: (dat
     if (!stripe() || !elements()) return
 
     setLoading(true)
-    setError(null)
+    setError(undefined)
 
     const result = await elements()!.submit()
     if (result.error) {
@@ -211,6 +216,7 @@ function PaymentForm(props: { plan: string; workspaceID: string; onSuccess: (dat
 
       await bookSubscription({
         workspaceID: props.workspaceID,
+        plan: props.plan,
         paymentMethodID: pm.id,
         paymentMethodType: pm.type,
         paymentMethodLast4: pm.card?.last4,
@@ -243,16 +249,14 @@ function PaymentForm(props: { plan: string; workspaceID: string; onSuccess: (dat
 
 export default function BlackSubscribe() {
   const workspaces = createAsync(() => getWorkspaces())
-  const [selectedWorkspace, setSelectedWorkspace] = createSignal<string | null>(null)
-  const [success, setSuccess] = createSignal<SuccessData | null>(null)
-
+  const [selectedWorkspace, setSelectedWorkspace] = createSignal<string | undefined>(undefined)
+  const [success, setSuccess] = createSignal<SuccessData | undefined>(undefined)
+  const [failure, setFailure] = createSignal<string | undefined>(undefined)
+  const [clientSecret, setClientSecret] = createSignal<string | undefined>(undefined)
+  const [stripe, setStripe] = createSignal<Stripe | undefined>(undefined)
   const params = useParams()
-  const plan = params.plan || "200"
-  const planData = plansMap[plan] || plansMap["200"]
-
-  const [clientSecret, setClientSecret] = createSignal<string | null>(null)
-  const [setupError, setSetupError] = createSignal<string | null>(null)
-  const [stripe, setStripe] = createSignal<Stripe | null>(null)
+  const planData = plansMap[(params.plan as PlanID) ?? "20"] ?? plansMap["20"]
+  const plan = planData.id
 
   // Resolve stripe promise once
   createEffect(() => {
@@ -275,27 +279,28 @@ export default function BlackSubscribe() {
     if (!id) return
 
     const ws = workspaces()?.find((w) => w.id === id)
-    if (ws?.billing.paymentMethodID) {
+    if (ws?.billing?.subscriptionID) {
+      setFailure("This workspace already has a subscription")
+      return
+    }
+    if (ws?.billing?.paymentMethodID) {
       setSuccess({
-        plan,
+        plan: planData.id,
         paymentMethodType: ws.billing.paymentMethodType!,
         paymentMethodLast4: ws.billing.paymentMethodLast4 ?? undefined,
       })
       return
     }
 
-    setClientSecret(null)
-    setSetupError(null)
-
     createSetupIntent({ plan, workspaceID: id })
       .then((data) => {
-        if (data.clientSecret) {
+        if (data.error) {
+          setFailure(data.error)
+        } else if ("clientSecret" in data) {
           setClientSecret(data.clientSecret)
-        } else if (data.error) {
-          setSetupError(data.error)
         }
       })
-      .catch(() => setSetupError("Failed to initialize payment"))
+      .catch(() => setFailure("Failed to initialize payment"))
   })
 
   // Keyboard navigation for workspace picker
@@ -321,15 +326,13 @@ export default function BlackSubscribe() {
       <Title>Subscribe to OpenCode Black</Title>
       <section data-slot="subscribe-form">
         <div data-slot="form-card">
-          <Show
-            when={success()}
-            fallback={
+          <Switch>
+            <Match when={success()}>{(data) => <Success {...data()} />}</Match>
+            <Match when={failure()}>{(data) => <Failure message={data()} />}</Match>
+            <Match when={true}>
               <>
                 <div data-slot="plan-header">
                   <p data-slot="title">Subscribe to OpenCode Black</p>
-                  <div data-slot="icon">
-                    <PlanIcon plan={plan} />
-                  </div>
                   <p data-slot="price">
                     <span data-slot="amount">${planData.id}</span> <span data-slot="period">per month</span>
                     <Show when={planData.multiplier}>
@@ -339,10 +342,6 @@ export default function BlackSubscribe() {
                 </div>
                 <div data-slot="divider" />
                 <p data-slot="section-title">Payment method</p>
-
-                <Show when={setupError()}>
-                  <p data-slot="error">{setupError()}</p>
-                </Show>
 
                 <Show
                   when={clientSecret() && selectedWorkspace() && stripe()}
@@ -387,14 +386,12 @@ export default function BlackSubscribe() {
                       },
                     }}
                   >
-                    <PaymentForm plan={plan} workspaceID={selectedWorkspace()!} onSuccess={setSuccess} />
+                    <IntentForm plan={plan} workspaceID={selectedWorkspace()!} onSuccess={setSuccess} />
                   </Elements>
                 </Show>
               </>
-            }
-          >
-            {(data) => <PaymentSuccess {...data()} />}
-          </Show>
+            </Match>
+          </Switch>
         </div>
 
         {/* Workspace picker modal */}
