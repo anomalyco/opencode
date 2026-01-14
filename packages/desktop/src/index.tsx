@@ -292,6 +292,23 @@ root?.addEventListener("mousewheel", (e) => {
   e.stopPropagation()
 })
 
+// Intercept all link clicks and open external links in the default browser
+root?.addEventListener("click", (e) => {
+  const target = e.target as HTMLElement
+  const anchor = target.closest("a")
+  if (!anchor) return
+
+  const href = anchor.getAttribute("href")
+  if (!href) return
+
+  // Only intercept external links (http/https)
+  if (href.startsWith("http://") || href.startsWith("https://")) {
+    e.preventDefault()
+    e.stopPropagation()
+    void shellOpen(href).catch(() => undefined)
+  }
+})
+
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
   const platform = createPlatform(() => serverPassword())
