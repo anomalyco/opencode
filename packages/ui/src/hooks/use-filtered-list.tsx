@@ -33,7 +33,14 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     }),
     async ({ filter, items }) => {
       const needle = filter?.toLowerCase()
-      const all = (items ?? (await (props.items as (filter: string) => T[] | Promise<T[]>)(needle))) || []
+      let all: T[]
+      if (items !== undefined) {
+        all = Array.isArray(items) ? items : []
+      } else if (typeof props.items === "function") {
+        all = (await props.items(needle ?? "")) || []
+      } else {
+        all = []
+      }
       const result = pipe(
         all,
         (x) => {
