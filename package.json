@@ -6,6 +6,7 @@
   "type": "module",
   "packageManager": "bun@1.3.5",
   "scripts": {
+    "predev": "bun run ./scripts/setup-mcp.ts",
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
