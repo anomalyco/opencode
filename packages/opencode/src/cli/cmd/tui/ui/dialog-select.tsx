@@ -158,7 +158,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     if (evt.name === "return") {
       const option = selected()
       if (option) {
-        // evt.preventDefault()
+        evt.preventDefault()
+        evt.stopPropagation()
         if (option.onSelect) option.onSelect(dialog)
         props.onSelect?.(option)
       }
@@ -255,7 +256,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                           props.onSelect?.(option)
                         }}
                         onMouseOver={() => {
-                          const index = filtered().findIndex((x) => isDeepEqual(x.value, option.value))
+                          const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
                           if (index === -1) return
                           moveTo(index)
                         }}

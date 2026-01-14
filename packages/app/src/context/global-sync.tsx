@@ -16,6 +16,7 @@ import {
   type LspStatus,
   type VcsInfo,
   type PermissionRequest,
+  type QuestionRequest,
   createOpencodeClient,
 } from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -26,6 +27,7 @@ import { ErrorPage, type InitError } from "../pages/error"
 import { batch, createContext, useContext, onCleanup, onMount, type ParentProps, Switch, Match } from "solid-js"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
+import { usePlatform } from "./platform"
 
 type State = {
   status: "loading" | "partial" | "complete"
@@ -48,6 +50,9 @@ type State = {
   permission: {
     [sessionID: string]: PermissionRequest[]
   }
+  question: {
+    [sessionID: string]: QuestionRequest[]
+  }
   mcp: {
     [name: string]: McpStatus
   }
@@ -64,6 +69,7 @@ type State = {
 
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
+  const platform = usePlatform()
   const [globalStore, setGlobalStore] = createStore<{
     ready: boolean
     error?: InitError
@@ -96,6 +102,7 @@ function createGlobalSync() {
         session_diff: {},
         todo: {},
         permission: {},
+        question: {},
         mcp: {},
         lsp: [],
         vcs: undefined,
@@ -139,6 +146,7 @@ function createGlobalSync() {
     const [store, setStore] = child(directory)
     const sdk = createOpencodeClient({
       baseUrl: globalSDK.url,
+      fetch: platform.fetch,
       directory,
       throwOnError: true,
     })
@@ -197,6 +205,38 @@ function createGlobalSync() {
                   reconcile(
                     permissions
                       .filter((p) => !!p?.id)
+                      .slice()
+                      .sort((a, b) => a.id.localeCompare(b.id)),
+                    { key: "id" },
+                  ),
+                )
+              }
+            })
+          }),
+          sdk.question.list().then((x) => {
+            const grouped: Record<string, QuestionRequest[]> = {}
+            for (const question of x.data ?? []) {
+              if (!question?.id || !question.sessionID) continue
+              const existing = grouped[question.sessionID]
+              if (existing) {
+                existing.push(question)
+                continue
+              }
+              grouped[question.sessionID] = [question]
+            }
+
+            batch(() => {
+              for (const sessionID of Object.keys(store.question)) {
+                if (grouped[sessionID]) continue
+                setStore("question", sessionID, [])
+              }
+              for (const [sessionID, questions] of Object.entries(grouped)) {
+                setStore(
+                  "question",
+                  sessionID,
+                  reconcile(
+                    questions
+                      .filter((q) => !!q?.id)
                       .slice()
                       .sort((a, b) => a.id.localeCompare(b.id)),
                     { key: "id" },
@@ -393,9 +433,48 @@ function createGlobalSync() {
         )
         break
       }
+      case "question.asked": {
+        const sessionID = event.properties.sessionID
+        const questions = store.question[sessionID]
+        if (!questions) {
+          setStore("question", sessionID, [event.properties])
+          break
+        }
+
+        const result = Binary.search(questions, event.properties.id, (q) => q.id)
+        if (result.found) {
+          setStore("question", sessionID, result.index, reconcile(event.properties))
+          break
+        }
+
+        setStore(
+          "question",
+          sessionID,
+          produce((draft) => {
+            draft.splice(result.index, 0, event.properties)
+          }),
+        )
+        break
+      }
+      case "question.replied":
+      case "question.rejected": {
+        const questions = store.question[event.properties.sessionID]
+        if (!questions) break
+        const result = Binary.search(questions, event.properties.requestID, (q) => q.id)
+        if (!result.found) break
+        setStore(
+          "question",
+          event.properties.sessionID,
+          produce((draft) => {
+            draft.splice(result.index, 1)
+          }),
+        )
+        break
+      }
       case "lsp.updated": {
         const sdk = createOpencodeClient({
           baseUrl: globalSDK.url,
+          fetch: platform.fetch,
           directory,
           throwOnError: true,
         })

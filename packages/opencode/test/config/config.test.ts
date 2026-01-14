@@ -1,4 +1,4 @@
-import { test, expect, mock, afterEach } from "bun:test"
+import { test, expect, describe, mock } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
@@ -330,6 +330,147 @@ Test agent prompt`,
           prompt: "Test agent prompt",
         }),
       )
+    },
+  })
+})
+
+test("loads agents from .opencode/agents (plural)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      const agentsDir = path.join(opencodeDir, "agents")
+      await fs.mkdir(path.join(agentsDir, "nested"), { recursive: true })
+
+      await Bun.write(
+        path.join(agentsDir, "helper.md"),
+        `---
+model: test/model
+mode: subagent
+---
+Helper agent prompt`,
+      )
+
+      await Bun.write(
+        path.join(agentsDir, "nested", "child.md"),
+        `---
+model: test/model
+mode: subagent
+---
+Nested agent prompt`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.agent?.["helper"]).toMatchObject({
+        name: "helper",
+        model: "test/model",
+        mode: "subagent",
+        prompt: "Helper agent prompt",
+      })
+
+      expect(config.agent?.["nested/child"]).toMatchObject({
+        name: "nested/child",
+        model: "test/model",
+        mode: "subagent",
+        prompt: "Nested agent prompt",
+      })
+    },
+  })
+})
+
+test("loads commands from .opencode/command (singular)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      const commandDir = path.join(opencodeDir, "command")
+      await fs.mkdir(path.join(commandDir, "nested"), { recursive: true })
+
+      await Bun.write(
+        path.join(commandDir, "hello.md"),
+        `---
+description: Test command
+---
+Hello from singular command`,
+      )
+
+      await Bun.write(
+        path.join(commandDir, "nested", "child.md"),
+        `---
+description: Nested command
+---
+Nested command template`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.command?.["hello"]).toEqual({
+        description: "Test command",
+        template: "Hello from singular command",
+      })
+
+      expect(config.command?.["nested/child"]).toEqual({
+        description: "Nested command",
+        template: "Nested command template",
+      })
+    },
+  })
+})
+
+test("loads commands from .opencode/commands (plural)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      const commandsDir = path.join(opencodeDir, "commands")
+      await fs.mkdir(path.join(commandsDir, "nested"), { recursive: true })
+
+      await Bun.write(
+        path.join(commandsDir, "hello.md"),
+        `---
+description: Test command
+---
+Hello from plural commands`,
+      )
+
+      await Bun.write(
+        path.join(commandsDir, "nested", "child.md"),
+        `---
+description: Nested command
+---
+Nested command template`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.command?.["hello"]).toEqual({
+        description: "Test command",
+        template: "Hello from plural commands",
+      })
+
+      expect(config.command?.["nested/child"]).toEqual({
+        description: "Nested command",
+        template: "Nested command template",
+      })
     },
   })
 })
@@ -1144,4 +1285,92 @@ test("project config overrides remote well-known config", async () => {
     globalThis.fetch = originalFetch
     Auth.all = originalAuthAll
   }
+})
+
+describe("getPluginName", () => {
+  test("extracts name from file:// URL", () => {
+    expect(Config.getPluginName("file:///path/to/plugin/foo.js")).toBe("foo")
+    expect(Config.getPluginName("file:///path/to/plugin/bar.ts")).toBe("bar")
+    expect(Config.getPluginName("file:///some/path/my-plugin.js")).toBe("my-plugin")
+  })
+
+  test("extracts name from npm package with version", () => {
+    expect(Config.getPluginName("oh-my-opencode@2.4.3")).toBe("oh-my-opencode")
+    expect(Config.getPluginName("some-plugin@1.0.0")).toBe("some-plugin")
+    expect(Config.getPluginName("plugin@latest")).toBe("plugin")
+  })
+
+  test("extracts name from scoped npm package", () => {
+    expect(Config.getPluginName("@scope/pkg@1.0.0")).toBe("@scope/pkg")
+    expect(Config.getPluginName("@opencode/plugin@2.0.0")).toBe("@opencode/plugin")
+  })
+
+  test("returns full string for package without version", () => {
+    expect(Config.getPluginName("some-plugin")).toBe("some-plugin")
+    expect(Config.getPluginName("@scope/pkg")).toBe("@scope/pkg")
+  })
+})
+
+describe("deduplicatePlugins", () => {
+  test("removes duplicates keeping higher priority (later entries)", () => {
+    const plugins = ["global-plugin@1.0.0", "shared-plugin@1.0.0", "local-plugin@2.0.0", "shared-plugin@2.0.0"]
+
+    const result = Config.deduplicatePlugins(plugins)
+
+    expect(result).toContain("global-plugin@1.0.0")
+    expect(result).toContain("local-plugin@2.0.0")
+    expect(result).toContain("shared-plugin@2.0.0")
+    expect(result).not.toContain("shared-plugin@1.0.0")
+    expect(result.length).toBe(3)
+  })
+
+  test("prefers local file over npm package with same name", () => {
+    const plugins = ["oh-my-opencode@2.4.3", "file:///project/.opencode/plugin/oh-my-opencode.js"]
+
+    const result = Config.deduplicatePlugins(plugins)
+
+    expect(result.length).toBe(1)
+    expect(result[0]).toBe("file:///project/.opencode/plugin/oh-my-opencode.js")
+  })
+
+  test("preserves order of remaining plugins", () => {
+    const plugins = ["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"]
+
+    const result = Config.deduplicatePlugins(plugins)
+
+    expect(result).toEqual(["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"])
+  })
+
+  test("local plugin directory overrides global opencode.json plugin", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const projectDir = path.join(dir, "project")
+        const opencodeDir = path.join(projectDir, ".opencode")
+        const pluginDir = path.join(opencodeDir, "plugin")
+        await fs.mkdir(pluginDir, { recursive: true })
+
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            plugin: ["my-plugin@1.0.0"],
+          }),
+        )
+
+        await Bun.write(path.join(pluginDir, "my-plugin.js"), "export default {}")
+      },
+    })
+
+    await Instance.provide({
+      directory: path.join(tmp.path, "project"),
+      fn: async () => {
+        const config = await Config.get()
+        const plugins = config.plugin ?? []
+
+        const myPlugins = plugins.filter((p) => Config.getPluginName(p) === "my-plugin")
+        expect(myPlugins.length).toBe(1)
+        expect(myPlugins[0].startsWith("file://")).toBe(true)
+      },
+    })
+  })
 })
