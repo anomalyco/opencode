@@ -30,26 +30,12 @@ export namespace SessionCompaction {
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
     if (config.compaction?.auto === false) return false
-    const inputLimit = input.model.limit.input
-    if (inputLimit && inputLimit > 0) return isOverflowWithInputLimit(input)
     const context = input.model.limit.context
     if (context === 0) return false
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
     const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
-    const usable = context - output
+    const usable = input.model.limit.input || context - output
     return count > usable
-  }
-
-  function isOverflowWithInputLimit(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
-    const inputTokens = input.tokens.input + input.tokens.cache.read
-    const outputTokens = input.tokens.output
-    const inputLimit = input.model.limit.input ?? 0
-    const outputLimit =
-      Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
-    if (inputTokens > inputLimit) return true
-    if (outputTokens > outputLimit) return true
-    if (input.model.limit.context > 0 && inputTokens + outputTokens > input.model.limit.context) return true
-    return false
   }
 
   export const PRUNE_MINIMUM = 20_000
