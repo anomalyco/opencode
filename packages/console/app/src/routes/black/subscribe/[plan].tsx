@@ -1,4 +1,4 @@
-import { A, action, createAsync, json, query, redirect, useParams } from "@solidjs/router"
+import { A, createAsync, query, redirect, useParams } from "@solidjs/router"
 import { Title } from "@solidjs/meta"
 import { createEffect, createSignal, For, Match, Show, Switch } from "solid-js"
 import { type Stripe, type PaymentMethod, loadStripe } from "@stripe/stripe-js"
@@ -35,6 +35,7 @@ const getWorkspaces = query(async () => {
             paymentMethodType: BillingTable.paymentMethodType,
             paymentMethodLast4: BillingTable.paymentMethodLast4,
             subscriptionID: BillingTable.subscriptionID,
+            timeSubscriptionBooked: BillingTable.timeSubscriptionBooked,
           },
         })
         .from(UserTable)
@@ -86,6 +87,14 @@ const createSetupIntent = async (input: { plan: string; workspaceID: string }) =
         },
       })
       customerID = customer.id
+      await Database.use((tx) =>
+        tx
+          .update(BillingTable)
+          .set({
+            customerID,
+          })
+          .where(eq(BillingTable.workspaceID, workspaceID)),
+      )
     }
 
     const intent = await Billing.stripe().setupIntents.create({
@@ -135,8 +144,7 @@ interface SuccessData {
 function Failure(props: { message: string }) {
   return (
     <div data-slot="failure">
-      <p data-slot="title">Uh oh, something went wrong</p>
-      <p data-slot="message">{props.message}</p>
+      <p data-slot="message">Uh oh! {props.message}</p>
     </div>
   )
 }
@@ -197,7 +205,7 @@ function IntentForm(props: { plan: PlanID; workspaceID: string; onSuccess: (data
     const { error: confirmError, setupIntent } = await stripe()!.confirmSetup({
       elements: elements()!,
       confirmParams: {
-        expand: ["setup_intent.payment_method"],
+        expand: ["payment_method"],
         payment_method_data: {
           allow_redisplay: "always",
         },
@@ -211,6 +219,8 @@ function IntentForm(props: { plan: PlanID; workspaceID: string; onSuccess: (data
       return
     }
 
+    // TODO
+    console.log(setupIntent)
     if (setupIntent?.status === "succeeded") {
       const pm = setupIntent.payment_method as PaymentMethod
 
@@ -274,7 +284,7 @@ export default function BlackSubscribe() {
   })
 
   // Fetch setup intent when workspace is selected (unless workspace already has payment method)
-  createEffect(() => {
+  createEffect(async () => {
     const id = selectedWorkspace()
     if (!id) return
 
@@ -284,6 +294,15 @@ export default function BlackSubscribe() {
       return
     }
     if (ws?.billing?.paymentMethodID) {
+      if (!ws?.billing?.timeSubscriptionBooked) {
+        await bookSubscription({
+          workspaceID: id,
+          plan: planData.id,
+          paymentMethodID: ws.billing.paymentMethodID!,
+          paymentMethodType: ws.billing.paymentMethodType!,
+          paymentMethodLast4: ws.billing.paymentMethodLast4 ?? undefined,
+        })
+      }
       setSuccess({
         plan: planData.id,
         paymentMethodType: ws.billing.paymentMethodType!,
@@ -292,15 +311,12 @@ export default function BlackSubscribe() {
       return
     }
 
-    createSetupIntent({ plan, workspaceID: id })
-      .then((data) => {
-        if (data.error) {
-          setFailure(data.error)
-        } else if ("clientSecret" in data) {
-          setClientSecret(data.clientSecret)
-        }
-      })
-      .catch(() => setFailure("Failed to initialize payment"))
+    const result = await createSetupIntent({ plan, workspaceID: id })
+    if (result.error) {
+      setFailure(result.error)
+    } else if ("clientSecret" in result) {
+      setClientSecret(result.clientSecret)
+    }
   })
 
   // Keyboard navigation for workspace picker
