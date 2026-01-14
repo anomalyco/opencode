@@ -68,6 +68,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         sessionTabs: {} as Record<string, SessionTabs>,
         sessionView: {} as Record<string, SessionView>,
+        links: {
+          openExternally: true,
+        },
       }),
     )
 
@@ -266,6 +269,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       )
     })
 
+    // Sync openLinksExternally setting to window.__OPENCODE__ for desktop app
+    createEffect(() => {
+      const value = store.links?.openExternally ?? true
+      window.__OPENCODE__ ??= {}
+      window.__OPENCODE__.openLinksExternally = value
+    })
+
     return {
       ready,
       projects: {
@@ -341,6 +351,24 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         toggle() {
           setStore("mobileSidebar", "opened", (x) => !x)
+        },
+      },
+      links: {
+        openExternally: createMemo(() => store.links?.openExternally ?? true),
+        setOpenExternally(value: boolean) {
+          if (!store.links) {
+            setStore("links", { openExternally: value })
+            return
+          }
+          setStore("links", "openExternally", value)
+        },
+        toggle() {
+          const current = store.links?.openExternally ?? true
+          if (!store.links) {
+            setStore("links", { openExternally: !current })
+            return
+          }
+          setStore("links", "openExternally", !current)
         },
       },
       view(sessionKey: string) {

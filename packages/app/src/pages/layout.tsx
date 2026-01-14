@@ -599,6 +599,12 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+shift+t",
         onSelect: () => cycleTheme(1),
       },
+      {
+        id: "links.toggle-external",
+        title: layout.links.openExternally() ? "Open links in app" : "Open links in browser",
+        category: "Settings",
+        onSelect: () => layout.links.toggle(),
+      },
     ]
 
     for (const [id, definition] of availableThemeEntries()) {
@@ -1236,6 +1242,23 @@ export default function Layout(props: ParentProps) {
               <Show when={expanded()}>Share feedback</Show>
             </Button>
           </Tooltip>
+          <Show when={platform.platform === "desktop"}>
+            <Tooltip
+              placement="right"
+              value={layout.links.openExternally() ? "Links open in browser" : "Links open in app"}
+              inactive={expanded()}
+            >
+              <Button
+                class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
+                variant="ghost"
+                size="large"
+                icon={layout.links.openExternally() ? "square-arrow-top-right" : "window-cursor"}
+                onClick={() => layout.links.toggle()}
+              >
+                <Show when={expanded()}>{layout.links.openExternally() ? "Links: Browser" : "Links: In-app"}</Show>
+              </Button>
+            </Tooltip>
+          </Show>
         </div>
       </div>
     )

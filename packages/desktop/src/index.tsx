@@ -292,12 +292,23 @@ root?.addEventListener("mousewheel", (e) => {
   e.stopPropagation()
 })
 
-// Handle external links - open in system browser instead of webview
-document.addEventListener("click", (e) => {
-  const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
-  if (link?.href) {
+// Intercept all link clicks and open external URLs in system browser
+root?.addEventListener("click", (e) => {
+  const anchor = (e.target as HTMLElement).closest("a")
+  if (!anchor) return
+
+  const href = anchor.getAttribute("href")
+  if (!href) return
+
+  // Only intercept external URLs (http/https)
+  if (href.startsWith("http://") || href.startsWith("https://")) {
+    // Check if user wants to open links externally (default: true)
+    const openExternally = window.__OPENCODE__?.openLinksExternally ?? true
+    if (!openExternally) return
+
     e.preventDefault()
-    platform.openLink(link.href)
+    e.stopPropagation()
+    void shellOpen(href).catch(() => undefined)
   }
 })
 
