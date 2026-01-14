@@ -416,10 +416,8 @@ export namespace Provider {
             ...(providerConfig?.options?.featureFlags || {}),
           },
         },
-        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string, options?: { anthropicModel?: string }) {
-          const anthropicModel = options?.anthropicModel
+        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
           return sdk.agenticChat(modelID, {
-            anthropicModel,
             featureFlags: {
               duo_agent_platform_agentic_chat: true,
               duo_agent_platform: true,
