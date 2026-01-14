@@ -183,3 +183,253 @@ test("returns empty array when no skills exist", async () => {
     },
   })
 })
+
+test("discovers skills from custom paths in config", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      // Custom paths use {skill,skills}/**/SKILL.md glob pattern
+      const customDir = path.join(dir, "my-custom-skills", "skill", "custom-skill")
+      await Bun.write(
+        path.join(customDir, "SKILL.md"),
+        `---
+name: custom-skill
+description: A skill from a custom directory.
+---
+
+# Custom Skill
+`,
+      )
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          skill: {
+            dirs: ["my-custom-skills"],
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      expect(skills.length).toBe(1)
+      const skill = skills.find((s) => s.name === "custom-skill")
+      expect(skill).toBeDefined()
+      expect(skill!.description).toBe("A skill from a custom directory.")
+    },
+  })
+})
+
+test("resolves relative custom skill paths from project directory", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      // Custom paths use {skill,skills}/**/SKILL.md glob pattern
+      const customDir = path.join(dir, "custom-skills", "skills", "relative-skill")
+      await Bun.write(
+        path.join(customDir, "SKILL.md"),
+        `---
+name: relative-skill
+description: A skill from a relative path.
+---
+
+# Relative Skill
+`,
+      )
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          skill: {
+            dirs: ["./custom-skills"],
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      expect(skills.length).toBe(1)
+      const skill = skills.find((s) => s.name === "relative-skill")
+      expect(skill).toBeDefined()
+      expect(skill!.location).toContain("custom-skills/skills/relative-skill/SKILL.md")
+    },
+  })
+})
+
+test("expands ~ in custom skill paths", async () => {
+  await using tmp = await tmpdir({ git: true })
+
+  const original = process.env.OPENCODE_TEST_HOME
+  process.env.OPENCODE_TEST_HOME = tmp.path
+
+  try {
+    // Custom paths use {skill,skills}/**/SKILL.md glob pattern
+    const homeSkillDir = path.join(tmp.path, "test-skills", "skill", "home-skill")
+    await fs.mkdir(homeSkillDir, { recursive: true })
+    await Bun.write(
+      path.join(homeSkillDir, "SKILL.md"),
+      `---
+name: home-skill
+description: A skill from home directory expansion.
+---
+
+# Home Skill
+`,
+    )
+    await Bun.write(
+      path.join(tmp.path, "opencode.json"),
+      JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        skill: {
+          dirs: ["~/test-skills"],
+        },
+      }),
+    )
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const skills = await Skill.all()
+        expect(skills.length).toBe(1)
+        const skill = skills.find((s) => s.name === "home-skill")
+        expect(skill).toBeDefined()
+        expect(skill!.description).toBe("A skill from home directory expansion.")
+      },
+    })
+  } finally {
+    process.env.OPENCODE_TEST_HOME = original
+  }
+})
+
+test("handles absolute custom skill paths", async () => {
+  await using tmp = await tmpdir({ git: true })
+
+  // Custom paths use {skill,skills}/**/SKILL.md glob pattern
+  const absoluteDir = path.join(tmp.path, "absolute-skills", "skill", "abs-skill")
+  await fs.mkdir(absoluteDir, { recursive: true })
+  await Bun.write(
+    path.join(absoluteDir, "SKILL.md"),
+    `---
+name: abs-skill
+description: A skill from an absolute path.
+---
+
+# Absolute Skill
+`,
+  )
+  await Bun.write(
+    path.join(tmp.path, "opencode.json"),
+    JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      skill: {
+        dirs: [path.join(tmp.path, "absolute-skills")],
+      },
+    }),
+  )
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      expect(skills.length).toBe(1)
+      const skill = skills.find((s) => s.name === "abs-skill")
+      expect(skill).toBeDefined()
+      expect(skill!.location).toContain("absolute-skills/skill/abs-skill/SKILL.md")
+    },
+  })
+})
+
+test("gracefully skips non-existent custom paths", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "existing-skill")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: existing-skill
+description: An existing skill.
+---
+
+# Existing Skill
+`,
+      )
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          skill: {
+            dirs: ["non-existent-path", "another-missing-dir"],
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      expect(skills.length).toBe(1)
+      expect(skills[0].name).toBe("existing-skill")
+    },
+  })
+})
+
+test("merges custom paths with default paths", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const defaultDir = path.join(dir, ".opencode", "skill", "default-skill")
+      await Bun.write(
+        path.join(defaultDir, "SKILL.md"),
+        `---
+name: default-skill
+description: A skill from default path.
+---
+
+# Default Skill
+`,
+      )
+      // Custom paths use {skill,skills}/**/SKILL.md glob pattern
+      const customDir = path.join(dir, "custom-skills", "skill", "custom-skill")
+      await Bun.write(
+        path.join(customDir, "SKILL.md"),
+        `---
+name: custom-skill
+description: A skill from custom path.
+---
+
+# Custom Skill
+`,
+      )
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          skill: {
+            dirs: ["custom-skills"],
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      expect(skills.length).toBe(2)
+      expect(skills.find((s) => s.name === "default-skill")).toBeDefined()
+      expect(skills.find((s) => s.name === "custom-skill")).toBeDefined()
+    },
+  })
+})
