@@ -233,7 +233,10 @@ export namespace Session {
   }
 
   export function plan(input: { slug: string; time: { created: number } }) {
-    return path.join(Instance.worktree, ".opencode", "plans", [input.time.created, input.slug].join("-") + ".md")
+    // Use Instance.directory when worktree is "/" (non-git project) to avoid
+    // creating files at root directory (e.g., /.opencode/plans/...)
+    const base = Instance.worktree === "/" ? Instance.directory : Instance.worktree
+    return path.join(base, ".opencode", "plans", [input.time.created, input.slug].join("-") + ".md")
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
