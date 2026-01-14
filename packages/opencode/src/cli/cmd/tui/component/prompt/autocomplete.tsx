@@ -160,9 +160,7 @@ export function Autocomplete(props: {
 
     props.setPrompt((draft) => {
       if (part.type === "file") {
-        const existingIndex = draft.parts.findIndex(
-          (p) => p.type === "file" && "url" in p && p.url === part.url,
-        )
+        const existingIndex = draft.parts.findIndex((p) => p.type === "file" && "url" in p && p.url === part.url)
         if (existingIndex !== -1) {
           const existing = draft.parts[existingIndex]
           if (
