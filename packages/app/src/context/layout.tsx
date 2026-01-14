@@ -1,12 +1,13 @@
 import { createStore, produce } from "solid-js/store"
-import { batch, createEffect, createMemo, onMount } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { useServer } from "./server"
 import { Project } from "@opencode-ai/sdk/v2"
-import { persisted } from "@/utils/persist"
+import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { same } from "@/utils/same"
+import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
@@ -29,14 +30,11 @@ type SessionTabs = {
   all: string[]
 }
 
-type SessionScroll = {
-  x: number
-  y: number
-}
-
 type SessionView = {
   scroll: Record<string, SessionScroll>
   reviewOpen?: string[]
+  terminalOpened?: boolean
+  reviewPanelOpened?: boolean
 }
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
@@ -50,18 +48,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const globalSync = useGlobalSync()
     const server = useServer()
     const [store, setStore, _, ready] = persisted(
-      "layout.v6",
+      Persist.global("layout", ["layout.v6"]),
       createStore({
         sidebar: {
           opened: false,
           width: 280,
         },
         terminal: {
-          opened: false,
           height: 280,
         },
         review: {
-          opened: true,
           diffStyle: "split" as ReviewDiffStyle,
         },
         session: {
@@ -74,6 +70,121 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         sessionView: {} as Record<string, SessionView>,
       }),
     )
+
+    const MAX_SESSION_KEYS = 50
+    const meta = { active: undefined as string | undefined, pruned: false }
+    const used = new Map<string, number>()
+
+    const SESSION_STATE_KEYS = [
+      { key: "prompt", legacy: "prompt", version: "v2" },
+      { key: "terminal", legacy: "terminal", version: "v1" },
+      { key: "file-view", legacy: "file", version: "v1" },
+    ] as const
+
+    const dropSessionState = (keys: string[]) => {
+      for (const key of keys) {
+        const parts = key.split("/")
+        const dir = parts[0]
+        const session = parts[1]
+        if (!dir) continue
+
+        for (const entry of SESSION_STATE_KEYS) {
+          const target = session ? Persist.session(dir, session, entry.key) : Persist.workspace(dir, entry.key)
+          void removePersisted(target)
+
+          const legacyKey = `${dir}/${entry.legacy}${session ? "/" + session : ""}.${entry.version}`
+          void removePersisted({ key: legacyKey })
+        }
+      }
+    }
+
+    function prune(keep?: string) {
+      if (!keep) return
+
+      const keys = new Set<string>()
+      for (const key of Object.keys(store.sessionView)) keys.add(key)
+      for (const key of Object.keys(store.sessionTabs)) keys.add(key)
+      if (keys.size <= MAX_SESSION_KEYS) return
+
+      const score = (key: string) => {
+        if (key === keep) return Number.MAX_SAFE_INTEGER
+        return used.get(key) ?? 0
+      }
+
+      const ordered = Array.from(keys).sort((a, b) => score(b) - score(a))
+      const drop = ordered.slice(MAX_SESSION_KEYS)
+      if (drop.length === 0) return
+
+      setStore(
+        produce((draft) => {
+          for (const key of drop) {
+            delete draft.sessionView[key]
+            delete draft.sessionTabs[key]
+          }
+        }),
+      )
+
+      scroll.drop(drop)
+      dropSessionState(drop)
+
+      for (const key of drop) {
+        used.delete(key)
+      }
+    }
+
+    function touch(sessionKey: string) {
+      meta.active = sessionKey
+      used.set(sessionKey, Date.now())
+
+      if (!ready()) return
+      if (meta.pruned) return
+
+      meta.pruned = true
+      prune(sessionKey)
+    }
+
+    const scroll = createScrollPersistence({
+      debounceMs: 250,
+      getSnapshot: (sessionKey) => store.sessionView[sessionKey]?.scroll,
+      onFlush: (sessionKey, next) => {
+        const current = store.sessionView[sessionKey]
+        const keep = meta.active ?? sessionKey
+        if (!current) {
+          setStore("sessionView", sessionKey, { scroll: next, terminalOpened: false, reviewPanelOpened: true })
+          prune(keep)
+          return
+        }
+
+        setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...(prev ?? {}), ...next }))
+        prune(keep)
+      },
+    })
+
+    createEffect(() => {
+      if (!ready()) return
+      if (meta.pruned) return
+      const active = meta.active
+      if (!active) return
+      meta.pruned = true
+      prune(active)
+    })
+
+    onMount(() => {
+      const flush = () => batch(() => scroll.flushAll())
+      const handleVisibility = () => {
+        if (document.visibilityState !== "hidden") return
+        flush()
+      }
+
+      window.addEventListener("pagehide", flush)
+      document.addEventListener("visibilitychange", handleVisibility)
+
+      onCleanup(() => {
+        window.removeEventListener("pagehide", flush)
+        document.removeEventListener("visibilitychange", handleVisibility)
+        scroll.dispose()
+      })
+    })
 
     const usedColors = new Set<AvatarColorKey>()
 
@@ -195,39 +306,19 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       },
       terminal: {
-        opened: createMemo(() => store.terminal.opened),
-        open() {
-          setStore("terminal", "opened", true)
-        },
-        close() {
-          setStore("terminal", "opened", false)
-        },
-        toggle() {
-          setStore("terminal", "opened", (x) => !x)
-        },
         height: createMemo(() => store.terminal.height),
         resize(height: number) {
           setStore("terminal", "height", height)
         },
       },
       review: {
-        opened: createMemo(() => store.review?.opened ?? true),
         diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
           if (!store.review) {
-            setStore("review", { opened: true, diffStyle })
+            setStore("review", { diffStyle })
             return
           }
           setStore("review", "diffStyle", diffStyle)
-        },
-        open() {
-          setStore("review", "opened", true)
-        },
-        close() {
-          setStore("review", "opened", false)
-        },
-        toggle() {
-          setStore("review", "opened", (x) => !x)
         },
       },
       session: {
@@ -253,28 +344,78 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       },
       view(sessionKey: string) {
+        touch(sessionKey)
+        scroll.seed(sessionKey)
         const s = createMemo(() => store.sessionView[sessionKey] ?? { scroll: {} })
+        const terminalOpened = createMemo(() => s().terminalOpened ?? false)
+        const reviewPanelOpened = createMemo(() => s().reviewPanelOpened ?? true)
+
+        function setTerminalOpened(next: boolean) {
+          const current = store.sessionView[sessionKey]
+          if (!current) {
+            setStore("sessionView", sessionKey, { scroll: {}, terminalOpened: next, reviewPanelOpened: true })
+            return
+          }
+
+          const value = current.terminalOpened ?? false
+          if (value === next) return
+          setStore("sessionView", sessionKey, "terminalOpened", next)
+        }
+
+        function setReviewPanelOpened(next: boolean) {
+          const current = store.sessionView[sessionKey]
+          if (!current) {
+            setStore("sessionView", sessionKey, { scroll: {}, terminalOpened: false, reviewPanelOpened: next })
+            return
+          }
+
+          const value = current.reviewPanelOpened ?? true
+          if (value === next) return
+          setStore("sessionView", sessionKey, "reviewPanelOpened", next)
+        }
+
         return {
           scroll(tab: string) {
-            return s().scroll?.[tab]
+            return scroll.scroll(sessionKey, tab)
           },
           setScroll(tab: string, pos: SessionScroll) {
-            const current = store.sessionView[sessionKey]
-            if (!current) {
-              setStore("sessionView", sessionKey, { scroll: { [tab]: pos } })
-              return
-            }
-
-            const prev = current.scroll?.[tab]
-            if (prev?.x === pos.x && prev?.y === pos.y) return
-            setStore("sessionView", sessionKey, "scroll", tab, pos)
+            scroll.setScroll(sessionKey, tab, pos)
+          },
+          terminal: {
+            opened: terminalOpened,
+            open() {
+              setTerminalOpened(true)
+            },
+            close() {
+              setTerminalOpened(false)
+            },
+            toggle() {
+              setTerminalOpened(!terminalOpened())
+            },
+          },
+          reviewPanel: {
+            opened: reviewPanelOpened,
+            open() {
+              setReviewPanelOpened(true)
+            },
+            close() {
+              setReviewPanelOpened(false)
+            },
+            toggle() {
+              setReviewPanelOpened(!reviewPanelOpened())
+            },
           },
           review: {
             open: createMemo(() => s().reviewOpen),
             setOpen(open: string[]) {
               const current = store.sessionView[sessionKey]
               if (!current) {
-                setStore("sessionView", sessionKey, { scroll: {}, reviewOpen: open })
+                setStore("sessionView", sessionKey, {
+                  scroll: {},
+                  terminalOpened: false,
+                  reviewPanelOpened: true,
+                  reviewOpen: open,
+                })
                 return
               }
 
@@ -285,6 +426,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }
       },
       tabs(sessionKey: string) {
+        touch(sessionKey)
         const tabs = createMemo(() => store.sessionTabs[sessionKey] ?? { all: [] })
         return {
           tabs,

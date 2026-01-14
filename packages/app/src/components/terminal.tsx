@@ -1,9 +1,9 @@
-import { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
+import type { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
 import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
-import { resolveThemeVariant, useTheme } from "@opencode-ai/ui/theme"
+import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
@@ -16,6 +16,7 @@ type TerminalColors = {
   background: string
   foreground: string
   cursor: string
+  selectionBackground: string
 }
 
 const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
@@ -23,11 +24,13 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
     background: "#fcfcfc",
     foreground: "#211e1e",
     cursor: "#211e1e",
+    selectionBackground: withAlpha("#211e1e", 0.2),
   },
   dark: {
     background: "#191515",
     foreground: "#d4d4d4",
     cursor: "#d4d4d4",
+    selectionBackground: withAlpha("#d4d4d4", 0.25),
   },
 }
 
@@ -42,6 +45,8 @@ export const Terminal = (props: TerminalProps) => {
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
   let handleResize: () => void
+  let handleTextareaFocus: () => void
+  let handleTextareaBlur: () => void
   let reconnect: number | undefined
   let disposed = false
 
@@ -53,12 +58,16 @@ export const Terminal = (props: TerminalProps) => {
     const variant = mode === "dark" ? currentTheme.dark : currentTheme.light
     if (!variant?.seeds) return fallback
     const resolved = resolveThemeVariant(variant, mode === "dark")
-    const text = resolved["text-base"] ?? fallback.foreground
+    const text = resolved["text-stronger"] ?? fallback.foreground
     const background = resolved["background-stronger"] ?? fallback.background
+    const alpha = mode === "dark" ? 0.25 : 0.2
+    const base = text.startsWith("#") ? (text as HexColor) : (fallback.foreground as HexColor)
+    const selectionBackground = withAlpha(base, alpha)
     return {
       background,
       foreground: text,
       cursor: text,
+      selectionBackground,
     }
   }
 
@@ -73,29 +82,11 @@ export const Terminal = (props: TerminalProps) => {
     setOption("theme", colors)
   })
 
-  const focusTerminal = () => term?.focus()
-  const copySelection = () => {
-    if (!term || !term.hasSelection()) return false
-    const selection = term.getSelection()
-    if (!selection) return false
-    if (document.body) {
-      const textarea = document.createElement("textarea")
-      textarea.value = selection
-      textarea.setAttribute("readonly", "")
-      textarea.style.position = "fixed"
-      textarea.style.opacity = "0"
-      document.body.appendChild(textarea)
-      textarea.select()
-      const copied = document.execCommand("copy")
-      document.body.removeChild(textarea)
-      if (copied) return true
-    }
-    const clipboard = navigator.clipboard
-    if (clipboard?.writeText) {
-      clipboard.writeText(selection).catch(() => {})
-      return true
-    }
-    return false
+  const focusTerminal = () => {
+    const t = term
+    if (!t) return
+    t.focus()
+    setTimeout(() => t.textarea?.focus(), 0)
   }
   const handlePointerDown = () => {
     const activeElement = document.activeElement
@@ -106,15 +97,20 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   onMount(async () => {
-    ghostty = await Ghostty.load()
+    const mod = await import("ghostty-web")
+    ghostty = await mod.Ghostty.load()
 
-    const socket = new WebSocket(
-      sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`,
-    )
+    const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+    if (window.__OPENCODE__?.serverPassword) {
+      url.username = "opencode"
+      url.password = window.__OPENCODE__?.serverPassword
+    }
+    const socket = new WebSocket(url)
     ws = socket
 
-    const t = new Term({
+    const t = new mod.Terminal({
       cursorBlink: true,
+      cursorStyle: "bar",
       fontSize: 14,
       fontFamily: "IBM Plex Mono, monospace",
       allowTransparency: true,
@@ -124,38 +120,79 @@ export const Terminal = (props: TerminalProps) => {
     })
     term = t
 
-    t.attachCustomKeyEventHandler((event) => {
-      const key = event.key.toLowerCase()
-      if (key === "c") {
-        const macCopy = event.metaKey && !event.ctrlKey && !event.altKey
-        const linuxCopy = event.ctrlKey && event.shiftKey && !event.metaKey
-        if ((macCopy || linuxCopy) && copySelection()) {
-          event.preventDefault()
-          return true
-        }
+    const copy = () => {
+      const selection = t.getSelection()
+      if (!selection) return false
+
+      const body = document.body
+      if (body) {
+        const textarea = document.createElement("textarea")
+        textarea.value = selection
+        textarea.setAttribute("readonly", "")
+        textarea.style.position = "fixed"
+        textarea.style.opacity = "0"
+        body.appendChild(textarea)
+        textarea.select()
+        const copied = document.execCommand("copy")
+        body.removeChild(textarea)
+        if (copied) return true
       }
-      // allow for ctrl-` to toggle terminal in parent
-      if (event.ctrlKey && key === "`") {
-        event.preventDefault()
+
+      const clipboard = navigator.clipboard
+      if (clipboard?.writeText) {
+        clipboard.writeText(selection).catch(() => {})
         return true
       }
+
+      return false
+    }
+
+    t.attachCustomKeyEventHandler((event) => {
+      const key = event.key.toLowerCase()
+
+      if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
+        copy()
+        return true
+      }
+
+      if (event.metaKey && !event.ctrlKey && !event.altKey && key === "c") {
+        if (!t.hasSelection()) return true
+        copy()
+        return true
+      }
+
+      // allow for ctrl-` to toggle terminal in parent
+      if (event.ctrlKey && key === "`") {
+        return true
+      }
+
       return false
     })
 
-    fitAddon = new FitAddon()
+    fitAddon = new mod.FitAddon()
     serializeAddon = new SerializeAddon()
     t.loadAddon(serializeAddon)
     t.loadAddon(fitAddon)
 
     t.open(container)
     container.addEventListener("pointerdown", handlePointerDown)
+
+    handleTextareaFocus = () => {
+      t.options.cursorBlink = true
+    }
+    handleTextareaBlur = () => {
+      t.options.cursorBlink = false
+    }
+
+    t.textarea?.addEventListener("focus", handleTextareaFocus)
+    t.textarea?.addEventListener("blur", handleTextareaBlur)
+
     focusTerminal()
 
     if (local.pty.buffer) {
       if (local.pty.rows && local.pty.cols) {
         t.resize(local.pty.cols, local.pty.rows)
       }
-      t.reset()
       t.write(local.pty.buffer, () => {
         if (local.pty.scrollY) {
           t.scrollToLine(local.pty.scrollY)
@@ -222,6 +259,8 @@ export const Terminal = (props: TerminalProps) => {
       window.removeEventListener("resize", handleResize)
     }
     container.removeEventListener("pointerdown", handlePointerDown)
+    term?.textarea?.removeEventListener("focus", handleTextareaFocus)
+    term?.textarea?.removeEventListener("blur", handleTextareaBlur)
 
     const t = term
     if (serializeAddon && props.onCleanup && t) {

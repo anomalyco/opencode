@@ -12,6 +12,7 @@ import { fn } from "@opencode-ai/util/fn"
 import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
+import { existsSync } from "fs"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -199,6 +200,7 @@ export namespace Project {
       },
     }
     if (sandbox !== result.worktree && !result.sandboxes.includes(sandbox)) result.sandboxes.push(sandbox)
+    result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
     await Storage.write<Info>(["project", id], result)
     GlobalBus.emit("event", {
       payload: {
