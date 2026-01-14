@@ -20,6 +20,7 @@ opencode.json
 a.out
 target
 .scripts
+AGENTS.md
 
 # Local dev files
 opencode-dev
