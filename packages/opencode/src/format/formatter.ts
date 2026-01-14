@@ -2,7 +2,6 @@ import { readableStreamToText } from "bun"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
-import { Flag } from "@/flag/flag"
 
 export interface Info {
   name: string
@@ -81,9 +80,36 @@ export const oxfmt: Info = {
   environment: {
     BUN_BE_BUN: "1",
   },
-  extensions: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"],
+  extensions: [
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".tsx",
+    ".mts",
+    ".cts",
+    ".json",
+    ".jsonc",
+    ".html",
+    ".vue",
+    ".css",
+    ".scss",
+    ".less",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".md",
+    ".mdx",
+    ".graphql",
+    ".gql",
+  ],
   async enabled() {
-    if (!Flag.OPENCODE_EXPERIMENTAL_OXFMT) return false
+    const configs = [".oxfmtrc.json", ".oxfmtrc.jsonc"]
+    for (const config of configs) {
+      const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
+      if (found.length > 0) return true
+    }
     const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
     for (const item of items) {
       const json = await Bun.file(item).json()
