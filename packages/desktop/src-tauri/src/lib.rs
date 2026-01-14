@@ -241,7 +241,21 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(PinchZoomDisablePlugin)
+        .plugin(PinchZoomDisablePlugin);
+
+    // MCP plugin for AI agent debugging (development only)
+    #[cfg(debug_assertions)]
+    {
+        builder = builder.plugin(
+            tauri_plugin_mcp::init_with_config(
+                tauri_plugin_mcp::PluginConfig::new("opencode-desktop".to_string())
+                    .start_socket_server(true)
+                    .socket_path("/tmp/tauri-mcp.sock".into()),
+            ),
+        );
+    }
+
+    builder = builder
         .invoke_handler(tauri::generate_handler![
             kill_sidecar,
             install_cli,
@@ -266,7 +280,7 @@ pub fn run() {
             #[allow(unused_mut)]
             let mut window_builder =
                 WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
-                    .title("OpenCode")
+                    .title("OpenWork")
                     .inner_size(size.width as f64, size.height as f64)
                     .decorations(true)
                     .zoom_hotkeys_enabled(true)

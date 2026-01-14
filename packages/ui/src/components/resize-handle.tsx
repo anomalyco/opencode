@@ -8,6 +8,8 @@ export interface ResizeHandleProps extends Omit<JSX.HTMLAttributes<HTMLDivElemen
   onResize: (size: number) => void
   onCollapse?: () => void
   collapseThreshold?: number
+  /** For right-side or bottom panels, set to true to invert the drag direction */
+  invert?: boolean
 }
 
 export function ResizeHandle(props: ResizeHandleProps) {
@@ -19,6 +21,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
     "onResize",
     "onCollapse",
     "collapseThreshold",
+    "invert",
     "class",
     "classList",
   ])
@@ -34,7 +37,9 @@ export function ResizeHandle(props: ResizeHandleProps) {
 
     const onMouseMove = (moveEvent: MouseEvent) => {
       const pos = local.direction === "horizontal" ? moveEvent.clientX : moveEvent.clientY
-      const delta = local.direction === "vertical" ? start - pos : pos - start
+      // For vertical direction or inverted horizontal (right-side panels), invert the delta
+      const shouldInvert = local.direction === "vertical" || local.invert
+      const delta = shouldInvert ? start - pos : pos - start
       current = startSize + delta
       const clamped = Math.min(local.max, Math.max(local.min, current))
       local.onResize(clamped)
@@ -61,6 +66,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
       {...rest}
       data-component="resize-handle"
       data-direction={local.direction}
+      data-invert={local.invert ? "true" : undefined}
       classList={{
         ...(local.classList ?? {}),
         [local.class ?? ""]: !!local.class,

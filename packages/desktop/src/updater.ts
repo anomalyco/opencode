@@ -17,7 +17,7 @@ export async function runUpdater({ alertOnFail }: { alertOnFail: boolean }) {
 
   if (!update) {
     if (alertOnFail)
-      await message("You are already using the latest version of OpenCode", { title: "No Update Available" })
+      await message("You are already using the latest version of OpenWork", { title: "No Update Available" })
     return
   }
 
@@ -29,7 +29,7 @@ export async function runUpdater({ alertOnFail }: { alertOnFail: boolean }) {
   }
 
   const shouldUpdate = await ask(
-    `Version ${update.version} of OpenCode has been downloaded, would you like to install it and relaunch?`,
+    `Version ${update.version} of OpenWork has been downloaded, would you like to install it and relaunch?`,
     { title: "Update Downloaded" },
   )
   if (!shouldUpdate) return

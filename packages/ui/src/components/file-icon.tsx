@@ -284,6 +284,9 @@ const ICON_MAPS: IconMaps = {
     pptx: "Powerpoint",
     xls: "Document",
     xlsx: "Document",
+    txt: "Document",
+    rtf: "Document",
+    odt: "Document",
 
     // Database files
     sql: "Database",

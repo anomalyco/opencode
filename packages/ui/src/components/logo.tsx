@@ -3,12 +3,22 @@ export const Mark = (props: { class?: string }) => {
     <svg
       data-component="logo-mark"
       classList={{ [props.class ?? ""]: !!props.class }}
-      viewBox="0 0 16 20"
+      viewBox="0 0 72 36"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path data-slot="logo-logo-mark-shadow" d="M12 16H4V8H12V16Z" fill="var(--icon-weak-base)" />
-      <path data-slot="logo-logo-mark-o" d="M12 4H4V16H12V4ZM16 20H0V0H16V20Z" fill="var(--icon-strong-base)" />
+      {/* OpenWork OW Mark - O with chevrons and W wave */}
+      <g stroke="var(--icon-strong-base)" stroke-width="2.5" fill="none">
+        {/* O circle */}
+        <circle cx="18" cy="18" r="12" />
+        {/* Left chevron inside O */}
+        <polyline points="14,13 9,18 14,23" stroke-linecap="round" stroke-linejoin="round" />
+        {/* Right chevron inside O */}
+        <polyline points="22,13 27,18 22,23" stroke-linecap="round" stroke-linejoin="round" />
+        {/* W as stylized wave */}
+        <path d="M36,8 C36,8 40,18 44,18 C48,18 48,8 52,8 C56,8 56,18 60,18 C64,18 68,8 68,8" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M36,28 C36,28 40,18 44,18 C48,18 48,28 52,28 C56,28 56,18 60,18 C64,18 68,28 68,28" stroke-linecap="round" stroke-linejoin="round" />
+      </g>
     </svg>
   )
 }
@@ -21,23 +31,17 @@ export const Logo = (props: { class?: string }) => {
       fill="none"
       classList={{ [props.class ?? ""]: !!props.class }}
     >
-      <g>
-        <path d="M18 30H6V18H18V30Z" fill="var(--icon-weak-base)" />
-        <path d="M18 12H6V30H18V12ZM24 36H0V6H24V36Z" fill="var(--icon-base)" />
-        <path d="M48 30H36V18H48V30Z" fill="var(--icon-weak-base)" />
-        <path d="M36 30H48V12H36V30ZM54 36H36V42H30V6H54V36Z" fill="var(--icon-base)" />
-        <path d="M84 24V30H66V24H84Z" fill="var(--icon-weak-base)" />
-        <path d="M84 24H66V30H84V36H60V6H84V24ZM66 18H78V12H66V18Z" fill="var(--icon-base)" />
-        <path d="M108 36H96V18H108V36Z" fill="var(--icon-weak-base)" />
-        <path d="M108 12H96V36H90V6H108V12ZM114 36H108V12H114V36Z" fill="var(--icon-base)" />
-        <path d="M144 30H126V18H144V30Z" fill="var(--icon-weak-base)" />
-        <path d="M144 12H126V30H144V36H120V6H144V12Z" fill="var(--icon-strong-base)" />
-        <path d="M168 30H156V18H168V30Z" fill="var(--icon-weak-base)" />
-        <path d="M168 12H156V30H168V12ZM174 36H150V6H174V36Z" fill="var(--icon-strong-base)" />
-        <path d="M198 30H186V18H198V30Z" fill="var(--icon-weak-base)" />
-        <path d="M198 12H186V30H198V12ZM204 36H180V6H198V0H204V36Z" fill="var(--icon-strong-base)" />
-        <path d="M234 24V30H216V24H234Z" fill="var(--icon-weak-base)" />
-        <path d="M216 12V18H228V12H216ZM234 24H216V30H234V36H210V6H234V24Z" fill="var(--icon-strong-base)" />
+      {/* OpenWork logo - OW mark only (scaled to fit original viewBox) */}
+      <g stroke="var(--icon-strong-base)" stroke-width="3" fill="none" transform="translate(45, 3)">
+        {/* O circle */}
+        <circle cx="18" cy="18" r="14" />
+        {/* Left chevron inside O */}
+        <polyline points="14,12 8,18 14,24" stroke-linecap="round" stroke-linejoin="round" />
+        {/* Right chevron inside O */}
+        <polyline points="22,12 28,18 22,24" stroke-linecap="round" stroke-linejoin="round" />
+        {/* W as stylized wave */}
+        <path d="M40,6 C40,6 46,18 52,18 C58,18 58,6 64,6 C70,6 70,18 76,18 C82,18 88,6 88,6" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M40,30 C40,30 46,18 52,18 C58,18 58,30 64,30 C70,30 70,18 76,18 C82,18 88,30 88,30" stroke-linecap="round" stroke-linejoin="round" />
       </g>
     </svg>
   )

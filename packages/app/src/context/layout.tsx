@@ -48,11 +48,15 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const globalSync = useGlobalSync()
     const server = useServer()
     const [store, setStore, _, ready] = persisted(
-      Persist.global("layout", ["layout.v6"]),
+      Persist.global("layout", ["layout.v8"]),
       createStore({
         sidebar: {
           opened: false,
           width: 280,
+        },
+        workspaceSidebar: {
+          opened: true,
+          width: 300,
         },
         terminal: {
           height: 280,
@@ -65,6 +69,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         mobileSidebar: {
           opened: false,
+        },
+        filePreview: {
+          opened: false,
+          width: 400,
+          filePath: null as string | null,
         },
         sessionTabs: {} as Record<string, SessionTabs>,
         sessionView: {} as Record<string, SessionView>,
@@ -341,6 +350,68 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         toggle() {
           setStore("mobileSidebar", "opened", (x) => !x)
+        },
+      },
+      workspaceSidebar: {
+        opened: createMemo(() => store.workspaceSidebar?.opened ?? false),
+        open() {
+          if (!store.workspaceSidebar) {
+            setStore("workspaceSidebar", { opened: true, width: 300 })
+            return
+          }
+          setStore("workspaceSidebar", "opened", true)
+        },
+        close() {
+          if (!store.workspaceSidebar) {
+            setStore("workspaceSidebar", { opened: false, width: 300 })
+            return
+          }
+          setStore("workspaceSidebar", "opened", false)
+        },
+        toggle() {
+          if (!store.workspaceSidebar) {
+            setStore("workspaceSidebar", { opened: true, width: 300 })
+            return
+          }
+          setStore("workspaceSidebar", "opened", (x) => !x)
+        },
+        width: createMemo(() => store.workspaceSidebar?.width ?? 300),
+        resize(width: number) {
+          const clampedWidth = Math.max(200, Math.min(600, width))
+          if (!store.workspaceSidebar) {
+            setStore("workspaceSidebar", { opened: false, width: clampedWidth })
+            return
+          }
+          setStore("workspaceSidebar", "width", clampedWidth)
+        },
+      },
+      filePreview: {
+        opened: createMemo(() => store.filePreview?.opened ?? false),
+        filePath: createMemo(() => store.filePreview?.filePath ?? null),
+        width: createMemo(() => store.filePreview?.width ?? 400),
+        open(filePath: string) {
+          if (!store.filePreview) {
+            setStore("filePreview", { opened: true, width: 400, filePath })
+            return
+          }
+          setStore("filePreview", "opened", true)
+          setStore("filePreview", "filePath", filePath)
+        },
+        close() {
+          if (!store.filePreview) {
+            setStore("filePreview", { opened: false, width: 400, filePath: null })
+            return
+          }
+          setStore("filePreview", "opened", false)
+          setStore("filePreview", "filePath", null)
+        },
+        resize(width: number) {
+          const clampedWidth = Math.max(200, Math.min(800, width))
+          if (!store.filePreview) {
+            setStore("filePreview", { opened: false, width: clampedWidth, filePath: null })
+            return
+          }
+          setStore("filePreview", "width", clampedWidth)
         },
       },
       view(sessionKey: string) {

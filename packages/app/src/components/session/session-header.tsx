@@ -200,25 +200,25 @@ export function SessionHeader() {
             </Show>
             <TooltipKeybind
               class="hidden md:block shrink-0"
-              title="Toggle terminal"
-              keybind={command.keybind("terminal.toggle")}
+              title="Toggle workspace files"
+              keybind={command.keybind("workspaceSidebar.toggle")}
             >
-              <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={() => view().terminal.toggle()}>
+              <Button variant="ghost" class="group/files-toggle size-6 p-0" onClick={() => layout.workspaceSidebar.toggle()}>
                 <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                   <Icon
                     size="small"
-                    name={view().terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
-                    class="group-hover/terminal-toggle:hidden"
+                    name={layout.workspaceSidebar.opened() ? "layout-right-full" : "layout-right"}
+                    class="group-hover/files-toggle:hidden"
                   />
                   <Icon
                     size="small"
-                    name="layout-bottom-partial"
-                    class="hidden group-hover/terminal-toggle:inline-block"
+                    name="layout-right-partial"
+                    class="hidden group-hover/files-toggle:inline-block"
                   />
                   <Icon
                     size="small"
-                    name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
-                    class="hidden group-active/terminal-toggle:inline-block"
+                    name={layout.workspaceSidebar.opened() ? "layout-right" : "layout-right-full"}
+                    class="hidden group-active/files-toggle:inline-block"
                   />
                 </div>
               </Button>

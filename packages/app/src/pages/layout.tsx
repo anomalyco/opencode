@@ -549,6 +549,13 @@ export default function Layout(props: ParentProps) {
         onSelect: () => layout.sidebar.toggle(),
       },
       {
+        id: "workspaceSidebar.toggle",
+        title: "Toggle workspace files",
+        category: "View",
+        keybind: "mod+shift+e",
+        onSelect: () => layout.workspaceSidebar.toggle(),
+      },
+      {
         id: "project.open",
         title: "Open project",
         category: "Project",

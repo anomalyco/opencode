@@ -1,11 +1,11 @@
 {
   "$schema": "https://opencode.ai/desktop-theme.json",
-  "name": "OC-1",
-  "id": "oc-1",
+  "name": "OpenWork",
+  "id": "openwork",
   "light": {
     "seeds": {
       "neutral": "#8e8b8b",
-      "primary": "#dcde8d",
+      "primary": "#3d3d3d",
       "success": "#12c905",
       "warning": "#ffdc17",
       "error": "#fc533a",
@@ -15,7 +15,7 @@
       "diffDelete": "#fc533a"
     },
     "overrides": {
-      "background-base": "#f8f7f7",
+      "background-base": "#EEE9DF",
       "background-weak": "var(--smoke-light-3)",
       "background-strong": "var(--smoke-light-1)",
       "background-stronger": "#fcfcfc",

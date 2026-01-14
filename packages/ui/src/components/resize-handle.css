@@ -29,6 +29,13 @@
       inset-inline-start: 50%;
       transform: translateX(-50%);
     }
+
+    /* For right-side panels, position on the left edge */
+    &[data-invert="true"] {
+      inset-inline-end: auto;
+      inset-inline-start: 0;
+      transform: translateX(-50%);
+    }
   }
 
   &[data-direction="vertical"] {

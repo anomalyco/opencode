@@ -50,6 +50,7 @@ import {
   SortableTerminalTab,
   NewSessionView,
 } from "@/components/session"
+import { FilePreviewPanel } from "@/components/file-preview-panel"
 import { usePlatform } from "@/context/platform"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
@@ -1053,7 +1054,7 @@ export default function Page() {
             "flex-1 md:flex-none py-6 md:py-3": true,
           }}
           style={{
-            width: isDesktop() && showTabs() ? `${layout.session.width()}px` : "100%",
+            width: isDesktop() && (showTabs() || layout.filePreview.opened()) ? `${layout.session.width()}px` : "100%",
             "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
           }}
         >
@@ -1252,7 +1253,7 @@ export default function Page() {
             </div>
           </div>
 
-          <Show when={isDesktop() && showTabs()}>
+          <Show when={isDesktop() && (showTabs() || layout.filePreview.opened())}>
             <ResizeHandle
               direction="horizontal"
               size={layout.session.width()}
@@ -1262,6 +1263,11 @@ export default function Page() {
             />
           </Show>
         </div>
+
+        {/* File Preview Panel - shown between session and tabs */}
+        <Show when={isDesktop() && layout.filePreview.opened()}>
+          <FilePreviewPanel />
+        </Show>
 
         {/* Desktop tabs panel (Review + Context + Files) - hidden on mobile */}
         <Show when={isDesktop() && showTabs()}>

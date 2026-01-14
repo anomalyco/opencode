@@ -483,6 +483,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
       onCleanup(unsub)
 
+      // Track if root directory has been loaded
+      let rootLoaded = false
+
       return {
         node: async (path: string) => {
           if (!store.node[path] || !store.node[path].loaded) {
@@ -494,6 +497,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         open,
         load,
         init,
+        // Load root directory files (for workspace sidebar)
+        loadRoot() {
+          if (rootLoaded) return
+          rootLoaded = true
+          list("")
+        },
         expand(path: string) {
           setStore("node", path, "expanded", true)
           if (store.node[path]?.loaded) return

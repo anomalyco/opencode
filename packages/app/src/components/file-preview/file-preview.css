@@ -1,0 +1,135 @@
+/* File Preview Viewer Styles */
+
+[data-component="file-preview"] {
+  background-color: var(--color-background-base);
+}
+
+[data-component="file-preview"] [data-slot="preview-header"] {
+  border-bottom: 1px solid var(--color-border-weak-base);
+}
+
+[data-component="file-preview"] [data-slot="preview-content"] {
+  background-color: var(--color-background-base);
+}
+
+/* Text Preview */
+[data-component="text-preview"] {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  tab-size: 2;
+  color: var(--color-text-base);
+  padding: 1rem;
+}
+
+[data-component="text-preview"] [data-slot="truncation-notice"] {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border-weak-base);
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+/* Markdown Preview */
+[data-component="file-preview"] [data-slot="markdown-wrapper"] {
+  overflow-x: auto;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] h1,
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] h2,
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] h3,
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] h4,
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] h5,
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] h1 {
+  font-size: 1.5em;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] h2 {
+  font-size: 1.25em;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] h3 {
+  font-size: 1.1em;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] p {
+  margin: 1em 0;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] ul,
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] ol {
+  margin: 1em 0;
+  padding-left: 2em;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] li {
+  margin: 0.25em 0;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0.2em 0.4em;
+  background-color: var(--color-background-weak);
+  border-radius: 3px;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] pre {
+  margin: 1em 0;
+  padding: 1em;
+  background-color: var(--color-background-weak);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] pre code {
+  padding: 0;
+  background-color: transparent;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] a {
+  color: var(--color-text-link);
+  text-decoration: underline;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] a:hover {
+  text-decoration: none;
+}
+
+[data-component="file-preview"] [data-slot="markdown-wrapper"] [data-component="markdown"] blockquote {
+  margin: 1em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--color-border-weak-base);
+  color: var(--color-text-muted);
+}
+
+/* HTML Preview */
+[data-component="html-preview"] {
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+}
+
+[data-component="html-preview"] iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  border: none;
+  background-color: white;
+}
