@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "trello": {
+      "command": "python",
+      "args": ["-m", "mcp.server.fastmcp", "server.py"],
+      "env": {
+        "PYTHONPATH": "."
+      }
+    }
+  }
+} 
