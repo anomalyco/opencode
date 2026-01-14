@@ -60,9 +60,15 @@ export namespace BunProc {
     }),
   )
 
-  export async function install(pkg: string, version = "latest") {
+  export async function install(pkg: string, version?: string) {
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
+
+    const isGithub = pkg.startsWith("github:")
+    // GitHub: default to "main" when no version; npm: default to "latest"
+    const pkgVersion = version ?? (isGithub ? "main" : "latest")
+    // Use # for GitHub, @ for npm
+    const pkgArg = isGithub ? `${pkg}#${pkgVersion}` : `${pkg}@${pkgVersion}`
 
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
     const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
@@ -71,7 +77,7 @@ export namespace BunProc {
       await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
       return result
     })
-    if (parsed.dependencies[pkg] === version) return mod
+    if (parsed.dependencies[pkg] === pkgVersion) return mod
 
     const proxied = !!(
       process.env.HTTP_PROXY ||
@@ -89,7 +95,7 @@ export namespace BunProc {
       ...(proxied ? ["--no-cache"] : []),
       "--cwd",
       Global.Path.cache,
-      pkg + "@" + version,
+      pkgArg,
     ]
 
     // Let Bun handle registry resolution:
@@ -98,32 +104,32 @@ export namespace BunProc {
     // - No need to pass --registry flag
     log.info("installing package using Bun's default registry resolution", {
       pkg,
-      version,
+      version: pkgVersion,
     })
 
     await BunProc.run(args, {
       cwd: Global.Path.cache,
     }).catch((e) => {
       throw new InstallFailedError(
-        { pkg, version },
+        { pkg, version: pkgVersion },
         {
           cause: e,
         },
       )
     })
 
-    // Resolve actual version from installed package when using "latest"
+    // For npm packages with "latest", resolve to actual version from installed package
     // This ensures subsequent starts use the cached version until explicitly updated
-    let resolvedVersion = version
-    if (version === "latest") {
+    let finalVersion = pkgVersion
+    if (version === undefined && !isGithub) {
       const installedPkgJson = Bun.file(path.join(mod, "package.json"))
       const installedPkg = await installedPkgJson.json().catch(() => null)
       if (installedPkg?.version) {
-        resolvedVersion = installedPkg.version
+        finalVersion = installedPkg.version
       }
     }
 
-    parsed.dependencies[pkg] = resolvedVersion
+    parsed.dependencies[pkg] = finalVersion
     await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
     return mod
   }
