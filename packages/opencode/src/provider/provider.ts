@@ -399,7 +399,7 @@ export namespace Provider {
         },
       }
     },
-    async gitlab(input) {
+    gitlab: async (input) => {
       const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
 
       const auth = await Auth.get(input.id)
