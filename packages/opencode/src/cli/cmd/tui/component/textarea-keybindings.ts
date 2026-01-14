@@ -14,6 +14,7 @@ const TEXTAREA_ACTIONS = [
   "select-right",
   "select-up",
   "select-down",
+  "select-all",
   "line-home",
   "line-end",
   "select-line-home",

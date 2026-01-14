@@ -674,6 +674,7 @@ export namespace Config {
       input_select_right: z.string().optional().default("shift+right").describe("Select right in input"),
       input_select_up: z.string().optional().default("shift+up").describe("Select up in input"),
       input_select_down: z.string().optional().default("shift+down").describe("Select down in input"),
+      input_select_all: z.string().optional().default("ctrl+shift+a").describe("Select all text in input"),
       input_line_home: z.string().optional().default("ctrl+a").describe("Move to start of line in input"),
       input_line_end: z.string().optional().default("ctrl+e").describe("Move to end of line in input"),
       input_select_line_home: z
