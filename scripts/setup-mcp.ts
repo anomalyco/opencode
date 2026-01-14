@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { $ } from "bun"
 import { existsSync } from "fs"
+import { resolve } from "path"
 
 const MCP_SERVERS = [
   {
@@ -8,19 +9,36 @@ const MCP_SERVERS = [
     path: "/tmp/ShopifyMockMCP",
     repo: "https://github.com/ramakay/ShopifyMockMCP.git",
     description: "Mock.shop Storefront API MCP server",
+    type: "node",
   },
   {
     name: "HydrogenMCP",
     path: "/tmp/HydrogenMCP",
     repo: "https://github.com/ramakay/ShopifyMockMCP.git",
     description: "Hydrogen Demo Store MCP server",
+    type: "node",
+  },
+  {
+    name: "AmazonMCP",
+    path: "mcps/amazon-mcp",
+    repo: "", // Local server, no repo
+    description: "Amazon Products Scraper MCP server",
+    type: "python",
   },
 ]
 
 async function setupMCPServer(server: typeof MCP_SERVERS[0]): Promise<boolean> {
-  const serverExists = existsSync(`${server.path}/dist/server.js`)
+  const serverPath = server.path.startsWith("/") ? server.path : resolve(process.cwd(), server.path)
 
-  if (serverExists) {
+  // Check if already configured
+  let isConfigured = false
+  if (server.type === "node") {
+    isConfigured = existsSync(`${serverPath}/dist/server.js`)
+  } else if (server.type === "python") {
+    isConfigured = existsSync(`${serverPath}/.venv/bin/python`)
+  }
+
+  if (isConfigured) {
     console.log(`✓ ${server.name} already configured`)
     return true
   }
@@ -29,24 +47,47 @@ async function setupMCPServer(server: typeof MCP_SERVERS[0]): Promise<boolean> {
   console.log(`   ${server.description}`)
 
   try {
-    const dirExists = existsSync(server.path)
+    const dirExists = existsSync(serverPath)
 
     if (!dirExists) {
-      console.log(`   → Cloning repository...`)
-      await $`git clone --depth 1 ${server.repo} ${server.path}`.quiet()
+      if (server.repo) {
+        console.log(`   → Cloning repository...`)
+        await $`git clone --depth 1 ${server.repo} ${serverPath}`
+      } else {
+        console.log(`   → Directory ${serverPath} does not exist and no repo provided. Skipping...`)
+        return false
+      }
     } else {
-      console.log(`   → Directory exists, skipping clone...`)
+      console.log(`   → Directory exists...`)
     }
 
-    console.log(`   → Installing dependencies...`)
-    await $`cd ${server.path} && npm install --silent`.quiet()
+    if (server.type === "node") {
+      console.log(`   → Installing dependencies...`)
+      await $`cd ${serverPath} && npm install`
 
-    console.log(`   → Building server...`)
-    await $`cd ${server.path} && npm run build --silent`.quiet()
+      console.log(`   → Building server...`)
+      await $`cd ${serverPath} && npm run build`
 
-    const built = existsSync(`${server.path}/dist/server.js`)
-    if (!built) {
-      throw new Error(`Build succeeded but dist/server.js not found`)
+      const built = existsSync(`${serverPath}/dist/server.js`)
+      if (!built) {
+        throw new Error(`Build succeeded but dist/server.js not found`)
+      }
+    } else if (server.type === "python") {
+      console.log(`   → Setting up Python environment...`)
+
+      const venvPath = `${serverPath}/.venv`
+      if (!existsSync(venvPath)) {
+        console.log(`   → Creating virtual environment...`)
+        await $`cd ${serverPath} && python3 -m venv .venv`
+      }
+
+      console.log(`   → Installing requirements...`)
+      await $`${venvPath}/bin/pip install -r ${serverPath}/requirements.txt`
+
+      const pythonExists = existsSync(`${venvPath}/bin/python`)
+      if (!pythonExists) {
+        throw new Error(`Python executable not found in .venv`)
+      }
     }
 
     console.log(`✓ ${server.name} setup complete`)
@@ -69,7 +110,6 @@ async function main() {
     process.exit(0)
   } else {
     console.error("\n❌ Some MCP servers failed to setup")
-    console.error("   ShopOS will start but Shopify tools may not work")
     console.error("   Check logs above for details\n")
     process.exit(1)
   }

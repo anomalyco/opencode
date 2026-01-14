@@ -258,7 +258,7 @@ def extract_search_results(html_content: str, max_results: int) -> list:
                 product_url = url_elem.get('href')
                 if product_url:
                     if product_url.startswith('/'):
-                        product_url = 'https://www.amazon.com' + product_url
+                        product_url = 'https://www.amazon.in' + product_url
                     product['url'] = product_url
             
             # Extract price
@@ -348,7 +348,7 @@ async def search_products(query: str, max_results: int = 5) -> str:
     """Search for products on Amazon and return results"""
     try:
         # Construct search URL
-        search_url = f"https://www.amazon.com/s?k={query.replace(' ', '+')}"
+        search_url = f"https://www.amazon.in/s?k={query.replace(' ', '+')}"
         
         # Fetch search results page
         html_content = await fetch_amazon_page(search_url)
@@ -365,4 +365,5 @@ async def search_products(query: str, max_results: int = 5) -> str:
 
 if __name__ == "__main__":
     print("Starting Amazon Products MCP server...")
-    mcp.run(transport = "stdio") 
+    mcp.run(transport = "stdio")
+ 

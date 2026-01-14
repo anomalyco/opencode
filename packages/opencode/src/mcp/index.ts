@@ -23,6 +23,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
+import path from "path"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -392,7 +393,15 @@ export namespace MCP {
     }
 
     if (mcp.type === "local") {
-      const [cmd, ...args] = mcp.command
+      const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
+      const command = mcp.command.map((arg) => {
+        if (!path.isAbsolute(arg) && (arg.includes("/") || arg.includes("\\"))) {
+          return path.resolve(root, arg)
+        }
+        return arg
+      })
+
+      const [cmd, ...args] = command
       const cwd = Instance.directory
       const transport = new StdioClientTransport({
         stderr: "ignore",

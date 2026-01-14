@@ -110,10 +110,10 @@ It's very similar to Claude Code in terms of capability. Here are the key differ
 
 ### Amazon MCP Server Setup
 
-To use the Amazon MCP server, you need to install the required Python dependencies:
+The Amazon MCP server is automatically set up when you run the project dev script.
 
 ```bash
-pip install -r mcps/amazon-mcp/requirements.txt
+bun run ./scripts/setup-mcp.ts
 ```
 
 ---

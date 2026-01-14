@@ -50,14 +50,17 @@
     // Access Token: 3b580e70970c4528da70c98e097c2fa0
     "hydrogen-store": {
       "type": "local",
-      "command": ["node", "/tmp/HydrogenMCP/dist/server.js"],
+      "command": [
+        "node",
+        "/tmp/HydrogenMCP/dist/server.js"
+      ],
       "enabled": true,
       "timeout": 15000, // Increased for API latency
     },
     "amazon-mcp": {
       "type": "local",
       "command": [
-        "/home/regal-artifex/playground/amazon-mcp-server/.venv/bin/python",
+        "mcps/amazon-mcp/.venv/bin/python",
         "mcps/amazon-mcp/server_v2.py"
       ],
       "enabled": true,
