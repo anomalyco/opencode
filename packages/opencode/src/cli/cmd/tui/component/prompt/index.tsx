@@ -563,25 +563,27 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
-      sdk.client.session.prompt({
-        sessionID,
-        ...selectedModel,
-        messageID,
-        agent: local.agent.current().name,
-        model: selectedModel,
-        variant,
-        parts: [
-          {
-            id: Identifier.ascending("part"),
-            type: "text",
-            text: inputText,
-          },
-          ...nonTextParts.map((x) => ({
-            id: Identifier.ascending("part"),
-            ...x,
-          })),
-        ],
-      })
+      sdk.client.session
+        .prompt({
+          sessionID,
+          ...selectedModel,
+          messageID,
+          agent: local.agent.current().name,
+          model: selectedModel,
+          variant,
+          parts: [
+            {
+              id: Identifier.ascending("part"),
+              type: "text",
+              text: inputText,
+            },
+            ...nonTextParts.map((x) => ({
+              id: Identifier.ascending("part"),
+              ...x,
+            })),
+          ],
+        })
+        .catch(() => {})
     }
     history.append({
       ...store.prompt,
