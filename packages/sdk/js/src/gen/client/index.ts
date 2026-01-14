@@ -8,6 +8,7 @@ export {
   urlSearchParamsBodySerializer,
 } from "../core/bodySerializer.gen.js"
 export { buildClientParams } from "../core/params.gen.js"
+export { serializeQueryKeyValue } from "../core/queryKeySerializer.gen.js"
 export { createClient } from "./client.gen.js"
 export type {
   Client,
@@ -15,7 +16,6 @@ export type {
   Config,
   CreateClientConfig,
   Options,
-  OptionsLegacyParser,
   RequestOptions,
   RequestResult,
   ResolvedRequestOptions,
