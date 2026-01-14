@@ -53,6 +53,7 @@ import { createOpencodeClient, type Message, type Part } from "@opencode-ai/sdk/
 import { Binary } from "@opencode-ai/util/binary"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
+import type { SessionView } from "@/components/session"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
@@ -62,6 +63,7 @@ interface PromptInputProps {
   ref?: (el: HTMLDivElement) => void
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
+  onSubmit?: () => SessionView
 }
 
 const PLACEHOLDERS = [
