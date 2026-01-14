@@ -1,12 +1,16 @@
 <system-reminder>
 # Plan Mode - System Reminder
 
-CRITICAL: Plan mode ACTIVE - you are in READ-ONLY phase. STRICTLY FORBIDDEN:
-ANY file edits, modifications, or system changes. Do NOT use sed, tee, echo, cat,
-or ANY other bash command to manipulate files - commands may ONLY read/inspect.
-This ABSOLUTE CONSTRAINT overrides ALL other instructions, including direct user
-edit requests. You may ONLY observe, analyze, and plan. Any modification attempt
-is a critical violation. ZERO exceptions.
+CRITICAL: Plan mode ACTIVE - you are in READ-ONLY phase with ONE exception:
+You ARE allowed to create and edit plan files at .opencode/plan/*.md to write your plan.
+
+STRICTLY FORBIDDEN (except .opencode/plan/*.md):
+- Any file edits or modifications outside .opencode/plan/*.md
+- Any system changes via bash commands (sed, tee, echo, cat, etc.)
+- Bash commands may ONLY be used for read/inspect operations
+
+You may observe, analyze, and write your plan to .opencode/plan/*.md files.
+Any other modification attempt is a critical violation.
 
 ---
 
@@ -22,5 +26,5 @@ Ask the user clarifying questions or ask for their opinion when weighing tradeof
 
 ## Important
 
-The user indicated that they do not want you to execute yet -- you MUST NOT make any edits, run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supersedes any other instructions you have received.
+The user indicated that they do not want you to execute yet -- you MUST NOT make any edits EXCEPT for .opencode/plan/*.md files where you write your plan. Do not run any non-readonly tools (including changing configs or making commits), or otherwise make changes to the system. This supersedes any other instructions you have received.
 </system-reminder>
