@@ -398,6 +398,94 @@ opencode session list
 
 ---
 
+### shares
+
+Manage shared sessions across all projects. View, remove, or open shared session links.
+
+```bash
+opencode shares [command]
+```
+
+---
+
+#### list
+
+List all shared sessions with their session ID, title, and share URL.
+
+```bash
+opencode shares list
+```
+
+Example output:
+
+```
+Session ID                      Title                                 URL
+───────────────────────────────────────────────────────────────────────────────────
+ses_442bb61e0ffeBzfJY3aJa5lRSi  Light chat and project context recap  https://opncd.ai/share/aJa5lRSi
+```
+
+Or use the short version.
+
+```bash
+opencode shares ls
+```
+
+##### Flags
+
+| Flag       | Description                          |
+| ---------- | ------------------------------------ |
+| `--format` | Output format: table or json (table) |
+
+---
+
+#### remove
+
+Remove a share (unshare a session). If no session ID is provided, an interactive selector is shown.
+
+```bash
+opencode shares remove [session-id]
+```
+
+Interactive mode:
+
+```bash
+opencode shares remove
+```
+
+```
+┌  Remove Share
+│
+◆  Select session to unshare
+│  ● Light chat and project context recap
+│  ○ Another session
+└
+```
+
+Direct mode:
+
+```bash
+opencode shares remove ses_442bb61e0ffeBzfJY3aJa5lRSi
+```
+
+Or use the short versions.
+
+```bash
+opencode shares rm
+opencode shares unshare
+```
+
+---
+
+#### open
+
+Open a share URL in your default browser. If no session ID is provided, an interactive selector is shown.
+
+```bash
+opencode shares open [session-id]
+```
+
+---
+
 ### stats
 
 Show token usage and cost statistics for your OpenCode sessions.
