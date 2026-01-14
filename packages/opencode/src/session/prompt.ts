@@ -33,6 +33,7 @@ import { spawn } from "child_process"
 import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
+import { Config } from "../config/config"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
@@ -484,12 +485,16 @@ export namespace SessionPrompt {
 
       // pending compaction
       if (task?.type === "compaction") {
+        if (!task.prompt) {
+          throw new Error("Compaction task missing required prompt")
+        }
         const result = await SessionCompaction.process({
           messages: msgs,
           parentID: lastUser.id,
           abort,
           sessionID,
           auto: task.auto,
+          prompt: task.prompt,
         })
         if (result === "stop") break
         continue
@@ -501,11 +506,26 @@ export namespace SessionPrompt {
         lastFinished.summary !== true &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
       ) {
+        const cfg = await Config.get()
+        const compactCommandName = cfg.compaction?.command ?? "compact"
+        const compactCommand = await Command.get(compactCommandName)
+
+        if (!compactCommand) {
+          const errorMsg =
+            `Auto-compaction command "${compactCommandName}" not found. ` +
+            `Please ensure the command exists or update the "compaction.command" config setting.`
+          log.error("auto-compaction command not found", {
+            compactCommandName,
+          })
+          throw new Error(errorMsg)
+        }
+
         await SessionCompaction.create({
           sessionID,
           agent: lastUser.agent,
           model: lastUser.model,
           auto: true,
+          prompt: await compactCommand.template,
         })
         continue
       }
@@ -615,11 +635,14 @@ export namespace SessionPrompt {
       })
       if (result === "stop") break
       if (result === "compact") {
+        const cfg = await Config.get()
+        const compactCmd = await Command.get(cfg.compaction?.command ?? Command.Default.COMPACT)
         await SessionCompaction.create({
           sessionID,
           agent: lastUser.agent,
           model: lastUser.model,
           auto: true,
+          prompt: await compactCmd.template,
         })
       }
       continue

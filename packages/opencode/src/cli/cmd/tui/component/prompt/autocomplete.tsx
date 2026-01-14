@@ -76,7 +76,7 @@ export function Autocomplete(props: {
 }) {
   const sdk = useSDK()
   const sync = useSync()
-  const command = useCommandDialog()
+  const dialog = useCommandDialog()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
@@ -85,7 +85,6 @@ export function Autocomplete(props: {
     index: 0,
     selected: 0,
     visible: false as AutocompleteRef["visible"],
-    input: "keyboard" as "keyboard" | "mouse",
   })
 
   const [positionTick, setPositionTick] = createSignal(0)
@@ -129,14 +128,6 @@ export function Autocomplete(props: {
     return props.input().getTextRange(store.index + 1, props.input().cursorOffset)
   })
 
-  // When the filter changes due to how TUI works, the mousemove might still be triggered
-  // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard so
-  // that the mouseover event doesn't trigger when filtering.
-  createEffect(() => {
-    filter()
-    setStore("input", "keyboard")
-  })
-
   function insertPart(text: string, part: PromptInfo["parts"][number]) {
     const input = props.input()
     const currentCursorOffset = input.cursorOffset
@@ -168,26 +159,6 @@ export function Autocomplete(props: {
     })
 
     props.setPrompt((draft) => {
-      if (part.type === "file") {
-        const existingIndex = draft.parts.findIndex((p) => p.type === "file" && "url" in p && p.url === part.url)
-        if (existingIndex !== -1) {
-          const existing = draft.parts[existingIndex]
-          if (
-            part.source?.text &&
-            existing &&
-            "source" in existing &&
-            existing.source &&
-            "text" in existing.source &&
-            existing.source.text
-          ) {
-            existing.source.text.start = extmarkStart
-            existing.source.text.end = extmarkEnd
-            existing.source.text.value = virtualText
-          }
-          return
-        }
-      }
-
       if (part.type === "file" && part.source?.text) {
         part.source.text.start = extmarkStart
         part.source.text.end = extmarkEnd
@@ -341,25 +312,163 @@ export function Autocomplete(props: {
       )
   })
 
+  const session = createMemo(() => (props.sessionID ? sync.session.get(props.sessionID) : undefined))
   const commands = createMemo((): AutocompleteOption[] => {
-    const results: AutocompleteOption[] = [...command.slashes()]
-
-    for (const serverCommand of sync.data.command) {
-      results.push({
-        display: "/" + serverCommand.name + (serverCommand.mcp ? " (MCP)" : ""),
-        description: serverCommand.description,
-        onSelect: () => {
-          const newText = "/" + serverCommand.name + " "
-          const cursor = props.input().logicalCursor
-          props.input().deleteRange(0, 0, cursor.row, cursor.col)
-          props.input().insertText(newText)
-          props.input().cursorOffset = Bun.stringWidth(newText)
+    const results: AutocompleteOption[] = []
+    const s = session()
+    for (const command of sync.data.command) {
+      if (command.compact && s) {
+        results.push({
+          display: "/" + command.name + (command.mcp ? " (MCP)" : ""),
+          description: command.description ?? "compact the session",
+          aliases: command.name === "compact" ? ["/summarize"] : undefined,
+          onSelect: () => {
+            dialog.trigger("session.compact", "prompt", {
+              commandName: command.name,
+              template: command.template,
+            })
+          },
+        })
+      } else if (!command.compact) {
+        results.push({
+          display: "/" + command.name + (command.mcp ? " (MCP)" : ""),
+          description: command.description,
+          onSelect: () => {
+            const newText = "/" + command.name + " "
+            const cursor = props.input().logicalCursor
+            props.input().deleteRange(0, 0, cursor.row, cursor.col)
+            props.input().insertText(newText)
+            props.input().cursorOffset = Bun.stringWidth(newText)
+          },
+        })
+      }
+    }
+    if (s) {
+      results.push(
+        {
+          display: "/undo",
+          description: "undo the last message",
+          onSelect: () => {
+            dialog.trigger("session.undo")
+          },
         },
-      })
+        {
+          display: "/redo",
+          description: "redo the last message",
+          onSelect: () => dialog.trigger("session.redo"),
+        },
+        {
+          display: "/unshare",
+          disabled: !s.share,
+          description: "unshare a session",
+          onSelect: () => dialog.trigger("session.unshare"),
+        },
+        {
+          display: "/rename",
+          description: "rename session",
+          onSelect: () => dialog.trigger("session.rename"),
+        },
+        {
+          display: "/copy",
+          description: "copy session transcript to clipboard",
+          onSelect: () => dialog.trigger("session.copy"),
+        },
+        {
+          display: "/export",
+          description: "export session transcript to file",
+          onSelect: () => dialog.trigger("session.export"),
+        },
+        {
+          display: "/timeline",
+          description: "jump to message",
+          onSelect: () => dialog.trigger("session.timeline"),
+        },
+        {
+          display: "/fork",
+          description: "fork from message",
+          onSelect: () => dialog.trigger("session.fork"),
+        },
+        {
+          display: "/thinking",
+          description: "toggle thinking visibility",
+          onSelect: () => dialog.trigger("session.toggle.thinking"),
+        },
+      )
+      if (sync.data.config.share !== "disabled") {
+        results.push({
+          display: "/share",
+          disabled: !!s.share?.url,
+          description: "share a session",
+          onSelect: () => dialog.trigger("session.share"),
+        })
+      }
     }
 
-    results.sort((a, b) => a.display.localeCompare(b.display))
-
+    results.push(
+      {
+        display: "/new",
+        aliases: ["/clear"],
+        description: "create a new session",
+        onSelect: () => dialog.trigger("session.new"),
+      },
+      {
+        display: "/models",
+        description: "list models",
+        onSelect: () => dialog.trigger("model.list"),
+      },
+      {
+        display: "/agents",
+        description: "list agents",
+        onSelect: () => dialog.trigger("agent.list"),
+      },
+      {
+        display: "/session",
+        aliases: ["/resume", "/continue"],
+        description: "list sessions",
+        onSelect: () => dialog.trigger("session.list"),
+      },
+      {
+        display: "/status",
+        description: "show status",
+        onSelect: () => dialog.trigger("opencode.status"),
+      },
+      {
+        display: "/mcp",
+        description: "toggle MCPs",
+        onSelect: () => dialog.trigger("mcp.list"),
+      },
+      {
+        display: "/theme",
+        description: "toggle theme",
+        onSelect: () => dialog.trigger("theme.switch"),
+      },
+      {
+        display: "/editor",
+        description: "open editor",
+        onSelect: () => dialog.trigger("prompt.editor", "prompt"),
+      },
+      {
+        display: "/connect",
+        description: "connect to a provider",
+        onSelect: () => dialog.trigger("provider.connect"),
+      },
+      {
+        display: "/help",
+        description: "show help",
+        onSelect: () => dialog.trigger("help.show"),
+      },
+      {
+        display: "/commands",
+        description: "show all commands",
+        onSelect: () => dialog.show(),
+      },
+      {
+        display: "/exit",
+        aliases: ["/quit", "/q"],
+        description: "exit the app",
+        onSelect: () => dialog.trigger("app.exit"),
+      },
+    )
     const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
     if (!max) return results
     return results.map((item) => ({
@@ -373,8 +482,9 @@ export function Autocomplete(props: {
     const agentsValue = agents()
     const commandsValue = commands()
 
-    const mixed: AutocompleteOption[] =
+    const mixed: AutocompleteOption[] = (
       store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
+    ).filter((x) => x.disabled !== true)
 
     const currentFilter = filter()
 
@@ -462,7 +572,7 @@ export function Autocomplete(props: {
   }
 
   function show(mode: "@" | "/") {
-    command.keybinds(false)
+    dialog.keybinds(false)
     setStore({
       visible: mode,
       index: props.input().cursorOffset,
@@ -479,7 +589,7 @@ export function Autocomplete(props: {
         draft.input = props.input().plainText
       })
     }
-    command.keybinds(true)
+    dialog.keybinds(true)
     setStore("visible", false)
   }
 
@@ -534,13 +644,11 @@ export function Autocomplete(props: {
           const isNavDown = name === "down" || (ctrlOnly && name === "n")
 
           if (isNavUp) {
-            setStore("input", "keyboard")
             move(-1)
             e.preventDefault()
             return
           }
           if (isNavDown) {
-            setStore("input", "keyboard")
             move(1)
             e.preventDefault()
             return
@@ -623,17 +731,7 @@ export function Autocomplete(props: {
               paddingRight={1}
               backgroundColor={index === store.selected ? theme.primary : undefined}
               flexDirection="row"
-              onMouseMove={() => {
-                setStore("input", "mouse")
-              }}
-              onMouseOver={() => {
-                if (store.input !== "mouse") return
-                moveTo(index)
-              }}
-              onMouseDown={() => {
-                setStore("input", "mouse")
-                moveTo(index)
-              }}
+              onMouseOver={() => moveTo(index)}
               onMouseUp={() => select()}
             >
               <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>

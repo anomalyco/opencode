@@ -72,11 +72,11 @@ function init() {
   })
 
   const result = {
-    trigger(name: string) {
+    trigger(name: string, source?: "prompt", data?: any) {
       for (const option of entries()) {
         if (option.value === name) {
           if (!isEnabled(option)) return
-          option.onSelect?.(dialog)
+          option.onSelect?.(dialog, source, data)
           return
         }
       }

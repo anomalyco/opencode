@@ -386,7 +386,7 @@ export function Session() {
         name: "compact",
         aliases: ["summarize"],
       },
-      onSelect: (dialog) => {
+      onSelect: async (dialog, trigger, data) => {
         const selectedModel = local.model.current()
         if (!selectedModel) {
           toast.show({
@@ -396,11 +396,29 @@ export function Session() {
           })
           return
         }
-        sdk.client.session.summarize({
+        // If no template provided (e.g., via keybind), use the default /compact command
+        const prompt = data?.template ?? sync.data.command.find((c) => c.name === "compact")?.template
+        if (!prompt) {
+          toast.show({
+            variant: "warning",
+            message: "No compact command configured",
+            duration: 3000,
+          })
+          return
+        }
+        const result = await sdk.client.session.summarize({
           sessionID: route.sessionID,
-          modelID: selectedModel.modelID,
           providerID: selectedModel.providerID,
+          modelID: selectedModel.modelID,
+          prompt,
         })
+        if (result.error) {
+          toast.show({
+            variant: "error",
+            message: "Summarize failed: " + JSON.stringify(result.error),
+            duration: 5000,
+          })
+        }
         dialog.clear()
       },
     },
@@ -988,11 +1006,11 @@ export function Session() {
                       {(function () {
                         const command = useCommandDialog()
                         const [hover, setHover] = createSignal(false)
-                        const dialog = useDialog()
+                        const modal = useDialog()
 
                         const handleUnrevert = async () => {
                           const confirmed = await DialogConfirm.show(
-                            dialog,
+                            modal,
                             "Confirm Redo",
                             "Are you sure you want to restore the reverted messages?",
                           )

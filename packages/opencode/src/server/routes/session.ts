@@ -513,6 +513,7 @@ export const SessionRoutes = lazy(() =>
         z.object({
           providerID: z.string(),
           modelID: z.string(),
+          prompt: z.string().describe("Prompt to use for compaction"),
           auto: z.boolean().optional().default(false),
         }),
       ),
@@ -538,6 +539,7 @@ export const SessionRoutes = lazy(() =>
             modelID: body.modelID,
           },
           auto: body.auto,
+          prompt: body.prompt,
         })
         await SessionPrompt.loop(sessionID)
         return c.json(true)

@@ -556,6 +556,7 @@ export namespace Config {
     agent: z.string().optional(),
     model: z.string().optional(),
     subtask: z.boolean().optional(),
+    compact: z.boolean().optional(),
   })
   export type Command = z.infer<typeof Command>
 
@@ -1042,6 +1043,10 @@ export namespace Config {
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
+          command: z
+            .string()
+            .optional()
+            .describe("Command to use for automatic compaction when context limit is reached. Defaults to 'compact'"),
         })
         .optional(),
       experimental: z

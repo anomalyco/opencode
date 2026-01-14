@@ -2105,6 +2105,7 @@ export type Command = {
   mcp?: boolean
   template: string
   subtask?: boolean
+  compact?: boolean
   hints: Array<string>
 }
 

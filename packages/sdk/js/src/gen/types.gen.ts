@@ -1451,6 +1451,7 @@ export type Command = {
   model?: string
   template: string
   subtask?: boolean
+  compact?: boolean
 }
 
 export type Model = {
@@ -2507,6 +2508,7 @@ export type SessionSummarizeData = {
   body?: {
     providerID: string
     modelID: string
+    prompt?: string
   }
   path: {
     /**

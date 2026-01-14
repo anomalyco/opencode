@@ -12,11 +12,14 @@ import { Log } from "../util/log"
 import { SessionProcessor } from "./processor"
 import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
+import PROMPT_COMPACT from "../command/template/compact.txt"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
+
+  export const DEFAULT_PROMPT = PROMPT_COMPACT
 
   export const Event = {
     Compacted: BusEvent.define(
@@ -95,6 +98,7 @@ export namespace SessionCompaction {
     sessionID: string
     abort: AbortSignal
     auto: boolean
+    prompt: string
   }) {
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
     const agent = await Agent.get("compaction")
@@ -132,15 +136,12 @@ export namespace SessionCompaction {
       model,
       abort: input.abort,
     })
-    // Allow plugins to inject context or replace compaction prompt
+    // Allow plugins to inject additional context for compaction
     const compacting = await Plugin.trigger(
       "experimental.session.compacting",
       { sessionID: input.sessionID },
-      { context: [], prompt: undefined },
+      { context: [] },
     )
-    const defaultPrompt =
-      "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation."
-    const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
     const result = await processor.process({
       user: userMessage,
       agent,
@@ -155,7 +156,7 @@ export namespace SessionCompaction {
           content: [
             {
               type: "text",
-              text: promptText,
+              text: [input.prompt, ...compacting.context].join("\n\n"),
             },
           ],
         },
@@ -201,6 +202,7 @@ export namespace SessionCompaction {
         modelID: z.string(),
       }),
       auto: z.boolean(),
+      prompt: z.string(),
     }),
     async (input) => {
       const msg = await Session.updateMessage({
@@ -219,6 +221,7 @@ export namespace SessionCompaction {
         sessionID: msg.sessionID,
         type: "compaction",
         auto: input.auto,
+        prompt: input.prompt,
       })
     },
   )

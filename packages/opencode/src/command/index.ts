@@ -5,6 +5,7 @@ import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_COMPACT from "./template/compact.txt"
 import { MCP } from "../mcp"
 
 export namespace Command {
@@ -31,6 +32,7 @@ export namespace Command {
       // https://zod.dev/v4/changelog?id=zfunction
       template: z.promise(z.string()).or(z.string()),
       subtask: z.boolean().optional(),
+      compact: z.boolean().optional(),
       hints: z.array(z.string()),
     })
     .meta({
@@ -53,6 +55,7 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     REVIEW: "review",
+    COMPACT: "compact",
   } as const
 
   const state = Instance.state(async () => {
@@ -76,6 +79,13 @@ export namespace Command {
         subtask: true,
         hints: hints(PROMPT_REVIEW),
       },
+      [Default.COMPACT]: {
+        name: Default.COMPACT,
+        description: "summarize session for compaction",
+        template: PROMPT_COMPACT,
+        compact: true,
+        hints: hints(PROMPT_COMPACT),
+      },
     }
 
     for (const [name, command] of Object.entries(cfg.command ?? {})) {
@@ -88,6 +98,7 @@ export namespace Command {
           return command.template
         },
         subtask: command.subtask,
+        compact: command.compact,
         hints: hints(command.template),
       }
     }

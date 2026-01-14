@@ -312,6 +312,31 @@ This is an **optional** config option.
 
 ---
 
+### Compact
+
+The `/compact` command performs **session compaction** - summarizing conversation history and removing all previous messages from context, replacing them with the summary. This reduces context size while preserving important information about what happened in the session.
+
+This command is called automatically when OpenCode reaches its token limit threshold (see [`compaction.auto`](/docs/config#compaction)). You can also run it manually at any time.
+
+To customize compaction:
+
+1. **Override the built-in command** - Create a custom `/compact` command using the patterns described above
+2. **Create a new compact command** - Mark any command with `compact: true` and configure [`compaction.command`](/docs/config#compaction) to specify which command is used for automatic compaction
+
+The command body will be used as the summary prompt.
+
+```md title=".opencode/command/handover.md"
+---
+description: Hand over session to next developer
+compact: true
+---
+
+Summarize this session for the next developer.
+Include key decisions and next steps.
+```
+
+---
+
 ## Built-in
 
 opencode includes several built-in commands like `/init`, `/undo`, `/redo`, `/share`, `/help`; [learn more](/docs/tui#commands).
