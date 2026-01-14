@@ -1,2 +1,2 @@
 export * from "./use-filtered-list"
-export * from "./create-seen"
+export * from "./create-auto-scroll"

@@ -1,6 +1,8 @@
 // @refresh reload
 import { createHandler, StartServer } from "@solidjs/start/server"
 
+const criticalCSS = `[data-component="top"]{min-height:80px;display:flex;align-items:center}`
+
 export default createHandler(
   () => (
     <StartServer
@@ -9,9 +11,9 @@ export default createHandler(
           <head>
             <meta charset="utf-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1" />
-            <link rel="icon" href="/favicon.svg" />
             <meta property="og:image" content="/social-share.png" />
             <meta property="twitter:image" content="/social-share.png" />
+            <style>{criticalCSS}</style>
             {assets}
           </head>
           <body>

@@ -7,7 +7,7 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/) is an AI coding agent built for the terminal.
+[**OpenCode**](/) is an open source AI coding agent. It's available as a terminal-based interface, desktop app, or IDE extension.
 
 ![OpenCode TUI with the opencode theme](../../assets/lander/screenshot.png)
 
@@ -17,7 +17,7 @@ Let's get started.
 
 #### Prerequisites
 
-To use OpenCode, you'll need:
+To use OpenCode in your terminal, you'll need:
 
 1. A modern terminal emulator like:
    - [WezTerm](https://wezterm.org), cross-platform
@@ -76,8 +76,10 @@ You can also install it with the following commands:
 - **Using Homebrew on macOS and Linux**
 
   ```bash
-  brew install opencode
+  brew install anomalyco/tap/opencode
   ```
+
+  > We recommend using the OpenCode tap for the most up to date releases. The official `brew install opencode` formula is maintained by the Homebrew team and is updated less frequently.
 
 - **Using Paru on Arch Linux**
 
@@ -109,18 +111,18 @@ You can also install it with the following commands:
 - **Using Mise**
 
   ```bash
-  mise use --pin -g ubi:sst/opencode
+  mise use -g github:anomalyco/opencode
   ```
 
 - **Using Docker**
 
   ```bash
-  docker run -it --rm ghcr.io/sst/opencode
+  docker run -it --rm ghcr.io/anomalyco/opencode
   ```
 
 Support for installing OpenCode on Windows using Bun is currently in progress.
 
-You can also grab the binary from the [Releases](https://github.com/sst/opencode/releases).
+You can also grab the binary from the [Releases](https://github.com/anomalyco/opencode/releases).
 
 ---
 
@@ -132,23 +134,21 @@ If you are new to using LLM providers, we recommend using [OpenCode Zen](/docs/z
 It's a curated list of models that have been tested and verified by the OpenCode
 team.
 
-1. Run `opencode auth login`, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
+1. Run the `/connect` command in the TUI, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
+
+   ```txt
+   /connect
+   ```
+
 2. Sign in, add your billing details, and copy your API key.
+
 3. Paste your API key.
 
-   ```bash
-   $ opencode auth login
-
-   ┌  Add credential
+   ```txt
+   ┌ API key
    │
-   ◇  Select provider
-   │  opencode
    │
-   ●  Create an api key at https://opencode.ai/auth
-   │
-   ◆  Enter your API key
-   │  _
-   └
+   └ enter
    ```
 
 Alternatively, you can select one of the other providers. [Learn more](/docs/providers#directory).

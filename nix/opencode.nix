@@ -1,7 +1,13 @@
-{ lib, stdenvNoCC, bun, fzf, ripgrep, makeBinaryWrapper }:
+{
+  lib,
+  stdenvNoCC,
+  bun,
+  ripgrep,
+  makeBinaryWrapper,
+}:
 args:
 let
-  scripts = args.scripts;
+  inherit (args) scripts;
   mkModules =
     attrs:
     args.mkNodeModules (
@@ -14,13 +20,10 @@ let
 in
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "opencode";
-  version = args.version;
-
-  src = args.src;
+  inherit (args) version src;
 
   node_modules = mkModules {
-    version = finalAttrs.version;
-    src = finalAttrs.src;
+    inherit (finalAttrs) version src;
   };
 
   nativeBuildInputs = [
@@ -97,7 +100,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     makeWrapper ${bun}/bin/bun $out/bin/opencode \
       --add-flags "run" \
       --add-flags "$out/lib/opencode/dist/src/index.js" \
-      --prefix PATH : ${lib.makeBinPath [ fzf ripgrep ]} \
+      --prefix PATH : ${lib.makeBinPath [ ripgrep ]} \
       --argv0 opencode
 
     runHook postInstall
@@ -113,6 +116,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     done
   '';
 
+  dontFixup = true;
+
   meta = {
     description = "AI coding agent built for the terminal";
     longDescription = ''
@@ -120,7 +125,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       It combines a TypeScript/JavaScript core with a Go-based TUI
       to provide an interactive AI coding experience.
     '';
-    homepage = "https://github.com/sst/opencode";
+    homepage = "https://github.com/anomalyco/opencode";
     license = lib.licenses.mit;
     platforms = [
       "aarch64-linux"

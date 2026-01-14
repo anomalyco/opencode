@@ -1,0 +1,40 @@
+diff --git a/dist/ghostty-web.js b/dist/ghostty-web.js
+index 7c9d64a617bbeb29d757a1acd54686e582868313..2d61098cdb77fa66cbb162897c5590f35cfcf791 100644
+--- a/dist/ghostty-web.js
++++ b/dist/ghostty-web.js
+@@ -1285,7 +1285,7 @@ const e = class H {
+         continue;
+       }
+       const C = g.getCodepoint();
+-      C === 0 || C < 32 ? B.push(" ") : B.push(String.fromCodePoint(C));
++      C === 0 || C < 32 || C > 1114111 || (C >= 55296 && C <= 57343) ? B.push(" ") : B.push(String.fromCodePoint(C));
+     }
+     return B.join("");
+   }
+@@ -1484,7 +1484,7 @@ class _ {
+       return;
+     let J = "";
+     A.flags & U.ITALIC && (J += "italic "), A.flags & U.BOLD && (J += "bold "), this.ctx.font = `${J}${this.fontSize}px ${this.fontFamily}`, this.ctx.fillStyle = this.rgbToCSS(w, o, i), A.flags & U.FAINT && (this.ctx.globalAlpha = 0.5);
+-    const s = g, F = C + this.metrics.baseline, a = String.fromCodePoint(A.codepoint || 32);
++    const s = g, F = C + this.metrics.baseline, a = (A.codepoint === 0 || A.codepoint == null || A.codepoint < 0 || A.codepoint > 1114111 || (A.codepoint >= 55296 && A.codepoint <= 57343)) ? " " : String.fromCodePoint(A.codepoint);
+     if (this.ctx.fillText(a, s, F), A.flags & U.FAINT && (this.ctx.globalAlpha = 1), A.flags & U.UNDERLINE) {
+       const N = C + this.metrics.baseline + 2;
+       this.ctx.strokeStyle = this.ctx.fillStyle, this.ctx.lineWidth = 1, this.ctx.beginPath(), this.ctx.moveTo(g, N), this.ctx.lineTo(g + I, N), this.ctx.stroke();
+@@ -1730,7 +1730,7 @@ const L = class R {
+       let G = "";
+       for (let J = M; J <= k; J++) {
+         const s = o[J];
+-        if (s && s.codepoint !== 0) {
++        if (s && s.codepoint !== 0 && s.codepoint <= 1114111 && !(s.codepoint >= 55296 && s.codepoint <= 57343)) {
+           const F = String.fromCodePoint(s.codepoint);
+           G += F, F.trim() && (i = G.length);
+         } else
+@@ -1995,7 +1995,7 @@ const L = class R {
+     if (!Q)
+       return null;
+     const g = (w) => {
+-      if (!w || w.codepoint === 0)
++      if (!w || w.codepoint === 0 || w.codepoint > 1114111 || (w.codepoint >= 55296 && w.codepoint <= 57343))
+         return !1;
+       const o = String.fromCodePoint(w.codepoint);
+       return /[\w-]/.test(o);

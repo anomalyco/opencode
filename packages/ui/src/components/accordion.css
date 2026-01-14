@@ -74,24 +74,26 @@
         border-bottom-right-radius: var(--radius-md);
       }
 
-      [data-slot="accordion-item"]:has(+ &) {
-        &[data-closed] {
-          border-bottom-left-radius: var(--radius-md);
-          border-bottom-right-radius: var(--radius-md);
-          [data-slot="accordion-trigger"] {
-            border-bottom-left-radius: var(--radius-md);
-            border-bottom-right-radius: var(--radius-md);
-          }
-        }
-        margin-bottom: 8px;
-      }
-
       & + [data-slot="accordion-item"] {
         margin-top: 8px;
 
         [data-slot="accordion-trigger"] {
           border-top-left-radius: var(--radius-md);
           border-top-right-radius: var(--radius-md);
+        }
+      }
+    }
+
+    &:has(+ [data-slot="accordion-item"][data-expanded]) {
+      margin-bottom: 8px;
+
+      &[data-closed] {
+        border-bottom-left-radius: var(--radius-md);
+        border-bottom-right-radius: var(--radius-md);
+
+        [data-slot="accordion-trigger"] {
+          border-bottom-left-radius: var(--radius-md);
+          border-bottom-right-radius: var(--radius-md);
         }
       }
     }

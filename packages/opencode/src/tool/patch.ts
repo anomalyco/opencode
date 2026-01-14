@@ -3,14 +3,12 @@ import * as path from "path"
 import * as fs from "fs/promises"
 import { Tool } from "./tool"
 import { FileTime } from "../file/time"
-import { Permission } from "../permission"
 import { Bus } from "../bus"
 import { FileWatcher } from "../file/watcher"
 import { Instance } from "../project/instance"
-import { Agent } from "../agent/agent"
 import { Patch } from "../patch"
-import { Filesystem } from "../util/filesystem"
 import { createTwoFilesPatch } from "diff"
+import { assertExternalDirectory } from "./external-directory"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -39,7 +37,6 @@ export const PatchTool = Tool.define("patch", {
     }
 
     // Validate file paths and check permissions
-    const agent = await Agent.get(ctx.agent)
     const fileChanges: Array<{
       filePath: string
       oldContent: string
@@ -52,35 +49,7 @@ export const PatchTool = Tool.define("patch", {
 
     for (const hunk of hunks) {
       const filePath = path.resolve(Instance.directory, hunk.path)
-
-      if (!Filesystem.contains(Instance.directory, filePath)) {
-        const parentDir = path.dirname(filePath)
-        if (agent.permission.external_directory === "ask") {
-          await Permission.ask({
-            type: "external_directory",
-            pattern: [parentDir, path.join(parentDir, "*")],
-            sessionID: ctx.sessionID,
-            messageID: ctx.messageID,
-            callID: ctx.callID,
-            title: `Patch file outside working directory: ${filePath}`,
-            metadata: {
-              filepath: filePath,
-              parentDir,
-            },
-          })
-        } else if (agent.permission.external_directory === "deny") {
-          throw new Permission.RejectedError(
-            ctx.sessionID,
-            "external_directory",
-            ctx.callID,
-            {
-              filepath: filePath,
-              parentDir,
-            },
-            `File ${filePath} is not in the current working directory`,
-          )
-        }
-      }
+      await assertExternalDirectory(ctx, filePath)
 
       switch (hunk.type) {
         case "add":
@@ -122,12 +91,15 @@ export const PatchTool = Tool.define("patch", {
 
           const diff = createTwoFilesPatch(filePath, filePath, oldContent, newContent)
 
+          const movePath = hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined
+          await assertExternalDirectory(ctx, movePath)
+
           fileChanges.push({
             filePath,
             oldContent,
             newContent,
             type: hunk.move_path ? "move" : "update",
-            movePath: hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined,
+            movePath,
           })
 
           totalDiff += diff + "\n"
@@ -152,18 +124,14 @@ export const PatchTool = Tool.define("patch", {
     }
 
     // Check permissions if needed
-    if (agent.permission.edit === "ask") {
-      await Permission.ask({
-        type: "edit",
-        sessionID: ctx.sessionID,
-        messageID: ctx.messageID,
-        callID: ctx.callID,
-        title: `Apply patch to ${fileChanges.length} files`,
-        metadata: {
-          diff: totalDiff,
-        },
-      })
-    }
+    await ctx.ask({
+      permission: "edit",
+      patterns: fileChanges.map((c) => path.relative(Instance.worktree, c.filePath)),
+      always: ["*"],
+      metadata: {
+        diff: totalDiff,
+      },
+    })
 
     // Apply the changes
     const changedFiles: string[] = []

@@ -6,6 +6,7 @@ export namespace FileIgnore {
     "bower_components",
     ".pnpm-store",
     "vendor",
+    ".npm",
     "dist",
     "build",
     "out",
@@ -22,11 +23,20 @@ export namespace FileIgnore {
     ".output",
     "desktop",
     ".sst",
+    ".cache",
+    ".webkit-cache",
+    "__pycache__",
+    ".pytest_cache",
+    "mypy_cache",
+    ".history",
+    ".gradle",
   ])
 
   const FILES = [
     "**/*.swp",
     "**/*.swo",
+
+    "**/*.pyc",
 
     // OS
     "**/.DS_Store",

@@ -1,17 +1,18 @@
-import { type Accessor, createMemo, Match, Show, Switch } from "solid-js"
+import { type Accessor, createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
-import type { AssistantMessage, Session } from "@opencode-ai/sdk"
+import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
+import { useCommandDialog } from "@tui/component/dialog-command"
+import { useKeybind } from "../../context/keybind"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
   return (
     <text fg={theme.text}>
-      <span style={{ bold: true, fg: theme.accent }}>#</span>{" "}
-      <span style={{ bold: true }}>{props.session().title}</span>
+      <span style={{ bold: true }}>#</span> <span style={{ bold: true }}>{props.session().title}</span>
     </text>
   )
 }
@@ -32,7 +33,6 @@ export function Header() {
   const sync = useSync()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
-  const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
 
   const cost = createMemo(() => {
     const total = pipe(
@@ -53,43 +53,77 @@ export function Header() {
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
     let result = total.toLocaleString()
     if (model?.limit.context) {
-      result += "/" + Math.round((total / model.limit.context) * 100) + "%"
+      result += "  " + Math.round((total / model.limit.context) * 100) + "%"
     }
     return result
   })
 
   const { theme } = useTheme()
+  const keybind = useKeybind()
+  const command = useCommandDialog()
+  const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
 
   return (
-    <box paddingLeft={1} paddingRight={1} {...SplitBorder} borderColor={theme.backgroundElement} flexShrink={0}>
-      <Show
-        when={shareEnabled()}
-        fallback={
-          <box flexDirection="row" justifyContent="space-between" gap={1}>
-            <Title session={session} />
-            <ContextInfo context={context} cost={cost} />
-          </box>
-        }
+    <box flexShrink={0}>
+      <box
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        paddingRight={1}
+        {...SplitBorder}
+        border={["left"]}
+        borderColor={theme.border}
+        flexShrink={0}
+        backgroundColor={theme.backgroundPanel}
       >
-        <Title session={session} />
-        <box flexDirection="row" justifyContent="space-between" gap={1}>
-          <box flexGrow={1} flexShrink={1}>
-            <Switch>
-              <Match when={session().share?.url}>
-                <text fg={theme.textMuted} wrapMode="word">
-                  {session().share!.url}
+        <Switch>
+          <Match when={session()?.parentID}>
+            <box flexDirection="row" gap={2}>
+              <text fg={theme.text}>
+                <b>Subagent session</b>
+              </text>
+              <box
+                onMouseOver={() => setHover("parent")}
+                onMouseOut={() => setHover(null)}
+                onMouseUp={() => command.trigger("session.parent")}
+                backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
+              >
+                <text fg={theme.text}>
+                  Parent <span style={{ fg: theme.textMuted }}>{keybind.print("session_parent")}</span>
                 </text>
-              </Match>
-              <Match when={true}>
-                <text fg={theme.text} wrapMode="word">
-                  /share <span style={{ fg: theme.textMuted }}>to create a shareable link</span>
+              </box>
+              <box
+                onMouseOver={() => setHover("prev")}
+                onMouseOut={() => setHover(null)}
+                onMouseUp={() => command.trigger("session.child.previous")}
+                backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
+              >
+                <text fg={theme.text}>
+                  Prev <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
                 </text>
-              </Match>
-            </Switch>
-          </box>
-          <ContextInfo context={context} cost={cost} />
-        </box>
-      </Show>
+              </box>
+              <box
+                onMouseOver={() => setHover("next")}
+                onMouseOut={() => setHover(null)}
+                onMouseUp={() => command.trigger("session.child.next")}
+                backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
+              >
+                <text fg={theme.text}>
+                  Next <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span>
+                </text>
+              </box>
+              <box flexGrow={1} flexShrink={1} />
+              <ContextInfo context={context} cost={cost} />
+            </box>
+          </Match>
+          <Match when={true}>
+            <box flexDirection="row" justifyContent="space-between" gap={1}>
+              <Title session={session} />
+              <ContextInfo context={context} cost={cost} />
+            </box>
+          </Match>
+        </Switch>
+      </box>
     </box>
   )
 }

@@ -4,7 +4,7 @@ import { map, filter, pipe, fromEntries, mapValues } from "remeda"
 import z from "zod"
 import { fn } from "@/util/fn"
 import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
-import { NamedError } from "@/util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "@/auth"
 
 export namespace ProviderAuth {
@@ -99,12 +99,16 @@ export namespace ProviderAuth {
           })
         }
         if ("refresh" in result) {
-          await Auth.set(input.providerID, {
+          const info: Auth.Info = {
             type: "oauth",
             access: result.access,
             refresh: result.refresh,
             expires: result.expires,
-          })
+          }
+          if (result.accountId) {
+            info.accountId = result.accountId
+          }
+          await Auth.set(input.providerID, info)
         }
         return
       }

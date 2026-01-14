@@ -11,3 +11,9 @@ new cloudflare.RegionalHostname("RegionalHostname", {
   regionKey: "us",
   zoneId: zoneID,
 })
+
+export const shortDomain = (() => {
+  if ($app.stage === "production") return "opncd.ai"
+  if ($app.stage === "dev") return "dev.opncd.ai"
+  return `${$app.stage}.dev.opncd.ai`
+})()

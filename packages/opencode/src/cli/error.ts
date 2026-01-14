@@ -32,9 +32,26 @@ export function FormatError(input: unknown) {
   }
   if (Config.InvalidError.isInstance(input))
     return [
-      `Config file at ${input.data.path} is invalid` + (input.data.message ? `: ${input.data.message}` : ""),
+      `Configuration is invalid${input.data.path && input.data.path !== "config" ? ` at ${input.data.path}` : ""}` +
+        (input.data.message ? `: ${input.data.message}` : ""),
       ...(input.data.issues?.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")) ?? []),
     ].join("\n")
 
   if (UI.CancelledError.isInstance(input)) return ""
+}
+
+export function FormatUnknownError(input: unknown): string {
+  if (input instanceof Error) {
+    return input.stack ?? `${input.name}: ${input.message}`
+  }
+
+  if (typeof input === "object" && input !== null) {
+    try {
+      return JSON.stringify(input, null, 2)
+    } catch {
+      return "Unexpected error (unserializable)"
+    }
+  }
+
+  return String(input)
 }
