@@ -71,11 +71,56 @@ Rules are evaluated by pattern match, with the **last matching rule winning**. A
 
 ### Wildcards
 
-Permission patterns use simple wildcard matching:
+Wildcards work on **both permission names and patterns**. They use simple wildcard matching:
 
 - `*` matches zero or more of any character
 - `?` matches exactly one character
 - All other characters match literally
+
+**Examples:**
+
+```json title="opencode.json"
+{
+  "permission": {
+    "*": "allow", // allow all tools by default (includes custom tools)
+    "web*": "deny", // deny all web tools
+    "websearch": "ask", // but ask for websearch
+    "bash": {
+      "git *": "allow", // allow git commands
+      "rm *": "deny" // deny rm commands
+    }
+  }
+}
+```
+
+:::note
+[Learn more](/docs/custom-tools) about creating and configuring custom tools.
+:::
+
+````
+
+---
+
+## Rule Evaluation
+
+Within each permission object, **the last matching pattern wins**. Put catch-all `"*"` rules first, then specific overrides:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "bash": {
+      "*": "allow", // catch-all first
+      "rm *": "deny" // specific override after
+    }
+  }
+}
+````
+
+:::warning
+**Never place `"*": "allow"` at the end** — it would match everything and override all previous rules!
+:::
+
+Agent permissions override global permissions. [Learn more](/docs/config#precedence-order) about how multiple config files are merged together.
 
 ---
 
@@ -102,24 +147,34 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 
 ## Defaults
 
-If you don’t specify anything, OpenCode starts from permissive defaults:
+If you don't specify anything, OpenCode starts from these defaults:
 
-- Most permissions default to `"allow"`.
-- `doom_loop` and `external_directory` default to `"ask"`.
-- `read` is `"allow"`, but `.env` files are denied by default:
-
-```json title="opencode.json"
+```json
 {
   "permission": {
+    "*": "allow",
+    "doom_loop": "ask",
+    "external_directory": {
+      "*": "ask"
+    },
+    "question": "deny",
+    "plan_enter": "deny",
+    "plan_exit": "deny",
     "read": {
       "*": "allow",
-      "*.env": "deny",
-      "*.env.*": "deny",
+      "*.env": "ask",
+      "*.env.*": "ask",
       "*.env.example": "allow"
     }
   }
 }
 ```
+
+- Most tools default to `"allow"`.
+- `read` defaults to `"allow"`, but `.env` files require approval (`"ask"`).
+- `doom_loop` and `external_directory` default to `"ask"`.
+- `question`, `plan_enter`, and `plan_exit` default to `"deny"`.
+- `read` defaults to "allow", `.env` defaults to `"ask"`.
 
 ---
 
