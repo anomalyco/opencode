@@ -52,7 +52,8 @@ import {
   SessionViewTabs,
   type SessionView,
 } from "@/components/session"
-import { AgentFlowPanel } from "@opencode-ai/ui/agent-flow-panel"
+import { AgentFlowGraph } from "@opencode-ai/ui/agent-flow-graph"
+import { AgentFlowTimeline } from "@opencode-ai/ui/agent-flow-timeline"
 import { useAgentFlow } from "@/context/agent-flow"
 import { usePlatform } from "@/context/platform"
 import { navMark, navParams } from "@/utils/perf"
@@ -737,7 +738,7 @@ export default function Page() {
   const mobileReview = createMemo(() => !isDesktop() && hasReview() && store.mobileTab === "review")
 
   const showTabs = createMemo(
-    () => view().reviewPanel.opened() && (hasReview() || tabs().all().length > 0 || contextOpen()),
+    () => currentView() !== "flow" && view().reviewPanel.opened() && (hasReview() || tabs().all().length > 0 || contextOpen()),
   )
 
   const activeTab = createMemo(() => {
@@ -1217,11 +1218,12 @@ export default function Page() {
                 </Show>
                 </Match>
                 <Match when={currentView() === "flow"}>
-                  <div class="relative w-full h-full min-w-0 overflow-y-auto">
-                    <AgentFlowPanel
+                  <div class="relative w-full h-full min-w-0 overflow-hidden">
+                    <AgentFlowTimeline
                       nodes={agentFlow.nodes()}
+                      prompt={userMessages()[0]?.summary?.title}
                       onSelectNode={(node) => agentFlow.selectNode(node.id)}
-                      class="px-4 md:px-6 py-4"
+                      class="h-full"
                     />
                   </div>
                 </Match>
@@ -1274,6 +1276,7 @@ export default function Page() {
                   }}
                   newSessionWorktree={newSessionWorktree()}
                   onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+                  onSubmit={() => setCurrentView("flow")}
                 />
               </Show>
             </div>

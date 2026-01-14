@@ -1,0 +1,198 @@
+[data-component="timeline-card"] {
+  display: flex;
+  flex-direction: column;
+  background: #FFFBF5;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 120px;
+
+  &:hover {
+    border-color: rgba(0, 0, 0, 0.15);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+  }
+
+  /* Status-based left border accent */
+  &[data-status="running"] {
+    border-left: 3px solid #FF9800;
+  }
+
+  &[data-status="complete"] {
+    border-left: 3px solid #4CAF50;
+  }
+
+  &[data-status="failed"] {
+    border-left: 3px solid #F44336;
+  }
+
+  &[data-status="pending"] {
+    border-left: 3px solid #9E9E9E;
+    opacity: 0.7;
+  }
+
+  /* Preview Area */
+  [data-slot="preview"] {
+    background: #F5F0E8;
+    padding: 1rem;
+    min-height: 100px;
+    max-height: 200px;
+    overflow: hidden;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  [data-slot="preview-content"] {
+    font-family: var(--font-family-mono);
+    font-size: 11px;
+    line-height: 1.5;
+    color: rgba(0, 0, 0, 0.55);
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 10;
+    -webkit-box-orient: vertical;
+  }
+
+  /* Tool Chips */
+  [data-slot="tools"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  [data-slot="tool-chip"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    background: #E8F5E9;
+    color: #2E7D32;
+
+    svg {
+      width: 12px;
+      height: 12px;
+    }
+
+    &[data-status="running"] {
+      background: #FFF8E1;
+      color: #F57C00;
+    }
+
+    &[data-status="failed"] {
+      background: #FFEBEE;
+      color: #C62828;
+    }
+
+    &[data-status="pending"] {
+      background: #F5F5F5;
+      color: #757575;
+    }
+  }
+
+  [data-slot="tool-more"] {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.5rem;
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.4);
+  }
+
+  /* Progress Bar */
+  [data-slot="progress"] {
+    height: 3px;
+    background: #FFF8E1;
+    overflow: hidden;
+  }
+
+  [data-slot="progress-bar"] {
+    height: 100%;
+    width: 30%;
+    background: linear-gradient(90deg, #FFE082, #FF9800, #FFE082);
+    background-size: 200% 100%;
+    animation: progress-shimmer 1.5s ease-in-out infinite;
+  }
+
+  @keyframes progress-shimmer {
+    0% {
+      background-position: 200% 0;
+      width: 20%;
+    }
+    50% {
+      width: 60%;
+    }
+    100% {
+      background-position: -200% 0;
+      width: 20%;
+    }
+  }
+
+  /* Footer */
+  [data-slot="footer"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(to top, #FFFBF5 70%, transparent);
+  }
+
+  [data-slot="agent-badge"] {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--agent-color);
+  }
+
+  [data-slot="status-area"] {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  [data-slot="status-pill"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    background: rgba(0, 0, 0, 0.75);
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    color: white;
+  }
+
+  [data-slot="status-icon"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    color: white;
+  }
+
+  &[data-status="complete"] [data-slot="status-pill"] {
+    background: #2E7D32;
+  }
+
+  &[data-status="failed"] [data-slot="status-pill"] {
+    background: #C62828;
+  }
+
+  &[data-status="pending"] [data-slot="status-pill"] {
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  [data-slot="duration"] {
+    font-size: 11px;
+    font-family: var(--font-family-mono);
+    color: rgba(0, 0, 0, 0.4);
+  }
+}
