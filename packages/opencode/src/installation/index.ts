@@ -155,7 +155,7 @@ export namespace Installation {
         break
       }
       case "choco":
-        cmd = $`choco upgrade opencode --version=${target} -y -r`
+        cmd = $`echo Y | choco upgrade opencode --version=${target}`
         break
       case "scoop":
         cmd = $`scoop install extras/opencode@${target}`
