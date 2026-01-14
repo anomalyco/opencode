@@ -30,14 +30,12 @@ export type ExecuteResult<M extends Metadata = Metadata> = {
   attachments?: FilePart[]
 }
 
-export type Input<Args extends z.ZodRawShape, M extends Metadata = Metadata> = {
+export function tool<Args extends z.ZodRawShape, M extends Metadata = Metadata>(input: {
   description: string
   args: Args
   execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext<M>): Promise<string | ExecuteResult<M>>
   formatValidationError?(error: z.ZodError): string
-}
-
-export function tool<Args extends z.ZodRawShape, M extends Metadata = Metadata>(input: Input<Args, M>) {
+}) {
   return input
 }
 tool.schema = z
