@@ -25,6 +25,7 @@ import {
   type ScrollAcceleration,
   TextAttributes,
   RGBA,
+  type MouseEvent,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
@@ -74,6 +75,7 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { useMultiClickTextCopy } from "../../util/use-multi-click-text-copy"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1101,6 +1103,11 @@ function UserMessage(props: {
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => (queued() ? theme.accent : local.agent.color(props.message.agent)))
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
+  const toast = useToast()
+  const multiClick = useMultiClickTextCopy({
+    getText: () => text()?.text ?? "",
+    toast,
+  })
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 
@@ -1121,7 +1128,10 @@ function UserMessage(props: {
             onMouseOut={() => {
               setHover(false)
             }}
-            onMouseUp={props.onMouseUp}
+            onMouseUp={(event) => {
+              multiClick.onMouseUp(event)
+              props.onMouseUp()
+            }}
             paddingTop={1}
             paddingBottom={1}
             paddingLeft={2}
@@ -1268,10 +1278,15 @@ const PART_MAPPING = {
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme, subtleSyntax } = useTheme()
   const ctx = use()
+  const toast = useToast()
   const content = createMemo(() => {
     // Filter out redacted reasoning chunks from OpenRouter
     // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
     return props.part.text.replace("[REDACTED]", "").trim()
+  })
+  const multiClick = useMultiClickTextCopy({
+    getText: () => content(),
+    toast,
   })
   return (
     <Show when={content() && ctx.showThinking()}>
@@ -1283,6 +1298,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
         border={["left"]}
         customBorderChars={SplitBorder.customBorderChars}
         borderColor={theme.backgroundElement}
+        onMouseUp={multiClick.onMouseUp}
       >
         <code
           filetype="markdown"
@@ -1301,9 +1317,14 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const toast = useToast()
+  const multiClick = useMultiClickTextCopy({
+    getText: () => props.part.text.trim(),
+    toast,
+  })
   return (
     <Show when={props.part.text.trim()}>
-      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
+      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={multiClick.onMouseUp}>
         <code
           filetype="markdown"
           drawUnstyledText={false}
