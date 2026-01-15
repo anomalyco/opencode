@@ -1153,7 +1153,7 @@ export default function Layout(props: ParentProps) {
                 <div class="relative w-full py-1">
                   <Button
                     variant="ghost"
-                    class="flex w-full text-left justify-start text-12-medium text-text-weak px-10"
+                    class="flex w-full text-left justify-start text-14-regular text-text-weak px-10"
                     size="large"
                     onClick={loadMore}
                   >
@@ -1198,7 +1198,7 @@ export default function Layout(props: ParentProps) {
             <div class="relative w-full py-1">
               <Button
                 variant="ghost"
-                class="flex w-full text-left justify-start text-12-medium text-text-weak px-10"
+                class="flex w-full text-left justify-start text-14-regular text-text-weak px-10"
                 size="large"
                 onClick={loadMore}
               >
