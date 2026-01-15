@@ -6,7 +6,7 @@ export interface IconButtonProps extends ComponentProps<typeof Kobalte> {
   icon: IconProps["name"]
   size?: "normal" | "large"
   iconSize?: IconProps["size"]
-  variant?: "primary" | "secondary" | "ghost"
+  variant?: "primary" | "secondary" | "ghost" | "danger"
 }
 
 export function IconButton(props: ComponentProps<"button"> & IconButtonProps) {

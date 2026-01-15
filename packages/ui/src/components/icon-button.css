@@ -101,6 +101,24 @@
     }
   }
 
+  &[data-variant="danger"] {
+    background-color: color-mix(in srgb, var(--surface-critical-strong) 20%, transparent);
+
+    [data-slot="icon-svg"] {
+      color: var(--surface-critical-strong);
+    }
+
+    &:hover:not(:disabled) {
+      background-color: color-mix(in srgb, var(--surface-critical-strong) 30%, transparent);
+    }
+    &:focus:not(:disabled) {
+      background-color: color-mix(in srgb, var(--surface-critical-strong) 25%, transparent);
+    }
+    &:active:not(:disabled) {
+      background-color: color-mix(in srgb, var(--surface-critical-strong) 35%, transparent);
+    }
+  }
+
   &[data-size="normal"] {
     width: 24px;
     height: 24px;
