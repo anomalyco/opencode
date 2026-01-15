@@ -140,9 +140,6 @@ pub fn sync_cli(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn get_user_shell() -> String {
-    std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
-}
 
 pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
     let state_dir = app

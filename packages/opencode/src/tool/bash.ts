@@ -238,9 +238,11 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       let timeout = params.timeout ?? DEFAULT_TIMEOUT
-      // Extend timeout for PowerShell Start-Job commands to minimum 60 seconds
-      if (/Start-Job/i.test(params.command)) {
-        timeout = Math.max(timeout, 60 * 1000)
+      // Extend timeout for PowerShell job commands to minimum 10 minutes (600,000ms)
+      const powershellJobCmdlets = /(Start-Job|Receive-Job|Wait-Job|Get-Job|Stop-Job|Remove-Job)/i
+      if (powershellJobCmdlets.test(params.command)) {
+        log.info(`Detected PowerShell job command: ${params.command}. Extending timeout to 10 minutes.`)
+        timeout = Math.max(timeout, 10 * 60 * 1000)
       }
       const tree = await parser().then((p) => p.parse(params.command))
       if (!tree) {
@@ -389,6 +391,7 @@ export const BashTool = Tool.define("bash", async () => {
       let timedOut = false
       let aborted = false
       let exited = false
+      let exitCode: number | null = null
 
       const kill = () => Shell.killTree(proc, { exited: () => exited })
 
@@ -415,8 +418,9 @@ export const BashTool = Tool.define("bash", async () => {
           ctx.abort.removeEventListener("abort", abortHandler)
         }
 
-        proc.once("exit", () => {
+        proc.once("exit", (code) => {
           exited = true
+          exitCode = code
           cleanup()
           resolve()
         })
@@ -435,11 +439,14 @@ export const BashTool = Tool.define("bash", async () => {
 
       const resultMetadata: string[] = []
 
-      if (timedOut) {
+      // Set appropriate exit codes for special cases
+      if (timedOut && exitCode === null) {
+        exitCode = 124 // Standard timeout exit code
         resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
       }
 
-      if (aborted) {
+      if (aborted && exitCode === null) {
+        exitCode = 130 // Standard SIGINT exit code for user abort
         resultMetadata.push("User aborted the command")
       }
 
@@ -451,7 +458,7 @@ export const BashTool = Tool.define("bash", async () => {
         title: params.description,
         metadata: {
           output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
-          exit: proc.exitCode,
+          exit: exitCode,
           description: params.description,
         },
         output,
