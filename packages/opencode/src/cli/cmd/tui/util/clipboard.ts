@@ -30,14 +30,52 @@ export namespace Clipboard {
     }
 
     if (os === "win32" || release().includes("WSL")) {
-      const script =
-        "Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [System.Convert]::ToBase64String($ms.ToArray()) }"
-      const base64 = await $`powershell.exe -NonInteractive -NoProfile -command "${script}"`.nothrow().text()
-      if (base64) {
-        const imageBuffer = Buffer.from(base64.trim(), "base64")
-        if (imageBuffer.length > 0) {
-          return { data: imageBuffer.toString("base64"), mime: "image/png" }
+      // Helper: encode PowerShell script as base64 UTF-16LE for -EncodedCommand
+      // This avoids ALL quoting/escaping issues with -command "..." which breaks
+      // when clipboard content ends with backslash sequences (e.g., "c:\path\file.png")
+      const encodePS = (script: string) => Buffer.from(script, "utf16le").toString("base64")
+
+      // Try to get image from Windows clipboard via PowerShell
+      const imgScript = `
+Add-Type -AssemblyName System.Windows.Forms
+$img = [System.Windows.Forms.Clipboard]::GetImage()
+if ($img) {
+  $ms = New-Object System.IO.MemoryStream
+  $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+  [System.Convert]::ToBase64String($ms.ToArray())
+}
+`.trim()
+      const imgEncoded = encodePS(imgScript)
+      const imgOut = (await $`powershell.exe -NonInteractive -NoProfile -EncodedCommand ${imgEncoded}`.nothrow().text()).trim()
+      if (imgOut) {
+        try {
+          const buf = Buffer.from(imgOut, "base64")
+          // Validate PNG magic bytes to prevent garbage PowerShell output from being treated as image
+          const isPng = buf.length >= 8 &&
+            buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
+            buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a
+          if (isPng) {
+            return { data: buf.toString("base64"), mime: "image/png" }
+          }
+        } catch {
+          // Invalid base64, fall through to text
         }
+      }
+
+      // Get TEXT from Windows clipboard via PowerShell
+      // CRITICAL: On WSL2, clipboardy uses Linux clipboard tools (xclip/wl-paste) which
+      // can't access Windows clipboard. We MUST use PowerShell to read Windows clipboard text.
+      // Using -EncodedCommand to avoid quoting issues with trailing backslashes in clipboard content.
+      const textScript = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+try { Get-Clipboard -Raw } catch { "" }
+`.trim()
+      const textEncoded = encodePS(textScript)
+      const text = (await $`powershell.exe -NonInteractive -NoProfile -EncodedCommand ${textEncoded}`.nothrow().text())
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n")
+      if (text && text.trim()) {
+        return { data: text, mime: "text/plain" }
       }
     }
 

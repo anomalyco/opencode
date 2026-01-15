@@ -778,10 +778,10 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
-                // Handle clipboard paste (Ctrl+V) - check for images first on Windows
-                // This is needed because Windows terminal doesn't properly send image data
-                // through bracketed paste, so we need to intercept the keypress and
-                // directly read from clipboard before the terminal handles it
+                // Handle clipboard paste (Ctrl+V) - IMAGES ONLY
+                // Windows terminal doesn't send image data through bracketed paste,
+                // so we intercept Ctrl+V and read directly from clipboard for images.
+                // Text is handled by onPaste (which always calls preventDefault first).
                 if (keybind.match("input_paste", e)) {
                   const content = await Clipboard.read()
                   if (content?.mime.startsWith("image/")) {
@@ -793,7 +793,7 @@ export function Prompt(props: PromptProps) {
                     })
                     return
                   }
-                  // If no image, let the default paste behavior continue
+                  // Text: let onPaste handle it (don't insert here)
                 }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()
@@ -853,70 +853,62 @@ export function Prompt(props: PromptProps) {
               }}
               onSubmit={submit}
               onPaste={async (event: PasteEvent) => {
-                if (props.disabled) {
-                  event.preventDefault()
-                  return
-                }
+                // ALWAYS preventDefault FIRST to avoid double-paste on WSL2/ConPTY
+                event.preventDefault()
+                if (props.disabled) return
 
-                // Normalize line endings at the boundary
-                // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
-                // Replace CRLF first, then any remaining CR
+                // Normalize line endings
                 const normalizedText = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
                 const pastedContent = normalizedText.trim()
-                if (!pastedContent) {
-                  command.trigger("prompt.paste")
-                  return
-                }
+                if (!pastedContent) return
 
-                // trim ' from the beginning and end of the pasted content. just
-                // ' and nothing else
+                // Check if pasted content is a file path
                 const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
                 const isUrl = /^(https?):\/\//.test(filepath)
                 if (!isUrl) {
                   try {
                     const file = Bun.file(filepath)
-                    // Handle SVG as raw text content, not as base64 image
-                    if (file.type === "image/svg+xml") {
-                      event.preventDefault()
-                      const content = await file.text().catch(() => {})
-                      if (content) {
-                        pasteText(content, `[SVG: ${file.name ?? "image"}]`)
-                        return
+                    const fileExists = await file.exists()
+                    if (fileExists) {
+                      // Handle SVG as raw text content
+                      if (file.type === "image/svg+xml") {
+                        const content = await file.text().catch(() => {})
+                        if (content) {
+                          pasteText(content, `[SVG: ${file.name ?? "image"}]`)
+                          return
+                        }
                       }
-                    }
-                    if (file.type.startsWith("image/")) {
-                      event.preventDefault()
-                      const content = await file
-                        .arrayBuffer()
-                        .then((buffer) => Buffer.from(buffer).toString("base64"))
-                        .catch(() => {})
-                      if (content) {
-                        await pasteImage({
-                          filename: file.name,
-                          mime: file.type,
-                          content,
-                        })
-                        return
+                      // Handle images
+                      if (file.type.startsWith("image/")) {
+                        const content = await file
+                          .arrayBuffer()
+                          .then((buffer) => Buffer.from(buffer).toString("base64"))
+                          .catch(() => {})
+                        if (content) {
+                          await pasteImage({
+                            filename: file.name,
+                            mime: file.type,
+                            content,
+                          })
+                          return
+                        }
                       }
                     }
                   } catch {}
                 }
 
+                // Large paste: show summary
                 const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
                 if (
                   (lineCount >= 3 || pastedContent.length > 150) &&
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
-                  event.preventDefault()
                   pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                   return
                 }
 
-                // Force layout update and render for the pasted content
-                setTimeout(() => {
-                  input.getLayoutNode().markDirty()
-                  renderer.requestRender()
-                }, 0)
+                // Small paste: direct insert
+                input.insertText(normalizedText)
               }}
               ref={(r: TextareaRenderable) => {
                 input = r
