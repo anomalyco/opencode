@@ -293,6 +293,11 @@ pub fn run() {
                     "#
                 ));
 
+            #[cfg(target_os = "macos")]
+            let window_builder = window_builder
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true);
+
             let _window = window_builder.build().expect("Failed to create window");
 
             let (tx, rx) = oneshot::channel();

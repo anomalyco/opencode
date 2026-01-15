@@ -319,9 +319,6 @@ render(() => {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
-        {ostype() === "macos" && (
-          <div class="mx-px bg-background-base border-b border-border-weak-base h-8" data-tauri-drag-region />
-        )}
         <ServerGate>
           {(data) => {
             setServerPassword(data().password)

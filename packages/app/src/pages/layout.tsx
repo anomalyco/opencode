@@ -271,6 +271,12 @@ export default function Layout(props: ParentProps) {
     return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
   })
 
+  const workspaceSetting = createMemo(() => {
+    const project = currentProject()
+    if (!project) return false
+    return layout.sidebar.workspaces(project.worktree)()
+  })
+
   createEffect(() => {
     const project = currentProject()
     if (!project) return
@@ -306,7 +312,16 @@ export default function Layout(props: ParentProps) {
     return sessions.filter((s) => !s.parentID)
   }
 
-  const currentSessions = createMemo(() => projectSessions(currentProject()))
+  const currentSessions = createMemo(() => {
+    const project = currentProject()
+    if (!project) return [] as Session[]
+    if (workspaceSetting()) return projectSessions(project)
+    const [projectStore] = globalSync.child(project.worktree)
+    return projectStore.session
+      .filter((session) => session.directory === projectStore.path.directory)
+      .filter((session) => !session.parentID)
+      .toSorted(sortSessions)
+  })
 
   type PrefetchQueue = {
     inflight: Set<string>
@@ -730,6 +745,21 @@ export default function Layout(props: ParentProps) {
   })
 
   createEffect(() => {
+    const project = currentProject()
+    if (!project) return
+
+    if (workspaceSetting()) {
+      const dirs = [project.worktree, ...(project.sandboxes ?? [])]
+      for (const directory of dirs) {
+        globalSync.project.loadSessions(directory)
+      }
+      return
+    }
+
+    globalSync.project.loadSessions(project.worktree)
+  })
+
+  createEffect(() => {
     if (isLargeViewport()) {
       const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 64
       document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
@@ -943,6 +973,7 @@ export default function Layout(props: ParentProps) {
     })
 
     const workspaces = createMemo(() => workspaceIds(props.project).slice(0, 2))
+    const workspaceEnabled = createMemo(() => layout.sidebar.workspaces(props.project.worktree)())
     const label = (directory: string) => {
       const [data] = globalSync.child(directory)
       const kind = directory === props.project.worktree ? "local" : "sandbox"
@@ -952,6 +983,15 @@ export default function Layout(props: ParentProps) {
 
     const sessions = (directory: string) => {
       const [data] = globalSync.child(directory)
+      return data.session
+        .filter((session) => session.directory === data.path.directory)
+        .filter((session) => !session.parentID)
+        .toSorted(sortSessions)
+        .slice(0, 2)
+    }
+
+    const projectSessions = () => {
+      const [data] = globalSync.child(props.project.worktree)
       return data.session
         .filter((session) => session.directory === data.path.directory)
         .filter((session) => !session.parentID)
@@ -980,23 +1020,39 @@ export default function Layout(props: ParentProps) {
           <div class="-m-3 flex flex-col w-72">
             <div class="px-3 py-2 text-12-medium text-text-strong">Recent sessions</div>
             <div class="px-2 pb-2 flex flex-col gap-2">
-              <For each={workspaces()}>
-                {(directory) => (
-                  <div class="flex flex-col gap-1">
-                    <div class="px-2 py-0.5 flex items-center gap-1 min-w-0">
-                      <div class="shrink-0 size-6 flex items-center justify-center">
-                        <Icon name="branch" size="small" class="text-icon-base" />
+              <Show
+                when={workspaceEnabled()}
+                fallback={
+                  <For each={projectSessions()}>
+                    {(session) => (
+                      <SessionItem
+                        session={session}
+                        slug={base64Encode(props.project.worktree)}
+                        dense
+                        mobile={props.mobile}
+                      />
+                    )}
+                  </For>
+                }
+              >
+                <For each={workspaces()}>
+                  {(directory) => (
+                    <div class="flex flex-col gap-1">
+                      <div class="px-2 py-0.5 flex items-center gap-1 min-w-0">
+                        <div class="shrink-0 size-6 flex items-center justify-center">
+                          <Icon name="branch" size="small" class="text-icon-base" />
+                        </div>
+                        <span class="truncate text-14-medium text-text-strong">{label(directory)}</span>
                       </div>
-                      <span class="truncate text-14-medium text-text-strong">{label(directory)}</span>
+                      <For each={sessions(directory)}>
+                        {(session) => (
+                          <SessionItem session={session} slug={base64Encode(directory)} dense mobile={props.mobile} />
+                        )}
+                      </For>
                     </div>
-                    <For each={sessions(directory)}>
-                      {(session) => (
-                        <SessionItem session={session} slug={base64Encode(directory)} dense mobile={props.mobile} />
-                      )}
-                    </For>
-                  </div>
-                )}
-              </For>
+                  )}
+                </For>
+              </Show>
             </div>
             <div class="px-2 py-2 border-t border-border-weak-base">
               <Button
@@ -1068,7 +1124,7 @@ export default function Layout(props: ParentProps) {
       return `${kind} : ${name}`
     })
     const open = createMemo(() => store.workspaceExpanded[props.directory] ?? true)
-    const hasMore = createMemo(() => local() && workspaceStore.session.length >= workspaceStore.limit)
+    const hasMore = createMemo(() => local() && workspaceStore.sessionTotal > workspaceStore.session.length)
     const loadMore = async () => {
       if (!local()) return
       setWorkspaceStore("limit", (limit) => limit + 5)
@@ -1157,7 +1213,7 @@ export default function Layout(props: ParentProps) {
         .filter((session) => !session.parentID)
         .toSorted(sortSessions),
     )
-    const hasMore = createMemo(() => workspaceStore.session.length >= workspaceStore.limit)
+    const hasMore = createMemo(() => workspaceStore.sessionTotal > workspaceStore.session.length)
     const loadMore = async () => {
       setWorkspaceStore("limit", (limit) => limit + 5)
       await globalSync.project.loadSessions(props.project.worktree)
@@ -1324,9 +1380,9 @@ export default function Layout(props: ParentProps) {
                               <DropdownMenu.ItemLabel>Close project</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
                             <DropdownMenu.Separator />
-                            <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces()}>
+                            <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces(p().worktree)}>
                               <DropdownMenu.ItemLabel>
-                                {layout.sidebar.workspaces() ? "Disable workspaces" : "Enable workspaces"}
+                                {layout.sidebar.workspaces(p().worktree)() ? "Disable workspaces" : "Enable workspaces"}
                               </DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
                           </DropdownMenu.Content>
@@ -1336,7 +1392,7 @@ export default function Layout(props: ParentProps) {
                   </div>
 
                   <Show
-                    when={layout.sidebar.workspaces()}
+                    when={layout.sidebar.workspaces(p().worktree)()}
                     fallback={
                       <>
                         <div class="py-4 px-3">
