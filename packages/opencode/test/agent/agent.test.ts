@@ -562,3 +562,70 @@ test("custom agent with model and fallback models preserves specific primary", a
     },
   })
 })
+
+test("fallback models with empty array does not set primary model", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        empty_fallback: {
+          models: [],
+          description: "Agent with empty models array",
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("empty_fallback")
+      expect(agent).toBeDefined()
+      expect(agent?.models).toHaveLength(0)
+      expect(agent?.model).toBeUndefined()
+    },
+  })
+})
+
+test("fallback models are not moved to options", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        fallback_agent: {
+          models: ["anthropic/claude-3-sonnet", "openai/gpt-4o"],
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("fallback_agent")
+      expect(agent?.models).toBeDefined()
+      expect(agent?.options.models).toBeUndefined()
+    },
+  })
+})
+
+test("native agent can have fallback models configured", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        build: {
+          models: ["anthropic/claude-3-opus", "anthropic/claude-3-sonnet", "openai/gpt-4o"],
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const build = await Agent.get("build")
+      expect(build).toBeDefined()
+      expect(build?.native).toBe(true)
+      expect(build?.models).toHaveLength(3)
+      expect(build?.models?.[0].providerID).toBe("anthropic")
+      expect(build?.models?.[0].modelID).toBe("claude-3-opus")
+      expect(build?.model?.providerID).toBe("anthropic")
+      expect(build?.model?.modelID).toBe("claude-3-opus")
+    },
+  })
+})

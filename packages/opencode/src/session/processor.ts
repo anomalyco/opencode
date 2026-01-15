@@ -20,12 +20,8 @@ export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
-  async function tryFallbackModel(
-    streamInput: LLM.StreamInput,
-    currentIndex: number,
-  ): Promise<boolean> {
-    const fallbackIndex = currentIndex + 1
-    const next = streamInput.agent.models?.[fallbackIndex]
+  async function tryFallbackModel(streamInput: LLM.StreamInput, targetIndex: number): Promise<boolean> {
+    const next = streamInput.agent.models?.[targetIndex]
 
     if (!next) {
       return false
@@ -72,9 +68,10 @@ export namespace SessionProcessor {
         needsCompaction = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
 
-        const currentModelIndex = streamInput.agent.models?.findIndex(
-          (m) => m.modelID === streamInput.model.id && m.providerID === streamInput.model.providerID,
-        ) ?? -1
+        const currentModelIndex =
+          streamInput.agent.models?.findIndex(
+            (m) => m.modelID === streamInput.model.id && m.providerID === streamInput.model.providerID,
+          ) ?? -1
         let fallbackIndex = currentModelIndex
         while (true) {
           try {
@@ -376,6 +373,7 @@ export namespace SessionProcessor {
 
             // Try fallback model if available
             if (streamInput.agent.models && fallbackIndex < streamInput.agent.models.length - 1) {
+              fallbackIndex++
               const fallbackSucceeded = await tryFallbackModel(streamInput, fallbackIndex)
               if (fallbackSucceeded) {
                 attempt = 0

@@ -559,6 +559,7 @@ export namespace Config {
       const knownKeys = new Set([
         "name",
         "model",
+        "models",
         "prompt",
         "description",
         "temperature",
