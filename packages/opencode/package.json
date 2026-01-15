@@ -97,6 +97,7 @@
     "clipboardy": "4.0.0",
     "decimal.js": "10.5.0",
     "diff": "catalog:",
+    "discord-rpc": "4.0.1",
     "fuzzysort": "3.1.0",
     "gray-matter": "4.0.3",
     "hono": "catalog:",

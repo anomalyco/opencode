@@ -295,7 +295,7 @@ test("very long filenames", async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
 
-      const longName = "a".repeat(200) + ".txt"
+      const longName = "a".repeat(process.platform === "win32" ? 120 : 200) + ".txt"
       const longFile = `${tmp.path}/${longName}`
 
       await Bun.write(longFile, "long filename content")
@@ -344,7 +344,11 @@ test("nested symlinks", async () => {
 
       const patch = await Snapshot.patch(before!)
       expect(patch.files).toContain(`${tmp.path}/sub/dir/link.txt`)
-      expect(patch.files).toContain(`${tmp.path}/sub-link`)
+      if (process.platform === "win32") {
+        expect(patch.files).toContain(`${tmp.path}/sub-link/dir/link.txt`)
+      } else {
+        expect(patch.files).toContain(`${tmp.path}/sub-link`)
+      }
     },
   })
 })

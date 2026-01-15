@@ -67,7 +67,7 @@ export namespace Snapshot {
         .split("\n")
         .map((x) => x.trim())
         .filter(Boolean)
-        .map((x) => path.join(Instance.worktree, x)),
+        .map((x) => path.posix.join(Instance.worktree, x.replace(/\\/g, "/"))),
     }
   }
 

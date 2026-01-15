@@ -140,7 +140,7 @@ export namespace Project {
           .then((x) => {
             const dirname = path.dirname(x.trim())
             if (dirname === ".") return sandbox
-            return dirname
+            return path.resolve(sandbox, dirname)
           })
           .catch(() => undefined)
 

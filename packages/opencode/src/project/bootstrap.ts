@@ -11,13 +11,17 @@ import { Instance } from "./instance"
 import { Vcs } from "./vcs"
 import { Log } from "@/util/log"
 import { ShareNext } from "@/share/share-next"
+import { DiscordPresence } from "@/discord/presence"
+
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
   await Plugin.init()
   Share.init()
   ShareNext.init()
+  void DiscordPresence.init()
   Format.init()
+
   await LSP.init()
   FileWatcher.init()
   File.init()

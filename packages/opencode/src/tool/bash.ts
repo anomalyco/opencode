@@ -2,11 +2,13 @@ import z from "zod"
 import { spawn } from "child_process"
 import { Tool } from "./tool"
 import path from "path"
+import os from "os"
 import DESCRIPTION from "./bash.txt"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
+
 
 import { $ } from "bun"
 import { Filesystem } from "@/util/filesystem"
@@ -20,7 +22,20 @@ import { Truncate } from "./truncation"
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
+const normalizeResolvedPath = (resolved: string) => {
+  if (process.platform !== "win32") return resolved
+  if (resolved.match(/^\/[a-z]\//)) {
+    return resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
+  }
+  if (resolved === "/tmp" || resolved.startsWith("/tmp/")) {
+    const suffix = resolved.slice("/tmp".length).replace(/^\//, "")
+    return path.join(os.tmpdir(), suffix)
+  }
+  return resolved
+}
+
 export const log = Log.create({ service: "bash-tool" })
+
 
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
@@ -120,10 +135,7 @@ export const BashTool = Tool.define("bash", async () => {
             log.info("resolved path", { arg, resolved })
             if (resolved) {
               // Git Bash on Windows returns Unix-style paths like /c/Users/...
-              const normalized =
-                process.platform === "win32" && resolved.match(/^\/[a-z]\//)
-                  ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
-                  : resolved
+              const normalized = normalizeResolvedPath(resolved)
               if (!Instance.containsPath(normalized)) directories.add(normalized)
             }
           }

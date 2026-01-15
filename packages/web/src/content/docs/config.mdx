@@ -428,7 +428,47 @@ If you don't want updates but want to be notified when a new version is availabl
 
 ---
 
+### Discord Rich Presence
+
+show your active session in discord (model, tool, session duration, share link).
+
+opencode uses the built-in app id unless you disable it.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "discord": {
+    "enabled": true,
+    "useDefaultClientId": true,
+    "showSessionDuration": true,
+    "showModel": true,
+    "showTool": true,
+    "buttons": {
+      "session": true
+    }
+  }
+}
+```
+
+to use your own app id:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "discord": {
+    "enabled": true,
+    "clientId": "YOUR_DISCORD_APP_ID",
+    "useDefaultClientId": false
+  }
+}
+```
+
+discord desktop app must be running. set `enabled` to false to disable rich presence.
+
+---
+
 ### Formatters
+
 
 You can configure code formatters through the `formatter` option.
 
