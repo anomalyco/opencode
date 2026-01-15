@@ -13,7 +13,7 @@ import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
 import { Logo } from "@opencode-ai/ui/logo"
-import { createSignal, Show, Accessor, JSX, createResource } from "solid-js"
+import { createSignal, createRoot, Show, Accessor, JSX, createResource } from "solid-js"
 
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
@@ -292,8 +292,11 @@ root?.addEventListener("mousewheel", (e) => {
   e.stopPropagation()
 })
 
-const [serverPassword, setServerPassword] = createSignal<string | null>(null)
-const platform = createPlatform(() => serverPassword())
+const { serverPassword, setServerPassword, platform } = createRoot(() => {
+  const [serverPassword, setServerPassword] = createSignal<string | null>(null)
+  const platform = createPlatform(() => serverPassword())
+  return { serverPassword, setServerPassword, platform }
+})
 
 // Handle external links - open in system browser instead of webview
 document.addEventListener("click", (e) => {
