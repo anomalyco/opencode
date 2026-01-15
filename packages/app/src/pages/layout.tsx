@@ -968,8 +968,8 @@ export default function Layout(props: ParentProps) {
         type="button"
         classList={{
           "flex items-center justify-center size-10 p-1 rounded-md border transition-colors cursor-default": true,
-          "bg-surface-base-hover border-icon-strong-base": selected(),
-          "bg-transparent border-transparent hover:bg-surface-base-hover hover:border-border-weak-base": !selected(),
+          "bg-transparent border-icon-strong-base": selected(),
+          "bg-transparent border-transparent hover:border-border-weak-base": !selected(),
         }}
         onClick={() => navigateToProject(props.project.worktree)}
       >
