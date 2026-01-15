@@ -30,6 +30,8 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
+import { useExecutionMode, handleModeToggleKey, determineRouting } from "@tui-integration"
+import { ExecutionMode } from "@shell-mode"
 
 export type PromptProps = {
   sessionID?: string
@@ -72,6 +74,7 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const executionMode = useExecutionMode()
 
   function promptModelWarning() {
     toast.show({
@@ -428,6 +431,15 @@ export function Prompt(props: PromptProps) {
 
   command.register(() => [
     {
+      title: `Toggle execution mode (${executionMode.getModeDisplay().name})`,
+      value: "mode.toggle",
+      category: "Session",
+      onSelect: (dialog) => {
+        executionMode.toggleMode()
+        dialog.clear()
+      },
+    },
+    {
       title: "Stash prompt",
       value: "prompt.stash",
       category: "Prompt",
@@ -527,7 +539,16 @@ export function Prompt(props: PromptProps) {
     const currentMode = store.mode
     const variant = local.model.variant.current()
 
-    if (store.mode === "shell") {
+    // Determine routing based on execution mode
+    // The old `!` prefix shell mode (store.mode === "shell") takes precedence
+    // Then check the execution mode for Auto/Shell/Agent routing
+    let shouldRouteToShell = store.mode === "shell"
+    if (!shouldRouteToShell && store.mode === "normal") {
+      const routing = await determineRouting(inputText)
+      shouldRouteToShell = routing === "shell"
+    }
+
+    if (shouldRouteToShell) {
       sdk.client.session.shell({
         sessionID,
         agent: local.agent.current().name,
@@ -537,7 +558,9 @@ export function Prompt(props: PromptProps) {
         },
         command: inputText,
       })
-      setStore("mode", "normal")
+      if (store.mode === "shell") {
+        setStore("mode", "normal")
+      }
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
@@ -689,6 +712,9 @@ export function Prompt(props: PromptProps) {
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
     if (store.mode === "shell") return theme.primary
+    // Use execution mode color when in Shell mode
+    const mode = executionMode.mode()
+    if (mode === ExecutionMode.Shell) return theme.secondary
     return local.agent.color(local.agent.current().name)
   })
 
@@ -793,6 +819,11 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                   // If no image, let the default paste behavior continue
+                }
+                // Handle Ctrl+Space to toggle execution mode
+                if (handleModeToggleKey(e, { setMode: executionMode.setMode })) {
+                  e.preventDefault()
+                  return
                 }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()
@@ -1063,11 +1094,11 @@ export function Prompt(props: PromptProps) {
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
-                  <text fg={theme.text}>
-                    {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
+                  <text fg={executionMode.mode() === ExecutionMode.Shell ? theme.secondary : theme.textMuted}>
+                    [{executionMode.getModeDisplay().name}]
                   </text>
                   <text fg={theme.text}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
+                    ctrl+space <span style={{ fg: theme.textMuted }}>mode</span>
                   </text>
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>

@@ -36,6 +36,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { ExecutionModeProvider, WorkingDirProvider } from "@tui-integration"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -142,7 +143,11 @@ export function tui(input: {
                                       <FrecencyProvider>
                                         <PromptHistoryProvider>
                                           <PromptRefProvider>
-                                            <App />
+                                            <ExecutionModeProvider>
+                                              <WorkingDirProvider>
+                                                <App />
+                                              </WorkingDirProvider>
+                                            </ExecutionModeProvider>
                                           </PromptRefProvider>
                                         </PromptHistoryProvider>
                                       </FrecencyProvider>

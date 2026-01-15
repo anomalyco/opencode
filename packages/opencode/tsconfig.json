@@ -10,7 +10,12 @@
     "customConditions": ["browser"],
     "paths": {
       "@/*": ["./src/*"],
-      "@tui/*": ["./src/cli/cmd/tui/*"]
+      "@tui/*": ["./src/cli/cmd/tui/*"],
+      "@plugin/*": ["./plugin/*"],
+      "@shell-mode": ["./plugin/shell-mode/index.ts"],
+      "@shell-mode/*": ["./plugin/shell-mode/*"],
+      "@tui-integration": ["./plugin/tui-integration/index.ts"],
+      "@tui-integration/*": ["./plugin/tui-integration/*"]
     }
   }
 }

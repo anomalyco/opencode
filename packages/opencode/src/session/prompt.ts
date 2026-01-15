@@ -44,6 +44,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { getCwd } from "@shell-mode"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -324,7 +325,7 @@ export namespace SessionPrompt {
           mode: task.agent,
           agent: task.agent,
           path: {
-            cwd: Instance.directory,
+            cwd: getCwd(),
             root: Instance.worktree,
           },
           cost: 0,
@@ -524,7 +525,7 @@ export namespace SessionPrompt {
           mode: agent.name,
           agent: agent.name,
           path: {
-            cwd: Instance.directory,
+            cwd: getCwd(),
             root: Instance.worktree,
           },
           cost: 0,
@@ -1383,7 +1384,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       agent: input.agent,
       cost: 0,
       path: {
-        cwd: Instance.directory,
+        cwd: getCwd(),
         root: Instance.worktree,
       },
       time: {
@@ -1474,7 +1475,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const args = matchingInvocation?.args
 
     const proc = spawn(shell, args, {
-      cwd: Instance.directory,
+      cwd: getCwd(),
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
       env: {
