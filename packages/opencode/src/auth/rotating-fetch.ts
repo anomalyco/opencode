@@ -1,7 +1,9 @@
 import { Auth } from "./index"
 import { withOAuthRecord } from "./context"
+import { CredentialManager } from "./credential-manager"
 
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 30_000
+const DEFAULT_AUTH_FAILURE_COOLDOWN_MS = 5 * 60_000
 
 function isReadableStream(value: unknown): value is ReadableStream {
   return typeof ReadableStream !== "undefined" && value instanceof ReadableStream
@@ -59,8 +61,6 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
     const { records, orderedIDs } = await Auth.OAuthPool.snapshot(opts.providerID, namespace)
     if (records.length === 0) return fetchFn(input, init)
 
-    if (orderedIDs.length <= 1) return fetchFn(input, init)
-
     const recordByID = new Map(records.map((record) => [record.id, record]))
     const candidates = orderedIDs.filter((id) => recordByID.has(id))
     if (candidates.length === 0) return fetchFn(input, init)
@@ -78,6 +78,13 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
     const attempted = new Set<string>()
     const refreshed = new Set<string>()
     let lastError: unknown
+
+    const pickNextCandidate = (now: number) =>
+      candidates.find((id) => {
+        if (attempted.has(id)) return false
+        const cooldownUntil = recordByID.get(id)?.health.cooldownUntil
+        return !cooldownUntil || cooldownUntil <= now
+      }) ?? candidates.find((id) => !attempted.has(id))
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const now = Date.now()
@@ -143,6 +150,15 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
           cooldownUntil: Date.now() + cooldownMs,
         })
         await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
+        if (hasMoreAttempts) {
+          const candidate = pickNextCandidate(Date.now())
+          void CredentialManager.notifyFailover({
+            providerID: opts.providerID,
+            fromRecordID: nextID,
+            toRecordID: candidate,
+            statusCode: response.status,
+          })
+        }
         if (!hasMoreAttempts) return response
         await drainResponse(response)
         continue
@@ -153,11 +169,13 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
 
         await Auth.OAuthPool.markAccessExpired(opts.providerID, namespace, nextID)
         if (!allowRetry) {
+          const cooldownUntil = Date.now() + DEFAULT_AUTH_FAILURE_COOLDOWN_MS
           await Auth.OAuthPool.recordOutcome({
             providerID: opts.providerID,
             recordID: nextID,
             statusCode: response.status,
             ok: false,
+            cooldownUntil,
           })
           await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
           return response
@@ -186,17 +204,28 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
               ok: false,
               cooldownUntil: Date.now() + cooldownMs,
             })
-            await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
-            if (!hasMoreAttempts) return retry
-            await drainResponse(retry)
-            continue
+          await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
+          if (hasMoreAttempts) {
+            const candidate = pickNextCandidate(Date.now())
+            void CredentialManager.notifyFailover({
+              providerID: opts.providerID,
+              fromRecordID: nextID,
+              toRecordID: candidate,
+              statusCode: retry.status,
+            })
           }
+          if (!hasMoreAttempts) return retry
+          await drainResponse(retry)
+          continue
+        }
 
+          const cooldownUntil = Date.now() + DEFAULT_AUTH_FAILURE_COOLDOWN_MS
           await Auth.OAuthPool.recordOutcome({
             providerID: opts.providerID,
             recordID: nextID,
             statusCode: retry.status,
             ok: false,
+            cooldownUntil,
           })
           await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
           if (!hasMoreAttempts) return retry
