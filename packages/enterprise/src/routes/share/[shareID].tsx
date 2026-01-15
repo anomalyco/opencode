@@ -295,13 +295,13 @@ export default function () {
                                 {(message) => (
                                   <SessionTurn
                                     sessionID={data().sessionID}
+                                    sessionTitle={info().title}
                                     messageID={message.id}
                                     stepsExpanded={store.expandedSteps[message.id] ?? false}
                                     onStepsExpandedToggle={() => setStore("expandedSteps", message.id, (v) => !v)}
                                     classes={{
                                       root: "min-w-0 w-full relative",
-                                      content:
-                                        "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
+                                      content: "flex flex-col justify-between !overflow-visible",
                                       container: "px-4",
                                     }}
                                   />

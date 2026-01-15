@@ -1237,6 +1237,7 @@ export default function Page() {
                                 >
                                   <SessionTurn
                                     sessionID={params.id!}
+                                    sessionTitle={info()?.title}
                                     messageID={message.id}
                                     lastUserMessageID={lastUserMessage()?.id}
                                     stepsExpanded={store.expanded[message.id] ?? false}
@@ -1245,8 +1246,7 @@ export default function Page() {
                                     }
                                     classes={{
                                       root: "min-w-0 w-full relative",
-                                      content:
-                                        "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
+                                      content: "flex flex-col justify-between !overflow-visible",
                                       container: "w-full px-4 md:px-6",
                                     }}
                                   />
