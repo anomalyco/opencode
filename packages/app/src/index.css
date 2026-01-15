@@ -10,7 +10,7 @@
   app-region: drag;
 }
 
-/* Terminal split resize handles - override default inset positioning */
+/* Terminal split resize handles */
 [data-terminal-split-container] [data-component="resize-handle"] {
   inset: unset;
 

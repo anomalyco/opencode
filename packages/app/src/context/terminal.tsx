@@ -64,22 +64,24 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
   )
 
   const getNextTitleNumber = () => {
-    const existing = new Set(store.all.map((pty) => pty.titleNumber))
+    const existing = new Set(store.all.filter((p) => p.tabId === p.id).map((pty) => pty.titleNumber))
     let next = 1
     while (existing.has(next)) next++
     return next
   }
 
   const createPty = async (tabId?: string): Promise<LocalPTY | undefined> => {
-    const num = getNextTitleNumber()
-    const pty = await sdk.client.pty.create({ title: `Terminal ${num}` }).catch((e) => {
+    const tab = tabId ? store.all.find((p) => p.id === tabId) : undefined
+    const num = tab?.titleNumber ?? getNextTitleNumber()
+    const title = tab?.title ?? `Terminal ${num}`
+    const pty = await sdk.client.pty.create({ title }).catch((e) => {
       console.error("Failed to create terminal", e)
       return undefined
     })
     if (!pty?.data?.id) return undefined
     return {
       id: pty.data.id,
-      title: pty.data.title ?? "Terminal",
+      title,
       titleNumber: num,
       tabId: tabId ?? pty.data.id,
     }
@@ -172,6 +174,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
     async closeTab(tabId: string) {
       const pane = store.panes[tabId]
       const ptyIds = pane ? getAllPtyIds(pane, pane.root) : [tabId]
+      const remaining = store.all.filter((p) => p.tabId === p.id && !ptyIds.includes(p.id))
 
       setStore(
         "all",
@@ -184,7 +187,6 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
         }),
       )
       if (store.active === tabId) {
-        const remaining = store.all.filter((p) => p.tabId === p.id && !ptyIds.includes(p.id))
         setStore("active", remaining[0]?.tabId)
       }
       for (const ptyId of ptyIds) {

@@ -1,4 +1,4 @@
-import { For, Show, createMemo } from "solid-js"
+import { For, Show, createMemo, createSignal, onCleanup } from "solid-js"
 import { Terminal } from "./terminal"
 import { useTerminal, type Panel } from "@/context/terminal"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -50,6 +50,7 @@ export function TerminalSplit(props: TerminalSplitProps) {
   const terminal = useTerminal()
   const pane = createMemo(() => terminal.pane(props.tabId))
   const terminals = createMemo(() => terminal.all().filter((t) => t.tabId === props.tabId))
+  const [containerFocused, setContainerFocused] = createSignal(true)
 
   const layout = createMemo(() => {
     const p = pane()
@@ -86,7 +87,17 @@ export function TerminalSplit(props: TerminalSplitProps) {
   }
 
   return (
-    <div class="relative size-full" data-terminal-split-container>
+    <div
+      class="relative size-full"
+      data-terminal-split-container
+      onFocusIn={() => setContainerFocused(true)}
+      onFocusOut={(e) => {
+        const related = e.relatedTarget as Node | null
+        if (!related || !e.currentTarget.contains(related)) {
+          setContainerFocused(false)
+        }
+      }}
+    >
       <For each={terminals()}>
         {(pty) => {
           const bounds = createMemo(() => layout().get(pty.id) ?? { top: 0, left: 0, width: 100, height: 100 })
@@ -97,7 +108,7 @@ export function TerminalSplit(props: TerminalSplitProps) {
             <div
               class="absolute flex flex-col min-h-0"
               classList={{
-                "ring-1 ring-inset ring-border-strong-base": isFocused(),
+                "ring-1 ring-inset ring-border-strong-base": containerFocused() && isFocused(),
                 "border-l border-border-weak-base": bounds().left > 0,
                 "border-t border-border-weak-base": bounds().top > 0,
               }}
@@ -121,7 +132,10 @@ export function TerminalSplit(props: TerminalSplitProps) {
                   />
                 </div>
               </Show>
-              <div class="flex-1 min-h-0 transition-opacity" classList={{ "opacity-50": hasSplits() && !isFocused() }}>
+              <div
+                class="flex-1 min-h-0"
+                classList={{ "opacity-50": !containerFocused() || (hasSplits() && !isFocused()) }}
+              >
                 <Terminal
                   pty={pty}
                   onCleanup={terminal.update}
@@ -156,6 +170,10 @@ function ResizeHandle(props: { tabId: string; panelId: string }) {
   const terminal = useTerminal()
   const pane = createMemo(() => terminal.pane(props.tabId))
   const panel = createMemo(() => pane()?.panels[props.panelId])
+
+  let cleanup: VoidFunction | undefined
+
+  onCleanup(() => cleanup?.())
 
   const position = createMemo(() => {
     const p = pane()
@@ -231,8 +249,10 @@ function ResizeHandle(props: { tabId: string; panelId: string }) {
     const handleMouseUp = () => {
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
+      cleanup = undefined
     }
 
+    cleanup = handleMouseUp
     document.addEventListener("mousemove", handleMouseMove)
     document.addEventListener("mouseup", handleMouseUp)
   }
@@ -250,6 +270,7 @@ function ResizeHandle(props: { tabId: string; panelId: string }) {
             width: pos().horizontal ? `${pos().size}%` : "8px",
             height: pos().horizontal ? "8px" : `${pos().size}%`,
             transform: pos().horizontal ? "translateY(-50%)" : "translateX(-50%)",
+            cursor: pos().horizontal ? "row-resize" : "col-resize",
           }}
           onMouseDown={handleMouseDown}
         />
