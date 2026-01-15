@@ -196,7 +196,7 @@ export async function getContributors(from: string, to: string) {
   const toRef = to === "HEAD" ? to : to.startsWith("v") ? to : `v${to}`
   const compare =
     await $`gh api "/repos/anomalyco/opencode/compare/${fromRef}...${toRef}" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
-  const contributors = new Map<string, string[]>()
+  const contributors = new Map<string, Set<string>>()
 
   for (const line of compare.split("\n").filter(Boolean)) {
     const { login, message } = JSON.parse(line) as { login: string | null; message: string }
@@ -204,8 +204,8 @@ export async function getContributors(from: string, to: string) {
     if (title.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
 
     if (login && !team.includes(login)) {
-      if (!contributors.has(login)) contributors.set(login, [])
-      contributors.get(login)?.push(title)
+      if (!contributors.has(login)) contributors.set(login, new Set())
+      contributors.get(login)!.add(title)
     }
   }
 
