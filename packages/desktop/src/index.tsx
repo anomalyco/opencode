@@ -292,6 +292,9 @@ root?.addEventListener("mousewheel", (e) => {
   e.stopPropagation()
 })
 
+const [serverPassword, setServerPassword] = createSignal<string | null>(null)
+const platform = createPlatform(() => serverPassword())
+
 // Handle external links - open in system browser instead of webview
 document.addEventListener("click", (e) => {
   const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
@@ -302,9 +305,6 @@ document.addEventListener("click", (e) => {
 })
 
 render(() => {
-  const [serverPassword, setServerPassword] = createSignal<string | null>(null)
-  const platform = createPlatform(() => serverPassword())
-
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
