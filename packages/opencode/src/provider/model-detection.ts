@@ -140,6 +140,11 @@ export namespace ProviderModelDetection.OpenAICompatible {
       throw new Error(`unknown error: ${error}`)
     }
 
+    let npm = "@ai-sdk/openai-compatible"
+    if (provider.id === "github-copilot" || provider.id === "github-copilot-enterprise") {
+      npm = "@ai-sdk/github-copilot"
+    }
+
     return Object.fromEntries(
       parsed.data
         .filter((model) => model.id && !model.id.includes("embedding") && !model.id.includes("embed"))
@@ -151,7 +156,7 @@ export namespace ProviderModelDetection.OpenAICompatible {
             api: {
               id: model.id,
               url: baseURL,
-              npm: "@ai-sdk/openai-compatible",
+              npm,
             },
             name: model.id,
           },

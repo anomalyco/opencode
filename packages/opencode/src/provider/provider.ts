@@ -945,11 +945,12 @@ export namespace Provider {
       log.info("found", { providerID })
     }
 
+    // auto-detect models
     for (const [providerID, provider] of Object.entries(providers)) {
       try {
         await ProviderModelDetection.populateModels(provider, config.provider?.[providerID], modelsDev[providerID])
       } catch (error) {
-        log.warn("failed to autodetect models", { providerID, error })
+        log.warn("failed to auto-detect models", { providerID, error })
       }
     }
 
