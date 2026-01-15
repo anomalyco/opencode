@@ -257,6 +257,35 @@ export namespace Shell {
           cmdArgs.push(cmdMatch[1])
           commandToExecute = cmdMatch[2]
         }
+        // After extracting commandToExecute (around line 258)
+        // For CMD commands, ensure the entire command string is passed correctly
+        // Do NOT parse pipes, quotes, or other shell syntax - CMD.exe handles that
+
+        // Verify proper quoting for echo commands
+        if (/^\s*echo\s+/i.test(commandToExecute)) {
+          // Echo commands need special handling to preserve arguments
+          // Ensure arguments are not being stripped by bash
+          console.log("CMD echo command detected", {
+            command: commandToExecute.substring(0, 100),
+            hasQuotes: commandToExecute.includes('"'),
+          })
+          // Push the full command as a single argument
+          cmdArgs.push(commandToExecute)
+          return {
+            executable: process.env.COMSPEC || "cmd.exe",
+            args: cmdArgs,
+            useShellFlag: false,
+          }
+        }
+        if (commandToExecute.includes('|') || commandToExecute.includes('"')) {
+          console.log('CMD command with pipes or quotes:', commandToExecute);
+          cmdArgs.push(commandToExecute);
+          return {
+            executable: process.env.COMSPEC || "cmd.exe",
+            args: cmdArgs,
+            useShellFlag: false,
+          };
+        }
 
         // Fix for chained commands (&& or ||) with dynamic environment variables (e.g., %cd%)
         // CMD expands %variables% at parse time, not execution time, which breaks `cd /d %temp% && echo %cd%`

@@ -351,20 +351,32 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
 }
 
 export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) {
-  const normalizeWhitespace = (text: string) => text.replace(/\s+/g, " ").trim()
+  // Helper function to check if a string is whitespace-only
+  const isWhitespaceOnly = (text: string): boolean => {
+    return text.length > 0 && text.trim().length === 0
+  }
+  
+  const normalizeWhitespace = (text: string) => {
+    // If the text is whitespace-only, return a marker
+    if (isWhitespaceOnly(text)) {
+      return "\x00WHITESPACE_ONLY\x00"
+    }
+    // Otherwise, collapse multiple whitespace and trim
+    return text.replace(/\s+/g, " ").trim()
+  }
+  
   const normalizedFind = normalizeWhitespace(find)
-
+  
   // Handle single line matches
   const lines = content.split("\n")
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     if (normalizeWhitespace(line) === normalizedFind) {
       yield line
-    } else {
-      // Only check for substring matches if the full line doesn't match
+    } else if (!normalizedFind.includes("\x00")) {
+      // Only check for substring matches if not a whitespace-only marker
       const normalizedLine = normalizeWhitespace(line)
       if (normalizedLine.includes(normalizedFind)) {
-        // Find the actual substring in the original line that matches
         const words = find.trim().split(/\s+/)
         if (words.length > 0) {
           const pattern = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+")
@@ -381,7 +393,7 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) 
       }
     }
   }
-
+  
   // Handle multi-line matches
   const findLines = find.split("\n")
   if (findLines.length > 1) {
@@ -605,6 +617,20 @@ export function trimDiff(diff: string): string {
   return trimmedLines.join("\n")
 }
 
+/**
+ * Unicode Emoji Matching Considerations
+ *
+ * Standard grep does not match emoji characters correctly because they are multi-byte Unicode sequences.
+ * Use Perl-compatible regex with grep -P for proper emoji matching, e.g., grep -P '\x{1F600}' to match 😀.
+ *
+ * Emoji characters reside in Unicode Supplementary Planes (beyond the Basic Multilingual Plane, BMP).
+ * The BMP covers U+0000 to U+FFFF, while emoji often fall in U+10000 and above.
+ *
+ * In PowerShell, [char] only supports BMP characters (0-65535). For emoji, use [char]::ConvertFromUtf32()
+ * to handle code points above 65535, e.g., [char]::ConvertFromUtf32(0x1F600) for 😀.
+ *
+ * Example in bash: grep -P '\x{1F600}' file.txt to find lines containing the grinning face emoji.
+ */
 export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
   if (oldString === newString) {
     throw new Error("oldString and newString must be different")

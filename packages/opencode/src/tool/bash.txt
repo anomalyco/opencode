@@ -46,6 +46,33 @@ Usage notes:
     cd /foo/bar && pytest tests
     </bad-example>
 
+Windows Command Execution - Critical Notes:
+
+CMD Echo Commands:
+- ✅ WORKS: cmd /c echo HelloWorld
+- ❌ ISSUE: When chained with &&, may output Windows banner
+- Solution: Execute commands individually to capture correct output
+
+CMD Quoting and Escaping:
+- Use caret (^) for escaping in CMD: cmd /c echo @echo off^ ^> test.bat
+- Pipes work: cmd /c echo test | findstr test
+- Complex pipes: cmd /c systeminfo | find /c "OS"
+
+PowerShell Variable Handling:
+- ✅ CORRECT: powershell -Command 'foreach ($i in 1,2,3) { Write-Host $i }'
+- ❌ WRONG: powershell -Command "foreach ($i in 1,2,3) { Write-Host $i }"
+- CRITICAL: Use single quotes to prevent bash $ interpretation
+
+Exit Code Tracking:
+- When using && chaining, exit codes may be from the wrong command
+- Solution: Execute commands individually to get accurate exit codes
+- Use: cmd /c <command> (separate from echo "Exit code: $?")
+
+Windows Command Compatibility:
+- Windows CMD commands (del, dir, copy, etc.) are NOT available in bash
+- Use Unix equivalents: rm, ls, cp, mv, etc.
+- Or use 'cmd /c <command>' to run Windows commands directly
+
 # Committing changes with git
 
 Only create commits when requested by the user. If unclear, ask first. When the user asks you to create a new git commit, follow these steps carefully:

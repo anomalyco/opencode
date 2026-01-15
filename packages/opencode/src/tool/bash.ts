@@ -182,6 +182,35 @@ function processPowerShellOutput(output: string, command: string): string {
   return processed
 }
 
+/**
+ * Detects common Windows CMD commands and provides Unix equivalents
+ * @param {string} command - The command string to check
+ * @returns {object|null} Translation object with unix command and suggestion, or null if no translation found
+ */
+function getWindowsCommandTranslation(command: string) {
+  const cmdMap: Record<string, { unix: string; message: string }> = {
+    'dir': { unix: 'ls', message: 'Use "ls" instead of "dir" for listing files.' },
+    'copy': { unix: 'cp', message: 'Use "cp" instead of "copy" for copying files.' },
+    'move': { unix: 'mv', message: 'Use "mv" instead of "move" for moving files.' },
+    'del': { unix: 'rm', message: 'Use "rm" instead of "del" for deleting files.' },
+    'type': { unix: 'cat', message: 'Use "cat" instead of "type" for displaying file contents.' },
+    'cls': { unix: 'clear', message: 'Use "clear" instead of "cls" for clearing the screen.' },
+    'cd': { unix: 'cd', message: 'Use "cd" for changing directories (already Unix-compatible).' },
+    'md': { unix: 'mkdir', message: 'Use "mkdir" instead of "md" for creating directories.' },
+    'rd': { unix: 'rmdir', message: 'Use "rmdir" instead of "rd" for removing directories.' },
+  }
+
+  const commandName = command.trim().split(/\s+/)[0].toLowerCase()
+  const translation = cmdMap[commandName]
+  if (translation) {
+    return {
+      translated: translation.unix,
+      suggestion: translation.message
+    }
+  }
+  return null
+}
+
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
   return {
@@ -287,8 +316,25 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
+      // Check for Windows CMD commands and provide helpful suggestions
+      const translation = getWindowsCommandTranslation(params.command)
+      if (translation) {
+        log.warn("Windows CMD command detected", { command: params.command, suggestion: translation.suggestion })
+        throw new Error(`Windows CMD command detected: ${params.command}. ${translation.suggestion}`)
+      }
+
       // Get the appropriate spawn configuration for this command
       const spawnConfig = Shell.getSpawnConfig(params.command)
+      
+      // Add more detailed logging for CMD commands (after line 298)
+      if (Shell.isCmdCommand(params.command)) {
+        log.info("bash tool CMD command", {
+          original: params.command.substring(0, 100),
+          executable: spawnConfig.executable,
+          args: spawnConfig.args.map(a => a.substring(0, 50)),
+          useShellFlag: spawnConfig.useShellFlag,
+        })
+      }
       
       log.info("bash tool spawn config", { 
         command: params.command.substring(0, 100),
