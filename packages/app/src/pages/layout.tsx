@@ -302,16 +302,6 @@ export default function Layout(props: ParentProps) {
     }
   })
 
-  function projectSessions(project: LocalProject | undefined) {
-    if (!project) return []
-    const dirs = [project.worktree, ...(project.sandboxes ?? [])]
-    const stores = dirs.map((dir) => globalSync.child(dir)[0])
-    const sessions = stores
-      .flatMap((store) => store.session.filter((session) => session.directory === store.path.directory))
-      .toSorted(sortSessions)
-    return sessions.filter((s) => !s.parentID)
-  }
-
   const currentSessions = createMemo(() => {
     const project = currentProject()
     if (!project) return [] as Session[]
@@ -1313,7 +1303,7 @@ export default function Layout(props: ParentProps) {
         <Show when={expanded()}>
           <div
             classList={{
-              "flex flex-col min-h-0 bg-background-stronger border border-border-weak-base rounded-tl-sm": true,
+              "flex flex-col min-h-0 bg-background-stronger border border-b-0 border-border-weak-base rounded-tl-sm": true,
               "flex-1 min-w-0": sidebarProps.mobile,
             }}
             style={{ width: sidebarProps.mobile ? undefined : `${Math.max(layout.sidebar.width() - 64, 0)}px` }}
@@ -1419,9 +1409,6 @@ export default function Layout(props: ParentProps) {
                   </Show>
                 </>
               )}
-            </Show>
-            <Show when={!project()}>
-              <div class="p-3 text-12-regular text-text-weak">Open a project to see sessions.</div>
             </Show>
             <Show when={providers.all().length > 0 && providers.paid().length === 0}>
               <div class="shrink-0 px-2 py-3 border-t border-border-weak-base">
