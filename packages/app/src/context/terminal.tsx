@@ -335,7 +335,36 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
         )
 
         const remainingPanels = Object.values(store.panes[tabId]?.panels ?? {})
-        if (remainingPanels.length === 1 && remainingPanels[0]?.ptyId === tabId) {
+        const shouldCleanupPane = remainingPanels.length === 1 && remainingPanels[0]?.ptyId
+
+        if (ptyId === tabId) {
+          const remaining = store.all.filter((x) => x.tabId === tabId)
+          if (remaining.length > 0) {
+            const newRoot = remaining[0]
+            for (let i = 0; i < store.all.length; i++) {
+              if (store.all[i].tabId === tabId) {
+                setStore("all", i, "tabId", newRoot.id)
+              }
+            }
+            if (!shouldCleanupPane) {
+              const currentPane = store.panes[tabId]
+              if (currentPane) {
+                setStore("panes", newRoot.id, { ...currentPane, id: newRoot.id })
+                setStore(
+                  "panes",
+                  produce((panes) => {
+                    delete panes[tabId]
+                  }),
+                )
+              }
+            }
+            if (store.active === tabId) {
+              setStore("active", newRoot.id)
+            }
+          }
+        }
+
+        if (shouldCleanupPane) {
           setStore(
             "panes",
             produce((panes) => {
