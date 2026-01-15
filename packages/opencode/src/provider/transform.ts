@@ -486,9 +486,6 @@ export namespace ProviderTransform {
     if (model.providerID === "openai" || providerOptions?.setCacheKey) {
       result["promptCacheKey"] = sessionID
     }
-    if (typeof providerOptions?.store === "boolean") {
-      result["store"] = providerOptions.store
-    }
 
     if (model.api.npm === "@ai-sdk/google" || model.api.npm === "@ai-sdk/google-vertex") {
       result["thinkingConfig"] = {
