@@ -38,6 +38,7 @@ type State = {
   config: Config
   path: Path
   session: Session[]
+  sessionTotal: number
   session_status: {
     [sessionID: string]: SessionStatus
   }
@@ -98,6 +99,7 @@ function createGlobalSync() {
         agent: [],
         command: [],
         session: [],
+        sessionTotal: 0,
         session_status: {},
         session_diff: {},
         todo: {},
@@ -117,21 +119,32 @@ function createGlobalSync() {
 
   async function loadSessions(directory: string) {
     const [store, setStore] = child(directory)
-    globalSDK.client.session
-      .list({ directory })
+    const limit = store.limit
+
+    return globalSDK.client.session
+      .list({ directory, roots: true })
       .then((x) => {
-        const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000
         const nonArchived = (x.data ?? [])
           .filter((s) => !!s?.id)
           .filter((s) => !s.time?.archived)
           .slice()
           .sort((a, b) => a.id.localeCompare(b.id))
+
+        const sandboxWorkspace = globalStore.project.some((p) => (p.sandboxes ?? []).includes(directory))
+        if (sandboxWorkspace) {
+          setStore("session", reconcile(nonArchived, { key: "id" }))
+          return
+        }
+
+        const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000
         // Include up to the limit, plus any updated in the last 4 hours
         const sessions = nonArchived.filter((s, i) => {
-          if (i < store.limit) return true
+          if (i < limit) return true
           const updated = new Date(s.time?.updated ?? s.time?.created).getTime()
           return updated > fourHoursAgo
         })
+        // Store total session count (used for "load more" pagination)
+        setStore("sessionTotal", nonArchived.length)
         setStore("session", reconcile(sessions, { key: "id" }))
       })
       .catch((err) => {

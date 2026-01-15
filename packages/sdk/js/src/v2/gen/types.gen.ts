@@ -967,6 +967,22 @@ export type KeybindsConfig = {
    */
   session_rename?: string
   /**
+   * Delete session
+   */
+  session_delete?: string
+  /**
+   * Delete stash entry
+   */
+  stash_delete?: string
+  /**
+   * Open provider list from model dialog
+   */
+  model_provider_list?: string
+  /**
+   * Toggle model favorite status
+   */
+  model_favorite_toggle?: string
+  /**
    * Share current session
    */
   session_share?: string
@@ -1410,6 +1426,7 @@ export type ProviderConfig = {
       }
       limit?: {
         context: number
+        input?: number
         output: number
       }
       modalities?: {
@@ -1482,7 +1499,7 @@ export type McpLocalConfig = {
    */
   enabled?: boolean
   /**
-   * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
+   * Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.
    */
   timeout?: number
 }
@@ -1526,7 +1543,7 @@ export type McpRemoteConfig = {
    */
   oauth?: McpOAuthConfig | false
   /**
-   * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
+   * Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.
    */
   timeout?: number
 }
@@ -1903,6 +1920,7 @@ export type Model = {
   }
   limit: {
     context: number
+    input?: number
     output: number
   }
   status: "alpha" | "beta" | "deprecated" | "active"
@@ -2589,7 +2607,14 @@ export type SessionListData = {
   body?: never
   path?: never
   query?: {
+    /**
+     * Filter sessions by project directory
+     */
     directory?: string
+    /**
+     * Only return root sessions (no parentID)
+     */
+    roots?: boolean
     /**
      * Filter sessions updated on or after this timestamp (milliseconds since epoch)
      */
@@ -3801,6 +3826,7 @@ export type ProviderListResponses = {
           }
           limit: {
             context: number
+            input?: number
             output: number
           }
           modalities?: {
