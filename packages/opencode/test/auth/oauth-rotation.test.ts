@@ -161,6 +161,42 @@ describe("OAuth subscription failover", () => {
     expect(order[1]).toBe(a1.recordID)
   })
 
+  test("fails over on non-auth errors", async () => {
+    await Auth.remove(providerID)
+
+    const a1 = await Auth.addOAuth(providerID, {
+      refresh: "r1",
+      access: "a1",
+      expires: Date.now() + 60_000,
+    })
+    const a2 = await Auth.addOAuth(providerID, {
+      refresh: "r2",
+      access: "a2",
+      expires: Date.now() + 60_000,
+    })
+
+    const baseFetch = async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      const auth = await Auth.get(providerID)
+      expect(auth?.type).toBe("oauth")
+      if (!auth || auth.type !== "oauth") return new Response("no auth", { status: 500 })
+
+      if (auth.refresh === "r1") {
+        return new Response("payment required", { status: 402 })
+      }
+
+      return new Response("ok", { status: 200 })
+    }
+
+    const fetchWithFailover = createOAuthRotatingFetch(baseFetch, { providerID })
+    const response = await fetchWithFailover("https://example.com", { method: "POST", body: "{}" })
+
+    expect(response.status).toBe(200)
+
+    const order = await Auth.OAuthPool.orderedIDs(providerID)
+    expect(order[0]).toBe(a2.recordID)
+    expect(order[1]).toBe(a1.recordID)
+  })
+
   test("sticks to the active credential until rate limited", async () => {
     await Auth.remove(providerID)
 
@@ -285,7 +321,7 @@ describe("OAuth subscription failover", () => {
     expect(recordByID.get(a2.recordID)?.health.failureCount ?? 0).toBe(1)
   })
 
-  test("fails over when a request throws", async () => {
+  test("retries network errors without rotating", async () => {
     await Auth.remove(providerID)
 
     const a1 = await Auth.addOAuth(providerID, {
@@ -299,13 +335,20 @@ describe("OAuth subscription failover", () => {
       expires: Date.now() + 60_000,
     })
 
+    const counts = new Map<string, number>()
+    let failures = 0
     const baseFetch = async (_input: RequestInfo | URL, _init?: RequestInit) => {
       const auth = await Auth.get(providerID)
       expect(auth?.type).toBe("oauth")
       if (!auth || auth.type !== "oauth") return new Response("no auth", { status: 500 })
 
-      if (auth.refresh === "r1") {
-        throw new Error("network down")
+      counts.set(auth.refresh, (counts.get(auth.refresh) ?? 0) + 1)
+
+      if (auth.refresh === "r1" && failures < 1) {
+        failures += 1
+        const error = new Error("network down")
+        ;(error as { code?: string }).code = "ECONNRESET"
+        throw error
       }
 
       return new Response("ok", { status: 200 })
@@ -316,10 +359,12 @@ describe("OAuth subscription failover", () => {
 
     expect(response.status).toBe(200)
 
-    const records = await Auth.OAuthPool.list(providerID)
-    const recordByID = new Map(records.map((record) => [record.id, record]))
-    expect(recordByID.get(a1.recordID)?.health.failureCount ?? 0).toBe(1)
-    expect(recordByID.get(a2.recordID)?.health.failureCount ?? 0).toBe(0)
+    expect(counts.get("r1") ?? 0).toBe(2)
+    expect(counts.get("r2") ?? 0).toBe(0)
+
+    const order = await Auth.OAuthPool.orderedIDs(providerID)
+    expect(order[0]).toBe(a1.recordID)
+    expect(order[1]).toBe(a2.recordID)
   })
 
   test("respects Retry-After HTTP date headers", async () => {

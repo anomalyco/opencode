@@ -4,6 +4,7 @@ import { CredentialManager } from "./credential-manager"
 
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 30_000
 const DEFAULT_AUTH_FAILURE_COOLDOWN_MS = 5 * 60_000
+const DEFAULT_NETWORK_RETRY_ATTEMPTS = 1
 
 function isReadableStream(value: unknown): value is ReadableStream {
   return typeof ReadableStream !== "undefined" && value instanceof ReadableStream
@@ -43,6 +44,56 @@ function parseRetryAfterMs(response: Response): number | undefined {
   return undefined
 }
 
+const NETWORK_ERROR_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ETIMEDOUT",
+  "ECONNABORTED",
+  "EPIPE",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_SOCKET",
+])
+const NETWORK_ERROR_NAMES = new Set(["AbortError", "TimeoutError", "FetchError"])
+
+function extractErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined
+  const code = (error as { code?: unknown }).code
+  return typeof code === "string" ? code : undefined
+}
+
+function extractErrorName(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined
+  const name = (error as { name?: unknown }).name
+  return typeof name === "string" ? name : undefined
+}
+
+function extractErrorMessage(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined
+  const message = (error as { message?: unknown }).message
+  return typeof message === "string" ? message : undefined
+}
+
+function isNetworkError(error: unknown): boolean {
+  const directCode = extractErrorCode(error)
+  const cause = typeof error === "object" && error !== null ? (error as { cause?: unknown }).cause : undefined
+  const causeCode = extractErrorCode(cause)
+  const code = directCode ?? causeCode
+  if (code && NETWORK_ERROR_CODES.has(code)) return true
+
+  const name = extractErrorName(error)
+  if (name && NETWORK_ERROR_NAMES.has(name)) return true
+
+  const message = extractErrorMessage(error)?.toLowerCase()
+  if (!message) return false
+  return message.includes("fetch failed") || message.includes("network error") || message.includes("network down")
+}
+
 function isAuthExpiredStatus(status: number): boolean {
   return status === 401 || status === 403
 }
@@ -55,6 +106,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
     maxAttempts?: number
     rateLimitCooldownMs?: number
     authFailureCooldownMs?: number
+    networkRetryAttempts?: number
     toastDurationMs?: number
   },
 ): TFetch {
@@ -73,6 +125,10 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
 
     const rateLimitCooldownMs = opts.rateLimitCooldownMs ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS
     const authFailureCooldownMs = opts.authFailureCooldownMs ?? DEFAULT_AUTH_FAILURE_COOLDOWN_MS
+    const configuredNetworkRetryAttempts = Math.max(
+      0,
+      opts.networkRetryAttempts ?? DEFAULT_NETWORK_RETRY_ATTEMPTS,
+    )
     const maxAttemptBudget = opts.maxAttempts ?? candidates.length
     let maxAttempts = Math.max(1, maxAttemptBudget)
     if (!allowRetry) {
@@ -100,20 +156,41 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
       if (!nextID) break
       attempted.add(nextID)
 
-      let attemptInput = input
-      if (inputIsRequest && allowRetry) {
-        try {
-          attemptInput = input.clone()
-        } catch (e) {
-          lastError = e
-          allowRetry = false
-          maxAttempts = attempt + 1
+      const hasMoreAttempts = () => attempt + 1 < maxAttempts
+      let networkRetryAttempts = allowRetry ? configuredNetworkRetryAttempts : 0
+
+      const runWithNetworkRetry = async (): Promise<Response> => {
+        for (let networkAttempt = 0; ; networkAttempt++) {
+          let attemptInput = input
+          if (inputIsRequest && allowRetry) {
+            try {
+              attemptInput = input.clone()
+            } catch (e) {
+              lastError = e
+              allowRetry = false
+              networkRetryAttempts = 0
+              maxAttempts = attempt + 1
+            }
+          }
+
+          try {
+            return await withOAuthRecord(opts.providerID, nextID, () => fetchFn(attemptInput, init))
+          } catch (e) {
+            lastError = e
+            await Auth.OAuthPool.recordOutcome({
+              providerID: opts.providerID,
+              recordID: nextID,
+              statusCode: 0,
+              ok: false,
+            })
+            const networkError = isNetworkError(e)
+            if (networkError && allowRetry && networkAttempt < networkRetryAttempts) {
+              continue
+            }
+            throw e
+          }
         }
       }
-
-      const hasMoreAttempts = attempt + 1 < maxAttempts
-
-      const run = () => withOAuthRecord(opts.providerID, nextID, () => fetchFn(attemptInput, init))
       const notifyFailover = async (statusCode: number) => {
         const candidate = pickNextCandidate(Date.now())
         if (!candidate) return
@@ -128,18 +205,13 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
 
       let response: Response
       try {
-        response = await run()
+        response = await runWithNetworkRetry()
       } catch (e) {
-        lastError = e
-        await Auth.OAuthPool.recordOutcome({
-          providerID: opts.providerID,
-          recordID: nextID,
-          statusCode: 0,
-          ok: false,
-        })
+        if (isNetworkError(e)) throw e
+
         await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
         await notifyFailover(0)
-        if (!hasMoreAttempts) throw e
+        if (!hasMoreAttempts()) throw e
         continue
       }
 
@@ -164,7 +236,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
         })
         await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
         await notifyFailover(response.status)
-        if (!hasMoreAttempts) return response
+        if (!hasMoreAttempts()) return response
         await drainResponse(response)
         continue
       }
@@ -190,7 +262,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
         await drainResponse(response)
 
         try {
-          const retry = await run()
+          const retry = await runWithNetworkRetry()
           if (retry.ok) {
             await Auth.OAuthPool.recordOutcome({
               providerID: opts.providerID,
@@ -212,7 +284,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
             })
             await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
             await notifyFailover(retry.status)
-            if (!hasMoreAttempts) return retry
+            if (!hasMoreAttempts()) return retry
             await drainResponse(retry)
             continue
           }
@@ -227,19 +299,13 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
           })
           await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
           await notifyFailover(retry.status)
-          if (!hasMoreAttempts) return retry
+          if (!hasMoreAttempts()) return retry
           await drainResponse(retry)
           continue
         } catch (e) {
-          lastError = e
-          await Auth.OAuthPool.recordOutcome({
-            providerID: opts.providerID,
-            recordID: nextID,
-            statusCode: 0,
-            ok: false,
-          })
+          if (isNetworkError(e)) throw e
           await notifyFailover(0)
-          if (!hasMoreAttempts) throw e
+          if (!hasMoreAttempts()) throw e
         }
 
         await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
@@ -252,7 +318,11 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
         statusCode: response.status,
         ok: false,
       })
-      return response
+      await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
+      await notifyFailover(response.status)
+      if (!hasMoreAttempts()) return response
+      await drainResponse(response)
+      continue
     }
 
     if (lastError) throw lastError

@@ -837,6 +837,12 @@ export namespace Config {
         .object({
           rateLimitCooldownMs: z.number().int().positive().optional().describe("Rate limit cooldown in milliseconds"),
           authFailureCooldownMs: z.number().int().positive().optional().describe("Auth failure cooldown in milliseconds"),
+          networkRetryAttempts: z
+            .number()
+            .int()
+            .nonnegative()
+            .optional()
+            .describe("Network retry attempts per OAuth credential before failing"),
           maxAttempts: z
             .number()
             .int()
