@@ -293,12 +293,26 @@ export namespace Session {
     z.object({
       sessionID: Identifier.schema("session"),
       limit: z.number().optional(),
+      ts_before: z.number().optional(),
+      breakpoint: z.boolean().optional(),
     }),
     async (input) => {
       const result = [] as MessageV2.WithParts[]
+
       for await (const msg of MessageV2.stream(input.sessionID)) {
+        if (input.ts_before && msg.info.time.created >= input.ts_before) {
+          continue
+        }
+
         if (input.limit && result.length >= input.limit) break
         result.push(msg)
+
+        if (input.ts_before && input.breakpoint) {
+          const hasCompaction = msg.parts.some((p) => p.type === "compaction")
+          if (hasCompaction) {
+            break
+          }
+        }
       }
       result.reverse()
       return result
