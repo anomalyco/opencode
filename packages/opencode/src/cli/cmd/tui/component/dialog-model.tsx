@@ -2,7 +2,7 @@ import { createMemo, createSignal } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useSync } from "@tui/context/sync"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
-import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
+import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { Keybind } from "@/util/keybind"
@@ -19,7 +19,6 @@ export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
-  const [ref, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [query, setQuery] = createSignal("")
 
   const connected = useConnected()
@@ -222,7 +221,6 @@ export function DialogModel(props: { providerID?: string }) {
           },
         },
       ]}
-      ref={setRef}
       onFilter={setQuery}
       skipFilter={true}
       title={title()}

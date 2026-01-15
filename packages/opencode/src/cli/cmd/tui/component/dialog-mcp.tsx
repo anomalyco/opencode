@@ -2,7 +2,7 @@ import { createMemo, createSignal } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useSync } from "@tui/context/sync"
 import { map, pipe, entries, sortBy } from "remeda"
-import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "@tui/ui/dialog-select"
+import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useTheme } from "../context/theme"
 import { Keybind } from "@/util/keybind"
 import { TextAttributes } from "@opentui/core"
@@ -23,7 +23,6 @@ export function DialogMcp() {
   const local = useLocal()
   const sync = useSync()
   const sdk = useSDK()
-  const [, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [loading, setLoading] = createSignal<string | null>(null)
 
   const options = createMemo(() => {
@@ -74,7 +73,6 @@ export function DialogMcp() {
 
   return (
     <DialogSelect
-      ref={setRef}
       title="MCPs"
       options={options()}
       keybind={keybinds()}
