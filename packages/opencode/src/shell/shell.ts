@@ -105,6 +105,27 @@ export namespace Shell {
   }
 
   /**
+   * Set of CMD builtin commands
+   */
+  const CMD_BUILTINS = new Set([
+    'assoc', 'attrib', 'break', 'call', 'cd', 'chcp', 'chdir', 'cls', 'cmd', 'color',
+    'copy', 'date', 'del', 'dir', 'echo', 'endlocal', 'erase', 'exit', 'for', 'ftype',
+    'goto', 'if', 'md', 'mkdir', 'mklink', 'move', 'path', 'pause', 'popd', 'prompt',
+    'pushd', 'rd', 'rem', 'ren', 'rmdir', 'set', 'setlocal', 'shift', 'start', 'time',
+    'title', 'type', 'ver', 'verify', 'vol'
+  ])
+
+  /**
+   * Checks if the first word of a command is a CMD builtin command
+   * @param {string} command - The command string to check
+   * @returns {boolean} True if the command starts with a builtin
+   */
+  export function isCmdBuiltin(command: string): boolean {
+    const firstWord = command.trim().split(/\s+/)[0]
+    return firstWord ? CMD_BUILTINS.has(firstWord.toLowerCase()) : false
+  }
+
+  /**
    * Converts CMD immediate expansion syntax (%var%) to delayed expansion syntax (!var!)
    * for dynamic environment variables
    */
@@ -142,6 +163,15 @@ export namespace Shell {
         args: [],
         useShellFlag: true,
         shell: acceptable(),
+      }
+    }
+
+    // Check for CMD builtins
+    if (isCmdBuiltin(command)) {
+      return {
+        executable: "cmd.exe",
+        args: ["/c", command],
+        useShellFlag: false,
       }
     }
 

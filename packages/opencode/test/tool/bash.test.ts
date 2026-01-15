@@ -5,6 +5,7 @@ import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import type { PermissionNext } from "../../src/permission/next"
 import { Truncate } from "../../src/tool/truncation"
+import { Shell } from "../../src/shell/shell"
 
 const ctx = {
   sessionID: "test",
@@ -840,6 +841,192 @@ describe("tool.bash PowerShell fixes", () => {
         // Should handle errors gracefully without NRE
         expect(result.metadata.output).not.toContain("NullReferenceException")
         expect(result.metadata.output).not.toContain("Object reference not set to an instance of an object")
+      },
+    })
+  })
+})
+describe("Shell.isCmdBuiltin detection", () => {
+  test("detects 'dir' as builtin", () => {
+    expect(Shell.isCmdBuiltin("dir")).toBe(true)
+  })
+
+  test("detects 'DIR' (uppercase) as builtin", () => {
+    expect(Shell.isCmdBuiltin("DIR")).toBe(true)
+  })
+
+  test("detects 'echo hello world' as builtin", () => {
+    expect(Shell.isCmdBuiltin("echo hello world")).toBe(true)
+  })
+
+  test("does not detect 'git status' as builtin", () => {
+    expect(Shell.isCmdBuiltin("git status")).toBe(false)
+  })
+
+  test("does not detect 'npm install' as builtin", () => {
+    expect(Shell.isCmdBuiltin("npm install")).toBe(false)
+  })
+
+  test("does not detect 'cmd /c dir' as bare builtin (it's explicit)", () => {
+    expect(Shell.isCmdBuiltin("cmd /c dir")).toBe(false)
+  })
+
+  test("does not detect 'powershell -Command \"dir\"' as builtin", () => {
+    expect(Shell.isCmdBuiltin("powershell -Command \"dir\"")).toBe(false)
+  })
+})
+
+describe("tool.bash bare CMD builtin support", () => {
+  test.skipIf(process.platform !== "win32")("executes bare dir command", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "dir",
+            description: "List directory contents",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.output).toContain(".git")
+      },
+    })
+  })
+
+  test.skipIf(process.platform !== "win32")("executes bare echo command", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "echo HelloWorld",
+            description: "Echo HelloWorld",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.output).toContain("HelloWorld")
+      },
+    })
+  })
+
+  test.skipIf(process.platform !== "win32")("executes bare type command", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await Bun.write(path.join(tmp.path, "test.txt"), "test content")
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "type test.txt",
+            description: "Display file contents",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.output).toContain("test content")
+      },
+    })
+  })
+
+  test.skipIf(process.platform !== "win32")("executes bare copy command", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await Bun.write(path.join(tmp.path, "source.txt"), "source content")
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "copy source.txt dest.txt",
+            description: "Copy file",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(await Bun.file(path.join(tmp.path, "dest.txt")).text()).toBe("source content")
+      },
+    })
+  })
+
+  test.skipIf(process.platform !== "win32")("executes bare mkdir command", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "mkdir testdir",
+            description: "Create directory",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(await Bun.file(path.join(tmp.path, "testdir")).exists()).toBe(true)
+      },
+    })
+  })
+
+  test.skipIf(process.platform !== "win32")("executes bare del command", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await Bun.write(path.join(tmp.path, "test.txt"), "content")
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "del test.txt",
+            description: "Delete file",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(await Bun.file(path.join(tmp.path, "test.txt")).exists()).toBe(false)
+      },
+    })
+  })
+
+  test.skipIf(process.platform !== "win32")("handles bare CMD with arguments", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "dir /b /s",
+            description: "List files recursively in bare format",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.output).toContain(".git")
+      },
+    })
+  })
+
+  test.skipIf(process.platform !== "win32")("bare CMD commands have exit code 0 on success", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "echo success",
+            description: "Echo success",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.output).toContain("success")
       },
     })
   })

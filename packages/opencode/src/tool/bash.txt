@@ -46,7 +46,14 @@ Usage notes:
     cd /foo/bar && pytest tests
     </bad-example>
 
-Windows Command Execution - Critical Notes:
+Windows Command Support - Native Execution:
+
+- Windows CMD builtins are now supported natively (dir, copy, del, mkdir, echo, type, etc.)
+- Bare CMD commands are automatically routed to cmd.exe
+- Examples of bare CMD commands: `dir`, `copy file.txt backup.txt`, `echo Hello`, `type file.txt`
+- Explicit `cmd /c` commands still work: `cmd /c dir`, `cmd /c echo test | findstr test`
+- PowerShell support: `powershell -Command "Get-Process"`
+- Note that complex operations with pipes/redirection should use explicit `cmd /c` or PowerShell
 
 CMD Echo Commands:
 - ✅ WORKS: cmd /c echo HelloWorld
@@ -67,11 +74,6 @@ Exit Code Tracking:
 - When using && chaining, exit codes may be from the wrong command
 - Solution: Execute commands individually to get accurate exit codes
 - Use: cmd /c <command> (separate from echo "Exit code: $?")
-
-Windows Command Compatibility:
-- Windows CMD commands (del, dir, copy, etc.) are NOT available in bash
-- Use Unix equivalents: rm, ls, cp, mv, etc.
-- Or use 'cmd /c <command>' to run Windows commands directly
 
 # Committing changes with git
 
