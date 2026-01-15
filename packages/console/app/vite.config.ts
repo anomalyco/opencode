@@ -4,14 +4,14 @@ import { nitro } from "nitro/vite"
 
 export default defineConfig({
   plugins: [
-    solidStart() as PluginOption,
+    solidStart() as unknown as PluginOption,
     nitro({
       compatibilityDate: "2024-09-19",
       preset: "cloudflare_module",
       cloudflare: {
         nodeCompat: true,
       },
-    }),
+    }) as unknown as PluginOption,
   ],
   server: {
     allowedHosts: true,

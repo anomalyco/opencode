@@ -20,11 +20,11 @@ const nitroConfig: any = (() => {
 export default defineConfig({
   plugins: [
     tailwindcss(),
-    solidStart() as PluginOption,
+    solidStart() as unknown as PluginOption,
     nitro({
       ...nitroConfig,
       baseURL: process.env.OPENCODE_BASE_URL,
-    }),
+    }) as unknown as PluginOption,
   ],
   server: {
     host: "0.0.0.0",
