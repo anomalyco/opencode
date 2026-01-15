@@ -10,6 +10,8 @@ import {
   type Tool,
   type ToolSet,
   extractReasoningMiddleware,
+  tool,
+  jsonSchema,
 } from "ai"
 import { clone, mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
@@ -140,6 +142,18 @@ export namespace LLM {
 
     const tools = await resolveTools(input)
 
+    // LiteLLM and some Anthropic proxies require the tools parameter to be present
+    // when message history contains tool calls, even if no tools are being used.
+    // Add a dummy tool that is never called to satisfy this validation.
+    if (Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
+      tools["_noop"] = tool({
+        description:
+          "Placeholder for LiteLLM/Anthropic proxy compatibility - required when message history contains tool calls but no active tools are needed",
+        inputSchema: jsonSchema({ type: "object", properties: {} }),
+        execute: async () => ({ output: "", title: "", metadata: {} }),
+      })
+    }
+
     return streamText({
       onError(error) {
         l.error("stream error", {
@@ -171,7 +185,7 @@ export namespace LLM {
       topP: params.topP,
       topK: params.topK,
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+      activeTools: Object.keys(tools).filter((x) => x !== "invalid" && x !== "_noop"),
       tools,
       maxOutputTokens,
       abortSignal: input.abort,
@@ -237,5 +251,17 @@ export namespace LLM {
       }
     }
     return input.tools
+  }
+
+  // Check if messages contain any tool-call content
+  // Used to determine if a dummy tool should be added for LiteLLM proxy compatibility
+  export function hasToolCalls(messages: ModelMessage[]): boolean {
+    for (const msg of messages) {
+      if (!Array.isArray(msg.content)) continue
+      for (const part of msg.content) {
+        if (part.type === "tool-call" || part.type === "tool-result") return true
+      }
+    }
+    return false
   }
 }
