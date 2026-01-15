@@ -151,11 +151,11 @@ export namespace Shell {
       // Match pattern: powershell[.exe] or pwsh[.exe] <args>
       const match = command.match(/^(powershell|pwsh)(?:\.exe)?\s+(.*)$/i)
       if (match) {
-        const [, , argsString] = match
-        
+        const [, requestedShell, argsString] = match
+
         // Check for debug/verbose flags in the arguments
         const { hasDebug, hasVerbose } = detectDebugAndVerboseFlags(argsString)
-        
+
         // Parse PowerShell arguments - split on -Command, -File, etc. but keep quoted strings intact
         // For -Command, we want: ["-Command", "the command string"]
         // For -NoProfile -Command, we want: ["-NoProfile", "-Command", "the command string"]
@@ -176,7 +176,7 @@ export namespace Shell {
                   (commandArg.startsWith("'") && commandArg.endsWith("'"))) {
                 commandArg = commandArg.slice(1, -1);
               }
-              
+
               // Prepend appropriate preference variables if debug/verbose flags were detected
               const preferenceStatements = []
               if (hasDebug) {
@@ -188,7 +188,7 @@ export namespace Shell {
               if (preferenceStatements.length > 0) {
                 commandArg = `${preferenceStatements.join('; ')}; ${commandArg}`
               }
-              
+
               args.push(commandArg)
             }
             break
@@ -231,9 +231,22 @@ export namespace Shell {
           // Should not reach here, but break to prevent infinite loop
           break
         }
-        
+
+        // Determine which PowerShell executable to use
+        let executable = "powershell.exe"
+        if (requestedShell.toLowerCase() === "pwsh") {
+          // Try pwsh.exe first, fall back to powershell.exe if not available
+          const pwshPath = Bun.which("pwsh.exe") || Bun.which("pwsh")
+          if (pwshPath) {
+            executable = "pwsh.exe"
+          } else {
+            // pwsh.exe not found, use powershell.exe
+            executable = "powershell.exe"
+          }
+        }
+
         return {
-          executable: match[1].toLowerCase() === "pwsh" ? "pwsh.exe" : "powershell.exe",
+          executable,
           args,
           useShellFlag: false,
         }

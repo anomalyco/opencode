@@ -195,7 +195,6 @@ function getWindowsCommandTranslation(command: string) {
     'del': { unix: 'rm', message: 'Use "rm" instead of "del" for deleting files.' },
     'type': { unix: 'cat', message: 'Use "cat" instead of "type" for displaying file contents.' },
     'cls': { unix: 'clear', message: 'Use "clear" instead of "cls" for clearing the screen.' },
-    'cd': { unix: 'cd', message: 'Use "cd" for changing directories (already Unix-compatible).' },
     'md': { unix: 'mkdir', message: 'Use "mkdir" instead of "md" for creating directories.' },
     'rd': { unix: 'rmdir', message: 'Use "rmdir" instead of "rd" for removing directories.' },
   }
@@ -233,7 +232,11 @@ export const BashTool = Tool.define("bash", async () => {
         ),
     }),
     async execute(params, ctx) {
-      const cwd = params.workdir || Instance.directory
+      let cwd = params.workdir || Instance.directory
+      // Normalize cwd for Windows Git Bash paths
+      if (process.platform === "win32" && cwd.match(/^\/[a-z]\//)) {
+        cwd = cwd.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
+      }
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
@@ -275,12 +278,7 @@ export const BashTool = Tool.define("bash", async () => {
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-            const resolved = await $`realpath ${arg}`
-              .cwd(cwd)
-              .quiet()
-              .nothrow()
-              .text()
-              .then((x) => x.trim())
+            const resolved = path.resolve(cwd, arg)
             log.info("resolved path", { arg, resolved })
             if (resolved) {
               // Git Bash on Windows returns Unix-style paths like /c/Users/...

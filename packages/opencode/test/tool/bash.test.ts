@@ -136,7 +136,7 @@ describe("tool.bash permissions", () => {
         await bash.execute(
           {
             command: "ls",
-            workdir: "/tmp",
+            workdir: "/c/nonexistent",
             description: "List /tmp",
           },
           testCtx,
