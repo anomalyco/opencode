@@ -133,6 +133,32 @@ export const ExperimentalRoutes = lazy(() =>
         return c.json(sandboxes)
       },
     )
+    .delete(
+      "/worktree",
+      describeRoute({
+        summary: "Remove worktree",
+        description: "Remove a git worktree and delete its branch.",
+        operationId: "worktree.remove",
+        responses: {
+          200: {
+            description: "Worktree removed",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", Worktree.remove.schema),
+      async (c) => {
+        const body = c.req.valid("json")
+        await Worktree.remove(body)
+        await Project.removeSandbox(Instance.project.id, body.directory)
+        return c.json(true)
+      },
+    )
     .get(
       "/resource",
       describeRoute({
