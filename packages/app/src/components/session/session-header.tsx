@@ -1,5 +1,4 @@
 import { createEffect, createMemo, onCleanup, Show } from "solid-js"
-import type { JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
