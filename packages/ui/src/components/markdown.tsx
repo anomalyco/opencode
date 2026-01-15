@@ -30,6 +30,8 @@ const config = {
   SANITIZE_NAMED_PROPS: true,
   FORBID_TAGS: ["style"],
   FORBID_CONTENTS: ["style", "script"],
+  ADD_TAGS: ["copy-button"],
+  ADD_ATTR: ["data-code"],
 }
 
 function sanitize(html: string) {
@@ -81,6 +83,7 @@ export function Markdown(
     },
     { initialValue: "" },
   )
+
   return (
     <div
       data-component="markdown"

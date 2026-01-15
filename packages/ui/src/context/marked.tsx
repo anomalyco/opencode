@@ -1,9 +1,22 @@
 import { marked } from "marked"
 import markedKatex from "marked-katex-extension"
 import markedShiki from "marked-shiki"
-import { bundledLanguages, type BundledLanguage } from "shiki"
+import { bundledLanguages, type BundledLanguage, type ShikiTransformer } from "shiki"
 import { createSimpleContext } from "./helper"
 import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
+
+import "../components/copy-button-element"
+
+const copyButtonTransformer: ShikiTransformer = {
+  name: "copy-button",
+  preprocess(code) {
+    ;(this.meta as Record<string, unknown>).code = code
+  },
+  postprocess(html) {
+    const code = (this.meta as Record<string, unknown>).code as string
+    return `<div data-slot="code-block-wrapper"><copy-button data-code="${encodeURIComponent(code)}"></copy-button>${html}</div>`
+  },
+}
 
 registerCustomTheme("OpenCode", () => {
   return Promise.resolve({
@@ -403,6 +416,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
             lang: lang || "text",
             theme: "OpenCode",
             tabindex: false,
+            transformers: [copyButtonTransformer],
           })
         },
       }),

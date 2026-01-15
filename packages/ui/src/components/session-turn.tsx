@@ -24,9 +24,8 @@ import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { ProviderIcon } from "./provider-icon"
 import type { IconName } from "./provider-icons/types"
-import { IconButton } from "./icon-button"
-import { Tooltip } from "./tooltip"
 import { Card } from "./card"
+import { CopyButton } from "./copy-button"
 import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
 import { Spinner } from "./spinner"
@@ -333,15 +332,6 @@ export function SessionTurn(
   const hasDiffs = createMemo(() => message()?.summary?.diffs?.length)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
-  const [responseCopied, setResponseCopied] = createSignal(false)
-  const handleCopyResponse = async () => {
-    const content = response()
-    if (!content) return
-    await navigator.clipboard.writeText(content)
-    setResponseCopied(true)
-    setTimeout(() => setResponseCopied(false), 2000)
-  }
-
   function duration() {
     const msg = message()
     if (!msg) return ""
@@ -586,13 +576,7 @@ export function SessionTurn(
                     <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-copy">
-                          <Tooltip value={responseCopied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
-                            <IconButton
-                              icon={responseCopied() ? "check" : "copy"}
-                              variant="secondary"
-                              onClick={handleCopyResponse}
-                            />
-                          </Tooltip>
+                          <CopyButton text={response} />
                         </div>
                         <div data-slot="session-turn-summary-header">
                           <h2 data-slot="session-turn-summary-title">Response</h2>
