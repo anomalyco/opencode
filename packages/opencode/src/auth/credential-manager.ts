@@ -50,7 +50,7 @@ export namespace CredentialManager {
       title: "OAuth Credential Failover",
       message,
       variant: "warning",
-      duration: 5000,
+      duration: 8000,
     }).catch((error) => log.debug("failed to show failover toast", { error }))
   }
 }
