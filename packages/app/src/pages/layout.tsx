@@ -1351,7 +1351,7 @@ export default function Layout(props: ParentProps) {
             }}
             style={{ width: sidebarProps.mobile ? undefined : `${Math.max(layout.sidebar.width() - 64, 0)}px` }}
           >
-            <Show when={project()}>
+            <Show when={project()} keyed>
               {(p) => (
                 <>
                   <div class="shrink-0 px-2 py-1">
@@ -1373,16 +1373,16 @@ export default function Layout(props: ParentProps) {
                         />
                         <DropdownMenu.Portal>
                           <DropdownMenu.Content>
-                            <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p()} />)}>
+                            <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
                               <DropdownMenu.ItemLabel>Edit project</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => closeProject(p().worktree)}>
+                            <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
                               <DropdownMenu.ItemLabel>Close project</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
                             <DropdownMenu.Separator />
-                            <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces(p().worktree)}>
+                            <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces(p.worktree)}>
                               <DropdownMenu.ItemLabel>
-                                {layout.sidebar.workspaces(p().worktree)() ? "Disable workspaces" : "Enable workspaces"}
+                                {layout.sidebar.workspaces(p.worktree)() ? "Disable workspaces" : "Enable workspaces"}
                               </DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
                           </DropdownMenu.Content>
@@ -1392,7 +1392,7 @@ export default function Layout(props: ParentProps) {
                   </div>
 
                   <Show
-                    when={layout.sidebar.workspaces(p().worktree)()}
+                    when={layout.sidebar.workspaces(p.worktree)()}
                     fallback={
                       <>
                         <div class="py-4 px-3">
@@ -1401,7 +1401,7 @@ export default function Layout(props: ParentProps) {
                             icon="plus-small"
                             class="w-full"
                             onClick={() => {
-                              navigate(`/${base64Encode(p().worktree)}/session`)
+                              navigate(`/${base64Encode(p.worktree)}/session`)
                               layout.mobileSidebar.hide()
                             }}
                           >
@@ -1409,7 +1409,7 @@ export default function Layout(props: ParentProps) {
                           </Button>
                         </div>
                         <div class="flex-1 min-h-0">
-                          <LocalWorkspace project={p()} mobile={sidebarProps.mobile} />
+                          <LocalWorkspace project={p} mobile={sidebarProps.mobile} />
                         </div>
                       </>
                     }
@@ -1438,7 +1438,7 @@ export default function Layout(props: ParentProps) {
                             <SortableProvider ids={workspaces()}>
                               <For each={workspaces()}>
                                 {(directory) => (
-                                  <SortableWorkspace directory={directory} project={p()} mobile={sidebarProps.mobile} />
+                                  <SortableWorkspace directory={directory} project={p} mobile={sidebarProps.mobile} />
                                 )}
                               </For>
                             </SortableProvider>
