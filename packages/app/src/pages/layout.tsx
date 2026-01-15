@@ -880,7 +880,7 @@ export default function Layout(props: ParentProps) {
     return (
       <div
         data-session-id={props.session.id}
-        class="group/session relative w-full rounded-md cursor-default transition-colors px-3
+        class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3
                hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
       >
         <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={16} openDelay={1000}>
@@ -897,7 +897,7 @@ export default function Layout(props: ParentProps) {
               >
                 <Switch>
                   <Match when={isWorking()}>
-                    <Spinner class="size-[15px]" />
+                    <Spinner class="size-[15px] opacity-50" />
                   </Match>
                   <Match when={hasPermissions()}>
                     <div class="size-1.5 rounded-full bg-surface-warning-strong" />
