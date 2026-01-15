@@ -1020,7 +1020,7 @@ export default function Layout(props: ParentProps) {
     }
 
     return (
-      <Dialog title="Delete workspace">
+      <Dialog title="Delete workspace" fit>
         <div class="flex flex-col gap-4 px-2.5 pb-3">
           <div class="flex flex-col gap-1">
             <span class="text-14-regular text-text-strong">Delete workspace "{name()}"?</span>
@@ -1097,7 +1097,7 @@ export default function Layout(props: ParentProps) {
     }
 
     return (
-      <Dialog title="Reset workspace">
+      <Dialog title="Reset workspace" fit>
         <div class="flex flex-col gap-4 px-2.5 pb-3">
           <div class="flex flex-col gap-1">
             <span class="text-14-regular text-text-strong">Reset workspace "{name()}"?</span>
