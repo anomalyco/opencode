@@ -16,9 +16,41 @@ import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
+import { Pty } from "@/pty"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
+
+const INTERACTIVE_COMMANDS = new Set([
+  "vim",
+  "vi",
+  "nano",
+  "emacs",
+  "ssh",
+  "telnet",
+  "opencode",
+  "less",
+  "more",
+  "htop",
+  "top",
+  "man",
+  "psql",
+  "mysql",
+  "sqlite3",
+  "python",
+  "python3",
+  "node",
+  "irb",
+])
+
+function shouldUseInteractive(command: string, explicitInteractive: boolean): boolean {
+  if (!explicitInteractive) return false
+
+  // Extract first command from the command string
+  const firstCommand = command.trim().split(/\s+/)[0].split(/[;&|]/)[0]
+
+  return INTERACTIVE_COMMANDS.has(firstCommand)
+}
 
 export const log = Log.create({ service: "bash-tool" })
 
@@ -73,6 +105,13 @@ export const BashTool = Tool.define("bash", async () => {
         .describe(
           "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
         ),
+      interactive: z
+        .boolean()
+        .describe(
+          "Enable interactive mode for commands requiring user input (arrow keys, text entry, etc.). Examples: opencode auth login, vim file.txt, ssh user@host, psql. Only works with supported commands.",
+        )
+        .optional()
+        .default(false),
     }),
     async execute(params, ctx) {
       const cwd = params.workdir || Instance.directory
@@ -80,6 +119,45 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
+
+      // Interactive mode handling
+      const useInteractive = shouldUseInteractive(params.command, params.interactive ?? false)
+
+      if (useInteractive) {
+        try {
+          log.info("attempting interactive mode via PTY", { command: params.command })
+
+          // Create PTY session
+          const ptyInfo = await Pty.create({
+            command: shell,
+            args: ["-c", params.command],
+            cwd,
+            title: params.description,
+            env: process.env as Record<string, string>,
+          })
+
+          log.info("PTY session created for interactive command", { ptyId: ptyInfo.id })
+
+          // Return immediately with PTY info
+          return {
+            title: params.description,
+            metadata: {
+              ptyId: ptyInfo.id,
+              interactive: true,
+              description: params.description,
+              command: params.command,
+            },
+            output: `Interactive mode enabled. Use arrow keys, Enter, and type to interact with the command.`,
+          }
+        } catch (error) {
+          log.warn("PTY creation failed, falling back to regular spawn", {
+            command: params.command,
+            error: error instanceof Error ? error.message : String(error),
+          })
+          // Fall through to regular spawn below
+        }
+      }
+
       const tree = await parser().then((p) => p.parse(params.command))
       if (!tree) {
         throw new Error("Failed to parse command")

@@ -25,6 +25,16 @@ Usage notes:
   - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
   - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
   - If the output exceeds ${maxLines} lines or ${maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Because of this, you do NOT need to use `head`, `tail`, or other truncation commands to limit output - just run the command directly.
+  - For commands requiring interactive user input (password prompts, menu selections, text editors), set `interactive: true` to enable full terminal emulation. This supports arrow keys, Enter, text input, and proper terminal control sequences.
+    
+    Supported interactive commands: vim, vi, nano, emacs, ssh, opencode (for auth), less, more, htop, man, psql, mysql, sqlite3, python (REPL), node (REPL), irb.
+    
+    Examples:
+      - opencode auth login (interactive: true) - Select auth provider with arrow keys
+      - vim config.yaml (interactive: true) - Edit file in vim
+      - ssh user@host (interactive: true) - SSH with password prompt
+      
+    Note: Commands not in the supported list will automatically fall back to standard mode.
 
   - Avoid using Bash with the `find`, `grep`, `cat`, `head`, `tail`, `sed`, `awk`, or `echo` commands, unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
     - File search: Use Glob (NOT find or ls)

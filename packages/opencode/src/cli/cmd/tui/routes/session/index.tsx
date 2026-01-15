@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   Show,
   Switch,
   useContext,
@@ -1541,7 +1542,124 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
   )
 }
 
+function BashInteractive(props: ToolProps<typeof BashTool> & { ptyId: string }) {
+  const { theme } = useTheme()
+  const sync = useSync()
+  const keyboard = useKeyboard()
+  const [output, setOutput] = createSignal<string>("")
+  const [ws, setWs] = createSignal<WebSocket | null>(null)
+  const [status, setStatus] = createSignal<"connecting" | "connected" | "error">("connecting")
+  const [retryCount, setRetryCount] = createSignal(0)
+  const [exited, setExited] = createSignal(false)
+
+  // WebSocket connection with retry logic
+  const connectToPty = () => {
+    const ptyId = props.ptyId
+    const endpoint = sync.data.endpoint || "http://localhost:4096"
+    const wsUrl = endpoint.replace(/^http/, "ws") + `/pty/${ptyId}/connect`
+
+    console.log("connecting to PTY", { wsUrl, ptyId })
+    const socket = new WebSocket(wsUrl)
+
+    socket.onopen = () => {
+      console.log("PTY WebSocket connected", { ptyId })
+      setStatus("connected")
+      setRetryCount(0)
+    }
+
+    socket.onmessage = (event) => {
+      setOutput((prev) => prev + event.data)
+    }
+
+    socket.onerror = (error) => {
+      console.error("PTY WebSocket error", { ptyId, error })
+      if (retryCount() < 3) {
+        setRetryCount((c) => c + 1)
+        const delay = Math.pow(2, retryCount()) * 1000 // Exponential backoff
+        setTimeout(() => {
+          if (!exited()) connectToPty()
+        }, delay)
+      } else {
+        setStatus("error")
+      }
+    }
+
+    socket.onclose = () => {
+      console.log("PTY WebSocket closed", { ptyId })
+      setExited(true)
+    }
+
+    setWs(socket)
+
+    onCleanup(() => {
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+        socket.close()
+      }
+    })
+  }
+
+  createEffect(() => {
+    connectToPty()
+  })
+
+  // Keyboard input handling - disabled TUI shortcuts, send to PTY
+  createEffect(() => {
+    const key = keyboard.key()
+    const socket = ws()
+
+    if (!key || !socket || socket.readyState !== WebSocket.OPEN) return
+
+    // ESC key exits interactive mode
+    if (key === "\x1b") {
+      socket.close()
+      setExited(true)
+      return
+    }
+
+    // Send all other input to PTY
+    socket.send(key)
+  })
+
+  const statusIndicator = createMemo(() => {
+    switch (status()) {
+      case "connecting":
+        return "⏳ Connecting..."
+      case "connected":
+        return "✓ Connected"
+      case "error":
+        return "✗ Connection failed after 3 retries"
+    }
+  })
+
+  return (
+    <BlockTool title={`# ${props.input.description ?? "Interactive Shell"}`} part={props.part}>
+      <box gap={1} overflow="scroll">
+        <text fg={theme.textMuted}>🔄 Interactive Mode</text>
+        <text fg={theme.textMuted}>
+          {statusIndicator()} • Session: {props.ptyId}
+        </text>
+        <text fg={theme.text}>$ {props.input.command}</text>
+        <text fg={theme.text}>{output()}</text>
+        <Show when={!exited()}>
+          <text fg={theme.textMuted}>Press ESC to exit interactive mode</text>
+        </Show>
+        <Show when={exited()}>
+          <text fg={theme.textMuted}>Session ended</text>
+        </Show>
+      </box>
+    </BlockTool>
+  )
+}
+
 function Bash(props: ToolProps<typeof BashTool>) {
+  // Check if this is an interactive PTY session
+  const ptyId = props.metadata.ptyId as string | undefined
+
+  if (ptyId && props.metadata.interactive) {
+    return <BashInteractive {...props} ptyId={ptyId} />
+  }
+
+  // Existing non-interactive Bash component code
   const { theme } = useTheme()
   const sync = useSync()
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
