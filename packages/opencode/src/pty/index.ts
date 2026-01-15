@@ -146,7 +146,6 @@ export namespace Pty {
     ptyProcess.onExit(({ exitCode }) => {
       log.info("session exited", { id, exitCode })
       session.info.status = "exited"
-      // Close all WebSocket connections
       for (const ws of session.subscribers) {
         ws.close()
       }
