@@ -89,44 +89,42 @@
   animation: reveal-terms 300ms cubic-bezier(0.25, 0, 0.5, 1) 50ms forwards;
 }
 
-::view-transition-old(action-20),
-::view-transition-old(action-100),
-::view-transition-old(action-200) {
-  animation: fade-out 100ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+::view-transition-old(actions-20),
+::view-transition-old(actions-100),
+::view-transition-old(actions-200) {
+  animation: fade-out 80ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-::view-transition-new(action-20),
-::view-transition-new(action-100),
-::view-transition-new(action-200) {
-  animation: fade-in-up 200ms cubic-bezier(0.16, 1, 0.3, 1) 250ms forwards;
+::view-transition-new(actions-20),
+::view-transition-new(actions-100),
+::view-transition-new(actions-200) {
+  animation: fade-in-up 200ms cubic-bezier(0.16, 1, 0.3, 1) 300ms forwards;
   opacity: 0;
 }
 
-::view-transition-group(plan-card-20),
-::view-transition-group(plan-card-100),
-::view-transition-group(plan-card-200) {
-  animation-duration: 200ms;
+::view-transition-group(card-20),
+::view-transition-group(card-100),
+::view-transition-group(card-200) {
+  animation-duration: 250ms;
   animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-::view-transition-image-pair(plan-card-20),
-::view-transition-image-pair(plan-card-100),
-::view-transition-image-pair(plan-card-200) {
+::view-transition-image-pair(card-20),
+::view-transition-image-pair(card-100),
+::view-transition-image-pair(card-200) {
   isolation: isolate;
+  overflow: hidden;
 }
 
-::view-transition-old(plan-card-20),
-::view-transition-old(plan-card-100),
-::view-transition-old(plan-card-200) {
-  animation: fade-out 120ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+::view-transition-old(card-20),
+::view-transition-old(card-100),
+::view-transition-old(card-200) {
   mix-blend-mode: normal;
 }
 
-::view-transition-new(plan-card-20),
-::view-transition-new(plan-card-100),
-::view-transition-new(plan-card-200) {
-  animation: fade-in 150ms cubic-bezier(0.4, 0, 0.2, 1) 50ms forwards;
-  opacity: 0;
+::view-transition-new(card-20),
+::view-transition-new(card-100),
+::view-transition-new(card-200) {
   mix-blend-mode: normal;
 }
 
@@ -362,8 +360,7 @@
         gap: 12px;
         padding: 24px;
         border: 1px solid rgba(255, 255, 255, 0.17);
-        background-color: rgba(0, 0, 0, 0.75);
-        backdrop-filter: blur(4px);
+        background: black;
         background-clip: padding-box;
         border-radius: 4px;
         text-decoration: none;
@@ -421,7 +418,6 @@
         margin: 0 auto;
         position: relative;
         background-color: rgba(0, 0, 0, 0.75);
-        backdrop-filter: blur(4px);
         z-index: 1;
 
         @media (max-width: 480px) {
