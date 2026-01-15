@@ -1160,7 +1160,10 @@ export default function Layout(props: ParentProps) {
                     variant="ghost"
                     class="flex w-full text-left justify-start text-14-regular text-text-weak px-10"
                     size="large"
-                    onClick={loadMore}
+                    onClick={(e: MouseEvent) => {
+                      loadMore()
+                      ;(e.currentTarget as HTMLButtonElement).blur()
+                    }}
                   >
                     Load more
                   </Button>
@@ -1205,7 +1208,10 @@ export default function Layout(props: ParentProps) {
                 variant="ghost"
                 class="flex w-full text-left justify-start text-14-regular text-text-weak px-10"
                 size="large"
-                onClick={loadMore}
+                onClick={(e: MouseEvent) => {
+                  loadMore()
+                  ;(e.currentTarget as HTMLButtonElement).blur()
+                }}
               >
                 Load more
               </Button>
