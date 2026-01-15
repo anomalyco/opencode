@@ -33,7 +33,7 @@
     border-radius: 6px;
     overflow: hidden;
     background: var(--surface-base);
-    border: 1px solid var(--border-base);
+    border: 1px solid var(--border-weak-base);
     transition: border-color 0.15s ease;
 
     &:hover {
@@ -465,7 +465,7 @@
 
   &[data-question="true"] {
     background: var(--background-base);
-    border: 1px solid var(--border-base);
+    border: 1px solid var(--border-weak-base);
   }
 }
 
