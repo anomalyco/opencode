@@ -49,10 +49,10 @@ export default function Black() {
                     data-slot="pricing-card"
                     style={{ "view-transition-name": `card-${plan.id}` }}
                   >
-                    <div data-slot="icon" style={{ "view-transition-name": `icon-${plan.id}` }}>
+                    <div data-slot="icon">
                       <PlanIcon plan={plan.id} />
                     </div>
-                    <p data-slot="price" style={{ "view-transition-name": `price-${plan.id}` }}>
+                    <p data-slot="price">
                       <span data-slot="amount">${plan.id}</span> <span data-slot="period">per month</span>
                       <Show when={plan.multiplier}>
                         <span data-slot="multiplier">{plan.multiplier}</span>
@@ -67,10 +67,10 @@ export default function Black() {
             {(plan) => (
               <div data-slot="selected-plan">
                 <div data-slot="selected-card" style={{ "view-transition-name": `card-${plan().id}` }}>
-                  <div data-slot="icon" style={{ "view-transition-name": `icon-${plan().id}` }}>
+                  <div data-slot="icon">
                     <PlanIcon plan={plan().id} />
                   </div>
-                  <p data-slot="price" style={{ "view-transition-name": `price-${plan().id}` }}>
+                  <p data-slot="price">
                     <span data-slot="amount">${plan().id}</span>{" "}
                     <span data-slot="period">per person billed monthly</span>
                     <Show when={plan().multiplier}>
