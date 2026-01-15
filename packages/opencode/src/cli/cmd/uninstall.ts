@@ -197,7 +197,15 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
           : await $`${cmd}`.quiet().nothrow()
       if (result.exitCode !== 0) {
         spinner.stop(`Package manager uninstall failed`, 1)
-        prompts.log.warn(`You may need to run manually: ${cmd.join(" ")}`)
+        if (
+          method === "choco" &&
+          result.stdout.toString("utf8").includes("not running from an elevated command shell")
+        ) {
+          prompts.log.warn(`You may need to run '${cmd.join(" ")}' from an elevated command shell`)
+        } else {
+          prompts.log.warn(`You may need to run manually: ${cmd.join(" ")}`)
+        }
+
         errors.push(`Package manager: exit code ${result.exitCode}`)
       } else {
         spinner.stop("Package removed")
