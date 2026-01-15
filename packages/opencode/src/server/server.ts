@@ -7,6 +7,7 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { stream, streamSSE } from "hono/streaming"
 import { proxy } from "hono/proxy"
+import { basicAuth } from "hono/basic-auth"
 import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
@@ -25,6 +26,7 @@ import { Project } from "../project/project"
 import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
+import { Flag } from "../flag/flag"
 import { Command } from "../command"
 import { ProviderAuth } from "../provider/auth"
 import { Global } from "../global"
@@ -45,6 +47,7 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { SessionStatus } from "@/session/status"
 import { upgradeWebSocket, websocket } from "hono/bun"
+import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { Pty } from "@/pty"
 import { PermissionNext } from "@/permission/next"
@@ -74,6 +77,7 @@ export namespace Server {
   const app = new Hono()
   export const App: () => Hono = lazy(
     () =>
+      // TODO: Break server.ts into smaller route files to fix type inference
       app
         .onError((err, c) => {
           log.error("failed", {
@@ -87,10 +91,17 @@ export namespace Server {
             else status = 500
             return c.json(err.toObject(), { status })
           }
+          if (err instanceof HTTPException) return err.getResponse()
           const message = err instanceof Error && err.stack ? err.stack : err.toString()
           return c.json(new NamedError.Unknown({ message }).toObject(), {
             status: 500,
           })
+        })
+        .use((c, next) => {
+          const password = Flag.OPENCODE_SERVER_PASSWORD
+          if (!password) return next()
+          const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+          return basicAuth({ username, password })(c, next)
         })
         .use(async (c, next) => {
           const skipLogging = c.req.path === "/log"
@@ -713,6 +724,8 @@ export namespace Server {
           validator(
             "query",
             z.object({
+              directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
+              roots: z.coerce.boolean().optional().meta({ description: "Only return root sessions (no parentID)" }),
               start: z.coerce
                 .number()
                 .optional()
@@ -726,6 +739,8 @@ export namespace Server {
             const term = query.search?.toLowerCase()
             const sessions: Session.Info[] = []
             for await (const session of Session.list()) {
+              if (query.directory !== undefined && session.directory !== query.directory) continue
+              if (query.roots && session.parentID) continue
               if (query.start !== undefined && session.time.updated < query.start) continue
               if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
               sessions.push(session)
@@ -2826,6 +2841,10 @@ export namespace Server {
               host: "app.opencode.ai",
             },
           })
+          response.headers.set(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'",
+          )
           return response
         }) as unknown as Hono,
   )
