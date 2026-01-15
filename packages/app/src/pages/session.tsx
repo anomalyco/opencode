@@ -885,6 +885,19 @@ export default function Page() {
     window.history.replaceState(null, "", `#${anchor(id)}`)
   }
 
+  const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
+    const root = scroller
+    if (!root) {
+      el.scrollIntoView({ behavior, block: "start" })
+      return
+    }
+
+    const a = el.getBoundingClientRect()
+    const b = root.getBoundingClientRect()
+    const top = a.top - b.top + root.scrollTop
+    root.scrollTo({ top, behavior })
+  }
+
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
     setActiveMessage(message)
 
@@ -896,7 +909,7 @@ export default function Page() {
 
       requestAnimationFrame(() => {
         const el = document.getElementById(anchor(message.id))
-        if (el) el.scrollIntoView({ behavior, block: "start" })
+        if (el) scrollToElement(el, behavior)
       })
 
       updateHash(message.id)
@@ -904,7 +917,7 @@ export default function Page() {
     }
 
     const el = document.getElementById(anchor(message.id))
-    if (el) el.scrollIntoView({ behavior, block: "start" })
+    if (el) scrollToElement(el, behavior)
     updateHash(message.id)
   }
 
@@ -956,7 +969,7 @@ export default function Page() {
 
       const hashTarget = document.getElementById(hash)
       if (hashTarget) {
-        hashTarget.scrollIntoView({ behavior: "auto", block: "start" })
+        scrollToElement(hashTarget, "auto")
         return
       }
 

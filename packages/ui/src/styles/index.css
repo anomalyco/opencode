@@ -19,6 +19,7 @@
 @import "../components/dropdown-menu.css" layer(components);
 @import "../components/dialog.css" layer(components);
 @import "../components/file-icon.css" layer(components);
+@import "../components/hover-card.css" layer(components);
 @import "../components/provider-icon.css" layer(components);
 @import "../components/icon.css" layer(components);
 @import "../components/icon-button.css" layer(components);
