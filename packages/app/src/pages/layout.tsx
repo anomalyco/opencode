@@ -821,13 +821,13 @@ export default function Layout(props: ParentProps) {
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
-      <div class={`relative size-8 shrink-0 rounded-sm ${props.class ?? ""}`}>
-        <div class="size-full rounded-sm overflow-clip">
+      <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
+        <div class="size-full rounded overflow-clip">
           <Avatar
             fallback={name()}
             src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
             {...getAvatarColors(props.project.icon?.color)}
-            class="size-full rounded-sm"
+            class="size-full rounded"
             style={
               notifications().length > 0 && props.notify
                 ? { "-webkit-mask-image": mask, "mask-image": mask }
@@ -982,7 +982,7 @@ export default function Layout(props: ParentProps) {
       <button
         type="button"
         classList={{
-          "flex items-center justify-center size-10 p-1 rounded-md border transition-colors cursor-default": true,
+          "flex items-center justify-center size-10 p-1 rounded-lg border transition-colors cursor-default": true,
           "bg-transparent border-icon-strong-base hover:bg-surface-base-hover": selected(),
           "bg-transparent border-transparent hover:bg-surface-base-hover hover:border-border-weak-base": !selected(),
         }}
