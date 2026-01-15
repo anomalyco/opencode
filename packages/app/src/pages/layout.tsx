@@ -885,7 +885,7 @@ export default function Layout(props: ParentProps) {
     return (
       <div
         data-session-id={props.session.id}
-        class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3
+        class="group/session relative w-full rounded-md cursor-default transition-colors px-3
                hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
       >
         <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={16} openDelay={1000}>
@@ -902,7 +902,7 @@ export default function Layout(props: ParentProps) {
               >
                 <Switch>
                   <Match when={isWorking()}>
-                    <Spinner class="size-[15px] opacity-50" />
+                    <Spinner class="size-[15px]" />
                   </Match>
                   <Match when={hasPermissions()}>
                     <div class="size-1.5 rounded-full bg-surface-warning-strong" />
@@ -940,6 +940,17 @@ export default function Layout(props: ParentProps) {
             <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} />
           </TooltipKeybind>
         </div>
+      </div>
+    )
+  }
+
+  const SessionSkeleton = (props: { count?: number }): JSX.Element => {
+    const items = Array.from({ length: props.count ?? 4 }, (_, index) => index)
+    return (
+      <div class="flex flex-col gap-1">
+        <For each={items}>
+          {() => <div class="h-8 w-full rounded-md bg-surface-raised-base opacity-60 animate-pulse" />}
+        </For>
       </div>
     )
   }
@@ -1105,6 +1116,7 @@ export default function Layout(props: ParentProps) {
       return `${kind} : ${name}`
     })
     const open = createMemo(() => store.workspaceExpanded[props.directory] ?? true)
+    const loading = createMemo(() => open() && workspaceStore.status !== "complete" && sessions().length === 0)
     const hasMore = createMemo(() => local() && workspaceStore.sessionTotal > workspaceStore.session.length)
     const loadMore = async () => {
       if (!local()) return
@@ -1166,6 +1178,9 @@ export default function Layout(props: ParentProps) {
               >
                 New session
               </Button>
+              <Show when={loading()}>
+                <SessionSkeleton />
+              </Show>
               <For each={sessions()}>
                 {(session) => <SessionItem session={session} slug={slug()} mobile={props.mobile} />}
               </For>
@@ -1200,6 +1215,7 @@ export default function Layout(props: ParentProps) {
         .filter((session) => !session.parentID)
         .toSorted(sortSessions),
     )
+    const loading = createMemo(() => workspaceStore.status !== "complete" && sessions().length === 0)
     const hasMore = createMemo(() => workspaceStore.sessionTotal > workspaceStore.session.length)
     const loadMore = async () => {
       setWorkspaceStore("limit", (limit) => limit + 5)
@@ -1214,6 +1230,9 @@ export default function Layout(props: ParentProps) {
         class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar"
       >
         <nav class="flex flex-col gap-1 px-2">
+          <Show when={loading()}>
+            <SessionSkeleton />
+          </Show>
           <For each={sessions()}>
             {(session) => <SessionItem session={session} slug={slug()} mobile={props.mobile} />}
           </For>
