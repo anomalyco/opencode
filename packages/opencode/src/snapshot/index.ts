@@ -6,6 +6,7 @@ import { Global } from "../global"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import { Filesystem } from "../util/filesystem"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
@@ -96,22 +97,43 @@ export namespace Snapshot {
     for (const item of patches) {
       for (const file of item.files) {
         if (files.has(file)) continue
-        log.info("reverting", { file, hash: item.hash })
-        const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} checkout ${item.hash} -- ${file}`
-          .quiet()
-          .cwd(Instance.worktree)
-          .nothrow()
+        const relativePath = path.relative(Instance.worktree, file)
+        if (!Filesystem.contains(Instance.worktree, file) || path.isAbsolute(relativePath) || relativePath === "") {
+          log.warn("skipping file outside worktree", { file, relativePath, worktree: Instance.worktree })
+          files.add(file)
+          continue
+        }
+        const gitPath = process.platform === "win32" ? relativePath.replaceAll("\\", "/") : relativePath
+        log.info("reverting", { file, gitPath, hash: item.hash })
+        const result =
+          await $`git --git-dir ${git} --work-tree ${Instance.worktree} checkout ${item.hash} -- ${gitPath}`
+            .quiet()
+            .cwd(Instance.worktree)
+            .nothrow()
         if (result.exitCode !== 0) {
-          const relativePath = path.relative(Instance.worktree, file)
           const checkTree =
-            await $`git --git-dir ${git} --work-tree ${Instance.worktree} ls-tree ${item.hash} -- ${relativePath}`
+            await $`git --git-dir ${git} --work-tree ${Instance.worktree} ls-tree ${item.hash} -- ${gitPath}`
               .quiet()
               .cwd(Instance.worktree)
               .nothrow()
           if (checkTree.exitCode === 0 && checkTree.text().trim()) {
-            log.info("file existed in snapshot but checkout failed, keeping", {
-              file,
-            })
+            log.info("checkout failed, trying git show fallback", { file, gitPath })
+            const content = await $`git --git-dir ${git} show ${item.hash}:${gitPath}`
+              .quiet()
+              .cwd(Instance.worktree)
+              .nothrow()
+            if (content.exitCode === 0) {
+              const dir = path.dirname(file)
+              await fs.mkdir(dir, { recursive: true })
+              await fs.writeFile(file, content.stdout)
+              log.info("restored file via git show", { file })
+            } else {
+              log.warn("failed to restore file, keeping current version", {
+                file,
+                checkoutError: result.stderr.toString(),
+                showError: content.stderr.toString(),
+              })
+            }
           } else {
             log.info("file did not exist in snapshot, deleting", { file })
             await fs.unlink(file).catch(() => {})
