@@ -11,6 +11,7 @@ import { exists } from "fs/promises"
 import { Flag } from "@/flag/flag"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
+import { Session } from "@/session"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -47,27 +48,15 @@ export namespace Skill {
 
     const addSkill = async (match: string) => {
       const md = await ConfigMarkdown.parse(match).catch((err) => {
-        if (!ConfigMarkdown.FrontmatterError.isInstance(err)) {
-          log.error("failed to load skill", { path: match, error: err })
-          return undefined
-        }
-        log.error("failed to parse skill frontmatter", {
-          path: err.data.path,
-          message: err.data.message,
-        })
-        const relativePath = path.relative(Instance.directory, match)
-        Bus.publish(TuiEvent.ToastShow, {
-          title: "Skill Error",
-          message: `Failed to parse ${relativePath}: ${err.data.message.split(":")[0]}`,
-          variant: "error",
-          duration: 8000,
-        })
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? `${err.data.path}: ${err.data.message}`
+          : `Failed to parse skill ${match}`
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load skill", { skill: match, err })
         return undefined
       })
 
-      if (!md) {
-        return
-      }
+      if (!md) return
 
       const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
       if (!parsed.success) return

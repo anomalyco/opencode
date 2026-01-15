@@ -221,9 +221,10 @@ export namespace Config {
       cwd: dir,
     })) {
       const md = await ConfigMarkdown.parse(item).catch((err) => {
-        Bus.publish(Session.Event.Error, {
-          error: new NamedError.Unknown({ message: `Frontmatter failed to parse command ${item}: ${err}` }),
-        })
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? `${err.data.path}: ${err.data.message}`
+          : `Failed to parse command ${item}`
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
         log.error("failed to load command", { command: item, err })
         return undefined
       })
@@ -266,9 +267,10 @@ export namespace Config {
       cwd: dir,
     })) {
       const md = await ConfigMarkdown.parse(item).catch((err) => {
-        Bus.publish(Session.Event.Error, {
-          error: new NamedError.Unknown({ message: `Frontmatter failed to parse agent ${item}: ${err}` }),
-        })
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? `${err.data.path}: ${err.data.message}`
+          : `Failed to parse agent ${item}`
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
         log.error("failed to load agent", { agent: item, err })
         return undefined
       })
@@ -314,9 +316,10 @@ export namespace Config {
       cwd: dir,
     })) {
       const md = await ConfigMarkdown.parse(item).catch((err) => {
-        Bus.publish(Session.Event.Error, {
-          error: new NamedError.Unknown({ message: `Frontmatter failed to parse mode ${item}: ${err}` }),
-        })
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? `${err.data.path}: ${err.data.message}`
+          : `Failed to parse mode ${item}`
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
         log.error("failed to load mode", { mode: item, err })
         return undefined
       })
