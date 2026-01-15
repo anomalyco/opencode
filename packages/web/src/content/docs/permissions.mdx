@@ -3,129 +3,75 @@ title: Permissions
 description: Control which actions require approval to run.
 ---
 
-By default, OpenCode allows most operations without approval, except `doom_loop` and `external_directory` which default to `ask`. You can configure this using the `permission` option.
+OpenCode uses the `permission` config to decide whether a given action should run automatically, prompt you, or be blocked.
+
+As of `v1.1.1`, the legacy `tools` boolean config is deprecated and has been merged into `permission`. The old `tools` config is still supported for backwards compatibility.
+
+---
+
+## Actions
+
+Each permission rule resolves to one of:
+
+- `"allow"` — run without approval
+- `"ask"` — prompt for approval
+- `"deny"` — block the action
+
+---
+
+## Configuration
+
+You can set permissions globally (with `*`), and override specific tools.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "edit": "allow",
-    "bash": "ask",
-    "skill": "ask",
-    "webfetch": "deny",
-    "doom_loop": "ask",
-    "external_directory": "ask"
+    "*": "ask",
+    "bash": "allow",
+    "edit": "deny"
   }
 }
 ```
 
-This lets you configure granular controls for the `edit`, `bash`, `skill`, `webfetch`, `doom_loop`, and `external_directory` tools.
+You can also set all permissions at once:
 
-- `"ask"` — Prompt for approval before running the tool
-- `"allow"` — Allow all operations without approval
-- `"deny"` — Disable the tool
-
----
-
-## Tools
-
-Currently, the permissions for the `edit`, `bash`, `skill`, `webfetch`, `doom_loop`, and `external_directory` tools can be configured through the `permission` option.
-
----
-
-### edit
-
-Use the `permission.edit` key to control whether file editing operations require user approval.
-
-```json title="opencode.json" {4}
+```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "edit": "ask"
-  }
+  "permission": "allow"
 }
 ```
 
 ---
 
-### bash
+## Granular Rules (Object Syntax)
 
-You can use the `permission.bash` key to control whether bash commands as a
-whole need user approval.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "bash": "ask"
-  }
-}
-```
-
-Or, you can target specific commands and set it to `allow`, `ask`, or `deny`.
+For most permissions, you can use an object to apply different actions based on the tool input.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "bash": {
-      "git push": "ask",
-      "git status": "allow",
-      "git diff": "allow",
-      "npm run build": "allow",
-      "ls": "allow",
-      "pwd": "allow"
-    }
-  }
-}
-```
-
----
-
-#### Wildcards
-
-You can also use wildcards to manage permissions for specific bash commands.
-
-:::tip
-You can use wildcards to manage permissions for specific bash commands.
-:::
-
-For example, **disable all** Terraform commands.
-
-```json title="opencode.json" {5}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "bash": {
-      "terraform *": "deny"
-    }
-  }
-}
-```
-
-You can also use the `*` wildcard to manage permissions for all commands. For
-example, **deny all commands** except a couple of specific ones.
-
-```json title="opencode.json" {5}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "npm *": "allow",
+      "rm *": "deny"
+    },
+    "edit": {
       "*": "deny",
-      "pwd": "allow",
-      "git status": "ask"
+      "packages/web/src/content/docs/*.mdx": "allow"
     }
   }
 }
 ```
 
-Here a specific rule can override the `*` wildcard.
+Rules are evaluated by pattern match, with the **last matching rule winning**. A common pattern is to put the catch-all `"*"` rule first, and more specific rules after it.
 
----
+### Wildcards
 
-##### Glob patterns
-
-The wildcard uses simple regex globbing patterns.
+Permission patterns use simple wildcard matching:
 
 - `*` matches zero or more of any character
 - `?` matches exactly one character
@@ -133,43 +79,43 @@ The wildcard uses simple regex globbing patterns.
 
 ---
 
-#### Scope of the `"ask"` option
+## Available Permissions
 
-When the agent asks for permission to run a particular bash command, it will
-request feedback with the three options "accept", "accept always" and "deny".
-The "accept always" answer applies for the rest of the current session.
+OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 
-In addition, command permissions are applied to the first two elements of a command. So, an "accept always" response for a command like `git log` would whitelist `git log *` but not `git commit ...`.
-
-When an agent asks for permission to run a command in a pipeline, we use tree sitter to parse each command in the pipeline. The "accept always" permission thus applies separately to each command in the pipeline.
+- `read` — reading a file (matches the file path)
+- `edit` — all file modifications (covers `edit`, `write`, `patch`, `multiedit`)
+- `glob` — file globbing (matches the glob pattern)
+- `grep` — content search (matches the regex pattern)
+- `list` — listing files in a directory (matches the directory path)
+- `bash` — running shell commands (matches parsed commands like `git status --porcelain`)
+- `task` — launching subagents (matches the subagent type)
+- `skill` — loading a skill (matches the skill name)
+- `lsp` — running LSP queries (currently non-granular)
+- `todoread`, `todowrite` — reading/updating the todo list
+- `webfetch` — fetching a URL (matches the URL)
+- `websearch`, `codesearch` — web/code search (matches the query)
+- `external_directory` — triggered when a tool touches paths outside the project working directory
+- `doom_loop` — triggered when the same tool call repeats 3 times with identical input
 
 ---
 
-### skill
+## Defaults
 
-Use the `permission.skill` key to control whether the model can load skills via the built-in `skill` tool.
+If you don’t specify anything, OpenCode starts from permissive defaults:
 
-You can apply a single rule to all skills:
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "skill": "ask"
-  }
-}
-```
-
-Or configure per-skill rules (supports the same wildcard patterns as `permission.bash`):
+- Most permissions default to `"allow"`.
+- `doom_loop` and `external_directory` default to `"ask"`.
+- `read` is `"allow"`, but `.env` files are denied by default:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "skill": {
-      "*": "deny",
-      "git-*": "allow",
-      "frontend/*": "ask"
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
     }
   }
 }
@@ -177,72 +123,37 @@ Or configure per-skill rules (supports the same wildcard patterns as `permission
 
 ---
 
-### webfetch
+## What “Ask” Does
 
-Use the `permission.webfetch` key to control whether the LLM can fetch web pages.
+When OpenCode prompts for approval, the UI offers three outcomes:
 
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "webfetch": "ask"
-  }
-}
-```
+- `once` — approve just this request
+- `always` — approve future requests matching the suggested patterns (for the rest of the current OpenCode session)
+- `reject` — deny the request
 
----
-
-### doom_loop
-
-Use the `permission.doom_loop` key to control whether approval is required when a doom loop is detected. A doom loop occurs when the same tool is called 3 times in a row with identical arguments.
-
-This helps prevent infinite loops where the LLM repeatedly attempts the same action without making progress.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "doom_loop": "ask"
-  }
-}
-```
-
----
-
-### external_directory
-
-Use the `permission.external_directory` key to control whether file operations require approval when accessing files outside the working directory.
-
-This provides an additional safety layer to prevent unintended modifications to files outside your project.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "external_directory": "ask"
-  }
-}
-```
+The set of patterns that `always` would approve is provided by the tool (for example, bash approvals typically whitelist a safe command prefix like `git status*`).
 
 ---
 
 ## Agents
 
-You can also configure permissions per agent. Where the agent specific config
-overrides the global config. [Learn more](/docs/agents#permissions) about agent permissions.
+You can override permissions per agent. Agent permissions are merged with the global config, and agent rules take precedence. [Learn more](/docs/agents#permissions) about agent permissions.
 
-```json title="opencode.json" {3-7,10-14}
+```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "bash": {
-      "git push": "ask"
+      "*": "ask",
+      "git status": "allow"
     }
   },
   "agent": {
     "build": {
       "permission": {
         "bash": {
+          "*": "ask",
+          "git status": "allow",
           "git push": "allow"
         }
       }
@@ -251,10 +162,7 @@ overrides the global config. [Learn more](/docs/agents#permissions) about agent 
 }
 ```
 
-For example, here the `build` agent overrides the global `bash` permission to
-allow `git push` commands.
-
-You can also configure permissions for agents in Markdown.
+You can also configure agent permissions in Markdown:
 
 ```markdown title="~/.config/opencode/agent/review.md"
 ---

@@ -117,7 +117,15 @@ export namespace MessageV2 {
     ref: "SymbolSource",
   })
 
-  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource]).meta({
+  export const ResourceSource = FilePartSourceBase.extend({
+    type: z.literal("resource"),
+    clientName: z.string(),
+    uri: z.string(),
+  }).meta({
+    ref: "ResourceSource",
+  })
+
+  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource, ResourceSource]).meta({
     ref: "FilePartSource",
   })
 
@@ -656,6 +664,7 @@ export namespace MessageV2 {
           return `${msg}: ${e.responseBody}`
         }).trim()
 
+        const metadata = e.url ? { url: e.url } : undefined
         return new MessageV2.APIError(
           {
             message,
@@ -663,6 +672,7 @@ export namespace MessageV2 {
             isRetryable: e.isRetryable,
             responseHeaders: e.responseHeaders,
             responseBody: e.responseBody,
+            metadata,
           },
           { cause: e },
         ).toObject()

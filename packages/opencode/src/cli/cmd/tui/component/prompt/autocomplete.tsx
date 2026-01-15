@@ -1,7 +1,7 @@
 import type { BoxRenderable, TextareaRenderable, KeyEvent, ScrollBoxRenderable } from "@opentui/core"
 import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
-import { createMemo, createResource, createEffect, onMount, onCleanup, For, Show, createSignal } from "solid-js"
+import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
@@ -11,6 +11,7 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
+import { useFrecency } from "./frecency"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -52,10 +53,13 @@ export type AutocompleteRef = {
 
 export type AutocompleteOption = {
   display: string
+  value?: string
   aliases?: string[]
   disabled?: boolean
   description?: string
+  isDirectory?: boolean
   onSelect?: () => void
+  path?: string
 }
 
 export function Autocomplete(props: {
@@ -75,6 +79,7 @@ export function Autocomplete(props: {
   const command = useCommandDialog()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
+  const frecency = useFrecency()
 
   const [store, setStore] = createStore({
     index: 0,
@@ -154,6 +159,26 @@ export function Autocomplete(props: {
     })
 
     props.setPrompt((draft) => {
+      if (part.type === "file") {
+        const existingIndex = draft.parts.findIndex((p) => p.type === "file" && "url" in p && p.url === part.url)
+        if (existingIndex !== -1) {
+          const existing = draft.parts[existingIndex]
+          if (
+            part.source?.text &&
+            existing &&
+            "source" in existing &&
+            existing.source &&
+            "text" in existing.source &&
+            existing.source.text
+          ) {
+            existing.source.text.start = extmarkStart
+            existing.source.text.end = extmarkEnd
+            existing.source.text.value = virtualText
+          }
+          return
+        }
+      }
+
       if (part.type === "file" && part.source?.text) {
         part.source.text.start = extmarkStart
         part.source.text.end = extmarkEnd
@@ -167,6 +192,10 @@ export function Autocomplete(props: {
       draft.parts.push(part)
       props.setExtmark(partIndex, extmarkId)
     })
+
+    if (part.type === "file" && part.source && part.source.type === "file") {
+      frecency.updateFrecency(part.source.path)
+    }
   }
 
   const [files] = createResource(
@@ -185,9 +214,19 @@ export function Autocomplete(props: {
 
       // Add file options
       if (!result.error && result.data) {
+        const sortedFiles = result.data.sort((a, b) => {
+          const aScore = frecency.getFrecency(a)
+          const bScore = frecency.getFrecency(b)
+          if (aScore !== bScore) return bScore - aScore
+          const aDepth = a.split("/").length
+          const bDepth = b.split("/").length
+          if (aDepth !== bDepth) return aDepth - bDepth
+          return a.localeCompare(b)
+        })
+
         const width = props.anchor().width - 4
         options.push(
-          ...result.data.map((item): AutocompleteOption => {
+          ...sortedFiles.map((item): AutocompleteOption => {
             let url = `file://${process.cwd()}/${item}`
             let filename = item
             if (lineRange && !item.endsWith("/")) {
@@ -200,8 +239,12 @@ export function Autocomplete(props: {
               url = urlObj.toString()
             }
 
+            const isDir = item.endsWith("/")
             return {
               display: Locale.truncateMiddle(filename, width),
+              value: filename,
+              isDirectory: isDir,
+              path: item,
               onSelect: () => {
                 insertPart(filename, {
                   type: "file",
@@ -230,6 +273,42 @@ export function Autocomplete(props: {
       initialValue: [],
     },
   )
+
+  const mcpResources = createMemo(() => {
+    if (!store.visible || store.visible === "/") return []
+
+    const options: AutocompleteOption[] = []
+    const width = props.anchor().width - 4
+
+    for (const res of Object.values(sync.data.mcp_resource)) {
+      const text = `${res.name} (${res.uri})`
+      options.push({
+        display: Locale.truncateMiddle(text, width),
+        value: text,
+        description: res.description,
+        onSelect: () => {
+          insertPart(res.name, {
+            type: "file",
+            mime: res.mimeType ?? "text/plain",
+            filename: res.name,
+            url: res.uri,
+            source: {
+              type: "resource",
+              text: {
+                start: 0,
+                end: 0,
+                value: "",
+              },
+              clientName: res.client,
+              uri: res.uri,
+            },
+          })
+        },
+      })
+    }
+
+    return options
+  })
 
   const agents = createMemo(() => {
     const agents = sync.data.agent
@@ -416,7 +495,7 @@ export function Autocomplete(props: {
     const commandsValue = commands()
 
     const mixed: AutocompleteOption[] = (
-      store.visible === "@" ? [...agentsValue, ...(filesValue || [])] : [...commandsValue]
+      store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
     ).filter((x) => x.disabled !== true)
 
     const currentFilter = filter()
@@ -430,14 +509,20 @@ export function Autocomplete(props: {
     }
 
     const result = fuzzysort.go(removeLineRange(currentFilter), mixed, {
-      keys: [(obj) => removeLineRange(obj.display.trimEnd()), "description", (obj) => obj.aliases?.join(" ") ?? ""],
+      keys: [
+        (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
+        "description",
+        (obj) => obj.aliases?.join(" ") ?? "",
+      ],
       limit: 10,
       scoreFn: (objResults) => {
         const displayResult = objResults[0]
+        let score = objResults.score
         if (displayResult && displayResult.target.startsWith(store.visible + currentFilter)) {
-          return objResults.score * 2
+          score *= 2
         }
-        return objResults.score
+        const frecencyScore = objResults.obj.path ? frecency.getFrecency(objResults.obj.path) : 0
+        return score * (1 + frecencyScore)
       },
     })
 
@@ -475,6 +560,27 @@ export function Autocomplete(props: {
     if (!selected) return
     hide()
     selected.onSelect?.()
+  }
+
+  function expandDirectory() {
+    const selected = options()[store.selected]
+    if (!selected) return
+
+    const input = props.input()
+    const currentCursorOffset = input.cursorOffset
+
+    const displayText = selected.display.trimEnd()
+    const path = displayText.startsWith("@") ? displayText.slice(1) : displayText
+
+    input.cursorOffset = store.index
+    const startCursor = input.logicalCursor
+    input.cursorOffset = currentCursorOffset
+    const endCursor = input.logicalCursor
+
+    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    input.insertText("@" + path)
+
+    setStore("selected", 0)
   }
 
   function show(mode: "@" | "/") {
@@ -515,8 +621,31 @@ export function Autocomplete(props: {
             (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
           ) {
             hide()
-            return
           }
+          return
+        }
+
+        // Check if autocomplete should reopen (e.g., after backspace deleted a space)
+        const offset = props.input().cursorOffset
+        if (offset === 0) return
+
+        // Check for "/" at position 0 - reopen slash commands
+        if (value.startsWith("/") && !value.slice(0, offset).match(/\s/)) {
+          show("/")
+          setStore("index", 0)
+          return
+        }
+
+        // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
+        const text = value.slice(0, offset)
+        const idx = text.lastIndexOf("@")
+        if (idx === -1) return
+
+        const between = text.slice(idx)
+        const before = idx === 0 ? undefined : value[idx - 1]
+        if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+          show("@")
+          setStore("index", idx)
         }
       },
       onKeyDown(e: KeyEvent) {
@@ -541,8 +670,18 @@ export function Autocomplete(props: {
             e.preventDefault()
             return
           }
-          if (name === "return" || name === "tab") {
+          if (name === "return") {
             select()
+            e.preventDefault()
+            return
+          }
+          if (name === "tab") {
+            const selected = options()[store.selected]
+            if (selected?.isDirectory) {
+              expandDirectory()
+            } else {
+              select()
+            }
             e.preventDefault()
             return
           }
@@ -565,8 +704,10 @@ export function Autocomplete(props: {
   })
 
   const height = createMemo(() => {
-    if (options().length) return Math.min(10, options().length)
-    return 1
+    const count = options().length || 1
+    if (!store.visible) return Math.min(10, count)
+    positionTick()
+    return Math.min(10, count, Math.max(1, props.anchor().y))
   })
 
   let scroll: ScrollBoxRenderable
@@ -588,7 +729,7 @@ export function Autocomplete(props: {
         height={height()}
         scrollbarOptions={{ visible: false }}
       >
-        <For
+        <Index
           each={options()}
           fallback={
             <box paddingLeft={1} paddingRight={1}>
@@ -600,20 +741,22 @@ export function Autocomplete(props: {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={index() === store.selected ? theme.primary : undefined}
+              backgroundColor={index === store.selected ? theme.primary : undefined}
               flexDirection="row"
+              onMouseOver={() => moveTo(index)}
+              onMouseUp={() => select()}
             >
-              <text fg={index() === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
-                {option.display}
+              <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
+                {option().display}
               </text>
-              <Show when={option.description}>
-                <text fg={index() === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
-                  {option.description}
+              <Show when={option().description}>
+                <text fg={index === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
+                  {option().description}
                 </text>
               </Show>
             </box>
           )}
-        </For>
+        </Index>
       </scrollbox>
     </box>
   )

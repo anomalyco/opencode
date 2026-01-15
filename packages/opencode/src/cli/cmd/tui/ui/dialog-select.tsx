@@ -71,12 +71,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   let input: InputRenderable
 
   const filtered = createMemo(() => {
+    if (props.skipFilter) {
+      return props.options.filter((x) => x.disabled !== true)
+    }
     const needle = store.filter.toLowerCase()
     const result = pipe(
       props.options,
       filter((x) => x.disabled !== true),
-      (x) =>
-        !needle || props.skipFilter ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj),
+      (x) => (!needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj)),
     )
     return result
   })
@@ -156,7 +158,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     if (evt.name === "return") {
       const option = selected()
       if (option) {
-        // evt.preventDefault()
+        evt.preventDefault()
+        evt.stopPropagation()
         if (option.onSelect) option.onSelect(dialog)
         props.onSelect?.(option)
       }
@@ -253,7 +256,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                           props.onSelect?.(option)
                         }}
                         onMouseOver={() => {
-                          const index = filtered().findIndex((x) => isDeepEqual(x.value, option.value))
+                          const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
                           if (index === -1) return
                           moveTo(index)
                         }}
@@ -312,12 +315,12 @@ function Option(props: {
   return (
     <>
       <Show when={props.current}>
-        <text flexShrink={0} fg={props.active ? fg : props.current ? theme.primary : theme.text} marginRight={0.5}>
+        <text flexShrink={0} fg={props.active ? fg : props.current ? theme.primary : theme.text} marginRight={0}>
           ●
         </text>
       </Show>
       <Show when={!props.current && props.gutter}>
-        <box flexShrink={0} marginRight={0.5}>
+        <box flexShrink={0} marginRight={0}>
           {props.gutter}
         </box>
       </Show>

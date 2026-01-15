@@ -27,11 +27,28 @@
         "aarch64-darwin" = "bun-darwin-arm64";
         "x86_64-darwin" = "bun-darwin-x64";
       };
-      defaultNodeModules = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+      # Parse "bun-{os}-{cpu}" to {os, cpu}
+      parseBunTarget =
+        target:
+        let
+          parts = lib.splitString "-" target;
+        in
+        {
+          os = builtins.elemAt parts 1;
+          cpu = builtins.elemAt parts 2;
+        };
+
       hashesFile = "${./nix}/hashes.json";
       hashesData =
         if builtins.pathExists hashesFile then builtins.fromJSON (builtins.readFile hashesFile) else { };
-      nodeModulesHash = hashesData.nodeModules or defaultNodeModules;
+      # Lookup hash: supports per-system ({system: hash}) or legacy single hash
+      nodeModulesHashFor =
+        system:
+        if builtins.isAttrs hashesData.nodeModules then
+          hashesData.nodeModules.${system}
+        else
+          hashesData.nodeModules;
       modelsDev = forEachSystem (
         system:
         let
@@ -63,13 +80,16 @@
         system:
         let
           pkgs = pkgsFor system;
+          bunPlatform = parseBunTarget bunTarget.${system};
           mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
-            hash = nodeModulesHash;
+            hash = nodeModulesHashFor system;
+            bunCpu = bunPlatform.cpu;
+            bunOs = bunPlatform.os;
           };
-          mkPackage = pkgs.callPackage ./nix/opencode.nix { };
-        in
-        {
-          default = mkPackage {
+          mkOpencode = pkgs.callPackage ./nix/opencode.nix { };
+          mkDesktop = pkgs.callPackage ./nix/desktop.nix { };
+
+          opencodePkg = mkOpencode {
             inherit (packageJson) version;
             src = ./.;
             scripts = ./nix/scripts;
@@ -77,6 +97,18 @@
             modelsDev = "${modelsDev.${system}}/dist/_api.json";
             inherit mkNodeModules;
           };
+
+          desktopPkg = mkDesktop {
+            inherit (packageJson) version;
+            src = ./.;
+            scripts = ./nix/scripts;
+            mkNodeModules = mkNodeModules;
+            opencode = opencodePkg;
+          };
+        in
+        {
+          default = opencodePkg;
+          desktop = desktopPkg;
         }
       );
 
