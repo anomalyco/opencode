@@ -240,7 +240,7 @@ export namespace Session {
 
   export const getCost = fn(Identifier.schema("session"), async (id) => {
     const read = await Storage.read<Info>(["session", Instance.project.id, id])
-    return read.cost ?? 0
+    return read.cost
   })
 
   export const share = fn(Identifier.schema("session"), async (id) => {
