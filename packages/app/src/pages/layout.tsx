@@ -1113,7 +1113,7 @@ export default function Layout(props: ParentProps) {
                   <div class="flex items-center justify-center shrink-0 size-6">
                     <Icon name="branch" size="small" />
                   </div>
-                  <span class="truncate text-14-medium text-text-strong">{title()}</span>
+                  <span class="truncate text-14-medium text-text-base">{title()}</span>
                   <Icon
                     name={open() ? "chevron-down" : "chevron-right"}
                     size="small"
