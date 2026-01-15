@@ -16,6 +16,7 @@ import {
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
+import { Persist, persisted } from "@/utils/persist"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
@@ -62,13 +63,16 @@ import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 
 export default function Layout(props: ParentProps) {
-  const [store, setStore] = createStore({
-    lastSession: {} as { [directory: string]: string },
-    activeProject: undefined as string | undefined,
-    activeWorkspace: undefined as string | undefined,
-    workspaceOrder: {} as Record<string, string[]>,
-    workspaceExpanded: {} as Record<string, boolean>,
-  })
+  const [store, setStore, , ready] = persisted(
+    Persist.global("layout.page", ["layout.page.v1"]),
+    createStore({
+      lastSession: {} as { [directory: string]: string },
+      activeProject: undefined as string | undefined,
+      activeWorkspace: undefined as string | undefined,
+      workspaceOrder: {} as Record<string, string[]>,
+      workspaceExpanded: {} as Record<string, boolean>,
+    }),
+  )
 
   let scrollContainerRef: HTMLDivElement | undefined
   const xlQuery = window.matchMedia("(min-width: 1280px)")
@@ -289,6 +293,7 @@ export default function Layout(props: ParentProps) {
   })
 
   createEffect(() => {
+    if (!ready()) return
     const project = currentProject()
     if (!project) return
 
@@ -708,7 +713,7 @@ export default function Layout(props: ParentProps) {
     const id = params.id
     setStore("lastSession", directory, id)
     notification.session.markViewed(id)
-    untrack(() => setStore("workspaceExpanded", directory, true))
+    untrack(() => setStore("workspaceExpanded", directory, (value) => value ?? true))
     requestAnimationFrame(() => scrollToSession(id))
   })
 
@@ -816,13 +821,13 @@ export default function Layout(props: ParentProps) {
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
-      <div class={`relative size-8 shrink-0 rounded-sm ${props.class ?? ""}`}>
-        <div class="size-full rounded-sm overflow-clip">
+      <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
+        <div class="size-full rounded overflow-clip">
           <Avatar
             fallback={name()}
             src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
             {...getAvatarColors(props.project.icon?.color)}
-            class="size-full rounded-sm"
+            class="size-full rounded"
             style={
               notifications().length > 0 && props.notify
                 ? { "-webkit-mask-image": mask, "mask-image": mask }
@@ -977,7 +982,7 @@ export default function Layout(props: ParentProps) {
       <button
         type="button"
         classList={{
-          "flex items-center justify-center size-10 p-1 rounded-md border transition-colors cursor-default": true,
+          "flex items-center justify-center size-10 p-1 rounded-lg border transition-colors cursor-default": true,
           "bg-transparent border-icon-strong-base hover:bg-surface-base-hover": selected(),
           "bg-transparent border-transparent hover:bg-surface-base-hover hover:border-border-weak-base": !selected(),
         }}
