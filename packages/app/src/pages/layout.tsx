@@ -873,7 +873,7 @@ export default function Layout(props: ParentProps) {
         class="group/session relative w-full rounded-md cursor-default transition-colors px-3
                hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
       >
-        <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
+        <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={16}>
           <A
             href={`${props.slug}/session/${props.session.id}`}
             class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
@@ -920,6 +920,7 @@ export default function Layout(props: ParentProps) {
             placement={props.mobile ? "bottom" : "right"}
             title="Archive session"
             keybind={command.keybind("session.archive")}
+            gutter={8}
           >
             <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} />
           </TooltipKeybind>
