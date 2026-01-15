@@ -778,6 +778,18 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
+                if (keybind.match("input_copy", e)) {
+                  const selection = input.visualCursor.selection
+                  if (selection) {
+                    const start = Math.min(selection.start, selection.end)
+                    const end = Math.max(selection.start, selection.end)
+                    const text = input.plainText.slice(start, end)
+                    if (text) {
+                      await Clipboard.write(text)
+                      return
+                    }
+                  }
+                }
                 // Handle clipboard paste (Ctrl+V) - check for images first on Windows
                 // This is needed because Windows terminal doesn't properly send image data
                 // through bracketed paste, so we need to intercept the keypress and
