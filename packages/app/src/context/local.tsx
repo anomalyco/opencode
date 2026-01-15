@@ -389,13 +389,46 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       //   })
       // }
 
-      const relative = (path: string) => path.replace(sync.data.path.directory + "/", "")
+      const relative = (path: string) => {
+        // If path is already relative (doesn't start with /), return as-is
+        if (!path.startsWith("/")) return path
+
+        // Get workspace directory and ensure it ends with /
+        const workspaceDir = sync.data.path.directory
+        const normalizedWorkspace = workspaceDir.endsWith("/") ? workspaceDir : workspaceDir + "/"
+
+        // If path starts with workspace directory, strip it
+        if (path.startsWith(normalizedWorkspace)) {
+          return path.slice(normalizedWorkspace.length)
+        }
+
+        // Fallback: try without trailing slash
+        if (path.startsWith(workspaceDir + "/")) {
+          return path.slice(workspaceDir.length + 1)
+        }
+
+        // If path doesn't match workspace, return as-is (might be external file)
+        console.warn("[local.file.relative] Path doesn't match workspace directory:", { path, workspaceDir })
+        return path
+      }
 
       const load = async (path: string) => {
         const relativePath = relative(path)
+
+        // === DEBUG LOGGING START ===
+        console.group("[local.file.load] SDK file read request")
+        console.log("Input path:", path)
+        console.log("Workspace directory:", sync.data.path.directory)
+        console.log("Converted to relative:", relativePath)
+        console.log("Sending to SDK with path:", relativePath)
+        console.log("Node exists in store:", !!store.node[relativePath])
+        console.groupEnd()
+        // === DEBUG LOGGING END ===
+
         await sdk.client.file
           .read({ path: relativePath })
           .then((x) => {
+            console.log("[local.file.load] SDK response success for:", relativePath)
             if (!store.node[relativePath]) return
             setStore(
               "node",
@@ -407,6 +440,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             )
           })
           .catch((e) => {
+            console.error("[local.file.load] SDK response error for:", relativePath, e)
             showToast({
               variant: "error",
               title: "Failed to load file",
@@ -488,10 +522,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       return {
         node: async (path: string) => {
-          if (!store.node[path] || !store.node[path].loaded) {
+          // Always convert to relative path for store lookup
+          const relativePath = relative(path)
+          console.log("[local.file.node] Looking up node:", { input: path, relativePath, exists: !!store.node[relativePath] })
+          if (!store.node[relativePath] || !store.node[relativePath].loaded) {
             await init(path)
           }
-          return store.node[path]
+          return store.node[relativePath]
         },
         update: (path: string, node: LocalFile) => setStore("node", path, reconcile(node)),
         open,

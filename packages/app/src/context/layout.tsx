@@ -390,6 +390,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         filePath: createMemo(() => store.filePreview?.filePath ?? null),
         width: createMemo(() => store.filePreview?.width ?? 400),
         open(filePath: string) {
+          console.log("[layout.filePreview] Opening preview with path:", filePath)
           if (!store.filePreview) {
             setStore("filePreview", { opened: true, width: 400, filePath })
             return

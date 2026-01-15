@@ -36,6 +36,12 @@ export default function Layout(props: ParentProps) {
             }
 
             const layout = useLayout()
+
+            // Handler for file chip clicks - opens file preview panel
+            const handleFileClick = (path: string) => {
+              console.log("[directory-layout] File chip clicked with path:", path)
+              layout.filePreview.open(path)
+            }
             const xlQuery = window.matchMedia("(min-width: 1280px)")
             const [isLargeViewport, setIsLargeViewport] = createSignal(xlQuery.matches)
             const handleViewportChange = (e: MediaQueryListEvent) => setIsLargeViewport(e.matches)
@@ -48,6 +54,7 @@ export default function Layout(props: ParentProps) {
                 directory={directory()}
                 onPermissionRespond={respond}
                 onNavigateToSession={navigateToSession}
+                onFileClick={handleFileClick}
               >
                 <LocalProvider>
                   <FileActivityProvider>

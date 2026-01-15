@@ -581,13 +581,14 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   return (
     <Show when={throttledText()}>
       <div data-component="text-part">
-        <Markdown text={throttledText()} cacheKey={part.id} />
+        <Markdown text={throttledText()} cacheKey={part.id} onFileClick={data.onFileClick} />
       </div>
     </Show>
   )
 }
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
+  const data = useData()
   const part = props.part as ReasoningPart
   const text = () => part.text.trim()
   const throttledText = createThrottledValue(text)
@@ -595,7 +596,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   return (
     <Show when={throttledText()}>
       <div data-component="reasoning-part">
-        <Markdown text={throttledText()} cacheKey={part.id} />
+        <Markdown text={throttledText()} cacheKey={part.id} onFileClick={data.onFileClick} />
       </div>
     </Show>
   )

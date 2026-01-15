@@ -493,15 +493,6 @@ export function SessionTurn(
                             </Match>
                           </Switch>
                         </div>
-                        <div data-slot="session-turn-user-badges">
-                          <Show when={(msg() as UserMessage).agent}>
-                            <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
-                          </Show>
-                          <Show when={(msg() as UserMessage).model?.modelID}>
-                            <span data-slot="session-turn-badge">{(msg() as UserMessage).model?.modelID}</span>
-                          </Show>
-                          <span data-slot="session-turn-badge">{(msg() as UserMessage).variant || "default"}</span>
-                        </div>
                       </div>
                     </div>
                     {/* User Message */}

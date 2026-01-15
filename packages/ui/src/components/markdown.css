@@ -167,4 +167,68 @@
     margin: 1.5rem 0;
     display: block;
   }
+
+  /* File chip inline placeholder - contains the hydrated FileChip component */
+  .file-chip-inline {
+    display: inline;
+    vertical-align: baseline;
+  }
+
+  /* File chip link - styled inline file reference */
+  .file-chip-link {
+    /* Reset button styles */
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    outline: none;
+
+    /* Chip styles */
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px 2px 6px;
+    margin: 0 2px;
+    border-radius: 4px;
+    background: var(--surface-warning-base, rgba(234, 179, 8, 0.1));
+    border: 1px solid var(--border-warning-base, rgba(234, 179, 8, 0.3));
+    color: var(--text-warning, #ca8a04);
+    font-family: var(--font-family-sans);
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    vertical-align: baseline;
+    line-height: 1.4;
+  }
+
+  .file-chip-link:hover {
+    background: var(--surface-warning-base-hover, rgba(234, 179, 8, 0.15));
+    border-color: var(--border-warning-base-hover, rgba(234, 179, 8, 0.5));
+    text-decoration: none;
+  }
+
+  .file-chip-link:active {
+    background: var(--surface-warning-base-active, rgba(234, 179, 8, 0.2));
+  }
+
+  .file-chip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-warning, #ca8a04);
+  }
+
+  .file-chip-icon svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .file-chip-name {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }

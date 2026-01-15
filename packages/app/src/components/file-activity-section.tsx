@@ -71,12 +71,20 @@ export function FileActivitySection(props: FileActivitySectionProps) {
     ? ACTIVITY_VISUAL_CONFIG.read
     : ACTIVITY_VISUAL_CONFIG.edited
 
-  // Create a pseudo LocalFile for rendering
-  const createLocalFile = (path: string): LocalFile => {
-    const name = getFileName(path)
+  // Create a LocalFile for rendering
+  // Activity paths are stored as whatever path the tool used
+  // We need the relative path format expected by the file system
+  const createLocalFile = (activityPath: string): LocalFile => {
+    const name = getFileName(activityPath)
+    // Convert to relative path - strips workspace directory prefix if present
+    const relativePath = local.file.relative(activityPath)
+
+    // Debug: log the path conversion
+    console.log("[FileActivitySection] activityPath:", activityPath, "-> relativePath:", relativePath)
+
     return {
-      path,
-      absolute: path,
+      path: relativePath,
+      absolute: activityPath,
       name,
       type: "file",
       ignored: false,
@@ -100,18 +108,19 @@ export function FileActivitySection(props: FileActivitySectionProps) {
         <Collapsible.Content>
           <div class="flex flex-col">
             <For each={sortedFiles()}>
-              {(path) => {
-                const file = createLocalFile(path)
-                const activity = () => fileActivity.get(path)
+              {(absolutePath) => {
+                const file = createLocalFile(absolutePath)
+                const activity = () => fileActivity.get(absolutePath)
                 const activityConfig = () => activity() ? ACTIVITY_VISUAL_CONFIG[activity()!.type] : undefined
+                const isSelected = () => props.selectedPath === file.path
 
                 return (
                   <button
                     class="py-1 px-2 pl-8 w-full flex items-center gap-x-2 rounded-md cursor-pointer transition-all duration-150"
                     classList={{
-                      "hover:bg-surface-raised-base-hover": props.selectedPath !== path,
-                      "bg-surface-interactive-base border border-border-weak-selected": props.selectedPath === path,
-                      [activityConfig()?.background ?? ""]: !!activity() && props.selectedPath !== path,
+                      "hover:bg-surface-raised-base-hover": !isSelected(),
+                      "bg-surface-interactive-base border border-border-weak-selected": isSelected(),
+                      [activityConfig()?.background ?? ""]: !!activity() && !isSelected(),
                     }}
                     onClick={() => props.onFileClick?.(file)}
                     onDblClick={() => props.onFileActivate?.(file)}
@@ -120,10 +129,10 @@ export function FileActivitySection(props: FileActivitySectionProps) {
                     <span
                       class="text-13-regular whitespace-nowrap truncate flex-1 text-left"
                       classList={{
-                        "text-text-base": props.selectedPath !== path,
-                        "text-text-strong": props.selectedPath === path,
+                        "text-text-base": !isSelected(),
+                        "text-text-strong": isSelected(),
                       }}
-                      title={path}
+                      title={file.path}
                     >
                       {file.name}
                     </span>

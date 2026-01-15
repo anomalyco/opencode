@@ -421,6 +421,17 @@ export default function Page() {
     ),
   )
 
+  // Listen for file-chip-click events from Markdown component (fallback when context isn't available)
+  createEffect(() => {
+    const handleFileChipClick = (e: Event) => {
+      const customEvent = e as CustomEvent<{ path: string }>
+      layout.filePreview.open(customEvent.detail.path)
+    }
+
+    document.addEventListener('file-chip-click', handleFileChipClick)
+    onCleanup(() => document.removeEventListener('file-chip-click', handleFileChipClick))
+  })
+
   createEffect(() => {
     const id = lastUserMessage()?.id
     if (!id) return

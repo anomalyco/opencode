@@ -2,6 +2,7 @@ import { Show, createSignal, createEffect, on, createMemo, onCleanup } from "sol
 import { useLayout } from "@/context/layout"
 import { useLocal, type LocalFile } from "@/context/local"
 import { useFileActivity } from "@/context/file-activity"
+import { useSync } from "@/context/sync"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Markdown } from "@opencode-ai/ui/markdown"
 import { getPreviewType, validateContent } from "./file-preview"
@@ -17,6 +18,7 @@ import "./file-preview/file-preview.css"
 export function FilePreviewPanel() {
   const layout = useLayout()
   const local = useLocal()
+  const sync = useSync()
   const fileActivity = useFileActivity()
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal<PreviewError | null>(null)
@@ -64,6 +66,16 @@ export function FilePreviewPanel() {
           return
         }
 
+        // === DEBUG LOGGING START ===
+        console.group("[FilePreviewPanel] Loading file")
+        console.log("Incoming path:", path)
+        console.log("Workspace directory:", sync.data.path.directory)
+        const relativePath = local.file.relative(path)
+        console.log("Converted relative path:", relativePath)
+        console.log("Expected format: relative from workspace root (e.g., 'src/file.ts')")
+        console.groupEnd()
+        // === DEBUG LOGGING END ===
+
         setError(null)
         setShowSizeWarning(false)
         setLoading(true)
@@ -74,6 +86,14 @@ export function FilePreviewPanel() {
 
           // Get updated node from local file system
           const node = await local.file.node(path)
+
+          // === DEBUG LOGGING START ===
+          console.log("[FilePreviewPanel] File node result:", node ? "Found" : "NOT FOUND")
+          if (!node) {
+            console.warn("[FilePreviewPanel] Node not found for path:", relativePath)
+          }
+          // === DEBUG LOGGING END ===
+
           if (node) {
             setFile(node as LocalFile)
           } else {
@@ -83,6 +103,7 @@ export function FilePreviewPanel() {
             })
           }
         } catch (e) {
+          console.error("[FilePreviewPanel] Error loading file:", e)
           setError({
             type: "not_found",
             message: "Failed to load file. The file may have been moved or deleted.",
