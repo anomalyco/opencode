@@ -118,7 +118,18 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
       setStore("active", pty.tabId)
     },
 
-    update(pty: Partial<LocalPTY> & { id: string }) {},
+    update(pty: Partial<LocalPTY> & { id: string }) {
+      setStore("all", (x) => x.map((x) => (x.id === pty.id ? { ...x, ...pty } : x)))
+      sdk.client.pty
+        .update({
+          ptyID: pty.id,
+          title: pty.title,
+          size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined,
+        })
+        .catch((e) => {
+          console.error("Failed to update terminal", e)
+        })
+    },
 
     async clone(id: string) {
       const index = store.all.findIndex((x) => x.id === id)

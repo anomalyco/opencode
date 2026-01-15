@@ -245,8 +245,8 @@ function ResizeHandle(props: { tabId: string; panelId: string }) {
           data-direction={pos().horizontal ? "vertical" : "horizontal"}
           class="absolute"
           style={{
-            top: pos().horizontal ? `${pos().top}%` : `${pos().top}%`,
-            left: pos().horizontal ? `${pos().left}%` : `${pos().left}%`,
+            top: `${pos().top}%`,
+            left: `${pos().left}%`,
             width: pos().horizontal ? `${pos().size}%` : "8px",
             height: pos().horizontal ? "8px" : `${pos().size}%`,
             transform: pos().horizontal ? "translateY(-50%)" : "translateX(-50%)",
