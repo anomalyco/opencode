@@ -159,6 +159,31 @@ export const ExperimentalRoutes = lazy(() =>
         return c.json(true)
       },
     )
+    .post(
+      "/worktree/reset",
+      describeRoute({
+        summary: "Reset worktree",
+        description: "Reset a worktree branch to the primary default branch.",
+        operationId: "worktree.reset",
+        responses: {
+          200: {
+            description: "Worktree reset",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", Worktree.reset.schema),
+      async (c) => {
+        const body = c.req.valid("json")
+        await Worktree.reset(body)
+        return c.json(true)
+      },
+    )
     .get(
       "/resource",
       describeRoute({
