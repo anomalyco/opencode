@@ -833,6 +833,20 @@ export namespace Config {
           }),
         )
         .optional(),
+      oauth: z
+        .object({
+          rateLimitCooldownMs: z.number().int().positive().optional().describe("Rate limit cooldown in milliseconds"),
+          authFailureCooldownMs: z.number().int().positive().optional().describe("Auth failure cooldown in milliseconds"),
+          maxAttempts: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum OAuth credential attempts per request"),
+          toastDurationMs: z.number().int().positive().optional().describe("Failover toast duration in milliseconds"),
+        })
+        .optional()
+        .describe("OAuth rotation settings"),
       options: z
         .object({
           apiKey: z.string().optional(),

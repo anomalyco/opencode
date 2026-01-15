@@ -38,6 +38,10 @@ export namespace Auth {
   export type Info = z.infer<typeof Info>
 
   const filepath = path.join(Global.Path.data, "auth.json")
+  const lockpath = `${filepath}.lock`
+  const STORE_LOCK_TIMEOUT_MS = 5_000
+  const STORE_LOCK_STALE_MS = 30_000
+  const STORE_LOCK_RETRY_MS = 25
 
   const Health = z
     .object({
@@ -115,6 +119,36 @@ export namespace Auth {
     await fs.mkdir(path.dirname(filepath), { recursive: true })
   }
 
+  async function withStoreLock<T>(fn: () => Promise<T>): Promise<T> {
+    await ensureDataDir()
+    const start = Date.now()
+    while (true) {
+      try {
+        const handle = await fs.open(lockpath, "wx")
+        await handle.close()
+        break
+      } catch (error) {
+        const code = (error as { code?: string }).code
+        if (code !== "EEXIST") throw error
+        const stat = await fs.stat(lockpath).catch(() => undefined)
+        if (stat && Date.now() - stat.mtimeMs > STORE_LOCK_STALE_MS) {
+          await fs.rm(lockpath).catch(() => {})
+          continue
+        }
+        if (Date.now() - start > STORE_LOCK_TIMEOUT_MS) {
+          throw new Error("Timed out waiting for auth store lock")
+        }
+        await Bun.sleep(STORE_LOCK_RETRY_MS + Math.random() * STORE_LOCK_RETRY_MS)
+      }
+    }
+
+    try {
+      return await fn()
+    } finally {
+      await fs.rm(lockpath).catch(() => {})
+    }
+  }
+
   async function writeStoreFile(store: StoreFile): Promise<void> {
     await ensureDataDir()
     const tempPath = `${filepath}.tmp`
@@ -124,12 +158,13 @@ export namespace Auth {
     await fs.chmod(filepath, 0o600).catch(() => {})
   }
 
-  async function loadStoreFile(): Promise<StoreFile> {
+  async function readStoreFile(): Promise<{ store: StoreFile; needsWrite: boolean }> {
     const file = Bun.file(filepath)
+    const exists = await file.exists()
     const raw = await file.json().catch(() => undefined)
 
     const parsed = StoreFile.safeParse(raw)
-    if (parsed.success) return parsed.data
+    if (parsed.success) return { store: parsed.data, needsWrite: false }
 
     const legacyParsed = z.record(z.string(), Info).safeParse(raw)
     if (legacyParsed.success) {
@@ -170,11 +205,31 @@ export namespace Auth {
         }
       }
 
-      await writeStoreFile(next)
-      return next
+      return { store: next, needsWrite: true }
     }
 
-    return { version: 2, providers: {} }
+    return { store: { version: 2, providers: {} }, needsWrite: exists }
+  }
+
+  async function loadStoreFile(): Promise<StoreFile> {
+    const result = await readStoreFile()
+    return result.store
+  }
+
+  type StoreUpdateResult<T> = {
+    value: T
+    changed: boolean
+  }
+
+  async function updateStore<T>(fn: (store: StoreFile) => Promise<StoreUpdateResult<T>> | StoreUpdateResult<T>) {
+    return withStoreLock(async () => {
+      const { store, needsWrite } = await readStoreFile()
+      const result = await fn(store)
+      if (result.changed || needsWrite) {
+        await writeStoreFile(store)
+      }
+      return result.value
+    })
   }
 
   function ensureOAuthProvider(store: StoreFile, providerID: string): OAuthProvider {
@@ -271,70 +326,69 @@ export namespace Auth {
   }
 
   export async function set(key: string, info: Info) {
-    const store = await loadStoreFile()
-
-    if (info.type === "api") {
-      store.providers[key] = { type: "api", key: info.key }
-      await writeStoreFile(store)
-      return
-    }
-
-    if (info.type === "wellknown") {
-      store.providers[key] = { type: "wellknown", key: info.key, token: info.token }
-      await writeStoreFile(store)
-      return
-    }
-
-    const namespace = "default"
-    const provider = ensureOAuthProvider(store, key)
-    const recordID =
-      getOAuthRecordID(key) ??
-      (await findOAuthRecordIDByRefreshToken({ providerID: key, namespace, refresh: info.refresh, provider })) ??
-      provider.active[namespace] ??
-      recordIDsForNamespace(provider, namespace)[0] ??
-      ulid()
-
-    const now = Date.now()
-    const existing = findOAuthRecord(provider, recordID)
-    if (!existing) {
-      provider.records.push({
-        id: recordID,
-        namespace,
-        label: "default",
-        accountId: info.accountId,
-        enterpriseUrl: info.enterpriseUrl,
-        refresh: info.refresh,
-        access: info.access,
-        expires: info.expires,
-        createdAt: now,
-        updatedAt: now,
-        health: { successCount: 0, failureCount: 0 },
-      })
-      provider.order[namespace] = [...(provider.order[namespace] ?? []), recordID]
-    } else {
-      existing.refresh = info.refresh
-      existing.access = info.access
-      existing.expires = info.expires
-      existing.updatedAt = now
-      if (info.accountId !== undefined) existing.accountId = info.accountId
-      if (info.enterpriseUrl !== undefined) existing.enterpriseUrl = info.enterpriseUrl
-      const order = provider.order[namespace] ?? []
-      if (!order.includes(recordID)) {
-        provider.order[namespace] = [...order, recordID]
+    return updateStore(async (store) => {
+      if (info.type === "api") {
+        store.providers[key] = { type: "api", key: info.key }
+        return { value: undefined, changed: true }
       }
-    }
-    provider.active[namespace] = recordID
 
-    await writeStoreFile(store)
+      if (info.type === "wellknown") {
+        store.providers[key] = { type: "wellknown", key: info.key, token: info.token }
+        return { value: undefined, changed: true }
+      }
+
+      const namespace = "default"
+      const provider = ensureOAuthProvider(store, key)
+      const recordID =
+        getOAuthRecordID(key) ??
+        (await findOAuthRecordIDByRefreshToken({ providerID: key, namespace, refresh: info.refresh, provider })) ??
+        provider.active[namespace] ??
+        recordIDsForNamespace(provider, namespace)[0] ??
+        ulid()
+
+      const now = Date.now()
+      const existing = findOAuthRecord(provider, recordID)
+      if (!existing) {
+        provider.records.push({
+          id: recordID,
+          namespace,
+          label: "default",
+          accountId: info.accountId,
+          enterpriseUrl: info.enterpriseUrl,
+          refresh: info.refresh,
+          access: info.access,
+          expires: info.expires,
+          createdAt: now,
+          updatedAt: now,
+          health: { successCount: 0, failureCount: 0 },
+        })
+        provider.order[namespace] = [...(provider.order[namespace] ?? []), recordID]
+      } else {
+        existing.refresh = info.refresh
+        existing.access = info.access
+        existing.expires = info.expires
+        existing.updatedAt = now
+        if (info.accountId !== undefined) existing.accountId = info.accountId
+        if (info.enterpriseUrl !== undefined) existing.enterpriseUrl = info.enterpriseUrl
+        const order = provider.order[namespace] ?? []
+        if (!order.includes(recordID)) {
+          provider.order[namespace] = [...order, recordID]
+        }
+      }
+      provider.active[namespace] = recordID
+
+      return { value: undefined, changed: true }
+    })
   }
 
   export async function remove(key: string) {
-    const store = await loadStoreFile()
-    const existing = store.providers[key]
-    if (!existing) return
+    return updateStore((store) => {
+      const existing = store.providers[key]
+      if (!existing) return { value: undefined, changed: false }
 
-    delete store.providers[key]
-    await writeStoreFile(store)
+      delete store.providers[key]
+      return { value: undefined, changed: true }
+    })
   }
 
   export async function addOAuth(
@@ -342,60 +396,57 @@ export namespace Auth {
     input: Omit<z.infer<typeof Oauth>, "type"> & { namespace?: string; label?: string },
   ) {
     const namespace = (input.namespace ?? "default").trim() || "default"
-    const store = await loadStoreFile()
+    return updateStore(async (store) => {
+      const provider = ensureOAuthProvider(store, providerID)
+      const now = Date.now()
+      const existingRecordID = await findOAuthRecordIDByRefreshToken({
+        providerID,
+        namespace,
+        refresh: input.refresh,
+        provider,
+      })
 
-    const provider = ensureOAuthProvider(store, providerID)
-    const now = Date.now()
-    const existingRecordID = await findOAuthRecordIDByRefreshToken({
-      providerID,
-      namespace,
-      refresh: input.refresh,
-      provider,
-    })
+      if (existingRecordID) {
+        const existing = findOAuthRecord(provider, existingRecordID)
+        if (existing) {
+          existing.refresh = input.refresh
+          existing.access = input.access
+          existing.expires = input.expires
+          existing.updatedAt = now
+          if (input.accountId !== undefined) existing.accountId = input.accountId
+          if (input.enterpriseUrl !== undefined) existing.enterpriseUrl = input.enterpriseUrl
+          if (input.label) existing.label = input.label
+        }
+        const order = provider.order[namespace] ?? []
+        if (!order.includes(existingRecordID)) {
+          provider.order[namespace] = [...order, existingRecordID]
+        }
+        provider.active[namespace] = existingRecordID
 
-    if (existingRecordID) {
-      const existing = findOAuthRecord(provider, existingRecordID)
-      if (existing) {
-        existing.refresh = input.refresh
-        existing.access = input.access
-        existing.expires = input.expires
-        existing.updatedAt = now
-        if (input.accountId !== undefined) existing.accountId = input.accountId
-        if (input.enterpriseUrl !== undefined) existing.enterpriseUrl = input.enterpriseUrl
-        if (input.label) existing.label = input.label
+        return { value: { providerID, namespace, recordID: existingRecordID }, changed: true }
       }
-      const order = provider.order[namespace] ?? []
-      if (!order.includes(existingRecordID)) {
-        provider.order[namespace] = [...order, existingRecordID]
-      }
-      provider.active[namespace] = existingRecordID
 
-      await writeStoreFile(store)
-      return { providerID, namespace, recordID: existingRecordID }
-    }
+      const recordID = ulid()
 
-    const recordID = ulid()
+      provider.records.push({
+        id: recordID,
+        namespace,
+        label: input.label ?? "default",
+        accountId: input.accountId,
+        enterpriseUrl: input.enterpriseUrl,
+        refresh: input.refresh,
+        access: input.access,
+        expires: input.expires,
+        createdAt: now,
+        updatedAt: now,
+        health: { successCount: 0, failureCount: 0 },
+      })
 
-    provider.records.push({
-      id: recordID,
-      namespace,
-      label: input.label ?? "default",
-      accountId: input.accountId,
-      enterpriseUrl: input.enterpriseUrl,
-      refresh: input.refresh,
-      access: input.access,
-      expires: input.expires,
-      createdAt: now,
-      updatedAt: now,
-      health: { successCount: 0, failureCount: 0 },
+      provider.order[namespace] = [...(provider.order[namespace] ?? []), recordID]
+      provider.active[namespace] = recordID
+
+      return { value: { providerID, namespace, recordID }, changed: true }
     })
-
-    provider.order[namespace] = [...(provider.order[namespace] ?? []), recordID]
-    provider.active[namespace] = recordID
-
-    await writeStoreFile(store)
-
-    return { providerID, namespace, recordID }
   }
 
   export namespace OAuthPool {
@@ -423,13 +474,14 @@ export namespace Auth {
     }
 
     export async function moveToBack(providerID: string, namespace: string, recordID: string): Promise<void> {
-      const store = await loadStoreFile()
-      const provider = store.providers[providerID]
-      if (!provider || provider.type !== "oauth") return
-      const order = recordIDsForNamespace(provider, namespace)
-      provider.order[namespace] = order.filter((id) => id !== recordID).concat(recordID)
-      provider.active[namespace] = provider.order[namespace][0] ?? provider.active[namespace]
-      await writeStoreFile(store)
+      await updateStore((store) => {
+        const provider = store.providers[providerID]
+        if (!provider || provider.type !== "oauth") return { value: undefined, changed: false }
+        const order = recordIDsForNamespace(provider, namespace)
+        provider.order[namespace] = order.filter((id) => id !== recordID).concat(recordID)
+        provider.active[namespace] = provider.order[namespace][0] ?? provider.active[namespace]
+        return { value: undefined, changed: true }
+      })
     }
 
     export async function recordOutcome(input: {
@@ -439,40 +491,42 @@ export namespace Auth {
       ok: boolean
       cooldownUntil?: number
     }): Promise<void> {
-      const store = await loadStoreFile()
-      const provider = store.providers[input.providerID]
-      if (!provider || provider.type !== "oauth") return
+      await updateStore((store) => {
+        const provider = store.providers[input.providerID]
+        if (!provider || provider.type !== "oauth") return { value: undefined, changed: false }
 
-      const record = findOAuthRecord(provider, input.recordID)
-      if (!record) return
+        const record = findOAuthRecord(provider, input.recordID)
+        if (!record) return { value: undefined, changed: false }
 
-      const now = Date.now()
-      const prevCooldown =
-        record.health.cooldownUntil && record.health.cooldownUntil > now ? record.health.cooldownUntil : undefined
-      const cooldownUntil = input.ok ? undefined : input.cooldownUntil ?? prevCooldown
+        const now = Date.now()
+        const prevCooldown =
+          record.health.cooldownUntil && record.health.cooldownUntil > now ? record.health.cooldownUntil : undefined
+        const cooldownUntil = input.ok ? undefined : input.cooldownUntil ?? prevCooldown
 
-      record.health = {
-        ...record.health,
-        cooldownUntil,
-        lastStatusCode: input.statusCode,
-        lastErrorAt: input.ok ? undefined : now,
-        successCount: record.health.successCount + (input.ok ? 1 : 0),
-        failureCount: record.health.failureCount + (input.ok ? 0 : 1),
-      }
-      record.updatedAt = now
-      await writeStoreFile(store)
+        record.health = {
+          ...record.health,
+          cooldownUntil,
+          lastStatusCode: input.statusCode,
+          lastErrorAt: input.ok ? undefined : now,
+          successCount: record.health.successCount + (input.ok ? 1 : 0),
+          failureCount: record.health.failureCount + (input.ok ? 0 : 1),
+        }
+        record.updatedAt = now
+        return { value: undefined, changed: true }
+      })
     }
 
     export async function markAccessExpired(providerID: string, namespace: string, recordID: string): Promise<void> {
-      const store = await loadStoreFile()
-      const provider = store.providers[providerID]
-      if (!provider || provider.type !== "oauth") return
-      const record = findOAuthRecord(provider, recordID)
-      if (!record || record.namespace !== namespace) return
-      record.access = ""
-      record.expires = 0
-      record.updatedAt = Date.now()
-      await writeStoreFile(store)
+      await updateStore((store) => {
+        const provider = store.providers[providerID]
+        if (!provider || provider.type !== "oauth") return { value: undefined, changed: false }
+        const record = findOAuthRecord(provider, recordID)
+        if (!record || record.namespace !== namespace) return { value: undefined, changed: false }
+        record.access = ""
+        record.expires = 0
+        record.updatedAt = Date.now()
+        return { value: undefined, changed: true }
+      })
     }
   }
 }
