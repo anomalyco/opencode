@@ -196,7 +196,7 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
           ? await $`echo Y | choco uninstall opencode -y -r`.quiet().nothrow()
           : await $`${cmd}`.quiet().nothrow()
       if (result.exitCode !== 0) {
-        spinner.stop(`Package manager uninstall failed`, 1)
+        spinner.stop(`Package manager uninstall failed: exit code ${result.exitCode}`, 1)
         if (
           method === "choco" &&
           result.stdout.toString("utf8").includes("not running from an elevated command shell")
@@ -205,8 +205,6 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
         } else {
           prompts.log.warn(`You may need to run manually: ${cmd.join(" ")}`)
         }
-
-        errors.push(`Package manager: exit code ${result.exitCode}`)
       } else {
         spinner.stop("Package removed")
       }
