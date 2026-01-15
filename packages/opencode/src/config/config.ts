@@ -771,6 +771,20 @@ export namespace Config {
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   })
 
+  export const Bash = z
+    .object({
+      hideEnvPrefix: z
+        .boolean()
+        .optional()
+        .describe(
+          "Hide environment variable prefix (export CI=true DEBIAN_FRONTEND=...) in bash command display. The prefix is still used during execution.",
+        ),
+    })
+    .strict()
+    .meta({
+      ref: "BashConfig",
+    })
+
   export const Server = z
     .object({
       port: z.number().int().positive().optional().describe("Port to listen on"),
@@ -848,6 +862,7 @@ export namespace Config {
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       logLevel: Log.Level.optional().describe("Log level"),
       tui: TUI.optional().describe("TUI specific settings"),
+      bash: Bash.optional().describe("Bash tool display settings"),
       server: Server.optional().describe("Server configuration for opencode serve and web commands"),
       command: z
         .record(z.string(), Command)

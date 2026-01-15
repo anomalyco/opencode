@@ -65,6 +65,7 @@ import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
+import { stripEnvPrefix } from "@opencode-ai/util/bash"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
@@ -1553,6 +1554,12 @@ function Bash(props: ToolProps<typeof BashTool>) {
     return [...lines().slice(0, 10), "…"].join("\n")
   })
 
+  const displayCommand = createMemo(() => {
+    const cmd = props.input.command ?? ""
+    if (sync.data.config.bash?.hideEnvPrefix) return stripEnvPrefix(cmd)
+    return cmd
+  })
+
   const workdirDisplay = createMemo(() => {
     const workdir = props.input.workdir
     if (!workdir || workdir === ".") return undefined
@@ -1587,7 +1594,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <text fg={theme.text}>$ {props.input.command}</text>
+            <text fg={theme.text}>$ {displayCommand()}</text>
             <text fg={theme.text}>{limited()}</text>
             <Show when={overflow()}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
@@ -1596,8 +1603,8 @@ function Bash(props: ToolProps<typeof BashTool>) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="$" pending="Writing command..." complete={props.input.command} part={props.part}>
-          {props.input.command}
+        <InlineTool icon="$" pending="Writing command..." complete={displayCommand()} part={props.part}>
+          {displayCommand()}
         </InlineTool>
       </Match>
     </Switch>
