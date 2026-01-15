@@ -23,6 +23,7 @@ import type { FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
+import { formatDuration } from "@/util/format"
 import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
@@ -89,7 +90,7 @@ export function Prompt(props: PromptProps) {
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
-  let promptPartTypeId: number
+  let promptPartTypeId = 0
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
     input.insertText(evt.properties.text)
@@ -310,13 +311,42 @@ export function Prompt(props: PromptProps) {
     ]
   })
 
+  const ref: PromptRef = {
+    get focused() {
+      return input.focused
+    },
+    get current() {
+      return store.prompt
+    },
+    focus() {
+      input.focus()
+    },
+    blur() {
+      input.blur()
+    },
+    set(prompt) {
+      input.setText(prompt.input)
+      setStore("prompt", prompt)
+      restoreExtmarksFromParts(prompt.parts)
+      input.gotoBufferEnd()
+    },
+    reset() {
+      input.clear()
+      input.extmarks.clear()
+      setStore("prompt", {
+        input: "",
+        parts: [],
+      })
+      setStore("extmarkToPartIndex", new Map())
+    },
+    submit() {
+      submit()
+    },
+  }
+
   createEffect(() => {
     if (props.visible !== false) input?.focus()
     if (props.visible === false) input?.blur()
-  })
-
-  onMount(() => {
-    promptPartTypeId = input.extmarks.registerType("prompt-part")
   })
 
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
@@ -452,39 +482,6 @@ export function Prompt(props: PromptProps) {
     },
   ])
 
-  props.ref?.({
-    get focused() {
-      return input.focused
-    },
-    get current() {
-      return store.prompt
-    },
-    focus() {
-      input.focus()
-    },
-    blur() {
-      input.blur()
-    },
-    set(prompt) {
-      input.setText(prompt.input)
-      setStore("prompt", prompt)
-      restoreExtmarksFromParts(prompt.parts)
-      input.gotoBufferEnd()
-    },
-    reset() {
-      input.clear()
-      input.extmarks.clear()
-      setStore("prompt", {
-        input: "",
-        parts: [],
-      })
-      setStore("extmarkToPartIndex", new Map())
-    },
-    submit() {
-      submit()
-    },
-  })
-
   async function submit() {
     if (props.disabled) return
     if (autocomplete?.visible) return
@@ -567,25 +564,27 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
-      sdk.client.session.prompt({
-        sessionID,
-        ...selectedModel,
-        messageID,
-        agent: local.agent.current().name,
-        model: selectedModel,
-        variant,
-        parts: [
-          {
-            id: Identifier.ascending("part"),
-            type: "text",
-            text: inputText,
-          },
-          ...nonTextParts.map((x) => ({
-            id: Identifier.ascending("part"),
-            ...x,
-          })),
-        ],
-      })
+      sdk.client.session
+        .prompt({
+          sessionID,
+          ...selectedModel,
+          messageID,
+          agent: local.agent.current().name,
+          model: selectedModel,
+          variant,
+          parts: [
+            {
+              id: Identifier.ascending("part"),
+              type: "text",
+              text: inputText,
+            },
+            ...nonTextParts.map((x) => ({
+              id: Identifier.ascending("part"),
+              ...x,
+            })),
+          ],
+        })
+        .catch(() => {})
     }
     history.append({
       ...store.prompt,
@@ -916,12 +915,15 @@ export function Prompt(props: PromptProps) {
                 // Force layout update and render for the pasted content
                 setTimeout(() => {
                   input.getLayoutNode().markDirty()
-                  input.gotoBufferEnd()
                   renderer.requestRender()
                 }, 0)
               }}
               ref={(r: TextareaRenderable) => {
                 input = r
+                if (promptPartTypeId === 0) {
+                  promptPartTypeId = input.extmarks.registerType("prompt-part")
+                }
+                props.ref?.(ref)
                 setTimeout(() => {
                   input.cursorColor = theme.text
                 }, 0)
@@ -1036,7 +1038,8 @@ export function Prompt(props: PromptProps) {
                       if (!r) return ""
                       const baseMessage = message()
                       const truncatedHint = isTruncated() ? " (click to expand)" : ""
-                      const retryInfo = ` [retrying ${seconds() > 0 ? `in ${seconds()}s ` : ""}attempt #${r.attempt}]`
+                      const duration = formatDuration(seconds())
+                      const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
                       return baseMessage + truncatedHint + retryInfo
                     }
 
@@ -1063,7 +1066,10 @@ export function Prompt(props: PromptProps) {
               <Switch>
                 <Match when={store.mode === "normal"}>
                   <text fg={theme.text}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>switch agent</span>
+                    {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
+                  </text>
+                  <text fg={theme.text}>
+                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
                   </text>
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>

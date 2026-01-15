@@ -198,6 +198,12 @@ export default function Home() {
               <li>
                 <span>[*]</span>
                 <div>
+                  <strong>ChatGPT Plus/Pro</strong> Log in with OpenAI to use your ChatGPT Plus or Pro account
+                </div>
+              </li>
+              <li>
+                <span>[*]</span>
+                <div>
                   <strong>Any model</strong> 75+ LLM providers through Models.dev, including local models
                 </div>
               </li>
@@ -686,7 +692,8 @@ export default function Home() {
               </li>
               <li>
                 <Faq question="Can I only use OpenCode in the terminal?">
-                  Not anymore! OpenCode is now available as an app for your desktop.
+                  Not anymore! OpenCode is now available as an app for your <a href="/download">desktop</a> and{" "}
+                  <a href="/docs/web">web</a>!
                 </Faq>
               </li>
               <li>
