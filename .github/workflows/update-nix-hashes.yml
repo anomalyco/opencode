@@ -33,7 +33,7 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
       - name: Setup Nix
-        uses: DeterminateSystems/nix-installer-action@v20
+        uses: nixbuild/nix-quick-install-action@v34
 
       - name: Configure git
         run: |
@@ -123,7 +123,7 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
       - name: Setup Nix
-        uses: DeterminateSystems/nix-installer-action@v20
+        uses: nixbuild/nix-quick-install-action@v34
 
       - name: Configure git
         run: |
