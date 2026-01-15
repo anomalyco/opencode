@@ -315,7 +315,19 @@ export default function Layout(props: ParentProps) {
   const currentSessions = createMemo(() => {
     const project = currentProject()
     if (!project) return [] as Session[]
-    if (workspaceSetting()) return projectSessions(project)
+    if (workspaceSetting()) {
+      const dirs = workspaceIds(project)
+      const result: Session[] = []
+      for (const dir of dirs) {
+        const [dirStore] = globalSync.child(dir)
+        const dirSessions = dirStore.session
+          .filter((session) => session.directory === dirStore.path.directory)
+          .filter((session) => !session.parentID)
+          .toSorted(sortSessions)
+        result.push(...dirSessions)
+      }
+      return result
+    }
     const [projectStore] = globalSync.child(project.worktree)
     return projectStore.session
       .filter((session) => session.directory === projectStore.path.directory)
@@ -464,89 +476,44 @@ export default function Layout(props: ParentProps) {
   })
 
   function navigateSessionByOffset(offset: number) {
-    const projects = layout.projects.list()
-    if (projects.length === 0) return
-
-    const project = currentProject()
-    const projectIndex = project ? projects.findIndex((p) => p.worktree === project.worktree) : -1
-
-    if (projectIndex === -1) {
-      const targetProject = offset > 0 ? projects[0] : projects[projects.length - 1]
-      if (targetProject) navigateToProject(targetProject.worktree)
-      return
-    }
-
     const sessions = currentSessions()
+    if (sessions.length === 0) return
+
     const sessionIndex = params.id ? sessions.findIndex((s) => s.id === params.id) : -1
 
     let targetIndex: number
     if (sessionIndex === -1) {
       targetIndex = offset > 0 ? 0 : sessions.length - 1
     } else {
-      targetIndex = sessionIndex + offset
+      targetIndex = (sessionIndex + offset + sessions.length) % sessions.length
     }
 
-    if (targetIndex >= 0 && targetIndex < sessions.length) {
-      const session = sessions[targetIndex]
-      const next = sessions[targetIndex + 1]
-      const prev = sessions[targetIndex - 1]
+    const session = sessions[targetIndex]
+    if (!session) return
 
-      if (offset > 0) {
-        if (next) prefetchSession(next, "high")
-        if (prev) prefetchSession(prev)
-      }
-
-      if (offset < 0) {
-        if (prev) prefetchSession(prev, "high")
-        if (next) prefetchSession(next)
-      }
-
-      if (import.meta.env.DEV) {
-        navStart({
-          dir: base64Encode(session.directory),
-          from: params.id,
-          to: session.id,
-          trigger: offset > 0 ? "alt+arrowdown" : "alt+arrowup",
-        })
-      }
-      navigateToSession(session)
-      queueMicrotask(() => scrollToSession(session.id))
-      return
-    }
-
-    const nextProjectIndex = projectIndex + (offset > 0 ? 1 : -1)
-    const nextProject = projects[nextProjectIndex]
-    if (!nextProject) return
-
-    const nextProjectSessions = projectSessions(nextProject)
-    if (nextProjectSessions.length === 0) {
-      navigateToProject(nextProject.worktree)
-      return
-    }
-
-    const index = offset > 0 ? 0 : nextProjectSessions.length - 1
-    const targetSession = nextProjectSessions[index]
-    const nextSession = nextProjectSessions[index + 1]
-    const prevSession = nextProjectSessions[index - 1]
+    const next = sessions[(targetIndex + 1) % sessions.length]
+    const prev = sessions[(targetIndex - 1 + sessions.length) % sessions.length]
 
     if (offset > 0) {
-      if (nextSession) prefetchSession(nextSession, "high")
+      if (next) prefetchSession(next, "high")
+      if (prev) prefetchSession(prev)
     }
 
     if (offset < 0) {
-      if (prevSession) prefetchSession(prevSession, "high")
+      if (prev) prefetchSession(prev, "high")
+      if (next) prefetchSession(next)
     }
 
     if (import.meta.env.DEV) {
       navStart({
-        dir: base64Encode(targetSession.directory),
+        dir: base64Encode(session.directory),
         from: params.id,
-        to: targetSession.id,
+        to: session.id,
         trigger: offset > 0 ? "alt+arrowdown" : "alt+arrowup",
       })
     }
-    navigateToSession(targetSession)
-    queueMicrotask(() => scrollToSession(targetSession.id))
+    navigateToSession(session)
+    queueMicrotask(() => scrollToSession(session.id))
   }
 
   async function archiveSession(session: Session) {
