@@ -559,7 +559,7 @@ test("defaultAgent respects default_agent config set to custom agent with mode a
   })
 })
 
-test("defaultAgent falls back when default_agent points to subagent", async () => {
+test("defaultAgent throws when default_agent points to subagent", async () => {
   await using tmp = await tmpdir({
     config: {
       default_agent: "explore",
@@ -568,15 +568,12 @@ test("defaultAgent falls back when default_agent points to subagent", async () =
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const agent = await Agent.defaultAgent()
-      // explore is a subagent, so it should fall back to first primary-capable agent
-      expect(agent).not.toBe("explore")
-      expect(agent).toBe("build")
+      await expect(Agent.defaultAgent()).rejects.toThrow('default agent "explore" is a subagent')
     },
   })
 })
 
-test("defaultAgent falls back when default_agent points to hidden agent", async () => {
+test("defaultAgent throws when default_agent points to hidden agent", async () => {
   await using tmp = await tmpdir({
     config: {
       default_agent: "compaction",
@@ -585,15 +582,12 @@ test("defaultAgent falls back when default_agent points to hidden agent", async 
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const agent = await Agent.defaultAgent()
-      // compaction is hidden, so it should fall back to first primary-capable agent
-      expect(agent).not.toBe("compaction")
-      expect(agent).toBe("build")
+      await expect(Agent.defaultAgent()).rejects.toThrow('default agent "compaction" is hidden')
     },
   })
 })
 
-test("defaultAgent falls back when default_agent points to non-existent agent", async () => {
+test("defaultAgent throws when default_agent points to non-existent agent", async () => {
   await using tmp = await tmpdir({
     config: {
       default_agent: "does_not_exist",
@@ -602,8 +596,7 @@ test("defaultAgent falls back when default_agent points to non-existent agent", 
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const agent = await Agent.defaultAgent()
-      expect(agent).toBe("build")
+      await expect(Agent.defaultAgent()).rejects.toThrow('default agent "does_not_exist" not found')
     },
   })
 })
@@ -626,7 +619,7 @@ test("defaultAgent returns plan when build is disabled and default_agent not set
   })
 })
 
-test("defaultAgent returns first primary-capable agent when all natives are disabled", async () => {
+test("defaultAgent throws when all primary agents are disabled", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
@@ -638,9 +631,8 @@ test("defaultAgent returns first primary-capable agent when all natives are disa
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const agent = await Agent.defaultAgent()
-      // build and plan are disabled, so it should return general
-      expect(agent).toBe("build")
+      // build and plan are disabled, no primary-capable agents remain
+      await expect(Agent.defaultAgent()).rejects.toThrow("no primary visible agent found")
     },
   })
 })
