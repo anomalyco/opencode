@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-PyPI 배포 스크립트
+PyPI Publish Script
 
 Usage:
-    # 로컬 테스트 (editable install)
+    # Local test (editable install)
     python scripts/publish.py --local
 
-    # TestPyPI에 배포 (테스트)
+    # Publish to TestPyPI (test)
     python scripts/publish.py --test
 
-    # PyPI에 배포 (프로덕션)
+    # Publish to PyPI (production)
     python scripts/publish.py --prod
 
-    # 빌드만 (배포 없이)
+    # Build only (no publish)
     python scripts/publish.py --build-only
 
-    # 버전 업데이트
+    # Version update
     python scripts/publish.py --bump patch  # 1.1.15 -> 1.1.16
     python scripts/publish.py --bump minor  # 1.1.15 -> 1.2.0
     python scripts/publish.py --bump major  # 1.1.15 -> 2.0.0
