@@ -161,53 +161,64 @@ export default function Layout(props: ParentProps) {
   })
 
   onMount(() => {
+    const alerts = {
+      "permission.asked": {
+        title: "Permission required",
+        icon: "checklist" as const,
+        description: (sessionTitle: string, projectName: string) =>
+          `${sessionTitle} in ${projectName} needs permission`,
+      },
+      "question.asked": {
+        title: "Question",
+        icon: "bubble-5" as const,
+        description: (sessionTitle: string, projectName: string) => `${sessionTitle} in ${projectName} has a question`,
+      },
+    }
+
     const toastBySession = new Map<string, number>()
     const alertedAtBySession = new Map<string, number>()
-    const permissionAlertCooldownMs = 5000
+    const cooldownMs = 5000
 
     const unsub = globalSDK.event.listen((e) => {
-      if (e.details?.type !== "permission.asked") return
+      if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked") return
+      const config = alerts[e.details.type]
       const directory = e.name
-      const perm = e.details.properties
-      if (permission.autoResponds(perm, directory)) return
+      const props = e.details.properties
+      if (e.details.type === "permission.asked" && permission.autoResponds(e.details.properties, directory)) return
 
       const [store] = globalSync.child(directory)
-      const session = store.session.find((s) => s.id === perm.sessionID)
-      const sessionKey = `${directory}:${perm.sessionID}`
+      const session = store.session.find((s) => s.id === props.sessionID)
+      const sessionKey = `${directory}:${props.sessionID}`
 
       const sessionTitle = session?.title ?? "New session"
       const projectName = getFilename(directory)
-      const description = `${sessionTitle} in ${projectName} needs permission`
-      const href = `/${base64Encode(directory)}/session/${perm.sessionID}`
+      const description = config.description(sessionTitle, projectName)
+      const href = `/${base64Encode(directory)}/session/${props.sessionID}`
 
       const now = Date.now()
       const lastAlerted = alertedAtBySession.get(sessionKey) ?? 0
-      if (now - lastAlerted < permissionAlertCooldownMs) return
+      if (now - lastAlerted < cooldownMs) return
       alertedAtBySession.set(sessionKey, now)
 
-      void platform.notify("Permission required", description, href)
+      void platform.notify(config.title, description, href)
 
       const currentDir = params.dir ? base64Decode(params.dir) : undefined
       const currentSession = params.id
-      if (directory === currentDir && perm.sessionID === currentSession) return
+      if (directory === currentDir && props.sessionID === currentSession) return
       if (directory === currentDir && session?.parentID === currentSession) return
 
       const existingToastId = toastBySession.get(sessionKey)
-      if (existingToastId !== undefined) {
-        toaster.dismiss(existingToastId)
-      }
+      if (existingToastId !== undefined) toaster.dismiss(existingToastId)
 
       const toastId = showToast({
         persistent: true,
-        icon: "checklist",
-        title: "Permission required",
+        icon: config.icon,
+        title: config.title,
         description,
         actions: [
           {
             label: "Go to session",
-            onClick: () => {
-              navigate(href)
-            },
+            onClick: () => navigate(href),
           },
           {
             label: "Dismiss",
