@@ -9,7 +9,7 @@ import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { ZenData } from "@opencode-ai/console-core/model.js"
-import { BlackData } from "@opencode-ai/console-core/black.js"
+import { Black, BlackData } from "@opencode-ai/console-core/black.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
@@ -495,27 +495,28 @@ export async function handler(
 
       // Check weekly limit
       if (sub.fixedUsage && sub.timeFixedUpdated) {
-        const week = getWeekBounds(now)
-        if (sub.timeFixedUpdated >= week.start && sub.fixedUsage >= centsToMicroCents(black.fixedLimit * 100)) {
-          const retryAfter = Math.ceil((week.end.getTime() - now.getTime()) / 1000)
+        const result = Black.analyzeWeeklyUsage({
+          usage: sub.fixedUsage,
+          timeUpdated: sub.timeFixedUpdated,
+        })
+        if (result.status === "rate-limited")
           throw new SubscriptionError(
-            `Subscription quota exceeded. Retry in ${formatRetryTime(retryAfter)}.`,
-            retryAfter,
+            `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+            result.resetInSec,
           )
-        }
       }
 
       // Check rolling limit
       if (sub.rollingUsage && sub.timeRollingUpdated) {
-        const rollingWindowMs = black.rollingWindow * 3600 * 1000
-        const windowStart = new Date(now.getTime() - rollingWindowMs)
-        if (sub.timeRollingUpdated >= windowStart && sub.rollingUsage >= centsToMicroCents(black.rollingLimit * 100)) {
-          const retryAfter = Math.ceil((sub.timeRollingUpdated.getTime() + rollingWindowMs - now.getTime()) / 1000)
+        const result = Black.analyzeRollingUsage({
+          usage: sub.rollingUsage,
+          timeUpdated: sub.timeRollingUpdated,
+        })
+        if (result.status === "rate-limited")
           throw new SubscriptionError(
-            `Subscription quota exceeded. Retry in ${formatRetryTime(retryAfter)}.`,
-            retryAfter,
+            `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+            result.resetInSec,
           )
-        }
       }
 
       return

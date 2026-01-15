@@ -10,9 +10,14 @@ const squares = Array.from({ length: 16 }, (_, i) => ({
   outer: outerIndices.has(i),
 }))
 
-export function Spinner(props: { class?: string; classList?: ComponentProps<"div">["classList"] }) {
+export function Spinner(props: {
+  class?: string
+  classList?: ComponentProps<"div">["classList"]
+  style?: ComponentProps<"div">["style"]
+}) {
   return (
     <svg
+      {...props}
       viewBox="0 0 15 15"
       data-component="spinner"
       classList={{

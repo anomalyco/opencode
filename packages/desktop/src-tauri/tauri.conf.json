@@ -11,6 +11,20 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "title": "OpenCode",
+        "url": "/",
+        "decorations": true,
+        "dragDropEnabled": false,
+        "zoomHotkeysEnabled": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 12.0, "y": 18.0 }
+      }
+    ],
     "withGlobalTauri": true,
     "security": {
       "csp": null

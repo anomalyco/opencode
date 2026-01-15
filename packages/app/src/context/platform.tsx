@@ -5,6 +5,9 @@ export type Platform = {
   /** Platform discriminator */
   platform: "web" | "desktop"
 
+  /** Desktop OS (Tauri only) */
+  os?: "macos" | "windows" | "linux"
+
   /** App version */
   version?: string
 
