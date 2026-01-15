@@ -20,7 +20,7 @@ import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
 import { existsSync } from "fs"
 import { Bus } from "@/bus"
-import { TuiEvent } from "@/cli/cmd/tui/event"
+import { Session } from "@/session"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -221,24 +221,13 @@ export namespace Config {
       cwd: dir,
     })) {
       const md = await ConfigMarkdown.parse(item).catch((err) => {
-        if (!ConfigMarkdown.FrontmatterError.isInstance(err)) {
-          log.error("failed to load command", { path: item, error: err })
-          return undefined
-        }
-        log.error("failed to parse command frontmatter", {
-          path: err.data.path,
-          message: err.data.message,
+        Bus.publish(Session.Event.Error, {
+          error: new NamedError.Unknown({ message: `Frontmatter failed to parse command ${item}: ${err}` }),
         })
-        const relativePath = path.relative(dir, item)
-        Bus.publish(TuiEvent.ToastShow, {
-          title: "Command Error",
-          message: `Failed to parse ${relativePath}: ${err.data.message.split(":")[0]}`,
-          variant: "error",
-          duration: 8000,
-        })
+        log.error("failed to load command", { command: item, err })
         return undefined
       })
-      if (!md?.data) continue
+      if (!md) continue
 
       const name = (() => {
         const patterns = ["/.opencode/command/", "/command/"]
@@ -277,24 +266,13 @@ export namespace Config {
       cwd: dir,
     })) {
       const md = await ConfigMarkdown.parse(item).catch((err) => {
-        if (!ConfigMarkdown.FrontmatterError.isInstance(err)) {
-          log.error("failed to load agent", { path: item, error: err })
-          return undefined
-        }
-        log.error("failed to parse agent frontmatter", {
-          path: err.data.path,
-          message: err.data.message,
+        Bus.publish(Session.Event.Error, {
+          error: new NamedError.Unknown({ message: `Frontmatter failed to parse agent ${item}: ${err}` }),
         })
-        const relativePath = path.relative(dir, item)
-        Bus.publish(TuiEvent.ToastShow, {
-          title: "Agent Error",
-          message: `Failed to parse ${relativePath}: ${err.data.message.split(":")[0]}`,
-          variant: "error",
-          duration: 8000,
-        })
+        log.error("failed to load agent", { agent: item, err })
         return undefined
       })
-      if (!md?.data) continue
+      if (!md) continue
 
       // Extract relative path from agent folder for nested agents
       let agentName = path.basename(item, ".md")
@@ -336,24 +314,13 @@ export namespace Config {
       cwd: dir,
     })) {
       const md = await ConfigMarkdown.parse(item).catch((err) => {
-        if (!ConfigMarkdown.FrontmatterError.isInstance(err)) {
-          log.error("failed to load mode", { path: item, error: err })
-          return undefined
-        }
-        log.error("failed to parse mode frontmatter", {
-          path: err.data.path,
-          message: err.data.message,
+        Bus.publish(Session.Event.Error, {
+          error: new NamedError.Unknown({ message: `Frontmatter failed to parse mode ${item}: ${err}` }),
         })
-        const relativePath = path.relative(dir, item)
-        Bus.publish(TuiEvent.ToastShow, {
-          title: "Mode Error",
-          message: `Failed to parse ${relativePath}: ${err.data.message.split(":")[0]}`,
-          variant: "error",
-          duration: 8000,
-        })
+        log.error("failed to load mode", { mode: item, err })
         return undefined
       })
-      if (!md?.data) continue
+      if (!md) continue
 
       const config = {
         name: path.basename(item, ".md"),
