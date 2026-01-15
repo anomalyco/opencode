@@ -859,7 +859,6 @@ export default function Layout(props: ParentProps) {
       return false
     })
     const isWorking = createMemo(() => {
-      if (props.session.id === params.id) return false
       if (hasPermissions()) return false
       const status = sessionStore.session_status[props.session.id]
       return status?.type === "busy" || status?.type === "retry"
