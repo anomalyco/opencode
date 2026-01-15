@@ -29,23 +29,6 @@
     gap: 28px;
     overflow-anchor: none;
 
-    [data-slot="session-turn-user-badges"] {
-      position: absolute;
-      right: 0;
-      display: flex;
-      gap: 6px;
-      padding-left: 16px;
-      background: linear-gradient(to right, transparent, var(--background-stronger) 12px);
-      opacity: 0;
-      transition: opacity 0.15s ease;
-      pointer-events: none;
-    }
-
-    &:hover [data-slot="session-turn-user-badges"] {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
     [data-slot="session-turn-badge"] {
       display: inline-flex;
       align-items: center;
@@ -71,7 +54,7 @@
 
   [data-slot="session-turn-response-trigger"] {
     position: sticky;
-    top: 32px;
+    top: calc(var(--sticky-header-height, 0px));
     background-color: var(--background-stronger);
     z-index: 20;
     width: calc(100% + 9px);
@@ -88,8 +71,15 @@
   }
 
   [data-slot="session-turn-message-content"] {
-    margin-top: -18px;
+    margin-top: 0;
     max-width: 100%;
+  }
+
+  [data-slot="session-turn-user-badges"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-left: 16px;
   }
 
   [data-slot="session-turn-message-title"] {

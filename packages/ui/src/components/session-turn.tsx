@@ -119,6 +119,7 @@ function AssistantMessageItem(props: {
 export function SessionTurn(
   props: ParentProps<{
     sessionID: string
+    sessionTitle?: string
     messageID: string
     lastUserMessageID?: string
     stepsExpanded?: boolean
@@ -330,7 +331,9 @@ export function SessionTurn(
 
   const response = createMemo(() => lastTextPart()?.text)
   const responsePartId = createMemo(() => lastTextPart()?.id)
-  const hasDiffs = createMemo(() => message()?.summary?.diffs?.length)
+  const sessionInfo = createMemo(() => data.store.session.find((item) => item.id === props.sessionID))
+  const sessionTitle = createMemo(() => props.sessionTitle ?? sessionInfo()?.title)
+  const hasDiffs = createMemo(() => (data.store.session_diff?.[props.sessionID]?.length ?? 0) > 0)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
   const [responseCopied, setResponseCopied] = createSignal(false)
@@ -376,6 +379,7 @@ export function SessionTurn(
     diffLimit: diffInit,
     status: rawStatus(),
     duration: duration(),
+    titleShown: false,
   })
 
   createEffect(
@@ -388,6 +392,18 @@ export function SessionTurn(
       { defer: true },
     ),
   )
+
+  createEffect(() => {
+    if (!sessionTitle()) {
+      setStore("titleShown", false)
+      return
+    }
+    if (store.titleShown) return
+    const first = allMessages().find((item) => item?.role === "user")
+    if (!first) return
+    if (first.id !== props.messageID) return
+    setStore("titleShown", true)
+  })
 
   createEffect(() => {
     const r = retry()
@@ -482,40 +498,53 @@ export function SessionTurn(
                     <Part part={shellModePart()!} message={msg()} defaultOpen />
                   </Match>
                   <Match when={true}>
-                    {/* Title (sticky) */}
-                    <div ref={(el) => setStore("stickyTitleRef", el)} data-slot="session-turn-sticky-title">
-                      <div data-slot="session-turn-message-header">
-                        <div data-slot="session-turn-message-title">
-                          <Switch>
-                            <Match when={working()}>
-                              <Typewriter as="h1" text={msg().summary?.title} data-slot="session-turn-typewriter" />
-                            </Match>
-                            <Match when={true}>
-                              <h1>{msg().summary?.title}</h1>
-                            </Match>
-                          </Switch>
-                        </div>
-                        <div data-slot="session-turn-user-badges">
-                          <Show when={(msg() as UserMessage).agent}>
-                            <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
-                          </Show>
-                          <Show when={(msg() as UserMessage).model?.modelID}>
-                            <span data-slot="session-turn-badge" class="inline-flex items-center gap-1">
-                              <ProviderIcon
-                                id={(msg() as UserMessage).model!.providerID as IconName}
-                                class="size-3.5 shrink-0"
-                              />
-                              {(msg() as UserMessage).model?.modelID}
-                            </span>
-                          </Show>
-                          <span data-slot="session-turn-badge">{(msg() as UserMessage).variant || "default"}</span>
+                    <Show when={sessionTitle() && store.titleShown}>
+                      <div ref={(el) => setStore("stickyTitleRef", el)} data-slot="session-turn-sticky-title">
+                        <div data-slot="session-turn-message-header">
+                          <div data-slot="session-turn-message-title">
+                            <Switch>
+                              <Match when={working()}>
+                                <Typewriter as="h1" text={sessionTitle()} data-slot="session-turn-typewriter" />
+                              </Match>
+                              <Match when={true}>
+                                <h1>{sessionTitle()}</h1>
+                              </Match>
+                            </Switch>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    </Show>
+
+                    <Show
+                      when={
+                        (msg() as UserMessage).agent ||
+                        (msg() as UserMessage).model?.modelID ||
+                        (msg() as UserMessage).variant
+                      }
+                    >
+                      <div data-slot="session-turn-user-badges">
+                        <Show when={(msg() as UserMessage).agent}>
+                          <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
+                        </Show>
+                        <Show when={(msg() as UserMessage).model?.modelID}>
+                          <span data-slot="session-turn-badge" class="inline-flex items-center gap-1">
+                            <ProviderIcon
+                              id={(msg() as UserMessage).model!.providerID as IconName}
+                              class="size-3.5 shrink-0"
+                            />
+                            {(msg() as UserMessage).model?.modelID}
+                          </span>
+                        </Show>
+                        <Show when={(msg() as UserMessage).variant}>
+                          <span data-slot="session-turn-badge">{(msg() as UserMessage).variant}</span>
+                        </Show>
+                      </div>
+                    </Show>
                     {/* User Message */}
                     <div data-slot="session-turn-message-content">
                       <Message message={msg()} parts={parts()} />
                     </div>
+
                     {/* Trigger (sticky) */}
                     <Show when={working() || hasSteps()}>
                       <div ref={(el) => setStore("stickyTriggerRef", el)} data-slot="session-turn-response-trigger">
@@ -612,7 +641,7 @@ export function SessionTurn(
                             setStore("diffsOpen", value)
                           }}
                         >
-                          <For each={(msg().summary?.diffs ?? []).slice(0, store.diffLimit)}>
+                          <For each={(data.store.session_diff?.[props.sessionID] ?? []).slice(0, store.diffLimit)}>
                             {(diff) => (
                               <Accordion.Item value={diff.file}>
                                 <StickyAccordionHeader>
@@ -658,13 +687,13 @@ export function SessionTurn(
                             )}
                           </For>
                         </Accordion>
-                        <Show when={(msg().summary?.diffs?.length ?? 0) > store.diffLimit}>
+                        <Show when={(data.store.session_diff?.[props.sessionID]?.length ?? 0) > store.diffLimit}>
                           <Button
                             data-slot="session-turn-accordion-more"
                             variant="ghost"
                             size="small"
                             onClick={() => {
-                              const total = msg().summary?.diffs?.length ?? 0
+                              const total = data.store.session_diff?.[props.sessionID]?.length ?? 0
                               setStore("diffLimit", (limit) => {
                                 const next = limit + diffBatch
                                 if (next > total) return total
@@ -672,7 +701,8 @@ export function SessionTurn(
                               })
                             }}
                           >
-                            Show more changes ({(msg().summary?.diffs?.length ?? 0) - store.diffLimit})
+                            Show more changes (
+                            {(data.store.session_diff?.[props.sessionID]?.length ?? 0) - store.diffLimit})
                           </Button>
                         </Show>
                       </div>

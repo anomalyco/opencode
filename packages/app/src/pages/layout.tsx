@@ -1296,7 +1296,13 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const SessionItem = (props: { session: Session; slug: string; mobile?: boolean; dense?: boolean }): JSX.Element => {
+  const SessionItem = (props: {
+    session: Session
+    slug: string
+    mobile?: boolean
+    dense?: boolean
+    popover?: boolean
+  }): JSX.Element => {
     const notification = useNotification()
     const notifications = createMemo(() => notification.session.unseen(props.session.id))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
@@ -1335,6 +1341,7 @@ export default function Layout(props: ParentProps) {
     )
     const hoverReady = createMemo(() => sessionStore.message[props.session.id] !== undefined)
     const hoverAllowed = createMemo(() => !props.mobile && layout.sidebar.opened())
+    const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
     const isActive = createMemo(() => props.session.id === params.id)
 
     const messageLabel = (message: Message) => {
@@ -1370,23 +1377,14 @@ export default function Layout(props: ParentProps) {
               </Match>
             </Switch>
           </div>
-          <Tooltip
-            inactive={hoverAllowed()}
-            placement="top-start"
-            value={props.session.title}
-            gutter={0}
-            openDelay={3000}
-            class="grow-1 min-w-0"
-          >
-            <InlineEditor
-              id={`session:${props.session.id}`}
-              value={() => props.session.title}
-              onSave={(next) => renameSession(props.session, next)}
-              class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
-              displayClass="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
-              stopPropagation
-            />
-          </Tooltip>
+          <InlineEditor
+            id={`session:${props.session.id}`}
+            value={() => props.session.title}
+            onSave={(next) => renameSession(props.session, next)}
+            class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
+            displayClass="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
+            stopPropagation
+          />
           <Show when={props.session.summary}>
             {(summary) => (
               <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
@@ -1396,7 +1394,7 @@ export default function Layout(props: ParentProps) {
           </Show>
         </div>
       </A>
-    ))
+    )
 
     return (
       <div
@@ -1405,8 +1403,12 @@ export default function Layout(props: ParentProps) {
                hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
       >
         <Show
-          when={hoverAllowed()}
-          fallback={item}
+          when={hoverEnabled()}
+          fallback={
+            <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
+              {item}
+            </Tooltip>
+          }
         >
           <HoverCard openDelay={150} closeDelay={100} placement="right" gutter={12} trigger={item}>
             <Show when={hoverReady()} fallback={<div class="text-12-regular text-text-weak">Loading messages…</div>}>
@@ -1730,6 +1732,7 @@ export default function Layout(props: ParentProps) {
                         slug={base64Encode(props.project.worktree)}
                         dense
                         mobile={props.mobile}
+                        popover={false}
                       />
                     )}
                   </For>
@@ -1746,7 +1749,13 @@ export default function Layout(props: ParentProps) {
                       </div>
                       <For each={sessions(directory)}>
                         {(session) => (
-                          <SessionItem session={session} slug={base64Encode(directory)} dense mobile={props.mobile} />
+                          <SessionItem
+                            session={session}
+                            slug={base64Encode(directory)}
+                            dense
+                            mobile={props.mobile}
+                            popover={false}
+                          />
                         )}
                       </For>
                     </div>
