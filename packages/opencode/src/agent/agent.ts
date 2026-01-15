@@ -256,13 +256,8 @@ export namespace Agent {
 
   export async function defaultAgent() {
     const agents = await list()
-    const primary = agents.find((a) => a.mode !== "subagent" && a.hidden !== true)
-    if (primary) return primary.name
-
-    const visible = agents.find((a) => a.hidden !== true)
-    if (visible) return visible.name
-
-    return "build"
+    const primaryVisible = agents.find((a) => a.mode !== "subagent" && a.hidden !== true)
+    return primaryVisible?.name || "build"
   }
 
   export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {

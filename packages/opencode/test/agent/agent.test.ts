@@ -513,8 +513,6 @@ test("explicit Truncate.DIR deny is respected", async () => {
   })
 })
 
-// Tests for Agent.defaultAgent()
-
 test("defaultAgent returns build when no default_agent config", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
@@ -624,6 +622,25 @@ test("defaultAgent returns plan when build is disabled and default_agent not set
       const agent = await Agent.defaultAgent()
       // build is disabled, so it should return plan (next primary agent)
       expect(agent).toBe("plan")
+    },
+  })
+})
+
+test("defaultAgent returns first primary-capable agent when all natives are disabled", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        build: { disable: true },
+        plan: { disable: true },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.defaultAgent()
+      // build and plan are disabled, so it should return general
+      expect(agent).toBe("build")
     },
   })
 })
