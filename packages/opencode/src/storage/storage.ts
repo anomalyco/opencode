@@ -174,8 +174,17 @@ export namespace Storage {
       if (!content.trim()) {
         throw new NotFoundError({ message: `Empty file: ${target}` })
       }
-      const result = JSON.parse(content)
-      return result as T
+      const hasControlCharacters = /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(content)
+      if (hasControlCharacters) {
+        throw new NotFoundError({ message: `Corrupted file detected: ${target}` })
+      }
+      try {
+        const result = JSON.parse(content)
+        return result as T
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e)
+        throw new NotFoundError({ message: `Failed to parse JSON from ${target}: ${message}` })
+      }
     })
   }
 
@@ -188,10 +197,19 @@ export namespace Storage {
       if (!content.trim()) {
         throw new NotFoundError({ message: `Empty file: ${target}` })
       }
-      const parsed = JSON.parse(content)
-      fn(parsed)
-      await Bun.write(target, JSON.stringify(parsed, null, 2))
-      return parsed as T
+      const hasControlCharacters = /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(content)
+      if (hasControlCharacters) {
+        throw new NotFoundError({ message: `Corrupted file detected: ${target}` })
+      }
+      try {
+        const parsed = JSON.parse(content)
+        fn(parsed)
+        await Bun.write(target, JSON.stringify(parsed, null, 2))
+        return parsed as T
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e)
+        throw new NotFoundError({ message: `Failed to parse JSON from ${target}: ${message}` })
+      }
     })
   }
 
