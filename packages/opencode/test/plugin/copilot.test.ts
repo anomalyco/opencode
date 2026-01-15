@@ -23,13 +23,15 @@ function hasSyntheticContent(content: unknown): boolean {
 function detectAgent(messages: any[]): boolean {
   if (!Array.isArray(messages) || messages.length === 0) return false
 
+  // Rule 1: If any assistant/tool message exists, this is a continuation
   const hasNonUser = messages.some((msg: any) => ["assistant", "tool"].includes(msg.role))
   if (hasNonUser) return true
 
-  const users = messages.filter((msg: any) => msg.role === "user")
-  if (users.length > 1) return true
+  // Rule 2: Check if the LAST user message is synthetic (compaction, tool result, etc.)
+  const last = messages[messages.length - 1]
+  if (last?.role === "user" && hasSyntheticContent(last.content)) return true
 
-  return users.some((msg: any) => hasSyntheticContent(msg.content))
+  return false
 }
 
 function getInitiator(body: any): "user" | "agent" {
@@ -98,14 +100,15 @@ describe("plugin.copilot", () => {
       expect(getInitiator(body)).toBe("agent")
     })
 
-    test("multiple user messages returns agent", () => {
+    test("multiple user messages without assistant returns user (each charges)", () => {
       const body = {
         messages: [
           { role: "user", content: "First" },
           { role: "user", content: "Second" },
         ],
       }
-      expect(getInitiator(body)).toBe("agent")
+      // Real user follow-ups should charge premium - this is correct Copilot behavior
+      expect(getInitiator(body)).toBe("user")
     })
 
     test("synthetic tool attachment returns agent", () => {
@@ -162,7 +165,7 @@ describe("plugin.copilot", () => {
       expect(getInitiator(body)).toBe("agent")
     })
 
-    test("multi-turn with real user follow-up does not charge premium", () => {
+    test("multi-turn with real user follow-up correctly detected as agent (assistant exists)", () => {
       const body = {
         messages: [
           { role: "user", content: "Hello" },
@@ -170,6 +173,7 @@ describe("plugin.copilot", () => {
           { role: "user", content: "Now do something else" },
         ],
       }
+      // Agent because assistant message exists, not because of multiple users
       expect(getInitiator(body)).toBe("agent")
     })
   })
