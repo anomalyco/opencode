@@ -124,12 +124,19 @@ function createGlobalSync() {
     return globalSDK.client.session
       .list({ directory, roots: true })
       .then((x) => {
-        const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000
         const nonArchived = (x.data ?? [])
           .filter((s) => !!s?.id)
           .filter((s) => !s.time?.archived)
           .slice()
           .sort((a, b) => a.id.localeCompare(b.id))
+
+        const sandboxWorkspace = globalStore.project.some((p) => (p.sandboxes ?? []).includes(directory))
+        if (sandboxWorkspace) {
+          setStore("session", reconcile(nonArchived, { key: "id" }))
+          return
+        }
+
+        const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000
         // Include up to the limit, plus any updated in the last 4 hours
         const sessions = nonArchived.filter((s, i) => {
           if (i < limit) return true

@@ -67,6 +67,12 @@
     [data-slot="icon-svg"] {
       color: var(--icon-strong-base);
     }
+
+    &:disabled {
+      background-color: var(--icon-strong-disabled);
+      color: var(--icon-invert-base);
+      cursor: not-allowed;
+    }
   }
 
   &[data-variant="ghost"] {
@@ -99,6 +105,10 @@
       /*   color: var(--icon-selected); */
       /* } */
     }
+    &:disabled {
+      color: var(--icon-invert-base);
+      cursor: not-allowed;
+    }
   }
 
   &[data-size="normal"] {
@@ -127,12 +137,6 @@
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large); /* 166.667% */
     letter-spacing: var(--letter-spacing-normal);
-  }
-
-  &:disabled {
-    background-color: var(--icon-strong-disabled);
-    color: var(--icon-invert-base);
-    cursor: not-allowed;
   }
 
   &:focus {
