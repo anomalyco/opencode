@@ -197,16 +197,23 @@ export namespace Provider {
         return undefined
       })
 
-      if (!profile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
+      const awsWebIdentityTokenFile = Env.get("AWS_WEB_IDENTITY_TOKEN_FILE")
 
-      const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
-
-      // Build credential provider options (only pass profile if specified)
-      const credentialProviderOptions = profile ? { profile } : {}
+      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile) return { autoload: false }
 
       const providerOptions: AmazonBedrockProviderSettings = {
         region: defaultRegion,
-        credentialProvider: fromNodeProviderChain(credentialProviderOptions),
+      }
+
+      // Only use credential chain if no bearer token exists
+      // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
+      if (!awsBearerToken) {
+        const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
+
+        // Build credential provider options (only pass profile if specified)
+        const credentialProviderOptions = profile ? { profile } : {}
+
+        providerOptions.credentialProvider = fromNodeProviderChain(credentialProviderOptions)
       }
 
       // Add custom endpoint if specified (endpoint takes precedence over baseURL)
@@ -392,7 +399,7 @@ export namespace Provider {
         },
       }
     },
-    async gitlab(input) {
+    gitlab: async (input) => {
       const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
 
       const auth = await Auth.get(input.id)
@@ -416,10 +423,8 @@ export namespace Provider {
             ...(providerConfig?.options?.featureFlags || {}),
           },
         },
-        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string, options?: { anthropicModel?: string }) {
-          const anthropicModel = options?.anthropicModel
+        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
           return sdk.agenticChat(modelID, {
-            anthropicModel,
             featureFlags: {
               duo_agent_platform_agentic_chat: true,
               duo_agent_platform: true,
@@ -552,6 +557,7 @@ export namespace Provider {
       }),
       limit: z.object({
         context: z.number(),
+        input: z.number().optional(),
         output: z.number(),
       }),
       status: z.enum(["alpha", "beta", "deprecated", "active"]),
@@ -614,6 +620,7 @@ export namespace Provider {
       },
       limit: {
         context: model.limit.context,
+        input: model.limit.input,
         output: model.limit.output,
       },
       capabilities: {
@@ -865,7 +872,12 @@ export namespace Provider {
 
     for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
       if (disabled.has(providerID)) continue
-      const result = await fn(database[providerID])
+      const data = database[providerID]
+      if (!data) {
+        log.error("Provider does not exist in model list " + providerID)
+        continue
+      }
+      const result = await fn(data)
       if (result && (result.autoload || providers[providerID])) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
         mergeProvider(providerID, {

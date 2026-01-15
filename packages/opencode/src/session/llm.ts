@@ -55,13 +55,20 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [language, cfg] = await Promise.all([Provider.getLanguage(input.model), Config.get()])
+    const [language, cfg, provider, auth] = await Promise.all([
+      Provider.getLanguage(input.model),
+      Config.get(),
+      Provider.getProvider(input.model.providerID),
+      Auth.get(input.model.providerID),
+    ])
+    const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
     const system = SystemPrompt.header(input.model.providerID)
     system.push(
       [
         // use agent prompt otherwise provider prompt
-        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+        // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
+        ...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message
@@ -84,15 +91,15 @@ export namespace LLM {
       system.push(header, rest.join("\n"))
     }
 
-    const provider = await Provider.getProvider(input.model.providerID)
-    const auth = await Auth.get(input.model.providerID)
-    const isCodex = provider.id === "openai" && auth?.type === "oauth"
-
     const variant =
       !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
     const base = input.small
       ? ProviderTransform.smallOptions(input.model)
-      : ProviderTransform.options(input.model, input.sessionID, provider.options)
+      : ProviderTransform.options({
+          model: input.model,
+          sessionID: input.sessionID,
+          providerOptions: provider.options,
+        })
     const options: Record<string, any> = pipe(
       base,
       mergeDeep(input.model.options),
@@ -101,7 +108,6 @@ export namespace LLM {
     )
     if (isCodex) {
       options.instructions = SystemPrompt.instructions()
-      options.store = false
     }
 
     const params = await Plugin.trigger(
@@ -110,7 +116,7 @@ export namespace LLM {
         sessionID: input.sessionID,
         agent: input.agent,
         model: input.model,
-        provider: Provider.getProvider(input.model.providerID),
+        provider,
         message: input.user,
       },
       {
@@ -211,7 +217,7 @@ export namespace LLM {
             async transformParams(args) {
               if (args.type === "stream") {
                 // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, input.model)
+                args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
               }
               return args.params
             },
