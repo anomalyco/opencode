@@ -85,6 +85,7 @@ export namespace FileWatcher {
         .cwd(Instance.worktree)
         .text()
         .then((x) => path.resolve(Instance.worktree, x.trim()))
+        .catch(() => undefined)
       if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
         const gitDirContents = await readdir(vcsDir).catch(() => [])
         const ignoreList = gitDirContents.filter((entry) => entry !== "HEAD")

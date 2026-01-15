@@ -45,6 +45,11 @@ export default tool({
     }
 
     const prs = result.items as PR[]
+
+    if (prs.length === 0) {
+      return `No other PRs found matching "${args.query}"`
+    }
+
     const formatted = prs.map((pr) => `${pr.title}\n${pr.html_url}`).join("\n\n")
 
     return `Found ${result.total_count} PRs (showing ${prs.length}):\n\n${formatted}`

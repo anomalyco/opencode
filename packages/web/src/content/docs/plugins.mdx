@@ -288,6 +288,25 @@ Your custom tools will be available to opencode alongside built-in tools.
 
 ---
 
+### Logging
+
+Use `client.app.log()` instead of `console.log` for structured logging:
+
+```ts title=".opencode/plugin/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    service: "my-plugin",
+    level: "info",
+    message: "Plugin initialized",
+    extra: { foo: "bar" },
+  })
+}
+```
+
+Levels: `debug`, `info`, `warn`, `error`. See [SDK documentation](https://opencode.ai/docs/sdk) for details.
+
+---
+
 ### Compaction hooks
 
 Customize the context included when a session is compacted:

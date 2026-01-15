@@ -21,7 +21,7 @@ export interface DialogSelectProps<T> {
   onSelect?: (option: DialogSelectOption<T>) => void
   skipFilter?: boolean
   keybind?: {
-    keybind: Keybind.Info
+    keybind?: Keybind.Info
     title: string
     disabled?: boolean
     onTrigger: (option: DialogSelectOption<T>) => void
@@ -71,12 +71,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   let input: InputRenderable
 
   const filtered = createMemo(() => {
+    if (props.skipFilter) {
+      return props.options.filter((x) => x.disabled !== true)
+    }
     const needle = store.filter.toLowerCase()
     const result = pipe(
       props.options,
       filter((x) => x.disabled !== true),
-      (x) =>
-        !needle || props.skipFilter ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj),
+      (x) => (!needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj)),
     )
     return result
   })
@@ -107,15 +109,16 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   createEffect(
     on([() => store.filter, () => props.current], ([filter, current]) => {
-      if (filter.length > 0) {
-        setStore("selected", 0)
-      } else if (current) {
-        const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
-        if (currentIndex >= 0) {
-          setStore("selected", currentIndex)
+      setTimeout(() => {
+        if (filter.length > 0) {
+          moveTo(0, true)
+        } else if (current) {
+          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+          if (currentIndex >= 0) {
+            moveTo(currentIndex, true)
+          }
         }
-      }
-      scroll?.scrollTo(0)
+      }, 0)
     }),
   )
 
@@ -127,7 +130,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     moveTo(next)
   }
 
-  function moveTo(next: number) {
+  function moveTo(next: number, center = false) {
     setStore("selected", next)
     props.onMove?.(selected()!)
     if (!scroll) return
@@ -136,13 +139,18 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     })
     if (!target) return
     const y = target.y - scroll.y
-    if (y >= scroll.height) {
-      scroll.scrollBy(y - scroll.height + 1)
-    }
-    if (y < 0) {
-      scroll.scrollBy(y)
-      if (isDeepEqual(flat()[0].value, selected()?.value)) {
-        scroll.scrollTo(0)
+    if (center) {
+      const centerOffset = Math.floor(scroll.height / 2)
+      scroll.scrollBy(y - centerOffset)
+    } else {
+      if (y >= scroll.height) {
+        scroll.scrollBy(y - scroll.height + 1)
+      }
+      if (y < 0) {
+        scroll.scrollBy(y)
+        if (isDeepEqual(flat()[0].value, selected()?.value)) {
+          scroll.scrollTo(0)
+        }
       }
     }
   }
@@ -156,14 +164,15 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     if (evt.name === "return") {
       const option = selected()
       if (option) {
-        // evt.preventDefault()
+        evt.preventDefault()
+        evt.stopPropagation()
         if (option.onSelect) option.onSelect(dialog)
         props.onSelect?.(option)
       }
     }
 
     for (const item of props.keybind ?? []) {
-      if (item.disabled) continue
+      if (item.disabled || !item.keybind) continue
       if (Keybind.match(item.keybind, keybind.parse(evt))) {
         const s = selected()
         if (s) {
@@ -185,7 +194,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
   props.ref?.(ref)
 
-  const keybinds = createMemo(() => props.keybind?.filter((x) => !x.disabled) ?? [])
+  const keybinds = createMemo(() => props.keybind?.filter((x) => !x.disabled && x.keybind) ?? [])
 
   return (
     <box gap={1} paddingBottom={1}>
@@ -253,7 +262,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                           props.onSelect?.(option)
                         }}
                         onMouseOver={() => {
-                          const index = filtered().findIndex((x) => isDeepEqual(x.value, option.value))
+                          const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
                           if (index === -1) return
                           moveTo(index)
                         }}
@@ -312,12 +321,12 @@ function Option(props: {
   return (
     <>
       <Show when={props.current}>
-        <text flexShrink={0} fg={props.active ? fg : props.current ? theme.primary : theme.text} marginRight={0.5}>
+        <text flexShrink={0} fg={props.active ? fg : props.current ? theme.primary : theme.text} marginRight={0}>
           ●
         </text>
       </Show>
       <Show when={!props.current && props.gutter}>
-        <box flexShrink={0} marginRight={0.5}>
+        <box flexShrink={0} marginRight={0}>
           {props.gutter}
         </box>
       </Show>

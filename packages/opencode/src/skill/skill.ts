@@ -6,7 +6,7 @@ import { ConfigMarkdown } from "../config/markdown"
 import { Log } from "../util/log"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
-import { exists } from "fs/promises"
+import { Flag } from "@/flag/flag"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -76,19 +76,28 @@ export namespace Skill {
     )
     // Also include global ~/.claude/skills/
     const globalClaude = `${Global.Path.home}/.claude`
-    if (await exists(globalClaude)) {
+    if (await Filesystem.isDir(globalClaude)) {
       claudeDirs.push(globalClaude)
     }
 
-    for (const dir of claudeDirs) {
-      for await (const match of CLAUDE_SKILL_GLOB.scan({
-        cwd: dir,
-        absolute: true,
-        onlyFiles: true,
-        followSymlinks: true,
-        dot: true,
-      })) {
-        await addSkill(match)
+    if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS) {
+      for (const dir of claudeDirs) {
+        const matches = await Array.fromAsync(
+          CLAUDE_SKILL_GLOB.scan({
+            cwd: dir,
+            absolute: true,
+            onlyFiles: true,
+            followSymlinks: true,
+            dot: true,
+          }),
+        ).catch((error) => {
+          log.error("failed .claude directory scan for skills", { dir, error })
+          return []
+        })
+
+        for (const match of matches) {
+          await addSkill(match)
+        }
       }
     }
 
