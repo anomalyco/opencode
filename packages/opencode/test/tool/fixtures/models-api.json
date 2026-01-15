@@ -1908,6 +1908,38 @@
         "cost": { "input": 0, "output": 0 },
         "limit": { "context": 128000, "output": 4096 }
       },
+      "nvidia/deepseek-ai/deepseek-v3.2": {
+        "id": "nvidia/deepseek-ai/deepseek-v3.2",
+        "name": "DeepSeek V3.2",
+        "family": "deepseek-v3",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": true,
+        "knowledge": "2024-07",
+        "release_date": "2025-12-01",
+        "last_updated": "2025-12-01",
+        "modalities": { "input": ["text"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0.28, "output": 0.4 },
+        "limit": { "context": 163840, "output": 65536 }
+      },
+      "nvidia/minimaxai/minimax-m2.1": {
+        "id": "nvidia/minimaxai/minimax-m2.1",
+        "name": "MiniMax M2.1",
+        "family": "minimax",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "interleaved": { "field": "reasoning_details" },
+        "temperature": true,
+        "release_date": "2025-12-23",
+        "last_updated": "2025-12-23",
+        "modalities": { "input": ["text"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0.3, "output": 1.2 },
+        "limit": { "context": 204800, "output": 131072 }
+      },
       "minimaxai/minimax-m2": {
         "id": "minimaxai/minimax-m2",
         "name": "MiniMax-M2",
