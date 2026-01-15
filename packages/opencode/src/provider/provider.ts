@@ -1031,6 +1031,7 @@ export namespace Provider {
         maxAttempts: oauthConfig?.maxAttempts,
         rateLimitCooldownMs: oauthConfig?.rateLimitCooldownMs,
         authFailureCooldownMs: oauthConfig?.authFailureCooldownMs,
+        networkRetryAttempts: oauthConfig?.networkRetryAttempts,
         toastDurationMs: oauthConfig?.toastDurationMs,
       })
 
