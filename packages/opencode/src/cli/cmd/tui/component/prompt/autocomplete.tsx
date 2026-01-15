@@ -13,13 +13,15 @@ import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
 
+const linesRangeToken = ":"
+
 function removeLineRange(input: string) {
-  const hashIndex = input.lastIndexOf("#")
+  const hashIndex = input.lastIndexOf(linesRangeToken)
   return hashIndex !== -1 ? input.substring(0, hashIndex) : input
 }
 
 function extractLineRange(input: string) {
-  const hashIndex = input.lastIndexOf("#")
+  const hashIndex = input.lastIndexOf(linesRangeToken)
   if (hashIndex === -1) {
     return { baseQuery: input }
   }
@@ -230,7 +232,7 @@ export function Autocomplete(props: {
             let url = `file://${process.cwd()}/${item}`
             let filename = item
             if (lineRange && !item.endsWith("/")) {
-              filename = `${item}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
+              filename = `${item}${linesRangeToken}${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
               const urlObj = new URL(url)
               urlObj.searchParams.set("start", String(lineRange.startLine))
               if (lineRange.endLine !== undefined) {
