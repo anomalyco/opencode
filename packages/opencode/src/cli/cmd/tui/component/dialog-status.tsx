@@ -9,7 +9,7 @@ export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()
 
-  const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
+  const enabledFormatters = createMemo(() => sync.data.formatter?.filter((f) => f.enabled) ?? [])
 
   const plugins = createMemo(() => {
     const list = sync.data.config.plugin ?? []

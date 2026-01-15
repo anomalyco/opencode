@@ -623,7 +623,7 @@ export namespace MessageV2 {
       case (e as SystemError)?.code === "ECONNRESET":
         return new MessageV2.APIError(
           {
-            message: "Connection reset by server",
+            message: "Connection reset by server. If this persists, check your network/proxy settings.",
             isRetryable: true,
             metadata: {
               code: (e as SystemError).code ?? "",

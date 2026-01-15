@@ -110,7 +110,8 @@ describe("session.message-v2.fromError", () => {
 
       expect(MessageV2.APIError.isInstance(result)).toBe(true)
       expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
-      expect((result as MessageV2.APIError).data.message).toBe("Connection reset by server")
+      expect((result as MessageV2.APIError).data.message).toInclude("Connection reset by server")
+      expect((result as MessageV2.APIError).data.message).toInclude("network/proxy")
       expect((result as MessageV2.APIError).data.metadata?.code).toBe("ECONNRESET")
       expect((result as MessageV2.APIError).data.metadata?.message).toInclude("socket connection")
     },
@@ -119,13 +120,13 @@ describe("session.message-v2.fromError", () => {
 
   test("ECONNRESET socket error is retryable", () => {
     const error = new MessageV2.APIError({
-      message: "Connection reset by server",
+      message: "Connection reset by server. If this persists, check your network/proxy settings.",
       isRetryable: true,
       metadata: { code: "ECONNRESET", message: "The socket connection was closed unexpectedly" },
     }).toObject() as MessageV2.APIError
 
     const retryable = SessionRetry.retryable(error)
     expect(retryable).toBeDefined()
-    expect(retryable).toBe("Connection reset by server")
+    expect(retryable).toInclude("Connection reset by server")
   })
 })
