@@ -150,7 +150,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           providerID: model.providerID,
         },
         agent: agent.name,
-        options: agent.options,
         tools: {
           todowrite: false,
           todoread: false,
