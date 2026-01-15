@@ -1006,7 +1006,7 @@ export default function Layout(props: ParentProps) {
                         <div class="shrink-0 size-6 flex items-center justify-center">
                           <Icon name="branch" size="small" class="text-icon-base" />
                         </div>
-                        <span class="truncate text-14-medium text-text-strong">{label(directory)}</span>
+                        <span class="truncate text-14-medium text-text-base">{label(directory)}</span>
                       </div>
                       <For each={sessions(directory)}>
                         {(session) => (
@@ -1018,18 +1018,20 @@ export default function Layout(props: ParentProps) {
                 </For>
               </Show>
             </div>
-            <div class="px-2 py-2 border-t border-border-weak-base">
-              <Button
-                variant="ghost"
-                class="flex w-full text-left justify-start text-text-base px-2"
-                onClick={() => {
-                  layout.sidebar.open()
-                  navigateToProject(props.project.worktree)
-                }}
-              >
-                View all sessions
-              </Button>
-            </div>
+            <Show when={!selected()}>
+              <div class="px-2 py-2 border-t border-border-weak-base">
+                <Button
+                  variant="ghost"
+                  class="flex w-full text-left justify-start text-text-base px-2"
+                  onClick={() => {
+                    layout.sidebar.open()
+                    navigateToProject(props.project.worktree)
+                  }}
+                >
+                  View all sessions
+                </Button>
+              </div>
+            </Show>
           </div>
         </HoverCard>
       </div>
