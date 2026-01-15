@@ -1338,16 +1338,16 @@ export default function Layout(props: ParentProps) {
                         <DropdownMenu.Portal>
                           <DropdownMenu.Content class="mt-1">
                             <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
-                              <DropdownMenu.ItemLabel>Edit project</DropdownMenu.ItemLabel>
+                              <DropdownMenu.ItemLabel>Edit</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
-                              <DropdownMenu.ItemLabel>Close project</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Separator />
                             <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces(p.worktree)}>
                               <DropdownMenu.ItemLabel>
                                 {layout.sidebar.workspaces(p.worktree)() ? "Disable workspaces" : "Enable workspaces"}
                               </DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator />
+                            <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
+                              <DropdownMenu.ItemLabel>Close</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
                           </DropdownMenu.Content>
                         </DropdownMenu.Portal>
