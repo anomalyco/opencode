@@ -29,16 +29,37 @@ function parse(tip: string): TipPart[] {
 
 export function Tips() {
   const theme = useTheme().theme
-  const parts = parse(TIPS[Math.floor(Math.random() * TIPS.length)])
+  const [index, setIndex] = createSignal(Math.floor(Math.random() * TIPS.length))
+  const [hover, setHover] = createSignal(false)
+  const parts = createMemo(() => parse(TIPS[index()]))
+
+  function cycle() {
+    setIndex((i) => (i + 1) % TIPS.length)
+  }
 
   return (
-    <box flexDirection="row" maxWidth="100%">
+    <box
+      flexDirection="row"
+      maxWidth="100%"
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+      onMouseUp={cycle}
+    >
       <text flexShrink={0} style={{ fg: theme.warning }}>
         ● Tip{" "}
       </text>
       <text flexShrink={1}>
-        <For each={parts}>
-          {(part) => <span style={{ fg: part.highlight ? theme.text : theme.textMuted }}>{part.text}</span>}
+        <For each={parts()}>
+          {(part) => (
+            <span
+              style={{
+                fg: part.highlight ? theme.text : theme.textMuted,
+                underline: hover(),
+              }}
+            >
+              {part.text}
+            </span>
+          )}
         </For>
       </text>
     </box>
