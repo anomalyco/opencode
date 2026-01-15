@@ -13,6 +13,8 @@ import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
+import { Global } from "@/global"
+import path from "path"
 
 export namespace Agent {
   export const Info = z
@@ -53,6 +55,8 @@ export namespace Agent {
         [Truncate.GLOB]: "allow",
       },
       question: "deny",
+      plan_enter: "deny",
+      plan_exit: "deny",
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
       read: {
         "*": "allow",
@@ -71,6 +75,7 @@ export namespace Agent {
           defaults,
           PermissionNext.fromConfig({
             question: "allow",
+            plan_enter: "allow",
           }),
           user,
         ),
@@ -84,9 +89,14 @@ export namespace Agent {
           defaults,
           PermissionNext.fromConfig({
             question: "allow",
+            plan_exit: "allow",
+            external_directory: {
+              [path.join(Global.Path.data, "plans", "*")]: "allow",
+            },
             edit: {
               "*": "deny",
-              ".opencode/plan/*.md": "allow",
+              [path.join(".opencode", "plans", "*.md")]: "allow",
+              [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
             },
           }),
           user,

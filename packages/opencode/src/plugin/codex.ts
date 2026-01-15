@@ -361,37 +361,6 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
           }
         }
 
-        if (!provider.models["gpt-5.2-codex"]) {
-          const model = {
-            id: "gpt-5.2-codex",
-            providerID: "openai",
-            api: {
-              id: "gpt-5.2-codex",
-              url: "https://chatgpt.com/backend-api/codex",
-              npm: "@ai-sdk/openai",
-            },
-            name: "GPT-5.2 Codex",
-            capabilities: {
-              temperature: false,
-              reasoning: true,
-              attachment: true,
-              toolcall: true,
-              input: { text: true, audio: false, image: true, video: false, pdf: false },
-              output: { text: true, audio: false, image: false, video: false, pdf: false },
-              interleaved: false,
-            },
-            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-            limit: { context: 400000, output: 128000 },
-            status: "active" as const,
-            options: {},
-            headers: {},
-            release_date: "2025-12-18",
-            variants: {} as Record<string, Record<string, any>>,
-          }
-          model.variants = ProviderTransform.variants(model)
-          provider.models["gpt-5.2-codex"] = model
-        }
-
         // Zero out costs for Codex (included with ChatGPT subscription)
         for (const model of Object.values(provider.models)) {
           model.cost = {

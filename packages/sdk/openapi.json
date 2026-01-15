@@ -981,7 +981,16 @@
             "name": "directory",
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Filter sessions by project directory"
+          },
+          {
+            "in": "query",
+            "name": "roots",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Only return root sessions (no parentID)"
           },
           {
             "in": "query",
@@ -3561,6 +3570,9 @@
                                   "type": "object",
                                   "properties": {
                                     "context": {
+                                      "type": "number"
+                                    },
+                                    "input": {
                                       "type": "number"
                                     },
                                     "output": {
@@ -7122,6 +7134,10 @@
           "multiple": {
             "description": "Allow selecting multiple choices",
             "type": "boolean"
+          },
+          "custom": {
+            "description": "Allow typing a custom answer (default: true)",
+            "type": "boolean"
           }
         },
         "required": ["question", "header", "options"]
@@ -7507,6 +7523,9 @@
             "type": "string",
             "pattern": "^ses.*"
           },
+          "slug": {
+            "type": "string"
+          },
           "projectID": {
             "type": "string"
           },
@@ -7593,7 +7612,7 @@
             "required": ["messageID"]
           }
         },
-        "required": ["id", "projectID", "directory", "title", "version", "time"]
+        "required": ["id", "slug", "projectID", "directory", "title", "version", "time"]
       },
       "Event.session.created": {
         "type": "object",
@@ -8152,7 +8171,27 @@
           },
           "session_rename": {
             "description": "Rename session",
-            "default": "none",
+            "default": "ctrl+r",
+            "type": "string"
+          },
+          "session_delete": {
+            "description": "Delete session",
+            "default": "ctrl+d",
+            "type": "string"
+          },
+          "stash_delete": {
+            "description": "Delete stash entry",
+            "default": "ctrl+d",
+            "type": "string"
+          },
+          "model_provider_list": {
+            "description": "Open provider list from model dialog",
+            "default": "ctrl+a",
+            "type": "string"
+          },
+          "model_favorite_toggle": {
+            "description": "Toggle model favorite status",
+            "default": "ctrl+f",
             "type": "string"
           },
           "session_share": {
@@ -8832,6 +8871,9 @@
                     "context": {
                       "type": "number"
                     },
+                    "input": {
+                      "type": "number"
+                    },
                     "output": {
                       "type": "number"
                     }
@@ -8991,7 +9033,7 @@
             "type": "boolean"
           },
           "timeout": {
-            "description": "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
+            "description": "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991
@@ -9057,7 +9099,7 @@
             ]
           },
           "timeout": {
-            "description": "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
+            "description": "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991
@@ -9960,6 +10002,9 @@
             "type": "object",
             "properties": {
               "context": {
+                "type": "number"
+              },
+              "input": {
                 "type": "number"
               },
               "output": {

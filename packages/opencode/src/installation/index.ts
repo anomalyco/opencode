@@ -83,6 +83,14 @@ export namespace Installation {
         name: "brew" as const,
         command: () => $`brew list --formula opencode`.throws(false).quiet().text(),
       },
+      {
+        name: "scoop" as const,
+        command: () => $`scoop list opencode`.throws(false).quiet().text(),
+      },
+      {
+        name: "choco" as const,
+        command: () => $`choco list --limit-output opencode`.throws(false).quiet().text(),
+      },
     ]
 
     checks.sort((a, b) => {
@@ -95,7 +103,9 @@ export namespace Installation {
 
     for (const check of checks) {
       const output = await check.command()
-      if (output.includes(check.name === "brew" ? "opencode" : "opencode-ai")) {
+      const installedName =
+        check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
+      if (output.includes(installedName)) {
         return check.name
       }
     }
@@ -144,20 +154,28 @@ export namespace Installation {
         })
         break
       }
+      case "choco":
+        cmd = $`echo Y | choco upgrade opencode --version=${target}`
+        break
+      case "scoop":
+        cmd = $`scoop install extras/opencode@${target}`
+        break
       default:
         throw new Error(`Unknown method: ${method}`)
     }
     const result = await cmd.quiet().throws(false)
+    if (result.exitCode !== 0) {
+      const stderr = method === "choco" ? "not running from an elevated command shell" : result.stderr.toString("utf8")
+      throw new UpgradeFailedError({
+        stderr: stderr,
+      })
+    }
     log.info("upgraded", {
       method,
       target,
       stdout: result.stdout.toString(),
       stderr: result.stderr.toString(),
     })
-    if (result.exitCode !== 0)
-      throw new UpgradeFailedError({
-        stderr: result.stderr.toString("utf8"),
-      })
     await $`${process.execPath} --version`.nothrow().quiet().text()
   }
 
@@ -188,6 +206,29 @@ export namespace Installation {
       })
       const channel = CHANNEL
       return fetch(`${registry}/opencode-ai/${channel}`)
+        .then((res) => {
+          if (!res.ok) throw new Error(res.statusText)
+          return res.json()
+        })
+        .then((data: any) => data.version)
+    }
+
+    if (detectedMethod === "choco") {
+      return fetch(
+        "https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27opencode%27%20and%20IsLatestVersion&$select=Version",
+        { headers: { Accept: "application/json;odata=verbose" } },
+      )
+        .then((res) => {
+          if (!res.ok) throw new Error(res.statusText)
+          return res.json()
+        })
+        .then((data: any) => data.d.results[0].Version)
+    }
+
+    if (detectedMethod === "scoop") {
+      return fetch("https://raw.githubusercontent.com/ScoopInstaller/Extras/master/bucket/opencode.json", {
+        headers: { Accept: "application/json" },
+      })
         .then((res) => {
           if (!res.ok) throw new Error(res.statusText)
           return res.json()
