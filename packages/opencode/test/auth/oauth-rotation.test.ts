@@ -210,4 +210,115 @@ describe("OAuth subscription failover", () => {
     expect(afterRateLimit[0]).toBe(a2.recordID)
     expect(afterRateLimit[1]).toBe(a1.recordID)
   })
+
+  test("does not retry non-replayable bodies but rotates for the next request", async () => {
+    await Auth.remove(providerID)
+
+    const a1 = await Auth.addOAuth(providerID, {
+      refresh: "r1",
+      access: "a1",
+      expires: Date.now() + 60_000,
+    })
+    const a2 = await Auth.addOAuth(providerID, {
+      refresh: "r2",
+      access: "a2",
+      expires: Date.now() + 60_000,
+    })
+
+    const counts = new Map<string, number>()
+    const baseFetch = async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      const auth = await Auth.get(providerID)
+      expect(auth?.type).toBe("oauth")
+      if (!auth || auth.type !== "oauth") return new Response("no auth", { status: 500 })
+
+      counts.set(auth.refresh, (counts.get(auth.refresh) ?? 0) + 1)
+      return new Response("rate limited", { status: 429 })
+    }
+
+    const fetchWithFailover = createOAuthRotatingFetch(baseFetch, { providerID })
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("payload"))
+        controller.close()
+      },
+    })
+    const response = await fetchWithFailover("https://example.com", { method: "POST", body })
+
+    expect(response.status).toBe(429)
+    expect(counts.get("r1") ?? 0).toBe(1)
+    expect(counts.get("r2") ?? 0).toBe(0)
+
+    const order = await Auth.OAuthPool.orderedIDs(providerID)
+    expect(order[0]).toBe(a2.recordID)
+    expect(order[1]).toBe(a1.recordID)
+  })
+
+  test("returns the last response when all credentials are exhausted", async () => {
+    await Auth.remove(providerID)
+
+    const a1 = await Auth.addOAuth(providerID, {
+      refresh: "r1",
+      access: "a1",
+      expires: Date.now() + 60_000,
+    })
+    const a2 = await Auth.addOAuth(providerID, {
+      refresh: "r2",
+      access: "a2",
+      expires: Date.now() + 60_000,
+    })
+
+    const baseFetch = async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      const auth = await Auth.get(providerID)
+      expect(auth?.type).toBe("oauth")
+      if (!auth || auth.type !== "oauth") return new Response("no auth", { status: 500 })
+      return new Response("rate limited", { status: 429 })
+    }
+
+    const fetchWithFailover = createOAuthRotatingFetch(baseFetch, { providerID })
+    const response = await fetchWithFailover("https://example.com", { method: "POST", body: "{}" })
+
+    expect(response.status).toBe(429)
+
+    const records = await Auth.OAuthPool.list(providerID)
+    const recordByID = new Map(records.map((record) => [record.id, record]))
+    expect(recordByID.get(a1.recordID)?.health.failureCount ?? 0).toBe(1)
+    expect(recordByID.get(a2.recordID)?.health.failureCount ?? 0).toBe(1)
+  })
+
+  test("fails over when a request throws", async () => {
+    await Auth.remove(providerID)
+
+    const a1 = await Auth.addOAuth(providerID, {
+      refresh: "r1",
+      access: "a1",
+      expires: Date.now() + 60_000,
+    })
+    const a2 = await Auth.addOAuth(providerID, {
+      refresh: "r2",
+      access: "a2",
+      expires: Date.now() + 60_000,
+    })
+
+    const baseFetch = async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      const auth = await Auth.get(providerID)
+      expect(auth?.type).toBe("oauth")
+      if (!auth || auth.type !== "oauth") return new Response("no auth", { status: 500 })
+
+      if (auth.refresh === "r1") {
+        throw new Error("network down")
+      }
+
+      return new Response("ok", { status: 200 })
+    }
+
+    const fetchWithFailover = createOAuthRotatingFetch(baseFetch, { providerID })
+    const response = await fetchWithFailover("https://example.com", { method: "POST", body: "{}" })
+
+    expect(response.status).toBe(200)
+
+    const records = await Auth.OAuthPool.list(providerID)
+    const recordByID = new Map(records.map((record) => [record.id, record]))
+    expect(recordByID.get(a1.recordID)?.health.failureCount ?? 0).toBe(1)
+    expect(recordByID.get(a2.recordID)?.health.failureCount ?? 0).toBe(0)
+  })
 })

@@ -4,12 +4,13 @@ import { CredentialManager } from "./credential-manager"
 
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 30_000
 const DEFAULT_AUTH_FAILURE_COOLDOWN_MS = 5 * 60_000
+const DEFAULT_MAX_ATTEMPTS = 5
 
 function isReadableStream(value: unknown): value is ReadableStream {
   return typeof ReadableStream !== "undefined" && value instanceof ReadableStream
 }
 
-function isAsyncIterable(value: unknown): boolean {
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
   return typeof value === "object" && value !== null && Symbol.asyncIterator in value
 }
 
@@ -53,6 +54,9 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
     providerID: string
     namespace?: string
     maxAttempts?: number
+    rateLimitCooldownMs?: number
+    authFailureCooldownMs?: number
+    toastDurationMs?: number
   },
 ): TFetch {
   const namespace = (opts.namespace ?? "default").trim() || "default"
@@ -68,7 +72,10 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
     let allowRetry =
       isReplayableBody(init?.body) && (!inputIsRequest || (!input.bodyUsed && !isReadableStream(input.body)))
 
-    let maxAttempts = Math.max(1, opts.maxAttempts ?? candidates.length)
+    const rateLimitCooldownMs = opts.rateLimitCooldownMs ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS
+    const authFailureCooldownMs = opts.authFailureCooldownMs ?? DEFAULT_AUTH_FAILURE_COOLDOWN_MS
+    const maxAttemptBudget = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
+    let maxAttempts = Math.max(1, maxAttemptBudget)
     if (!allowRetry) {
       maxAttempts = 1
     } else if (maxAttempts > candidates.length) {
@@ -89,12 +96,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const now = Date.now()
 
-      const nextID =
-        candidates.find((id) => {
-          if (attempted.has(id)) return false
-          const cooldownUntil = recordByID.get(id)?.health.cooldownUntil
-          return !cooldownUntil || cooldownUntil <= now
-        }) ?? candidates.find((id) => !attempted.has(id))
+      const nextID = pickNextCandidate(now)
 
       if (!nextID) break
       attempted.add(nextID)
@@ -113,6 +115,17 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
       const hasMoreAttempts = attempt + 1 < maxAttempts
 
       const run = () => withOAuthRecord(opts.providerID, nextID, () => fetchFn(attemptInput, init))
+      const notifyFailover = async (statusCode: number) => {
+        const candidate = pickNextCandidate(Date.now())
+        if (!candidate) return
+        await CredentialManager.notifyFailover({
+          providerID: opts.providerID,
+          fromRecordID: nextID,
+          toRecordID: candidate,
+          statusCode,
+          toastDurationMs: opts.toastDurationMs,
+        })
+      }
 
       let response: Response
       try {
@@ -126,6 +139,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
           ok: false,
         })
         await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
+        await notifyFailover(0)
         if (!hasMoreAttempts) throw e
         continue
       }
@@ -141,7 +155,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
       }
 
       if (response.status === 429) {
-        const cooldownMs = parseRetryAfterMs(response) ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS
+        const cooldownMs = parseRetryAfterMs(response) ?? rateLimitCooldownMs
         await Auth.OAuthPool.recordOutcome({
           providerID: opts.providerID,
           recordID: nextID,
@@ -150,17 +164,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
           cooldownUntil: Date.now() + cooldownMs,
         })
         await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
-        if (hasMoreAttempts) {
-          const candidate = pickNextCandidate(Date.now())
-          if (candidate && candidate !== nextID) {
-            void CredentialManager.notifyFailover({
-              providerID: opts.providerID,
-              fromRecordID: nextID,
-              toRecordID: candidate,
-              statusCode: response.status,
-            })
-          }
-        }
+        await notifyFailover(response.status)
         if (!hasMoreAttempts) return response
         await drainResponse(response)
         continue
@@ -171,7 +175,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
 
         await Auth.OAuthPool.markAccessExpired(opts.providerID, namespace, nextID)
         if (!allowRetry) {
-          const cooldownUntil = Date.now() + DEFAULT_AUTH_FAILURE_COOLDOWN_MS
+          const cooldownUntil = Date.now() + authFailureCooldownMs
           await Auth.OAuthPool.recordOutcome({
             providerID: opts.providerID,
             recordID: nextID,
@@ -180,17 +184,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
             cooldownUntil,
           })
           await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
-          if (hasMoreAttempts) {
-            const candidate = pickNextCandidate(Date.now())
-            if (candidate && candidate !== nextID) {
-              void CredentialManager.notifyFailover({
-                providerID: opts.providerID,
-                fromRecordID: nextID,
-                toRecordID: candidate,
-                statusCode: response.status,
-              })
-            }
-          }
+          await notifyFailover(response.status)
           return response
         }
 
@@ -209,7 +203,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
           }
 
           if (retry.status === 429) {
-            const cooldownMs = parseRetryAfterMs(retry) ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS
+            const cooldownMs = parseRetryAfterMs(retry) ?? rateLimitCooldownMs
             await Auth.OAuthPool.recordOutcome({
               providerID: opts.providerID,
               recordID: nextID,
@@ -218,23 +212,13 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
               cooldownUntil: Date.now() + cooldownMs,
             })
             await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
-            if (hasMoreAttempts) {
-              const candidate = pickNextCandidate(Date.now())
-              if (candidate && candidate !== nextID) {
-                void CredentialManager.notifyFailover({
-                  providerID: opts.providerID,
-                  fromRecordID: nextID,
-                  toRecordID: candidate,
-                  statusCode: retry.status,
-                })
-              }
-            }
+            await notifyFailover(retry.status)
             if (!hasMoreAttempts) return retry
             await drainResponse(retry)
             continue
           }
 
-          const cooldownUntil = Date.now() + DEFAULT_AUTH_FAILURE_COOLDOWN_MS
+          const cooldownUntil = Date.now() + authFailureCooldownMs
           await Auth.OAuthPool.recordOutcome({
             providerID: opts.providerID,
             recordID: nextID,
@@ -243,17 +227,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
             cooldownUntil,
           })
           await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
-          if (hasMoreAttempts) {
-            const candidate = pickNextCandidate(Date.now())
-            if (candidate && candidate !== nextID) {
-              void CredentialManager.notifyFailover({
-                providerID: opts.providerID,
-                fromRecordID: nextID,
-                toRecordID: candidate,
-                statusCode: retry.status,
-              })
-            }
-          }
+          await notifyFailover(retry.status)
           if (!hasMoreAttempts) return retry
           await drainResponse(retry)
           continue
@@ -265,6 +239,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
             statusCode: 0,
             ok: false,
           })
+          await notifyFailover(0)
           if (!hasMoreAttempts) throw e
         }
 
