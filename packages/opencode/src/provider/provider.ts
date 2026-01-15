@@ -906,6 +906,19 @@ export namespace Provider {
       mergeProvider(providerID, partial)
     }
 
+    // detect and populate models
+    await Promise.all(
+      Object.entries(providers).map(async ([providerID, provider]) => {
+        try {
+          await ProviderModelDetection.populateModels(provider, config.provider?.[providerID], modelsDev[providerID])
+          log.info("detect models", { providerID })
+        }
+        catch (error) {
+          log.warn(`detect models ${error}`, { providerID })
+        }
+      })
+    )
+
     for (const [providerID, provider] of Object.entries(providers)) {
       if (!isProviderAllowed(providerID)) {
         delete providers[providerID]
@@ -943,15 +956,6 @@ export namespace Provider {
       }
 
       log.info("found", { providerID })
-    }
-
-    // auto-detect models
-    for (const [providerID, provider] of Object.entries(providers)) {
-      try {
-        await ProviderModelDetection.populateModels(provider, config.provider?.[providerID], modelsDev[providerID])
-      } catch (error) {
-        log.warn("failed to auto-detect models", { providerID, error })
-      }
     }
 
     return {

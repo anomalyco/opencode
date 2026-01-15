@@ -66,7 +66,7 @@ export namespace ProviderModelDetection {
     provider: Provider.Info,
     configProvider?: Config.Provider,
     modelsDevProvider?: ModelsDev.Provider,
-  ): Promise<undefined> {
+  ): Promise<void> {
     const providerNPM = configProvider?.npm ?? modelsDevProvider?.npm ?? "@ai-sdk/openai-compatible"
     const providerBaseURL = configProvider?.options?.baseURL ?? configProvider?.api ?? modelsDevProvider?.api
 
@@ -123,26 +123,21 @@ export namespace ProviderModelDetection.OpenAICompatible {
     try {
       res = await fetchFn(`${baseURL}/models`, {
         headers,
-        signal: AbortSignal.timeout(5 * 1000),
+        signal: AbortSignal.timeout(3 * 1000),
       })
     } catch (error) {
-      throw new Error(`failed to fetch: ${error}`)
+      throw new Error(`failed to fetch ${baseURL}/models\n${error}`)
     }
     if (!res.ok) {
-      throw new Error(`failed to fetch: http status ${res.status}`)
+      throw new Error(`bad http status ${res.status}`)
     }
     try {
       parsed = OpenAICompatibleResponse.parse(await res.json())
     } catch (error) {
       if (error instanceof z.ZodError) {
-        throw new Error(`failed to parse response: ${error.message}`)
+        throw new Error(`bad data structure\n${error}`)
       }
-      throw new Error(`unknown error: ${error}`)
-    }
-
-    let npm = "@ai-sdk/openai-compatible"
-    if (provider.id === "github-copilot" || provider.id === "github-copilot-enterprise") {
-      npm = "@ai-sdk/github-copilot"
+      throw new Error(`unknown error\n${error}`)
     }
 
     return Object.fromEntries(
@@ -156,7 +151,7 @@ export namespace ProviderModelDetection.OpenAICompatible {
             api: {
               id: model.id,
               url: baseURL,
-              npm,
+              npm: "@ai-sdk/openai-compatible",
             },
             name: model.id,
           },
