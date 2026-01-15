@@ -1036,11 +1036,9 @@ export namespace Config {
             .describe("Tools that should only be available to primary agents."),
           continue_loop_on_deny: z.boolean().optional().describe("Continue the agent loop when a tool call is denied"),
           mcp_timeout: z
-            .number()
-            .int()
-            .positive()
+            .union([z.literal("never"), z.number().int().positive()])
             .optional()
-            .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+            .describe("Timeout in milliseconds for MCP requests, or 'never' to disable timeout"),
         })
         .optional(),
     })

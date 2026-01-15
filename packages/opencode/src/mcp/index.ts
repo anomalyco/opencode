@@ -125,6 +125,7 @@ export namespace MCP {
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
+        const timeout = config.experimental?.mcp_timeout
         return client.callTool(
           {
             name: mcpTool.name,
@@ -133,7 +134,7 @@ export namespace MCP {
           CallToolResultSchema,
           {
             resetTimeoutOnProgress: true,
-            timeout: config.experimental?.mcp_timeout,
+            timeout: timeout === "never" ? undefined : timeout,
           },
         )
       },
