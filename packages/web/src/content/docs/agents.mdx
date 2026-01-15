@@ -436,10 +436,6 @@ permission:
 Only analyze code and suggest changes.
 ```
 
-:::tip
-Use pattern matching for commands with arguments. `"grep *"` allows `grep pattern file.txt`, while `"grep"` alone would block it. Commands like `git status` work for default behavior but require explicit permission (like `"git status*"`) when arguments are passed.
-:::
-
 You can set permissions for specific bash commands.
 
 ```json title="opencode.json" {7}
