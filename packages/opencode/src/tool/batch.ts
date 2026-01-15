@@ -19,6 +19,11 @@ export const BatchTool = Tool.define("batch", async () => {
         .min(1, "Provide at least one tool call")
         .describe("Array of tool calls to execute in parallel"),
     }),
+    /**
+     * Formats validation errors for the batch tool parameters.
+     * @param error - The Zod validation error
+     * @returns Formatted error message with details
+     */
     formatValidationError(error) {
       const formattedErrors = error.issues
         .map((issue) => {
@@ -29,6 +34,12 @@ export const BatchTool = Tool.define("batch", async () => {
 
       return `Invalid parameters for tool 'batch':\n${formattedErrors}\n\nExpected payload format:\n  [{"tool": "tool_name", "parameters": {...}}, {...}]`
     },
+    /**
+     * Executes multiple tool calls in parallel, up to a maximum of 10.
+     * @param params - The tool parameters containing tool_calls array
+     * @param ctx - The execution context
+     * @returns Promise resolving to the execution result
+     */
     async execute(params, ctx) {
       const { Session } = await import("../session")
       const { Identifier } = await import("../id/id")

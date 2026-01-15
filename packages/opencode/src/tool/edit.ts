@@ -31,6 +31,13 @@ export const EditTool = Tool.define("edit", {
     newString: z.string().describe("The text to replace it with (must be different from oldString)"),
     replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
   }),
+  /**
+   * Executes the edit operation on a file, replacing oldString with newString.
+   * Handles file permissions, creates diffs, and validates changes with LSP.
+   * @param params - The edit parameters
+   * @param ctx - The execution context
+   * @returns Promise resolving to the edit result with metadata
+   */
   async execute(params, ctx) {
     if (!params.filePath) {
       throw new Error("filePath is required")
@@ -171,10 +178,20 @@ function levenshtein(a: string, b: string): number {
   return matrix[a.length][b.length]
 }
 
+/**
+ * Simple replacer that yields the exact find string.
+ * @param _content - The content (unused)
+ * @param find - The string to find
+ */
 export const SimpleReplacer: Replacer = function* (_content, find) {
   yield find
 }
 
+/**
+ * Replacer that matches lines by trimming whitespace.
+ * @param content - The content to search in
+ * @param find - The string to find
+ */
 export const LineTrimmedReplacer: Replacer = function* (content, find) {
   const originalLines = content.split("\n")
   const searchLines = find.split("\n")

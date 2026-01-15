@@ -70,6 +70,146 @@ PowerShell Variable Handling:
 - ❌ WRONG: powershell -Command "foreach ($i in 1,2,3) { Write-Host $i }"
 - CRITICAL: Use single quotes to prevent bash $ interpretation
 
+Bash Variable Syntax Not Supported in CMD:
+- The `Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.
+
+All commands run in ${directory} by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID using `cd <directory> && <command>` patterns - use `workdir` instead.
+
+IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) - use the specialized tools for this instead.
+
+Before executing the command, please follow these steps:
+
+1. Directory Verification:
+   - If the command will create new directories or files, first use `ls` to verify the parent directory exists and is the correct location
+   - For example, before running "mkdir foo/bar", first use `ls foo` to check that "foo" exists and is the intended parent directory
+
+2. Command Execution:
+   - Always quote file paths that contain spaces with double quotes (e.g., rm "path with spaces/file.txt")
+   - Examples of proper quoting:
+     - mkdir "/Users/name/My Documents" (correct)
+     - mkdir /Users/name/My Documents (incorrect - will fail)
+     - python "/path/with spaces/script.py" (correct)
+     - python /path/with spaces/script.py (incorrect - will fail)
+   - After ensuring proper quoting, execute the command.
+   - Capture the output of the command.
+
+Usage notes:
+  - The command argument is required.
+  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
+  - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
+  - If the output exceeds ${maxLines} lines or ${maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Because of this, you do NOT need to use `head`, `tail`, or other truncation commands to limit output - just run the command directly.
+
+  - Avoid using Bash with the `find`, `grep`, `cat`, `head`, `tail`, `sed`, `awk`, or `echo` commands, unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
+    - File search: Use Glob (NOT find or ls)
+    - Content search: Use Grep (NOT grep or rg)
+    - Read files: Use Read (NOT cat/head/tail)
+    - Edit files: Use Edit (NOT sed/awk)
+    - Write files: Use Write (NOT echo >/cat <<EOF)
+    - Communication: Output text directly (NOT echo/printf)
+  - When issuing multiple commands:
+    - If the commands are independent and can run in parallel, make multiple Bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two Bash tool calls in parallel.
+    - If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m "message" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead.
+    - Use ';' only when you need to run commands sequentially but don't care if earlier commands fail
+    - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
+  - AVOID using `cd <directory> && <command>`. Use the `workdir` parameter to change directories instead.
+    <good-example>
+    Use workdir="/foo/bar" with command: pytest tests
+    </good-example>
+    <bad-example>
+    cd /foo/bar && pytest tests
+    </bad-example>
+
+Windows Command Support - Native Execution:
+
+- Windows CMD builtins are now supported natively (dir, copy, del, mkdir, echo, type, etc.)
+- Bare CMD commands are automatically routed to cmd.exe
+- Examples of bare CMD commands: `dir`, `copy file.txt backup.txt`, `echo Hello`, `type file.txt`
+- Explicit `cmd /c` commands still work: `cmd /c dir`, `cmd /c echo test | findstr test`
+- PowerShell support: `powershell -Command "Get-Process"`
+- Note that complex operations with pipes/redirection should use explicit `cmd /c` or PowerShell
+
+CMD Echo Commands:
+- ✅ WORKS: cmd /c echo HelloWorld
+- ❌ ISSUE: When chained with &&, may output Windows banner
+- Solution: Execute commands individually to capture correct output
+
+CMD Quoting and Escaping:
+- Use caret (^) for escaping in CMD: cmd /c echo @echo off^ ^> test.bat
+- Pipes work: cmd /c echo test | findstr test
+- Complex pipes: cmd /c systeminfo | find /c "OS"
+
+ symbol (used for process ID in bash) is bash syntax and not supported in CMD
+- In CMD, use `%random%` for random numbers or other CMD variables
+- Example: Instead of `cmd /c mkdir test_Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.
+
+All commands run in ${directory} by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID using `cd <directory> && <command>` patterns - use `workdir` instead.
+
+IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) - use the specialized tools for this instead.
+
+Before executing the command, please follow these steps:
+
+1. Directory Verification:
+   - If the command will create new directories or files, first use `ls` to verify the parent directory exists and is the correct location
+   - For example, before running "mkdir foo/bar", first use `ls foo` to check that "foo" exists and is the intended parent directory
+
+2. Command Execution:
+   - Always quote file paths that contain spaces with double quotes (e.g., rm "path with spaces/file.txt")
+   - Examples of proper quoting:
+     - mkdir "/Users/name/My Documents" (correct)
+     - mkdir /Users/name/My Documents (incorrect - will fail)
+     - python "/path/with spaces/script.py" (correct)
+     - python /path/with spaces/script.py (incorrect - will fail)
+   - After ensuring proper quoting, execute the command.
+   - Capture the output of the command.
+
+Usage notes:
+  - The command argument is required.
+  - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
+  - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
+  - If the output exceeds ${maxLines} lines or ${maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Because of this, you do NOT need to use `head`, `tail`, or other truncation commands to limit output - just run the command directly.
+
+  - Avoid using Bash with the `find`, `grep`, `cat`, `head`, `tail`, `sed`, `awk`, or `echo` commands, unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
+    - File search: Use Glob (NOT find or ls)
+    - Content search: Use Grep (NOT grep or rg)
+    - Read files: Use Read (NOT cat/head/tail)
+    - Edit files: Use Edit (NOT sed/awk)
+    - Write files: Use Write (NOT echo >/cat <<EOF)
+    - Communication: Output text directly (NOT echo/printf)
+  - When issuing multiple commands:
+    - If the commands are independent and can run in parallel, make multiple Bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two Bash tool calls in parallel.
+    - If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m "message" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead.
+    - Use ';' only when you need to run commands sequentially but don't care if earlier commands fail
+    - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
+  - AVOID using `cd <directory> && <command>`. Use the `workdir` parameter to change directories instead.
+    <good-example>
+    Use workdir="/foo/bar" with command: pytest tests
+    </good-example>
+    <bad-example>
+    cd /foo/bar && pytest tests
+    </bad-example>
+
+Windows Command Support - Native Execution:
+
+- Windows CMD builtins are now supported natively (dir, copy, del, mkdir, echo, type, etc.)
+- Bare CMD commands are automatically routed to cmd.exe
+- Examples of bare CMD commands: `dir`, `copy file.txt backup.txt`, `echo Hello`, `type file.txt`
+- Explicit `cmd /c` commands still work: `cmd /c dir`, `cmd /c echo test | findstr test`
+- PowerShell support: `powershell -Command "Get-Process"`
+- Note that complex operations with pipes/redirection should use explicit `cmd /c` or PowerShell
+
+CMD Echo Commands:
+- ✅ WORKS: cmd /c echo HelloWorld
+- ❌ ISSUE: When chained with &&, may output Windows banner
+- Solution: Execute commands individually to capture correct output
+
+CMD Quoting and Escaping:
+- Use caret (^) for escaping in CMD: cmd /c echo @echo off^ ^> test.bat
+- Pipes work: cmd /c echo test | findstr test
+- Complex pipes: cmd /c systeminfo | find /c "OS"
+
+, use `cmd /c mkdir test_%random%`
+- Alternative: Use PowerShell for more advanced variable handling
+
 Exit Code Tracking:
 - When using && chaining, exit codes may be from the wrong command
 - Solution: Execute commands individually to get accurate exit codes

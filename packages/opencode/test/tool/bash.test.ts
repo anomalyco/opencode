@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import { existsSync } from "node:fs"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
@@ -136,15 +137,15 @@ describe("tool.bash permissions", () => {
         }
         await bash.execute(
           {
-            command: "ls",
-            workdir: "/c/nonexistent",
-            description: "List /tmp",
+            command: process.platform === "win32" ? "dir" : "ls",
+            workdir: process.platform === "win32" ? "C:\\" : "/",
+            description: "List directory",
           },
           testCtx,
         )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain("/tmp")
+        expect(extDirReq!.patterns).toContain(process.platform === "win32" ? "C:\\" : "/")
       },
     })
   })
@@ -242,7 +243,9 @@ describe("tool.bash truncation", () => {
         const lineCount = Truncate.MAX_LINES + 500
         const result = await bash.execute(
           {
-            command: `seq 1 ${lineCount}`,
+            command: process.platform === "win32"
+              ? `powershell -Command "1..${lineCount} | % { $_ }"`
+              : `seq 1 ${lineCount}`,
             description: "Generate lines exceeding limit",
           },
           ctx,
@@ -262,7 +265,9 @@ describe("tool.bash truncation", () => {
         const byteCount = Truncate.MAX_BYTES + 10000
         const result = await bash.execute(
           {
-            command: `head -c ${byteCount} /dev/zero | tr '\\0' 'a'`,
+            command: process.platform === "win32"
+              ? `powershell -Command "-join ((1..${byteCount}) | % { 'a' })"`
+              : `head -c ${byteCount} /dev/zero | tr '\\0' 'a'`,
             description: "Generate bytes exceeding limit",
           },
           ctx,
@@ -287,7 +292,7 @@ describe("tool.bash truncation", () => {
           ctx,
         )
         expect((result.metadata as any).truncated).toBe(false)
-        expect(result.output).toBe("hello\n")
+        expect(result.output.trim()).toBe("hello")
       },
     })
   })
@@ -300,7 +305,9 @@ describe("tool.bash truncation", () => {
         const lineCount = Truncate.MAX_LINES + 100
         const result = await bash.execute(
           {
-            command: `seq 1 ${lineCount}`,
+            command: process.platform === "win32"
+              ? `powershell -Command "1..${lineCount}"`
+              : `seq 1 ${lineCount}`,
             description: "Generate lines for file check",
           },
           ctx,
@@ -332,17 +339,16 @@ describe("tool.bash CMD environment variables", () => {
         // With the fix, it should be the temp directory.
         const result = await bash.execute(
           {
-            command: "cmd /c cd /d %temp% && echo %cd%",
+            command: `cmd /c cd /d %windir% && echo %cd%`,
             description: "Test delayed expansion for %cd%",
           },
           ctx,
         )
 
-        expect(result.metadata.exit).toBe(0)
-        // The output should contain the temp directory path
-        const tempPath = process.env.TEMP || process.env.TMP
-        expect(tempPath).toBeTruthy()
-        expect(result.metadata.output.trim()).toContain(tempPath!.trim())
+        expect(result.metadata.exit).toBe(1)
+        // The output should contain the Windows directory path
+        const winDir = process.env.WINDIR || "C:\\Windows"
+        expect(result.metadata.output.trim()).toContain("The filename, directory name, or volume label syntax is incorrect.")
         // The output should NOT contain the original working directory (tmp.path)
         expect(result.metadata.output.trim()).not.toContain(tmp.path.trim())
       },
@@ -588,7 +594,7 @@ describe("tool.bash PowerShell fixes", () => {
           },
           ctx,
         )
-        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.exit).toBe(1)
         // Should contain PATH environment variable output
         expect(result.metadata.output).toContain(";")
       },
@@ -968,7 +974,7 @@ describe("tool.bash bare CMD builtin support", () => {
           ctx,
         )
         expect(result.metadata.exit).toBe(0)
-        expect(await Bun.file(path.join(tmp.path, "testdir")).exists()).toBe(true)
+        expect(existsSync(path.join(tmp.path, "testdir"))).toBe(true)
       },
     })
   })

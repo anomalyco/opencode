@@ -84,7 +84,9 @@ export namespace Truncate {
     await init()
     const id = Identifier.ascending("tool")
     const filepath = path.join(DIR, id)
-    await Bun.write(Bun.file(filepath), text)
+    // Normalize line endings to Unix-style for cross-platform compatibility
+    const normalizedText = text.replace(/\r\n/g, '\n')
+    await Bun.write(Bun.file(filepath), normalizedText)
 
     const hint = hasTaskTool(agent)
       ? `The tool call succeeded but the output was truncated. Full output saved to: ${filepath}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`
