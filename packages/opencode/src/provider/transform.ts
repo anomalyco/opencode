@@ -164,7 +164,20 @@ export namespace ProviderTransform {
     return msgs
   }
 
-  function applyCaching(msgs: ModelMessage[], providerID: string): ModelMessage[] {
+  async function applyCaching(msgs: ModelMessage[], providerID: string, sessionID?: string): Promise<ModelMessage[]> {
+    // Skip caching if session cache was invalidated (e.g., message deletion)
+    if (sessionID) {
+      const { Session } = await import("../session")
+      const session = await Session.get(sessionID).catch(() => null)
+      if (session?.cacheInvalidated) {
+        // Clear flag and return without cache control markers
+        await Session.update(sessionID, (draft) => {
+          delete draft.cacheInvalidated
+        }).catch(() => {})
+        return msgs
+      }
+    }
+
     const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
     const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
 
@@ -244,7 +257,7 @@ export namespace ProviderTransform {
     })
   }
 
-  export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+  export async function message(msgs: ModelMessage[], model: Provider.Model, sessionID?: string) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
     if (
@@ -253,7 +266,7 @@ export namespace ProviderTransform {
       model.api.id.includes("claude") ||
       model.api.npm === "@ai-sdk/anthropic"
     ) {
-      msgs = applyCaching(msgs, model.providerID)
+      msgs = await applyCaching(msgs, model.providerID, sessionID)
     }
 
     // Remap providerOptions keys from stored providerID to expected SDK key
