@@ -10,7 +10,7 @@ HASH_FILE=${HASH_FILE:-$DEFAULT_HASH_FILE}
 if [ ! -f "$HASH_FILE" ]; then
   cat >"$HASH_FILE" <<EOF
 {
-  "nodeModules": "$DUMMY"
+  "nodeModules": {}
 }
 EOF
 fi
@@ -111,7 +111,7 @@ fi
 
 write_node_modules_hash "$CORRECT_HASH"
 
-jq -e --arg hash "$CORRECT_HASH" '.nodeModules == $hash' "$HASH_FILE" >/dev/null
+jq -e --arg system "$SYSTEM" --arg hash "$CORRECT_HASH" '.nodeModules[$system] == $hash' "$HASH_FILE" >/dev/null
 
 echo "node_modules hash updated for ${SYSTEM}: $CORRECT_HASH"
 
