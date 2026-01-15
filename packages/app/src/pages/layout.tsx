@@ -1122,9 +1122,7 @@ export default function Layout(props: ParentProps) {
                 </div>
               </Collapsible.Trigger>
               <div class="absolute right-1 top-1/2 -translate-y-1/2 hidden items-center gap-0.5 pointer-events-none group-hover/trigger:flex group-focus-within/trigger:flex">
-                <Tooltip class="pointer-events-auto" value="More options" placement="top">
-                  <IconButton icon="dot-grid" variant="ghost" class="size-6 rounded-md" />
-                </Tooltip>
+                <IconButton icon="dot-grid" variant="ghost" class="size-6 rounded-md pointer-events-auto" />
                 <Tooltip class="pointer-events-auto" value="New session" placement="top">
                   <IconButton
                     icon="plus-small"
