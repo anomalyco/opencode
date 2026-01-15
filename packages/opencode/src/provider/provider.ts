@@ -75,14 +75,14 @@ export namespace Provider {
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
+      const betaFlags = ["interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
+      if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
+        betaFlags.unshift("claude-code-20250219")
+      }
+      const headers = betaFlags.length > 0 ? { "anthropic-beta": betaFlags.join(",") } : undefined
       return {
         autoload: false,
-        options: {
-          headers: {
-            "anthropic-beta":
-              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
-          },
-        },
+        options: headers ? { headers } : {},
       }
     },
     async opencode(input) {

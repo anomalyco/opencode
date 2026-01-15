@@ -20,7 +20,9 @@ import { Flag } from "@/flag/flag"
 
 export namespace SystemPrompt {
   export function header(providerID: string) {
-    if (providerID.includes("anthropic")) return [PROMPT_ANTHROPIC_SPOOF.trim()]
+    if (providerID.includes("anthropic") && !Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
+      return [PROMPT_ANTHROPIC_SPOOF.trim()]
+    }
     return []
   }
 
