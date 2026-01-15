@@ -8,19 +8,9 @@ import { useTheme, tint } from "@tui/context/theme"
 // ~ = shadow top only (▀ with fg=shadow)
 const SHADOW_MARKER = /[_^~]/
 
-const LOGO_LEFT = [
-  `                   `,
-  `█▀▀█ █▀▀█ █▀▀█ █▀▀▄`,
-  `█__█ █__█ █^^^ █__█`,
-  `▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀`,
-]
+const LOGO_LEFT = [`                   `, `█▀▀█ █▀▀█ █▀▀█ █▀▀▄`, `█__█ █__█ █^^^ █__█`, `▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀`]
 
-const LOGO_RIGHT = [
-  `             ▄     `,
-  `█▀▀▀ █▀▀█ █▀▀█ █▀▀█`,
-  `█___ █__█ █__█ █^^^`,
-  `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`,
-]
+const LOGO_RIGHT = [`             ▄     `, `█▀▀▀ █▀▀█ █▀▀█ █▀▀█`, `█___ █__█ █__█ █^^^`, `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`]
 
 export function Logo() {
   const { theme } = useTheme()
@@ -36,24 +26,44 @@ export function Logo() {
       const markerIndex = rest.search(SHADOW_MARKER)
 
       if (markerIndex === -1) {
-        elements.push(<text fg={fg} attributes={attrs} selectable={false}>{rest}</text>)
+        elements.push(
+          <text fg={fg} attributes={attrs} selectable={false}>
+            {rest}
+          </text>,
+        )
         break
       }
 
       if (markerIndex > 0) {
-        elements.push(<text fg={fg} attributes={attrs} selectable={false}>{rest.slice(0, markerIndex)}</text>)
+        elements.push(
+          <text fg={fg} attributes={attrs} selectable={false}>
+            {rest.slice(0, markerIndex)}
+          </text>,
+        )
       }
 
       const marker = rest[markerIndex]
       switch (marker) {
         case "_":
-          elements.push(<text fg={fg} bg={shadow} attributes={attrs} selectable={false}> </text>)
+          elements.push(
+            <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
+              {" "}
+            </text>,
+          )
           break
         case "^":
-          elements.push(<text fg={fg} bg={shadow} attributes={attrs} selectable={false}>▀</text>)
+          elements.push(
+            <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
+              ▀
+            </text>,
+          )
           break
         case "~":
-          elements.push(<text fg={shadow} attributes={attrs} selectable={false}>▀</text>)
+          elements.push(
+            <text fg={shadow} attributes={attrs} selectable={false}>
+              ▀
+            </text>,
+          )
           break
       }
 
