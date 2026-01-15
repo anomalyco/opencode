@@ -903,7 +903,13 @@ export default function Layout(props: ParentProps) {
               <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
                 {props.session.title}
               </span>
-              <Show when={props.session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
+              <Show when={props.session.summary}>
+                {(summary) => (
+                  <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
+                    <DiffChanges changes={summary()} />
+                  </div>
+                )}
+              </Show>
             </div>
           </A>
         </Tooltip>
