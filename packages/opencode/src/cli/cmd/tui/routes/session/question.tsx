@@ -372,9 +372,11 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               const value = () => store.answers[index()]?.join(", ") ?? ""
               const answered = () => Boolean(value())
               return (
-                <box paddingLeft={1}>
+                <box paddingLeft={1} flexDirection="column">
                   <text>
-                    <span style={{ fg: theme.textMuted }}>{q.header}:</span>{" "}
+                    <span style={{ fg: theme.textMuted }}>{q.header}:</span>
+                  </text>
+                  <text>
                     <span style={{ fg: answered() ? theme.text : theme.error }}>
                       {answered() ? value() : "(not answered)"}
                     </span>
