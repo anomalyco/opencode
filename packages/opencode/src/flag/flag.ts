@@ -40,6 +40,8 @@ export namespace Flag {
   export const OPENCODE_EXPERIMENTAL_LSP_TOOL = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_LSP_TOOL")
   export const OPENCODE_EXPERIMENTAL_PLAN_MODE = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_PLAN_MODE")
 
+  export const OPENCODE_STRICT_PATH_SANDBOX = truthy("OPENCODE_STRICT_PATH_SANDBOX")
+
   function truthy(key: string) {
     const value = process.env[key]?.toLowerCase()
     return value === "true" || value === "1"

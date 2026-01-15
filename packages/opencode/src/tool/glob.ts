@@ -4,7 +4,8 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
-import { assertExternalDirectory } from "./external-directory"
+import { Filesystem } from "../util/filesystem"
+import { Flag } from "../flag/flag"
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -18,6 +19,22 @@ export const GlobTool = Tool.define("glob", {
       ),
   }),
   async execute(params, ctx) {
+    let search = params.path ?? Instance.directory
+    search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
+
+    const isExternal = !Filesystem.contains(Instance.directory, search)
+    if (isExternal) {
+      if (Flag.OPENCODE_STRICT_PATH_SANDBOX) {
+        throw new Error(`Search path "${search}" is outside the project directory. Searches must be within: ${Instance.directory}`)
+      }
+      await ctx.ask({
+        permission: "external_directory",
+        patterns: [search],
+        always: [path.dirname(search) + "/*"],
+        metadata: { path: search },
+      })
+    }
+
     await ctx.ask({
       permission: "glob",
       patterns: [params.pattern],
@@ -27,10 +44,6 @@ export const GlobTool = Tool.define("glob", {
         path: params.path,
       },
     })
-
-    let search = params.path ?? Instance.directory
-    search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
-    await assertExternalDirectory(ctx, search, { kind: "directory" })
 
     const limit = 100
     const files = []
