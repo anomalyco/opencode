@@ -962,6 +962,7 @@ export namespace Provider {
         providerID: model.providerID,
       })
       const s = await state()
+      const config = await Config.get()
       const provider = s.providers[model.providerID]
       const options = { ...provider.options }
 
@@ -1005,8 +1006,13 @@ export namespace Provider {
         })
       }
 
+      const oauthConfig = config.provider?.[model.providerID]?.oauth
       options["fetch"] = createOAuthRotatingFetch(fetchWithTimeout, {
         providerID: model.providerID,
+        maxAttempts: oauthConfig?.maxAttempts,
+        rateLimitCooldownMs: oauthConfig?.rateLimitCooldownMs,
+        authFailureCooldownMs: oauthConfig?.authFailureCooldownMs,
+        toastDurationMs: oauthConfig?.toastDurationMs,
       })
 
       // Special case: google-vertex-anthropic uses a subpath import

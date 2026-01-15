@@ -1,4 +1,4 @@
-import { AsyncLocalStorage } from "async_hooks"
+import { AsyncLocalStorage } from "node:async_hooks"
 
 type Store = {
   oauthRecordByProvider: Map<string, string>
