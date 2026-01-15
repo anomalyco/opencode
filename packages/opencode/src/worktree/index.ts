@@ -43,6 +43,16 @@ export namespace Worktree {
 
   export type RemoveInput = z.infer<typeof RemoveInput>
 
+  export const ResetInput = z
+    .object({
+      directory: z.string(),
+    })
+    .meta({
+      ref: "WorktreeResetInput",
+    })
+
+  export type ResetInput = z.infer<typeof ResetInput>
+
   export const NotGitError = NamedError.create(
     "WorktreeNotGitError",
     z.object({
@@ -73,6 +83,13 @@ export namespace Worktree {
 
   export const RemoveFailedError = NamedError.create(
     "WorktreeRemoveFailedError",
+    z.object({
+      message: z.string(),
+    }),
+  )
+
+  export const ResetFailedError = NamedError.create(
+    "WorktreeResetFailedError",
     z.object({
       message: z.string(),
     }),
@@ -276,6 +293,116 @@ export namespace Worktree {
       if (deleted.exitCode !== 0) {
         throw new RemoveFailedError({ message: errorText(deleted) || "Failed to delete worktree branch" })
       }
+    }
+
+    return true
+  })
+
+  export const reset = fn(ResetInput, async (input) => {
+    if (Instance.project.vcs !== "git") {
+      throw new NotGitError({ message: "Worktrees are only supported for git projects" })
+    }
+
+    const directory = path.resolve(input.directory)
+    if (directory === path.resolve(Instance.worktree)) {
+      throw new ResetFailedError({ message: "Cannot reset the primary workspace" })
+    }
+
+    const list = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
+    if (list.exitCode !== 0) {
+      throw new ResetFailedError({ message: errorText(list) || "Failed to read git worktrees" })
+    }
+
+    const lines = outputText(list.stdout)
+      .split("\n")
+      .map((line) => line.trim())
+    const entries = lines.reduce<{ path?: string; branch?: string }[]>((acc, line) => {
+      if (!line) return acc
+      if (line.startsWith("worktree ")) {
+        acc.push({ path: line.slice("worktree ".length).trim() })
+        return acc
+      }
+      const current = acc[acc.length - 1]
+      if (!current) return acc
+      if (line.startsWith("branch ")) {
+        current.branch = line.slice("branch ".length).trim()
+      }
+      return acc
+    }, [])
+
+    const entry = entries.find((item) => item.path && path.resolve(item.path) === directory)
+    if (!entry?.path) {
+      throw new ResetFailedError({ message: "Worktree not found" })
+    }
+
+    const remoteList = await $`git remote`.quiet().nothrow().cwd(Instance.worktree)
+    if (remoteList.exitCode !== 0) {
+      throw new ResetFailedError({ message: errorText(remoteList) || "Failed to list git remotes" })
+    }
+
+    const remotes = outputText(remoteList.stdout)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+
+    const remote = remotes.includes("origin")
+      ? "origin"
+      : remotes.length === 1
+        ? remotes[0]
+        : remotes.includes("upstream")
+          ? "upstream"
+          : ""
+
+    const remoteHead = remote
+      ? await $`git symbolic-ref refs/remotes/${remote}/HEAD`.quiet().nothrow().cwd(Instance.worktree)
+      : { exitCode: 1, stdout: undefined, stderr: undefined }
+
+    const remoteRef = remoteHead.exitCode === 0 ? outputText(remoteHead.stdout) : ""
+    const remoteTarget = remoteRef ? remoteRef.replace(/^refs\/remotes\//, "") : ""
+    const remoteBranch = remote && remoteTarget.startsWith(`${remote}/`) ? remoteTarget.slice(`${remote}/`.length) : ""
+
+    const mainCheck = await $`git show-ref --verify --quiet refs/heads/main`.quiet().nothrow().cwd(Instance.worktree)
+    const masterCheck = await $`git show-ref --verify --quiet refs/heads/master`
+      .quiet()
+      .nothrow()
+      .cwd(Instance.worktree)
+    const localBranch = mainCheck.exitCode === 0 ? "main" : masterCheck.exitCode === 0 ? "master" : ""
+
+    const target = remoteBranch ? `${remote}/${remoteBranch}` : localBranch
+    if (!target) {
+      throw new ResetFailedError({ message: "Default branch not found" })
+    }
+
+    if (remoteBranch) {
+      const fetch = await $`git fetch ${remote} ${remoteBranch}`.quiet().nothrow().cwd(Instance.worktree)
+      if (fetch.exitCode !== 0) {
+        throw new ResetFailedError({ message: errorText(fetch) || `Failed to fetch ${target}` })
+      }
+    }
+
+    const checkout = await $`git checkout ${target}`.quiet().nothrow().cwd(entry.path)
+    if (checkout.exitCode !== 0) {
+      throw new ResetFailedError({ message: errorText(checkout) || `Failed to checkout ${target}` })
+    }
+
+    const worktreeBranch = entry.branch?.replace(/^refs\/heads\//, "")
+    if (!worktreeBranch) {
+      throw new ResetFailedError({ message: "Worktree branch not found" })
+    }
+
+    const reset = await $`git reset --hard ${target}`.quiet().nothrow().cwd(entry.path)
+    if (reset.exitCode !== 0) {
+      throw new ResetFailedError({ message: errorText(reset) || "Failed to reset worktree" })
+    }
+
+    const branchReset = await $`git branch -f ${worktreeBranch} ${target}`.quiet().nothrow().cwd(entry.path)
+    if (branchReset.exitCode !== 0) {
+      throw new ResetFailedError({ message: errorText(branchReset) || "Failed to update worktree branch" })
+    }
+
+    const checkoutBranch = await $`git checkout ${worktreeBranch}`.quiet().nothrow().cwd(entry.path)
+    if (checkoutBranch.exitCode !== 0) {
+      throw new ResetFailedError({ message: errorText(checkoutBranch) || "Failed to checkout worktree branch" })
     }
 
     return true

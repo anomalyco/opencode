@@ -942,6 +942,30 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  const resetWorkspace = async (directory: string) => {
+    const current = currentProject()
+    if (!current) return
+    if (directory === current.worktree) return
+
+    const result = await globalSDK.client.worktree
+      .reset({ directory: current.worktree, worktreeResetInput: { directory } })
+      .then((x) => x.data)
+      .catch((err) => {
+        showToast({
+          title: "Failed to reset workspace",
+          description: errorMessage(err),
+        })
+        return false
+      })
+
+    if (!result) return
+
+    showToast({
+      title: "Workspace reset",
+      description: "Workspace now matches the default branch.",
+    })
+  }
+
   function DialogDeleteWorkspace(props: { directory: string }) {
     const name = createMemo(() => getFilename(props.directory))
     const [data, setData] = createStore({
@@ -993,6 +1017,66 @@ export default function Layout(props: ParentProps) {
             </Button>
             <Button variant="primary" size="large" disabled={data.status === "loading"} onClick={handleDelete}>
               Delete workspace
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
+  }
+
+  function DialogResetWorkspace(props: { directory: string }) {
+    const name = createMemo(() => getFilename(props.directory))
+    const [data, setData] = createStore({
+      status: "loading" as "loading" | "ready" | "error",
+      dirty: false,
+    })
+
+    onMount(() => {
+      const current = currentProject()
+      if (!current) {
+        setData({ status: "error", dirty: false })
+        return
+      }
+
+      globalSDK.client.file
+        .status({ directory: props.directory })
+        .then((x) => {
+          const files = x.data ?? []
+          const dirty = files.length > 0
+          setData({ status: "ready", dirty })
+        })
+        .catch(() => {
+          setData({ status: "error", dirty: false })
+        })
+    })
+
+    const handleReset = async () => {
+      await resetWorkspace(props.directory)
+      dialog.close()
+    }
+
+    const description = () => {
+      if (data.status === "loading") return "Checking for unmerged changes..."
+      if (data.status === "error") return "Unable to verify git status."
+      if (!data.dirty) return "No unmerged changes detected."
+      return "Unmerged changes detected in this workspace."
+    }
+
+    return (
+      <Dialog title="Reset workspace">
+        <div class="flex flex-col gap-4 px-2.5 pb-3">
+          <div class="flex flex-col gap-1">
+            <span class="text-14-regular text-text-strong">Reset workspace "{name()}"?</span>
+            <span class="text-12-regular text-text-weak">
+              {description()} This will reset the workspace to match the default branch.
+            </span>
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="large" disabled={data.status === "loading"} onClick={handleReset}>
+              Reset workspace
             </Button>
           </div>
         </div>
@@ -1390,6 +1474,12 @@ export default function Layout(props: ParentProps) {
                       <DropdownMenu.Content>
                         <DropdownMenu.Item onSelect={() => navigate(`/${slug()}/session`)}>
                           <DropdownMenu.ItemLabel>New session</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item
+                          disabled={local()}
+                          onSelect={() => dialog.show(() => <DialogResetWorkspace directory={props.directory} />)}
+                        >
+                          <DropdownMenu.ItemLabel>Reset workspace</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           disabled={local()}
