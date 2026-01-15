@@ -1,36 +1,29 @@
 import { createMemo, createResource, Show } from "solid-js"
 import { Portal } from "solid-js/web"
-import { A, useNavigate, useParams } from "@solidjs/router"
+import { useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
-import { useServer } from "@/context/server"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+// import { useServer } from "@/context/server"
+// import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getFilename } from "@opencode-ai/util/path"
-import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
+import { base64Decode } from "@opencode-ai/util/encode"
 import { iife } from "@opencode-ai/util/iife"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Button } from "@opencode-ai/ui/button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { Select } from "@opencode-ai/ui/select"
 import { Popover } from "@opencode-ai/ui/popover"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { DialogSelectServer } from "@/components/dialog-select-server"
-import { SessionLspIndicator } from "@/components/session-lsp-indicator"
-import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
-import type { Session } from "@opencode-ai/sdk/v2/client"
-import { same } from "@/utils/same"
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
   const layout = useLayout()
   const params = useParams()
-  const navigate = useNavigate()
   const command = useCommand()
-  const server = useServer()
-  const dialog = useDialog()
+  // const server = useServer()
+  // const dialog = useDialog()
   const sync = useSync()
 
   const projectDirectory = createMemo(() => base64Decode(params.dir ?? ""))
@@ -46,28 +39,10 @@ export function SessionHeader() {
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
 
-  const sessions = createMemo(() => (sync.data.session ?? []).filter((s) => !s.parentID))
   const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
-  const parentSession = createMemo(() => {
-    const current = currentSession()
-    if (!current?.parentID) return undefined
-    return sync.data.session.find((s) => s.id === current.parentID)
-  })
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
-  const worktrees = createMemo(() => layout.projects.list().map((p) => p.worktree), [], { equals: same })
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey()))
-
-  function navigateToProject(directory: string) {
-    navigate(`/${base64Encode(directory)}`)
-  }
-
-  function navigateToSession(session: Session | undefined) {
-    if (!session) return
-    // Only navigate if we're actually changing to a different session
-    if (session.id === params.id) return
-    navigate(`/${params.dir}/session/${session.id}`)
-  }
 
   const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
   const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
@@ -99,28 +74,28 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-3">
-              <div class="hidden md:flex items-center gap-1">
-                <Button
-                  size="small"
-                  variant="ghost"
-                  onClick={() => {
-                    dialog.show(() => <DialogSelectServer />)
-                  }}
-                >
-                  <div
-                    classList={{
-                      "size-1.5 rounded-full": true,
-                      "bg-icon-success-base": server.healthy() === true,
-                      "bg-icon-critical-base": server.healthy() === false,
-                      "bg-border-weak-base": server.healthy() === undefined,
-                    }}
-                  />
-                  <Icon name="server" size="small" class="text-icon-weak" />
-                  <span class="text-12-regular text-text-weak truncate max-w-[200px]">{server.name}</span>
-                </Button>
-                <SessionLspIndicator />
-                <SessionMcpIndicator />
-              </div>
+              {/* <div class="hidden md:flex items-center gap-1"> */}
+              {/*   <Button */}
+              {/*     size="small" */}
+              {/*     variant="ghost" */}
+              {/*     onClick={() => { */}
+              {/*       dialog.show(() => <DialogSelectServer />) */}
+              {/*     }} */}
+              {/*   > */}
+              {/*     <div */}
+              {/*       classList={{ */}
+              {/*         "size-1.5 rounded-full": true, */}
+              {/*         "bg-icon-success-base": server.healthy() === true, */}
+              {/*         "bg-icon-critical-base": server.healthy() === false, */}
+              {/*         "bg-border-weak-base": server.healthy() === undefined, */}
+              {/*       }} */}
+              {/*     /> */}
+              {/*     <Icon name="server" size="small" class="text-icon-weak" /> */}
+              {/*     <span class="text-12-regular text-text-weak truncate max-w-[200px]">{server.name}</span> */}
+              {/*   </Button> */}
+              {/*   <SessionLspIndicator /> */}
+              {/*   <SessionMcpIndicator /> */}
+              {/* </div> */}
               <div class="flex items-center gap-1">
                 <Show when={currentSession()?.summary?.files}>
                   <TooltipKeybind
