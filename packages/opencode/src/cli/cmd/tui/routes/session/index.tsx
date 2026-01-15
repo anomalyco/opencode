@@ -504,6 +504,7 @@ export function Session() {
       title: showThinking() ? "Hide thinking" : "Show thinking",
       value: "session.toggle.thinking",
       category: "Session",
+      keybind: "thinking_toggle" as const,
       onSelect: (dialog) => {
         setShowThinking((prev) => !prev)
         dialog.clear()

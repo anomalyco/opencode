@@ -122,6 +122,7 @@ export function SessionTurn(
     messageID: string
     lastUserMessageID?: string
     stepsExpanded?: boolean
+    showReasoning?: boolean
     onStepsExpandedToggle?: () => void
     onUserInteracted?: () => void
     classes?: {
@@ -564,7 +565,7 @@ export function SessionTurn(
                               message={assistantMessage}
                               responsePartId={responsePartId()}
                               hideResponsePart={hideResponsePart()}
-                              hideReasoning={!working()}
+                              hideReasoning={!working() && !props.showReasoning}
                             />
                           )}
                         </For>

@@ -1,4 +1,4 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on, createSignal } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -170,6 +170,8 @@ export default function Page() {
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
+
+  const [showReasoning, setShowReasoning] = createSignal(false)
 
   if (import.meta.env.DEV) {
     createEffect(
@@ -537,6 +539,22 @@ export default function Page() {
         showToast({
           title: "Thinking effort changed",
           description: "The thinking effort has been changed to " + (local.model.variant.current() ?? "Default"),
+        })
+      },
+    },
+    {
+      id: "session.toggle.reasoning",
+      title: showReasoning() ? "Hide reasoning" : "Show reasoning",
+      description: "Toggle visibility of reasoning/thinking content",
+      category: "Session",
+      keybind: "mod+shift+r",
+      onSelect: () => {
+        setShowReasoning((prev) => !prev)
+        showToast({
+          title: showReasoning() ? "Reasoning visible" : "Reasoning hidden",
+          description: showReasoning()
+            ? "Reasoning content will be shown in messages"
+            : "Reasoning content will be hidden from messages",
         })
       },
     },
@@ -1187,6 +1205,7 @@ export default function Page() {
                                     messageID={message.id}
                                     lastUserMessageID={lastUserMessage()?.id}
                                     stepsExpanded={store.expanded[message.id] ?? false}
+                                    showReasoning={showReasoning()}
                                     onStepsExpandedToggle={() =>
                                       setStore("expanded", message.id, (open: boolean | undefined) => !open)
                                     }
