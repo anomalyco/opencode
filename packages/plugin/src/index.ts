@@ -115,7 +115,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 access: string
                 expires: number
                 accountId?: string
-                enterpriseUrl?: string
+                enterpriseUrl?: string // Used for GitHub Copilot Enterprise auth flows.
               }
             | { key: string }
           ))
@@ -136,7 +136,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 access: string
                 expires: number
                 accountId?: string
-                enterpriseUrl?: string
+                enterpriseUrl?: string // Used for GitHub Copilot Enterprise auth flows.
               }
             | { key: string }
           ))

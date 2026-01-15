@@ -321,4 +321,96 @@ describe("OAuth subscription failover", () => {
     expect(recordByID.get(a1.recordID)?.health.failureCount ?? 0).toBe(1)
     expect(recordByID.get(a2.recordID)?.health.failureCount ?? 0).toBe(0)
   })
+
+  test("respects Retry-After HTTP date headers", async () => {
+    await Auth.remove(providerID)
+
+    const a1 = await Auth.addOAuth(providerID, {
+      refresh: "r1",
+      access: "a1",
+      expires: Date.now() + 60_000,
+    })
+    await Auth.addOAuth(providerID, {
+      refresh: "r2",
+      access: "a2",
+      expires: Date.now() + 60_000,
+    })
+
+    const originalNow = Date.now
+    const now = 1_700_000_000_000
+    Date.now = () => now
+
+    try {
+      const retryAt = new Date(now + 5_000).toUTCString()
+      const baseFetch = async (_input: RequestInfo | URL, _init?: RequestInit) => {
+        const auth = await Auth.get(providerID)
+        expect(auth?.type).toBe("oauth")
+        if (!auth || auth.type !== "oauth") return new Response("no auth", { status: 500 })
+
+        if (auth.refresh === "r1") {
+          return new Response("rate limited", {
+            status: 429,
+            headers: {
+              "Retry-After": retryAt,
+            },
+          })
+        }
+
+        return new Response("ok", { status: 200 })
+      }
+
+      const fetchWithFailover = createOAuthRotatingFetch(baseFetch, { providerID })
+      const response = await fetchWithFailover("https://example.com", { method: "POST", body: "{}" })
+
+      expect(response.status).toBe(200)
+
+      const records = await Auth.OAuthPool.list(providerID)
+      const recordByID = new Map(records.map((record) => [record.id, record]))
+      expect(recordByID.get(a1.recordID)?.health.cooldownUntil).toBe(now + 5_000)
+    } finally {
+      Date.now = originalNow
+    }
+  })
+
+  test("falls back when Request.clone throws", async () => {
+    await Auth.remove(providerID)
+
+    await Auth.addOAuth(providerID, {
+      refresh: "r1",
+      access: "a1",
+      expires: Date.now() + 60_000,
+    })
+    await Auth.addOAuth(providerID, {
+      refresh: "r2",
+      access: "a2",
+      expires: Date.now() + 60_000,
+    })
+
+    const counts = new Map<string, number>()
+    const baseFetch = async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      const auth = await Auth.get(providerID)
+      expect(auth?.type).toBe("oauth")
+      if (!auth || auth.type !== "oauth") return new Response("no auth", { status: 500 })
+
+      counts.set(auth.refresh, (counts.get(auth.refresh) ?? 0) + 1)
+
+      if (auth.refresh === "r1") {
+        return new Response("rate limited", { status: 429 })
+      }
+
+      return new Response("ok", { status: 200 })
+    }
+
+    const request = new Request("https://example.com", { method: "POST" })
+    ;(request as { clone: () => Request }).clone = () => {
+      throw new Error("clone failed")
+    }
+
+    const fetchWithFailover = createOAuthRotatingFetch(baseFetch, { providerID })
+    const response = await fetchWithFailover(request)
+
+    expect(response.status).toBe(429)
+    expect(counts.get("r1") ?? 0).toBe(1)
+    expect(counts.get("r2") ?? 0).toBe(0)
+  })
 })
