@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(bun install)",
+      "Bash(./node_modules/.bin/bun install)",
+      "Bash(bun --version:*)",
+      "Bash(dir:*)",
+      "Bash(rustc:*)",
+      "Bash(bun run build)",
+      "Bash(bun run tauri:*)",
+      "Bash(bun run typecheck)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

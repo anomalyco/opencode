@@ -1,0 +1,42 @@
+[package]
+name = "af-console"
+version = "0.0.1"
+description = "Agent Foundry Build Studio"
+authors = ["Agent Foundry"]
+edition = "2021"
+
+[lib]
+name = "af_console_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [ "devtools"] }
+tauri-plugin-opener = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-process = "2"
+tauri-plugin-http = "2"
+tauri-plugin-os = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+uuid = { version = "1", features = ["v4"] }
+ulid = "1"
+chrono = "0.4"
+aliyun-oss-client = "0.10"
+tar = "0.4"
+flate2 = "1.0"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+    "Win32_Security"
+] }
