@@ -35,14 +35,32 @@ export namespace Keybind {
   export function toString(info: Info | undefined): string {
     if (!info) return ""
     const parts: string[] = []
+    const symbols: Record<string, string> = {
+      left: "←",
+      right: "→",
+      up: "↑",
+      down: "↓",
+      pageup: "⇞",
+      pagedown: "⇟",
+      home: "⤒",
+      end: "⤓",
+      escape: "⎋",
+      tab: "⇥",
+      backspace: "⌫",
+      delete: "⌦",
+      enter: "↵",
+      return: "↵",
+      space: "␣",
+    }
 
     if (info.ctrl) parts.push("ctrl")
     if (info.meta) parts.push("alt")
     if (info.super) parts.push("super")
     if (info.shift) parts.push("shift")
     if (info.name) {
-      if (info.name === "delete") parts.push("del")
-      else parts.push(info.name)
+      const symbol = symbols[info.name]
+      if (symbol) parts.push(symbol)
+      if (!symbol) parts.push(info.name)
     }
 
     let result = parts.join("+")

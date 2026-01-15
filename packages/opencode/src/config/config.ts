@@ -788,6 +788,13 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    keybind_hint: z
+      .object({
+        enabled: z.boolean().optional().default(true).describe("Enable keybind hint overlay"),
+        delay_ms: z.number().int().min(0).optional().default(200).describe("Delay before showing keybind hints (ms)"),
+      })
+      .optional()
+      .describe("Keybind hint overlay settings"),
   })
 
   export const Server = z

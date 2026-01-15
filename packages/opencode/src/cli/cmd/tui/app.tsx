@@ -1,8 +1,22 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
-import { TextAttributes } from "@opentui/core"
+import { RGBA, TextAttributes } from "@opentui/core"
+import { Locale } from "@/util/locale"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createSignal,
+  onMount,
+  batch,
+  Show,
+  on,
+  For,
+  createMemo,
+} from "solid-js"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -18,7 +32,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
-import { KeybindProvider } from "@tui/context/keybind"
+import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
@@ -195,6 +209,23 @@ function App() {
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+  const keybind = useKeybind()
+  const hints = createMemo(() => keybind.keybindHints)
+  const columnWidth = 36
+  const columnGap = 2
+  const keyLimit = Math.min(10, Math.max(1, columnWidth - 6))
+  const hintColumns = createMemo(() => {
+    const list = hints()
+    const available = Math.max(1, dimensions().width - 4)
+    const maxColumns = Math.max(1, Math.floor((available + columnGap) / (columnWidth + columnGap)))
+    const total = Math.min(maxColumns, Math.max(1, list.length))
+    const rows = Math.ceil(list.length / total)
+    const columns = Array.from({ length: total }, (_, index) => {
+      const start = index * rows
+      return list.slice(start, start + rows)
+    })
+    return { columns, rows }
+  })
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
@@ -647,6 +678,55 @@ function App() {
           <Session />
         </Match>
       </Switch>
+      <Show when={hints().length}>
+        <box position="absolute" left={0} right={0} bottom={0} alignItems="center">
+          <box
+            width={dimensions().width}
+            flexDirection="column"
+            paddingLeft={4}
+            paddingRight={4}
+            paddingTop={2}
+            paddingBottom={2}
+            backgroundColor={RGBA.fromInts(
+              theme.backgroundPanel.r,
+              theme.backgroundPanel.g,
+              theme.backgroundPanel.b,
+              200,
+            )}
+          >
+            <box flexDirection="row" gap={columnGap}>
+              <For each={hintColumns().columns}>
+                {(column) => (
+                  <box flexDirection="column" width={columnWidth}>
+                    <For each={column}>
+                      {(item) => {
+                        const desc = item.count > 1 ? `+${item.count} keymaps` : item.desc
+                        const keyText = Locale.truncate(item.key, keyLimit)
+                        const descLimit = Math.max(4, columnWidth - keyText.length - 1)
+                        const descText = Locale.truncate(desc, descLimit)
+                        return (
+                          <box flexDirection="row" width={columnWidth} gap={1}>
+                            <text fg={theme.text} wrapMode="none">
+                              {keyText}
+                            </text>
+                            <text fg={theme.textMuted} wrapMode="none">
+                              {descText}
+                            </text>
+                          </box>
+                        )
+                      }}
+                    </For>
+                  </box>
+                )}
+              </For>
+            </box>
+            <box height={1} />
+            <text fg={theme.textMuted}>
+              Input <span style={{ fg: theme.primary }}>{keybind.print("leader")}</span>
+            </text>
+          </box>
+        </box>
+      </Show>
     </box>
   )
 }
