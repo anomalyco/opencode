@@ -10,6 +10,7 @@ export interface TerminalProps extends ComponentProps<"div"> {
   onSubmit?: () => void
   onCleanup?: (pty: LocalPTY) => void
   onConnectError?: (error: unknown) => void
+  onExit?: () => void
 }
 
 type TerminalColors = {
@@ -49,6 +50,7 @@ export const Terminal = (props: TerminalProps) => {
   let handleTextareaBlur: () => void
   let reconnect: number | undefined
   let disposed = false
+  let cleaning = false
 
   const getTerminalColors = (): TerminalColors => {
     const mode = theme.mode()
@@ -166,6 +168,11 @@ export const Terminal = (props: TerminalProps) => {
         return true
       }
 
+      // allow cmd+d and cmd+shift+d for terminal splitting
+      if (event.metaKey && key === "d") {
+        return true
+      }
+
       return false
     })
 
@@ -231,7 +238,6 @@ export const Terminal = (props: TerminalProps) => {
     // console.log("Scroll position:", ydisp)
     // })
     socket.addEventListener("open", () => {
-      console.log("WebSocket connected")
       sdk.client.pty
         .update({
           ptyID: local.pty.id,
@@ -250,7 +256,9 @@ export const Terminal = (props: TerminalProps) => {
       props.onConnectError?.(error)
     })
     socket.addEventListener("close", () => {
-      console.log("WebSocket disconnected")
+      if (!cleaning) {
+        props.onExit?.()
+      }
     })
   })
 
@@ -274,6 +282,7 @@ export const Terminal = (props: TerminalProps) => {
       })
     }
 
+    cleaning = true
     ws?.close()
     t?.dispose()
   })
