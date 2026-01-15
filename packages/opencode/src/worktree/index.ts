@@ -385,6 +385,11 @@ export namespace Worktree {
       throw new ResetFailedError({ message: errorText(checkout) || `Failed to checkout ${target}` })
     }
 
+    const clean = await $`git clean -fd`.quiet().nothrow().cwd(entry.path)
+    if (clean.exitCode !== 0) {
+      throw new ResetFailedError({ message: errorText(clean) || "Failed to clean worktree" })
+    }
+
     const worktreeBranch = entry.branch?.replace(/^refs\/heads\//, "")
     if (!worktreeBranch) {
       throw new ResetFailedError({ message: "Worktree branch not found" })
@@ -393,6 +398,11 @@ export namespace Worktree {
     const reset = await $`git reset --hard ${target}`.quiet().nothrow().cwd(entry.path)
     if (reset.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(reset) || "Failed to reset worktree" })
+    }
+
+    const cleanAfter = await $`git clean -fd`.quiet().nothrow().cwd(entry.path)
+    if (cleanAfter.exitCode !== 0) {
+      throw new ResetFailedError({ message: errorText(cleanAfter) || "Failed to clean worktree" })
     }
 
     const branchReset = await $`git branch -f ${worktreeBranch} ${target}`.quiet().nothrow().cwd(entry.path)

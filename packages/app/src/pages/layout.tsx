@@ -942,10 +942,15 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  const resetWorkspace = async (directory: string, sessions: Session[]) => {
+  const resetWorkspace = async (directory: string) => {
     const current = currentProject()
     if (!current) return
     if (directory === current.worktree) return
+
+    const sessions = await globalSDK.client.session
+      .list({ directory })
+      .then((x) => x.data ?? [])
+      .catch(() => [])
 
     const pending = sessions.filter((session) => session.time.archived === undefined)
     if (pending.length > 0) {
@@ -1047,12 +1052,13 @@ export default function Layout(props: ParentProps) {
       sessions: [] as Session[],
     })
 
-    const refreshSessions = () => {
-      const [workspace] = globalSync.child(props.directory)
-      const sessions = workspace.session
-        .filter((session) => session.directory === workspace.path.directory)
-        .filter((session) => session.time.archived === undefined)
-      setState({ sessions })
+    const refresh = async () => {
+      const sessions = await globalSDK.client.session
+        .list({ directory: props.directory })
+        .then((x) => x.data ?? [])
+        .catch(() => [])
+      const active = sessions.filter((session) => session.time.archived === undefined)
+      setState({ sessions: active })
     }
 
     onMount(() => {
@@ -1068,7 +1074,7 @@ export default function Layout(props: ParentProps) {
           const files = x.data ?? []
           const dirty = files.length > 0
           setState({ status: "ready", dirty })
-          refreshSessions()
+          void refresh()
         })
         .catch(() => {
           setState({ status: "error", dirty: false })
@@ -1076,7 +1082,7 @@ export default function Layout(props: ParentProps) {
     })
 
     const handleReset = async () => {
-      await resetWorkspace(props.directory, state.sessions)
+      await resetWorkspace(props.directory)
       dialog.close()
     }
 
