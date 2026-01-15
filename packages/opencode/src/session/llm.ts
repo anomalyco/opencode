@@ -95,7 +95,11 @@ export namespace LLM {
       !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
     const base = input.small
       ? ProviderTransform.smallOptions(input.model)
-      : ProviderTransform.options(input.model, input.sessionID, provider.options)
+      : ProviderTransform.options({
+          model: input.model,
+          sessionID: input.sessionID,
+          providerOptions: provider.options,
+        })
     const options: Record<string, any> = pipe(
       base,
       mergeDeep(input.model.options),
@@ -104,7 +108,6 @@ export namespace LLM {
     )
     if (isCodex) {
       options.instructions = SystemPrompt.instructions()
-      options.store = false
     }
 
     const params = await Plugin.trigger(
@@ -214,7 +217,7 @@ export namespace LLM {
             async transformParams(args) {
               if (args.type === "stream") {
                 // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, input.model)
+                args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
               }
               return args.params
             },
