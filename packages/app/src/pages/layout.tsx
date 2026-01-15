@@ -596,7 +596,7 @@ export default function Layout(props: ParentProps) {
         id: "theme.cycle",
         title: "Cycle theme",
         category: "Theme",
-        keybind: "mod+shift+t",
+        keybind: "mod+shift+l",
         onSelect: () => cycleTheme(1),
       },
     ]
@@ -618,7 +618,7 @@ export default function Layout(props: ParentProps) {
       id: "theme.scheme.cycle",
       title: "Cycle color scheme",
       category: "Theme",
-      keybind: "mod+shift+s",
+      keybind: "mod+shift+h",
       onSelect: () => cycleColorScheme(1),
     })
 
