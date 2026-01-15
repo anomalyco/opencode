@@ -277,8 +277,7 @@ export namespace File {
     const project = Instance.project
     const full = path.join(Instance.directory, file)
 
-    // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
-    // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
+    // Check if path is lexically contained first (fast check)
     if (!Instance.containsPath(full)) {
       throw new Error(`Access denied: path escapes project directory`)
     }
@@ -287,6 +286,11 @@ export namespace File {
 
     if (!(await bunFile.exists())) {
       return { type: "text", content: "" }
+    }
+
+    const real = await fs.promises.realpath(full)
+    if (!Instance.containsPath(real)) {
+      throw new Error(`Access denied: path escapes project directory`)
     }
 
     const encode = await shouldEncode(bunFile)
@@ -337,10 +341,18 @@ export namespace File {
     }
     const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
 
-    // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
-    // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
+    // Check if path is lexically contained first (fast check)
     if (!Instance.containsPath(resolved)) {
       throw new Error(`Access denied: path escapes project directory`)
+    }
+
+    try {
+      const real = await fs.promises.realpath(resolved)
+      if (!Instance.containsPath(real)) {
+        throw new Error(`Access denied: path escapes project directory`)
+      }
+    } catch (err: any) {
+      if (err.message && err.message.startsWith("Access denied")) throw err
     }
 
     const nodes: Node[] = []
