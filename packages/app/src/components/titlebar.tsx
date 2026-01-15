@@ -17,6 +17,7 @@ export function Titlebar() {
   const reserve = createMemo(
     () => platform.platform === "desktop" && (platform.os === "windows" || platform.os === "linux"),
   )
+  const web = createMemo(() => platform.platform === "web")
 
   const getWin = () => {
     if (platform.platform !== "desktop") return
@@ -88,7 +89,7 @@ export function Titlebar() {
           onClick={layout.mobileSidebar.toggle}
         />
         <TooltipKeybind
-          class="hidden xl:flex shrink-0 ml-14"
+          class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0"}
           placement="bottom"
           title="Toggle sidebar"
           keybind={command.keybind("sidebar.toggle")}
