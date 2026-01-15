@@ -42,27 +42,31 @@ export namespace Skill {
     const skills: Record<string, Info> = {}
 
     const addSkill = async (match: string) => {
-      const md = await ConfigMarkdown.parse(match)
-      if (!md) {
-        return
-      }
+      try {
+        const md = await ConfigMarkdown.parse(match)
+        if (!md) {
+          return
+        }
 
-      const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
-      if (!parsed.success) return
+        const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
+        if (!parsed.success) return
 
-      // Warn on duplicate skill names
-      if (skills[parsed.data.name]) {
-        log.warn("duplicate skill name", {
+        // Warn on duplicate skill names
+        if (skills[parsed.data.name]) {
+          log.warn("duplicate skill name", {
+            name: parsed.data.name,
+            existing: skills[parsed.data.name].location,
+            duplicate: match,
+          })
+        }
+
+        skills[parsed.data.name] = {
           name: parsed.data.name,
-          existing: skills[parsed.data.name].location,
-          duplicate: match,
-        })
-      }
-
-      skills[parsed.data.name] = {
-        name: parsed.data.name,
-        description: parsed.data.description,
-        location: match,
+          description: parsed.data.description,
+          location: match,
+        }
+      } catch (error) {
+        log.warn("failed to parse skill file", { path: match, error })
       }
     }
 
