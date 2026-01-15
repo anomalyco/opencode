@@ -1,5 +1,6 @@
-import { memo } from 'react'
-import type { FileItem } from '../types/fs'
+import { memo, createContext, useContext } from 'react'
+import { useFileTree } from '../hooks'
+import type { FileItem } from '../types'
 
 interface FileTreeProps {
   rootPath?: string
@@ -16,6 +17,9 @@ interface FileTreeItemProps {
   onSelectFile: (path: string) => void
   children: FileItem[]
 }
+
+// Create Context to share file tree state
+const FileTreeContext = createContext<ReturnType<typeof useFileTree> | null>(null)
 
 // File type icons
 const getFileIcon = (fileName: string, isDir: boolean) => {
@@ -120,8 +124,6 @@ const FileTreeItem = memo<FileTreeItemProps>(({
               key={child.path}
               item={child}
               level={level + 1}
-              onToggleFolder={onToggleFolder}
-              onSelectFile={onSelectFile}
             />
           ))}
         </div>
@@ -130,28 +132,31 @@ const FileTreeItem = memo<FileTreeItemProps>(({
   )
 })
 
-// Container component that handles loading children
+// Container component that uses shared context
 interface FileTreeItemContainerProps {
   item: FileItem
   level: number
-  onToggleFolder: (path: string) => void
-  onSelectFile: (path: string) => void
 }
 
 const FileTreeItemContainer = memo<FileTreeItemContainerProps>(({
   item,
   level,
-  onToggleFolder,
-  onSelectFile,
 }) => {
+  // Use shared context instead of creating new hook instance
+  const context = useContext(FileTreeContext)
+  
+  if (!context) {
+    console.error('FileTreeItemContainer must be used within FileTreeContext.Provider')
+    return null
+  }
+
   const {
     selectedFile,
     getDirectoryItems,
-    isFolderExpanded
-  } = useFileTree({
-    rootPath: undefined, // We're not managing root here
-    onFileSelect: onSelectFile
-  })
+    isFolderExpanded,
+    toggleFolder,
+    selectFile,
+  } = context
 
   const isSelected = selectedFile === item.path
   const isExpanded = item.is_dir ? isFolderExpanded(item.path) : false
@@ -163,8 +168,8 @@ const FileTreeItemContainer = memo<FileTreeItemContainerProps>(({
       level={level}
       isSelected={isSelected}
       isExpanded={isExpanded}
-      onToggleFolder={onToggleFolder}
-      onSelectFile={onSelectFile}
+      onToggleFolder={toggleFolder}
+      onSelectFile={selectFile}
       children={children}
     />
   )
@@ -182,16 +187,17 @@ function formatFileSize(bytes: number): string {
 }
 
 export default function FileTree({ rootPath, onFileSelect }: FileTreeProps) {
+  // Create file tree state at the top level
+  const fileTreeState = useFileTree({
+    rootPath,
+    onFileSelect
+  })
+
   const {
     rootItems,
     isLoading,
     error,
-    toggleFolder,
-    selectFile
-  } = useFileTree({
-    rootPath,
-    onFileSelect
-  })
+  } = fileTreeState
 
   if (!rootPath) {
     return (
@@ -240,33 +246,30 @@ export default function FileTree({ rootPath, onFileSelect }: FileTreeProps) {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-800">
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-gray-700 bg-gray-850">
-        <h3 className="text-sm font-medium text-gray-300">Files</h3>
-      </div>
+    <FileTreeContext.Provider value={fileTreeState}>
+      <div className="h-full overflow-y-auto bg-gray-800">
+        {/* Header */}
+        <div className="px-3 py-2 border-b border-gray-700 bg-gray-850">
+          <h3 className="text-sm font-medium text-gray-300">Files</h3>
+        </div>
 
-      {/* File Tree */}
-      <div className="py-1">
-        {rootItems.map(item => (
-          <FileTreeItemContainer
-            key={item.path}
-            item={item}
-            level={0}
-            onToggleFolder={toggleFolder}
-            onSelectFile={selectFile}
-          />
-        ))}
+        {/* File Tree */}
+        <div className="py-1">
+          {rootItems.map(item => (
+            <FileTreeItemContainer
+              key={item.path}
+              item={item}
+              level={0}
+            />
+          ))}
 
-        {rootItems.length === 0 && !isLoading && (
-          <div className="px-4 py-8 text-center text-gray-500 text-sm">
-            <p>No files found</p>
-          </div>
-        )}
+          {rootItems.length === 0 && !isLoading && (
+            <div className="px-4 py-8 text-center text-gray-500 text-sm">
+              <p>No files found</p>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </FileTreeContext.Provider>
   )
 }
-
-// Need to import at the bottom to avoid circular dependency
-import { useFileTree } from '../hooks/useFileTree'

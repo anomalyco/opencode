@@ -7,6 +7,8 @@
 export interface SessionConfig {
   agent?: string
   directory?: string
+  providerID?: string
+  modelID?: string
 }
 
 export interface Session {
@@ -16,13 +18,47 @@ export interface Session {
   createdAt: string
 }
 
+/**
+ * OpenCode MessageV2 Part types
+ */
 export interface MessagePart {
-  type: 'text' | 'tool_use' | 'tool_result' | 'thinking'
+  id: string
+  sessionID: string
+  messageID: string
+  type: string
+  // text part
   text?: string
-  tool_name?: string
-  tool_input?: any
-  tool_result?: any
-  content?: string
+  synthetic?: boolean
+  // tool part
+  tool?: string
+  callID?: string
+  state?: {
+    status: 'pending' | 'running' | 'completed' | 'error'
+    input?: any
+    output?: any
+    metadata?: any
+    error?: any
+  }
+  // reasoning part
+  time?: { start: number; end?: number }
+  // file part
+  mime?: string
+  filename?: string
+  url?: string
+  // step part
+  step?: string
+  title?: string
+  // generic
+  metadata?: Record<string, any>
+}
+
+export interface MessageInfo {
+  id: string
+  sessionID: string
+  role: 'user' | 'assistant'
+  time: { created: number; completed?: number }
+  modelID?: string
+  providerID?: string
 }
 
 export interface Message {
@@ -30,11 +66,45 @@ export interface Message {
   role: 'user' | 'assistant'
   parts: MessagePart[]
   createdAt: string
+  info?: MessageInfo
+}
+
+export interface SessionMessageResponse {
+  info: MessageInfo
+  parts: MessagePart[]
 }
 
 export interface SendMessageRequest {
   sessionId: string
   content: string
+}
+
+export interface ProviderModel {
+  id: string
+  name: string
+  family?: string
+  cost?: {
+    input: number
+    output: number
+  }
+  limit?: {
+    context: number
+    output: number
+  }
+  status?: 'alpha' | 'beta' | 'deprecated'
+}
+
+export interface Provider {
+  id: string
+  name: string
+  env: string[]
+  models: Record<string, ProviderModel>
+}
+
+export interface ProvidersResponse {
+  all: Provider[]
+  default: Record<string, string>
+  connected: string[]
 }
 
 export class OpenCodeClient {
@@ -60,13 +130,21 @@ export class OpenCodeClient {
    * Create a new session
    */
   async createSession(config: SessionConfig): Promise<Session> {
+    const body: Record<string, any> = {
+      agent: config.agent || 'build',
+      directory: config.directory,
+    }
+
+    // Add provider/model selection if specified
+    if (config.providerID && config.modelID) {
+      body.providerID = config.providerID
+      body.modelID = config.modelID
+    }
+
     const response = await fetch(`${this.baseURL}/session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        agent: config.agent || 'build',
-        directory: config.directory,
-      }),
+      body: JSON.stringify(body),
     })
 
     if (!response.ok) {
@@ -104,10 +182,11 @@ export class OpenCodeClient {
 
   /**
    * Send a message and receive streaming response
+   * The server returns JSON, not SSE - it streams the complete response
    */
   async sendMessage(
     request: SendMessageRequest,
-    onChunk: (part: MessagePart) => void
+    onResponse: (response: SessionMessageResponse) => void
   ): Promise<void> {
     const response = await fetch(
       `${this.baseURL}/session/${request.sessionId}/message`,
@@ -124,7 +203,7 @@ export class OpenCodeClient {
       throw new Error(`Failed to send message: ${response.statusText}`)
     }
 
-    // Handle SSE streaming
+    // The server streams JSON - collect all chunks
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
 
@@ -132,23 +211,23 @@ export class OpenCodeClient {
       throw new Error('No response body')
     }
 
+    let buffer = ''
     while (true) {
       const { done, value } = await reader.read()
 
       if (done) break
 
-      const chunk = decoder.decode(value, { stream: true })
-      const lines = chunk.split('\n')
+      buffer += decoder.decode(value, { stream: true })
+    }
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6))
-            onChunk(data)
-          } catch (err) {
-            console.warn('Failed to parse SSE chunk:', err)
-          }
-        }
+    // Parse the complete JSON response
+    if (buffer.trim()) {
+      try {
+        const data = JSON.parse(buffer)
+        onResponse(data)
+      } catch (err) {
+        console.error('Failed to parse response:', err, buffer)
+        throw new Error('Failed to parse server response')
       }
     }
   }
@@ -164,6 +243,19 @@ export class OpenCodeClient {
     if (!response.ok) {
       throw new Error(`Failed to delete session: ${response.statusText}`)
     }
+  }
+
+  /**
+   * Get all available providers and models
+   */
+  async getProviders(): Promise<ProvidersResponse> {
+    const response = await fetch(`${this.baseURL}/provider`)
+
+    if (!response.ok) {
+      throw new Error(`Failed to get providers: ${response.statusText}`)
+    }
+
+    return response.json()
   }
 }
 

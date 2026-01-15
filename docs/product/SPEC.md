@@ -21,19 +21,30 @@ Build Console 升级为 **Build Studio（桌面优先，后续移动端）**。�
 
 ### 2.1 IA / 布局（两栏 + 右上角动作）
 
-**全局结构：两栏固定（可拖拽比例）**
+**全局结构：两栏可拖拽调整比例**
+
+- **Header（顶部栏）**
+  - **Workspace 下拉菜单**：显示最近工作区列表 + 打开 / 新建选项
+  - **Provider 选择器**：切换 AI 模型（优先展示 OpenCode 免费模型）
+  - **Actions Bar**：Deploy to AF / Export Local / Copy
 
 - **左栏：Chat 区（交互式 vibe coding）**
   - streaming 输出
   - tool call / tool result timeline
   - 可切换 agent（plan/build）
-  - 可插入 “选中文件/选中片段” 作为上下文
+  - 可插入 "选中文件/选中片段" 作为上下文
+
+- **可拖拽分隔线**：支持左右拖动调整 Chat 与 Workspace 区域宽度
+  - 默认比例：40% Chat / 60% Workspace
+  - 最小宽度限制：Chat 280px, Workspace 400px
+  - 双击重置为默认比例
 
 - **右栏：Workspace 区（Tab 切换）**
   - Tab A：**Preview**
-    - 在“沙盒 dev server”中运行 `pnpm run dev`
+    - 在"沙盒 dev server"中运行 `pnpm run dev`
     - 内嵌 WebView/iframe 展示 `http://localhost:<port>`
     - 显示 dev server 状态、端口、日志、重启按钮
+    - **响应式视口切换**：Desktop / iPhone SE (375x667) / iPhone 14 Pro (390x844)
   - Tab B：**Code**
     - 左侧：文件树（git-aware / ignore-aware）
     - 右侧：编辑器（Monaco/CodeMirror）

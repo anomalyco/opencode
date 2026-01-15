@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { AFDeployConfig } from '../types/deploy'
-import { useDeploy } from '../hooks/useDeploy'
+import type { AFDeployConfig } from '../types'
+import { useDeploy } from '../hooks'
 
 interface DeployDialogProps {
   isOpen: boolean

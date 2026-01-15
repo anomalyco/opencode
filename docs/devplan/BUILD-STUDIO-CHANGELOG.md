@@ -1,5 +1,122 @@
 # Build Studio Development Changelog
 
+## Week 7 - Phase 7: UI Enhancements (2026-01-15)
+
+### 🚀 Phase 7 Completed: UI Enhancements
+
+**Scope**: Implemented four major UI features: Provider Selection, Unified Workspace UI, Resizable Split Pane, and Mobile Preview Mode.
+
+**Status**: ✅ **FULLY IMPLEMENTED** - All features ready for testing
+
+### ✅ Feature 1: Provider Selection (Header)
+
+**Goal**: Allow users to select AI provider/model from OpenCode's free providers.
+
+**Implementation**:
+- ✅ Created `src/types/provider.ts` - TypeScript interfaces for provider data
+- ✅ Added `getProviders()` to `src/lib/opencode-client.ts` - Fetch providers from `/provider` endpoint
+- ✅ Created `src/hooks/useProviders.ts` - Provider data fetching, caching, and selection
+- ✅ Created `src/components/ProviderSelector.tsx` - Dropdown component with model list
+
+**Key Features**:
+- Fetches all providers from OpenCode server
+- Filters for free models (`cost.input === 0`) in the opencode provider
+- Shows "Free" badge for free models
+- Persists selection to localStorage (`af.selectedModel`)
+- Loading and error states
+
+### ✅ Feature 2: Unified Workspace UI (Dropdown)
+
+**Goal**: Replace "Open Workspace" button with dropdown menu showing recent workspaces.
+
+**Implementation**:
+- ✅ Created `src/hooks/useWorkspaceHistory.ts` - Recent workspace management (localStorage)
+- ✅ Created `src/components/WorkspaceDropdown.tsx` - Dropdown with recent list + actions
+- ✅ Updated `src/components/ActionsBar.tsx` - Removed "Open Workspace" button
+- ✅ Added `create_new_workspace` command to `src-tauri/src/fs_utils.rs`
+
+**Key Features**:
+- Recent workspaces list (max 10 entries)
+- "Open Workspace..." triggers Tauri folder dialog
+- "New Workspace..." creates React+Vite project with template
+- Remove from recent functionality
+- Active workspace highlighting
+
+### ✅ Feature 3: Resizable Split Pane
+
+**Goal**: Make the Chat/Workspace divider draggable to adjust panel widths.
+
+**Implementation**:
+- ✅ Created `src/hooks/useSplitPane.ts` - Mouse drag handling and width state
+- ✅ Created `src/components/ResizableSplitter.tsx` - Draggable divider component
+- ✅ Updated `src/App.tsx` - Replaced fixed widths with resizable layout
+
+**Key Features**:
+- Default split: 40% chat / 60% workspace
+- Min width constraints: Chat 280px, Workspace 400px
+- Persists user preference to localStorage (`af.splitRatio`)
+- Double-click to reset to default ratio
+- Visual feedback during drag
+
+### ✅ Feature 4: Mobile Preview Mode
+
+**Goal**: Add viewport toggle in Preview tab to switch between Desktop and Mobile views.
+
+**Implementation**:
+- ✅ Updated `src/components/PreviewTab.tsx` - Added viewport selector and responsive container
+
+**Key Features**:
+- Viewport presets:
+  - Desktop: Full width (current behavior)
+  - iPhone SE: 375x667
+  - iPhone 14 Pro: 390x844
+- Device frame styling with notch and home indicator
+- Centered mobile viewport in available space
+- Toggle buttons in status bar
+
+### 📁 Files Created/Modified
+
+| Action | File | Purpose |
+|--------|------|---------|
+| Create | `src/types/provider.ts` | Provider TypeScript types |
+| Create | `src/hooks/useProviders.ts` | Provider data fetching |
+| Create | `src/hooks/useWorkspaceHistory.ts` | Recent workspace management |
+| Create | `src/hooks/useSplitPane.ts` | Split pane state/logic |
+| Create | `src/components/ProviderSelector.tsx` | Provider dropdown UI |
+| Create | `src/components/WorkspaceDropdown.tsx` | Workspace dropdown |
+| Create | `src/components/ResizableSplitter.tsx` | Draggable divider |
+| Modify | `src/lib/opencode-client.ts` | Added getProviders API |
+| Modify | `src/App.tsx` | Integrated all new components |
+| Modify | `src/components/ActionsBar.tsx` | Removed Open Workspace button |
+| Modify | `src/components/ChatPanel.tsx` | Provider selection support |
+| Modify | `src/components/PreviewTab.tsx` | Mobile viewport toggle |
+| Modify | `src/hooks/useSession.ts` | Provider/model selection |
+| Modify | `src-tauri/src/fs_utils.rs` | Added create_new_workspace |
+| Modify | `src-tauri/src/main.rs` | Registered new command |
+
+### 🧪 Testing Checklist
+
+- [ ] Provider selector loads and displays free models
+- [ ] Provider selection persists across app restarts
+- [ ] Session creation uses selected provider/model
+- [ ] Workspace dropdown shows recent workspaces
+- [ ] Open Workspace... dialog works correctly
+- [ ] New Workspace... creates project with template
+- [ ] Splitter can be dragged to resize panels
+- [ ] Double-click splitter resets to default ratio
+- [ ] Split ratio persists across sessions
+- [ ] Mobile preview shows device frame correctly
+- [ ] Viewport switching works without issues
+
+### 🚀 Performance Notes
+
+- Provider list cached in memory, refreshable on demand
+- Recent workspaces stored in localStorage (max 10)
+- Split ratio changes are throttled during drag
+- Mobile preview uses CSS transforms for smooth rendering
+
+---
+
 ## Week 6 - Phase 6: Deploy to Agent Foundry (2026-01-15)
 
 ### 🚀 Phase 6 Kickoff: Deploy to AF Implementation
@@ -66,228 +183,6 @@ serde_json = "1.0"
 - [ ] Deploy UI provides clear feedback throughout process
 - [ ] Generated share URLs are valid and accessible
 - [ ] Error scenarios are handled gracefully
-
-## Week 6 - Phase 6: Deploy to Agent Foundry (2026-01-15)
-
-### ✅ Phase 6 Implementation Completed: Deploy to AF
-
-**Scope**: Implemented the complete "Build → Bundle → Upload → Register → Share" workflow for deploying web applications to Agent Foundry platform.
-
-**Status**: ✅ **FULLY IMPLEMENTED** - Deploy functionality ready for testing
-
-### 🚀 Technical Implementation Completed
-
-#### 6.1 Build Process Integration ✅
-**Goal**: Execute `pnpm run build` and capture build artifacts
-- ✅ **Rust Command**: `deploy_build_workspace(workspace_id, root_path) -> BuildResult`
-- ✅ **Error Handling**: Parse build errors and display user-friendly messages
-- ✅ **Progress Tracking**: Stream build logs to UI with real-time updates
-- ✅ **Validation**: Check package.json, node_modules, and dist directory creation
-
-#### 6.2 Bundle Creation ✅
-**Goal**: Package dist/ directory into deployable tar.gz bundle
-- ✅ **Rust Command**: `bundle_dist(dist_path, output_name) -> BundlePath`
-- ✅ **Compression**: Use tar + gzip for optimal compression using flate2
-- ✅ **Output**: Generate timestamped bundles in temp directory
-- ✅ **Cleanup**: Automatic bundle file cleanup after upload
-
-#### 6.3 AF Backend API Integration ✅
-**Goal**: Authenticate and interact with Agent Foundry backend services
-- ✅ **Upload Credentials**: GET `/api/v1/artifact/upload-credential`
-- ✅ **Artifact Registration**: POST `/api/v1/artifact`
-- ✅ **Feed Publishing**: POST `/api/v1/feed/publish` (optional for prod)
-- ✅ **Client Class**: Complete AFBackendClient with authentication
-- ✅ **Error Handling**: Comprehensive API error responses
-
-#### 6.4 OSS Upload Implementation ✅
-**Goal**: Upload bundle to Alibaba Cloud Object Storage Service
-- ✅ **Rust SDK**: Integrated `aliyun-oss-client` crate v0.10
-- ✅ **Progress Tracking**: Real-time upload progress (placeholder ready)
-- ✅ **Error Recovery**: Comprehensive error handling for network failures
-- ✅ **STS Token**: Support for temporary credentials with security tokens
-
-#### 6.5 Deploy UI Enhancement ✅
-**Goal**: User-friendly deployment experience
-- ✅ **Deploy Dialog**: Complete form with name, description, tags, environment
-- ✅ **Progress Visualization**: Step-by-step progress with current operation
-- ✅ **Success State**: Share URL, artifact ID, and deployment metadata display
-- ✅ **Error States**: Clear error messages with retry capabilities
-- ✅ **Form Validation**: Required fields and input validation
-- ✅ **Tag Management**: Add/remove tags dynamically
-
-### 📁 Files Implemented (9 new/modified files)
-
-#### New Files Created
-- ✅ `src/types/deploy.ts` (55 lines) - Complete deploy type definitions
-- ✅ `src-tauri/src/deploy.rs` (140 lines) - Rust deploy commands and OSS integration
-- ✅ `src/lib/af-client.ts` (85 lines) - AF Backend API client
-- ✅ `src/hooks/useDeploy.ts` (180 lines) - Deploy state management hook
-- ✅ `src/components/DeployDialog.tsx` (280 lines) - Complete deployment UI
-
-#### Modified Files
-- ✅ `src-tauri/Cargo.toml` - Added 3 new dependencies (aliyun-oss-client, tar, flate2)
-- ✅ `src-tauri/src/main.rs` - Registered 5 new deploy commands
-- ✅ `src/components/ActionsBar.tsx` - Integrated Deploy button with dialog
-- ✅ `src/App.tsx` - Pass workspace props to ActionsBar
-
-### 🎯 Feature Checklist - All Complete
-
-- ✅ Build process executes successfully with error handling
-- ✅ Bundle creation produces valid tar.gz files
-- ✅ OSS upload functionality with credential support
-- ✅ AF Backend API integration works end-to-end
-- ✅ Deploy UI provides clear feedback throughout process
-- ✅ Generated share URLs follow AF URL format
-- ✅ Error scenarios are handled gracefully
-- ✅ TypeScript compilation passes with no errors
-- ✅ Form validation and user input handling
-- ✅ Progress tracking with real-time updates
-- ✅ Deploy button state management (disabled when no workspace)
-
-### 🧪 Testing Status
-
-#### ✅ Static Testing Completed
-- ✅ **TypeScript Compilation**: All files compile without errors
-- ✅ **Import Resolution**: All imports and dependencies resolved
-- ✅ **Type Safety**: Complete type coverage for all interfaces
-- ✅ **Code Review**: All functions implement error handling
-
-#### 🔄 Dynamic Testing Required (Rust installation needed)
-Due to missing Rust toolchain on current environment:
-- ⚠️ **Runtime Testing**: Requires `cargo` installation to test Tauri dev server
-- ⚠️ **Deploy Flow**: End-to-end testing needs live AF Backend API
-- ⚠️ **OSS Upload**: Requires valid OSS credentials for integration testing
-
-#### 📋 Manual Testing Checklist (For environments with Rust)
-
-**Prerequisites**:
-1. Install Rust: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-2. Start OpenCode Server: `bun dev` (in opencode root)
-3. Configure AF API key (when available)
-
-**Deploy Workflow Testing**:
-- [ ] Open workspace with a Vite/React project
-- [ ] Click "Deploy to AF" button (should be enabled)
-- [ ] Fill out deploy dialog form (name, description, tags, env)
-- [ ] Submit deployment and verify progress steps
-- [ ] Check build process runs successfully
-- [ ] Verify bundle creation in temp directory
-- [ ] Test error handling for failed builds
-- [ ] Verify success state shows share URL
-- [ ] Test cleanup of bundle files
-
-### 📊 Technical Architecture
-
-#### Rust Backend (5 Commands)
-```rust
-// Deploy commands registered in main.rs
-deploy::deploy_build_workspace   // Build project with pnpm
-deploy::bundle_dist             // Create tar.gz bundle
-deploy::upload_to_oss          // Upload to Alibaba Cloud
-deploy::get_bundle_size        // Get bundle file size
-deploy::cleanup_bundle         // Clean up temp files
-```
-
-#### React Frontend (Deploy Flow)
-```typescript
-// Component hierarchy
-DeployDialog (modal)
-├── Form (name, description, tags, env)
-├── Progress Display (steps with percentage)
-├── Success State (share URL, artifact ID)
-└── Error State (retry options)
-
-// Hook for state management
-useDeploy()
-├── deployToAF() - Main deployment function
-├── updateProgress() - Progress updates
-├── clearError() - Error handling
-└── resetState() - State cleanup
-```
-
-#### API Integration
-```typescript
-// AF Backend Client
-AFBackendClient
-├── getUploadCredential() - Get OSS credentials
-├── createArtifact() - Register artifact
-├── publishToFeed() - Publish to public feed
-└── authentication support
-```
-
-### 📦 Dependencies Added
-
-#### Rust Dependencies (Cargo.toml)
-```toml
-aliyun-oss-client = "0.10"  # OSS upload functionality
-tar = "0.4"                 # TAR archive creation
-flate2 = "1.0"             # GZIP compression
-```
-
-#### Frontend Dependencies
-- All deploy functionality uses existing dependencies
-- No additional npm packages required
-- TypeScript types provide full type safety
-
-### 🐛 Known Limitations
-
-1. **AF Backend API URLs**: Currently hardcoded to `https://api.agent-foundry.com`
-   - **Solution**: Make configurable via settings
-2. **Authentication**: API key management not implemented
-   - **Solution**: Add settings panel for AF API key
-3. **Upload Progress**: Progress tracking structure ready but not implemented
-   - **Solution**: Add progress callbacks to OSS client
-4. **Environment Configuration**: No development/staging backend switching
-   - **Solution**: Add environment selection in settings
-
-### 🚀 Performance Characteristics
-
-- **Build Time**: Depends on project size (typically 10-60s)
-- **Bundle Size**: Compressed with gzip (typically 80-90% reduction)
-- **Upload Time**: Depends on bundle size and network (typically 5-30s)
-- **UI Responsiveness**: Real-time progress updates prevent blocking
-- **Memory Usage**: Efficient streaming for large files
-- **Cleanup**: Automatic temp file cleanup prevents disk bloat
-
-### 📚 Next Steps (Phase 7-8)
-
-**Immediate (Week 7)**:
-1. **Runtime Testing**: Test complete workflow with Rust toolchain
-2. **AF API Integration**: Connect with actual AF Backend endpoints
-3. **Error Refinement**: Improve error messages based on real failures
-4. **Progress Enhancement**: Add real-time upload progress
-
-**Future Enhancements**:
-1. **Authentication UI**: Settings panel for AF API key
-2. **History**: Deploy history and artifact management
-3. **Preview**: Pre-deploy preview of bundle contents
-4. **Rollback**: One-click rollback to previous deployment
-
-### 💡 Usage Instructions
-
-**For Developers**:
-1. Open a React/Vite project in Build Studio
-2. Ensure project builds successfully (`pnpm build` works)
-3. Click "Deploy to AF" in top-right actions
-4. Fill out deployment form
-5. Watch progress and get share URL
-6. Share URL with users or embed in other applications
-
-**For Testing**:
-```bash
-# Install Rust (if not installed)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Start OpenCode Server
-cd opencode && bun dev
-
-# Start Build Studio
-cd packages/console && bun run tauri dev
-
-# Open a Vite project and test deploy flow
-```
-
----
 
 ## Week 5 - Phase 5A-C: Code Editor Implementation (2026-01-15)
 

@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
-import FileTree from './FileTree'
-import { useCodeMirror } from '../hooks/useCodeMirror'
-import { useOpenFiles } from '../hooks/useOpenFiles'
+import { FileTree } from './'
+import { useCodeMirror, useOpenFiles } from '../hooks'
 
 interface CodeTabProps {
   workspaceId?: string

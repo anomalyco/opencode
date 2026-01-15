@@ -1,5 +1,5 @@
 // AF Backend API Client for deployment
-import { AFArtifact, OSSUploadCredential, WebAppManifest } from '../types/deploy'
+import type { AFArtifact, OSSUploadCredential, WebAppManifest } from '../types'
 
 const AF_BACKEND_BASE_URL = 'https://api.agent-foundry.com' // TODO: Make configurable
 

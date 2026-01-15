@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import PreviewTab from './PreviewTab'
-import CodeTab from './CodeTab'
+import { CodeTab, PreviewTab } from './'
 
 type TabType = 'preview' | 'code'
 

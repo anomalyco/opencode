@@ -1,0 +1,11 @@
+// Barrel exports for components
+export { default as ActionsBar } from './ActionsBar'
+export { default as ChatPanel } from './ChatPanel'
+export { default as CodeTab } from './CodeTab'
+export { default as DeployDialog } from './DeployDialog'
+export { default as FileTree } from './FileTree'
+export { default as PreviewTab } from './PreviewTab'
+export { default as ProviderSelector } from './ProviderSelector'
+export { default as ResizableSplitter } from './ResizableSplitter'
+export { default as WorkspaceDropdown } from './WorkspaceDropdown'
+export { default as WorkspacePanel } from './WorkspacePanel'

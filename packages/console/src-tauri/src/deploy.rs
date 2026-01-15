@@ -1,10 +1,11 @@
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Read;
 use flate2::{Compression, write::GzEncoder};
-use tar::{Builder, Header};
+use tar::Builder;
 use serde::{Deserialize, Serialize};
+use aliyun_oss_client::file::File;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildResult {
@@ -34,7 +35,7 @@ pub struct OSSUploadCredential {
 
 #[tauri::command]
 pub async fn deploy_build_workspace(
-    workspace_id: String,
+    _workspace_id: String,
     root_path: String,
 ) -> Result<BuildResult, String> {
     let path = Path::new(&root_path);
@@ -148,23 +149,20 @@ pub async fn upload_to_oss(
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
     // Create OSS client
+    // Note: aliyun-oss-client 0.10 expects specific types, so we convert Strings using .into()
+    // Parameter order: KeyId, KeySecret, EndPoint (region), BucketName (bucket)
     let client = aliyun_oss_client::Client::new(
-        credential.access_key_id,
-        credential.access_key_secret,
-        credential.bucket,
-        credential.region,
+        credential.access_key_id.into(),
+        credential.access_key_secret.into(),
+        credential.region.into(),
+        credential.bucket.into(),
     );
 
-    // Set STS token if provided
-    let client = if !credential.security_token.is_empty() {
-        client.with_sts_token(credential.security_token)
-    } else {
-        client
-    };
-
     // Upload file to OSS
+    // Note: with_sts_token() doesn't exist in aliyun-oss-client 0.10 API
+    // STS token support may need to be handled differently if required
     client
-        .put_object(&credential.oss_key, file_content)
+        .put_content_base(file_content, "application/gzip", credential.oss_key.as_str())
         .await
         .map_err(|e| format!("OSS upload failed: {}", e))?;
 

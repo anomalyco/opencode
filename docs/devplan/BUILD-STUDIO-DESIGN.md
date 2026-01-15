@@ -28,7 +28,8 @@
 **当前实现状态 (2026-01-15)**:
 - ✅ **Phase 1-4 完成**: 基础架构、Chat集成、Preview功能、OpenCode集成
 - ✅ **Phase 5 完成**: 代码编辑器 (文件树 + CodeMirror 6 + 多文件支持 + 文件保存)
-- 🔄 **Phase 6-7**: Deploy to AF、Export功能 (计划中)
+- ✅ **Phase 6 完成**: Deploy to AF
+- ✅ **Phase 7 完成**: UI增强 (Provider选择、Workspace下拉、可拖拽分隔、Mobile预览)
 
 ---
 
@@ -86,30 +87,37 @@ opencode/
 │   │   ├── src/
 │   │   │   ├── main.tsx         # React 入口
 │   │   │   ├── components/
-│   │   │   │   ├── ChatPanel.tsx       # ✅ 完全实现
+│   │   │   │   ├── ChatPanel.tsx       # ✅ 完全实现 (支持provider选择)
 │   │   │   │   ├── WorkspacePanel.tsx  # ✅ 完全实现
-│   │   │   │   ├── PreviewTab.tsx      # ✅ 完全实现
-│   │   │   │   ├── CodeTab.tsx         # ✅ 完全实现 (新)
-│   │   │   │   ├── FileTree.tsx        # ✅ 完全实现 (新)
-│   │   │   │   └── ActionsBar.tsx      # ✅ 完全实现
+│   │   │   │   ├── PreviewTab.tsx      # ✅ 完全实现 (支持mobile viewport)
+│   │   │   │   ├── CodeTab.tsx         # ✅ 完全实现
+│   │   │   │   ├── FileTree.tsx        # ✅ 完全实现
+│   │   │   │   ├── ActionsBar.tsx      # ✅ 完全实现
+│   │   │   │   ├── ProviderSelector.tsx  # ✅ 完全实现 (Phase 7)
+│   │   │   │   ├── WorkspaceDropdown.tsx # ✅ 完全实现 (Phase 7)
+│   │   │   │   └── ResizableSplitter.tsx # ✅ 完全实现 (Phase 7)
 │   │   │   ├── hooks/
-│   │   │   │   ├── useSession.ts       # ✅ 完全实现
-│   │   │   │   ├── useFileTree.ts      # ✅ 完全实现 (新)
-│   │   │   │   ├── useCodeMirror.ts    # ✅ 完全实现 (新)
-│   │   │   │   └── useOpenFiles.ts     # ✅ 完全实现 (新)
+│   │   │   │   ├── useSession.ts       # ✅ 完全实现 (支持provider/model选择)
+│   │   │   │   ├── useFileTree.ts      # ✅ 完全实现
+│   │   │   │   ├── useCodeMirror.ts    # ✅ 完全实现
+│   │   │   │   ├── useOpenFiles.ts     # ✅ 完全实现
+│   │   │   │   ├── useProviders.ts     # ✅ 完全实现
+│   │   │   │   ├── useWorkspaceHistory.ts # ✅ 完全实现
+│   │   │   │   └── useSplitPane.ts     # ✅ 完全实现
 │   │   │   ├── lib/
 │   │   │   │   ├── opencode-client.ts  # ✅ 完全实现
 │   │   │   │   └── af-client.ts        # 🔄 计划中
 │   │   │   └── types/
 │   │   │       ├── workspace.ts        # ✅ 完全实现
-│   │   │       ├── fs.ts               # ✅ 完全实现 (新)
-│   │   │       └── deploy.ts           # 🔄 计划中
+│   │   │       ├── fs.ts               # ✅ 完全实现
+│   │   │       ├── deploy.ts           # ✅ 完全实现
+│   │   │       └── provider.ts         # ✅ 完全实现
 │   │   ├── src-tauri/           # Tauri backend
 │   │   │   ├── src/
 │   │   │   │   ├── main.rs             # ✅ 完全实现
 │   │   │   │   ├── workspace_runner.rs # ✅ 完全实现
-│   │   │   │   ├── fs_utils.rs         # ✅ 完全实现 (新)
-│   │   │   │   └── deploy.rs           # 🔄 计划中
+│   │   │   │   ├── fs_utils.rs         # ✅ 完全实现
+│   │   │   │   └── deploy.rs           # ✅ 完全实现
 │   │   │   ├── Cargo.toml
 │   │   │   └── tauri.conf.json
 │   │   ├── vite.config.ts

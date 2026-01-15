@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
-use tauri::api::dir::read_dir;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FileItem {
@@ -89,11 +88,15 @@ fn read_directory_shallow(path: String) -> Result<Vec<FileItem>, String> {
         return Err("Path is not a directory".to_string());
     }
 
-    let entries = read_dir(&dir_path, false).map_err(|e| e.to_string())?;
+    let entries = std::fs::read_dir(&dir_path).map_err(|e: std::io::Error| e.to_string())?;
     let mut items = Vec::new();
 
-    for entry in entries {
-        let path_buf = PathBuf::from(&entry.path);
+    for entry_result in entries {
+        let entry = entry_result.map_err(|e: std::io::Error| e.to_string())?;
+        let path_buf = entry.path();
+        let metadata = entry.metadata().map_err(|e: std::io::Error| e.to_string())?;
+        let is_dir = metadata.is_dir();
+        
         let name = path_buf
             .file_name()
             .and_then(|n| n.to_str())
@@ -101,7 +104,7 @@ fn read_directory_shallow(path: String) -> Result<Vec<FileItem>, String> {
             .to_string();
 
         // Skip ignored files/directories
-        if should_ignore(&name, entry.is_dir) {
+        if should_ignore(&name, is_dir) {
             continue;
         }
 
@@ -210,4 +213,166 @@ pub async fn delete_file(path: String) -> Result<(), String> {
     } else {
         std::fs::remove_file(file_path).map_err(|e| format!("Failed to delete file: {}", e))
     }
+}
+
+/// Create a new workspace directory with basic project structure
+#[tauri::command]
+pub async fn create_new_workspace(parent_path: String, name: String) -> Result<String, String> {
+    // Sanitize workspace name
+    let sanitized_name: String = name
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect();
+
+    if sanitized_name.is_empty() {
+        return Err("Invalid workspace name".to_string());
+    }
+
+    let parent = Path::new(&parent_path);
+    if !parent.exists() || !parent.is_dir() {
+        return Err("Parent directory does not exist".to_string());
+    }
+
+    let workspace_path = parent.join(&sanitized_name);
+    
+    if workspace_path.exists() {
+        return Err(format!("Workspace '{}' already exists", sanitized_name));
+    }
+
+    // Create workspace directory
+    std::fs::create_dir_all(&workspace_path)
+        .map_err(|e| format!("Failed to create workspace directory: {}", e))?;
+
+    // Create basic project structure
+    let src_dir = workspace_path.join("src");
+    std::fs::create_dir_all(&src_dir)
+        .map_err(|e| format!("Failed to create src directory: {}", e))?;
+
+    // Create package.json
+    let package_json = format!(
+        r#"{{
+  "name": "{}",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {{
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  }},
+  "dependencies": {{
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }},
+  "devDependencies": {{
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.0"
+  }}
+}}"#,
+        sanitized_name
+    );
+    std::fs::write(workspace_path.join("package.json"), package_json)
+        .map_err(|e| format!("Failed to create package.json: {}", e))?;
+
+    // Create vite.config.ts
+    let vite_config = r#"import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+})
+"#;
+    std::fs::write(workspace_path.join("vite.config.ts"), vite_config)
+        .map_err(|e| format!("Failed to create vite.config.ts: {}", e))?;
+
+    // Create index.html
+    let index_html = format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+"#,
+        sanitized_name
+    );
+    std::fs::write(workspace_path.join("index.html"), index_html)
+        .map_err(|e| format!("Failed to create index.html: {}", e))?;
+
+    // Create src/main.tsx
+    let main_tsx = r#"import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App'
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
+"#;
+    std::fs::write(src_dir.join("main.tsx"), main_tsx)
+        .map_err(|e| format!("Failed to create main.tsx: {}", e))?;
+
+    // Create src/App.tsx
+    let app_tsx = format!(
+        r#"export default function App() {{
+  return (
+    <div style={{ padding: '2rem', fontFamily: 'system-ui, sans-serif' }}>
+      <h1>Welcome to {}</h1>
+      <p>Start editing src/App.tsx to build your app!</p>
+    </div>
+  )
+}}
+"#,
+        sanitized_name
+    );
+    std::fs::write(src_dir.join("App.tsx"), app_tsx)
+        .map_err(|e| format!("Failed to create App.tsx: {}", e))?;
+
+    // Create tsconfig.json
+    let tsconfig = r#"{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}
+"#;
+    std::fs::write(workspace_path.join("tsconfig.json"), tsconfig)
+        .map_err(|e| format!("Failed to create tsconfig.json: {}", e))?;
+
+    // Create .gitignore
+    let gitignore = r#"node_modules
+dist
+.env
+.env.local
+*.log
+.DS_Store
+"#;
+    std::fs::write(workspace_path.join(".gitignore"), gitignore)
+        .map_err(|e| format!("Failed to create .gitignore: {}", e))?;
+
+    Ok(workspace_path.to_string_lossy().to_string())
 }

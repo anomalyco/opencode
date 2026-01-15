@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { OpenFile } from '../types/fs'
+import type { OpenFile } from '../types'
 
 interface UseOpenFilesOptions {
   onFileChange?: (filePath: string, isDirty: boolean) => void

@@ -1,7 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { opencode, Session, Message, MessagePart } from '../lib/opencode-client'
+import { opencode, type Session, type Message, type SessionMessageResponse } from '../lib'
+import type { SelectedModel } from './useProviders'
 
-export function useSession(workspaceId?: string, rootPath?: string) {
+export function useSession(
+  workspaceId?: string,
+  rootPath?: string,
+  selectedModel?: SelectedModel | null
+) {
   const [session, setSession] = useState<Session | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -51,10 +56,12 @@ export function useSession(workspaceId?: string, rootPath?: string) {
           }
         }
 
-        // Create new session
+        // Create new session with optional model selection
         const newSession = await opencode.createSession({
           agent: 'build',
           directory: rootPath,
+          providerID: selectedModel?.providerID,
+          modelID: selectedModel?.modelID,
         })
 
         setSession(newSession)
@@ -82,35 +89,33 @@ export function useSession(workspaceId?: string, rootPath?: string) {
         const userMessage: Message = {
           id: `user-${Date.now()}`,
           role: 'user',
-          parts: [{ type: 'text', text: content }],
+          parts: [{ 
+            id: `part-${Date.now()}`,
+            sessionID: session.id,
+            messageID: `user-${Date.now()}`,
+            type: 'text', 
+            text: content 
+          }],
           createdAt: new Date().toISOString(),
         }
         setMessages((prev) => [...prev, userMessage])
 
-        // Create assistant message placeholder
-        const assistantMessage: Message = {
-          id: `assistant-${Date.now()}`,
-          role: 'assistant',
-          parts: [],
-          createdAt: new Date().toISOString(),
-        }
-        setMessages((prev) => [...prev, assistantMessage])
-
-        // Stream response
+        // Send message and handle response
         await opencode.sendMessage(
           {
             sessionId: session.id,
             content,
           },
-          (part: MessagePart) => {
-            setMessages((prev) => {
-              const updated = [...prev]
-              const lastMessage = updated[updated.length - 1]
-              if (lastMessage.role === 'assistant') {
-                lastMessage.parts.push(part)
-              }
-              return updated
-            })
+          (response: SessionMessageResponse) => {
+            // Convert response to Message format
+            const assistantMessage: Message = {
+              id: response.info.id,
+              role: 'assistant',
+              parts: response.parts,
+              createdAt: new Date(response.info.time.created).toISOString(),
+              info: response.info,
+            }
+            setMessages((prev) => [...prev, assistantMessage])
           }
         )
       } catch (err: any) {

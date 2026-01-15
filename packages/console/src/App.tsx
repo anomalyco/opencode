@@ -1,8 +1,13 @@
-import { useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
-import ChatPanel from './components/ChatPanel'
-import WorkspacePanel from './components/WorkspacePanel'
-import ActionsBar from './components/ActionsBar'
+import { useState, useRef } from 'react'
+import {
+  ActionsBar,
+  ChatPanel,
+  ProviderSelector,
+  ResizableSplitter,
+  WorkspaceDropdown,
+  WorkspacePanel,
+} from './components'
+import { useSplitPane, useWorkspaceHistory, type SelectedModel } from './hooks'
 
 interface Workspace {
   id: string
@@ -12,20 +17,25 @@ interface Workspace {
 
 function App() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
+  const [selectedModel, setSelectedModel] = useState<SelectedModel | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const { addToHistory } = useWorkspaceHistory()
 
-  const handleOpenWorkspace = async () => {
-    try {
-      const rootPath = await invoke<string>('open_workspace_dialog')
-      if (rootPath) {
-        // Generate a simple workspace ID
-        const id = Date.now().toString()
-        const name = rootPath.split(/[/\\]/).pop() || 'Workspace'
+  const {
+    leftWidth,
+    rightWidth,
+    isDragging,
+    handleMouseDown,
+    handleDoubleClick,
+  } = useSplitPane(containerRef)
 
-        setWorkspace({ id, name, rootPath })
-      }
-    } catch (err) {
-      console.error('Failed to open workspace:', err)
-    }
+  const handleSelectWorkspace = (ws: Workspace) => {
+    setWorkspace(ws)
+    addToHistory(ws)
+  }
+
+  const handleModelChange = (model: SelectedModel) => {
+    setSelectedModel(model)
   }
 
   return (
@@ -34,29 +44,44 @@ function App() {
       <header className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-semibold">Agent Foundry Build Studio</h1>
-          {workspace && (
-            <span className="text-sm text-gray-400 px-2 py-1 bg-gray-700 rounded">
-              {workspace.name}
-            </span>
-          )}
+          
+          {/* Workspace Dropdown */}
+          <WorkspaceDropdown
+            currentWorkspace={workspace}
+            onSelectWorkspace={handleSelectWorkspace}
+          />
+
+          {/* Provider Selector */}
+          <ProviderSelector onModelChange={handleModelChange} />
         </div>
+
         <ActionsBar
-          onOpenWorkspace={handleOpenWorkspace}
           workspaceId={workspace?.id}
           workspaceName={workspace?.name}
           rootPath={workspace?.rootPath}
         />
       </header>
 
-      {/* Main Content: Two-Column Layout */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left: Chat Panel (40%) */}
-        <div className="w-2/5 border-r border-gray-700">
-          <ChatPanel workspaceId={workspace?.id} rootPath={workspace?.rootPath} />
+      {/* Main Content: Resizable Two-Column Layout */}
+      <div ref={containerRef} className="flex flex-1 overflow-hidden">
+        {/* Left: Chat Panel */}
+        <div style={{ width: leftWidth }} className="min-w-[280px] overflow-hidden">
+          <ChatPanel
+            workspaceId={workspace?.id}
+            rootPath={workspace?.rootPath}
+            selectedModel={selectedModel}
+          />
         </div>
 
-        {/* Right: Workspace Panel (60%) */}
-        <div className="w-3/5">
+        {/* Resizable Splitter */}
+        <ResizableSplitter
+          onMouseDown={handleMouseDown}
+          onDoubleClick={handleDoubleClick}
+          isDragging={isDragging}
+        />
+
+        {/* Right: Workspace Panel */}
+        <div style={{ width: rightWidth }} className="min-w-[400px] overflow-hidden">
           <WorkspacePanel
             workspaceId={workspace?.id}
             rootPath={workspace?.rootPath}

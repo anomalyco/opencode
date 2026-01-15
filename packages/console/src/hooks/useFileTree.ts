@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import type { FileItem, FileTreeState } from '../types/fs'
+import type { FileItem, FileTreeState } from '../types'
 
 interface UseFileTreeOptions {
   rootPath?: string

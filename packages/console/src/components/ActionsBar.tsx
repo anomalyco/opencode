@@ -1,15 +1,13 @@
 import { useState } from 'react'
-import DeployDialog from './DeployDialog'
+import { DeployDialog } from './'
 
 interface ActionsBarProps {
-  onOpenWorkspace: () => void
   workspaceId?: string
   workspaceName?: string
   rootPath?: string
 }
 
 export default function ActionsBar({
-  onOpenWorkspace,
   workspaceId,
   workspaceName,
   rootPath
@@ -36,12 +34,6 @@ export default function ActionsBar({
     <>
       <div className="flex items-center gap-2">
         <button
-          onClick={onOpenWorkspace}
-          className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium transition-colors"
-        >
-          Open Workspace
-        </button>
-        <button
           onClick={handleDeploy}
           className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
             workspaceId
@@ -55,13 +47,23 @@ export default function ActionsBar({
         </button>
         <button
           onClick={handleExport}
-          className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium transition-colors"
+          className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+            workspaceId
+              ? 'bg-gray-700 hover:bg-gray-600'
+              : 'bg-gray-600 cursor-not-allowed opacity-50'
+          }`}
+          disabled={!workspaceId}
         >
           Export Local
         </button>
         <button
           onClick={handleCopy}
-          className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium transition-colors"
+          className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+            workspaceId
+              ? 'bg-gray-700 hover:bg-gray-600'
+              : 'bg-gray-600 cursor-not-allowed opacity-50'
+          }`}
+          disabled={!workspaceId}
         >
           Copy
         </button>

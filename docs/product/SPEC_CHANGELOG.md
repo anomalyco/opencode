@@ -2,6 +2,59 @@
 
 > Track changes to the design specification
 
+## 2026-01-15 - Phase 7: UI Enhancements
+
+### ✅ New Features Implemented
+
+#### 1. Provider Selection (Header)
+- **Feature**: Dropdown in header to select AI provider/model
+- **Implementation**: Shows free models from OpenCode provider
+- **Details**: 
+  - Fetches providers from OpenCode server `/provider` endpoint
+  - Filters for models with `cost.input === 0`
+  - Persists selection to localStorage
+  - Shows "Free" badge for free models
+
+#### 2. Unified Workspace UI
+- **Feature**: Dropdown menu for workspace management
+- **Implementation**: Replaces "Open Workspace" button with dropdown
+- **Details**:
+  - Recent workspaces list (max 10)
+  - "Open Workspace..." option triggers folder dialog
+  - "New Workspace..." creates new project with React+Vite template
+  - Remove from recent functionality
+
+#### 3. Resizable Split Pane
+- **Feature**: Draggable divider between Chat and Workspace panels
+- **Implementation**: Mouse drag handling with width constraints
+- **Details**:
+  - Default split: 40% chat / 60% workspace
+  - Minimum widths: Chat 280px, Workspace 400px
+  - Double-click to reset to default ratio
+  - Persists user preference to localStorage
+
+#### 4. Mobile Preview Mode
+- **Feature**: Viewport toggle in Preview tab
+- **Implementation**: Switch between Desktop and iPhone viewports
+- **Details**:
+  - Desktop: Full width (current behavior)
+  - iPhone SE: 375x667
+  - iPhone 14 Pro: 390x844
+  - Device frame styling with notch and home indicator
+
+### 🔄 Updated Design Decisions
+
+#### Layout Ratio
+- **Previous Decision**: Hardcoded 40/60 split (MVP)
+- **New Decision**: Draggable split with localStorage persistence
+- **Change**: Moved from Phase 2 to current implementation
+
+#### Actions Bar
+- **Previous**: 4 buttons (Open Workspace + Deploy/Export/Copy)
+- **New**: 3 buttons (Deploy/Export/Copy) - Open Workspace moved to header dropdown
+
+---
+
 ## 2026-01-15 - Initial Implementation Decisions
 
 ### ✅ Confirmed Design Decisions
@@ -67,10 +120,10 @@
 
 ### 🚫 Explicit Non-Goals (MVP)
 
-1. **Drag-to-resize layout**: Phase 2
+1. ~~**Drag-to-resize layout**: Phase 2~~ → ✅ Implemented in Phase 7
 2. **LSP integration**: Phase 2+
 3. **Container sandbox**: Phase 2
-4. **Mobile support**: Phase 3
+4. ~~**Mobile support**: Phase 3~~ → ✅ Mobile Preview Mode implemented in Phase 7
 5. **Multiple session switching**: Week 4+
 
 ### 📊 Technical Decision Log

@@ -28,14 +28,6 @@ Before you begin, make sure you have the following installed:
    powershell -c "irm bun.sh/install.ps1 | iex"
    ```
 
-3. **pnpm** (v8+)
-   ```bash
-   npm install -g pnpm
-   ```
-
-4. **Node.js** (v20+) - Required for workspace projects
-   - Download from https://nodejs.org/
-
 ### System Requirements
 
 - **macOS**: 10.15+ (Catalina or later)

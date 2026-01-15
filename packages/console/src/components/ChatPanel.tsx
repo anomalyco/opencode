@@ -1,14 +1,16 @@
-import { useState } from 'react'
-import { useSession } from '../hooks/useSession'
-import type { Message, MessagePart } from '../lib/opencode-client'
+import { useState, useRef, useEffect } from 'react'
+import { useSession, type SelectedModel } from '../hooks'
+import type { Message, MessagePart } from '../lib'
 
 interface ChatPanelProps {
   workspaceId?: string
   rootPath?: string
+  selectedModel?: SelectedModel | null
 }
 
-export default function ChatPanel({ workspaceId, rootPath }: ChatPanelProps) {
+export default function ChatPanel({ workspaceId, rootPath, selectedModel }: ChatPanelProps) {
   const [input, setInput] = useState('')
+  const messagesEndRef = useRef<HTMLDivElement>(null)
   const {
     session,
     messages,
@@ -17,7 +19,12 @@ export default function ChatPanel({ workspaceId, rootPath }: ChatPanelProps) {
     error,
     serverStatus,
     sendMessage,
-  } = useSession(workspaceId, rootPath)
+  } = useSession(workspaceId, rootPath, selectedModel)
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
   const handleSend = async () => {
     if (!input.trim() || isSending) return
@@ -91,6 +98,8 @@ export default function ChatPanel({ workspaceId, rootPath }: ChatPanelProps) {
               <span>AI is thinking...</span>
             </div>
           )}
+
+          <div ref={messagesEndRef} />
         </div>
       </div>
 
@@ -136,6 +145,36 @@ export default function ChatPanel({ workspaceId, rootPath }: ChatPanelProps) {
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === 'user'
 
+  // Improved filtering - less aggressive, allow most parts to show
+  const visibleParts = message.parts.filter(part => {
+    // Always filter out synthetic parts
+    if (part.synthetic) return false
+    
+    // For text parts, only filter if completely empty
+    if (part.type === 'text') {
+      return !!part.text?.trim()
+    }
+    
+    // For all other part types, show them by default
+    // (tool, reasoning, step-start, step-finish, file, agent, etc.)
+    return true
+  })
+
+  // Debug logging to help diagnose issues
+  if (visibleParts.length === 0) {
+    console.log('[ChatPanel] Message with no visible parts:', {
+      messageId: message.id,
+      role: message.role,
+      totalParts: message.parts.length,
+      parts: message.parts.map(p => ({ type: p.type, synthetic: p.synthetic, hasText: !!p.text }))
+    })
+  }
+
+  // Don't render anything if no visible parts
+  if (visibleParts.length === 0) {
+    return null
+  }
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
@@ -145,8 +184,8 @@ function MessageBubble({ message }: { message: Message }) {
             : 'bg-gray-800 text-gray-300 border border-gray-700'
         }`}
       >
-        {message.parts.map((part, idx) => (
-          <MessagePartRenderer key={idx} part={part} isUser={isUser} />
+        {visibleParts.map((part, idx) => (
+          <MessagePartRenderer key={part.id || idx} part={part} isUser={isUser} />
         ))}
       </div>
     </div>
@@ -162,38 +201,112 @@ function MessagePartRenderer({
 }) {
   switch (part.type) {
     case 'text':
+      if (!part.text?.trim()) return null
       return (
-        <p className="text-sm whitespace-pre-wrap">{part.text || part.content}</p>
+        <p className="text-sm whitespace-pre-wrap">{part.text}</p>
       )
 
-    case 'tool_use':
+    case 'reasoning':
+      return (
+        <div className="text-xs text-gray-500 italic mt-1 border-l-2 border-gray-600 pl-2">
+          💭 {part.text}
+        </div>
+      )
+
+    case 'tool':
       return (
         <div className={`text-xs ${isUser ? 'text-blue-200' : 'text-gray-400'} mt-2`}>
-          <span className="font-mono bg-gray-900/50 px-1 rounded">
-            🔧 {part.tool_name}
+          <div className="flex items-center gap-2">
+            <span className="font-mono bg-gray-900/50 px-2 py-1 rounded">
+              🔧 {part.tool}
+            </span>
+            {part.state && (
+              <span className={`px-1.5 py-0.5 rounded text-xs ${
+                part.state.status === 'completed' 
+                  ? 'bg-green-600/30 text-green-400' 
+                  : part.state.status === 'error'
+                  ? 'bg-red-600/30 text-red-400'
+                  : 'bg-yellow-600/30 text-yellow-400'
+              }`}>
+                {part.state.status}
+              </span>
+            )}
+          </div>
+          {part.state?.output && (
+            <pre className="font-mono bg-gray-900/50 p-2 rounded overflow-x-auto max-h-32 mt-1 text-xs">
+              {typeof part.state.output === 'string'
+                ? part.state.output
+                : JSON.stringify(part.state.output, null, 2)}
+            </pre>
+          )}
+          {part.state?.error && (
+            <div className="text-red-400 mt-1">
+              Error: {part.state.error.message || String(part.state.error)}
+            </div>
+          )}
+        </div>
+      )
+
+    case 'step-start':
+      return (
+        <div className="text-xs text-blue-400 mt-2 flex items-center gap-2">
+          <span>▶</span>
+          <span>{part.title || part.step}</span>
+        </div>
+      )
+
+    case 'step-finish':
+      return (
+        <div className="text-xs text-green-400 mt-1 flex items-center gap-2">
+          <span>✓</span>
+          <span>{part.title || part.step} completed</span>
+        </div>
+      )
+
+    case 'file':
+      return (
+        <div className={`text-xs ${isUser ? 'text-blue-200' : 'text-gray-400'} mt-2`}>
+          <span className="font-mono bg-gray-900/50 px-2 py-1 rounded">
+            📄 {part.filename || 'Attached file'}
           </span>
         </div>
       )
 
-    case 'tool_result':
+    case 'agent':
       return (
-        <div className={`text-xs ${isUser ? 'text-blue-200' : 'text-gray-400'} mt-1`}>
-          <pre className="font-mono bg-gray-900/50 p-2 rounded overflow-x-auto max-h-32">
-            {typeof part.tool_result === 'string'
-              ? part.tool_result
-              : JSON.stringify(part.tool_result, null, 2)}
-          </pre>
+        <div className="text-xs text-purple-400 mt-2 flex items-center gap-2">
+          <span>🤖</span>
+          <span>Agent: {part.title || 'Processing...'}</span>
         </div>
       )
 
-    case 'thinking':
-      return (
-        <div className="text-xs text-gray-500 italic mt-1">
-          💭 {part.content}
-        </div>
-      )
+    case 'snapshot':
+    case 'patch':
+    case 'compaction':
+    case 'retry':
+    case 'subtask':
+      // These are internal/system parts, don't display
+      return null
 
     default:
-      return null
+      // Fallback for unknown part types - show with debug info
+      console.log('[ChatPanel] Unknown part type:', part.type, part)
+      
+      // If it has text, display it
+      if (part.text?.trim()) {
+        return (
+          <div className="text-sm whitespace-pre-wrap">
+            <div className="text-xs text-gray-500 mb-1">[{part.type}]</div>
+            {part.text}
+          </div>
+        )
+      }
+      
+      // Otherwise show a generic indicator
+      return (
+        <div className="text-xs text-gray-500 italic mt-1">
+          [{part.type}]
+        </div>
+      )
   }
 }

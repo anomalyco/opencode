@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { AFDeployConfig, AFDeployResult, BuildResult, BundleResult, DeployProgress, DeployState } from '../types/deploy'
-import { afBackendClient } from '../lib/af-client'
+import type { AFDeployConfig, AFDeployResult, BuildResult, BundleResult, DeployProgress, DeployState } from '../types'
+import { afBackendClient } from '../lib'
 
 export function useDeploy() {
   const [state, setState] = useState<DeployState>({

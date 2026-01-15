@@ -1,14 +1,89 @@
 use std::collections::HashMap;
+use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::io::{BufRead, BufReader};
 use std::thread;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 
 /// Port range for dev servers
 const PORT_MIN: u16 = 3000;
 const PORT_MAX: u16 = 4000;
+
+/// Package manager detection
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum PackageManager {
+    Bun,
+    Pnpm,
+    Yarn,
+    Npm,
+}
+
+impl PackageManager {
+    /// Detect package manager from lock file in workspace
+    pub fn detect(root_path: &str) -> Self {
+        if Path::new(&format!("{}/bun.lock", root_path)).exists() 
+            || Path::new(&format!("{}/bun.lockb", root_path)).exists() {
+            PackageManager::Bun
+        } else if Path::new(&format!("{}/pnpm-lock.yaml", root_path)).exists() {
+            PackageManager::Pnpm
+        } else if Path::new(&format!("{}/yarn.lock", root_path)).exists() {
+            PackageManager::Yarn
+        } else {
+            PackageManager::Npm
+        }
+    }
+
+    /// Get the install command
+    pub fn install_command(&self) -> &str {
+        match self {
+            PackageManager::Bun => "bun",
+            PackageManager::Pnpm => "pnpm",
+            PackageManager::Yarn => "yarn",
+            PackageManager::Npm => "npm",
+        }
+    }
+
+    /// Get the install arguments
+    pub fn install_args(&self) -> Vec<&str> {
+        match self {
+            PackageManager::Bun => vec!["install"],
+            PackageManager::Pnpm => vec!["install"],
+            PackageManager::Yarn => vec!["install"],
+            PackageManager::Npm => vec!["install"],
+        }
+    }
+
+    /// Get the dev run command args
+    pub fn dev_args(&self, port: u16) -> Vec<String> {
+        match self {
+            PackageManager::Bun => vec!["run".to_string(), "dev".to_string(), "--".to_string(), "--port".to_string(), port.to_string()],
+            PackageManager::Pnpm => vec!["run".to_string(), "dev".to_string(), "--".to_string(), "--port".to_string(), port.to_string()],
+            PackageManager::Yarn => vec!["run".to_string(), "dev".to_string(), "--port".to_string(), port.to_string()],
+            PackageManager::Npm => vec!["run".to_string(), "dev".to_string(), "--".to_string(), "--port".to_string(), port.to_string()],
+        }
+    }
+}
+
+/// Install progress status
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InstallProgress {
+    pub status: InstallStatus,
+    pub package_manager: String,
+    pub message: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum InstallStatus {
+    Pending,
+    Installing,
+    Completed,
+    Error,
+}
 
 /// Workspace Runner: 管理 dev server 进程
 pub struct WorkspaceRunner {
@@ -20,7 +95,7 @@ pub struct WorkspaceRunner {
 pub struct ProcessHandle {
     pub workspace_id: String,
     #[serde(skip)]
-    pub child: Option<Child>,
+    pub child: Arc<Mutex<Option<Child>>>,
     pub port: u16,
     pub status: ProcessStatus,
     pub logs: Vec<LogEntry>,
@@ -106,15 +181,63 @@ impl WorkspaceRunner {
     }
 }
 
-#[tauri::command]
-pub fn open_workspace_dialog() -> Result<String, String> {
-    use tauri::api::dialog::blocking::FileDialogBuilder;
+/// Install dependencies in the workspace
+fn install_dependencies(
+    root_path: &str,
+    pkg_manager: &PackageManager,
+    app_handle: &AppHandle,
+    workspace_id: &str,
+) -> Result<(), String> {
+    // Emit install started event
+    let progress = InstallProgress {
+        status: InstallStatus::Installing,
+        package_manager: pkg_manager.install_command().to_string(),
+        message: format!("Installing dependencies with {}...", pkg_manager.install_command()),
+    };
+    let _ = app_handle.emit(&format!("install-progress:{}", workspace_id), &progress);
 
-    FileDialogBuilder::new()
+    // Run install command
+    let output = Command::new(pkg_manager.install_command())
+        .args(pkg_manager.install_args())
+        .current_dir(root_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("Failed to run {}: {}", pkg_manager.install_command(), e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let progress = InstallProgress {
+            status: InstallStatus::Error,
+            package_manager: pkg_manager.install_command().to_string(),
+            message: format!("Install failed: {}", stderr),
+        };
+        let _ = app_handle.emit(&format!("install-progress:{}", workspace_id), &progress);
+        return Err(format!("Install failed: {}", stderr));
+    }
+
+    // Emit install completed event
+    let progress = InstallProgress {
+        status: InstallStatus::Completed,
+        package_manager: pkg_manager.install_command().to_string(),
+        message: "Dependencies installed successfully".to_string(),
+    };
+    let _ = app_handle.emit(&format!("install-progress:{}", workspace_id), &progress);
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn open_workspace_dialog(app: AppHandle) -> Result<String, String> {
+    let folder = app.dialog()
+        .file()
         .set_title("Select Workspace Folder")
-        .pick_folder()
-        .map(|p| p.to_string_lossy().to_string())
-        .ok_or_else(|| "No folder selected".into())
+        .blocking_pick_folder();
+    
+    match folder {
+        Some(path) => Ok(path.to_string()),
+        None => Err("No folder selected".into()),
+    }
 }
 
 #[tauri::command]
@@ -148,21 +271,28 @@ pub async fn workspace_dev_start(
 
     // 3. Check package.json exists
     let pkg_json_path = format!("{}/package.json", root_path);
-    if !std::path::Path::new(&pkg_json_path).exists() {
+    if !Path::new(&pkg_json_path).exists() {
         runner.port_allocator.lock().unwrap().release(port);
         return Err("package.json not found in workspace".to_string());
     }
 
-    // 4. Check if node_modules exists
+    // 4. Detect package manager
+    let pkg_manager = PackageManager::detect(&root_path);
+
+    // 5. Check if node_modules exists, auto-install if missing
     let node_modules_path = format!("{}/node_modules", root_path);
-    if !std::path::Path::new(&node_modules_path).exists() {
-        runner.port_allocator.lock().unwrap().release(port);
-        return Err("node_modules not found. Please run 'pnpm install' first".to_string());
+    if !Path::new(&node_modules_path).exists() {
+        // Auto-install dependencies
+        if let Err(e) = install_dependencies(&root_path, &pkg_manager, &app_handle, &workspace_id) {
+            runner.port_allocator.lock().unwrap().release(port);
+            return Err(e);
+        }
     }
 
-    // 5. Start dev server
-    let mut child = Command::new("pnpm")
-        .args(&["run", "dev", "--", "--port", &port.to_string()])
+    // 6. Start dev server using detected package manager
+    let dev_args = pkg_manager.dev_args(port);
+    let mut child = Command::new(pkg_manager.install_command())
+        .args(&dev_args)
         .current_dir(&root_path)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -175,10 +305,10 @@ pub async fn workspace_dev_start(
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
 
-    // 6. Store process handle
+    // 7. Store process handle
     let handle = ProcessHandle {
         workspace_id: workspace_id.clone(),
-        child: Some(child),
+        child: Arc::new(Mutex::new(Some(child))),
         port,
         status: ProcessStatus::Starting,
         logs: vec![],
@@ -190,7 +320,7 @@ pub async fn workspace_dev_start(
         .unwrap()
         .insert(workspace_id.clone(), handle);
 
-    // 7. Spawn log readers
+    // 8. Spawn log readers
     if let Some(stdout) = stdout {
         let workspace_id_clone = workspace_id.clone();
         let app_handle_clone = app_handle.clone();
@@ -227,7 +357,7 @@ pub async fn workspace_dev_start(
         });
     }
 
-    // 8. Update status to Running after a short delay (simulate startup)
+    // 9. Update status to Running after a short delay (simulate startup)
     let processes_clone = runner.processes.clone();
     let workspace_id_clone = workspace_id.clone();
     tokio::spawn(async move {
@@ -250,8 +380,8 @@ pub async fn workspace_dev_stop(
     runner: tauri::State<'_, WorkspaceRunner>,
 ) -> Result<(), String> {
     let mut processes = runner.processes.lock().unwrap();
-    if let Some(mut handle) = processes.remove(&workspace_id) {
-        if let Some(mut child) = handle.child.take() {
+    if let Some(handle) = processes.remove(&workspace_id) {
+        if let Some(mut child) = handle.child.lock().unwrap().take() {
             child.kill().map_err(|e| format!("Failed to kill process: {}", e))?;
         }
         runner.port_allocator.lock().unwrap().release(handle.port);
@@ -263,7 +393,7 @@ pub async fn workspace_dev_stop(
 
 #[tauri::command]
 pub async fn workspace_run_build(
-    workspace_id: String,
+    _workspace_id: String,
     root_path: String,
 ) -> Result<BuildResult, String> {
     // Check package.json exists
@@ -310,21 +440,69 @@ pub async fn get_dev_server_status(
 
 #[tauri::command]
 pub async fn request_dev_permission(
-    workspace_id: String,
+    _workspace_id: String,
     root_path: String,
+    app: AppHandle,
 ) -> Result<bool, String> {
-    use tauri::api::dialog::{MessageDialogBuilder, MessageDialogKind, MessageDialogButtons};
-
     let message = format!(
         "Build Studio will run code from:\n{}\n\n\
         This may execute arbitrary commands. Only proceed if you trust this workspace.",
         root_path
     );
 
-    let result = MessageDialogBuilder::new("Security Warning", message)
-        .kind(MessageDialogKind::Warning)
+    let result = app.dialog()
+        .message(message)
+        .title("Security Warning")
         .buttons(MessageDialogButtons::OkCancel)
-        .blocking_show();
+        .blocking_show_with_result();
 
-    Ok(result)
+    Ok(matches!(result, MessageDialogResult::Ok))
+}
+
+/// Explicitly install dependencies in a workspace
+#[tauri::command]
+pub async fn workspace_install_deps(
+    workspace_id: String,
+    root_path: String,
+    app_handle: AppHandle,
+) -> Result<InstallProgress, String> {
+    // Check package.json exists
+    let pkg_json_path = format!("{}/package.json", root_path);
+    if !Path::new(&pkg_json_path).exists() {
+        return Err("package.json not found in workspace".to_string());
+    }
+
+    // Detect package manager
+    let pkg_manager = PackageManager::detect(&root_path);
+
+    // Emit install started
+    let progress = InstallProgress {
+        status: InstallStatus::Installing,
+        package_manager: pkg_manager.install_command().to_string(),
+        message: format!("Installing dependencies with {}...", pkg_manager.install_command()),
+    };
+    let _ = app_handle.emit(&format!("install-progress:{}", workspace_id), &progress);
+
+    // Run install
+    install_dependencies(&root_path, &pkg_manager, &app_handle, &workspace_id)?;
+
+    Ok(InstallProgress {
+        status: InstallStatus::Completed,
+        package_manager: pkg_manager.install_command().to_string(),
+        message: "Dependencies installed successfully".to_string(),
+    })
+}
+
+/// Detect the package manager used in a workspace
+#[tauri::command]
+pub async fn detect_package_manager(root_path: String) -> Result<String, String> {
+    let pkg_manager = PackageManager::detect(&root_path);
+    Ok(pkg_manager.install_command().to_string())
+}
+
+/// Check if dependencies are installed in a workspace
+#[tauri::command]
+pub async fn check_deps_installed(root_path: String) -> Result<bool, String> {
+    let node_modules_path = format!("{}/node_modules", root_path);
+    Ok(Path::new(&node_modules_path).exists())
 }

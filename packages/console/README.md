@@ -1,134 +1,302 @@
-# Agent Foundry Build Studio (Console)
+# OpenCode Console
 
-> AI-powered development console for Agent Foundry
+> Multi-layered platform for OpenCode: web console, Tauri desktop app, backend core, and serverless functions.
 
-## 快速开始
+## Overview
+
+The `packages/console` package is a monorepo-style collection of related packages that power the OpenCode console platform:
+
+| Package | Description |
+|---------|-------------|
+| `app/` | SolidStart web application - main web frontend |
+| `core/` | Backend core - database, business logic, domain modules |
+| `function/` | Cloudflare Workers - serverless functions |
+| `mail/` | Email templates using JSX Email |
+| `resource/` | SST resource configuration |
+| `src/` + `src-tauri/` | Tauri desktop app - "Build Studio" |
+
+## Project Structure
+
+```
+packages/console/
+├── app/                      # SolidStart Web Application
+│   ├── src/
+│   │   ├── routes/           # Page routes (auth, workspace, download, etc.)
+│   │   ├── context/          # Auth context providers
+│   │   ├── component/        # Shared UI components
+│   │   ├── asset/            # Images, SVGs, brand assets
+│   │   └── style/            # Global CSS styles
+│   ├── public/               # Static assets (favicon, manifest, etc.)
+│   ├── script/
+│   │   └── generate-sitemap.ts
+│   └── vite.config.ts
+│
+├── core/                     # Backend Core (Database + Business Logic)
+│   ├── src/
+│   │   ├── account.ts        # Account management
+│   │   ├── actor.ts          # Actor pattern for auth context
+│   │   ├── billing.ts        # Billing & subscription logic
+│   │   ├── black.ts          # Black tier features
+│   │   ├── key.ts            # API key management
+│   │   ├── model.ts          # AI model configuration
+│   │   ├── provider.ts       # Provider management
+│   │   ├── user.ts           # User management
+│   │   ├── workspace.ts      # Workspace management
+│   │   ├── drizzle/          # Database client & types
+│   │   ├── schema/           # Drizzle ORM table definitions
+│   │   └── util/             # Utility functions
+│   ├── migrations/           # SQL migration files (53+ migrations)
+│   ├── script/               # Admin scripts (see below)
+│   └── drizzle.config.ts
+│
+├── function/                 # Cloudflare Workers
+│   └── src/
+│       ├── auth.ts           # OpenAuth authentication handler
+│       └── log-processor.ts  # Honeycomb metrics processor
+│
+├── mail/                     # Email Templates (JSX Email)
+│   └── emails/
+│       ├── templates/
+│       │   ├── InviteEmail.tsx
+│       │   └── static/       # Fonts, images for emails
+│       ├── components.tsx    # Shared email components
+│       └── styles.ts         # Email styles
+│
+├── resource/                 # SST Resource Configuration
+│   ├── resource.cloudflare.ts  # Cloudflare environment
+│   └── resource.node.ts        # Node.js environment
+│
+├── scripts/                  # Console Dev Scripts
+│   ├── predev.ts             # Pre-dev setup hook
+│   └── verify-setup.ts       # Validates file structure
+│
+├── src/                      # Tauri Desktop App (Build Studio) - React
+│   ├── main.tsx              # Entry point
+│   ├── App.tsx               # Main application component
+│   ├── components/           # React UI components
+│   │   ├── index.ts          # Barrel exports
+│   │   ├── ChatPanel.tsx     # AI chat interface
+│   │   ├── WorkspacePanel.tsx # Workspace tabs (Preview/Code)
+│   │   ├── PreviewTab.tsx    # Dev server preview with iframe
+│   │   ├── CodeTab.tsx       # File tree + code editor
+│   │   ├── FileTree.tsx      # File explorer
+│   │   ├── ActionsBar.tsx    # Deploy/Export/Copy actions
+│   │   ├── DeployDialog.tsx  # Deployment configuration
+│   │   ├── ProviderSelector.tsx # AI model selection
+│   │   ├── WorkspaceDropdown.tsx # Workspace switcher
+│   │   └── ResizableSplitter.tsx # Resizable panel divider
+│   ├── hooks/                # React hooks
+│   │   ├── index.ts          # Barrel exports
+│   │   ├── useSession.ts     # OpenCode session management
+│   │   ├── useProviders.ts   # AI provider/model fetching
+│   │   ├── useFileTree.ts    # File tree state
+│   │   ├── useOpenFiles.ts   # Open file tabs
+│   │   ├── useCodeMirror.ts  # CodeMirror editor integration
+│   │   ├── useDeploy.ts      # Deployment workflow
+│   │   ├── useSplitPane.ts   # Resizable panel logic
+│   │   └── useWorkspaceHistory.ts # Recent workspaces
+│   ├── lib/                  # Client utilities
+│   │   ├── index.ts          # Barrel exports
+│   │   ├── opencode-client.ts # OpenCode Server API client
+│   │   └── af-client.ts      # Agent Foundry backend client
+│   └── types/                # TypeScript types
+│       ├── index.ts          # Barrel exports
+│       ├── workspace.ts      # Workspace data models
+│       ├── deploy.ts         # Deployment types
+│       ├── fs.ts             # File system types
+│       └── provider.ts       # Provider types
+│
+└── src-tauri/                # Tauri Rust Backend
+    ├── src/
+    │   ├── main.rs           # Rust entry point
+    │   ├── workspace_runner.rs # Dev server process management
+    │   ├── file_ops.rs       # File system operations
+    │   ├── deploy.rs         # Deployment commands
+    │   └── lib.rs            # Library exports
+    ├── icons/                # App icons
+    ├── Cargo.toml            # Rust dependencies
+    └── tauri.conf.json       # Tauri configuration
+```
+
+## Core Scripts
+
+Admin scripts located in `core/script/`:
+
+| Script | Purpose |
+|--------|---------|
+| `credit-workspace.ts` | Add credits to a workspace |
+| `lookup-user.ts` | Find user by email/ID |
+| `onboard-zen-black.ts` | Onboard new Zen Black users |
+| `promote-black.ts` | Promote user to Black tier |
+| `remove-black.ts` | Remove Black tier from user |
+| `promote-models.ts` | Promote models to dev/prod |
+| `pull-models.ts` | Pull model configs from stage |
+| `update-models.ts` | Update model configurations |
+| `update-black.ts` | Update Black tier settings |
+| `reset-db.ts` | Reset database (danger!) |
+
+Usage:
+```bash
+# Run with SST shell for environment
+bun run --cwd packages/console/core shell-dev script/lookup-user.ts user@example.com
+```
+
+## Quick Start
 
 ### Prerequisites
 
-- **Bun** 1.3+ ([安装](https://bun.sh))
-- **Rust** 1.70+ ([安装](https://rustup.rs))
-- **Node.js** 18+ (用于一些工具链)
+- **Bun** 1.3+ ([install](https://bun.sh))
+- **Rust** 1.70+ ([install](https://rustup.rs)) - for Tauri desktop app
+- **Node.js** 18+ (for some tooling)
 
-### 安装依赖
+### Install Dependencies
 
 ```bash
-# 在项目根目录
+# From project root
 bun install
 
-# 或者只安装 console package
+# Or install console package only
 cd packages/console
 bun install
 ```
 
-### 开发模式
+### Development
+
+#### Web App (SolidStart)
 
 ```bash
-# 方式1：运行 Tauri desktop app (推荐)
+# Start dev server
+bun run --cwd packages/console/app dev
+
+# With remote auth (for testing against dev environment)
+bun run --cwd packages/console/app dev:remote
+```
+
+#### Tauri Desktop App (Build Studio)
+
+```bash
+# Start Tauri dev mode (recommended)
 bun run --cwd packages/console tauri dev
 
-# 方式2：只运行 web dev server (调试 UI)
+# Or run web dev server only (for UI debugging)
 bun run --cwd packages/console dev
 ```
 
-### 构建
+#### Email Templates
 
 ```bash
-# 构建桌面应用
+# Preview email templates
+bun run --cwd packages/console/mail dev
+```
+
+### Build
+
+```bash
+# Build Tauri desktop app
 bun run --cwd packages/console tauri build
 
-# 输出位置:
+# Output locations:
 # - macOS: src-tauri/target/release/bundle/macos/
 # - Windows: src-tauri/target/release/bundle/msi/
 ```
 
-## 项目结构
+### Database
 
-```
-packages/console/
-├── src/                      # 前端代码 (React + TypeScript)
-│   ├── main.tsx              # 入口文件
-│   ├── App.tsx               # 主应用组件
-│   ├── components/           # UI 组件
-│   │   ├── ChatPanel.tsx     # 左侧 Chat 面板
-│   │   ├── WorkspacePanel.tsx # 右侧 Workspace 面板
-│   │   └── ActionsBar.tsx    # 右上角操作按钮
-│   ├── hooks/                # React hooks
-│   ├── lib/                  # 工具函数
-│   └── types/                # TypeScript 类型定义
-│       └── workspace.ts      # Workspace 数据模型
-├── src-tauri/                # Tauri backend (Rust)
-│   ├── src/
-│   │   ├── main.rs           # Rust 入口
-│   │   └── workspace_runner.rs # Workspace 进程管理
-│   ├── Cargo.toml            # Rust 依赖
-│   └── tauri.conf.json       # Tauri 配置
-├── public/                   # 静态资源
-├── vite.config.ts            # Vite 配置
-├── tailwind.config.js        # Tailwind CSS 配置
-└── package.json              # NPM 依赖
+```bash
+# Run migrations (dev stage)
+bun run --cwd packages/console/core db-dev push
+
+# Generate new migration
+bun run --cwd packages/console/core db-dev generate
+
+# Open Drizzle Studio
+bun run --cwd packages/console/core db-dev studio
 ```
 
-## Phase 1 完成功能
+## Technology Stack
 
-✅ **基础框架**
-- Tauri 2.x 项目初始化
-- Vite + React + Tailwind CSS 配置
-- Workspace TypeScript 类型定义
-- 两栏布局 (Chat + Workspace)
-- 右上角 Actions Bar (4个按钮)
-  - Open Workspace (已连接 Tauri IPC)
-  - Deploy to AF (占位)
-  - Export Local (占位)
-  - Copy (占位)
+| Layer | Technology |
+|-------|------------|
+| **Web App** | SolidStart, Solid.js, Tailwind CSS, Vite |
+| **Desktop App** | Tauri 2.x, React 18, CodeMirror 6, Tailwind CSS |
+| **Backend Core** | Drizzle ORM, PostgreSQL/PlanetScale |
+| **Serverless** | Cloudflare Workers, OpenAuth |
+| **Email** | JSX Email |
+| **Infrastructure** | SST (Serverless Stack) |
+| **Build Tool** | Bun, Vite |
 
-✅ **Tauri IPC**
-- `greet` command (测试连接)
-- `open_workspace_dialog` command (打开文件选择器)
+## Architecture
 
-## 下一步 (Week 2)
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      User Interfaces                         │
+├─────────────────────────────┬───────────────────────────────┤
+│     Web App (SolidStart)    │    Desktop App (Tauri/React)  │
+│         app/                │         src/ + src-tauri/     │
+└─────────────┬───────────────┴───────────────┬───────────────┘
+              │                               │
+              ▼                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Backend Services                          │
+├─────────────────────────────┬───────────────────────────────┤
+│    Cloudflare Workers       │      OpenCode Server          │
+│       function/             │    (local, via Tauri IPC)     │
+└─────────────┬───────────────┴───────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       Core Layer                             │
+│                         core/                                │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────────────┐ │
+│  │ Account │  │  User   │  │Workspace│  │     Billing     │ │
+│  └────┬────┘  └────┬────┘  └────┬────┘  └────────┬────────┘ │
+│       └────────────┴────────────┴────────────────┘          │
+│                           │                                  │
+│                    ┌──────▼──────┐                          │
+│                    │   Drizzle   │                          │
+│                    │     ORM     │                          │
+│                    └──────┬──────┘                          │
+└───────────────────────────┼─────────────────────────────────┘
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │  PostgreSQL/  │
+                    │  PlanetScale  │
+                    └───────────────┘
+```
 
-- [ ] 实现 Workspace Runner (pnpm dev/build)
-- [ ] Preview Tab 嵌入 dev server
-- [ ] Code Tab 文件树 + 编辑器
-- [ ] 集成 OpenCode Server
+## Tauri Commands
 
-## 技术栈
-
-- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS
-- **Backend**: Tauri 2.x (Rust)
-- **Build Tool**: Bun
-- **State Management**: Zustand (待添加)
-- **Editor**: CodeMirror 6 (待添加)
-
-## 开发说明
-
-### Tauri Commands
-
-所有 Rust commands 在 `src-tauri/src/main.rs` 中定义，通过 `invoke` 从前端调用：
+Rust commands defined in `src-tauri/src/` and callable from frontend via `invoke`:
 
 ```typescript
 import { invoke } from '@tauri-apps/api/core'
 
-// 调用 Rust command
-const result = await invoke<string>('open_workspace_dialog')
+// Open workspace folder dialog
+const rootPath = await invoke<string>('open_workspace_dialog')
+
+// Start dev server
+const info = await invoke<DevServerInfo>('workspace_dev_start', {
+  workspaceId,
+  rootPath,
+})
+
+// Stop dev server
+await invoke('workspace_dev_stop', { workspaceId })
+
+// Read directory contents
+const items = await invoke<FileItem[]>('read_directory', { path })
+
+// Read file content
+const content = await invoke<string>('read_file_content', { path })
+
+// Write file content
+await invoke('write_file_content', { path, content })
 ```
 
-### 添加新的 Tauri Command
+## Troubleshooting
 
-1. 在 `src-tauri/src/*.rs` 中定义函数并添加 `#[tauri::command]`
-2. 在 `main.rs` 的 `invoke_handler` 中注册
-3. 在前端使用 `invoke('command_name', { args })` 调用
-
-### 样式规范
-
-- 使用 Tailwind CSS utility classes
-- 遵循暗色主题 (bg-gray-900/800/700)
-- 间距使用 4px 基数 (p-4, gap-2, etc.)
-
-## 故障排除
-
-### Rust 编译错误
+### Rust Compilation Errors
 
 ```bash
 cd packages/console/src-tauri
@@ -136,23 +304,31 @@ cargo clean
 cargo build
 ```
 
-### 前端类型错误
+### TypeScript Errors
 
 ```bash
 bun run --cwd packages/console typecheck
 ```
 
-### 依赖问题
+### Dependency Issues
 
 ```bash
-# 清理并重装
+# Clean and reinstall
 rm -rf node_modules
 bun install
 ```
 
-## 参考文档
+### Database Connection
 
-- [设计方案](../../doc/devplan/BUILD-STUDIO-DESIGN.md)
-- [规格说明](../../doc/agent-foundry/AF-BUILDCONSOLE-SPEC.md)
-- [Tauri 文档](https://tauri.app/)
-- [React 文档](https://react.dev/)
+```bash
+# Test database connection
+bun run --cwd packages/console/core shell-dev script/lookup-user.ts test
+```
+
+## Related Documentation
+
+- [Design Document](../../docs/devplan/BUILD-STUDIO-DESIGN.md)
+- [Product Spec](../../docs/product/SPEC.md)
+- [Tauri Documentation](https://tauri.app/)
+- [SolidStart Documentation](https://start.solidjs.com/)
+- [Drizzle ORM Documentation](https://orm.drizzle.team/)
