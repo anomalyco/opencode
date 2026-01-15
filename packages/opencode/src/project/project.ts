@@ -48,6 +48,93 @@ export namespace Project {
     log.info("fromDirectory", { directory })
 
     const { id, sandbox, worktree, vcs } = await iife(async () => {
+      const envGitDir = process.env.GIT_DIR
+      const envWorkTree = process.env.GIT_WORK_TREE
+
+      if (envGitDir && (await fs.stat(envGitDir).catch(() => undefined))) {
+        log.info("using GIT_DIR from environment", { envGitDir, envWorkTree })
+        const gitBinary = Bun.which("git")
+        if (!gitBinary) {
+          return {
+            id: "global",
+            worktree: envWorkTree ?? directory,
+            sandbox: envWorkTree ?? directory,
+            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+          }
+        }
+
+        const git = envGitDir
+        let sandbox = envWorkTree ?? directory
+
+        let id = await Bun.file(path.join(git, "opencode"))
+          .text()
+          .then((x) => x.trim())
+          .catch(() => undefined)
+
+        if (!id) {
+          const roots = await $`git rev-list --max-parents=0 --all`
+            .env({ ...process.env, GIT_DIR: git })
+            .quiet()
+            .nothrow()
+            .text()
+            .then((x) =>
+              x
+                .split("\n")
+                .filter(Boolean)
+                .map((x) => x.trim())
+                .toSorted(),
+            )
+            .catch(() => undefined)
+
+          id = roots?.[0]
+          if (id) {
+            void Bun.file(path.join(git, "opencode"))
+              .write(id)
+              .catch(() => undefined)
+          }
+        }
+
+        if (!id) {
+          return {
+            id: "global",
+            worktree: sandbox,
+            sandbox,
+            vcs: "git",
+          }
+        }
+
+        if (!envWorkTree) {
+          const top = await $`git rev-parse --show-toplevel`
+            .env({ ...process.env, GIT_DIR: git })
+            .quiet()
+            .nothrow()
+            .text()
+            .then((x) => x.trim())
+            .catch(() => undefined)
+
+          if (top) sandbox = top
+        }
+
+        const worktree = await $`git rev-parse --git-common-dir`
+          .env({ ...process.env, GIT_DIR: git })
+          .quiet()
+          .nothrow()
+          .text()
+          .then((x) => {
+            const dirname = path.dirname(x.trim())
+            if (dirname === ".") return sandbox
+            return dirname
+          })
+          .catch(() => sandbox)
+
+        return {
+          id,
+          sandbox,
+          worktree,
+          vcs: "git",
+        }
+      }
+
       const matches = Filesystem.up({ targets: [".git"], start: directory })
       const git = await matches.next().then((x) => x.value)
       await matches.return()

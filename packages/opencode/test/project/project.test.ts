@@ -89,6 +89,84 @@ describe("Project.fromDirectory with worktrees", () => {
   })
 })
 
+describe("Project.fromDirectory with GIT_DIR/GIT_WORK_TREE env vars", () => {
+  test("should respect GIT_DIR and GIT_WORK_TREE when both are set", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    // Create a separate directory that is NOT a git repo
+    const separateDir = path.join(tmp.path, "..", "separate-dir")
+    await $`mkdir -p ${separateDir}`.quiet()
+
+    // Set env vars to point to the git repo
+    const originalGitDir = process.env.GIT_DIR
+    const originalWorkTree = process.env.GIT_WORK_TREE
+    try {
+      process.env.GIT_DIR = path.join(tmp.path, ".git")
+      process.env.GIT_WORK_TREE = tmp.path
+
+      // Call fromDirectory with the separate (non-git) directory
+      const { project } = await Project.fromDirectory(separateDir)
+
+      // Should detect the git repo from env vars, not filesystem walk
+      expect(project.vcs).toBe("git")
+      expect(project.worktree).toBe(tmp.path)
+    } finally {
+      if (originalGitDir === undefined) delete process.env.GIT_DIR
+      else process.env.GIT_DIR = originalGitDir
+      if (originalWorkTree === undefined) delete process.env.GIT_WORK_TREE
+      else process.env.GIT_WORK_TREE = originalWorkTree
+      await $`rm -rf ${separateDir}`.quiet().nothrow()
+    }
+  })
+
+  test("should respect only GIT_DIR and derive worktree", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const separateDir = path.join(tmp.path, "..", "separate-dir-2")
+    await $`mkdir -p ${separateDir}`.quiet()
+
+    const originalGitDir = process.env.GIT_DIR
+    const originalWorkTree = process.env.GIT_WORK_TREE
+    try {
+      process.env.GIT_DIR = path.join(tmp.path, ".git")
+      delete process.env.GIT_WORK_TREE
+
+      const { project } = await Project.fromDirectory(separateDir)
+
+      expect(project.vcs).toBe("git")
+      expect(project.worktree).toBe(tmp.path)
+    } finally {
+      if (originalGitDir === undefined) delete process.env.GIT_DIR
+      else process.env.GIT_DIR = originalGitDir
+      if (originalWorkTree === undefined) delete process.env.GIT_WORK_TREE
+      else process.env.GIT_WORK_TREE = originalWorkTree
+      await $`rm -rf ${separateDir}`.quiet().nothrow()
+    }
+  })
+
+  test("should fall back to filesystem walk when GIT_DIR is invalid", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const originalGitDir = process.env.GIT_DIR
+    const originalWorkTree = process.env.GIT_WORK_TREE
+    try {
+      process.env.GIT_DIR = "/nonexistent/path/.git"
+      process.env.GIT_WORK_TREE = "/nonexistent/path"
+
+      // Should fall back to filesystem walk and find the actual git repo
+      const { project } = await Project.fromDirectory(tmp.path)
+
+      expect(project.vcs).toBe("git")
+      expect(project.worktree).toBe(tmp.path)
+    } finally {
+      if (originalGitDir === undefined) delete process.env.GIT_DIR
+      else process.env.GIT_DIR = originalGitDir
+      if (originalWorkTree === undefined) delete process.env.GIT_WORK_TREE
+      else process.env.GIT_WORK_TREE = originalWorkTree
+    }
+  })
+})
+
 describe("Project.discover", () => {
   test("should discover favicon.png in root", async () => {
     await using tmp = await tmpdir({ git: true })
