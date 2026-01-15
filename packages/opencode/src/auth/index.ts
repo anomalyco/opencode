@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import z from "zod"
 import { ulid } from "ulid"
 import { getOAuthRecordID } from "./context"
+import { Log } from "../util/log"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
@@ -42,6 +43,17 @@ export namespace Auth {
   const STORE_LOCK_TIMEOUT_MS = 5_000
   const STORE_LOCK_STALE_MS = 30_000
   const STORE_LOCK_RETRY_MS = 25
+  const STORE_LOCK_BEST_EFFORT_TIMEOUT_MS = 250
+  const STORE_LOCK_BEST_EFFORT_RETRY_MS = 10
+
+  const log = Log.create({ service: "auth.store" })
+
+  class StoreLockTimeoutError extends Error {
+    constructor() {
+      super("Timed out waiting for auth store lock")
+      this.name = "StoreLockTimeoutError"
+    }
+  }
 
   const Health = z
     .object({
@@ -119,8 +131,14 @@ export namespace Auth {
     await fs.mkdir(path.dirname(filepath), { recursive: true })
   }
 
-  async function withStoreLock<T>(fn: () => Promise<T>): Promise<T> {
+  async function withStoreLock<T>(
+    fn: () => Promise<T>,
+    options: { timeoutMs?: number; staleMs?: number; retryMs?: number } = {},
+  ): Promise<T> {
     await ensureDataDir()
+    const timeoutMs = options.timeoutMs ?? STORE_LOCK_TIMEOUT_MS
+    const staleMs = options.staleMs ?? STORE_LOCK_STALE_MS
+    const retryMs = options.retryMs ?? STORE_LOCK_RETRY_MS
     const start = Date.now()
     while (true) {
       try {
@@ -131,14 +149,14 @@ export namespace Auth {
         const code = (error as { code?: string }).code
         if (code !== "EEXIST") throw error
         const stat = await fs.stat(lockpath).catch(() => undefined)
-        if (stat && Date.now() - stat.mtimeMs > STORE_LOCK_STALE_MS) {
+        if (stat && Date.now() - stat.mtimeMs > staleMs) {
           await fs.rm(lockpath).catch(() => {})
           continue
         }
-        if (Date.now() - start > STORE_LOCK_TIMEOUT_MS) {
-          throw new Error("Timed out waiting for auth store lock")
+        if (Date.now() - start > timeoutMs) {
+          throw new StoreLockTimeoutError()
         }
-        await Bun.sleep(STORE_LOCK_RETRY_MS + Math.random() * STORE_LOCK_RETRY_MS)
+        await Bun.sleep(retryMs + Math.random() * retryMs)
       }
     }
 
@@ -221,7 +239,10 @@ export namespace Auth {
     changed: boolean
   }
 
-  async function updateStore<T>(fn: (store: StoreFile) => Promise<StoreUpdateResult<T>> | StoreUpdateResult<T>) {
+  async function updateStoreWithLock<T>(
+    fn: (store: StoreFile) => Promise<StoreUpdateResult<T>> | StoreUpdateResult<T>,
+    lockOptions?: { timeoutMs?: number; staleMs?: number; retryMs?: number },
+  ) {
     return withStoreLock(async () => {
       const { store, needsWrite } = await readStoreFile()
       const result = await fn(store)
@@ -229,7 +250,28 @@ export namespace Auth {
         await writeStoreFile(store)
       }
       return result.value
-    })
+    }, lockOptions)
+  }
+
+  async function updateStore<T>(fn: (store: StoreFile) => Promise<StoreUpdateResult<T>> | StoreUpdateResult<T>) {
+    return updateStoreWithLock(fn)
+  }
+
+  async function updateStoreBestEffort(
+    fn: (store: StoreFile) => Promise<StoreUpdateResult<void>> | StoreUpdateResult<void>,
+  ): Promise<void> {
+    try {
+      await updateStoreWithLock(fn, {
+        timeoutMs: STORE_LOCK_BEST_EFFORT_TIMEOUT_MS,
+        retryMs: STORE_LOCK_BEST_EFFORT_RETRY_MS,
+      })
+    } catch (error) {
+      if (error instanceof StoreLockTimeoutError) {
+        log.warn("auth store lock busy, skipping update", { timeoutMs: STORE_LOCK_BEST_EFFORT_TIMEOUT_MS })
+        return
+      }
+      throw error
+    }
   }
 
   function ensureOAuthProvider(store: StoreFile, providerID: string): OAuthProvider {
@@ -474,7 +516,7 @@ export namespace Auth {
     }
 
     export async function moveToBack(providerID: string, namespace: string, recordID: string): Promise<void> {
-      await updateStore((store) => {
+      await updateStoreBestEffort((store) => {
         const provider = store.providers[providerID]
         if (!provider || provider.type !== "oauth") return { value: undefined, changed: false }
         const order = recordIDsForNamespace(provider, namespace)
@@ -491,7 +533,7 @@ export namespace Auth {
       ok: boolean
       cooldownUntil?: number
     }): Promise<void> {
-      await updateStore((store) => {
+      await updateStoreBestEffort((store) => {
         const provider = store.providers[input.providerID]
         if (!provider || provider.type !== "oauth") return { value: undefined, changed: false }
 
@@ -517,7 +559,7 @@ export namespace Auth {
     }
 
     export async function markAccessExpired(providerID: string, namespace: string, recordID: string): Promise<void> {
-      await updateStore((store) => {
+      await updateStoreBestEffort((store) => {
         const provider = store.providers[providerID]
         if (!provider || provider.type !== "oauth") return { value: undefined, changed: false }
         const record = findOAuthRecord(provider, recordID)

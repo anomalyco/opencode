@@ -4,7 +4,6 @@ import { CredentialManager } from "./credential-manager"
 
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 30_000
 const DEFAULT_AUTH_FAILURE_COOLDOWN_MS = 5 * 60_000
-const DEFAULT_MAX_ATTEMPTS = 5
 
 function isReadableStream(value: unknown): value is ReadableStream {
   return typeof ReadableStream !== "undefined" && value instanceof ReadableStream
@@ -74,7 +73,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
 
     const rateLimitCooldownMs = opts.rateLimitCooldownMs ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS
     const authFailureCooldownMs = opts.authFailureCooldownMs ?? DEFAULT_AUTH_FAILURE_COOLDOWN_MS
-    const maxAttemptBudget = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
+    const maxAttemptBudget = opts.maxAttempts ?? candidates.length
     let maxAttempts = Math.max(1, maxAttemptBudget)
     if (!allowRetry) {
       maxAttempts = 1
