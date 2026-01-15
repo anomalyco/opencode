@@ -85,6 +85,14 @@ export function Prompt(props: PromptProps) {
     }
   }
 
+  function canPasteImage() {
+    const model = local.model.current()
+    if (!model) return false
+    const provider = sync.data.provider.find((x) => x.id === model.providerID)
+    const info = provider?.models[model.modelID]
+    return info?.capabilities?.input?.image ?? false
+  }
+
   const textareaKeybindings = useTextareaKeybindings()
 
   const fileStyleId = syntax().getStyleId("extmark.file")!
@@ -658,6 +666,14 @@ export function Prompt(props: PromptProps) {
   }
 
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
+    if (!canPasteImage()) {
+      toast.show({
+        variant: "warning",
+        message: "Current model does not support images",
+        duration: 3000,
+      })
+      return
+    }
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
     const count = store.prompt.parts.filter((x) => x.type === "file").length
