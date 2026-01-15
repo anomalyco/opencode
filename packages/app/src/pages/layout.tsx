@@ -64,7 +64,7 @@ import { useServer } from "@/context/server"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
-    Persist.global("layout.page", ["layout.page.v1"]),
+    Persist.global("layout", ["layout.v6"]),
     createStore({
       lastSession: {} as { [directory: string]: string },
       activeProject: undefined as string | undefined,
