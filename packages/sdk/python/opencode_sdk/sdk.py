@@ -712,10 +712,18 @@ class SessionApi:
         )
 
     def summarize(
-        self, session_id: str, *, provider_id: str, model_id: str, directory: str | None = None
+        self,
+        session_id: str,
+        *,
+        provider_id: str,
+        model_id: str,
+        auto: bool | None = None,
+        directory: str | None = None,
     ) -> Response[bool]:
         """Summarize the session."""
-        body = {"providerID": provider_id, "modelID": model_id}
+        body: dict[str, Any] = {"providerID": provider_id, "modelID": model_id}
+        if auto is not None:
+            body["auto"] = auto
         return self._client.post(
             "/session/{sessionID}/summarize",
             path_params={"sessionID": session_id},
@@ -724,10 +732,18 @@ class SessionApi:
         )
 
     async def summarize_async(
-        self, session_id: str, *, provider_id: str, model_id: str, directory: str | None = None
+        self,
+        session_id: str,
+        *,
+        provider_id: str,
+        model_id: str,
+        auto: bool | None = None,
+        directory: str | None = None,
     ) -> Response[bool]:
         """Summarize the session (async)."""
-        body = {"providerID": provider_id, "modelID": model_id}
+        body: dict[str, Any] = {"providerID": provider_id, "modelID": model_id}
+        if auto is not None:
+            body["auto"] = auto
         return await self._client.apost(
             "/session/{sessionID}/summarize",
             path_params={"sessionID": session_id},
@@ -766,6 +782,7 @@ class SessionApi:
         no_reply: bool | None = None,
         system: str | None = None,
         tools: dict[str, bool] | None = None,
+        variant: str | None = None,
         directory: str | None = None,
     ) -> Response[AssistantMessageWithParts]:
         """Create and send a new message to a session."""
@@ -782,6 +799,8 @@ class SessionApi:
             body["system"] = system
         if tools is not None:
             body["tools"] = tools
+        if variant is not None:
+            body["variant"] = variant
         return self._client.post(
             "/session/{sessionID}/message",
             path_params={"sessionID": session_id},
@@ -800,6 +819,7 @@ class SessionApi:
         no_reply: bool | None = None,
         system: str | None = None,
         tools: dict[str, bool] | None = None,
+        variant: str | None = None,
         directory: str | None = None,
     ) -> Response[AssistantMessageWithParts]:
         """Create and send a new message to a session (async)."""
@@ -816,6 +836,8 @@ class SessionApi:
             body["system"] = system
         if tools is not None:
             body["tools"] = tools
+        if variant is not None:
+            body["variant"] = variant
         return await self._client.apost(
             "/session/{sessionID}/message",
             path_params={"sessionID": session_id},
@@ -854,6 +876,7 @@ class SessionApi:
         no_reply: bool | None = None,
         system: str | None = None,
         tools: dict[str, bool] | None = None,
+        variant: str | None = None,
         directory: str | None = None,
     ) -> Response[None]:
         """Create and send a new message to a session, start if needed and return immediately."""
@@ -870,6 +893,8 @@ class SessionApi:
             body["system"] = system
         if tools is not None:
             body["tools"] = tools
+        if variant is not None:
+            body["variant"] = variant
         return self._client.post(
             "/session/{sessionID}/prompt_async",
             path_params={"sessionID": session_id},
@@ -888,6 +913,7 @@ class SessionApi:
         no_reply: bool | None = None,
         system: str | None = None,
         tools: dict[str, bool] | None = None,
+        variant: str | None = None,
         directory: str | None = None,
     ) -> Response[None]:
         """Create and send a new message, start if needed and return immediately (async)."""
@@ -904,6 +930,8 @@ class SessionApi:
             body["system"] = system
         if tools is not None:
             body["tools"] = tools
+        if variant is not None:
+            body["variant"] = variant
         return await self._client.apost(
             "/session/{sessionID}/prompt_async",
             path_params={"sessionID": session_id},
@@ -920,6 +948,8 @@ class SessionApi:
         message_id: str | None = None,
         agent: str | None = None,
         model: str | None = None,
+        variant: str | None = None,
+        parts: list[dict[str, Any]] | None = None,
         directory: str | None = None,
     ) -> Response[AssistantMessageWithParts]:
         """Send a new command to a session."""
@@ -930,6 +960,10 @@ class SessionApi:
             body["agent"] = agent
         if model is not None:
             body["model"] = model
+        if variant is not None:
+            body["variant"] = variant
+        if parts is not None:
+            body["parts"] = parts
         return self._client.post(
             "/session/{sessionID}/command",
             path_params={"sessionID": session_id},
@@ -946,6 +980,8 @@ class SessionApi:
         message_id: str | None = None,
         agent: str | None = None,
         model: str | None = None,
+        variant: str | None = None,
+        parts: list[dict[str, Any]] | None = None,
         directory: str | None = None,
     ) -> Response[AssistantMessageWithParts]:
         """Send a new command to a session (async)."""
@@ -956,6 +992,10 @@ class SessionApi:
             body["agent"] = agent
         if model is not None:
             body["model"] = model
+        if variant is not None:
+            body["variant"] = variant
+        if parts is not None:
+            body["parts"] = parts
         return await self._client.apost(
             "/session/{sessionID}/command",
             path_params={"sessionID": session_id},
@@ -1488,21 +1528,41 @@ class FindApi:
         )
 
     def files(
-        self, *, query: str, dirs: bool | None = None, directory: str | None = None
+        self,
+        *,
+        query: str,
+        dirs: bool | None = None,
+        type: Literal["file", "directory"] | None = None,
+        limit: int | None = None,
+        directory: str | None = None,
     ) -> Response[list[str]]:
         """Find files."""
         query_params: dict[str, Any] = {"query": query, "directory": directory}
         if dirs is not None:
             query_params["dirs"] = "true" if dirs else "false"
+        if type is not None:
+            query_params["type"] = type
+        if limit is not None:
+            query_params["limit"] = limit
         return self._client.get("/find/file", query_params=query_params)
 
     async def files_async(
-        self, *, query: str, dirs: bool | None = None, directory: str | None = None
+        self,
+        *,
+        query: str,
+        dirs: bool | None = None,
+        type: Literal["file", "directory"] | None = None,
+        limit: int | None = None,
+        directory: str | None = None,
     ) -> Response[list[str]]:
         """Find files (async)."""
         query_params: dict[str, Any] = {"query": query, "directory": directory}
         if dirs is not None:
             query_params["dirs"] = "true" if dirs else "false"
+        if type is not None:
+            query_params["type"] = type
+        if limit is not None:
+            query_params["limit"] = limit
         return await self._client.aget("/find/file", query_params=query_params)
 
     def symbols(self, *, query: str, directory: str | None = None) -> Response[list[Symbol]]:

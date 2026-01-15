@@ -424,6 +424,108 @@ class TestSessionApi:
         mock_client.post.assert_called_once()
         assert result.ok
 
+    def test_summarize_with_auto(self, mock_client: MagicMock) -> None:
+        """Test summarizing session with auto parameter."""
+        api = SessionApi(mock_client)
+        result = api.summarize("ses_123", provider_id="anthropic", model_id="claude-3", auto=True)
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        assert call_args[1]["body"]["auto"] is True
+        assert result.ok
+
+    def test_prompt_with_variant(self, mock_client: MagicMock) -> None:
+        """Test sending a prompt with variant parameter."""
+        api = SessionApi(mock_client)
+        parts: list[TextPartInput] = [{"type": "text", "text": "Hello!"}]
+        result = api.prompt("ses_123", parts=parts, variant="fast")
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        assert call_args[1]["body"]["variant"] == "fast"
+        assert result.ok
+
+    def test_prompt_async_fire_with_variant(self, mock_client: MagicMock) -> None:
+        """Test fire-and-forget prompt with variant parameter."""
+        api = SessionApi(mock_client)
+        parts: list[TextPartInput] = [{"type": "text", "text": "Hello!"}]
+        result = api.prompt_async_fire("ses_123", parts=parts, variant="fast")
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        assert call_args[1]["body"]["variant"] == "fast"
+        assert result.ok
+
+    def test_command_with_variant_and_parts(self, mock_client: MagicMock) -> None:
+        """Test sending a command with variant and parts parameters."""
+        api = SessionApi(mock_client)
+        parts = [{"type": "text", "text": "additional context"}]
+        result = api.command(
+            "ses_123",
+            command="git",
+            arguments="status",
+            variant="fast",
+            parts=parts,
+        )
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        assert call_args[1]["body"]["command"] == "git"
+        assert call_args[1]["body"]["arguments"] == "status"
+        assert call_args[1]["body"]["variant"] == "fast"
+        assert call_args[1]["body"]["parts"] == parts
+        assert result.ok
+
+    @pytest.mark.asyncio
+    async def test_summarize_with_auto_async(self, mock_client: MagicMock) -> None:
+        """Test async summarizing session with auto parameter."""
+        api = SessionApi(mock_client)
+        result = await api.summarize_async(
+            "ses_123", provider_id="anthropic", model_id="claude-3", auto=True
+        )
+        mock_client.apost.assert_called_once()
+        call_args = mock_client.apost.call_args
+        assert call_args[1]["body"]["auto"] is True
+        assert result.ok
+
+    @pytest.mark.asyncio
+    async def test_prompt_with_variant_async(self, mock_client: MagicMock) -> None:
+        """Test async sending a prompt with variant parameter."""
+        api = SessionApi(mock_client)
+        parts: list[TextPartInput] = [{"type": "text", "text": "Hello!"}]
+        result = await api.prompt_async("ses_123", parts=parts, variant="fast")
+        mock_client.apost.assert_called_once()
+        call_args = mock_client.apost.call_args
+        assert call_args[1]["body"]["variant"] == "fast"
+        assert result.ok
+
+    @pytest.mark.asyncio
+    async def test_prompt_async_fire_with_variant_async(self, mock_client: MagicMock) -> None:
+        """Test async fire-and-forget prompt with variant parameter."""
+        api = SessionApi(mock_client)
+        parts: list[TextPartInput] = [{"type": "text", "text": "Hello!"}]
+        result = await api.prompt_async_fire_async("ses_123", parts=parts, variant="fast")
+        mock_client.apost.assert_called_once()
+        call_args = mock_client.apost.call_args
+        assert call_args[1]["body"]["variant"] == "fast"
+        assert result.ok
+
+    @pytest.mark.asyncio
+    async def test_command_with_variant_and_parts_async(self, mock_client: MagicMock) -> None:
+        """Test async sending a command with variant and parts parameters."""
+        api = SessionApi(mock_client)
+        parts = [{"type": "text", "text": "additional context"}]
+        result = await api.command_async(
+            "ses_123",
+            command="git",
+            arguments="status",
+            variant="fast",
+            parts=parts,
+        )
+        mock_client.apost.assert_called_once()
+        call_args = mock_client.apost.call_args
+        assert call_args[1]["body"]["command"] == "git"
+        assert call_args[1]["body"]["arguments"] == "status"
+        assert call_args[1]["body"]["variant"] == "fast"
+        assert call_args[1]["body"]["parts"] == parts
+        assert result.ok
+
 
 class TestToolApi:
     """Tests for ToolApi."""
@@ -472,6 +574,65 @@ class TestFindApi:
         mock_client.get.assert_called_once()
         call_args = mock_client.get.call_args
         assert call_args[1]["query_params"]["dirs"] == "true"
+        assert result.ok
+
+    def test_files_with_type(self, mock_client: MagicMock) -> None:
+        """Test finding files with type filter."""
+        api = FindApi(mock_client)
+        result = api.files(query="*.py", type="file")
+        mock_client.get.assert_called_once()
+        call_args = mock_client.get.call_args
+        assert call_args[1]["query_params"]["type"] == "file"
+        assert result.ok
+
+    def test_files_with_limit(self, mock_client: MagicMock) -> None:
+        """Test finding files with limit."""
+        api = FindApi(mock_client)
+        result = api.files(query="*.py", limit=100)
+        mock_client.get.assert_called_once()
+        call_args = mock_client.get.call_args
+        assert call_args[1]["query_params"]["limit"] == 100
+        assert result.ok
+
+    def test_files_with_type_and_limit(self, mock_client: MagicMock) -> None:
+        """Test finding files with type and limit parameters."""
+        api = FindApi(mock_client)
+        result = api.files(query="src", type="directory", limit=50)
+        mock_client.get.assert_called_once()
+        call_args = mock_client.get.call_args
+        assert call_args[1]["query_params"]["type"] == "directory"
+        assert call_args[1]["query_params"]["limit"] == 50
+        assert result.ok
+
+    @pytest.mark.asyncio
+    async def test_files_with_type_async(self, mock_client: MagicMock) -> None:
+        """Test async finding files with type filter."""
+        api = FindApi(mock_client)
+        result = await api.files_async(query="*.py", type="file")
+        mock_client.aget.assert_called_once()
+        call_args = mock_client.aget.call_args
+        assert call_args[1]["query_params"]["type"] == "file"
+        assert result.ok
+
+    @pytest.mark.asyncio
+    async def test_files_with_limit_async(self, mock_client: MagicMock) -> None:
+        """Test async finding files with limit."""
+        api = FindApi(mock_client)
+        result = await api.files_async(query="*.py", limit=100)
+        mock_client.aget.assert_called_once()
+        call_args = mock_client.aget.call_args
+        assert call_args[1]["query_params"]["limit"] == 100
+        assert result.ok
+
+    @pytest.mark.asyncio
+    async def test_files_with_type_and_limit_async(self, mock_client: MagicMock) -> None:
+        """Test async finding files with type and limit parameters."""
+        api = FindApi(mock_client)
+        result = await api.files_async(query="src", type="directory", limit=50)
+        mock_client.aget.assert_called_once()
+        call_args = mock_client.aget.call_args
+        assert call_args[1]["query_params"]["type"] == "directory"
+        assert call_args[1]["query_params"]["limit"] == 50
         assert result.ok
 
     def test_symbols(self, mock_client: MagicMock) -> None:
