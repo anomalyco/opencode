@@ -1632,6 +1632,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       template = template.replace(bashRegex, () => results[index++])
     }
     template = template.trim()
+    if (!template) {
+      const error = new NamedError.Unknown({
+        message: `Command "${input.command}" resolved to an empty prompt. Add content to the command template.`,
+      })
+      Bus.publish(Session.Event.Error, {
+        sessionID: input.sessionID,
+        error: error.toObject(),
+      })
+      throw error
+    }
 
     const model = await (async () => {
       if (command.model) {

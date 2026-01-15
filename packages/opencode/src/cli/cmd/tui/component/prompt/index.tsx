@@ -547,21 +547,30 @@ export function Prompt(props: PromptProps) {
       })
     ) {
       let [command, ...args] = inputText.split(" ")
-      sdk.client.session.command({
-        sessionID,
-        command: command.slice(1),
-        arguments: args.join(" "),
-        agent: local.agent.current().name,
-        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-        messageID,
-        variant,
-        parts: nonTextParts
-          .filter((x) => x.type === "file")
-          .map((x) => ({
-            id: Identifier.ascending("part"),
-            ...x,
-          })),
-      })
+      sdk.client.session
+        .command({
+          sessionID,
+          command: command.slice(1),
+          arguments: args.join(" "),
+          agent: local.agent.current().name,
+          model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+          messageID,
+          variant,
+          parts: nonTextParts
+            .filter((x) => x.type === "file")
+            .map((x) => ({
+              id: Identifier.ascending("part"),
+              ...x,
+            })),
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error)
+          toast.show({
+            variant: "error",
+            message: message ? `Command failed: ${message}` : "Command failed",
+            duration: 3000,
+          })
+        })
     } else {
       sdk.client.session
         .prompt({
