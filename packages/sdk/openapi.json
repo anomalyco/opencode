@@ -6842,6 +6842,18 @@
               "agent": {
                 "type": "string"
               },
+              "model": {
+                "type": "object",
+                "properties": {
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "modelID": {
+                    "type": "string"
+                  }
+                },
+                "required": ["providerID", "modelID"]
+              },
               "command": {
                 "type": "string"
               }
@@ -9796,6 +9808,18 @@
           },
           "agent": {
             "type": "string"
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "providerID": {
+                "type": "string"
+              },
+              "modelID": {
+                "type": "string"
+              }
+            },
+            "required": ["providerID", "modelID"]
           },
           "command": {
             "type": "string"
