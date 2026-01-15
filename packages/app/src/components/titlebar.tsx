@@ -88,7 +88,7 @@ export function Titlebar() {
           onClick={layout.mobileSidebar.toggle}
         />
         <TooltipKeybind
-          class="hidden xl:flex shrink-0"
+          class="hidden xl:flex shrink-0 ml-14"
           placement="bottom"
           title="Toggle sidebar"
           keybind={command.keybind("sidebar.toggle")}

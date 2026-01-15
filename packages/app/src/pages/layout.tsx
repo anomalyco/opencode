@@ -1333,10 +1333,10 @@ export default function Layout(props: ParentProps) {
                           as={IconButton}
                           icon="dot-grid"
                           variant="ghost"
-                          class="shrink-0 size-6 rounded-md hidden group-hover/project:flex group-focus-within/project:flex"
+                          class="shrink-0 size-6 rounded-md opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100 data-[expanded]:bg-surface-base-active"
                         />
                         <DropdownMenu.Portal>
-                          <DropdownMenu.Content>
+                          <DropdownMenu.Content class="mt-1">
                             <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
                               <DropdownMenu.ItemLabel>Edit project</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
