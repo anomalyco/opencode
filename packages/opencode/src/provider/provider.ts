@@ -739,25 +739,6 @@ export namespace Provider {
         models: existing?.models ?? {},
       }
 
-      // (local providers only) auto-detect models and extend config
-      if (provider.options?.autoDetectModels) {
-        const providerNPM = provider.npm ?? modelsDev[providerID]?.npm ?? "@ai-sdk/openai-compatible"
-        const providerBaseURL = provider.options?.baseURL ?? provider.api ?? modelsDev[providerID]?.api
-        if (providerNPM === "@ai-sdk/openai-compatible" && providerBaseURL) {
-          try {
-            const modelIDs = await ProviderModelDetection.OpenAICompatible.getModelIDs(providerBaseURL)
-            const providerModels = provider.models ?? {}
-            modelIDs.forEach((modelID) => {
-              if (!(modelID in providerModels)) providerModels[modelID] = {}
-            })
-            provider.models = providerModels
-            parsed.models = {}
-          } catch (error) {
-            log.warn("failed to auto-detect models", { providerID, error })
-          }
-        }
-      }
-
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
         const existingModel = parsed.models[model.id ?? modelID]
         const name = iife(() => {
@@ -962,6 +943,14 @@ export namespace Provider {
       }
 
       log.info("found", { providerID })
+    }
+
+    for (const [providerID, provider] of Object.entries(providers)) {
+      try {
+        await ProviderModelDetection.populateModels(provider, config.provider?.[providerID], modelsDev[providerID])
+      } catch (error) {
+        log.warn("failed to autodetect models", { providerID, error })
+      }
     }
 
     return {
