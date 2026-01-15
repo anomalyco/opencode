@@ -1319,7 +1319,7 @@ export default function Layout(props: ParentProps) {
               {(p) => (
                 <>
                   <div class="shrink-0 px-2 py-1">
-                    <div class="flex items-start justify-between gap-2 p-2">
+                    <div class="group/project flex items-start justify-between gap-2 p-2 pr-1">
                       <div class="flex flex-col min-w-0">
                         <span class="text-16-medium text-text-strong truncate">{projectName()}</span>
                         <Tooltip placement="right" value={project()?.worktree} class="shrink-0">
@@ -1333,7 +1333,7 @@ export default function Layout(props: ParentProps) {
                           as={IconButton}
                           icon="dot-grid"
                           variant="ghost"
-                          class="shrink-0 size-6 rounded-md"
+                          class="shrink-0 size-6 rounded-md hidden group-hover/project:flex group-focus-within/project:flex"
                         />
                         <DropdownMenu.Portal>
                           <DropdownMenu.Content>
