@@ -33,6 +33,16 @@ export namespace Worktree {
 
   export type CreateInput = z.infer<typeof CreateInput>
 
+  export const RemoveInput = z
+    .object({
+      directory: z.string(),
+    })
+    .meta({
+      ref: "WorktreeRemoveInput",
+    })
+
+  export type RemoveInput = z.infer<typeof RemoveInput>
+
   export const NotGitError = NamedError.create(
     "WorktreeNotGitError",
     z.object({
@@ -56,6 +66,13 @@ export namespace Worktree {
 
   export const StartCommandFailedError = NamedError.create(
     "WorktreeStartCommandFailedError",
+    z.object({
+      message: z.string(),
+    }),
+  )
+
+  export const RemoveFailedError = NamedError.create(
+    "WorktreeRemoveFailedError",
     z.object({
       message: z.string(),
     }),
@@ -213,5 +230,54 @@ export namespace Worktree {
     }
 
     return info
+  })
+
+  export const remove = fn(RemoveInput, async (input) => {
+    if (Instance.project.vcs !== "git") {
+      throw new NotGitError({ message: "Worktrees are only supported for git projects" })
+    }
+
+    const directory = path.resolve(input.directory)
+    const list = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
+    if (list.exitCode !== 0) {
+      throw new RemoveFailedError({ message: errorText(list) || "Failed to read git worktrees" })
+    }
+
+    const lines = outputText(list.stdout)
+      .split("\n")
+      .map((line) => line.trim())
+    const entries = lines.reduce<{ path?: string; branch?: string }[]>((acc, line) => {
+      if (!line) return acc
+      if (line.startsWith("worktree ")) {
+        acc.push({ path: line.slice("worktree ".length).trim() })
+        return acc
+      }
+      const current = acc[acc.length - 1]
+      if (!current) return acc
+      if (line.startsWith("branch ")) {
+        current.branch = line.slice("branch ".length).trim()
+      }
+      return acc
+    }, [])
+
+    const entry = entries.find((item) => item.path && path.resolve(item.path) === directory)
+    if (!entry?.path) {
+      throw new RemoveFailedError({ message: "Worktree not found" })
+    }
+
+    const removed = await $`git worktree remove --force ${entry.path}`.quiet().nothrow().cwd(Instance.worktree)
+    if (removed.exitCode !== 0) {
+      throw new RemoveFailedError({ message: errorText(removed) || "Failed to remove git worktree" })
+    }
+
+    const branch = entry.branch?.replace(/^refs\/heads\//, "")
+    if (branch) {
+      const deleted = await $`git branch -D ${branch}`.quiet().nothrow().cwd(Instance.worktree)
+      if (deleted.exitCode !== 0) {
+        throw new RemoveFailedError({ message: errorText(deleted) || "Failed to delete worktree branch" })
+      }
+    }
+
+    return true
   })
 }
