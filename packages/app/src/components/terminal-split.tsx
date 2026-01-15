@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
+import { For, Show, createMemo } from "solid-js"
 import { Terminal } from "./terminal"
 import { useTerminal, type Panel } from "@/context/terminal"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -7,7 +7,6 @@ export interface TerminalSplitProps {
   tabId: string
 }
 
-// Compute the CSS position for a terminal based on the panel tree
 function computeLayout(
   panels: Record<string, Panel>,
   panelId: string,
@@ -18,26 +17,21 @@ function computeLayout(
   if (!panel) return result
 
   if (panel.ptyId) {
-    // Terminal panel - store its bounds
     result.set(panel.ptyId, bounds)
   } else if (panel.children && panel.children.length === 2) {
-    // Split panel - divide bounds between children
     const [leftId, rightId] = panel.children
     const sizes = panel.sizes ?? [50, 50]
-    const horizontal = panel.direction === "horizontal"
 
-    if (horizontal) {
+    if (panel.direction === "horizontal") {
       const topHeight = (bounds.height * sizes[0]) / 100
-      const bottomHeight = bounds.height - topHeight
       const topBounds = { ...bounds, height: topHeight }
-      const bottomBounds = { ...bounds, top: bounds.top + topHeight, height: bottomHeight }
+      const bottomBounds = { ...bounds, top: bounds.top + topHeight, height: bounds.height - topHeight }
       for (const [k, v] of computeLayout(panels, leftId, topBounds)) result.set(k, v)
       for (const [k, v] of computeLayout(panels, rightId, bottomBounds)) result.set(k, v)
     } else {
       const leftWidth = (bounds.width * sizes[0]) / 100
-      const rightWidth = bounds.width - leftWidth
       const leftBounds = { ...bounds, width: leftWidth }
-      const rightBounds = { ...bounds, left: bounds.left + leftWidth, width: rightWidth }
+      const rightBounds = { ...bounds, left: bounds.left + leftWidth, width: bounds.width - leftWidth }
       for (const [k, v] of computeLayout(panels, leftId, leftBounds)) result.set(k, v)
       for (const [k, v] of computeLayout(panels, rightId, rightBounds)) result.set(k, v)
     }
@@ -46,12 +40,10 @@ function computeLayout(
   return result
 }
 
-// Find which panelId contains a given ptyId
 function findPanelForPty(panels: Record<string, Panel>, ptyId: string): string | undefined {
   for (const [id, panel] of Object.entries(panels)) {
     if (panel.ptyId === ptyId) return id
   }
-  return undefined
 }
 
 export function TerminalSplit(props: TerminalSplitProps) {
@@ -59,11 +51,9 @@ export function TerminalSplit(props: TerminalSplitProps) {
   const pane = createMemo(() => terminal.pane(props.tabId))
   const terminals = createMemo(() => terminal.all().filter((t) => t.tabId === props.tabId))
 
-  // Compute layout for all terminals
   const layout = createMemo(() => {
     const p = pane()
     if (!p) {
-      // Single terminal - full size
       const single = terminals()[0]
       if (!single) return new Map()
       return new Map([[single.id, { top: 0, left: 0, width: 100, height: 100 }]])
@@ -149,12 +139,10 @@ export function TerminalSplit(props: TerminalSplitProps) {
   )
 }
 
-// Separate component for resize handles
 function ResizeHandles(props: { tabId: string }) {
   const terminal = useTerminal()
   const pane = createMemo(() => terminal.pane(props.tabId))
 
-  // Collect all split panels that need resize handles
   const splits = createMemo(() => {
     const p = pane()
     if (!p) return []
@@ -168,16 +156,13 @@ function ResizeHandle(props: { tabId: string; panelId: string }) {
   const terminal = useTerminal()
   const pane = createMemo(() => terminal.pane(props.tabId))
   const panel = createMemo(() => pane()?.panels[props.panelId])
-  const [dragging, setDragging] = createSignal(false)
 
-  // Calculate the position of this resize handle
   const position = createMemo(() => {
     const p = pane()
     if (!p) return null
     const pan = panel()
     if (!pan?.children || pan.children.length !== 2) return null
 
-    // Walk up the tree to compute this panel's bounds
     const bounds = computePanelBounds(p.panels, p.root, props.panelId, {
       top: 0,
       left: 0,
@@ -187,9 +172,8 @@ function ResizeHandle(props: { tabId: string; panelId: string }) {
     if (!bounds) return null
 
     const sizes = pan.sizes ?? [50, 50]
-    const horizontal = pan.direction === "horizontal"
 
-    if (horizontal) {
+    if (pan.direction === "horizontal") {
       return {
         horizontal: true,
         top: bounds.top + (bounds.height * sizes[0]) / 100,
@@ -207,7 +191,6 @@ function ResizeHandle(props: { tabId: string; panelId: string }) {
 
   const handleMouseDown = (e: MouseEvent) => {
     e.preventDefault()
-    setDragging(true)
 
     const pos = position()
     if (!pos) return
@@ -219,7 +202,6 @@ function ResizeHandle(props: { tabId: string; panelId: string }) {
     const pan = panel()
     if (!pan) return
 
-    // Get the bounds of this split panel
     const p = pane()
     if (!p) return
     const panelBounds = computePanelBounds(p.panels, p.root, props.panelId, {
@@ -231,8 +213,7 @@ function ResizeHandle(props: { tabId: string; panelId: string }) {
     if (!panelBounds) return
 
     const handleMouseMove = (e: MouseEvent) => {
-      const horizontal = pan.direction === "horizontal"
-      if (horizontal) {
+      if (pan.direction === "horizontal") {
         const totalPx = (rect.height * panelBounds.height) / 100
         const topPx = (rect.height * panelBounds.top) / 100
         const posPx = e.clientY - rect.top - topPx
@@ -248,7 +229,6 @@ function ResizeHandle(props: { tabId: string; panelId: string }) {
     }
 
     const handleMouseUp = () => {
-      setDragging(false)
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
     }
@@ -278,7 +258,6 @@ function ResizeHandle(props: { tabId: string; panelId: string }) {
   )
 }
 
-// Helper to compute bounds of a specific panel by walking the tree
 function computePanelBounds(
   panels: Record<string, Panel>,
   currentId: string,

@@ -18,24 +18,20 @@ export type LocalPTY = {
 
 export type SplitDirection = "horizontal" | "vertical"
 
-// Flat panel structure - either a terminal or a split container
 export type Panel = {
   id: string
   parentId?: string
-  // For terminal panels
   ptyId?: string
-  // For split panels
   direction?: SplitDirection
-  children?: [string, string] // panel IDs
+  children?: [string, string]
   sizes?: [number, number]
 }
 
-// A tab's split pane state
 export type TabPane = {
   id: string
-  root: string // root panel ID
+  root: string
   panels: Record<string, Panel>
-  focused?: string // focused panel ID
+  focused?: string
 }
 
 const WORKSPACE_KEY = "__workspace__"
@@ -89,7 +85,6 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
     }
   }
 
-  // Get all ptyIds from a panel and its children
   const getAllPtyIds = (pane: TabPane, panelId: string): string[] => {
     const panel = pane.panels[panelId]
     if (!panel) return []
@@ -100,7 +95,6 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
     return []
   }
 
-  // Migrate legacy terminals without tabId
   const migrate = (terminals: LocalPTY[]) =>
     terminals.map((p) => ((p as { tabId?: string }).tabId ? p : { ...p, tabId: p.id }))
 
@@ -168,27 +162,20 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
       const pane = store.panes[tabId]
       const ptyIds = pane ? getAllPtyIds(pane, pane.root) : [tabId]
 
-      // Remove all terminals in this tab
       setStore(
         "all",
         store.all.filter((x) => !ptyIds.includes(x.id)),
       )
-
-      // Remove pane
       setStore(
         "panes",
         produce((panes) => {
           delete panes[tabId]
         }),
       )
-
-      // Update active
       if (store.active === tabId) {
         const remaining = store.all.filter((p) => p.tabId === p.id && !ptyIds.includes(p.id))
         setStore("active", remaining[0]?.tabId)
       }
-
-      // Clean up PTYs on server
       for (const ptyId of ptyIds) {
         await sdk.client.pty.remove({ ptyID: ptyId }).catch((e) => {
           console.error("Failed to close terminal", e)
@@ -215,7 +202,6 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
       setStore("all", [...store.all, newPty])
 
       if (!pane) {
-        // First split - create initial structure
         const rootId = generateId()
         const leftId = generateId()
         const rightId = generateId()
@@ -244,18 +230,16 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
           focused: rightId,
         })
       } else {
-        // Split existing panel
         const focusedPanelId = pane.focused
         if (!focusedPanelId) return
 
         const focusedPanel = pane.panels[focusedPanelId]
-        if (!focusedPanel?.ptyId) return // Can only split terminal panels
+        if (!focusedPanel?.ptyId) return
 
         const oldPtyId = focusedPanel.ptyId
         const newSplitId = generateId()
         const newTerminalId = generateId()
 
-        // Add child panels first
         setStore("panes", tabId, "panels", newSplitId, {
           id: newSplitId,
           parentId: focusedPanelId,
@@ -266,7 +250,6 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
           parentId: focusedPanelId,
           ptyId: newPty.id,
         })
-        // Convert parent to split - update properties individually
         setStore("panes", tabId, "panels", focusedPanelId, "ptyId", undefined)
         setStore("panes", tabId, "panels", focusedPanelId, "direction", direction)
         setStore("panes", tabId, "panels", focusedPanelId, "children", [newSplitId, newTerminalId])
@@ -289,9 +272,8 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
       if (!panel) return
 
       const ptyId = panel.ptyId
-      if (!ptyId) return // Can only close terminal panels
+      if (!ptyId) return
 
-      // If closing the root terminal (no parent), close the whole tab
       if (!panel.parentId) {
         await this.closeTab(tabId)
         return
@@ -300,22 +282,18 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
       const parentPanel = pane.panels[panel.parentId]
       if (!parentPanel?.children || parentPanel.children.length !== 2) return
 
-      // Find sibling
       const siblingId = parentPanel.children[0] === panelId ? parentPanel.children[1] : parentPanel.children[0]
       const sibling = pane.panels[siblingId]
       if (!sibling) return
 
       batch(() => {
-        // Replace parent with sibling's content
         if (sibling.ptyId) {
-          // Sibling is a terminal - parent becomes terminal
           setStore("panes", tabId, "panels", panel.parentId!, {
             id: panel.parentId!,
             parentId: parentPanel.parentId,
             ptyId: sibling.ptyId,
           })
         } else if (sibling.children && sibling.children.length === 2) {
-          // Sibling is a split - parent inherits its split
           setStore("panes", tabId, "panels", panel.parentId!, {
             id: panel.parentId!,
             parentId: parentPanel.parentId,
@@ -323,12 +301,10 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
             children: sibling.children,
             sizes: sibling.sizes,
           })
-          // Update children's parentId
           setStore("panes", tabId, "panels", sibling.children[0], "parentId", panel.parentId!)
           setStore("panes", tabId, "panels", sibling.children[1], "parentId", panel.parentId!)
         }
 
-        // Remove closed panel and sibling
         setStore(
           "panes",
           tabId,
@@ -339,17 +315,14 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
           }),
         )
 
-        // Update focus
         const newFocused = sibling.ptyId ? panel.parentId! : (sibling.children?.[0] ?? panel.parentId!)
         setStore("panes", tabId, "focused", newFocused)
 
-        // Remove terminal from all
         setStore(
           "all",
           store.all.filter((x) => x.id !== ptyId),
         )
 
-        // If only one terminal left, remove pane entirely
         const remainingPanels = Object.values(store.panes[tabId]?.panels ?? {})
         if (remainingPanels.length === 1 && remainingPanels[0]?.ptyId === tabId) {
           setStore(
@@ -361,7 +334,6 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
         }
       })
 
-      // Clean up PTY on server
       await sdk.client.pty.remove({ ptyID: ptyId }).catch((e) => {
         console.error("Failed to close terminal", e)
       })
