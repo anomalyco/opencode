@@ -942,10 +942,25 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  const resetWorkspace = async (directory: string) => {
+  const resetWorkspace = async (directory: string, sessions: Session[]) => {
     const current = currentProject()
     if (!current) return
     if (directory === current.worktree) return
+
+    const pending = sessions.filter((session) => session.time.archived === undefined)
+    if (pending.length > 0) {
+      await Promise.all(
+        pending.map((session) =>
+          globalSDK.client.session
+            .update({
+              sessionID: session.id,
+              directory: session.directory,
+              time: { archived: Date.now() },
+            })
+            .catch(() => undefined),
+        ),
+      )
+    }
 
     const result = await globalSDK.client.worktree
       .reset({ directory: current.worktree, worktreeResetInput: { directory } })
@@ -1026,15 +1041,24 @@ export default function Layout(props: ParentProps) {
 
   function DialogResetWorkspace(props: { directory: string }) {
     const name = createMemo(() => getFilename(props.directory))
-    const [data, setData] = createStore({
+    const [state, setState] = createStore({
       status: "loading" as "loading" | "ready" | "error",
       dirty: false,
+      sessions: [] as Session[],
     })
+
+    const refreshSessions = () => {
+      const [workspace] = globalSync.child(props.directory)
+      const sessions = workspace.session
+        .filter((session) => session.directory === workspace.path.directory)
+        .filter((session) => session.time.archived === undefined)
+      setState({ sessions })
+    }
 
     onMount(() => {
       const current = currentProject()
       if (!current) {
-        setData({ status: "error", dirty: false })
+        setState({ status: "error", dirty: false })
         return
       }
 
@@ -1043,23 +1067,33 @@ export default function Layout(props: ParentProps) {
         .then((x) => {
           const files = x.data ?? []
           const dirty = files.length > 0
-          setData({ status: "ready", dirty })
+          setState({ status: "ready", dirty })
+          refreshSessions()
         })
         .catch(() => {
-          setData({ status: "error", dirty: false })
+          setState({ status: "error", dirty: false })
         })
     })
 
     const handleReset = async () => {
-      await resetWorkspace(props.directory)
+      await resetWorkspace(props.directory, state.sessions)
       dialog.close()
     }
 
+    const archivedCount = () => state.sessions.length
+
     const description = () => {
-      if (data.status === "loading") return "Checking for unmerged changes..."
-      if (data.status === "error") return "Unable to verify git status."
-      if (!data.dirty) return "No unmerged changes detected."
+      if (state.status === "loading") return "Checking for unmerged changes..."
+      if (state.status === "error") return "Unable to verify git status."
+      if (!state.dirty) return "No unmerged changes detected."
       return "Unmerged changes detected in this workspace."
+    }
+
+    const archivedLabel = () => {
+      const count = archivedCount()
+      if (count === 0) return "No active sessions will be archived."
+      const label = count === 1 ? "1 session" : `${count} sessions`
+      return `${label} will be archived.`
     }
 
     return (
@@ -1068,14 +1102,14 @@ export default function Layout(props: ParentProps) {
           <div class="flex flex-col gap-1">
             <span class="text-14-regular text-text-strong">Reset workspace "{name()}"?</span>
             <span class="text-12-regular text-text-weak">
-              {description()} This will reset the workspace to match the default branch.
+              {description()} {archivedLabel()} This will reset the workspace to match the default branch.
             </span>
           </div>
           <div class="flex justify-end gap-2">
             <Button variant="ghost" size="large" onClick={() => dialog.close()}>
               Cancel
             </Button>
-            <Button variant="primary" size="large" disabled={data.status === "loading"} onClick={handleReset}>
+            <Button variant="primary" size="large" disabled={state.status === "loading"} onClick={handleReset}>
               Reset workspace
             </Button>
           </div>
