@@ -177,12 +177,6 @@ export namespace Storage {
         )
 
         migratedCount++
-        if (migratedCount % 50 === 0) {
-          log.info("cost migration progress", {
-            sessionsMigrated: migratedCount,
-            elapsedMs: Date.now() - startTime,
-          })
-        }
       }
 
       log.info("cost migration complete", {
