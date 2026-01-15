@@ -98,7 +98,7 @@
 ::view-transition-new(actions-20),
 ::view-transition-new(actions-100),
 ::view-transition-new(actions-200) {
-  animation: fade-in-up 200ms cubic-bezier(0.16, 1, 0.3, 1) 300ms forwards;
+  animation: fade-in-up 300ms cubic-bezier(0.16, 1, 0.3, 1) 300ms forwards;
   opacity: 0;
 }
 
@@ -107,25 +107,6 @@
 ::view-transition-group(card-200) {
   animation-duration: 250ms;
   animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-::view-transition-image-pair(card-20),
-::view-transition-image-pair(card-100),
-::view-transition-image-pair(card-200) {
-  isolation: isolate;
-  overflow: hidden;
-}
-
-::view-transition-old(card-20),
-::view-transition-old(card-100),
-::view-transition-old(card-200) {
-  mix-blend-mode: normal;
-}
-
-::view-transition-new(card-20),
-::view-transition-new(card-100),
-::view-transition-new(card-200) {
-  mix-blend-mode: normal;
 }
 
 [data-page="black"] {
@@ -600,6 +581,8 @@
 
       [data-slot="icon"] {
         color: rgba(255, 255, 255, 0.59);
+        isolation: isolate;
+        transform: translateZ(0);
       }
 
       [data-slot="price"] {
