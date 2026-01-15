@@ -21,7 +21,7 @@ export interface DialogSelectProps<T> {
   onSelect?: (option: DialogSelectOption<T>) => void
   skipFilter?: boolean
   keybind?: {
-    keybind: Keybind.Info
+    keybind?: Keybind.Info
     title: string
     disabled?: boolean
     onTrigger: (option: DialogSelectOption<T>) => void
@@ -166,7 +166,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     }
 
     for (const item of props.keybind ?? []) {
-      if (item.disabled) continue
+      if (item.disabled || !item.keybind) continue
       if (Keybind.match(item.keybind, keybind.parse(evt))) {
         const s = selected()
         if (s) {
@@ -188,7 +188,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
   props.ref?.(ref)
 
-  const keybinds = createMemo(() => props.keybind?.filter((x) => !x.disabled) ?? [])
+  const keybinds = createMemo(() => props.keybind?.filter((x) => !x.disabled && x.keybind) ?? [])
 
   return (
     <box gap={1} paddingBottom={1}>

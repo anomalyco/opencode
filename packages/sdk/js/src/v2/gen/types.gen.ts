@@ -967,6 +967,22 @@ export type KeybindsConfig = {
    */
   session_rename?: string
   /**
+   * Delete session
+   */
+  session_delete?: string
+  /**
+   * Delete stash entry
+   */
+  stash_delete?: string
+  /**
+   * Open provider list from model dialog
+   */
+  model_provider_list?: string
+  /**
+   * Toggle model favorite status
+   */
+  model_favorite_toggle?: string
+  /**
    * Share current session
    */
   session_share?: string
