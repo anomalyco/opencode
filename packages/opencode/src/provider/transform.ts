@@ -473,6 +473,25 @@ export namespace ProviderTransform {
       case "@ai-sdk/perplexity":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/perplexity
         return {}
+
+      case "@jerome-benoit/sap-ai-provider":
+        if (model.api.id.includes("anthropic")) {
+          return {
+            high: {
+              thinking: {
+                type: "enabled",
+                budgetTokens: 16000,
+              },
+            },
+            max: {
+              thinking: {
+                type: "enabled",
+                budgetTokens: 31999,
+              },
+            },
+          }
+        }
+        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
     }
     return {}
   }
