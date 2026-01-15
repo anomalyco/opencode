@@ -815,6 +815,7 @@ export namespace Config {
           apiKey: z.string().optional(),
           baseURL: z.string().optional(),
           enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
+          store: z.boolean().optional().describe("Set the OpenAI Responses store flag for this provider"),
           setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
           timeout: z
             .union([
