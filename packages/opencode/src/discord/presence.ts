@@ -197,7 +197,137 @@ export namespace DiscordPresence {
   const log = Log.create({ service: "discord-presence" })
   let started = false
 
-  class RpcClient implements Client {
+  const ARRPC_PORT = 6463
+  const ARRPC_URL = `ws://127.0.0.1:${ARRPC_PORT}`
+
+  /** WebSocket client for arRPC (Vesktop, etc) */
+  class ArRpcClient implements Client {
+    private ws?: WebSocket
+    private ready = false
+    private pending?: Activity
+    private nonceCounter = 0
+
+    constructor(private clientId: string) {}
+
+    async connect() {
+      if (this.ws) return
+
+      return new Promise<void>((resolve) => {
+        try {
+          const ws = new WebSocket(ARRPC_URL)
+          this.ws = ws
+
+          const timeout = setTimeout(() => {
+            ws.close()
+            resolve()
+          }, 5000)
+
+          ws.onopen = () => {
+            ws.send(JSON.stringify({ v: 1, client_id: this.clientId }))
+          }
+
+          ws.onmessage = (event) => {
+            try {
+              const data = JSON.parse(event.data as string)
+              if (data.evt === "READY") {
+                clearTimeout(timeout)
+                this.ready = true
+                log.info("connected to discord via arRPC")
+                if (this.pending) void this.setActivity(this.pending)
+                resolve()
+              }
+            } catch {}
+          }
+
+          ws.onerror = () => {
+            clearTimeout(timeout)
+            resolve()
+          }
+
+          ws.onclose = () => {
+            this.ready = false
+            this.ws = undefined
+          }
+        } catch {
+          resolve()
+        }
+      })
+    }
+
+    async setActivity(activity: Activity) {
+      this.pending = activity
+      if (!this.ready || !this.ws) return
+
+      const rpcActivity: Record<string, unknown> = {
+        details: activity.details,
+        state: activity.state,
+      }
+      if (activity.startTimestamp) {
+        rpcActivity.timestamps = { start: activity.startTimestamp }
+      }
+      if (activity.buttons?.length) {
+        rpcActivity.buttons = activity.buttons
+      }
+
+      this.ws.send(
+        JSON.stringify({
+          cmd: "SET_ACTIVITY",
+          args: { pid: process.pid, activity: rpcActivity },
+          nonce: `n-${++this.nonceCounter}`,
+        }),
+      )
+    }
+
+    async clearActivity() {
+      this.pending = undefined
+      if (!this.ready || !this.ws) return
+
+      this.ws.send(
+        JSON.stringify({
+          cmd: "SET_ACTIVITY",
+          args: { pid: process.pid, activity: null },
+          nonce: `n-${++this.nonceCounter}`,
+        }),
+      )
+    }
+
+    async destroy() {
+      if (this.ws) {
+        this.ws.close()
+        this.ws = undefined
+      }
+      this.ready = false
+      this.pending = undefined
+    }
+  }
+
+  /** Check if arRPC WebSocket is available */
+  async function isArRpcAvailable(): Promise<boolean> {
+    return new Promise((resolve) => {
+      try {
+        const ws = new WebSocket(ARRPC_URL)
+        const timeout = setTimeout(() => {
+          ws.close()
+          resolve(false)
+        }, 1000)
+
+        ws.onopen = () => {
+          clearTimeout(timeout)
+          ws.close()
+          resolve(true)
+        }
+        ws.onerror = () => {
+          clearTimeout(timeout)
+          resolve(false)
+        }
+      } catch {
+        resolve(false)
+      }
+    })
+  }
+
+  /** IPC client for official Discord (discord-rpc package) */
+  class IpcClient implements Client {
     private client?: {
       on: (event: string, listener: (...args: any[]) => void) => void
       login: (input: { clientId: string }) => Promise<void>
@@ -225,6 +355,7 @@ export namespace DiscordPresence {
         this.client = client
         client.on("ready", () => {
           this.ready = true
+          log.info("connected to discord via IPC")
           if (this.pending) void this.setActivity(this.pending)
         })
         client.on("error", (error: unknown) => {
@@ -275,6 +406,16 @@ export namespace DiscordPresence {
     }
   }
 
+  /** Create appropriate RPC client - tries arRPC first (Vesktop), falls back to IPC (official Discord) */
+  async function createRpcClient(clientId: string): Promise<Client> {
+    if (await isArRpcAvailable()) {
+      log.info("arRPC detected, using WebSocket transport")
+      return new ArRpcClient(clientId)
+    }
+    log.info("using IPC transport for Discord RPC")
+    return new IpcClient(clientId)
+  }
+
   function toManagerConfig(settings?: Settings): Config {
     const { enabled: _enabled, clientId: _clientId, useDefaultClientId: _useDefaultClientId, ...rest } = settings ?? {}
     return {
@@ -300,7 +441,7 @@ export namespace DiscordPresence {
       return
     }
 
-    const client = new RpcClient(clientId)
+    const client = await createRpcClient(clientId)
     const manager = new Manager({
       client,
       config: toManagerConfig(settings),
