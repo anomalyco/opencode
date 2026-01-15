@@ -8971,10 +8971,6 @@
                 "description": "GitHub Enterprise URL for copilot authentication",
                 "type": "string"
               },
-              "store": {
-                "description": "Set the OpenAI Responses store flag for this provider",
-                "type": "boolean"
-              },
               "setCacheKey": {
                 "description": "Enable promptCacheKey for this provider (default false)",
                 "type": "boolean"
