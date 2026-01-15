@@ -47,13 +47,34 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const globalSdk = useGlobalSDK()
     const globalSync = useGlobalSync()
     const server = useServer()
+
+    const isRecord = (value: unknown): value is Record<string, unknown> =>
+      typeof value === "object" && value !== null && !Array.isArray(value)
+
+    const migrate = (value: unknown) => {
+      if (!isRecord(value)) return value
+      const sidebar = value.sidebar
+      if (!isRecord(sidebar)) return value
+      if (typeof sidebar.workspaces !== "boolean") return value
+      return {
+        ...value,
+        sidebar: {
+          ...sidebar,
+          workspaces: {},
+          workspacesDefault: sidebar.workspaces,
+        },
+      }
+    }
+
+    const target = Persist.global("layout", ["layout.v6"])
     const [store, setStore, _, ready] = persisted(
-      Persist.global("layout", ["layout.v6"]),
+      { ...target, migrate },
       createStore({
         sidebar: {
           opened: false,
           width: 280,
-          workspaces: false,
+          workspaces: {} as Record<string, boolean>,
+          workspacesDefault: false,
         },
         terminal: {
           height: 280,
@@ -305,12 +326,15 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         resize(width: number) {
           setStore("sidebar", "width", width)
         },
-        workspaces: createMemo(() => store.sidebar.workspaces ?? false),
-        setWorkspaces(value: boolean) {
-          setStore("sidebar", "workspaces", value)
+        workspaces(directory: string) {
+          return createMemo(() => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false)
         },
-        toggleWorkspaces() {
-          setStore("sidebar", "workspaces", (x) => !x)
+        setWorkspaces(directory: string, value: boolean) {
+          setStore("sidebar", "workspaces", directory, value)
+        },
+        toggleWorkspaces(directory: string) {
+          const current = store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
+          setStore("sidebar", "workspaces", directory, !current)
         },
       },
       terminal: {
