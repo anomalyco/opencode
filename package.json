@@ -4,7 +4,7 @@
   "description": "AI-powered development tool",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.3.5",
+  "packageManager": "bun@1.3.6",
   "scripts": {
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "typecheck": "bun turbo typecheck",
@@ -21,7 +21,7 @@
       "packages/slack"
     ],
     "catalog": {
-      "@types/bun": "1.3.4",
+      "@types/bun": "1.3.6",
       "@octokit/rest": "22.0.0",
       "@hono/zod-validator": "0.4.2",
       "ulid": "3.0.1",
