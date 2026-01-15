@@ -18,7 +18,6 @@ import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
-import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
@@ -1163,17 +1162,6 @@ export default function Page() {
                     }
                   >
                     <div class="relative w-full h-full min-w-0">
-                      <Show when={isDesktop()}>
-                        <div class="absolute inset-0 pointer-events-none z-10">
-                          <SessionMessageRail
-                            messages={visibleUserMessages()}
-                            current={activeMessage()}
-                            onMessageSelect={scrollToMessage}
-                            wide={!showTabs()}
-                            class="pointer-events-auto"
-                          />
-                        </div>
-                      </Show>
                       <div
                         ref={setScrollRef}
                         onScroll={(e) => {
@@ -1255,13 +1243,7 @@ export default function Page() {
                                       root: "min-w-0 w-full relative",
                                       content:
                                         "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
-                                      container:
-                                        "px-4 md:px-6 " +
-                                        (!showTabs()
-                                          ? "md:max-w-200 md:mx-auto"
-                                          : visibleUserMessages().length > 1
-                                            ? "md:pr-6 md:pl-18"
-                                            : ""),
+                                      container: "w-full px-4 md:px-6",
                                     }}
                                   />
                                 </div>

@@ -28,13 +28,14 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
+import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { getFilename } from "@opencode-ai/util/path"
-import { Session } from "@opencode-ai/sdk/v2/client"
+import { Session, type Message, type TextPart } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { createStore, produce, reconcile } from "solid-js/store"
 import {
@@ -1329,63 +1330,104 @@ export default function Layout(props: ParentProps) {
       return agent?.color
     })
 
+    const hoverMessages = createMemo(() =>
+      sessionStore.message[props.session.id]?.filter((message) => message.role === "user"),
+    )
+    const hoverReady = createMemo(() => sessionStore.message[props.session.id] !== undefined)
+    const hoverAllowed = createMemo(() => !props.mobile && layout.sidebar.opened())
+    const isActive = createMemo(() => props.session.id === params.id)
+
+    const messageLabel = (message: Message) => {
+      const parts = sessionStore.part[message.id] ?? []
+      const text = parts.find((part): part is TextPart => part?.type === "text" && !part.synthetic && !part.ignored)
+      return text?.text
+    }
+
+    const item = (
+      <A
+        href={`${props.slug}/session/${props.session.id}`}
+        class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
+        onMouseEnter={() => prefetchSession(props.session, "high")}
+        onFocus={() => prefetchSession(props.session, "high")}
+      >
+        <div class="flex items-center gap-1 w-full">
+          <div
+            class="shrink-0 size-6 flex items-center justify-center"
+            style={{ color: tint() ?? "var(--icon-interactive-base)" }}
+          >
+            <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
+              <Match when={isWorking()}>
+                <Spinner class="size-[15px]" />
+              </Match>
+              <Match when={hasPermissions()}>
+                <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+              </Match>
+              <Match when={hasError()}>
+                <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+              </Match>
+              <Match when={notifications().length > 0}>
+                <div class="size-1.5 rounded-full bg-text-interactive-base" />
+              </Match>
+            </Switch>
+          </div>
+          <Tooltip
+            inactive={hoverAllowed()}
+            placement="top-start"
+            value={props.session.title}
+            gutter={0}
+            openDelay={3000}
+            class="grow-1 min-w-0"
+          >
+            <InlineEditor
+              id={`session:${props.session.id}`}
+              value={() => props.session.title}
+              onSave={(next) => renameSession(props.session, next)}
+              class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
+              displayClass="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
+              stopPropagation
+            />
+          </Tooltip>
+          <Show when={props.session.summary}>
+            {(summary) => (
+              <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
+                <DiffChanges changes={summary()} />
+              </div>
+            )}
+          </Show>
+        </div>
+      </A>
+    ))
+
     return (
       <div
         data-session-id={props.session.id}
         class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3
                hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
       >
-        <A
-          href={`${props.slug}/session/${props.session.id}`}
-          class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
-          onMouseEnter={() => prefetchSession(props.session, "high")}
-          onFocus={() => prefetchSession(props.session, "high")}
+        <Show
+          when={hoverAllowed()}
+          fallback={item}
         >
-          <div class="flex items-center gap-1 w-full">
-            <div
-              class="shrink-0 size-6 flex items-center justify-center"
-              style={{ color: tint() ?? "var(--icon-interactive-base)" }}
-            >
-              <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
-                <Match when={isWorking()}>
-                  <Spinner class="size-[15px]" />
-                </Match>
-                <Match when={hasPermissions()}>
-                  <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-                </Match>
-                <Match when={hasError()}>
-                  <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-                </Match>
-                <Match when={notifications().length > 0}>
-                  <div class="size-1.5 rounded-full bg-text-interactive-base" />
-                </Match>
-              </Switch>
-            </div>
-            <Tooltip
-              placement="top-start"
-              value={props.session.title}
-              gutter={0}
-              openDelay={3000}
-              class="grow-1 min-w-0"
-            >
-              <InlineEditor
-                id={`session:${props.session.id}`}
-                value={() => props.session.title}
-                onSave={(next) => renameSession(props.session, next)}
-                class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
-                displayClass="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
-                stopPropagation
+          <HoverCard openDelay={150} closeDelay={100} placement="right" gutter={12} trigger={item}>
+            <Show when={hoverReady()} fallback={<div class="text-12-regular text-text-weak">Loading messages…</div>}>
+              <MessageNav
+                messages={hoverMessages() ?? []}
+                current={undefined}
+                getLabel={messageLabel}
+                onMessageSelect={(message) => {
+                  if (!isActive()) {
+                    navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
+                    return
+                  }
+                  window.location.hash = `message-${message.id}`
+                  window.dispatchEvent(new HashChangeEvent("hashchange"))
+                }}
+                size="normal"
+                class="w-60"
               />
-            </Tooltip>
-            <Show when={props.session.summary}>
-              {(summary) => (
-                <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
-                  <DiffChanges changes={summary()} />
-                </div>
-              )}
             </Show>
-          </div>
-        </A>
+          </HoverCard>
+        </Show>
         <div
           class={`hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"}`}
         >
