@@ -20,6 +20,31 @@ export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
+  async function tryFallbackModel(
+    streamInput: LLM.StreamInput,
+    currentIndex: number,
+  ): Promise<boolean> {
+    const fallbackIndex = currentIndex + 1
+    const next = streamInput.agent.models?.[fallbackIndex]
+
+    if (!next) {
+      return false
+    }
+
+    try {
+      const nextModel = await Provider.getModel(next.providerID, next.modelID)
+      streamInput.model = nextModel
+      log.info("switching to fallback model", {
+        to: nextModel.id,
+        provider: nextModel.providerID,
+      })
+      return true
+    } catch (loadError) {
+      log.error("failed to load fallback model", { error: loadError, model: next })
+      return false
+    }
+  }
+
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
 
@@ -46,10 +71,11 @@ export namespace SessionProcessor {
         log.info("process")
         needsCompaction = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
-        let fallbackIndex =
-          streamInput.agent.models?.findIndex(
-            (m) => m.modelID === streamInput.model.id && m.providerID === streamInput.model.providerID,
-          ) ?? -1
+
+        const currentModelIndex = streamInput.agent.models?.findIndex(
+          (m) => m.modelID === streamInput.model.id && m.providerID === streamInput.model.providerID,
+        ) ?? -1
+        let fallbackIndex = currentModelIndex
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
@@ -348,20 +374,12 @@ export namespace SessionProcessor {
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
             const retry = SessionRetry.retryable(error)
 
+            // Try fallback model if available
             if (streamInput.agent.models && fallbackIndex < streamInput.agent.models.length - 1) {
-              fallbackIndex++
-              const next = streamInput.agent.models[fallbackIndex]
-              try {
-                const nextModel = await Provider.getModel(next.providerID, next.modelID)
-                streamInput.model = nextModel
-                log.info("switching to fallback model", {
-                  to: nextModel.id,
-                  provider: nextModel.providerID,
-                })
+              const fallbackSucceeded = await tryFallbackModel(streamInput, fallbackIndex)
+              if (fallbackSucceeded) {
                 attempt = 0
                 continue
-              } catch (loadError) {
-                log.error("failed to load fallback model", { error: loadError, model: next })
               }
             }
 
