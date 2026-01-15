@@ -61,6 +61,10 @@ export namespace Agent {
       plan: {
         name: "plan",
         options: {},
+        model: {
+          providerID: "google",
+          modelID: "gemini-3-pro-preview",
+        },
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
