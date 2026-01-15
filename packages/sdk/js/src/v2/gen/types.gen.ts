@@ -2604,7 +2604,14 @@ export type SessionListData = {
   body?: never
   path?: never
   query?: {
+    /**
+     * Filter sessions by project directory
+     */
     directory?: string
+    /**
+     * Only return root sessions (no parentID)
+     */
+    roots?: boolean
     /**
      * Filter sessions updated on or after this timestamp (milliseconds since epoch)
      */

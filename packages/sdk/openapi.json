@@ -981,7 +981,16 @@
             "name": "directory",
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Filter sessions by project directory"
+          },
+          {
+            "in": "query",
+            "name": "roots",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Only return root sessions (no parentID)"
           },
           {
             "in": "query",
