@@ -152,12 +152,14 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
         await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
         if (hasMoreAttempts) {
           const candidate = pickNextCandidate(Date.now())
-          void CredentialManager.notifyFailover({
-            providerID: opts.providerID,
-            fromRecordID: nextID,
-            toRecordID: candidate,
-            statusCode: response.status,
-          })
+          if (candidate && candidate !== nextID) {
+            void CredentialManager.notifyFailover({
+              providerID: opts.providerID,
+              fromRecordID: nextID,
+              toRecordID: candidate,
+              statusCode: response.status,
+            })
+          }
         }
         if (!hasMoreAttempts) return response
         await drainResponse(response)
@@ -178,6 +180,17 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
             cooldownUntil,
           })
           await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
+          if (hasMoreAttempts) {
+            const candidate = pickNextCandidate(Date.now())
+            if (candidate && candidate !== nextID) {
+              void CredentialManager.notifyFailover({
+                providerID: opts.providerID,
+                fromRecordID: nextID,
+                toRecordID: candidate,
+                statusCode: response.status,
+              })
+            }
+          }
           return response
         }
 
@@ -204,20 +217,22 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
               ok: false,
               cooldownUntil: Date.now() + cooldownMs,
             })
-          await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
-          if (hasMoreAttempts) {
-            const candidate = pickNextCandidate(Date.now())
-            void CredentialManager.notifyFailover({
-              providerID: opts.providerID,
-              fromRecordID: nextID,
-              toRecordID: candidate,
-              statusCode: retry.status,
-            })
+            await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
+            if (hasMoreAttempts) {
+              const candidate = pickNextCandidate(Date.now())
+              if (candidate && candidate !== nextID) {
+                void CredentialManager.notifyFailover({
+                  providerID: opts.providerID,
+                  fromRecordID: nextID,
+                  toRecordID: candidate,
+                  statusCode: retry.status,
+                })
+              }
+            }
+            if (!hasMoreAttempts) return retry
+            await drainResponse(retry)
+            continue
           }
-          if (!hasMoreAttempts) return retry
-          await drainResponse(retry)
-          continue
-        }
 
           const cooldownUntil = Date.now() + DEFAULT_AUTH_FAILURE_COOLDOWN_MS
           await Auth.OAuthPool.recordOutcome({
@@ -228,6 +243,17 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
             cooldownUntil,
           })
           await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
+          if (hasMoreAttempts) {
+            const candidate = pickNextCandidate(Date.now())
+            if (candidate && candidate !== nextID) {
+              void CredentialManager.notifyFailover({
+                providerID: opts.providerID,
+                fromRecordID: nextID,
+                toRecordID: candidate,
+                statusCode: retry.status,
+              })
+            }
+          }
           if (!hasMoreAttempts) return retry
           await drainResponse(retry)
           continue
