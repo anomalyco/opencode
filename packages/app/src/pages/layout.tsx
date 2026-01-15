@@ -897,7 +897,7 @@ export default function Layout(props: ParentProps) {
               >
                 <Switch>
                   <Match when={isWorking()}>
-                    <Spinner class="size-[15px]" />
+                    <Spinner class="size-[15px] opacity-50" />
                   </Match>
                   <Match when={hasPermissions()}>
                     <div class="size-1.5 rounded-full bg-surface-warning-strong" />
