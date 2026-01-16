@@ -1,8 +1,34 @@
 import { generatePKCE } from "@openauthjs/openauth/pkce"
 import { Auth } from "./index"
+import path from "path"
+import os from "os"
 
 export namespace AuthAnthropic {
   const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+
+  // Bridge to Claude Code credentials for EXACT auth parity
+  // Claude Code stores OAuth tokens with user:sessions:claude_code scope
+  // which is required for API access via subscription
+  interface ClaudeCodeCredentials {
+    claudeAiOauth?: {
+      accessToken: string
+      refreshToken: string
+      expiresAt: number
+      scopes: string[]
+      subscriptionType?: string
+    }
+  }
+
+  async function getClaudeCodeCredentials(): Promise<ClaudeCodeCredentials | null> {
+    try {
+      const credPath = path.join(os.homedir(), ".claude", ".credentials.json")
+      const file = Bun.file(credPath)
+      if (!(await file.exists())) return null
+      return await file.json()
+    } catch {
+      return null
+    }
+  }
 
   export async function authorize(mode: "max" | "console") {
     const pkce = await generatePKCE()
@@ -51,6 +77,36 @@ export namespace AuthAnthropic {
   }
 
   export async function access() {
+    // PRIORITY 1: Bridge to Claude Code credentials (exact same auth)
+    // This uses the user:sessions:claude_code scope that Claude Code has
+    const claudeCodeCreds = await getClaudeCodeCredentials()
+    if (claudeCodeCreds?.claudeAiOauth) {
+      const oauth = claudeCodeCreds.claudeAiOauth
+      // Check if token is still valid (with 60s buffer)
+      if (oauth.accessToken && oauth.expiresAt > Date.now() + 60000) {
+        return oauth.accessToken
+      }
+      // Token expired - try to refresh using Claude Code's refresh token
+      if (oauth.refreshToken) {
+        try {
+          const response = await fetch("https://claude.ai/api/auth/oauth/refresh", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh_token: oauth.refreshToken }),
+          })
+          if (response.ok) {
+            const json = await response.json()
+            // Note: We can't write back to Claude Code's credentials file
+            // but we can use the refreshed token for this session
+            return json.access_token as string
+          }
+        } catch {
+          // Fall through to OpenCode auth
+        }
+      }
+    }
+
+    // PRIORITY 2: OpenCode's own OAuth tokens
     const info = await Auth.get("anthropic")
     if (!info || info.type !== "oauth") return
     if (info.access && info.expires > Date.now()) return info.access

@@ -1,0 +1,10 @@
+#!/bin/bash
+# Conatus Development Launcher
+# Use this for system-wide development access
+#
+# Named after Spinoza's conatus: the striving to persist in one's being.
+
+CONATUS_DIR="/home/bryan/projects/opencode-analysis/packages/opencode"
+
+cd "$CONATUS_DIR"
+exec bun run --conditions=browser ./src/index.ts "$@"

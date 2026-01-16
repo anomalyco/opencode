@@ -9,7 +9,7 @@ import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "../auth"
-import { AuthAnthropic } from "../auth/anthropic"
+// AuthAnthropic is handled by opencode-anthropic-auth plugin
 import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
@@ -75,42 +75,8 @@ export namespace Provider {
   }>
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
-    async anthropic(provider) {
-      // Try OAuth first (same auth as Claude Code / claude.ai)
-      const access = await AuthAnthropic.access()
-      if (access) {
-        // OAuth available - use it (free via Claude subscription)
-        for (const model of Object.values(provider.models)) {
-          model.cost = { input: 0, output: 0, cache: { read: 0, write: 0 } }
-        }
-        return {
-          autoload: true,
-          options: {
-            apiKey: "", // OAuth doesn't need API key
-            async fetch(input: any, init: any) {
-              const accessToken = await AuthAnthropic.access()
-              const headers = {
-                ...init.headers,
-                authorization: `Bearer ${accessToken}`,
-                "anthropic-beta": "oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
-              }
-              delete headers["x-api-key"]
-              return fetch(input, { ...init, headers })
-            },
-          },
-        }
-      }
-      // Fall back to API key auth
-      return {
-        autoload: false,
-        options: {
-          headers: {
-            "anthropic-beta":
-              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
-          },
-        },
-      }
-    },
+    // Anthropic OAuth is handled by opencode-anthropic-auth plugin
+    // which transforms requests to work with Claude Code credentials
     async opencode(input) {
       const hasKey = await (async () => {
         const env = Env.all()
