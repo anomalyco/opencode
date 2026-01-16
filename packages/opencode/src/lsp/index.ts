@@ -466,6 +466,30 @@ export namespace LSP {
     return Promise.all(tasks)
   }
 
+  export async function restartByExtension(extension: string) {
+    const s = await state()
+    const restarted: string[] = []
+
+    for (const server of Object.values(s.servers)) {
+      if (server.extensions.length && !server.extensions.includes(extension)) continue
+
+      for (const client of s.clients.filter((c) => c.serverID === server.id)) {
+        log.info("restarting LSP server", { serverID: client.serverID, root: client.root })
+        await client.shutdown()
+        const idx = s.clients.indexOf(client)
+        if (idx >= 0) s.clients.splice(idx, 1)
+        s.broken.delete(client.root + client.serverID)
+        restarted.push(server.id)
+      }
+    }
+
+    if (restarted.length > 0) {
+      Bus.publish(Event.Updated, {})
+    }
+
+    return restarted
+  }
+
   export namespace Diagnostic {
     export function pretty(diagnostic: LSPClient.Diagnostic) {
       const severityMap = {
