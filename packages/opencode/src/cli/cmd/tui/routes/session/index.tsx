@@ -494,11 +494,7 @@ export function Session() {
       keybind: "sidebar_overlay_toggle",
       category: "System",
       onSelect: (dialog) => {
-        setSidebarOverlayEnabled((prev) => {
-          const next = !prev
-          kv.set("sidebar_overlay", next)
-          return next
-        })
+        setSidebarOverlayEnabled((prev) => !prev)
         dialog.clear()
       },
     },
