@@ -1,7 +1,7 @@
 import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
-import { batch, createEffect, createMemo, For, Show, type JSX, on } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
@@ -27,6 +27,9 @@ export interface DialogSelectProps<T> {
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
   current?: T
+  selected?: T
+  initialFilter?: string
+  initialScrollTop?: number
 }
 
 export interface DialogSelectOption<T = any> {
@@ -44,6 +47,7 @@ export interface DialogSelectOption<T = any> {
 export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
+  scrollTop: number
 }
 
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
@@ -51,13 +55,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const { theme } = useTheme()
   const [store, setStore] = createStore({
     selected: 0,
-    filter: "",
+    filter: props.initialFilter ?? "",
   })
 
   createEffect(
     on(
       () => props.current,
       (current) => {
+        if (props.selected) return
         if (current) {
           const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
           if (currentIndex >= 0) {
@@ -66,6 +71,36 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         }
       },
     ),
+  )
+
+  const [selectedApplied, setSelectedApplied] = createSignal(false)
+  const [scrollTopApplied, setScrollTopApplied] = createSignal(false)
+
+  createEffect(
+    on(
+      () => props.selected,
+      (selected) => {
+        if (!selected) {
+          setSelectedApplied(false)
+          return
+        }
+        setSelectedApplied(false)
+      },
+    ),
+  )
+
+  createEffect(
+    on([() => props.selected, () => flat().length], ([selected]) => {
+      if (!selected || selectedApplied()) return
+      const selectedIndex = flat().findIndex((opt) => isDeepEqual(opt.value, selected))
+      if (selectedIndex < 0) return
+      setStore("selected", selectedIndex)
+      setSelectedApplied(true)
+      setTimeout(() => {
+        if (!scroll) return
+        moveTo(selectedIndex)
+      }, 0)
+    }),
   )
 
   let input: InputRenderable
@@ -112,11 +147,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       setTimeout(() => {
         if (filter.length > 0) {
           moveTo(0, true)
-        } else if (current) {
-          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
-          if (currentIndex >= 0) {
-            moveTo(currentIndex, true)
-          }
+          return
+        }
+        if (!current) return
+        const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+        if (currentIndex >= 0) {
+          moveTo(currentIndex, true)
         }
       }, 0)
     }),
@@ -142,16 +178,19 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     if (center) {
       const centerOffset = Math.floor(scroll.height / 2)
       scroll.scrollBy(y - centerOffset)
-    } else {
-      if (y >= scroll.height) {
-        scroll.scrollBy(y - scroll.height + 1)
+      if (isDeepEqual(flat()[0].value, selected()?.value)) {
+        scroll.scrollTo(0)
       }
-      if (y < 0) {
-        scroll.scrollBy(y)
-        if (isDeepEqual(flat()[0].value, selected()?.value)) {
-          scroll.scrollTo(0)
-        }
-      }
+      return
+    }
+    if (y >= scroll.height) {
+      scroll.scrollBy(y - scroll.height + 1)
+    }
+    if (y < 0) {
+      scroll.scrollBy(y)
+    }
+    if (isDeepEqual(flat()[0].value, selected()?.value)) {
+      scroll.scrollTo(0)
     }
   }
 
@@ -193,6 +232,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     get filtered() {
       return filtered()
     },
+    get scrollTop() {
+      return scroll?.scrollTop ?? 0
+    },
   }
   props.ref?.(ref)
 
@@ -220,6 +262,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             focusedTextColor={theme.textMuted}
             ref={(r) => {
               input = r
+              if (props.initialFilter) {
+                input.value = props.initialFilter
+              }
               setTimeout(() => input.focus(), 1)
             }}
             placeholder={props.placeholder ?? "Search"}
@@ -238,7 +283,15 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           paddingLeft={1}
           paddingRight={1}
           scrollbarOptions={{ visible: false }}
-          ref={(r: ScrollBoxRenderable) => (scroll = r)}
+          ref={(r: ScrollBoxRenderable) => {
+            scroll = r
+            if (props.initialScrollTop === undefined || props.selected || scrollTopApplied()) return
+            setTimeout(() => {
+              if (!scroll || props.initialScrollTop === undefined) return
+              scroll.scrollTop = props.initialScrollTop
+              setScrollTopApplied(true)
+            }, 1)
+          }}
           maxHeight={height()}
         >
           <For each={grouped()}>

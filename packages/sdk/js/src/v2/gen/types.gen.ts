@@ -968,6 +968,14 @@ export type KeybindsConfig = {
    */
   session_list?: string
   /**
+   * Open session directory selector
+   */
+  session_directory?: string
+  /**
+   * Refresh session directory list
+   */
+  session_directory_refresh?: string
+  /**
    * Show session timeline
    */
   session_timeline?: string

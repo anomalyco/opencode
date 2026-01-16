@@ -140,6 +140,10 @@ export const TuiThreadCommand = cmd({
       events = createEventSource(client)
     }
 
+    const switchDirectory = async (directory: string) => {
+      await client.call("switchDirectory", { directory })
+    }
+
     const tuiPromise = tui({
       url,
       fetch: customFetch,
@@ -154,6 +158,7 @@ export const TuiThreadCommand = cmd({
       onExit: async () => {
         await client.call("shutdown", undefined)
       },
+      switchDirectory,
     })
 
     setTimeout(() => {

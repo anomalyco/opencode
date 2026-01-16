@@ -77,6 +77,10 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         if (evt.name === "\x1F") {
           return Keybind.fromParsedKey({ ...evt, name: "_", ctrl: true }, store.leader)
         }
+        // Handle Ctrl+G (bell) which some terminals emit as \x07
+        if (evt.name === "\x07") {
+          return Keybind.fromParsedKey({ ...evt, name: "g", ctrl: true }, store.leader)
+        }
         return Keybind.fromParsedKey(evt, store.leader)
       },
       match(key: keyof KeybindsConfig, evt: ParsedKey) {

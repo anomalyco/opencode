@@ -1,7 +1,7 @@
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { batch, onCleanup, onMount } from "solid-js"
+import { batch, createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
 
 export type EventSource = {
   on: (handler: (event: Event) => void) => () => void
@@ -11,12 +11,26 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
   init: (props: { url: string; directory?: string; fetch?: typeof fetch; events?: EventSource }) => {
     const abort = new AbortController()
-    const sdk = createOpencodeClient({
-      baseUrl: props.url,
-      signal: abort.signal,
-      directory: props.directory,
-      fetch: props.fetch,
-    })
+    const createClient = (directory?: string) => {
+      return createOpencodeClient({
+        baseUrl: props.url,
+        signal: abort.signal,
+        directory,
+        fetch: props.fetch,
+      })
+    }
+
+    const [sdk, setSdk] = createSignal(createClient(props.directory))
+
+    createEffect(
+      on(
+        () => props.directory,
+        (directory) => {
+          setSdk(createClient(directory))
+        },
+        { defer: true },
+      ),
+    )
 
     const emitter = createGlobalEmitter<{
       [key in Event["type"]]: Extract<Event, { type: key }>
@@ -65,7 +79,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       // Fall back to SSE
       while (true) {
         if (abort.signal.aborted) break
-        const events = await sdk.event.subscribe(
+        const events = await sdk().event.subscribe(
           {},
           {
             signal: abort.signal,
@@ -89,6 +103,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       if (timer) clearTimeout(timer)
     })
 
-    return { client: sdk, event: emitter, url: props.url }
+    return {
+      get client() {
+        return sdk()
+      },
+      createClient,
+      event: emitter,
+      url: props.url,
+    }
   },
 })

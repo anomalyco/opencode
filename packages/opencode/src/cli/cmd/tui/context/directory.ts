@@ -1,6 +1,7 @@
-import { createMemo } from "solid-js"
+import { createMemo, createSignal } from "solid-js"
 import { useSync } from "./sync"
 import { Global } from "@/global"
+import { createSimpleContext } from "./helper"
 
 export function useDirectory() {
   const sync = useSync()
@@ -11,3 +12,24 @@ export function useDirectory() {
     return result
   })
 }
+
+export const { use: useDirectoryState, provider: DirectoryProvider } = createSimpleContext({
+  name: "DirectoryState",
+  init: (props: { directory?: string; onSwitch?: (directory: string) => Promise<void> }) => {
+    const [current, setCurrent] = createSignal(props.directory ?? process.cwd())
+
+    const switchTo = async (directory: string) => {
+      if (directory === current()) return true
+      await props.onSwitch?.(directory)
+      setCurrent(directory)
+      return true
+    }
+
+    return {
+      get current() {
+        return current()
+      },
+      switchTo,
+    }
+  },
+})
