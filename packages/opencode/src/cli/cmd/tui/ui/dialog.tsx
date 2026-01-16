@@ -58,6 +58,12 @@ function init() {
 
   useKeyboard((evt) => {
     if (evt.name === "escape" && store.stack.length > 0) {
+      // Check if a textarea is currently focused - if so, let the component handle escape
+      const focused = renderer.currentFocusedRenderable
+      if (focused && focused.constructor.name === "TextareaRenderable") {
+        return
+      }
+      if (evt.defaultPrevented) return
       const current = store.stack.at(-1)!
       current.onClose?.()
       setStore("stack", store.stack.slice(0, -1))
