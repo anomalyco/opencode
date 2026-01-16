@@ -188,6 +188,15 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
       const pty = store.all.find((x) => x.id === id)
       if (!pty) return
 
+      const pane = store.panes[pty.tabId]
+      if (pane) {
+        const panelId = Object.keys(pane.panels).find((key) => pane.panels[key].ptyId === id)
+        if (panelId) {
+          await this.closeSplit(pty.tabId, panelId)
+          return
+        }
+      }
+
       if (store.active === pty.tabId) {
         const remaining = store.all.filter((p) => p.tabId === p.id && p.id !== id)
         setStore("active", remaining[0]?.tabId)
@@ -208,6 +217,9 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
       const terminalsInTab = store.all.filter((p) => p.tabId === tabId)
       const ptyIds = pane ? getAllPtyIds(pane, pane.root) : terminalsInTab.map((p) => p.id)
 
+      const remainingTabs = store.all.filter((p) => p.tabId !== tabId)
+      const uniqueTabIds = [...new Set(remainingTabs.map((p) => p.tabId))]
+
       setStore(
         "all",
         store.all.filter((x) => !ptyIds.includes(x.id)),
@@ -219,8 +231,6 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
         }),
       )
       if (store.active === tabId) {
-        const remainingTabs = store.all.filter((p) => p.tabId !== tabId)
-        const uniqueTabIds = [...new Set(remainingTabs.map((p) => p.tabId))]
         setStore("active", uniqueTabIds[0])
       }
       for (const ptyId of ptyIds) {
@@ -333,6 +343,8 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
       const sibling = pane.panels[siblingId]
       if (!sibling) return
 
+      const newFocused = sibling.ptyId ? panel.parentId! : (getFirstLeaf(pane, sibling.children![0]) ?? panel.parentId!)
+
       batch(() => {
         setStore(
           "panes",
@@ -361,9 +373,6 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
           }),
         )
 
-        const newFocused = sibling.ptyId
-          ? panel.parentId!
-          : (getFirstLeaf(pane, sibling.children![0]) ?? panel.parentId!)
         setStore("panes", tabId, "focused", newFocused)
 
         setStore(
