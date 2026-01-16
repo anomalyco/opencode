@@ -1,16 +1,16 @@
 import type { Argv } from "yargs"
 import path from "path"
-import { UI } from "../ui"
+import { UI } from "@/cli/ui"
 import { cmd } from "./cmd"
-import { Flag } from "../../flag/flag"
-import { bootstrap } from "../bootstrap"
-import { Command } from "../../command"
+import { Flag } from "@/flag/flag"
+import { bootstrap } from "@/cli/bootstrap"
+import { Command } from "@/command"
 import { EOL } from "os"
 import { select } from "@clack/prompts"
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
-import { Server } from "../../server/server"
-import { Provider } from "../../provider/provider"
-import { Agent } from "../../agent/agent"
+import { Server } from "@/server/server"
+import { Provider } from "@/provider/provider"
+import { Agent } from "@/agent/agent"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],

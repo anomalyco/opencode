@@ -1,7 +1,7 @@
 import { EOL } from "os"
-import { Project } from "../../../project/project"
-import { Log } from "../../../util/log"
-import { cmd } from "../cmd"
+import { Project } from "@/project/project"
+import { Log } from "@/util/log"
+import { cmd } from "@/cli/cmd/cmd"
 
 export const ScrapCommand = cmd({
   command: "scrap",

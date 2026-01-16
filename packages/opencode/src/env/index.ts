@@ -1,4 +1,4 @@
-import { Instance } from "../project/instance"
+import { Instance } from "@/project/instance"
 
 export namespace Env {
   const state = Instance.state(() => {

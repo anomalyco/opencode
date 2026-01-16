@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { SessionRetry } from "../../src/session/retry"
-import { MessageV2 } from "../../src/session/message-v2"
+import { SessionRetry } from "@/session/retry"
+import { MessageV2 } from "@/session/message-v2"
 
 function apiError(headers?: Record<string, string>): MessageV2.APIError {
   return new MessageV2.APIError({

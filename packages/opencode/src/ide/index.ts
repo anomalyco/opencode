@@ -3,7 +3,7 @@ import { Bus } from "@/bus"
 import { spawn } from "bun"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
-import { Log } from "../util/log"
+import { Log } from "@/util/log"
 
 const SUPPORTED_IDES = [
   { name: "Windsurf" as const, cmd: "windsurf" },

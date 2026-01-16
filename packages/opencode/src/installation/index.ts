@@ -3,9 +3,9 @@ import path from "path"
 import { $ } from "bun"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
-import { Log } from "../util/log"
+import { Log } from "@/util/log"
 import { iife } from "@/util/iife"
-import { Flag } from "../flag/flag"
+import { Flag } from "@/flag/flag"
 
 declare global {
   const OPENCODE_VERSION: string

@@ -18,11 +18,11 @@ import {
   type ToolCallContent,
   type ToolKind,
 } from "@agentclientprotocol/sdk"
-import { Log } from "../util/log"
+import { Log } from "@/util/log"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig, ACPSessionState } from "./types"
-import { Provider } from "../provider/provider"
-import { Agent as AgentModule } from "../agent/agent"
+import { Provider } from "@/provider/provider"
+import { Agent as AgentModule } from "@/agent/agent"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config/config"

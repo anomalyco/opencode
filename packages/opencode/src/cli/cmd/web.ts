@@ -1,8 +1,8 @@
-import { Server } from "../../server/server"
-import { UI } from "../ui"
+import { Server } from "@/server/server"
+import { UI } from "@/cli/ui"
 import { cmd } from "./cmd"
-import { withNetworkOptions, resolveNetworkOptions } from "../network"
-import { Flag } from "../../flag/flag"
+import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
+import { Flag } from "@/flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
 

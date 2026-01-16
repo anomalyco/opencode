@@ -1,8 +1,8 @@
 import type { Argv } from "yargs"
-import { Session } from "../../session"
+import { Session } from "@/session"
 import { cmd } from "./cmd"
-import { bootstrap } from "../bootstrap"
-import { UI } from "../ui"
+import { bootstrap } from "@/cli/bootstrap"
+import { UI } from "@/cli/ui"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
 

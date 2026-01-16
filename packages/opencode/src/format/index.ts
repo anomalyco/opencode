@@ -1,13 +1,13 @@
-import { Bus } from "../bus"
-import { File } from "../file"
-import { Log } from "../util/log"
+import { Bus } from "@/bus"
+import { File } from "@/file"
+import { Log } from "@/util/log"
 import path from "path"
 import z from "zod"
 
 import * as Formatter from "./formatter"
-import { Config } from "../config/config"
+import { Config } from "@/config/config"
 import { mergeDeep } from "remeda"
-import { Instance } from "../project/instance"
+import { Instance } from "@/project/instance"
 
 export namespace Format {
   const log = Log.create({ service: "format" })

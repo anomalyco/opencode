@@ -9,8 +9,8 @@ import {
   type UIMessage,
   type ToolSet,
 } from "ai"
-import { Identifier } from "../id/id"
-import { LSP } from "../lsp"
+import { Identifier } from "@/id/id"
+import { LSP } from "@/lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
 import { Storage } from "@/storage/storage"

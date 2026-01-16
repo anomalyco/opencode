@@ -1,10 +1,10 @@
 import fs from "fs/promises"
 import path from "path"
-import { Global } from "../global"
-import { Identifier } from "../id/id"
-import { lazy } from "../util/lazy"
-import { PermissionNext } from "../permission/next"
-import type { Agent } from "../agent/agent"
+import { Global } from "@/global"
+import { Identifier } from "@/id/id"
+import { lazy } from "@/util/lazy"
+import { PermissionNext } from "@/permission/next"
+import type { Agent } from "@/agent/agent"
 
 export namespace Truncate {
   export const MAX_LINES = 2000

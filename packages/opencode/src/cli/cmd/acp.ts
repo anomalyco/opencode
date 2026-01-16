@@ -1,11 +1,11 @@
 import { Log } from "@/util/log"
-import { bootstrap } from "../bootstrap"
+import { bootstrap } from "@/cli/bootstrap"
 import { cmd } from "./cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { ACP } from "@/acp/agent"
 import { Server } from "@/server/server"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import { withNetworkOptions, resolveNetworkOptions } from "../network"
+import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 
 const log = Log.create({ service: "acp-command" })
 

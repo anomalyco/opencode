@@ -56,7 +56,7 @@ delete process.env["CEREBRAS_API_KEY"]
 delete process.env["SAMBANOVA_API_KEY"]
 
 // Now safe to import from src/
-const { Log } = await import("../src/util/log")
+const { Log } = await import("@/util/log")
 
 Log.init({
   print: false,

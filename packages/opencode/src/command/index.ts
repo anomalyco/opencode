@@ -1,11 +1,11 @@
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
-import { Config } from "../config/config"
-import { Instance } from "../project/instance"
-import { Identifier } from "../id/id"
-import PROMPT_INITIALIZE from "./template/initialize.txt"
-import PROMPT_REVIEW from "./template/review.txt"
-import { MCP } from "../mcp"
+import { Config } from "@/config/config"
+import { Instance } from "@/project/instance"
+import { Identifier } from "@/id/id"
+import PROMPT_INITIALIZE from "@/command/template/initialize.txt"
+import PROMPT_REVIEW from "@/command/template/review.txt"
+import { MCP } from "@/mcp"
 
 export namespace Command {
   export const Event = {

@@ -1,7 +1,7 @@
 import { $ } from "bun"
 import { platform, release } from "os"
 import clipboardy from "clipboardy"
-import { lazy } from "../../../../util/lazy.js"
+import { lazy } from "@/util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
 

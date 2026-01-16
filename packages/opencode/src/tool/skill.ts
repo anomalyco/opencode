@@ -1,9 +1,9 @@
 import path from "path"
 import z from "zod"
 import { Tool } from "./tool"
-import { Skill } from "../skill"
-import { ConfigMarkdown } from "../config/markdown"
-import { PermissionNext } from "../permission/next"
+import { Skill } from "@/skill"
+import { ConfigMarkdown } from "@/config/markdown"
+import { PermissionNext } from "@/permission/next"
 
 const parameters = z.object({
   name: z.string().describe("The skill identifier from available_skills (e.g., 'code-review' or 'category/helper')"),

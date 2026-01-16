@@ -23,9 +23,9 @@ mock.module("opencode-anthropic-auth", () => ({ default: mockPlugin }))
 mock.module("@gitlab/opencode-gitlab-auth", () => ({ default: mockPlugin }))
 
 import { tmpdir } from "../fixture/fixture"
-import { Instance } from "../../src/project/instance"
-import { Provider } from "../../src/provider/provider"
-import { Env } from "../../src/env"
+import { Instance } from "@/project/instance"
+import { Provider } from "@/provider/provider"
+import { Env } from "@/env"
 
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({

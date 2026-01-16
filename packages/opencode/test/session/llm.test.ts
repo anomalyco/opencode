@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { LLM } from "../../src/session/llm"
+import { LLM } from "@/session/llm"
 import type { ModelMessage } from "ai"
 
 describe("session.llm.hasToolCalls", () => {

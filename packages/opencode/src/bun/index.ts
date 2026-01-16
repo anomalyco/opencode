@@ -1,11 +1,11 @@
 import z from "zod"
-import { Global } from "../global"
-import { Log } from "../util/log"
+import { Global } from "@/global"
+import { Log } from "@/util/log"
 import path from "path"
 import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
 import { createRequire } from "module"
-import { Lock } from "../util/lock"
+import { Lock } from "@/util/lock"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })

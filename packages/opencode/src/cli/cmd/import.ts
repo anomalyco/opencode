@@ -1,9 +1,9 @@
 import type { Argv } from "yargs"
-import { Session } from "../../session"
+import { Session } from "@/session"
 import { cmd } from "./cmd"
-import { bootstrap } from "../bootstrap"
-import { Storage } from "../../storage/storage"
-import { Instance } from "../../project/instance"
+import { bootstrap } from "@/cli/bootstrap"
+import { Storage } from "@/storage/storage"
+import { Instance } from "@/project/instance"
 import { EOL } from "os"
 
 export const ImportCommand = cmd({

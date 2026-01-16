@@ -98,10 +98,10 @@ beforeEach(() => {
 })
 
 // Import modules after mocking
-const { MCP } = await import("../../src/mcp/index")
-const { Bus } = await import("../../src/bus")
-const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
-const { Instance } = await import("../../src/project/instance")
+const { MCP } = await import("@/mcp/index")
+const { Bus } = await import("@/bus")
+const { McpOAuthCallback } = await import("@/mcp/oauth-callback")
+const { Instance } = await import("@/project/instance")
 const { tmpdir } = await import("../fixture/fixture")
 
 test("BrowserOpenFailed event is published when open() throws", async () => {

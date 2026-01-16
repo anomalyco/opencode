@@ -26,10 +26,10 @@ mock.module("@gitlab/opencode-gitlab-auth", () => ({ default: mockPlugin }))
 
 // Import after mocks are set up
 const { tmpdir } = await import("../fixture/fixture")
-const { Instance } = await import("../../src/project/instance")
-const { Provider } = await import("../../src/provider/provider")
-const { Env } = await import("../../src/env")
-const { Global } = await import("../../src/global")
+const { Instance } = await import("@/project/instance")
+const { Provider } = await import("@/provider/provider")
+const { Env } = await import("@/env")
+const { Global } = await import("@/global")
 
 test("GitLab Duo: loads provider with API key from environment", async () => {
   await using tmp = await tmpdir({

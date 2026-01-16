@@ -1,7 +1,7 @@
 import { ConfigMarkdown } from "@/config/markdown"
-import { Config } from "../config/config"
-import { MCP } from "../mcp"
-import { Provider } from "../provider/provider"
+import { Config } from "@/config/config"
+import { MCP } from "@/mcp"
+import { Provider } from "@/provider/provider"
 import { UI } from "./ui"
 
 export function FormatError(input: unknown) {

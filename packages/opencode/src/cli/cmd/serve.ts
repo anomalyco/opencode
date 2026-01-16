@@ -1,7 +1,7 @@
-import { Server } from "../../server/server"
+import { Server } from "@/server/server"
 import { cmd } from "./cmd"
-import { withNetworkOptions, resolveNetworkOptions } from "../network"
-import { Flag } from "../../flag/flag"
+import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
+import { Flag } from "@/flag/flag"
 
 export const ServeCommand = cmd({
   command: "serve",

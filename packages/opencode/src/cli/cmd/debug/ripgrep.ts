@@ -1,8 +1,8 @@
 import { EOL } from "os"
-import { Ripgrep } from "../../../file/ripgrep"
-import { Instance } from "../../../project/instance"
-import { bootstrap } from "../../bootstrap"
-import { cmd } from "../cmd"
+import { Ripgrep } from "@/file/ripgrep"
+import { Instance } from "@/project/instance"
+import { bootstrap } from "@/cli/bootstrap"
+import { cmd } from "@/cli/cmd/cmd"
 
 export const RipgrepCommand = cmd({
   command: "rg",

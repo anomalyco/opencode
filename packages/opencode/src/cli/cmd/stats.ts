@@ -1,10 +1,10 @@
 import type { Argv } from "yargs"
 import { cmd } from "./cmd"
-import { Session } from "../../session"
-import { bootstrap } from "../bootstrap"
-import { Storage } from "../../storage/storage"
-import { Project } from "../../project/project"
-import { Instance } from "../../project/instance"
+import { Session } from "@/session"
+import { bootstrap } from "@/cli/bootstrap"
+import { Storage } from "@/storage/storage"
+import { Project } from "@/project/project"
+import { Instance } from "@/project/instance"
 
 interface SessionStats {
   totalSessions: number

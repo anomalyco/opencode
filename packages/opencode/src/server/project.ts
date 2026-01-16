@@ -1,8 +1,8 @@
 import { Hono } from "hono"
 import { describeRoute, validator } from "hono-openapi"
 import { resolver } from "hono-openapi"
-import { Instance } from "../project/instance"
-import { Project } from "../project/project"
+import { Instance } from "@/project/instance"
+import { Project } from "@/project/project"
 import z from "zod"
 import { errors } from "./error"
 

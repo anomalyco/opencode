@@ -23,7 +23,7 @@ import { createStore, produce, reconcile, type SetStoreFunction, type Store } fr
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { useGlobalSDK } from "./global-sdk"
-import { ErrorPage, type InitError } from "../pages/error"
+import { ErrorPage, type InitError } from "@/pages/error"
 import {
   batch,
   createContext,

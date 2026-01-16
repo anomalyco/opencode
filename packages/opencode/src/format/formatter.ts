@@ -1,7 +1,7 @@
 import { readableStreamToText } from "bun"
-import { BunProc } from "../bun"
-import { Instance } from "../project/instance"
-import { Filesystem } from "../util/filesystem"
+import { BunProc } from "@/bun"
+import { Instance } from "@/project/instance"
+import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/flag/flag"
 
 export interface Info {

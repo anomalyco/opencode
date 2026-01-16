@@ -1,7 +1,7 @@
 import type { LanguageModelV2 } from "@ai-sdk/provider"
 import { OpenAICompatibleChatLanguageModel } from "@ai-sdk/openai-compatible"
 import { type FetchFunction, withoutTrailingSlash, withUserAgentSuffix } from "@ai-sdk/provider-utils"
-import { OpenAIResponsesLanguageModel } from "./responses/openai-responses-language-model"
+import { OpenAIResponsesLanguageModel } from "@/provider/sdk/openai-compatible/src/responses/openai-responses-language-model"
 
 // Import the version or define it
 const VERSION = "0.1.0"

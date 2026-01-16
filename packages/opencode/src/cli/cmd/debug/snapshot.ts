@@ -1,6 +1,6 @@
-import { Snapshot } from "../../../snapshot"
-import { bootstrap } from "../../bootstrap"
-import { cmd } from "../cmd"
+import { Snapshot } from "@/snapshot"
+import { bootstrap } from "@/cli/bootstrap"
+import { cmd } from "@/cli/cmd/cmd"
 
 export const SnapshotCommand = cmd({
   command: "snapshot",

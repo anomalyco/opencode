@@ -4,14 +4,14 @@ import path from "path"
 import { pathToFileURL, fileURLToPath } from "url"
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node"
 import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types"
-import { Log } from "../util/log"
+import { Log } from "@/util/log"
 import { LANGUAGE_EXTENSIONS } from "./language"
 import z from "zod"
 import type { LSPServer } from "./server"
 import { NamedError } from "@opencode-ai/util/error"
-import { withTimeout } from "../util/timeout"
-import { Instance } from "../project/instance"
-import { Filesystem } from "../util/filesystem"
+import { withTimeout } from "@/util/timeout"
+import { Instance } from "@/project/instance"
+import { Filesystem } from "@/util/filesystem"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
 

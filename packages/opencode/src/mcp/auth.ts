@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import z from "zod"
-import { Global } from "../global"
+import { Global } from "@/global"
 
 export namespace McpAuth {
   export const Tokens = z.object({

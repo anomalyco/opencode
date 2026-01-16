@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test"
-import { BashArity } from "../../src/permission/arity"
+import { BashArity } from "@/permission/arity"
 
 test("arity 1 - unknown commands default to first token", () => {
   expect(BashArity.prefix(["unknown", "command", "subcommand"])).toEqual(["unknown"])

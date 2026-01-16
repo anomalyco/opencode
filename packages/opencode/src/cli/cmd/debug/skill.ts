@@ -1,7 +1,7 @@
 import { EOL } from "os"
-import { Skill } from "../../../skill"
-import { bootstrap } from "../../bootstrap"
-import { cmd } from "../cmd"
+import { Skill } from "@/skill"
+import { bootstrap } from "@/cli/bootstrap"
+import { cmd } from "@/cli/cmd/cmd"
 
 export const SkillCommand = cmd({
   command: "skill",

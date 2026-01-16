@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test"
 import { $ } from "bun"
-import { Snapshot } from "../../src/snapshot"
-import { Instance } from "../../src/project/instance"
+import { Snapshot } from "@/snapshot"
+import { Instance } from "@/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
 async function bootstrap() {

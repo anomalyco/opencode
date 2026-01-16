@@ -1,7 +1,7 @@
 import { EOL } from "os"
-import { File } from "../../../file"
-import { bootstrap } from "../../bootstrap"
-import { cmd } from "../cmd"
+import { File } from "@/file"
+import { bootstrap } from "@/cli/bootstrap"
+import { cmd } from "@/cli/cmd/cmd"
 import { Ripgrep } from "@/file/ripgrep"
 
 const FileSearchCommand = cmd({

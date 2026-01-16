@@ -1,12 +1,12 @@
 import z from "zod"
-import { Identifier } from "../id/id"
-import { Snapshot } from "../snapshot"
+import { Identifier } from "@/id/id"
+import { Snapshot } from "@/snapshot"
 import { MessageV2 } from "./message-v2"
 import { Session } from "."
-import { Log } from "../util/log"
+import { Log } from "@/util/log"
 import { splitWhen } from "remeda"
-import { Storage } from "../storage/storage"
-import { Bus } from "../bus"
+import { Storage } from "@/storage/storage"
+import { Bus } from "@/bus"
 import { SessionPrompt } from "./prompt"
 
 export namespace SessionRevert {

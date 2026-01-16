@@ -21,15 +21,15 @@ import {
 import { z } from "zod/v4"
 import type { OpenAIConfig } from "./openai-config"
 import { openaiFailedResponseHandler } from "./openai-error"
-import { codeInterpreterInputSchema, codeInterpreterOutputSchema } from "./tool/code-interpreter"
-import { fileSearchOutputSchema } from "./tool/file-search"
-import { imageGenerationOutputSchema } from "./tool/image-generation"
+import { codeInterpreterInputSchema, codeInterpreterOutputSchema } from "@/provider/sdk/openai-compatible/src/responses/tool/code-interpreter"
+import { fileSearchOutputSchema } from "@/provider/sdk/openai-compatible/src/responses/tool/file-search"
+import { imageGenerationOutputSchema } from "@/provider/sdk/openai-compatible/src/responses/tool/image-generation"
 import { convertToOpenAIResponsesInput } from "./convert-to-openai-responses-input"
 import { mapOpenAIResponseFinishReason } from "./map-openai-responses-finish-reason"
 import type { OpenAIResponsesIncludeOptions, OpenAIResponsesIncludeValue } from "./openai-responses-api-types"
 import { prepareResponsesTools } from "./openai-responses-prepare-tools"
 import type { OpenAIResponsesModelId } from "./openai-responses-settings"
-import { localShellInputSchema } from "./tool/local-shell"
+import { localShellInputSchema } from "@/provider/sdk/openai-compatible/src/responses/tool/local-shell"
 
 const webSearchCallItem = z.object({
   type: z.literal("web_search_call"),

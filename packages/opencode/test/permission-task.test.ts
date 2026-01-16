@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test"
-import { PermissionNext } from "../src/permission/next"
-import { Config } from "../src/config/config"
-import { Instance } from "../src/project/instance"
+import { PermissionNext } from "@/permission/next"
+import { Config } from "@/config/config"
+import { Instance } from "@/project/instance"
 import { tmpdir } from "./fixture/fixture"
 
 describe("PermissionNext.evaluate for permission.task", () => {

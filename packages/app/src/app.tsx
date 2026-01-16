@@ -23,7 +23,7 @@ import { CommandProvider } from "@/context/command"
 import { Logo } from "@opencode-ai/ui/logo"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
-import { ErrorPage } from "./pages/error"
+import { ErrorPage } from "@/pages/error"
 import { iife } from "@opencode-ai/util/iife"
 import { Suspense } from "solid-js"
 

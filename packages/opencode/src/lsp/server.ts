@@ -1,15 +1,15 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process"
 import path from "path"
 import os from "os"
-import { Global } from "../global"
-import { Log } from "../util/log"
-import { BunProc } from "../bun"
+import { Global } from "@/global"
+import { Log } from "@/util/log"
+import { BunProc } from "@/bun"
 import { $, readableStreamToText } from "bun"
 import fs from "fs/promises"
-import { Filesystem } from "../util/filesystem"
-import { Instance } from "../project/instance"
-import { Flag } from "../flag/flag"
-import { Archive } from "../util/archive"
+import { Filesystem } from "@/util/filesystem"
+import { Instance } from "@/project/instance"
+import { Flag } from "@/flag/flag"
+import { Archive } from "@/util/archive"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })

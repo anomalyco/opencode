@@ -1,7 +1,7 @@
-import { LSP } from "../../../lsp"
-import { bootstrap } from "../../bootstrap"
-import { cmd } from "../cmd"
-import { Log } from "../../../util/log"
+import { LSP } from "@/lsp"
+import { bootstrap } from "@/cli/bootstrap"
+import { cmd } from "@/cli/cmd/cmd"
+import { Log } from "@/util/log"
 import { EOL } from "os"
 
 export const LSPCommand = cmd({

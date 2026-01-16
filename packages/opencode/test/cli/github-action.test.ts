@@ -1,6 +1,6 @@
 import { test, expect, describe } from "bun:test"
-import { extractResponseText } from "../../src/cli/cmd/github"
-import type { MessageV2 } from "../../src/session/message-v2"
+import { extractResponseText } from "@/cli/cmd/github"
+import type { MessageV2 } from "@/session/message-v2"
 
 // Helper to create minimal valid parts
 function createTextPart(text: string): MessageV2.Part {

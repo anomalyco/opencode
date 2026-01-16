@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { ReadTool } from "../../src/tool/read"
-import { Instance } from "../../src/project/instance"
+import { ReadTool } from "@/tool/read"
+import { Instance } from "@/project/instance"
 import { tmpdir } from "../fixture/fixture"
-import { PermissionNext } from "../../src/permission/next"
-import { Agent } from "../../src/agent/agent"
+import { PermissionNext } from "@/permission/next"
+import { Agent } from "@/agent/agent"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import os from "node:os"
 import path from "node:path"
 import { mkdtemp, mkdir, rm } from "node:fs/promises"
-import { Filesystem } from "../../src/util/filesystem"
+import { Filesystem } from "@/util/filesystem"
 
 describe("util.filesystem", () => {
   test("exists() is true for files and directories", async () => {

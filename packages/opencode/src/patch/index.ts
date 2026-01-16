@@ -1,7 +1,7 @@
 import z from "zod"
 import * as path from "path"
 import * as fs from "fs/promises"
-import { Log } from "../util/log"
+import { Log } from "@/util/log"
 
 export namespace Patch {
   const log = Log.create({ service: "patch" })

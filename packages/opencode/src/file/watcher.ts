@@ -1,10 +1,10 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import z from "zod"
-import { Instance } from "../project/instance"
-import { Log } from "../util/log"
+import { Instance } from "@/project/instance"
+import { Log } from "@/util/log"
 import { FileIgnore } from "./ignore"
-import { Config } from "../config/config"
+import { Config } from "@/config/config"
 import path from "path"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"

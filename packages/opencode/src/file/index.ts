@@ -6,12 +6,12 @@ import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import fs from "fs"
 import ignore from "ignore"
-import { Log } from "../util/log"
-import { Filesystem } from "../util/filesystem"
-import { Instance } from "../project/instance"
+import { Log } from "@/util/log"
+import { Filesystem } from "@/util/filesystem"
+import { Instance } from "@/project/instance"
 import { Ripgrep } from "./ripgrep"
 import fuzzysort from "fuzzysort"
-import { Global } from "../global"
+import { Global } from "@/global"
 
 export namespace File {
   const log = Log.create({ service: "file" })

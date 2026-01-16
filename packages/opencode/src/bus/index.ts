@@ -1,6 +1,6 @@
 import z from "zod"
-import { Log } from "../util/log"
-import { Instance } from "../project/instance"
+import { Log } from "@/util/log"
+import { Instance } from "@/project/instance"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
 

@@ -1,8 +1,8 @@
 import { test, expect } from "bun:test"
 import { tmpdir } from "../fixture/fixture"
-import { Instance } from "../../src/project/instance"
-import { Agent } from "../../src/agent/agent"
-import { PermissionNext } from "../../src/permission/next"
+import { Instance } from "@/project/instance"
+import { Agent } from "@/agent/agent"
+import { PermissionNext } from "@/permission/next"
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): PermissionNext.Action | undefined {
@@ -448,7 +448,7 @@ test("legacy tools config maps write/edit/patch/multiedit to edit permission", a
 })
 
 test("Truncate.DIR is allowed even when user denies external_directory globally", async () => {
-  const { Truncate } = await import("../../src/tool/truncation")
+  const { Truncate } = await import("@/tool/truncation")
   await using tmp = await tmpdir({
     config: {
       permission: {
@@ -468,7 +468,7 @@ test("Truncate.DIR is allowed even when user denies external_directory globally"
 })
 
 test("Truncate.DIR is allowed even when user denies external_directory per-agent", async () => {
-  const { Truncate } = await import("../../src/tool/truncation")
+  const { Truncate } = await import("@/tool/truncation")
   await using tmp = await tmpdir({
     config: {
       agent: {
@@ -492,7 +492,7 @@ test("Truncate.DIR is allowed even when user denies external_directory per-agent
 })
 
 test("explicit Truncate.DIR deny is respected", async () => {
-  const { Truncate } = await import("../../src/tool/truncation")
+  const { Truncate } = await import("@/tool/truncation")
   await using tmp = await tmpdir({
     config: {
       permission: {

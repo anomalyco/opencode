@@ -1,14 +1,14 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { Log } from "../util/log"
+import { Log } from "@/util/log"
 import { LSPClient } from "./client"
 import path from "path"
 import { pathToFileURL } from "url"
 import { LSPServer } from "./server"
 import z from "zod"
-import { Config } from "../config/config"
+import { Config } from "@/config/config"
 import { spawn } from "child_process"
-import { Instance } from "../project/instance"
+import { Instance } from "@/project/instance"
 import { Flag } from "@/flag/flag"
 
 export namespace LSP {

@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Session } from "../../src/session"
-import { Bus } from "../../src/bus"
-import { Log } from "../../src/util/log"
-import { Instance } from "../../src/project/instance"
+import { Session } from "@/session"
+import { Bus } from "@/bus"
+import { Log } from "@/util/log"
+import { Instance } from "@/project/instance"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })

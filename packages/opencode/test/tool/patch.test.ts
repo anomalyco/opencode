@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { PatchTool } from "../../src/tool/patch"
-import { Instance } from "../../src/project/instance"
+import { PatchTool } from "@/tool/patch"
+import { Instance } from "@/project/instance"
 import { tmpdir } from "../fixture/fixture"
-import { PermissionNext } from "../../src/permission/next"
+import { PermissionNext } from "@/permission/next"
 import * as fs from "fs/promises"
 
 const ctx = {

@@ -3,11 +3,11 @@ import {
   type LanguageModelV2CallWarning,
   UnsupportedFunctionalityError,
 } from "@ai-sdk/provider"
-import { codeInterpreterArgsSchema } from "./tool/code-interpreter"
-import { fileSearchArgsSchema } from "./tool/file-search"
-import { webSearchArgsSchema } from "./tool/web-search"
-import { webSearchPreviewArgsSchema } from "./tool/web-search-preview"
-import { imageGenerationArgsSchema } from "./tool/image-generation"
+import { codeInterpreterArgsSchema } from "@/provider/sdk/openai-compatible/src/responses/tool/code-interpreter"
+import { fileSearchArgsSchema } from "@/provider/sdk/openai-compatible/src/responses/tool/file-search"
+import { webSearchArgsSchema } from "@/provider/sdk/openai-compatible/src/responses/tool/web-search"
+import { webSearchPreviewArgsSchema } from "@/provider/sdk/openai-compatible/src/responses/tool/web-search-preview"
+import { imageGenerationArgsSchema } from "@/provider/sdk/openai-compatible/src/responses/tool/image-generation"
 import type { OpenAIResponsesTool } from "./openai-responses-api-types"
 
 export function prepareResponsesTools({

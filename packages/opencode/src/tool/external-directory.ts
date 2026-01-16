@@ -1,6 +1,6 @@
 import path from "path"
 import type { Tool } from "./tool"
-import { Instance } from "../project/instance"
+import { Instance } from "@/project/instance"
 
 type Kind = "file" | "directory"
 

@@ -1,5 +1,5 @@
 import path from "path"
-import { Global } from "../global"
+import { Global } from "@/global"
 import fs from "fs/promises"
 import z from "zod"
 

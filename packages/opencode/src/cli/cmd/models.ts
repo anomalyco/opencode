@@ -1,9 +1,9 @@
 import type { Argv } from "yargs"
-import { Instance } from "../../project/instance"
-import { Provider } from "../../provider/provider"
-import { ModelsDev } from "../../provider/models"
+import { Instance } from "@/project/instance"
+import { Provider } from "@/provider/provider"
+import { ModelsDev } from "@/provider/models"
 import { cmd } from "./cmd"
-import { UI } from "../ui"
+import { UI } from "@/cli/ui"
 import { EOL } from "os"
 
 export const ModelsCommand = cmd({

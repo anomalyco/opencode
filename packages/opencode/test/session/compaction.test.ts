@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { SessionCompaction } from "../../src/session/compaction"
-import { Token } from "../../src/util/token"
-import { Instance } from "../../src/project/instance"
-import { Log } from "../../src/util/log"
+import { SessionCompaction } from "@/session/compaction"
+import { Token } from "@/util/token"
+import { Instance } from "@/project/instance"
+import { Log } from "@/util/log"
 import { tmpdir } from "../fixture/fixture"
-import { Session } from "../../src/session"
-import type { Provider } from "../../src/provider/provider"
+import { Session } from "@/session"
+import type { Provider } from "@/provider/provider"
 
 Log.init({ print: false })
 

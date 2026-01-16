@@ -7,7 +7,7 @@ import {
 import { convertToBase64, parseProviderOptions } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
 import type { OpenAIResponsesInput, OpenAIResponsesReasoning } from "./openai-responses-api-types"
-import { localShellInputSchema, localShellOutputSchema } from "./tool/local-shell"
+import { localShellInputSchema, localShellOutputSchema } from "@/provider/sdk/openai-compatible/src/responses/tool/local-shell"
 
 /**
  * Check if a string is a file ID based on the given prefixes

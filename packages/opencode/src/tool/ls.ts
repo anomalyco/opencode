@@ -2,8 +2,8 @@ import z from "zod"
 import { Tool } from "./tool"
 import * as path from "path"
 import DESCRIPTION from "./ls.txt"
-import { Instance } from "../project/instance"
-import { Ripgrep } from "../file/ripgrep"
+import { Instance } from "@/project/instance"
+import { Ripgrep } from "@/file/ripgrep"
 import { assertExternalDirectory } from "./external-directory"
 
 export const IGNORE_PATTERNS = [

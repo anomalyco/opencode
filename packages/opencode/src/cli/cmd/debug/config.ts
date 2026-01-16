@@ -1,7 +1,7 @@
 import { EOL } from "os"
-import { Config } from "../../../config/config"
-import { bootstrap } from "../../bootstrap"
-import { cmd } from "../cmd"
+import { Config } from "@/config/config"
+import { bootstrap } from "@/cli/bootstrap"
+import { cmd } from "@/cli/cmd/cmd"
 
 export const ConfigCommand = cmd({
   command: "config",

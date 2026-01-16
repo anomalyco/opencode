@@ -1,5 +1,5 @@
 import type { Argv, InferredOptionTypes } from "yargs"
-import { Config } from "../config/config"
+import { Config } from "@/config/config"
 
 const options = {
   port: {

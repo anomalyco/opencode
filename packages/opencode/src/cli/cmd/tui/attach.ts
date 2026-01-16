@@ -1,4 +1,4 @@
-import { cmd } from "../cmd"
+import { cmd } from "@/cli/cmd/cmd"
 import { tui } from "./app"
 
 export const AttachCommand = cmd({
