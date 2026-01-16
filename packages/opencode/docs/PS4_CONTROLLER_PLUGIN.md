@@ -29,7 +29,6 @@ The controller vibrates in the following scenarios:
 
 | Event | Vibration Pattern |
 |-------|------------------|
-| Agent starts thinking | Short vibration (200ms, 30% intensity) |
 | Question asked | Medium vibration (300ms, 50% intensity) |
 | Permission requested | Medium vibration (400ms, 40% intensity) |
 | Error encountered | Long vibration (1000ms, 100% intensity) |

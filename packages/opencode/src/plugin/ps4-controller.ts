@@ -117,13 +117,6 @@ export async function PS4ControllerPlugin(input: PluginInput): Promise<Hooks> {
   const controller = new PS4Controller()
 
   // Subscribe to session events to trigger vibration when agent needs attention
-  Bus.subscribe(Session.Event.Thinking, async (event) => {
-    if (controller.isConnected()) {
-      // Vibrate briefly when agent starts thinking
-      await controller.vibrate(200, 0.3)
-    }
-  })
-
   Bus.subscribe(Session.Event.Error, async (event) => {
     if (controller.isConnected()) {
       // Strong vibration on errors to get user's attention
