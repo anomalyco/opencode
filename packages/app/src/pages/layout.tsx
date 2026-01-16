@@ -64,7 +64,7 @@ import { useServer } from "@/context/server"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
-    Persist.global("layout", ["layout.v6"]),
+    Persist.global("layout.page", ["layout.page.v1"]),
     createStore({
       lastSession: {} as { [directory: string]: string },
       activeProject: undefined as string | undefined,
@@ -73,6 +73,8 @@ export default function Layout(props: ParentProps) {
       workspaceExpanded: {} as Record<string, boolean>,
     }),
   )
+
+  const pageReady = createMemo(() => ready())
 
   let scrollContainerRef: HTMLDivElement | undefined
   const xlQuery = window.matchMedia("(min-width: 1280px)")
@@ -85,6 +87,7 @@ export default function Layout(props: ParentProps) {
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const layout = useLayout()
+  const layoutReady = createMemo(() => layout.ready())
   const platform = usePlatform()
   const server = useServer()
   const notification = useNotification()
@@ -293,7 +296,8 @@ export default function Layout(props: ParentProps) {
   })
 
   createEffect(() => {
-    if (!ready()) return
+    if (!pageReady()) return
+    if (!layoutReady()) return
     const project = currentProject()
     if (!project) return
 
@@ -315,6 +319,16 @@ export default function Layout(props: ParentProps) {
 
     if (merged.some((d, i) => d !== existing[i])) {
       setStore("workspaceOrder", project.worktree, merged)
+    }
+  })
+
+  createEffect(() => {
+    if (!pageReady()) return
+    if (!layoutReady()) return
+    for (const [directory, expanded] of Object.entries(store.workspaceExpanded)) {
+      if (layout.sidebar.workspaces(directory)()) continue
+      if (!expanded) continue
+      setStore("workspaceExpanded", directory, false)
     }
   })
 
@@ -708,6 +722,7 @@ export default function Layout(props: ParentProps) {
   }
 
   createEffect(() => {
+    if (!pageReady()) return
     if (!params.dir || !params.id) return
     const directory = base64Decode(params.dir)
     const id = params.id
@@ -885,7 +900,7 @@ export default function Layout(props: ParentProps) {
     return (
       <div
         data-session-id={props.session.id}
-        class="group/session relative w-full rounded-md cursor-default transition-colors px-3
+        class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3
                hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
       >
         <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={16} openDelay={1000}>
@@ -900,7 +915,7 @@ export default function Layout(props: ParentProps) {
                 class="shrink-0 size-6 flex items-center justify-center"
                 style={{ color: tint() ?? "var(--icon-interactive-base)" }}
               >
-                <Switch>
+                <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
                   <Match when={isWorking()}>
                     <Spinner class="size-[15px]" />
                   </Match>
@@ -993,9 +1008,10 @@ export default function Layout(props: ParentProps) {
       <button
         type="button"
         classList={{
-          "flex items-center justify-center size-10 p-1 rounded-lg border transition-colors cursor-default": true,
-          "bg-transparent border-icon-strong-base hover:bg-surface-base-hover": selected(),
-          "bg-transparent border-transparent hover:bg-surface-base-hover hover:border-border-weak-base": !selected(),
+          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
+          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
+          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+            !selected(),
         }}
         onClick={() => navigateToProject(props.project.worktree)}
       >
@@ -1048,7 +1064,7 @@ export default function Layout(props: ParentProps) {
               <div class="px-2 py-2 border-t border-border-weak-base">
                 <Button
                   variant="ghost"
-                  class="flex w-full text-left justify-start text-text-base px-2"
+                  class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
                   onClick={() => {
                     layout.sidebar.open()
                     navigateToProject(props.project.worktree)
@@ -1135,7 +1151,7 @@ export default function Layout(props: ParentProps) {
         >
           <div class="px-2 py-1">
             <div class="group/trigger relative">
-              <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover">
+              <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-2 py-1.5 rounded-md hover:bg-surface-raised-base-hover transition-all group-hover/trigger:pr-16 group-focus-within/trigger:pr-16">
                 <div class="flex items-center gap-1 min-w-0">
                   <div class="flex items-center justify-center shrink-0 size-6">
                     <Icon name="branch" size="small" />
@@ -1188,7 +1204,7 @@ export default function Layout(props: ParentProps) {
                 <div class="relative w-full py-1">
                   <Button
                     variant="ghost"
-                    class="flex w-full text-left justify-start text-14-regular text-text-weak px-10"
+                    class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
                     size="large"
                     onClick={(e: MouseEvent) => {
                       loadMore()
@@ -1240,7 +1256,7 @@ export default function Layout(props: ParentProps) {
             <div class="relative w-full py-1">
               <Button
                 variant="ghost"
-                class="flex w-full text-left justify-start text-14-regular text-text-weak px-10"
+                class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
                 size="large"
                 onClick={(e: MouseEvent) => {
                   loadMore()
@@ -1408,7 +1424,7 @@ export default function Layout(props: ParentProps) {
                           <Button
                             size="large"
                             icon="plus-small"
-                            class="w-full"
+                            class="w-full max-w-[256px]"
                             onClick={() => {
                               navigate(`/${base64Encode(p.worktree)}/session`)
                               layout.mobileSidebar.hide()
@@ -1425,7 +1441,7 @@ export default function Layout(props: ParentProps) {
                   >
                     <>
                       <div class="py-4 px-3">
-                        <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
+                        <Button size="large" icon="plus-small" class="w-full max-w-[256px]" onClick={createWorkspace}>
                           New workspace
                         </Button>
                       </div>
@@ -1496,7 +1512,7 @@ export default function Layout(props: ParentProps) {
             "hidden xl:block": true,
             "relative shrink-0": true,
           }}
-          style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : "64px" }}
+          style={{ width: layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "64px" }}
         >
           <div class="@container w-full h-full contain-strict">
             <SidebarContent />
@@ -1505,9 +1521,9 @@ export default function Layout(props: ParentProps) {
             <ResizeHandle
               direction="horizontal"
               size={layout.sidebar.width()}
-              min={214}
+              min={244}
               max={window.innerWidth * 0.3 + 64}
-              collapseThreshold={144}
+              collapseThreshold={244}
               onResize={layout.sidebar.resize}
               onCollapse={layout.sidebar.close}
             />
@@ -1516,7 +1532,7 @@ export default function Layout(props: ParentProps) {
         <div class="xl:hidden">
           <div
             classList={{
-              "fixed inset-0 z-40 transition-opacity duration-200": true,
+              "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
               "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
               "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
             }}
@@ -1526,7 +1542,7 @@ export default function Layout(props: ParentProps) {
           />
           <div
             classList={{
-              "@container fixed inset-y-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
+              "@container fixed top-10 bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
               "translate-x-0": layout.mobileSidebar.opened(),
               "-translate-x-full": !layout.mobileSidebar.opened(),
             }}
@@ -1539,7 +1555,7 @@ export default function Layout(props: ParentProps) {
         <main
           classList={{
             "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base": true,
-            "border-l rounded-tl-sm": !layout.sidebar.opened(),
+            "xl:border-l xl:rounded-tl-sm": !layout.sidebar.opened(),
           }}
         >
           {props.children}

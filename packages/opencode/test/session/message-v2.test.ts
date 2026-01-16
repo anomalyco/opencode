@@ -1,7 +1,34 @@
 import { describe, expect, test } from "bun:test"
 import { MessageV2 } from "../../src/session/message-v2"
+import type { ToolSet } from "ai"
 
 const sessionID = "session"
+
+// Mock tool that transforms output to content format with media support
+function createMockTools(): ToolSet {
+  return {
+    bash: {
+      description: "mock bash tool",
+      inputSchema: { type: "object", properties: {} } as any,
+      toModelOutput(result: { output: string; attachments?: MessageV2.FilePart[] }) {
+        return {
+          type: "content" as const,
+          value: [
+            { type: "text" as const, text: result.output },
+            ...(result.attachments?.map((attachment) => {
+              const base64 = attachment.url.startsWith("data:") ? attachment.url.split(",", 2)[1] : attachment.url
+              return {
+                type: "media" as const,
+                data: base64,
+                mediaType: attachment.mime,
+              }
+            }) ?? []),
+          ],
+        }
+      },
+    },
+  } as ToolSet
+}
 
 function userInfo(id: string): MessageV2.User {
   return {
@@ -259,7 +286,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessage(input, { tools: createMockTools() })).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -286,19 +313,11 @@ describe("session.message-v2.toModelMessage", () => {
             toolCallId: "call-1",
             toolName: "bash",
             output: {
-              type: "json",
-              value: {
-                output: "ok",
-                attachments: [
-                  {
-                    ...basePart(assistantID, "file-1"),
-                    type: "file",
-                    mime: "image/png",
-                    filename: "attachment.png",
-                    url: "https://example.com/attachment.png",
-                  },
-                ],
-              },
+              type: "content",
+              value: [
+                { type: "text", text: "ok" },
+                { type: "media", data: "https://example.com/attachment.png", mediaType: "image/png" },
+              ],
             },
             providerOptions: { openai: { tool: "meta" } },
           },
@@ -343,7 +362,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessage(input, { tools: createMockTools() })).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -367,7 +386,10 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-result",
             toolCallId: "call-1",
             toolName: "bash",
-            output: { type: "text", value: "[Old tool result content cleared]" },
+            output: {
+              type: "content",
+              value: [{ type: "text", text: "[Old tool result content cleared]" }],
+            },
           },
         ],
       },

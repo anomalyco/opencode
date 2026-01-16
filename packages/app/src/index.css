@@ -9,3 +9,16 @@
 *[data-tauri-drag-region] {
   app-region: drag;
 }
+
+/* Terminal split resize handles */
+[data-terminal-split-container] [data-component="resize-handle"] {
+  inset: unset;
+
+  &[data-direction="horizontal"] {
+    height: 100%;
+  }
+
+  &[data-direction="vertical"] {
+    width: 100%;
+  }
+}

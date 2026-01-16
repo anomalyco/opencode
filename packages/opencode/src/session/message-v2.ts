@@ -6,8 +6,8 @@ import {
   convertToModelMessages,
   LoadAPIKeyError,
   type ModelMessage,
-  type UIMessage,
   type ToolSet,
+  type UIMessage,
 } from "ai"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
@@ -516,7 +516,7 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 output: part.state.time.compacted
-                  ? "[Old tool result content cleared]"
+                  ? { output: "[Old tool result content cleared]" }
                   : { output: part.state.output, attachments: part.state.attachments },
                 callProviderMetadata: part.metadata,
               })
@@ -558,9 +558,7 @@ export namespace MessageV2 {
 
     return convertToModelMessages(
       result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
-      {
-        tools: options?.tools,
-      },
+      { tools: options?.tools },
     )
   }
 
