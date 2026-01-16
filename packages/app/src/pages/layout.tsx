@@ -902,15 +902,6 @@ export default function Layout(props: ParentProps) {
     globalSync.project.loadSessions(project.worktree)
   })
 
-  createEffect(() => {
-    if (isLargeViewport()) {
-      const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 64
-      document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
-      return
-    }
-    document.documentElement.style.setProperty("--dialog-left-margin", "0px")
-  })
-
   function getDraggableId(event: unknown): string | undefined {
     if (typeof event !== "object" || event === null) return undefined
     if (!("draggable" in event)) return undefined
