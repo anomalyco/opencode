@@ -1074,6 +1074,10 @@ export namespace Config {
         .describe(
           "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
         ),
+      notifications: z
+        .boolean()
+        .optional()
+        .describe("Send desktop notifications when sessions complete (macOS only). Defaults to true."),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
       enabled_providers: z
         .array(z.string())
