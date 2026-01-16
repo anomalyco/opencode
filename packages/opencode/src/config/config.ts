@@ -1,6 +1,6 @@
 import { Log } from "../util/log"
 import path from "path"
-import { pathToFileURL } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import os from "os"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
@@ -18,7 +18,7 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
-import { existsSync, readFileSync } from "fs"
+import { existsSync } from "fs"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -329,56 +329,30 @@ export namespace Config {
     return plugins
   }
 
-  function findPackageJsonName(filePath: string): string | undefined {
-    let dir = path.dirname(filePath)
-    const root = path.parse(dir).root
-
-    for (let i = 0; i < 5 && dir !== root; i++) {
-      const pkgPath = path.join(dir, "package.json")
-      if (existsSync(pkgPath)) {
-        try {
-          const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"))
-          if (pkg.name && typeof pkg.name === "string") {
-            return pkg.name
-          }
-        } catch {
-          // Invalid JSON, continue searching up
-        }
-      }
-      dir = path.dirname(dir)
-    }
-
-    return undefined
-  }
-
   /**
    * Extracts a canonical plugin name from a plugin specifier.
-   * - For file:// URLs: looks for package.json name, falls back to filename/parent directory
+   * - For file:// URLs: extracts filename, or walks up to find non-generic parent directory
    * - For npm packages: extracts package name without version
    *
    * @example
-   * getPluginName("file:///path/to/oh-my-opencode/dist/index.js") // "oh-my-opencode" (from package.json)
-   * getPluginName("file:///path/to/plugin/foo.js") // "foo" (no package.json, uses filename)
+   * getPluginName("file:///path/to/plugin/foo.js") // "foo"
+   * getPluginName("file:///path/to/plugin-a/index.js") // "plugin-a"
+   * getPluginName("file:///path/to/oh-my-opencode/dist/index.js") // "oh-my-opencode"
    * getPluginName("oh-my-opencode@2.4.3") // "oh-my-opencode"
    * getPluginName("@scope/pkg@1.0.0") // "@scope/pkg"
    */
   export function getPluginName(plugin: string): string {
     if (plugin.startsWith("file://")) {
-      const pathname = new URL(plugin).pathname
-
-      const packageName = findPackageJsonName(pathname)
-      if (packageName) {
-        return packageName
-      }
-
-      const parts = pathname.split("/").filter(Boolean)
-      const filename = path.parse(pathname).name
+      const filePath = fileURLToPath(plugin)
+      const parsed = path.parse(filePath)
+      const filename = parsed.name
       const genericNames = new Set(["index", "main", "plugin", "dist", "build", "out", "lib"])
 
       if (!genericNames.has(filename)) {
         return filename
       }
 
+      const parts = filePath.split(path.sep).filter(Boolean)
       for (let i = parts.length - 2; i >= 0; i--) {
         const dirName = parts[i]
         if (!genericNames.has(dirName) && dirName !== ".opencode") {

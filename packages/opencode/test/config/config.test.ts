@@ -1294,45 +1294,11 @@ describe("getPluginName", () => {
     expect(Config.getPluginName("file:///some/path/my-plugin.js")).toBe("my-plugin")
   })
 
-  test("extracts parent directory name for generic filenames (fallback when no package.json)", () => {
+  test("extracts parent directory name for generic filenames", () => {
     expect(Config.getPluginName("file:///path/to/plugin-a/index.js")).toBe("plugin-a")
     expect(Config.getPluginName("file:///path/to/plugin-b/dist/index.js")).toBe("plugin-b")
     expect(Config.getPluginName("file:///path/to/oh-my-opencode/dist/index.js")).toBe("oh-my-opencode")
     expect(Config.getPluginName("file:///path/to/my-plugin/build/main.js")).toBe("my-plugin")
-  })
-
-  test("extracts name from package.json when present", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        const pluginDir = path.join(dir, "my-awesome-plugin", "dist")
-        await fs.mkdir(pluginDir, { recursive: true })
-        await Bun.write(
-          path.join(dir, "my-awesome-plugin", "package.json"),
-          JSON.stringify({ name: "my-awesome-plugin", version: "1.0.0" }),
-        )
-        await Bun.write(path.join(pluginDir, "index.js"), "export default {}")
-      },
-    })
-
-    const pluginPath = `file://${path.join(tmp.path, "my-awesome-plugin", "dist", "index.js")}`
-    expect(Config.getPluginName(pluginPath)).toBe("my-awesome-plugin")
-  })
-
-  test("prefers package.json name over directory name", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        const pluginDir = path.join(dir, "wrong-name", "dist")
-        await fs.mkdir(pluginDir, { recursive: true })
-        await Bun.write(
-          path.join(dir, "wrong-name", "package.json"),
-          JSON.stringify({ name: "@scope/correct-name", version: "1.0.0" }),
-        )
-        await Bun.write(path.join(pluginDir, "index.js"), "export default {}")
-      },
-    })
-
-    const pluginPath = `file://${path.join(tmp.path, "wrong-name", "dist", "index.js")}`
-    expect(Config.getPluginName(pluginPath)).toBe("@scope/correct-name")
   })
 
   test("extracts name from npm package with version", () => {
