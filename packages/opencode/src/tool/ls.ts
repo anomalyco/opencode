@@ -3,6 +3,7 @@ import { Tool } from "./tool"
 import * as path from "path"
 import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"
+import { getCwd } from "@shell-mode"
 import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectory } from "./external-directory"
 

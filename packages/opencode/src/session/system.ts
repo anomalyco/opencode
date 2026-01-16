@@ -4,6 +4,7 @@ import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
 
 import { Instance } from "../project/instance"
+import { getCwd } from "@shell-mode"
 import path from "path"
 import os from "os"
 
@@ -39,11 +40,12 @@ export namespace SystemPrompt {
 
   export async function environment() {
     const project = Instance.project
+    const cwd = getCwd()
     return [
       [
         `Here is some useful information about the environment you are running in:`,
         `<env>`,
-        `  Working directory: ${Instance.directory}`,
+        `  Working directory: ${cwd}`,
         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
@@ -52,7 +54,7 @@ export namespace SystemPrompt {
         `  ${
           project.vcs === "git" && false
             ? await Ripgrep.tree({
-                cwd: Instance.directory,
+                cwd,
                 limit: 200,
               })
             : ""

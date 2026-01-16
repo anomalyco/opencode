@@ -7,7 +7,7 @@
 
 export { ExecutionMode, ModeController, getModeController, type ModeDisplay } from "./mode"
 export { shouldRouteToShell } from "./command-check"
-export { getCwd, setCwd, resetCwd } from "./cwd"
+export { getCwd, setCwd, resetCwd, CwdEvent } from "./cwd"
 export {
   execute as SessionShellExecute,
   dispose as SessionShellDispose,

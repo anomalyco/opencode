@@ -4,6 +4,7 @@ import { Ripgrep } from "../file/ripgrep"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
+import { getCwd } from "@shell-mode"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
 

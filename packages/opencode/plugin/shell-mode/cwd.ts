@@ -4,10 +4,25 @@
  */
 
 import { Instance } from "@/project/instance"
+import { Bus } from "@/bus"
+import { BusEvent } from "@/bus/bus-event"
 import path from "path"
 import os from "os"
+import z from "zod"
 
 let currentCwd: string | null = null
+
+/**
+ * Event published when the working directory changes.
+ */
+export const CwdEvent = {
+  Updated: BusEvent.define(
+    "cwd.updated",
+    z.object({
+      cwd: z.string(),
+    }),
+  ),
+}
 
 /**
  * Get the current working directory.
@@ -37,7 +52,13 @@ export function setCwd(dir: string): void {
     resolved = path.resolve(getCwd(), resolved)
   }
 
+  const changed = currentCwd !== resolved
   currentCwd = resolved
+
+  // Publish event if cwd changed
+  if (changed) {
+    Bus.publish(CwdEvent.Updated, { cwd: resolved })
+  }
 }
 
 /**

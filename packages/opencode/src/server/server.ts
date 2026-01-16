@@ -46,6 +46,7 @@ import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { SessionStatus } from "@/session/status"
+import { getCwd, CwdEvent } from "@shell-mode"
 import { upgradeWebSocket, websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
@@ -612,6 +613,7 @@ export namespace Server {
                           config: z.string(),
                           worktree: z.string(),
                           directory: z.string(),
+                          cwd: z.string(),
                         })
                         .meta({
                           ref: "Path",
@@ -629,6 +631,7 @@ export namespace Server {
               config: Global.Path.config,
               worktree: Instance.worktree,
               directory: Instance.directory,
+              cwd: getCwd(),
             })
           },
         )

@@ -745,6 +745,17 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  // Shorten working directory path for display
+  const shortenedWorkingDir = createMemo(() => {
+    const dir = sync.data.path.cwd || sync.data.path.directory
+    if (!dir) return ""
+    const home = sync.data.path.home || process.env.HOME || process.env.USERPROFILE || ""
+    if (home && dir.startsWith(home)) {
+      return "~" + dir.slice(home.length)
+    }
+    return dir
+  })
+
   return (
     <>
       <Autocomplete
@@ -1011,7 +1022,7 @@ export function Prompt(props: PromptProps) {
           />
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={<text />}>
+          <Show when={status().type !== "idle"} fallback={<text fg={theme.textMuted} marginLeft={1}>{shortenedWorkingDir()}</text>}>
             <box
               flexDirection="row"
               gap={1}

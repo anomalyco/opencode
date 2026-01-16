@@ -5,6 +5,7 @@ import path from "path"
 import DESCRIPTION from "./bash.txt"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
+import { getCwd } from "@shell-mode"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
 
@@ -65,7 +66,7 @@ export const BashTool = Tool.define("bash", async () => {
       workdir: z
         .string()
         .describe(
-          `The working directory to run the command in. Defaults to ${Instance.directory}. Use this instead of 'cd' commands.`,
+          `The working directory to run the command in. Defaults to the current working directory. Use this instead of 'cd' commands.`,
         )
         .optional(),
       description: z
@@ -75,7 +76,7 @@ export const BashTool = Tool.define("bash", async () => {
         ),
     }),
     async execute(params, ctx) {
-      const cwd = params.workdir || Instance.directory
+      const cwd = params.workdir || getCwd()
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }

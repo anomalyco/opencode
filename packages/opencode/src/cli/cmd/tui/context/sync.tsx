@@ -27,7 +27,13 @@ import { useExit } from "./exit"
 import { useArgs } from "./args"
 import { batch, onMount } from "solid-js"
 import { Log } from "@/util/log"
-import type { Path } from "@opencode-ai/sdk"
+import type { Path as SDKPath } from "@opencode-ai/sdk"
+
+// Extend SDK Path type with additional fields from our server
+type Path = SDKPath & {
+  home?: string
+  cwd?: string
+}
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -99,7 +105,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp_resource: {},
       formatter: [],
       vcs: undefined,
-      path: { state: "", config: "", worktree: "", directory: "" },
+      path: { home: "", state: "", config: "", worktree: "", directory: "", cwd: "" },
     })
 
     const sdk = useSDK()
@@ -302,6 +308,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "vcs.branch.updated": {
           setStore("vcs", { branch: event.properties.branch })
+          break
+        }
+
+        default: {
+          // Handle custom events not in SDK types
+          const customEvent = event as { type: string; properties: Record<string, unknown> }
+          if (customEvent.type === "cwd.updated" && typeof customEvent.properties.cwd === "string") {
+            setStore("path", "cwd", customEvent.properties.cwd)
+          }
           break
         }
       }

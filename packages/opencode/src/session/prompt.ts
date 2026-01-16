@@ -44,7 +44,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
-import { getCwd } from "@shell-mode"
+import { getCwd, setCwd } from "@shell-mode"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1424,55 +1424,60 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
     ).toLowerCase()
 
-    const invocations: Record<string, { args: string[] }> = {
+    // Unique sentinel to mark the end of command output and capture cwd
+    const cwdSentinel = `__OPENCODE_CWD_${part.callID}__:`
+
+    const invocations: Record<string, { args: string[]; wrapCommand: (cmd: string) => string }> = {
       nu: {
-        args: ["-c", input.command],
+        args: ["-c"],
+        wrapCommand: (cmd) => `${cmd}; print $"${cwdSentinel}(pwd)"`,
       },
       fish: {
-        args: ["-c", input.command],
+        args: ["-c"],
+        wrapCommand: (cmd) => `${cmd}; echo "${cwdSentinel}"(pwd)`,
       },
       zsh: {
-        args: [
-          "-c",
-          "-l",
-          `
+        args: ["-c", "-l"],
+        wrapCommand: (cmd) => `
             [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
             [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-            eval ${JSON.stringify(input.command)}
+            eval ${JSON.stringify(cmd)}
+            echo "${cwdSentinel}$(pwd -P 2>/dev/null || pwd)"
           `,
-        ],
       },
       bash: {
-        args: [
-          "-c",
-          "-l",
-          `
+        args: ["-c", "-l"],
+        wrapCommand: (cmd) => `
             shopt -s expand_aliases
             [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-            eval ${JSON.stringify(input.command)}
+            eval ${JSON.stringify(cmd)}
+            echo "${cwdSentinel}$(pwd -P 2>/dev/null || pwd)"
           `,
-        ],
       },
       // Windows cmd
       cmd: {
-        args: ["/c", input.command],
+        args: ["/c"],
+        wrapCommand: (cmd) => `${cmd} & echo ${cwdSentinel}%CD%`,
       },
       // Windows PowerShell
       powershell: {
-        args: ["-NoProfile", "-Command", input.command],
+        args: ["-NoProfile", "-Command"],
+        wrapCommand: (cmd) => `${cmd}; Write-Host "${cwdSentinel}$(Get-Location)"`,
       },
       pwsh: {
-        args: ["-NoProfile", "-Command", input.command],
+        args: ["-NoProfile", "-Command"],
+        wrapCommand: (cmd) => `${cmd}; Write-Host "${cwdSentinel}$(Get-Location)"`,
       },
-      // Fallback: any shell that doesn't match those above
-      //  - No -l, for max compatibility
+      // Fallback: any shell that doesn't match those above (POSIX compatible)
       "": {
-        args: ["-c", `${input.command}`],
+        args: ["-c"],
+        wrapCommand: (cmd) => `${cmd}; echo "${cwdSentinel}$(pwd -P 2>/dev/null || pwd)"`,
       },
     }
 
     const matchingInvocation = invocations[shellName] ?? invocations[""]
-    const args = matchingInvocation?.args
+    const wrappedCommand = matchingInvocation.wrapCommand(input.command)
+    const args = [...matchingInvocation.args, wrappedCommand]
 
     const proc = spawn(shell, args, {
       cwd: getCwd(),
@@ -1486,11 +1491,23 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     let output = ""
 
+    // Helper to get display output (without sentinel)
+    const getDisplayOutput = () => {
+      const sentinelIndex = output.lastIndexOf(cwdSentinel)
+      if (sentinelIndex === -1) return output
+      // Find start of the line containing sentinel
+      let lineStart = sentinelIndex
+      while (lineStart > 0 && output[lineStart - 1] !== "\n") {
+        lineStart--
+      }
+      return output.slice(0, lineStart).trimEnd()
+    }
+
     proc.stdout?.on("data", (chunk) => {
       output += chunk.toString()
       if (part.state.status === "running") {
         part.state.metadata = {
-          output: output,
+          output: getDisplayOutput(),
           description: "",
         }
         Session.updatePart(part)
@@ -1501,7 +1518,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       output += chunk.toString()
       if (part.state.status === "running") {
         part.state.metadata = {
-          output: output,
+          output: getDisplayOutput(),
           description: "",
         }
         Session.updatePart(part)
@@ -1536,6 +1553,27 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     if (aborted) {
       output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
     }
+
+    // Extract and update the working directory from the sentinel
+    const sentinelIndex = output.lastIndexOf(cwdSentinel)
+    let cleanOutput = output
+    if (sentinelIndex !== -1) {
+      // Extract the cwd from after the sentinel
+      const afterSentinel = output.slice(sentinelIndex + cwdSentinel.length)
+      const newlineIndex = afterSentinel.indexOf("\n")
+      const newCwd = (newlineIndex !== -1 ? afterSentinel.slice(0, newlineIndex) : afterSentinel).trim()
+      if (newCwd) {
+        setCwd(newCwd)
+      }
+      // Strip the sentinel line from the output
+      // Find the start of the line containing the sentinel
+      let lineStart = sentinelIndex
+      while (lineStart > 0 && output[lineStart - 1] !== "\n") {
+        lineStart--
+      }
+      cleanOutput = output.slice(0, lineStart).trimEnd()
+    }
+
     msg.time.completed = Date.now()
     await Session.updateMessage(msg)
     if (part.state.status === "running") {
@@ -1548,10 +1586,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         input: part.state.input,
         title: "",
         metadata: {
-          output,
+          output: cleanOutput,
           description: "",
         },
-        output,
+        output: cleanOutput,
       }
       await Session.updatePart(part)
     }
