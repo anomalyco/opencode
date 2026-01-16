@@ -15,31 +15,11 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { SessionFallback } from "./fallback"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
-
-  async function tryFallbackModel(streamInput: LLM.StreamInput, targetIndex: number): Promise<boolean> {
-    const next = streamInput.agent.models?.[targetIndex]
-
-    if (!next) {
-      return false
-    }
-
-    try {
-      const nextModel = await Provider.getModel(next.providerID, next.modelID)
-      streamInput.model = nextModel
-      log.info("switching to fallback model", {
-        to: nextModel.id,
-        provider: nextModel.providerID,
-      })
-      return true
-    } catch (loadError) {
-      log.error("failed to load fallback model", { error: loadError, model: next })
-      return false
-    }
-  }
 
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
@@ -68,11 +48,7 @@ export namespace SessionProcessor {
         needsCompaction = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
 
-        const currentModelIndex =
-          streamInput.agent.models?.findIndex(
-            (m) => m.modelID === streamInput.model.id && m.providerID === streamInput.model.providerID,
-          ) ?? -1
-        let fallbackIndex = currentModelIndex
+        const attemptedFallbacks = new Set<string>()
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
@@ -371,14 +347,16 @@ export namespace SessionProcessor {
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
             const retry = SessionRetry.retryable(error)
 
-            // Try fallback model if available
-            if (streamInput.agent.models && fallbackIndex < streamInput.agent.models.length - 1) {
-              fallbackIndex++
-              const fallbackSucceeded = await tryFallbackModel(streamInput, fallbackIndex)
-              if (fallbackSucceeded) {
-                attempt = 0
-                continue
-              }
+            // Try fallback model from global config
+            const fallback = await SessionFallback.getFallback(
+              input.model.providerID,
+              input.model.id,
+              attemptedFallbacks,
+            )
+            if (fallback) {
+              streamInput.model = fallback.model
+              attempt = 0
+              continue
             }
 
             if (retry !== undefined) {

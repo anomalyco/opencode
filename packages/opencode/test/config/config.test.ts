@@ -1373,4 +1373,89 @@ describe("deduplicatePlugins", () => {
       },
     })
   })
+
+  describe("fallbacks config", () => {
+    test("parses fallbacks with provider-level rules", async () => {
+      await using tmp = await tmpdir({
+        config: {
+          fallbacks: {
+            provider: {
+              anthropic: ["openai", "google"],
+            },
+          },
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.fallbacks).toBeDefined()
+          expect(config.fallbacks?.provider).toBeDefined()
+          expect(config.fallbacks?.provider?.anthropic).toEqual(["openai", "google"])
+        },
+      })
+    })
+
+    test("parses fallbacks with model-specific rules", async () => {
+      await using tmp = await tmpdir({
+        config: {
+          fallbacks: {
+            models: {
+              "anthropic/claude-3-opus": ["openai/gpt-4o"],
+            },
+          },
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.fallbacks).toBeDefined()
+          expect(config.fallbacks?.models).toBeDefined()
+          expect(config.fallbacks?.models?.["anthropic/claude-3-opus"]).toEqual(["openai/gpt-4o"])
+        },
+      })
+    })
+
+    test("parses fallbacks with both provider and model rules", async () => {
+      await using tmp = await tmpdir({
+        config: {
+          fallbacks: {
+            provider: {
+              anthropic: ["openai"],
+            },
+            models: {
+              "google/gemini-pro": ["anthropic/claude-3-sonnet"],
+            },
+          },
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.fallbacks).toBeDefined()
+          expect(config.fallbacks?.provider?.anthropic).toEqual(["openai"])
+          expect(config.fallbacks?.models?.["google/gemini-pro"]).toEqual(["anthropic/claude-3-sonnet"])
+        },
+      })
+    })
+
+    test("allows empty fallbacks object", async () => {
+      await using tmp = await tmpdir({
+        config: {
+          fallbacks: {},
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.fallbacks).toBeDefined()
+          expect(config.fallbacks?.provider).toBeUndefined()
+          expect(config.fallbacks?.models).toBeUndefined()
+        },
+      })
+    })
+  })
 })
