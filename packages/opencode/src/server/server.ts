@@ -2,6 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Log } from "../util/log"
+import { rewriteHtmlForBasePath, rewriteJsForBasePath, rewriteCssForBasePath } from "../util/base-path"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
@@ -63,10 +64,19 @@ export namespace Server {
   const log = Log.create({ service: "server" })
 
   let _url: URL | undefined
+  let _basePath: string = ""
   let _corsWhitelist: string[] = []
 
   export function url(): URL {
-    return _url ?? new URL("http://localhost:4096")
+    const base = _url ?? new URL("http://localhost:4096")
+    if (_basePath) {
+      return new URL(_basePath + "/", base)
+    }
+    return base
+  }
+
+  export function basePath(): string {
+    return _basePath
   }
 
   export const Event = {
@@ -152,14 +162,24 @@ export namespace Server {
                 description: "Health information",
                 content: {
                   "application/json": {
-                    schema: resolver(z.object({ healthy: z.literal(true), version: z.string() })),
+                    schema: resolver(
+                      z.object({
+                        healthy: z.literal(true),
+                        version: z.string(),
+                        basePath: z.string().optional(),
+                      }),
+                    ),
                   },
                 },
               },
             },
           }),
           async (c) => {
-            return c.json({ healthy: true, version: Installation.VERSION })
+            return c.json({
+              healthy: true,
+              version: Installation.VERSION,
+              basePath: _basePath || undefined,
+            })
           },
         )
         .get(
@@ -2833,7 +2853,12 @@ export namespace Server {
           },
         )
         .all("/*", async (c) => {
-          const path = c.req.path
+          // Strip basePath from the request path before proxying
+          let path = c.req.path
+          if (_basePath && path.startsWith(_basePath)) {
+            path = path.slice(_basePath.length) || "/"
+          }
+
           const response = await proxy(`https://app.opencode.ai${path}`, {
             ...c.req,
             headers: {
@@ -2841,6 +2866,39 @@ export namespace Server {
               host: "app.opencode.ai",
             },
           })
+
+          // Rewrite content for basePath support
+          const contentType = response.headers.get("content-type") || ""
+
+          if (_basePath && contentType.includes("text/html")) {
+            const html = rewriteHtmlForBasePath(await response.text(), _basePath)
+            return new Response(html, {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers,
+            })
+          }
+
+          if (_basePath && (contentType.includes("javascript") || path.endsWith(".js"))) {
+            const js = rewriteJsForBasePath(await response.text(), _basePath)
+            return new Response(js, {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers,
+            })
+          }
+
+          if (_basePath && (contentType.includes("text/css") || path.endsWith(".css"))) {
+            const css = rewriteCssForBasePath(await response.text(), _basePath)
+            return new Response(css, {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers,
+            })
+          }
+
+          // Set CSP header only when not rewriting content (no basePath)
+          // When basePath is set, we inject inline scripts which would violate CSP
           response.headers.set(
             "Content-Security-Policy",
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'",
@@ -2864,13 +2922,35 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[]; basePath?: string }) {
     _corsWhitelist = opts.cors ?? []
+
+    // Normalize basePath: ensure leading slash, remove trailing slash
+    const rawBasePath = opts.basePath ?? "/"
+    _basePath =
+      rawBasePath === "/"
+        ? ""
+        : (rawBasePath.startsWith("/") ? rawBasePath : `/${rawBasePath}`).replace(/\/+$/, "")
+
+    // Create wrapper app for base path routing
+    const baseApp = new Hono()
+    const mainApp = App()
+
+    if (_basePath) {
+      // Mount the main app under the base path
+      baseApp.route(_basePath, mainApp)
+
+      // Also mount at root level to support reverse proxies that strip the basePath
+      // before forwarding requests (e.g., some Kubernetes ingress configurations)
+      baseApp.route("/", mainApp)
+    }
+
+    const appToServe = _basePath ? baseApp : mainApp
 
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
-      fetch: App().fetch,
+      fetch: appToServe.fetch,
       websocket: websocket,
     } as const
     const tryServe = (port: number) => {
