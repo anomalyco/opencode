@@ -511,13 +511,7 @@ export namespace SessionPrompt {
       }
 
       // normal processing
-      let agent = await Agent.get(lastUser.agent)
-      if (!agent) {
-        const fallback = await Agent.defaultAgent()
-        agent = await Agent.get(fallback)
-        if (!agent) throw new Error(`Agent not found: ${lastUser.agent}, fallback ${fallback} also missing`)
-        log.warn("agent not found, using fallback", { requested: lastUser.agent, fallback })
-      }
+      const agent = await Agent.getOrFallback(lastUser.agent)
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
       msgs = await insertReminders({
@@ -826,14 +820,7 @@ export namespace SessionPrompt {
   }
 
   async function createUserMessage(input: PromptInput) {
-    const requestedAgent = input.agent ?? (await Agent.defaultAgent())
-    let agent = await Agent.get(requestedAgent)
-    if (!agent) {
-      const fallback = await Agent.defaultAgent()
-      agent = await Agent.get(fallback)
-      if (!agent) throw new Error(`Agent not found: ${requestedAgent}, fallback ${fallback} also missing`)
-      log.warn("agent not found in createUserMessage, using fallback", { requested: requestedAgent, fallback })
-    }
+    const agent = await Agent.getOrFallback(input.agent ?? (await Agent.defaultAgent()))
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -1364,13 +1351,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     if (session.revert) {
       SessionRevert.cleanup(session)
     }
-    let agent = await Agent.get(input.agent)
-    if (!agent) {
-      const fallback = await Agent.defaultAgent()
-      agent = await Agent.get(fallback)
-      if (!agent) throw new Error(`Agent not found: ${input.agent}, fallback ${fallback} also missing`)
-      log.warn("agent not found in shell, using fallback", { requested: input.agent, fallback })
-    }
+    const agent = await Agent.getOrFallback(input.agent)
     const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
     const userMsg: MessageV2.User = {
       id: Identifier.ascending("message"),

@@ -247,6 +247,19 @@ export namespace Agent {
     return state().then((x) => x[agent])
   }
 
+  /**
+   * Get agent by name, falling back to default agent if not found.
+   * Throws if neither the requested agent nor fallback exists.
+   */
+  export async function getOrFallback(name: string): Promise<Info> {
+    const agent = await get(name)
+    if (agent) return agent
+    const fallback = await defaultAgent()
+    const resolved = await get(fallback)
+    if (!resolved) throw new Error(`Agent not found: ${name}, fallback ${fallback} also missing`)
+    return resolved
+  }
+
   export async function list() {
     const cfg = await Config.get()
     return pipe(
