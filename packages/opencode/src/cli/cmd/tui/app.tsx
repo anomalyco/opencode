@@ -465,6 +465,15 @@ function App() {
       title: "Open WebUI",
       value: "webui.open",
       onSelect: () => {
+        if (sdk.url.includes("opencode.internal")) {
+          toast.show({
+            variant: "warning",
+            message: "WebUI requires server mode. Restart with: opencode --port 4096",
+            duration: 5000,
+          })
+          dialog.clear()
+          return
+        }
         open(sdk.url).catch(() => {})
         dialog.clear()
       },
