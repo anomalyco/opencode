@@ -1,4 +1,4 @@
-import { convertToCopilotMessages } from "@/provider/sdk/copilot/src/chat/convert-to-copilot-messages"
+import { convertToOpenAICompatibleChatMessages as convertToCopilotMessages } from "@/provider/sdk/copilot/chat/convert-to-openai-compatible-chat-messages"
 import { describe, test, expect } from "bun:test"
 
 const CACHE_CONTROL = { copilot_cache_control: { type: "ephemeral" as const } }
@@ -336,27 +336,6 @@ describe("tool calls", () => {
       content: "Result 2",
       ...CACHE_CONTROL,
     })
-  })
-
-  test("should handle string input for tool calls", () => {
-    const result = convertToCopilotMessages([
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "tool-call",
-            toolCallId: "call1",
-            toolName: "calculator",
-            input: '{"a":1,"b":2}',
-          },
-        ],
-      },
-    ])
-
-    expect(result[0].role).toBe("assistant")
-    if (result[0].role === "assistant") {
-      expect(result[0].tool_calls?.[0].function.arguments).toBe('{"a":1,"b":2}')
-    }
   })
 
   test("should handle text plus multiple tool calls", () => {

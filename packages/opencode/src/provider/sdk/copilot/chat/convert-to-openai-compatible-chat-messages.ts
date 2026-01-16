@@ -12,7 +12,7 @@ const CACHE_CONTROL = { copilot_cache_control: { type: 'ephemeral' as const } };
 function getOpenAIMetadata(message: {
   providerOptions?: SharedV2ProviderMetadata;
 }) {
-  return message?.providerOptions?.openaiCompatible ?? {};
+  return message?.providerOptions?.copilot ?? {};
 }
 
 export function convertToOpenAICompatibleChatMessages(
@@ -91,6 +91,8 @@ export function convertToOpenAICompatibleChatMessages(
 
       case 'assistant': {
         let text = '';
+        let reasoningText: string | undefined;
+        let reasoningOpaque: string | undefined;
         const toolCalls: Array<{
           id: string;
           type: 'function';
@@ -99,9 +101,21 @@ export function convertToOpenAICompatibleChatMessages(
 
         for (const part of content) {
           const partMetadata = getOpenAIMetadata(part);
+          // Check for reasoningOpaque on any part (may be attached to text/tool-call)
+          const partOpaque = (
+            part.providerOptions as { copilot?: { reasoningOpaque?: string } }
+          )?.copilot?.reasoningOpaque;
+          if (partOpaque && !reasoningOpaque) {
+            reasoningOpaque = partOpaque;
+          }
+
           switch (part.type) {
             case 'text': {
               text += part.text;
+              break;
+            }
+            case 'reasoning': {
+              reasoningText = part.text;
               break;
             }
             case 'tool-call': {
@@ -121,8 +135,10 @@ export function convertToOpenAICompatibleChatMessages(
 
         messages.push({
           role: 'assistant',
-          content: text,
+          content: text || null,
           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+          reasoning_text: reasoningText,
+          reasoning_opaque: reasoningOpaque,
           ...CACHE_CONTROL,
           ...metadata,
         });

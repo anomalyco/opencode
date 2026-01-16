@@ -15,19 +15,25 @@ type JsonRecord<T = never> = Record<
   JSONValue | JSONValue[] | T | T[] | undefined
 >;
 
+// Copilot-specific cache control type
+type CopilotCacheControl = { copilot_cache_control?: { type: 'ephemeral' } };
+
 export interface OpenAICompatibleSystemMessage
   extends JsonRecord<OpenAICompatibleSystemContentPart> {
   role: 'system';
   content: string | Array<OpenAICompatibleSystemContentPart>;
 }
 
-export interface OpenAICompatibleSystemContentPart extends JsonRecord {
+export interface OpenAICompatibleSystemContentPart
+  extends JsonRecord,
+    CopilotCacheControl {
   type: 'text';
   text: string;
 }
 
 export interface OpenAICompatibleUserMessage
-  extends JsonRecord<OpenAICompatibleContentPart> {
+  extends JsonRecord<OpenAICompatibleContentPart>,
+    CopilotCacheControl {
   role: 'user';
   content: string | Array<OpenAICompatibleContentPart>;
 }
@@ -47,10 +53,14 @@ export interface OpenAICompatibleContentPartText extends JsonRecord {
 }
 
 export interface OpenAICompatibleAssistantMessage
-  extends JsonRecord<OpenAICompatibleMessageToolCall> {
+  extends JsonRecord<OpenAICompatibleMessageToolCall>,
+    CopilotCacheControl {
   role: 'assistant';
   content?: string | null;
   tool_calls?: Array<OpenAICompatibleMessageToolCall>;
+  // Copilot-specific reasoning fields
+  reasoning_text?: string;
+  reasoning_opaque?: string;
 }
 
 export interface OpenAICompatibleMessageToolCall extends JsonRecord {
@@ -62,7 +72,9 @@ export interface OpenAICompatibleMessageToolCall extends JsonRecord {
   };
 }
 
-export interface OpenAICompatibleToolMessage extends JsonRecord {
+export interface OpenAICompatibleToolMessage
+  extends JsonRecord,
+    CopilotCacheControl {
   role: 'tool';
   content: string;
   tool_call_id: string;

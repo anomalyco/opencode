@@ -1,4 +1,4 @@
-import { CopilotChatLanguageModel } from "@/provider/sdk/copilot/src/chat/copilot-chat-model"
+import { OpenAICompatibleChatLanguageModel } from "@/provider/sdk/copilot/chat/openai-compatible-chat-language-model"
 import { describe, test, expect, mock } from "bun:test"
 import type { LanguageModelV2Prompt } from "@ai-sdk/provider"
 
@@ -86,7 +86,7 @@ function createMockFetch(chunks: string[]) {
 }
 
 function createModel(fetchFn: ReturnType<typeof mock>) {
-  return new CopilotChatLanguageModel("test-model", {
+  return new OpenAICompatibleChatLanguageModel("test-model", {
     provider: "copilot.chat",
     url: () => "https://api.test.com/chat/completions",
     headers: () => ({ Authorization: "Bearer test-token" }),
