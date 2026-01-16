@@ -35,7 +35,9 @@ export function SessionHeader() {
   const name = createMemo(() => {
     const current = project()
     if (current) return current.name || getFilename(current.worktree)
-    return getFilename(projectDirectory())
+    const directory = projectDirectory()
+    if (directory === sync.data.path.chat) return "Chat"
+    return getFilename(directory)
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
 

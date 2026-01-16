@@ -71,21 +71,6 @@ export namespace Agent {
     const user = PermissionNext.fromConfig(cfg.permission ?? {})
 
     const result: Record<string, Info> = {
-      build: {
-        name: "build",
-        options: {},
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            question: "allow",
-            plan_enter: "allow",
-            chat_enter: "allow",
-          }),
-          user,
-        ),
-        mode: "primary",
-        native: true,
-      },
       chat: {
         name: "chat",
         prompt: PROMPT_CHAT,
@@ -98,6 +83,21 @@ export namespace Agent {
             external_directory: {
               [path.join(Global.Path.state, "chat", "*")]: "allow",
             },
+          }),
+          user,
+        ),
+        mode: "primary",
+        native: true,
+      },
+      build: {
+        name: "build",
+        options: {},
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+            plan_enter: "allow",
+            chat_enter: "allow",
           }),
           user,
         ),
@@ -272,7 +272,7 @@ export namespace Agent {
     return pipe(
       await state(),
       values(),
-      sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"]),
+      sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "chat"), "desc"]),
     )
   }
 
