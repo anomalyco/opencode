@@ -325,10 +325,19 @@ export default function Layout(props: ParentProps) {
   createEffect(() => {
     if (!pageReady()) return
     if (!layoutReady()) return
-    for (const [directory, expanded] of Object.entries(store.workspaceExpanded)) {
-      if (layout.sidebar.workspaces(directory)()) continue
-      if (!expanded) continue
-      setStore("workspaceExpanded", directory, false)
+    const project = currentProject()
+    if (!project) return
+
+    const enabled = layout.sidebar.workspaces(project.worktree)()
+    const dirs = [project.worktree, ...(project.sandboxes ?? [])]
+
+    for (const directory of dirs) {
+      const expanded = store.workspaceExpanded[directory]
+      if (enabled && expanded === undefined) {
+        setStore("workspaceExpanded", directory, true)
+      } else if (!enabled && expanded) {
+        setStore("workspaceExpanded", directory, false)
+      }
     }
   })
 
