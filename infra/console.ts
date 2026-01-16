@@ -119,6 +119,7 @@ const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS5"),
   new sst.Secret("ZEN_MODELS6"),
   new sst.Secret("ZEN_MODELS7"),
+  new sst.Secret("ZEN_MODELS8"),
 ]
 const ZEN_BLACK = new sst.Secret("ZEN_BLACK")
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
