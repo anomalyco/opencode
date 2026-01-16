@@ -1,8 +1,5 @@
-import { createMemo, createSignal, onCleanup, onMount, Show, type Accessor } from "solid-js"
+import { createMemo, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
@@ -114,67 +111,11 @@ export function formatKeybind(config: string): string {
   return IS_MAC ? parts.join("") : parts.join("+")
 }
 
-function DialogCommand(props: { options: CommandOption[] }) {
-  const dialog = useDialog()
-  let cleanup: (() => void) | void
-  let committed = false
-
-  const handleMove = (option: CommandOption | undefined) => {
-    cleanup?.()
-    cleanup = option?.onHighlight?.()
-  }
-
-  const handleSelect = (option: CommandOption | undefined) => {
-    if (option) {
-      committed = true
-      cleanup = undefined
-      dialog.close()
-      option.onSelect?.("palette")
-    }
-  }
-
-  onCleanup(() => {
-    if (!committed) {
-      cleanup?.()
-    }
-  })
-
-  return (
-    <Dialog title="Commands">
-      <List
-        search={{ placeholder: "Search commands", autofocus: true }}
-        emptyMessage="No commands found"
-        items={() => props.options.filter((x) => !x.id.startsWith("suggested.") || !x.disabled)}
-        key={(x) => x?.id}
-        filterKeys={["title", "description", "category"]}
-        groupBy={(x) => x.category ?? ""}
-        onMove={handleMove}
-        onSelect={handleSelect}
-      >
-        {(option) => (
-          <div class="w-full flex items-center justify-between gap-4">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="text-14-regular text-text-strong whitespace-nowrap">{option.title}</span>
-              <Show when={option.description}>
-                <span class="text-14-regular text-text-weak truncate">{option.description}</span>
-              </Show>
-            </div>
-            <Show when={option.keybind}>
-              <span class="text-12-regular text-text-subtle shrink-0">{formatKeybind(option.keybind!)}</span>
-            </Show>
-          </div>
-        )}
-      </List>
-    </Dialog>
-  )
-}
-
 export const { use: useCommand, provider: CommandProvider } = createSimpleContext({
   name: "Command",
   init: () => {
     const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
     const [suspendCount, setSuspendCount] = createSignal(0)
-    const dialog = useDialog()
 
     const options = createMemo(() => {
       const seen = new Set<string>()
@@ -202,10 +143,17 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     const suspended = () => suspendCount() > 0
 
-    const showPalette = () => {
-      if (!dialog.active) {
-        dialog.show(() => <DialogCommand options={options().filter((x) => !x.disabled)} />)
+    const run = (id: string, source?: "palette" | "keybind" | "slash") => {
+      for (const option of options()) {
+        if (option.id === id || option.id === "suggested." + id) {
+          option.onSelect?.(source)
+          return
+        }
       }
+    }
+
+    const showPalette = () => {
+      run("file.open", "palette")
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -248,12 +196,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         })
       },
       trigger(id: string, source?: "palette" | "keybind" | "slash") {
-        for (const option of options()) {
-          if (option.id === id || option.id === "suggested." + id) {
-            option.onSelect?.(source)
-            return
-          }
-        }
+        run(id, source)
       },
       keybind(id: string) {
         const option = options().find((x) => x.id === id || x.id === "suggested." + id)

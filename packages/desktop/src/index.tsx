@@ -13,7 +13,7 @@ import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
 import { Logo } from "@opencode-ai/ui/logo"
-import { createSignal, Show, Accessor, JSX, createResource } from "solid-js"
+import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
 
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
@@ -30,6 +30,11 @@ let update: Update | null = null
 
 const createPlatform = (password: Accessor<string | null>): Platform => ({
   platform: "desktop",
+  os: (() => {
+    const type = ostype()
+    if (type === "macos" || type === "windows" || type === "linux") return type
+    return undefined
+  })(),
   version: pkg.version,
 
   async openDirectoryPickerDialog(opts) {
@@ -296,12 +301,24 @@ render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
   const platform = createPlatform(() => serverPassword())
 
+  function handleClick(e: MouseEvent) {
+    const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
+    if (link?.href) {
+      e.preventDefault()
+      platform.openLink(link.href)
+    }
+  }
+
+  onMount(() => {
+    document.addEventListener("click", handleClick)
+    onCleanup(() => {
+      document.removeEventListener("click", handleClick)
+    })
+  })
+
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
-        {ostype() === "macos" && (
-          <div class="mx-px bg-background-base border-b border-border-weak-base h-8" data-tauri-drag-region />
-        )}
         <ServerGate>
           {(data) => {
             setServerPassword(data().password)
