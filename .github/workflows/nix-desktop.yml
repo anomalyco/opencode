@@ -9,6 +9,7 @@ on:
       - "nix/**"
       - "packages/app/**"
       - "packages/desktop/**"
+      - ".github/workflows/nix-desktop.yml"
   pull_request:
     paths:
       - "flake.nix"
@@ -16,6 +17,7 @@ on:
       - "nix/**"
       - "packages/app/**"
       - "packages/desktop/**"
+      - ".github/workflows/nix-desktop.yml"
   workflow_dispatch:
 
 jobs:

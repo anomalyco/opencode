@@ -10,11 +10,13 @@ on:
       - "bun.lock"
       - "package.json"
       - "packages/*/package.json"
+      - .github/workflows/update-nix-hashes.yml"
   pull_request:
     paths:
       - "bun.lock"
       - "package.json"
       - "packages/*/package.json"
+      - .github/workflows/update-nix-hashes.yml"
 
 jobs:
   update-flake:
