@@ -64,7 +64,7 @@ import { useServer } from "@/context/server"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
-    Persist.global("layout", ["layout.v6"]),
+    Persist.global("layout.page", ["layout.page.v1"]),
     createStore({
       lastSession: {} as { [directory: string]: string },
       activeProject: undefined as string | undefined,
@@ -73,6 +73,9 @@ export default function Layout(props: ParentProps) {
       workspaceExpanded: {} as Record<string, boolean>,
     }),
   )
+
+  const pageReady = createMemo(() => ready())
+  const layoutReady = createMemo(() => layout.ready())
 
   let scrollContainerRef: HTMLDivElement | undefined
   const xlQuery = window.matchMedia("(min-width: 1280px)")
@@ -293,7 +296,8 @@ export default function Layout(props: ParentProps) {
   })
 
   createEffect(() => {
-    if (!ready()) return
+    if (!pageReady()) return
+    if (!layoutReady()) return
     const project = currentProject()
     if (!project) return
 
@@ -315,6 +319,16 @@ export default function Layout(props: ParentProps) {
 
     if (merged.some((d, i) => d !== existing[i])) {
       setStore("workspaceOrder", project.worktree, merged)
+    }
+  })
+
+  createEffect(() => {
+    if (!pageReady()) return
+    if (!layoutReady()) return
+    for (const [directory, expanded] of Object.entries(store.workspaceExpanded)) {
+      if (layout.sidebar.workspaces(directory)()) continue
+      if (!expanded) continue
+      setStore("workspaceExpanded", directory, false)
     }
   })
 
@@ -708,6 +722,7 @@ export default function Layout(props: ParentProps) {
   }
 
   createEffect(() => {
+    if (!pageReady()) return
     if (!params.dir || !params.id) return
     const directory = base64Decode(params.dir)
     const id = params.id
