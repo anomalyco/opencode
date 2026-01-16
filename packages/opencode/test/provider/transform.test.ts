@@ -681,6 +681,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
 
     expect(result).toHaveLength(1)
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBeUndefined()
     expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
   })
 
@@ -720,6 +721,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
 
     expect(result).toHaveLength(1)
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBeUndefined()
     expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
   })
 

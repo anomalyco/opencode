@@ -17,11 +17,11 @@ on:
       - "packages/*/package.json"
 
 jobs:
-  update-flake:
+  update-linux:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
-      TITLE: flake.lock
+      SYSTEM: x86_64-linux
 
     steps:
       - name: Checkout repository
@@ -33,32 +33,39 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
       - name: Setup Nix
-        uses: nixbuild/nix-quick-install-action@v34
+        uses: DeterminateSystems/nix-installer-action@v20
 
       - name: Configure git
         run: |
           git config --global user.email "action@github.com"
           git config --global user.name "Github Action"
 
-      - name: Update ${{ env.TITLE }}
+      - name: Update flake.lock
         run: |
           set -euo pipefail
-          echo "📦 Updating $TITLE..."
+          echo "📦 Updating flake.lock..."
           nix flake update
-          echo "✅ $TITLE updated successfully"
+          echo "✅ flake.lock updated successfully"
 
-      - name: Commit ${{ env.TITLE }} changes
+      - name: Update node_modules hash for x86_64-linux
+        run: |
+          set -euo pipefail
+          echo "🔄 Updating node_modules hash for x86_64-linux..."
+          nix/scripts/update-hashes.sh
+          echo "✅ node_modules hash for x86_64-linux updated successfully"
+
+      - name: Commit Linux hash changes
         env:
           TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
 
-          echo "🔍 Checking for changes in tracked files..."
+          echo "🔍 Checking for changes in tracked Nix files..."
 
           summarize() {
             local status="$1"
             {
-              echo "### Nix $TITLE"
+              echo "### Nix Hash Update (x86_64-linux)"
               echo ""
               echo "- ref: ${GITHUB_REF_NAME}"
               echo "- status: ${status}"
@@ -68,10 +75,11 @@ jobs:
             fi
             echo "" >> "$GITHUB_STEP_SUMMARY"
           }
-          FILES=(flake.lock flake.nix)
+
+          FILES=(flake.lock flake.nix nix/node-modules.nix nix/hashes.json)
           STATUS="$(git status --short -- "${FILES[@]}" || true)"
           if [ -z "$STATUS" ]; then
-            echo "✅ No changes detected."
+            echo "✅ No changes detected. Hashes are already up to date."
             summarize "no changes"
             exit 0
           fi
@@ -81,7 +89,7 @@ jobs:
           echo "🔗 Staging files..."
           git add "${FILES[@]}"
           echo "💾 Committing changes..."
-          git commit -m "Update $TITLE"
+          git commit -m "Update Nix flake.lock and x86_64-linux hash"
           echo "✅ Changes committed"
 
           BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
@@ -93,25 +101,12 @@ jobs:
 
           summarize "committed $(git rev-parse --short HEAD)"
 
-  update-node-modules-hash:
-    needs: update-flake
+  update-macos:
+    needs: update-linux
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - system: x86_64-linux
-            host: blacksmith-4vcpu-ubuntu-2404
-          - system: aarch64-linux
-            host: blacksmith-4vcpu-ubuntu-2404-arm
-          - system: x86_64-darwin
-            host: macos-15-intel
-          - system: aarch64-darwin
-            host: macos-latest
-    runs-on: ${{ matrix.host }}
+    runs-on: macos-latest
     env:
-      SYSTEM: ${{ matrix.system }}
-      TITLE: node_modules hash (${{ matrix.system }})
+      SYSTEM: aarch64-darwin
 
     steps:
       - name: Checkout repository
@@ -123,7 +118,7 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
       - name: Setup Nix
-        uses: nixbuild/nix-quick-install-action@v34
+        uses: DeterminateSystems/nix-installer-action@v20
 
       - name: Configure git
         run: |
@@ -137,25 +132,25 @@ jobs:
           BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
           git pull origin "$BRANCH"
 
-      - name: Update ${{ env.TITLE }}
+      - name: Update node_modules hash for aarch64-darwin
         run: |
           set -euo pipefail
-          echo "🔄 Updating $TITLE..."
+          echo "🔄 Updating node_modules hash for aarch64-darwin..."
           nix/scripts/update-hashes.sh
-          echo "✅ $TITLE updated successfully"
+          echo "✅ node_modules hash for aarch64-darwin updated successfully"
 
-      - name: Commit ${{ env.TITLE }} changes
+      - name: Commit macOS hash changes
         env:
           TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
 
-          echo "🔍 Checking for changes in tracked files..."
+          echo "🔍 Checking for changes in tracked Nix files..."
 
           summarize() {
             local status="$1"
             {
-              echo "### Nix $TITLE"
+              echo "### Nix Hash Update (aarch64-darwin)"
               echo ""
               echo "- ref: ${GITHUB_REF_NAME}"
               echo "- status: ${status}"
@@ -169,7 +164,7 @@ jobs:
           FILES=(nix/hashes.json)
           STATUS="$(git status --short -- "${FILES[@]}" || true)"
           if [ -z "$STATUS" ]; then
-            echo "✅ No changes detected."
+            echo "✅ No changes detected. Hash is already up to date."
             summarize "no changes"
             exit 0
           fi
@@ -179,7 +174,7 @@ jobs:
           echo "🔗 Staging files..."
           git add "${FILES[@]}"
           echo "💾 Committing changes..."
-          git commit -m "Update $TITLE"
+          git commit -m "Update aarch64-darwin hash"
           echo "✅ Changes committed"
 
           BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"

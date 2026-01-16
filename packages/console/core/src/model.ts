@@ -74,8 +74,7 @@ export namespace ZenData {
         Resource.ZEN_MODELS4.value +
         Resource.ZEN_MODELS5.value +
         Resource.ZEN_MODELS6.value +
-        Resource.ZEN_MODELS7.value +
-        Resource.ZEN_MODELS8.value,
+        Resource.ZEN_MODELS7.value,
     )
     return ModelsSchema.parse(json)
   })

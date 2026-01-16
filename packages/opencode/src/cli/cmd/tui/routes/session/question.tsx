@@ -3,7 +3,7 @@ import { createMemo, For, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
-import { tint, useTheme } from "../../context/theme"
+import { useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
@@ -125,7 +125,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     // Skip processing if a dialog (e.g., command palette) is open
     if (dialog.stack.length > 0) return
 
-    // When editing custom answer textarea
+    // When editing "Other" textarea
     if (store.editing && !confirm()) {
       if (evt.name === "escape") {
         evt.preventDefault()
@@ -196,12 +196,6 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     if (evt.name === "right" || evt.name === "l") {
       evt.preventDefault()
       selectTab((store.tab + 1) % tabs())
-    }
-
-    if (evt.name === "tab") {
-      evt.preventDefault()
-      const direction = evt.shift ? -1 : 1
-      selectTab((store.tab + direction + tabs()) % tabs())
     }
 
     if (confirm()) {
@@ -305,15 +299,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                   const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
                   return (
                     <box onMouseOver={() => moveTo(i())} onMouseUp={() => selectOption()}>
-                      <box flexDirection="row">
-                        <box backgroundColor={active() ? theme.backgroundElement : undefined} paddingRight={1}>
-                          <text fg={active() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
-                            {`${i() + 1}.`}
-                          </text>
-                        </box>
+                      <box flexDirection="row" gap={1}>
                         <box backgroundColor={active() ? theme.backgroundElement : undefined}>
                           <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
-                            {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
+                            {multi()
+                              ? `${i() + 1}. [${picked() ? "✓" : " "}] ${opt.label}`
+                              : `${i() + 1}. ${opt.label}`}
                           </text>
                         </box>
                         <Show when={!multi()}>
@@ -330,18 +321,14 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               </For>
               <Show when={custom()}>
                 <box onMouseOver={() => moveTo(options().length)} onMouseUp={() => selectOption()}>
-                  <box flexDirection="row">
-                    <box backgroundColor={other() ? theme.backgroundElement : undefined} paddingRight={1}>
-                      <text fg={other() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
-                        {`${options().length + 1}.`}
-                      </text>
-                    </box>
+                  <box flexDirection="row" gap={1}>
                     <box backgroundColor={other() ? theme.backgroundElement : undefined}>
                       <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                        {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
+                        {multi()
+                          ? `${options().length + 1}. [${customPicked() ? "✓" : " "}] Type your own answer`
+                          : `${options().length + 1}. Type your own answer`}
                       </text>
                     </box>
-
                     <Show when={!multi()}>
                       <text fg={theme.success}>{customPicked() ? "✓" : ""}</text>
                     </Show>

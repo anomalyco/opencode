@@ -143,7 +143,6 @@ async function printWorkspace(workspaceID: string) {
         amount: PaymentTable.amount,
         paymentID: PaymentTable.paymentID,
         invoiceID: PaymentTable.invoiceID,
-        customerID: PaymentTable.customerID,
         timeCreated: PaymentTable.timeCreated,
         timeRefunded: PaymentTable.timeRefunded,
       })

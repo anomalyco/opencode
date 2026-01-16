@@ -428,7 +428,7 @@ export default function Page() {
     {
       id: "file.open",
       title: "Open file",
-      description: "Search files and commands",
+      description: "Search and open a file",
       category: "File",
       keybind: "mod+p",
       slash: "open",
