@@ -17,6 +17,8 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
+  DebugIngestErrors,
+  DebugIngestResponses,
   EventSubscribeResponses,
   EventTuiCommandExecute,
   EventTuiPromptAppend,
@@ -241,6 +243,27 @@ export class Global extends HeyApiClient {
     return (options?.client ?? this.client).post<GlobalDisposeResponses, unknown, ThrowOnError>({
       url: "/global/dispose",
       ...options,
+    })
+  }
+}
+
+export class Debug extends HeyApiClient {
+  /**
+   * Ingest debug logs
+   *
+   * Ingest Cursor-style debug logs (NDJSON or JSON) and append them to .opencode/debug.log in the worktree root.
+   */
+  public ingest<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionId: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionId" }] }])
+    return (options?.client ?? this.client).post<DebugIngestResponses, DebugIngestErrors, ThrowOnError>({
+      url: "/ingest/{sessionId}",
+      ...options,
+      ...params,
     })
   }
 }
@@ -3020,6 +3043,11 @@ export class OpencodeClient extends HeyApiClient {
   private _global?: Global
   get global(): Global {
     return (this._global ??= new Global({ client: this.client }))
+  }
+
+  private _debug?: Debug
+  get debug(): Debug {
+    return (this._debug ??= new Debug({ client: this.client }))
   }
 
   private _project?: Project

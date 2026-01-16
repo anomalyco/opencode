@@ -2174,6 +2174,36 @@ export type GlobalDisposeResponses = {
 
 export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
 
+export type DebugIngestData = {
+  body?: never
+  path: {
+    sessionId: string
+  }
+  query?: never
+  url: "/ingest/{sessionId}"
+}
+
+export type DebugIngestErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type DebugIngestError = DebugIngestErrors[keyof DebugIngestErrors]
+
+export type DebugIngestResponses = {
+  /**
+   * Logs ingested
+   */
+  200: {
+    success: true
+    count: number
+  }
+}
+
+export type DebugIngestResponse = DebugIngestResponses[keyof DebugIngestResponses]
+
 export type ProjectListData = {
   body?: never
   path?: never

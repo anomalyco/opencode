@@ -40,6 +40,8 @@ import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
+import { Worktree } from "../worktree"
+import { Debug } from "@/debug"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -89,7 +91,7 @@ export namespace Server {
           return basicAuth({ username, password })(c, next)
         })
         .use(async (c, next) => {
-          const skipLogging = c.req.path === "/log"
+          const skipLogging = c.req.path === "/log" || c.req.path.startsWith("/ingest/")
           if (!skipLogging) {
             log.info("request", {
               method: c.req.method,
@@ -142,6 +144,71 @@ export namespace Server {
             },
           })
         })
+        .post(
+          "/ingest/:sessionId",
+          describeRoute({
+            summary: "Ingest debug logs",
+            description:
+              "Ingest Cursor-style debug logs (NDJSON or JSON) and append them to .opencode/debug.log in the worktree root.",
+            operationId: "debug.ingest",
+            responses: {
+              200: {
+                description: "Logs ingested",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.object({ success: z.literal(true), count: z.number().int().nonnegative() })),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator("param", z.object({ sessionId: z.string() })),
+          async (c) => {
+            const { sessionId } = c.req.valid("param")
+            const contentType = c.req.header("content-type") ?? ""
+
+            const raw = contentType.includes("application/json") ? await c.req.json() : await c.req.text()
+            const entries = Array.isArray(raw)
+              ? raw
+              : typeof raw === "string"
+                ? raw
+                    .split("\n")
+                    .map((l) => l.trim())
+                    .filter(Boolean)
+                    .map((line) => JSON.parse(line))
+                : [raw]
+
+            const lines: string[] = []
+            for (const entry of entries) {
+              const parsed = Debug.IngestEntry.safeParse(entry)
+              if (!parsed.success) {
+                return c.json(
+                  {
+                    success: false as const,
+                    data: entry,
+                    errors: parsed.error.flatten().fieldErrors,
+                  },
+                  400,
+                )
+              }
+              if (parsed.data.sessionId !== sessionId) {
+                return c.json(
+                  {
+                    success: false as const,
+                    data: { sessionId: parsed.data.sessionId, pathSessionId: sessionId },
+                    errors: [{ sessionId: "Body sessionId must match /ingest/:sessionId" }],
+                  },
+                  400,
+                )
+              }
+              lines.push(JSON.stringify(parsed.data))
+            }
+
+            await Debug.appendLogLines({ worktreeRoot: Instance.worktree, lines })
+            return c.json({ success: true as const, count: lines.length })
+          },
+        )
         .get(
           "/doc",
           openAPIRouteHandler(app, {
@@ -254,6 +321,1029 @@ export namespace Server {
             })
           },
         )
+        .get(
+          "/session",
+          describeRoute({
+            summary: "List sessions",
+            description: "Get a list of all OpenCode sessions, sorted by most recently updated.",
+            operationId: "session.list",
+            responses: {
+              200: {
+                description: "List of sessions",
+                content: {
+                  "application/json": {
+                    schema: resolver(Session.Info.array()),
+                  },
+                },
+              },
+            },
+          }),
+          validator(
+            "query",
+            z.object({
+              directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
+              roots: z.coerce.boolean().optional().meta({ description: "Only return root sessions (no parentID)" }),
+              start: z.coerce
+                .number()
+                .optional()
+                .meta({ description: "Filter sessions updated on or after this timestamp (milliseconds since epoch)" }),
+              search: z.string().optional().meta({ description: "Filter sessions by title (case-insensitive)" }),
+              limit: z.coerce.number().optional().meta({ description: "Maximum number of sessions to return" }),
+            }),
+          ),
+          async (c) => {
+            const query = c.req.valid("query")
+            const term = query.search?.toLowerCase()
+            const sessions: Session.Info[] = []
+            for await (const session of Session.list()) {
+              if (query.directory !== undefined && session.directory !== query.directory) continue
+              if (query.roots && session.parentID) continue
+              if (query.start !== undefined && session.time.updated < query.start) continue
+              if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
+              sessions.push(session)
+              if (query.limit !== undefined && sessions.length >= query.limit) break
+            }
+            return c.json(sessions)
+          },
+        )
+        .get(
+          "/session/status",
+          describeRoute({
+            summary: "Get session status",
+            description: "Retrieve the current status of all sessions, including active, idle, and completed states.",
+            operationId: "session.status",
+            responses: {
+              200: {
+                description: "Get session status",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.record(z.string(), SessionStatus.Info)),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          async (c) => {
+            const result = SessionStatus.list()
+            return c.json(result)
+          },
+        )
+        .get(
+          "/session/:sessionID",
+          describeRoute({
+            summary: "Get session",
+            description: "Retrieve detailed information about a specific OpenCode session.",
+            tags: ["Session"],
+            operationId: "session.get",
+            responses: {
+              200: {
+                description: "Get session",
+                content: {
+                  "application/json": {
+                    schema: resolver(Session.Info),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: Session.get.schema,
+            }),
+          ),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            log.info("SEARCH", { url: c.req.url })
+            const session = await Session.get(sessionID)
+            return c.json(session)
+          },
+        )
+        .get(
+          "/session/:sessionID/children",
+          describeRoute({
+            summary: "Get session children",
+            tags: ["Session"],
+            description: "Retrieve all child sessions that were forked from the specified parent session.",
+            operationId: "session.children",
+            responses: {
+              200: {
+                description: "List of children",
+                content: {
+                  "application/json": {
+                    schema: resolver(Session.Info.array()),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: Session.children.schema,
+            }),
+          ),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            const session = await Session.children(sessionID)
+            return c.json(session)
+          },
+        )
+        .get(
+          "/session/:sessionID/todo",
+          describeRoute({
+            summary: "Get session todos",
+            description: "Retrieve the todo list associated with a specific session, showing tasks and action items.",
+            operationId: "session.todo",
+            responses: {
+              200: {
+                description: "Todo list",
+                content: {
+                  "application/json": {
+                    schema: resolver(Todo.Info.array()),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string().meta({ description: "Session ID" }),
+            }),
+          ),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            const todos = await Todo.get(sessionID)
+            return c.json(todos)
+          },
+        )
+        .post(
+          "/session",
+          describeRoute({
+            summary: "Create session",
+            description: "Create a new OpenCode session for interacting with AI assistants and managing conversations.",
+            operationId: "session.create",
+            responses: {
+              ...errors(400),
+              200: {
+                description: "Successfully created session",
+                content: {
+                  "application/json": {
+                    schema: resolver(Session.Info),
+                  },
+                },
+              },
+            },
+          }),
+          validator("json", Session.create.schema.optional()),
+          async (c) => {
+            const body = c.req.valid("json") ?? {}
+            const session = await Session.create(body)
+            return c.json(session)
+          },
+        )
+        .delete(
+          "/session/:sessionID",
+          describeRoute({
+            summary: "Delete session",
+            description: "Delete a session and permanently remove all associated data, including messages and history.",
+            operationId: "session.delete",
+            responses: {
+              200: {
+                description: "Successfully deleted session",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: Session.remove.schema,
+            }),
+          ),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            await Session.remove(sessionID)
+            return c.json(true)
+          },
+        )
+        .patch(
+          "/session/:sessionID",
+          describeRoute({
+            summary: "Update session",
+            description: "Update properties of an existing session, such as title or other metadata.",
+            operationId: "session.update",
+            responses: {
+              200: {
+                description: "Successfully updated session",
+                content: {
+                  "application/json": {
+                    schema: resolver(Session.Info),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string(),
+            }),
+          ),
+          validator(
+            "json",
+            z.object({
+              title: z.string().optional(),
+              time: z
+                .object({
+                  archived: z.number().optional(),
+                })
+                .optional(),
+            }),
+          ),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            const updates = c.req.valid("json")
+
+            const updatedSession = await Session.update(sessionID, (session) => {
+              if (updates.title !== undefined) {
+                session.title = updates.title
+              }
+              if (updates.time?.archived !== undefined) session.time.archived = updates.time.archived
+            })
+
+            return c.json(updatedSession)
+          },
+        )
+        .post(
+          "/session/:sessionID/init",
+          describeRoute({
+            summary: "Initialize session",
+            description:
+              "Analyze the current application and create an AGENTS.md file with project-specific agent configurations.",
+            operationId: "session.init",
+            responses: {
+              200: {
+                description: "200",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string().meta({ description: "Session ID" }),
+            }),
+          ),
+          validator("json", Session.initialize.schema.omit({ sessionID: true })),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            const body = c.req.valid("json")
+            await Session.initialize({ ...body, sessionID })
+            return c.json(true)
+          },
+        )
+        .post(
+          "/session/:sessionID/fork",
+          describeRoute({
+            summary: "Fork session",
+            description: "Create a new session by forking an existing session at a specific message point.",
+            operationId: "session.fork",
+            responses: {
+              200: {
+                description: "200",
+                content: {
+                  "application/json": {
+                    schema: resolver(Session.Info),
+                  },
+                },
+              },
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: Session.fork.schema.shape.sessionID,
+            }),
+          ),
+          validator("json", Session.fork.schema.omit({ sessionID: true })),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            const body = c.req.valid("json")
+            const result = await Session.fork({ ...body, sessionID })
+            return c.json(result)
+          },
+        )
+        .post(
+          "/session/:sessionID/abort",
+          describeRoute({
+            summary: "Abort session",
+            description: "Abort an active session and stop any ongoing AI processing or command execution.",
+            operationId: "session.abort",
+            responses: {
+              200: {
+                description: "Aborted session",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string(),
+            }),
+          ),
+          async (c) => {
+            SessionPrompt.cancel(c.req.valid("param").sessionID)
+            return c.json(true)
+          },
+        )
+
+        .post(
+          "/session/:sessionID/share",
+          describeRoute({
+            summary: "Share session",
+            description: "Create a shareable link for a session, allowing others to view the conversation.",
+            operationId: "session.share",
+            responses: {
+              200: {
+                description: "Successfully shared session",
+                content: {
+                  "application/json": {
+                    schema: resolver(Session.Info),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string(),
+            }),
+          ),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            await Session.share(sessionID)
+            const session = await Session.get(sessionID)
+            return c.json(session)
+          },
+        )
+        .get(
+          "/session/:sessionID/diff",
+          describeRoute({
+            summary: "Get message diff",
+            description: "Get the file changes (diff) that resulted from a specific user message in the session.",
+            operationId: "session.diff",
+            responses: {
+              200: {
+                description: "Successfully retrieved diff",
+                content: {
+                  "application/json": {
+                    schema: resolver(Snapshot.FileDiff.array()),
+                  },
+                },
+              },
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: SessionSummary.diff.schema.shape.sessionID,
+            }),
+          ),
+          validator(
+            "query",
+            z.object({
+              messageID: SessionSummary.diff.schema.shape.messageID,
+            }),
+          ),
+          async (c) => {
+            const query = c.req.valid("query")
+            const params = c.req.valid("param")
+            const result = await SessionSummary.diff({
+              sessionID: params.sessionID,
+              messageID: query.messageID,
+            })
+            return c.json(result)
+          },
+        )
+        .delete(
+          "/session/:sessionID/share",
+          describeRoute({
+            summary: "Unshare session",
+            description: "Remove the shareable link for a session, making it private again.",
+            operationId: "session.unshare",
+            responses: {
+              200: {
+                description: "Successfully unshared session",
+                content: {
+                  "application/json": {
+                    schema: resolver(Session.Info),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: Session.unshare.schema,
+            }),
+          ),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            await Session.unshare(sessionID)
+            const session = await Session.get(sessionID)
+            return c.json(session)
+          },
+        )
+        .post(
+          "/session/:sessionID/summarize",
+          describeRoute({
+            summary: "Summarize session",
+            description: "Generate a concise summary of the session using AI compaction to preserve key information.",
+            operationId: "session.summarize",
+            responses: {
+              200: {
+                description: "Summarized session",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string().meta({ description: "Session ID" }),
+            }),
+          ),
+          validator(
+            "json",
+            z.object({
+              providerID: z.string(),
+              modelID: z.string(),
+              auto: z.boolean().optional().default(false),
+            }),
+          ),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            const body = c.req.valid("json")
+            const session = await Session.get(sessionID)
+            await SessionRevert.cleanup(session)
+            const msgs = await Session.messages({ sessionID })
+            let currentAgent = await Agent.defaultAgent()
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              const info = msgs[i].info
+              if (info.role === "user") {
+                currentAgent = info.agent || (await Agent.defaultAgent())
+                break
+              }
+            }
+            await SessionCompaction.create({
+              sessionID,
+              agent: currentAgent,
+              model: {
+                providerID: body.providerID,
+                modelID: body.modelID,
+              },
+              auto: body.auto,
+            })
+            await SessionPrompt.loop(sessionID)
+            return c.json(true)
+          },
+        )
+        .get(
+          "/session/:sessionID/message",
+          describeRoute({
+            summary: "Get session messages",
+            description: "Retrieve all messages in a session, including user prompts and AI responses.",
+            operationId: "session.messages",
+            responses: {
+              200: {
+                description: "List of messages",
+                content: {
+                  "application/json": {
+                    schema: resolver(MessageV2.WithParts.array()),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string().meta({ description: "Session ID" }),
+            }),
+          ),
+          validator(
+            "query",
+            z.object({
+              limit: z.coerce.number().optional(),
+            }),
+          ),
+          async (c) => {
+            const query = c.req.valid("query")
+            const messages = await Session.messages({
+              sessionID: c.req.valid("param").sessionID,
+              limit: query.limit,
+            })
+            return c.json(messages)
+          },
+        )
+        .get(
+          "/session/:sessionID/diff",
+          describeRoute({
+            summary: "Get session diff",
+            description: "Get all file changes (diffs) made during this session.",
+            operationId: "session.diff",
+            responses: {
+              200: {
+                description: "List of diffs",
+                content: {
+                  "application/json": {
+                    schema: resolver(Snapshot.FileDiff.array()),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string().meta({ description: "Session ID" }),
+            }),
+          ),
+          async (c) => {
+            const diff = await Session.diff(c.req.valid("param").sessionID)
+            return c.json(diff)
+          },
+        )
+        .get(
+          "/session/:sessionID/message/:messageID",
+          describeRoute({
+            summary: "Get message",
+            description: "Retrieve a specific message from a session by its message ID.",
+            operationId: "session.message",
+            responses: {
+              200: {
+                description: "Message",
+                content: {
+                  "application/json": {
+                    schema: resolver(
+                      z.object({
+                        info: MessageV2.Info,
+                        parts: MessageV2.Part.array(),
+                      }),
+                    ),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string().meta({ description: "Session ID" }),
+              messageID: z.string().meta({ description: "Message ID" }),
+            }),
+          ),
+          async (c) => {
+            const params = c.req.valid("param")
+            const message = await MessageV2.get({
+              sessionID: params.sessionID,
+              messageID: params.messageID,
+            })
+            return c.json(message)
+          },
+        )
+        .delete(
+          "/session/:sessionID/message/:messageID/part/:partID",
+          describeRoute({
+            description: "Delete a part from a message",
+            operationId: "part.delete",
+            responses: {
+              200: {
+                description: "Successfully deleted part",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string().meta({ description: "Session ID" }),
+              messageID: z.string().meta({ description: "Message ID" }),
+              partID: z.string().meta({ description: "Part ID" }),
+            }),
+          ),
+          async (c) => {
+            const params = c.req.valid("param")
+            await Session.removePart({
+              sessionID: params.sessionID,
+              messageID: params.messageID,
+              partID: params.partID,
+            })
+            return c.json(true)
+          },
+        )
+        .patch(
+          "/session/:sessionID/message/:messageID/part/:partID",
+          describeRoute({
+            description: "Update a part in a message",
+            operationId: "part.update",
+            responses: {
+              200: {
+                description: "Successfully updated part",
+                content: {
+                  "application/json": {
+                    schema: resolver(MessageV2.Part),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string().meta({ description: "Session ID" }),
+              messageID: z.string().meta({ description: "Message ID" }),
+              partID: z.string().meta({ description: "Part ID" }),
+            }),
+          ),
+          validator("json", MessageV2.Part),
+          async (c) => {
+            const params = c.req.valid("param")
+            const body = c.req.valid("json")
+            if (
+              body.id !== params.partID ||
+              body.messageID !== params.messageID ||
+              body.sessionID !== params.sessionID
+            ) {
+              throw new Error(
+                `Part mismatch: body.id='${body.id}' vs partID='${params.partID}', body.messageID='${body.messageID}' vs messageID='${params.messageID}', body.sessionID='${body.sessionID}' vs sessionID='${params.sessionID}'`,
+              )
+            }
+            const part = await Session.updatePart(body)
+            return c.json(part)
+          },
+        )
+        .post(
+          "/session/:sessionID/message",
+          describeRoute({
+            summary: "Send message",
+            description: "Create and send a new message to a session, streaming the AI response.",
+            operationId: "session.prompt",
+            responses: {
+              200: {
+                description: "Created message",
+                content: {
+                  "application/json": {
+                    schema: resolver(
+                      z.object({
+                        info: MessageV2.Assistant,
+                        parts: MessageV2.Part.array(),
+                      }),
+                    ),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string().meta({ description: "Session ID" }),
+            }),
+          ),
+          validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
+          async (c) => {
+            c.status(200)
+            c.header("Content-Type", "application/json")
+            return stream(c, async (stream) => {
+              const sessionID = c.req.valid("param").sessionID
+              const body = c.req.valid("json")
+              const system =
+                body.agent === "debug"
+                  ? [
+                      body.system,
+                      Debug.configSystemBlock({ requestUrl: c.req.url, sessionID, worktreeRoot: Instance.worktree }),
+                    ]
+                      .filter(Boolean)
+                      .join("\n\n")
+                  : body.system
+              const msg = await SessionPrompt.prompt({ ...body, system, sessionID })
+              stream.write(JSON.stringify(msg))
+            })
+          },
+        )
+        .post(
+          "/session/:sessionID/prompt_async",
+          describeRoute({
+            summary: "Send async message",
+            description:
+              "Create and send a new message to a session asynchronously, starting the session if needed and returning immediately.",
+            operationId: "session.prompt_async",
+            responses: {
+              204: {
+                description: "Prompt accepted",
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string().meta({ description: "Session ID" }),
+            }),
+          ),
+          validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
+          async (c) => {
+            c.status(204)
+            c.header("Content-Type", "application/json")
+            return stream(c, async () => {
+              const sessionID = c.req.valid("param").sessionID
+              const body = c.req.valid("json")
+              const system =
+                body.agent === "debug"
+                  ? [
+                      body.system,
+                      Debug.configSystemBlock({ requestUrl: c.req.url, sessionID, worktreeRoot: Instance.worktree }),
+                    ]
+                      .filter(Boolean)
+                      .join("\n\n")
+                  : body.system
+              SessionPrompt.prompt({ ...body, system, sessionID })
+            })
+          },
+        )
+        .post(
+          "/session/:sessionID/command",
+          describeRoute({
+            summary: "Send command",
+            description: "Send a new command to a session for execution by the AI assistant.",
+            operationId: "session.command",
+            responses: {
+              200: {
+                description: "Created message",
+                content: {
+                  "application/json": {
+                    schema: resolver(
+                      z.object({
+                        info: MessageV2.Assistant,
+                        parts: MessageV2.Part.array(),
+                      }),
+                    ),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string().meta({ description: "Session ID" }),
+            }),
+          ),
+          validator("json", SessionPrompt.CommandInput.omit({ sessionID: true })),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            const body = c.req.valid("json")
+            const msg = await SessionPrompt.command({ ...body, sessionID })
+            return c.json(msg)
+          },
+        )
+        .post(
+          "/session/:sessionID/shell",
+          describeRoute({
+            summary: "Run shell command",
+            description: "Execute a shell command within the session context and return the AI's response.",
+            operationId: "session.shell",
+            responses: {
+              200: {
+                description: "Created message",
+                content: {
+                  "application/json": {
+                    schema: resolver(MessageV2.Assistant),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string().meta({ description: "Session ID" }),
+            }),
+          ),
+          validator("json", SessionPrompt.ShellInput.omit({ sessionID: true })),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            const body = c.req.valid("json")
+            const msg = await SessionPrompt.shell({ ...body, sessionID })
+            return c.json(msg)
+          },
+        )
+        .post(
+          "/session/:sessionID/revert",
+          describeRoute({
+            summary: "Revert message",
+            description:
+              "Revert a specific message in a session, undoing its effects and restoring the previous state.",
+            operationId: "session.revert",
+            responses: {
+              200: {
+                description: "Updated session",
+                content: {
+                  "application/json": {
+                    schema: resolver(Session.Info),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string(),
+            }),
+          ),
+          validator("json", SessionRevert.RevertInput.omit({ sessionID: true })),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            log.info("revert", c.req.valid("json"))
+            const session = await SessionRevert.revert({
+              sessionID,
+              ...c.req.valid("json"),
+            })
+            return c.json(session)
+          },
+        )
+        .post(
+          "/session/:sessionID/unrevert",
+          describeRoute({
+            summary: "Restore reverted messages",
+            description: "Restore all previously reverted messages in a session.",
+            operationId: "session.unrevert",
+            responses: {
+              200: {
+                description: "Updated session",
+                content: {
+                  "application/json": {
+                    schema: resolver(Session.Info),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string(),
+            }),
+          ),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            const session = await SessionRevert.unrevert({ sessionID })
+            return c.json(session)
+          },
+        )
+        .post(
+          "/session/:sessionID/permissions/:permissionID",
+          describeRoute({
+            summary: "Respond to permission",
+            deprecated: true,
+            description: "Approve or deny a permission request from the AI assistant.",
+            operationId: "permission.respond",
+            responses: {
+              200: {
+                description: "Permission processed successfully",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string(),
+              permissionID: z.string(),
+            }),
+          ),
+          validator("json", z.object({ response: PermissionNext.Reply })),
+          async (c) => {
+            const params = c.req.valid("param")
+            PermissionNext.reply({
+              requestID: params.permissionID,
+              reply: c.req.valid("json").response,
+            })
+            return c.json(true)
+          },
+        )
+        .post(
+          "/permission/:requestID/reply",
+          describeRoute({
+            summary: "Respond to permission request",
+            description: "Approve or deny a permission request from the AI assistant.",
+            operationId: "permission.reply",
+            responses: {
+              200: {
+                description: "Permission processed successfully",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              requestID: z.string(),
+            }),
+          ),
+          validator("json", z.object({ reply: PermissionNext.Reply, message: z.string().optional() })),
+          async (c) => {
+            const params = c.req.valid("param")
+            const json = c.req.valid("json")
+            await PermissionNext.reply({
+              requestID: params.requestID,
+              reply: json.reply,
+              message: json.message,
+            })
+            return c.json(true)
+          },
+        )
+        .get(
+          "/permission",
+          describeRoute({
+            summary: "List pending permissions",
+            description: "Get all pending permission requests across all sessions.",
+            operationId: "permission.list",
+            responses: {
+              200: {
+                description: "List of pending permissions",
+                content: {
+                  "application/json": {
+                    schema: resolver(PermissionNext.Request.array()),
+                  },
+                },
+              },
+            },
+          }),
+          async (c) => {
+            const permissions = await PermissionNext.list()
+            return c.json(permissions)
+          },
+        )
+        .route("/question", QuestionRoute)
         .get(
           "/command",
           describeRoute({
