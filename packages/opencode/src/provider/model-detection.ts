@@ -1,4 +1,5 @@
 import z from "zod"
+import { iife } from "@/util/iife"
 import { Config } from "../config/config"
 import { ModelsDev } from "./models"
 import { Provider } from "./provider"
@@ -70,13 +71,12 @@ export namespace ProviderModelDetection {
     const providerNPM = configProvider?.npm ?? modelsDevProvider?.npm ?? "@ai-sdk/openai-compatible"
     const providerBaseURL = configProvider?.options?.baseURL ?? configProvider?.api ?? modelsDevProvider?.api
 
-    let detectedModels: Record<string, Partial<Provider.Model>> | undefined = undefined
-    if (providerNPM === "@ai-sdk/openai-compatible" && providerBaseURL) {
-      detectedModels = await ProviderModelDetection.OpenAICompatible.listModels(providerBaseURL, provider)
-    } else {
-      return
-    }
-    if (detectedModels === undefined) return
+    const detectedModels = await iife(async () => {
+      if (providerNPM === "@ai-sdk/openai-compatible" && providerBaseURL) {
+        return await ProviderModelDetection.OpenAICompatible.listModels(providerBaseURL, provider)
+      }
+    })
+    if (!detectedModels) return
 
     // Models detected from provider and config are kept
     const modelIDs = Array.from(new Set([
@@ -90,7 +90,7 @@ export namespace ProviderModelDetection {
         detectedModels[modelID],
         provider.models[modelID],
         provider.id,
-        providerBaseURL,
+        providerBaseURL!,
         modelID,
       ),
     ]))
@@ -112,33 +112,17 @@ export namespace ProviderModelDetection.OpenAICompatible {
   type OpenAICompatibleResponse = z.infer<typeof OpenAICompatibleResponse>
 
   export async function listModels(baseURL: string, provider: Provider.Info): Promise<Record<string, Partial<Provider.Model>>> {
-    let res: Response
-    let parsed: OpenAICompatibleResponse
-
     const fetchFn = provider.options["fetch"] ?? fetch
     const apiKey = provider.options["apiKey"] ?? provider.key ?? ""
     const headers = new Headers()
     if (apiKey) headers.append("Authorization", `Bearer ${apiKey}`)
 
-    try {
-      res = await fetchFn(`${baseURL}/models`, {
-        headers,
-        signal: AbortSignal.timeout(3 * 1000),
-      })
-    } catch (error) {
-      throw new Error(`failed to fetch ${baseURL}/models\n${error}`)
-    }
-    if (!res.ok) {
-      throw new Error(`bad http status ${res.status}`)
-    }
-    try {
-      parsed = OpenAICompatibleResponse.parse(await res.json())
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        throw new Error(`bad data structure\n${error}`)
-      }
-      throw new Error(`unknown error\n${error}`)
-    }
+    const res = await fetchFn(`${baseURL}/models`, {
+      headers,
+      signal: AbortSignal.timeout(3 * 1000),
+    })
+    if (!res.ok) throw new Error(`bad http status ${res.status}`)
+    const parsed = OpenAICompatibleResponse.parse(await res.json())
 
     return Object.fromEntries(
       parsed.data
