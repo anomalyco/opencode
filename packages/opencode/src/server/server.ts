@@ -1712,12 +1712,12 @@ export namespace Server {
           },
         )
         .post(
-          "/context/directory",
+          "/session/add-dir",
           describeRoute({
             summary: "Add directory to context",
             description:
               "Add a directory to the conversation context. If the directory is outside the project, grants external_directory permission.",
-            operationId: "context.directory",
+            operationId: "session.addDir",
             responses: {
               200: {
                 description: "Directory added successfully",

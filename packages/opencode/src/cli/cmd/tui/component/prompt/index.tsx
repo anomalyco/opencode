@@ -545,7 +545,7 @@ export function Prompt(props: PromptProps) {
         toast.show({ title: "Usage: /add-dir <path>", message: "Please provide a directory path", variant: "error" })
         return
       }
-      const result = await sdk.client.context.directory({ path: dirPath, sessionID })
+      const result = await sdk.client.session.addDir({ path: dirPath, sessionID })
       if (result.error) {
         toast.error(result.error)
         return

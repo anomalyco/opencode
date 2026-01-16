@@ -3668,7 +3668,7 @@ export type PermissionListResponses = {
 
 export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
 
-export type ContextDirectoryData = {
+export type SessionAddDirData = {
   body?: {
     path: string
     sessionID: string
@@ -3677,19 +3677,19 @@ export type ContextDirectoryData = {
   query?: {
     directory?: string
   }
-  url: "/context/directory"
+  url: "/session/add-dir"
 }
 
-export type ContextDirectoryErrors = {
+export type SessionAddDirErrors = {
   /**
    * Bad request
    */
   400: BadRequestError
 }
 
-export type ContextDirectoryError = ContextDirectoryErrors[keyof ContextDirectoryErrors]
+export type SessionAddDirError = SessionAddDirErrors[keyof SessionAddDirErrors]
 
-export type ContextDirectoryResponses = {
+export type SessionAddDirResponses = {
   /**
    * Directory added successfully
    */
@@ -3699,7 +3699,7 @@ export type ContextDirectoryResponses = {
   }
 }
 
-export type ContextDirectoryResponse = ContextDirectoryResponses[keyof ContextDirectoryResponses]
+export type SessionAddDirResponse = SessionAddDirResponses[keyof SessionAddDirResponses]
 
 export type QuestionListData = {
   body?: never

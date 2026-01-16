@@ -16,8 +16,6 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
-  ContextDirectoryErrors,
-  ContextDirectoryResponses,
   EventSubscribeResponses,
   EventTuiCommandExecute,
   EventTuiPromptAppend,
@@ -94,6 +92,8 @@ import type {
   QuestionReplyResponses,
   SessionAbortErrors,
   SessionAbortResponses,
+  SessionAddDirErrors,
+  SessionAddDirResponses,
   SessionChildrenErrors,
   SessionChildrenResponses,
   SessionCommandErrors,
@@ -1615,6 +1615,43 @@ export class Session extends HeyApiClient {
       ...params,
     })
   }
+
+  /**
+   * Add directory to context
+   *
+   * Add a directory to the conversation context. If the directory is outside the project, grants external_directory permission.
+   */
+  public addDir<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      path?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "path" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionAddDirResponses, SessionAddDirErrors, ThrowOnError>({
+      url: "/session/add-dir",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
 }
 
 export class Part extends HeyApiClient {
@@ -1787,45 +1824,6 @@ export class Permission extends HeyApiClient {
       url: "/permission",
       ...options,
       ...params,
-    })
-  }
-}
-
-export class Context extends HeyApiClient {
-  /**
-   * Add directory to context
-   *
-   * Add a directory to the conversation context. If the directory is outside the project, grants external_directory permission.
-   */
-  public directory<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      path?: string
-      sessionID?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "path" },
-            { in: "body", key: "sessionID" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<ContextDirectoryResponses, ContextDirectoryErrors, ThrowOnError>({
-      url: "/context/directory",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
     })
   }
 }
@@ -3097,11 +3095,6 @@ export class OpencodeClient extends HeyApiClient {
   private _permission?: Permission
   get permission(): Permission {
     return (this._permission ??= new Permission({ client: this.client }))
-  }
-
-  private _context?: Context
-  get context(): Context {
-    return (this._context ??= new Context({ client: this.client }))
   }
 
   private _question?: Question
