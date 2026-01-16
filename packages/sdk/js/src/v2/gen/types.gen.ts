@@ -393,6 +393,14 @@ export type PatchPart = {
   files: Array<string>
 }
 
+export type PlanPatchPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "plan-patch"
+  beforeContent: string | null
+}
+
 export type AgentPart = {
   id: string
   sessionID: string
@@ -449,6 +457,7 @@ export type Part =
   | StepFinishPart
   | SnapshotPart
   | PatchPart
+  | PlanPatchPart
   | AgentPart
   | RetryPart
   | CompactionPart
@@ -467,6 +476,40 @@ export type EventMessagePartRemoved = {
     sessionID: string
     messageID: string
     partID: string
+  }
+}
+
+export type PlanInfo = {
+  id: string
+  sessionID: string
+  filePath: string
+  status: "draft" | "pending_review" | "approved" | "rejected"
+  time: {
+    created: number
+    updated: number
+  }
+}
+
+export type EventPlanCreated = {
+  type: "plan.created"
+  properties: {
+    info: PlanInfo
+  }
+}
+
+export type EventPlanUpdated = {
+  type: "plan.updated"
+  properties: {
+    info: PlanInfo
+  }
+}
+
+export type EventPlanStatusChanged = {
+  type: "plan.status.changed"
+  properties: {
+    planID: string
+    sessionID: string
+    status: "draft" | "pending_review" | "approved" | "rejected"
   }
 }
 
@@ -603,6 +646,39 @@ export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
     sessionID: string
+  }
+}
+
+export type PlanReviewRequest = {
+  id: string
+  sessionID: string
+  planID: string
+  filePath: string
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventPlanReviewRequested = {
+  type: "plan_review.requested"
+  properties: PlanReviewRequest
+}
+
+export type EventPlanReviewApproved = {
+  type: "plan_review.approved"
+  properties: {
+    requestID: string
+    sessionID: string
+  }
+}
+
+export type EventPlanReviewRejected = {
+  type: "plan_review.rejected"
+  properties: {
+    requestID: string
+    sessionID: string
+    feedback?: string
   }
 }
 
@@ -749,6 +825,7 @@ export type Session = {
     partID?: string
     snapshot?: string
     diff?: string
+    planContent?: string
   }
 }
 
@@ -869,6 +946,9 @@ export type Event =
   | EventMessageRemoved
   | EventMessagePartUpdated
   | EventMessagePartRemoved
+  | EventPlanCreated
+  | EventPlanUpdated
+  | EventPlanStatusChanged
   | EventPermissionAsked
   | EventPermissionReplied
   | EventSessionStatus
@@ -877,6 +957,9 @@ export type Event =
   | EventQuestionReplied
   | EventQuestionRejected
   | EventSessionCompacted
+  | EventPlanReviewRequested
+  | EventPlanReviewApproved
+  | EventPlanReviewRejected
   | EventTodoUpdated
   | EventTuiPromptAppend
   | EventTuiCommandExecute
@@ -3730,6 +3813,125 @@ export type QuestionRejectResponses = {
 }
 
 export type QuestionRejectResponse = QuestionRejectResponses[keyof QuestionRejectResponses]
+
+export type PlanReviewListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/plan-review"
+}
+
+export type PlanReviewListResponses = {
+  /**
+   * List of pending plan reviews
+   */
+  200: Array<PlanReviewRequest>
+}
+
+export type PlanReviewListResponse = PlanReviewListResponses[keyof PlanReviewListResponses]
+
+export type PlanReviewContentData = {
+  body?: never
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/plan-review/{requestID}/content"
+}
+
+export type PlanReviewContentErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PlanReviewContentError = PlanReviewContentErrors[keyof PlanReviewContentErrors]
+
+export type PlanReviewContentResponses = {
+  /**
+   * Plan content
+   */
+  200: string
+}
+
+export type PlanReviewContentResponse = PlanReviewContentResponses[keyof PlanReviewContentResponses]
+
+export type PlanReviewApproveData = {
+  body?: never
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/plan-review/{requestID}/approve"
+}
+
+export type PlanReviewApproveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PlanReviewApproveError = PlanReviewApproveErrors[keyof PlanReviewApproveErrors]
+
+export type PlanReviewApproveResponses = {
+  /**
+   * Plan approved successfully
+   */
+  200: boolean
+}
+
+export type PlanReviewApproveResponse = PlanReviewApproveResponses[keyof PlanReviewApproveResponses]
+
+export type PlanReviewRejectData = {
+  body?: {
+    feedback?: string
+  }
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/plan-review/{requestID}/reject"
+}
+
+export type PlanReviewRejectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PlanReviewRejectError = PlanReviewRejectErrors[keyof PlanReviewRejectErrors]
+
+export type PlanReviewRejectResponses = {
+  /**
+   * Plan rejected successfully
+   */
+  200: boolean
+}
+
+export type PlanReviewRejectResponse = PlanReviewRejectResponses[keyof PlanReviewRejectResponses]
 
 export type ProviderListData = {
   body?: never

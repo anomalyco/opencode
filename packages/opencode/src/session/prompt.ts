@@ -633,7 +633,7 @@ export namespace SessionPrompt {
         sessionID,
         system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
         messages: [
-          ...MessageV2.toModelMessage(sessionMessages),
+          ...MessageV2.toModelMessage(sessionMessages, { tools }),
           ...(isLastStep
             ? [
                 {
@@ -1270,7 +1270,9 @@ export namespace SessionPrompt {
           sessionID: userMessage.info.sessionID,
           type: "text",
           text:
-            BUILD_SWITCH + "\n\n" + `A plan file exists at ${planInfo.filePath}. You should execute on the plan defined within it`,
+            BUILD_SWITCH +
+            "\n\n" +
+            `A plan file exists at ${planInfo.filePath}. You should execute on the plan defined within it`,
           synthetic: true,
         })
         userMessage.parts.push(part)

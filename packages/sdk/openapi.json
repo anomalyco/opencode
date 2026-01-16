@@ -3315,6 +3315,243 @@
         ]
       }
     },
+    "/plan-review": {
+      "get": {
+        "operationId": "plan_review.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List pending plan reviews",
+        "description": "Get all pending plan review requests across all sessions.",
+        "responses": {
+          "200": {
+            "description": "List of pending plan reviews",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlanReviewRequest"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.plan_review.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/plan-review/{requestID}/content": {
+      "get": {
+        "operationId": "plan_review.content",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "requestID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get plan content",
+        "description": "Get the content of a plan file for a pending review request.",
+        "responses": {
+          "200": {
+            "description": "Plan content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.plan_review.content({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/plan-review/{requestID}/approve": {
+      "post": {
+        "operationId": "plan_review.approve",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "requestID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Approve plan review",
+        "description": "Approve a plan and transition to build mode.",
+        "responses": {
+          "200": {
+            "description": "Plan approved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.plan_review.approve({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/plan-review/{requestID}/reject": {
+      "post": {
+        "operationId": "plan_review.reject",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "requestID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Reject plan review",
+        "description": "Reject a plan with optional feedback for revision.",
+        "responses": {
+          "200": {
+            "description": "Plan rejected successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "feedback": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.plan_review.reject({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/provider": {
       "get": {
         "operationId": "provider.list",
@@ -6763,6 +7000,35 @@
         },
         "required": ["id", "sessionID", "messageID", "type", "hash", "files"]
       },
+      "PlanPatchPart": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "messageID": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "plan-patch"
+          },
+          "beforeContent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["id", "sessionID", "messageID", "type", "beforeContent"]
+      },
       "AgentPart": {
         "type": "object",
         "properties": {
@@ -6930,6 +7196,9 @@
             "$ref": "#/components/schemas/PatchPart"
           },
           {
+            "$ref": "#/components/schemas/PlanPatchPart"
+          },
+          {
             "$ref": "#/components/schemas/AgentPart"
           },
           {
@@ -6983,6 +7252,103 @@
               }
             },
             "required": ["sessionID", "messageID", "partID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "PlanInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^pln.*"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["draft", "pending_review", "approved", "rejected"]
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "updated": {
+                "type": "number"
+              }
+            },
+            "required": ["created", "updated"]
+          }
+        },
+        "required": ["id", "sessionID", "filePath", "status", "time"]
+      },
+      "Event.plan.created": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "plan.created"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "info": {
+                "$ref": "#/components/schemas/PlanInfo"
+              }
+            },
+            "required": ["info"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.plan.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "plan.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "info": {
+                "$ref": "#/components/schemas/PlanInfo"
+              }
+            },
+            "required": ["info"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.plan.status.changed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "plan.status.changed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "planID": {
+                "type": "string"
+              },
+              "sessionID": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["draft", "pending_review", "approved", "rejected"]
+              }
+            },
+            "required": ["planID", "sessionID", "status"]
           }
         },
         "required": ["type", "properties"]
@@ -7319,6 +7685,99 @@
               }
             },
             "required": ["sessionID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "PlanReviewRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^plr.*"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "planID": {
+            "type": "string",
+            "pattern": "^pln.*"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string"
+              },
+              "callID": {
+                "type": "string"
+              }
+            },
+            "required": ["messageID", "callID"]
+          }
+        },
+        "required": ["id", "sessionID", "planID", "filePath"]
+      },
+      "Event.plan_review.requested": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "plan_review.requested"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/PlanReviewRequest"
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.plan_review.approved": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "plan_review.approved"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "requestID": {
+                "type": "string"
+              },
+              "sessionID": {
+                "type": "string"
+              }
+            },
+            "required": ["requestID", "sessionID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.plan_review.rejected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "plan_review.rejected"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "requestID": {
+                "type": "string"
+              },
+              "sessionID": {
+                "type": "string"
+              },
+              "feedback": {
+                "type": "string"
+              }
+            },
+            "required": ["requestID", "sessionID"]
           }
         },
         "required": ["type", "properties"]
@@ -7669,6 +8128,9 @@
                 "type": "string"
               },
               "diff": {
+                "type": "string"
+              },
+              "planContent": {
                 "type": "string"
               }
             },
@@ -8026,6 +8488,15 @@
             "$ref": "#/components/schemas/Event.message.part.removed"
           },
           {
+            "$ref": "#/components/schemas/Event.plan.created"
+          },
+          {
+            "$ref": "#/components/schemas/Event.plan.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.plan.status.changed"
+          },
+          {
             "$ref": "#/components/schemas/Event.permission.asked"
           },
           {
@@ -8048,6 +8519,15 @@
           },
           {
             "$ref": "#/components/schemas/Event.session.compacted"
+          },
+          {
+            "$ref": "#/components/schemas/Event.plan_review.requested"
+          },
+          {
+            "$ref": "#/components/schemas/Event.plan_review.approved"
+          },
+          {
+            "$ref": "#/components/schemas/Event.plan_review.rejected"
           },
           {
             "$ref": "#/components/schemas/Event.todo.updated"

@@ -64,6 +64,13 @@ import type {
   PermissionRespondErrors,
   PermissionRespondResponses,
   PermissionRuleset,
+  PlanReviewApproveErrors,
+  PlanReviewApproveResponses,
+  PlanReviewContentErrors,
+  PlanReviewContentResponses,
+  PlanReviewListResponses,
+  PlanReviewRejectErrors,
+  PlanReviewRejectResponses,
   ProjectCurrentResponses,
   ProjectListResponses,
   ProjectUpdateErrors,
@@ -1842,6 +1849,124 @@ export class Question extends HeyApiClient {
   }
 }
 
+export class PlanReview extends HeyApiClient {
+  /**
+   * List pending plan reviews
+   *
+   * Get all pending plan review requests across all sessions.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<PlanReviewListResponses, unknown, ThrowOnError>({
+      url: "/plan-review",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get plan content
+   *
+   * Get the content of a plan file for a pending review request.
+   */
+  public content<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<PlanReviewContentResponses, PlanReviewContentErrors, ThrowOnError>({
+      url: "/plan-review/{requestID}/content",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Approve plan review
+   *
+   * Approve a plan and transition to build mode.
+   */
+  public approve<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PlanReviewApproveResponses, PlanReviewApproveErrors, ThrowOnError>({
+      url: "/plan-review/{requestID}/approve",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reject plan review
+   *
+   * Reject a plan with optional feedback for revision.
+   */
+  public reject<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+      feedback?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "feedback" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PlanReviewRejectResponses, PlanReviewRejectErrors, ThrowOnError>({
+      url: "/plan-review/{requestID}/reject",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Oauth extends HeyApiClient {
   /**
    * OAuth authorize
@@ -3070,6 +3195,11 @@ export class OpencodeClient extends HeyApiClient {
   private _question?: Question
   get question(): Question {
     return (this._question ??= new Question({ client: this.client }))
+  }
+
+  private _planReview?: PlanReview
+  get planReview(): PlanReview {
+    return (this._planReview ??= new PlanReview({ client: this.client }))
   }
 
   private _provider?: Provider

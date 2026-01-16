@@ -183,9 +183,7 @@ export namespace ShareNext {
         data: x.info,
       })),
       ...messages.flatMap((x) =>
-        x.parts
-          .filter((y) => y.type !== "plan-patch")
-          .map((y) => ({ type: "part" as const, data: y as SDK.Part })),
+        x.parts.filter((y) => y.type !== "plan-patch").map((y) => ({ type: "part" as const, data: y as SDK.Part })),
       ),
       {
         type: "session_diff",

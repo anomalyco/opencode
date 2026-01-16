@@ -26,7 +26,8 @@ export function PlanReviewContent(props: { request: PlanReviewRequest }) {
     setLoading(true)
     setContent(null)
 
-    Bun.file(filePath).text()
+    Bun.file(filePath)
+      .text()
       .then((result) => {
         setContent(result)
       })
@@ -39,12 +40,7 @@ export function PlanReviewContent(props: { request: PlanReviewRequest }) {
   })
 
   return (
-    <box
-      marginTop={1}
-      border={["left"]}
-      borderColor={theme.warning}
-      customBorderChars={SplitBorder.customBorderChars}
-    >
+    <box marginTop={1} border={["left"]} borderColor={theme.warning} customBorderChars={SplitBorder.customBorderChars}>
       <box
         paddingTop={1}
         paddingBottom={1}

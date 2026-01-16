@@ -138,7 +138,7 @@ export function Session() {
 
     // Access store properties directly through the proxy (NOT Object.entries)
     // This ensures Solid.js tracks reactivity properly
-    const result: typeof sync.data.plan_review[string] = []
+    const result: (typeof sync.data.plan_review)[string] = []
     for (const sessionID of childIDs) {
       const sessionReviews = sync.data.plan_review[sessionID]
       if (sessionReviews && sessionReviews.length > 0) {
@@ -1060,7 +1060,12 @@ export function Session() {
                 {(request) => <PlanReviewControls request={request} />}
               </Show>
               <Prompt
-                visible={!session()?.parentID && permissions().length === 0 && questions().length === 0 && planReviews().length === 0}
+                visible={
+                  !session()?.parentID &&
+                  permissions().length === 0 &&
+                  questions().length === 0 &&
+                  planReviews().length === 0
+                }
                 ref={(r) => {
                   prompt = r
                   promptRef.set(r)

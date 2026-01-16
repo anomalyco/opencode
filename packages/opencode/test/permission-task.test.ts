@@ -106,9 +106,9 @@ describe("PermissionNext.evaluateWithSession for session-scoped patterns", () =>
       { permission: "edit", pattern: "*", action: "deny" },
     ]
     // Last matching rule wins - global deny should override session-scoped allow
-    expect(
-      PermissionNext.evaluateWithSession("edit", "*/plan/session_abc.md", "session_abc", ruleset).action,
-    ).toBe("deny")
+    expect(PermissionNext.evaluateWithSession("edit", "*/plan/session_abc.md", "session_abc", ruleset).action).toBe(
+      "deny",
+    )
   })
 
   test("global deny followed by session-scoped allow", () => {
@@ -117,13 +117,11 @@ describe("PermissionNext.evaluateWithSession for session-scoped patterns", () =>
       { permission: "edit", pattern: "*/plan/{sessionID}.md", action: "allow" },
     ]
     // Last matching rule wins - session-scoped allow should override global deny
-    expect(
-      PermissionNext.evaluateWithSession("edit", "*/plan/session_abc.md", "session_abc", ruleset).action,
-    ).toBe("allow")
+    expect(PermissionNext.evaluateWithSession("edit", "*/plan/session_abc.md", "session_abc", ruleset).action).toBe(
+      "allow",
+    )
     // Other patterns still denied
-    expect(
-      PermissionNext.evaluateWithSession("edit", "*/other/file.md", "session_abc", ruleset).action,
-    ).toBe("deny")
+    expect(PermissionNext.evaluateWithSession("edit", "*/other/file.md", "session_abc", ruleset).action).toBe("deny")
   })
 
   test("returns ask when no match", () => {
@@ -432,9 +430,9 @@ describe("session-scoped permissions with config files", () => {
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
         const sessionID = "session_abc"
         // evaluateWithSession expands the placeholder and matches
-        expect(
-          PermissionNext.evaluateWithSession("edit", "*/plan/session_abc.md", sessionID, ruleset).action,
-        ).toBe("allow")
+        expect(PermissionNext.evaluateWithSession("edit", "*/plan/session_abc.md", sessionID, ruleset).action).toBe(
+          "allow",
+        )
         // Regular evaluate does NOT expand placeholder, so it won't match the literal path
         // (the pattern "*/plan/{sessionID}.md" won't match "*/plan/session_abc.md")
         expect(PermissionNext.evaluate("edit", "*/plan/session_abc.md", ruleset).action).toBe("ask")
