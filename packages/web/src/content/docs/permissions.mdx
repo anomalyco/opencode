@@ -57,7 +57,8 @@ For most permissions, you can use an object to apply different actions based on 
       "*": "ask",
       "git *": "allow",
       "npm *": "allow",
-      "rm *": "deny"
+      "rm *": "deny",
+      "grep *": "allow"
     },
     "edit": {
       "*": "deny",
@@ -139,13 +140,20 @@ The set of patterns that `always` would approve is provided by the tool (for exa
 
 You can override permissions per agent. Agent permissions are merged with the global config, and agent rules take precedence. [Learn more](/docs/agents#permissions) about agent permissions.
 
+:::note
+Refer to the [Granular Rules (Object Syntax)](#granular-rules-object-syntax) section above for more detailed pattern matching examples.
+:::
+
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "bash": {
       "*": "ask",
-      "git status": "allow"
+      "git *": "allow",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "grep *": "allow"
     }
   },
   "agent": {
@@ -153,8 +161,10 @@ You can override permissions per agent. Agent permissions are merged with the gl
       "permission": {
         "bash": {
           "*": "ask",
-          "git status": "allow",
-          "git push": "allow"
+          "git *": "allow",
+          "git commit *": "ask",
+          "git push *": "deny",
+          "grep *": "allow"
         }
       }
     }
@@ -176,3 +186,7 @@ permission:
 
 Only analyze code and suggest changes.
 ```
+
+:::tip
+Use pattern matching for commands with arguments. `"grep *"` allows `grep pattern file.txt`, while `"grep"` alone would block it. Commands like `git status` work for default behavior but require explicit permission (like `"git status *"`) when arguments are passed.
+:::

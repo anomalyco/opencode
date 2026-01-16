@@ -443,6 +443,10 @@ export type Part =
       prompt: string
       description: string
       agent: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
       command?: string
     }
   | ReasoningPart
@@ -702,6 +706,14 @@ export type EventMcpToolsChanged = {
   }
 }
 
+export type EventMcpBrowserOpenFailed = {
+  type: "mcp.browser.open.failed"
+  properties: {
+    mcpName: string
+    url: string
+  }
+}
+
 export type EventCommandExecuted = {
   type: "command.executed"
   properties: {
@@ -886,6 +898,7 @@ export type Event =
   | EventTuiToastShow
   | EventTuiSessionSelect
   | EventMcpToolsChanged
+  | EventMcpBrowserOpenFailed
   | EventCommandExecuted
   | EventSessionCreated
   | EventSessionUpdated
@@ -981,6 +994,22 @@ export type KeybindsConfig = {
    * Rename session
    */
   session_rename?: string
+  /**
+   * Delete session
+   */
+  session_delete?: string
+  /**
+   * Delete stash entry
+   */
+  stash_delete?: string
+  /**
+   * Open provider list from model dialog
+   */
+  model_provider_list?: string
+  /**
+   * Toggle model favorite status
+   */
+  model_favorite_toggle?: string
   /**
    * Share current session
    */
@@ -1425,6 +1454,7 @@ export type ProviderConfig = {
       }
       limit?: {
         context: number
+        input?: number
         output: number
       }
       modalities?: {
@@ -1497,7 +1527,7 @@ export type McpLocalConfig = {
    */
   enabled?: boolean
   /**
-   * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
+   * Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.
    */
   timeout?: number
 }
@@ -1515,6 +1545,10 @@ export type McpOAuthConfig = {
    * OAuth scopes to request during authorization
    */
   scope?: string
+  /**
+   * OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).
+   */
+  redirectUri?: string
 }
 
 export type McpRemoteConfig = {
@@ -1541,7 +1575,7 @@ export type McpRemoteConfig = {
    */
   oauth?: McpOAuthConfig | false
   /**
-   * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
+   * Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.
    */
   timeout?: number
 }
@@ -1647,7 +1681,7 @@ export type Config = {
     [key: string]: AgentConfig | undefined
   }
   /**
-   * Agent configuration, see https://opencode.ai/docs/agent
+   * Agent configuration, see https://opencode.ai/docs/agents
    */
   agent?: {
     plan?: AgentConfig
@@ -1851,6 +1885,10 @@ export type SubtaskPartInput = {
   prompt: string
   description: string
   agent: string
+  model?: {
+    providerID: string
+    modelID: string
+  }
   command?: string
 }
 
@@ -1918,6 +1956,7 @@ export type Model = {
   }
   limit: {
     context: number
+    input?: number
     output: number
   }
   status: "alpha" | "beta" | "deprecated" | "active"
@@ -3823,6 +3862,7 @@ export type ProviderListResponses = {
           }
           limit: {
             context: number
+            input?: number
             output: number
           }
           modalities?: {
