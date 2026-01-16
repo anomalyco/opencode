@@ -643,12 +643,6 @@ export type EventReproductionStepsRejected = {
   }
 }
 
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
 export type Todo = {
   /**
    * Brief description of the task
@@ -1842,9 +1836,6 @@ export type Config = {
   }
 }
 
-export type ReproductionStepsReply = {
-  action: ReproductionStepsAction
-}
 export type Model = {
   id: string
   providerID: string
@@ -2005,6 +1996,10 @@ export type SubtaskPartInput = {
     modelID: string
   }
   command?: string
+}
+
+export type ReproductionStepsReply = {
+  action: ReproductionStepsAction
 }
 
 export type ProviderAuthMethod = {
@@ -3127,6 +3122,9 @@ export type SessionShareResponse = SessionShareResponses[keyof SessionShareRespo
 export type SessionDiffData = {
   body?: never
   path: {
+    /**
+     * Session ID
+     */
     sessionID: string
   }
   query?: {
@@ -3136,9 +3134,22 @@ export type SessionDiffData = {
   url: "/session/{sessionID}/diff"
 }
 
+export type SessionDiffErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionDiffError = SessionDiffErrors[keyof SessionDiffErrors]
+
 export type SessionDiffResponses = {
   /**
-   * Successfully retrieved diff
+   * List of diffs
    */
   200: Array<FileDiff>
 }
@@ -3893,6 +3904,7 @@ export type ReproductionStepsRejectResponses = {
 }
 
 export type ReproductionStepsRejectResponse = ReproductionStepsRejectResponses[keyof ReproductionStepsRejectResponses]
+
 export type ProviderListData = {
   body?: never
   path?: never
