@@ -5,6 +5,7 @@ import { Config } from "../../config/config"
 import { Provider } from "../../provider/provider"
 import { ModelsDev } from "../../provider/models"
 import { ProviderAuth } from "../../provider/auth"
+import { Auth } from "../../auth"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -160,6 +161,113 @@ export const ProviderRoutes = lazy(() =>
           code,
         })
         return c.json(true)
+      },
+    )
+    .get(
+      "/auth/usage",
+      describeRoute({
+        summary: "Get auth usage",
+        description: "Get rate limit and usage information for authenticated providers.",
+        operationId: "auth.usage",
+        responses: {
+          200: {
+            description: "Usage information per provider and account",
+            content: {
+              "application/json": {
+                schema: resolver(z.any().meta({ ref: "AuthUsage" })),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      async (c) => {
+        const all = await Auth.all()
+        const result: Record<
+          string,
+          {
+            accounts: Awaited<ReturnType<typeof Auth.OAuthPool.getUsage>>
+            anthropicUsage?: Awaited<ReturnType<typeof Auth.OAuthPool.fetchAnthropicUsage>>
+          }
+        > = {}
+
+        for (const [providerID, info] of Object.entries(all)) {
+          if (info.type === "oauth") {
+            const accounts = await Auth.OAuthPool.getUsage(providerID)
+            const anthropicUsage = await Auth.OAuthPool.fetchAnthropicUsage(providerID)
+            result[providerID] = { accounts, anthropicUsage: anthropicUsage ?? undefined }
+          }
+        }
+
+        return c.json(result)
+      },
+    )
+    .post(
+      "/auth/active",
+      describeRoute({
+        summary: "Set active OAuth account",
+        description: "Switch the active OAuth account for a provider.",
+        operationId: "auth.setActive",
+        responses: {
+          200: {
+            description: "Active account switched",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          providerID: z.string(),
+          recordID: z.string(),
+          namespace: z.string().optional(),
+        }),
+      ),
+      async (c) => {
+        const { providerID, recordID, namespace } = c.req.valid("json")
+        await Auth.OAuthPool.setActive(providerID, recordID, namespace ?? "default")
+        return c.json(true)
+      },
+    )
+    .delete(
+      "/auth/account",
+      describeRoute({
+        summary: "Delete OAuth account",
+        description: "Remove an OAuth account from a provider.",
+        operationId: "auth.deleteAccount",
+        responses: {
+          200: {
+            description: "Account deleted",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    success: z.boolean(),
+                    remaining: z.number(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          providerID: z.string(),
+          recordID: z.string(),
+        }),
+      ),
+      async (c) => {
+        const { providerID, recordID } = c.req.valid("json")
+        const remaining = await Auth.OAuthPool.deleteRecord(providerID, recordID)
+        return c.json({ success: true, remaining })
       },
     ),
 )

@@ -543,7 +543,7 @@ export namespace Auth {
         const now = Date.now()
         const prevCooldown =
           record.health.cooldownUntil && record.health.cooldownUntil > now ? record.health.cooldownUntil : undefined
-        const cooldownUntil = input.ok ? undefined : input.cooldownUntil ?? prevCooldown
+        const cooldownUntil = input.ok ? undefined : (input.cooldownUntil ?? prevCooldown)
 
         record.health = {
           ...record.health,
@@ -569,6 +569,116 @@ export namespace Auth {
         record.updatedAt = Date.now()
         return { value: undefined, changed: true }
       })
+    }
+
+    export async function getUsage(
+      providerID: string,
+      namespace = "default",
+    ): Promise<
+      Array<{
+        id: string
+        label?: string
+        isActive: boolean
+        health: {
+          successCount: number
+          failureCount: number
+          lastStatusCode?: number
+          cooldownUntil?: number
+        }
+      }>
+    > {
+      const store = await loadStoreFile()
+      const provider = store.providers[providerID]
+      if (!provider || provider.type !== "oauth") return []
+
+      const orderedIDs = recordIDsForNamespace(provider, namespace)
+      const now = Date.now()
+      const activeID =
+        orderedIDs.find((id) => {
+          const record = provider.records.find((r) => r.id === id)
+          const cooldownUntil = record?.health.cooldownUntil
+          return !cooldownUntil || cooldownUntil <= now
+        }) ?? orderedIDs[0]
+
+      return provider.records
+        .filter((record) => record.namespace === namespace)
+        .map((record) => ({
+          id: record.id,
+          label: record.label,
+          isActive: record.id === activeID,
+          health: {
+            successCount: record.health.successCount,
+            failureCount: record.health.failureCount,
+            lastStatusCode: record.health.lastStatusCode,
+            cooldownUntil: record.health.cooldownUntil,
+          },
+        }))
+    }
+
+    export async function fetchAnthropicUsage(
+      providerID: string,
+      namespace = "default",
+    ): Promise<{
+      fiveHour?: { utilization: number; resetsAt?: string }
+      sevenDay?: { utilization: number; resetsAt?: string }
+      sevenDaySonnet?: { utilization: number; resetsAt?: string }
+    } | null> {
+      if (providerID !== "anthropic") return null
+
+      const store = await loadStoreFile()
+      const provider = store.providers[providerID]
+      if (!provider || provider.type !== "oauth") return null
+
+      const orderedIDs = recordIDsForNamespace(provider, namespace)
+      const now = Date.now()
+      const activeID =
+        orderedIDs.find((id) => {
+          const rec = provider.records.find((r) => r.id === id)
+          const cooldownUntil = rec?.health.cooldownUntil
+          return !cooldownUntil || cooldownUntil <= now
+        }) ?? orderedIDs[0]
+      const record = provider.records.find((r) => r.id === activeID && r.namespace === namespace)
+      if (!record?.access) return null
+
+      try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 5000)
+
+        const response = await fetch("https://api.anthropic.com/api/oauth/usage", {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${record.access}`,
+            "anthropic-beta": "oauth-2025-04-20",
+          },
+          signal: controller.signal,
+        })
+
+        clearTimeout(timeout)
+
+        if (!response.ok) return null
+
+        const data = (await response.json()) as {
+          five_hour?: { utilization: number; resets_at?: string }
+          seven_day?: { utilization: number; resets_at?: string }
+          seven_day_sonnet?: { utilization: number; resets_at?: string }
+        }
+
+        return {
+          fiveHour: data.five_hour
+            ? { utilization: Math.round(data.five_hour.utilization), resetsAt: data.five_hour.resets_at }
+            : undefined,
+          sevenDay: data.seven_day
+            ? { utilization: Math.round(data.seven_day.utilization), resetsAt: data.seven_day.resets_at }
+            : undefined,
+          sevenDaySonnet: data.seven_day_sonnet
+            ? { utilization: Math.round(data.seven_day_sonnet.utilization), resetsAt: data.seven_day_sonnet.resets_at }
+            : undefined,
+        }
+      } catch {
+        return null
+      }
     }
   }
 }
