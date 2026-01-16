@@ -1152,6 +1152,33 @@ export namespace Config {
       return process.env[varName] || ""
     })
 
+    const cmdMatches = text.match(/\{cmd:[^}]+\}/g)
+    if (cmdMatches) {
+      const lines = text.split("\n")
+
+      for (const match of cmdMatches) {
+        const lineIndex = lines.findIndex((line) => line.includes(match))
+        if (lineIndex !== -1 && lines[lineIndex].trim().startsWith("//")) {
+          continue // Skip if line is commented
+        }
+        const command = match.replace(/^\{cmd:/, "").replace(/\}$/, "")
+        try {
+          const result = await Bun.$`sh -c ${command}`.text()
+          const trimmedResult = result.trim()
+          text = text.replace(match, JSON.stringify(trimmedResult).slice(1, -1))
+        } catch (error) {
+          const errMsg = `bad cmd reference: "${match}"`
+          throw new InvalidError(
+            {
+              path: configFilepath,
+              message: errMsg + ` command failed: ${error.message}`,
+            },
+            { cause: error },
+          )
+        }
+      }
+    }
+
     const fileMatches = text.match(/\{file:[^}]+\}/g)
     if (fileMatches) {
       const configDir = path.dirname(configFilepath)

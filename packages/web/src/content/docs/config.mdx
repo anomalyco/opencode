@@ -681,3 +681,31 @@ These are useful for:
 - Keeping sensitive data like API keys in separate files.
 - Including large instruction files without cluttering your config.
 - Sharing common configuration snippets across multiple config files.
+
+---
+
+### Commands
+
+Use `{cmd:command}` to substitute the output of a shell command:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "models": {},
+      "options": {
+        "apiKey": "{cmd:op read 'op://Vault/Provider/token'}"
+      }
+    }
+  }
+}
+```
+
+The command is executed using your system shell and the output is substituted after trimming whitespace. If the command fails or doesn't exist, OpenCode will throw an error with details about the failure.
+
+This is useful for:
+
+- Retrieving secrets from password managers like 1Password CLI (`op`), Bitwarden CLI (`bw`), etc.
+- Generating dynamic configuration values at runtime
+- Integrating with system tools and scripts
