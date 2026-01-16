@@ -2,8 +2,12 @@ Search and call MCP server tools.
 
 Operations:
 - "list": List all MCP servers and their tools
-- "search": Find tools by name or description
+- "search": Find tools by server name
 - "describe": Get tool's parameter schema
 - "call": Execute a tool
 
-You MUST call "describe" before "call". You SHOULD NOT call a tool without first checking its parameters.
+Usage notes:
+  - The "search" query MUST be a server name (e.g., "playwright", "context7"). It only matches against server names and returns all tools from matching servers.
+  - You MUST call "describe" before "call" to check the tool's parameters.
+  - You SHOULD NOT call a tool without first checking its parameters.
+  - Examples: search "playwright" to find all browser automation tools, search "context7" to find documentation lookup tools.
