@@ -88,6 +88,7 @@ export default function Layout(props: ParentProps) {
   onCleanup(() => xlQuery.removeEventListener("change", handleViewportChange))
 
   const params = useParams()
+  const [autoselect, setAutoselect] = createSignal(!params.dir)
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const layout = useLayout()
@@ -101,6 +102,7 @@ export default function Layout(props: ParentProps) {
   const dialog = useDialog()
   const command = useCommand()
   const theme = useTheme()
+  const initialDir = params.dir
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeLabel: Record<ColorScheme, string> = {
@@ -399,6 +401,43 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
     return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
   })
+
+  createEffect(
+    on(
+      () => ({ ready: pageReady(), project: currentProject() }),
+      (value) => {
+        if (!value.ready) return
+        const project = value.project
+        if (!project) return
+        const last = server.projects.last()
+        if (last === project.worktree) return
+        server.projects.touch(project.worktree)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => ({ ready: pageReady(), layoutReady: layoutReady(), dir: params.dir, list: layout.projects.list() }),
+      (value) => {
+        if (!value.ready) return
+        if (!value.layoutReady) return
+        if (!autoselect()) return
+        if (initialDir) return
+        if (value.dir) return
+        if (value.list.length === 0) return
+
+        const last = server.projects.last()
+        const next = value.list.find((project) => project.worktree === last) ?? value.list[0]
+        if (!next) return
+        setAutoselect(false)
+        openProject(next.worktree, false)
+        navigateToProject(next.worktree)
+      },
+      { defer: true },
+    ),
+  )
 
   const workspaceName = (directory: string) => store.workspaceName[directory]
   const workspaceLabel = (directory: string, branch?: string) =>
@@ -791,6 +830,7 @@ export default function Layout(props: ParentProps) {
 
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
+    server.projects.touch(directory)
     const lastSession = store.lastSession[directory]
     navigate(`/${base64Encode(directory)}${lastSession ? `/session/${lastSession}` : ""}`)
     layout.mobileSidebar.hide()
@@ -1195,7 +1235,7 @@ export default function Layout(props: ParentProps) {
           <div class="px-2 py-1">
             <div class="group/trigger relative">
               <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover">
-                <div class="flex items-center gap-1 min-w-0">
+                <div class="flex items-center gap-1 min-w-0 flex-1">
                   <div class="flex items-center justify-center shrink-0 size-6">
                     <Icon name="branch" size="small" />
                   </div>
@@ -1203,7 +1243,7 @@ export default function Layout(props: ParentProps) {
                   <Show
                     when={!local()}
                     fallback={
-                      <span class="text-14-medium text-text-base">
+                      <span class="text-14-medium text-text-base min-w-0 truncate">
                         {workspaceStore.vcs?.branch ?? getFilename(props.directory)}
                       </span>
                     }
@@ -1217,8 +1257,8 @@ export default function Layout(props: ParentProps) {
                         renameWorkspace(props.directory, trimmed)
                         setEditor("value", workspaceValue())
                       }}
-                      class="text-14-medium text-text-base"
-                      displayClass="text-14-medium text-text-base"
+                      class="text-14-medium text-text-base min-w-0 truncate"
+                      displayClass="text-14-medium text-text-base min-w-0 truncate"
                       editing={workspaceEditActive()}
                       stopPropagation={false}
                       openOnDblClick={false}

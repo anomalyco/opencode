@@ -597,7 +597,7 @@ export namespace SessionPrompt {
         sessionID,
         system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
         messages: [
-          ...MessageV2.toModelMessage(sessionMessages, { tools }),
+          ...MessageV2.toModelMessage(sessionMessages),
           ...(isLastStep
             ? [
                 {
@@ -718,22 +718,8 @@ export namespace SessionPrompt {
         },
         toModelOutput(result) {
           return {
-            type: "content",
-            value: [
-              {
-                type: "text",
-                text: result.output,
-              },
-              ...(result.attachments?.map((attachment: MessageV2.FilePart) => {
-                const base64 = attachment.url.startsWith("data:") ? attachment.url.split(",", 2)[1] : attachment.url
-
-                return {
-                  type: "media",
-                  data: base64,
-                  mediaType: attachment.mime,
-                }
-              }) ?? []),
-            ],
+            type: "text",
+            value: result.output,
           }
         },
       })
@@ -822,22 +808,8 @@ export namespace SessionPrompt {
       }
       item.toModelOutput = (result) => {
         return {
-          type: "content",
-          value: [
-            {
-              type: "text",
-              text: result.output,
-            },
-            ...(result.attachments?.map((attachment: MessageV2.FilePart) => {
-              const base64 = attachment.url.startsWith("data:") ? attachment.url.split(",", 2)[1] : attachment.url
-
-              return {
-                type: "media",
-                data: base64,
-                mediaType: attachment.mime,
-              }
-            }) ?? []),
-          ],
+          type: "text",
+          value: result.output,
         }
       }
       tools[key] = item
