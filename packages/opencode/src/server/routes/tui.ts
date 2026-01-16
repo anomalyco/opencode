@@ -119,7 +119,9 @@ export const TuiRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        // TODO: open dialog
+        await Bus.publish(TuiEvent.CommandExecute, {
+          command: "help.show",
+        })
         return c.json(true)
       },
     )
