@@ -957,6 +957,8 @@ export namespace Provider {
     return state().then((state) => state.providers)
   }
 
+  const dynamicKeys = new Map<string, { key: string; fetchedAt: number }>()
+  
   async function getSDK(model: Model) {
     try {
       using _ = log.time("getSDK", {
@@ -978,6 +980,44 @@ export namespace Provider {
           ...model.headers,
         }
 
+      if (options.apiKeyHelper) {
+        try {
+          const providerID = model.providerID
+          const interval = options.apiKeyRefreshInterval ?? 86400000
+          const cached = dynamicKeys.get(providerID)
+          const now = Date.now()
+
+          if (cached && now - cached.fetchedAt < interval) {
+            options.apiKey = cached.key
+            provider.options.apiKey = cached.key
+          } else {
+            const proc = Bun.spawn(["bash", "-c", options.apiKeyHelper], {
+              stdout: "pipe",
+              stderr: "inherit",
+            })
+            const output = await new Response(proc.stdout).text()
+            const key = output.trim()
+
+            if (key) {
+              dynamicKeys.set(providerID, { key, fetchedAt: now })
+              options.apiKey = key
+              if (options.headers) {
+                const dynamicKeyPlaceholder = `{dynamic:${providerID.toUpperCase().replace(/-/g, "_")}_API_KEY}`
+                for (const [headerKey, headerValue] of Object.entries(options.headers)) {
+                  if (typeof headerValue === "string" && headerValue.includes(dynamicKeyPlaceholder)) {
+                    options.headers[headerKey] = headerValue.replace(dynamicKeyPlaceholder, key)
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          log.error("failed to run apiKeyHelper", { providerID: model.providerID, error: e })
+        }
+      }
+      delete options.apiKeyHelper
+      delete options.apiKeyRefreshInterval
+      
       const key = Bun.hash.xxHash32(JSON.stringify({ npm: model.api.npm, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing

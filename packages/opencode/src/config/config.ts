@@ -835,6 +835,8 @@ export namespace Config {
         .optional(),
       options: z
         .object({
+          apiKeyHelper: z.string().optional().describe("Command to run to get the API key"),
+          apiKeyRefreshInterval: z.number().optional().describe("Interval in milliseconds to refresh the API key"),
           apiKey: z.string().optional(),
           baseURL: z.string().optional(),
           enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
