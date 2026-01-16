@@ -100,7 +100,31 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
   const migrate = (terminals: LocalPTY[]) =>
     terminals.map((p) => ((p as { tabId?: string }).tabId ? p : { ...p, tabId: p.id }))
 
-  const tabs = createMemo(() => migrate(store.all).filter((p) => p.tabId === p.id))
+  const tabCache = new Map<string, LocalPTY>()
+  const tabs = createMemo(() => {
+    const migrated = migrate(store.all)
+    const seen = new Set<string>()
+    const result: LocalPTY[] = []
+    for (const p of migrated) {
+      if (!seen.has(p.tabId)) {
+        seen.add(p.tabId)
+        const cached = tabCache.get(p.tabId)
+        if (cached) {
+          cached.title = p.title
+          cached.titleNumber = p.titleNumber
+          result.push(cached)
+        } else {
+          const tab = { ...p, id: p.tabId }
+          tabCache.set(p.tabId, tab)
+          result.push(tab)
+        }
+      }
+    }
+    for (const key of tabCache.keys()) {
+      if (!seen.has(key)) tabCache.delete(key)
+    }
+    return result
+  })
   const all = createMemo(() => migrate(store.all))
 
   return {
@@ -173,8 +197,8 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
 
     async closeTab(tabId: string) {
       const pane = store.panes[tabId]
-      const ptyIds = pane ? getAllPtyIds(pane, pane.root) : [tabId]
-      const remaining = store.all.filter((p) => p.tabId === p.id && !ptyIds.includes(p.id))
+      const terminalsInTab = store.all.filter((p) => p.tabId === tabId)
+      const ptyIds = pane ? getAllPtyIds(pane, pane.root) : terminalsInTab.map((p) => p.id)
 
       setStore(
         "all",
@@ -187,7 +211,9 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
         }),
       )
       if (store.active === tabId) {
-        setStore("active", remaining[0]?.tabId)
+        const remainingTabs = store.all.filter((p) => p.tabId !== tabId)
+        const uniqueTabIds = [...new Set(remainingTabs.map((p) => p.tabId))]
+        setStore("active", uniqueTabIds[0])
       }
       for (const ptyId of ptyIds) {
         await sdk.client.pty.remove({ ptyID: ptyId }).catch((e) => {
@@ -300,29 +326,28 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
       if (!sibling) return
 
       batch(() => {
-        if (sibling.ptyId) {
-          setStore("panes", tabId, "panels", panel.parentId!, {
-            id: panel.parentId!,
-            parentId: parentPanel.parentId,
-            ptyId: sibling.ptyId,
-          })
-        } else if (sibling.children && sibling.children.length === 2) {
-          setStore("panes", tabId, "panels", panel.parentId!, {
-            id: panel.parentId!,
-            parentId: parentPanel.parentId,
-            direction: sibling.direction,
-            children: sibling.children,
-            sizes: sibling.sizes,
-          })
-          setStore("panes", tabId, "panels", sibling.children[0], "parentId", panel.parentId!)
-          setStore("panes", tabId, "panels", sibling.children[1], "parentId", panel.parentId!)
-        }
-
         setStore(
           "panes",
           tabId,
           "panels",
           produce((panels) => {
+            const parent = panels[panel.parentId!]
+            if (!parent) return
+
+            if (sibling.ptyId) {
+              parent.ptyId = sibling.ptyId
+              parent.direction = undefined
+              parent.children = undefined
+              parent.sizes = undefined
+            } else if (sibling.children && sibling.children.length === 2) {
+              parent.ptyId = undefined
+              parent.direction = sibling.direction
+              parent.children = sibling.children
+              parent.sizes = sibling.sizes
+              panels[sibling.children[0]].parentId = panel.parentId!
+              panels[sibling.children[1]].parentId = panel.parentId!
+            }
+
             delete panels[panelId]
             delete panels[siblingId]
           }),
@@ -335,46 +360,19 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
           "all",
           store.all.filter((x) => x.id !== ptyId),
         )
-
-        const remainingPanels = Object.values(store.panes[tabId]?.panels ?? {})
-        const shouldCleanupPane = remainingPanels.length === 1 && remainingPanels[0]?.ptyId
-
-        if (ptyId === tabId) {
-          const remaining = store.all.filter((x) => x.tabId === tabId)
-          if (remaining.length > 0) {
-            const newRoot = remaining[0]
-            for (let i = 0; i < store.all.length; i++) {
-              if (store.all[i].tabId === tabId) {
-                setStore("all", i, "tabId", newRoot.id)
-              }
-            }
-            if (!shouldCleanupPane) {
-              const currentPane = store.panes[tabId]
-              if (currentPane) {
-                setStore("panes", newRoot.id, { ...currentPane, id: newRoot.id })
-                setStore(
-                  "panes",
-                  produce((panes) => {
-                    delete panes[tabId]
-                  }),
-                )
-              }
-            }
-            if (store.active === tabId) {
-              setStore("active", newRoot.id)
-            }
-          }
-        }
-
-        if (shouldCleanupPane) {
-          setStore(
-            "panes",
-            produce((panes) => {
-              delete panes[tabId]
-            }),
-          )
-        }
       })
+
+      const remainingPanels = Object.values(store.panes[tabId]?.panels ?? {})
+      const shouldCleanupPane = remainingPanels.length === 1 && remainingPanels[0]?.ptyId
+
+      if (shouldCleanupPane) {
+        setStore(
+          "panes",
+          produce((panes) => {
+            delete panes[tabId]
+          }),
+        )
+      }
 
       await sdk.client.pty.remove({ ptyID: ptyId }).catch((e) => {
         console.error("Failed to close terminal", e)

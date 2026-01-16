@@ -77,9 +77,14 @@ export function TerminalSplit(props: TerminalSplitProps) {
   }
 
   const handleClose = (ptyId: string) => {
+    const pty = terminal.all().find((t) => t.id === ptyId)
+    if (!pty) return
+
     const p = pane()
     if (!p) {
-      terminal.closeTab(props.tabId)
+      if (pty.tabId === props.tabId) {
+        terminal.closeTab(props.tabId)
+      }
       return
     }
     const panelId = findPanelForPty(p.panels, ptyId)
