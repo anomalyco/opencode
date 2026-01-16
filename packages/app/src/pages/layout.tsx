@@ -1532,9 +1532,7 @@ export default function Layout(props: ParentProps) {
         <div class="xl:hidden">
           <div
             classList={{
-              "fixed inset-x-0 bottom-0 z-40 transition-opacity duration-200": true,
-              "top-10": platform.platform === "desktop",
-              "top-0": platform.platform !== "desktop",
+              "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
               "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
               "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
             }}
@@ -1544,9 +1542,7 @@ export default function Layout(props: ParentProps) {
           />
           <div
             classList={{
-              "@container fixed bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
-              "top-10": platform.platform === "desktop",
-              "top-0": platform.platform !== "desktop",
+              "@container fixed top-10 bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
               "translate-x-0": layout.mobileSidebar.opened(),
               "-translate-x-full": !layout.mobileSidebar.opened(),
             }}
