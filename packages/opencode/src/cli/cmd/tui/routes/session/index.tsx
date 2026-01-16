@@ -1086,10 +1086,10 @@ export function Session() {
         </box>
         <Show when={sidebarVisible()}>
           <Switch>
-            <Match when={wide()}>
+            <Match when={!sidebarOverlay()}>
               <Sidebar sessionID={route.sessionID} />
             </Match>
-            <Match when={!wide()}>
+            <Match when={sidebarOverlay()}>
               <box
                 position="absolute"
                 top={0}

@@ -12,7 +12,7 @@ import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
 
-export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
@@ -77,7 +77,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={2}
-        position={props.overlay ? "absolute" : "relative"}
+        position="relative"
       >
         <scrollbox flexGrow={1}>
           <box flexShrink={0} gap={1} paddingRight={1}>
