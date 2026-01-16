@@ -915,7 +915,7 @@ export default function Layout(props: ParentProps) {
                 class="shrink-0 size-6 flex items-center justify-center"
                 style={{ color: tint() ?? "var(--icon-interactive-base)" }}
               >
-                <Switch>
+                <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
                   <Match when={isWorking()}>
                     <Spinner class="size-[15px]" />
                   </Match>
