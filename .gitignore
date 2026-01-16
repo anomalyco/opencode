@@ -27,3 +27,8 @@ logs/
 *.bun-build
 bun.lock
 bun.lock
+
+# Local development files
+.local-share-opencode/
+agent/
+packages/opencode/.profile/
