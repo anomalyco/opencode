@@ -30,6 +30,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
+import { Color } from "@/util/color"
 import type { Tool } from "@/tool/tool"
 import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
@@ -1298,9 +1299,84 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   )
 }
 
+function findColorCodePositions(text: string): Array<{ start: number; end: number; color: string }> {
+  const result: Array<{ start: number; end: number; color: string }> = []
+  const regex = /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g
+  let match
+
+  while ((match = regex.exec(text)) !== null) {
+    result.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      color: match[0],
+    })
+  }
+
+  return result
+}
+
+function colorCodePatcher(
+  syntaxStyle: () => ReturnType<ReturnType<typeof useTheme>["syntax"]>,
+  background: () => RGBA,
+) {
+  const patchClient = (client: any) => {
+    if (!client || client._colorPatched) return
+    client._colorPatched = true
+
+    const original = client.highlightOnce.bind(client)
+
+    client.highlightOnce = async (content: string, filetype: string) => {
+      const result = await original(content, filetype)
+      const colors = findColorCodePositions(content)
+
+      if (colors.length > 0 && result.highlights) {
+        result.highlights = result.highlights.filter((h: [number, number, string, any?]) => {
+          const [start, end] = h
+          return !colors.some((pos) => start < pos.end && end > pos.start)
+        })
+
+        const bg = background()
+        for (const pos of colors) {
+          const rgba = Color.hexToRgba(pos.color)
+          const themeBg = {
+            r: Math.round(bg.r * 255),
+            g: Math.round(bg.g * 255),
+            b: Math.round(bg.b * 255),
+          }
+          const blended = Color.blend(rgba, themeBg)
+          const fg = Color.getContrastColor(blended)
+          const name = `color.${pos.color.replace("#", "")}`
+
+          // Always re-register to handle theme changes
+          syntaxStyle().registerStyle(name, {
+            fg: RGBA.fromInts(fg.r, fg.g, fg.b),
+            bg: RGBA.fromInts(blended.r, blended.g, blended.b),
+          })
+
+          result.highlights.push([pos.start, pos.end, name, {}])
+        }
+      }
+
+      return result
+    }
+  }
+
+  const patchAll = (node: any) => {
+    if (!node) return
+    if (node._treeSitterClient) patchClient(node._treeSitterClient)
+    if (typeof node.getChildren === "function") {
+      for (const child of node.getChildren()) patchAll(child)
+    }
+  }
+
+  return patchAll
+}
+
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const patchedColorCodes = colorCodePatcher(syntax, () => theme.background)
+
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
@@ -1312,6 +1388,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           content={props.part.text.trim()}
           conceal={ctx.conceal()}
           fg={theme.text}
+          ref={patchedColorCodes}
         />
       </box>
     </Show>
