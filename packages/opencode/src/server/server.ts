@@ -2,6 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Log } from "../util/log"
+import { Filesystem } from "../util/filesystem"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
@@ -259,12 +260,16 @@ export namespace Server {
           },
         )
         .use(async (c, next) => {
-          let directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+          let directory: string = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
           try {
             directory = decodeURIComponent(directory)
           } catch {
             // fallback to original value
           }
+          // Sanitize directory path to prevent issues with trailing spaces, etc.
+          const { path: sanitized } = Filesystem.sanitizePath(directory)
+          directory = sanitized || directory
+
           return Instance.provide({
             directory,
             init: InstanceBootstrap,

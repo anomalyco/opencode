@@ -78,6 +78,10 @@ export namespace UI {
     println(Style.TEXT_DANGER_BOLD + "Error: " + Style.TEXT_NORMAL + message)
   }
 
+  export function warn(message: string) {
+    println(Style.TEXT_WARNING_BOLD + "Warning: " + Style.TEXT_NORMAL + message)
+  }
+
   export function markdown(text: string): string {
     return text
   }

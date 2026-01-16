@@ -7,6 +7,7 @@ import { UI } from "@/cli/ui"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
+import { Filesystem } from "@/util/filesystem"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 
@@ -74,8 +75,23 @@ export const TuiThreadCommand = cmd({
       }),
   handler: async (args) => {
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
-    const baseCwd = process.env.PWD ?? process.cwd()
-    const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
+    const baseCwd: string = process.env.PWD ?? process.cwd()
+    const rawCwd: string = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
+
+    // Sanitize path and warn about issues (e.g., trailing spaces)
+    const { path: sanitizedCwd, warnings } = Filesystem.sanitizePath(rawCwd)
+    for (const warning of warnings) {
+      UI.warn(`${warning}: ${JSON.stringify(rawCwd)}`)
+    }
+
+    if (!sanitizedCwd) {
+      UI.error("Working directory is invalid after sanitization")
+      return
+    }
+
+    const cwd: string = sanitizedCwd
+    const chdirPath: string = rawCwd
+
     const localWorker = new URL("./worker.ts", import.meta.url)
     const distWorker = new URL("./cli/cmd/tui/worker.js", import.meta.url)
     const workerPath = await iife(async () => {
@@ -84,9 +100,9 @@ export const TuiThreadCommand = cmd({
       return localWorker
     })
     try {
-      process.chdir(cwd)
+      process.chdir(chdirPath)
     } catch (e) {
-      UI.error("Failed to change directory to " + cwd)
+      UI.error("Failed to change directory to " + chdirPath)
       return
     }
 

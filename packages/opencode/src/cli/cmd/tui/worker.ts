@@ -7,6 +7,7 @@ import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
+import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import type { BunWebSocketData } from "hono/bun"
 import { Flag } from "@/flag/flag"
@@ -94,7 +95,8 @@ const startEventStream = (directory: string) => {
   })
 }
 
-startEventStream(process.cwd())
+const { path: sanitizedCwd } = Filesystem.sanitizePath(process.cwd())
+startEventStream(sanitizedCwd || process.cwd())
 
 export const rpc = {
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {

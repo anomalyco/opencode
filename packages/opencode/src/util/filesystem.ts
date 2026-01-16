@@ -2,7 +2,46 @@ import { realpathSync } from "fs"
 import { dirname, join, relative } from "path"
 
 export namespace Filesystem {
-  export const exists = (p: string) =>
+  export interface SanitizeResult {
+    path: string
+    warnings: string[]
+  }
+
+  /**
+   * Sanitize a path by removing problematic characters.
+   * Returns the sanitized path and any warnings about what was fixed.
+   */
+  export function sanitizePath(p: string): SanitizeResult {
+    const warnings: string[] = []
+    let result: string = p
+
+    // Check for null bytes
+    if (result.includes("\0")) {
+      warnings.push("Path contains null bytes")
+      result = result.replace(/\0/g, "")
+    }
+
+    // Check for leading whitespace
+    if (result !== result.trimStart()) {
+      warnings.push("Path has leading whitespace")
+      result = result.trimStart()
+    }
+
+    // Check for trailing whitespace
+    if (result !== result.trimEnd()) {
+      warnings.push("Path has trailing whitespace")
+      result = result.trimEnd()
+    }
+
+    // Check if empty after sanitization
+    if (!result) {
+      warnings.push("Path is empty after sanitization")
+    }
+
+    return { path: result, warnings }
+  }
+
+  export const exists = (p: string): Promise<boolean> =>
     Bun.file(p)
       .stat()
       .then(() => true)
