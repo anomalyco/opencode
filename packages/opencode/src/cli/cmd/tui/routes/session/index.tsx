@@ -1226,7 +1226,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.error}
         >
-          <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
+          <text fg={theme.textMuted}>{props.message.error?.data?.message ?? ""}</text>
         </box>
       </Show>
       <Switch>
@@ -1847,7 +1847,7 @@ function Patch(props: ToolProps<typeof PatchTool>) {
       <Match when={props.output !== undefined}>
         <BlockTool title="# Patch" part={props.part}>
           <box>
-            <text fg={theme.text}>{props.output?.trim()}</text>
+            <text fg={theme.text}>{props.output!.trim()}</text>
           </box>
         </BlockTool>
       </Match>
