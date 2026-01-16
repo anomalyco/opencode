@@ -84,6 +84,17 @@ This is used internally and can be invoked using `@general` in messages.
 
 Learn more about [agents](https://opencode.ai/docs/agents).
 
+### PS4 Controller Support (Experimental)
+
+OpenCode includes an experimental PS4 DualShock controller plugin for CLI interaction:
+
+- **Button Mappings**: Use L2/R2 for cancel/accept, D-Pad for navigation
+- **Vibration Feedback**: Controller vibrates when the agent needs attention or encounters errors
+- **Visual Button Hints**: See button assignments directly in prompts
+- **Auto-loaded**: Enabled automatically as an internal plugin
+
+See the [PS4 Controller Plugin documentation](./packages/opencode/docs/PS4_CONTROLLER_PLUGIN.md) for details.
+
 ### Documentation
 
 For more info on how to configure OpenCode [**head over to our docs**](https://opencode.ai/docs).
