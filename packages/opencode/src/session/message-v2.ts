@@ -504,10 +504,8 @@ export namespace MessageV2 {
               text: part.text,
               providerMetadata: part.metadata,
             })
-          if (part.type === "step-start")
-            assistantMessage.parts.push({
-              type: "step-start",
-            })
+          // step-start parts are not added to UIMessage since "step-start" is not a valid
+          // UIMessagePart type in the AI SDK - they are only used internally for tracking
           if (part.type === "tool") {
             if (part.state.status === "completed") {
               assistantMessage.parts.push({
@@ -556,12 +554,9 @@ export namespace MessageV2 {
       }
     }
 
-    return convertToModelMessages(
-      result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
-      {
-        tools: options?.tools,
-      },
-    )
+    return convertToModelMessages(result, {
+      tools: options?.tools,
+    })
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
