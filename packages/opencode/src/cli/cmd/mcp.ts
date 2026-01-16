@@ -6,6 +6,7 @@ import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { MCP } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
+import { McpOAuthCallback } from "../../mcp/oauth-callback"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "../../config/config"
 import { Instance } from "../../project/instance"
@@ -13,6 +14,7 @@ import { Installation } from "../../installation"
 import path from "path"
 import { Global } from "../../global"
 import { modify, applyEdits } from "jsonc-parser"
+import { Bus } from "../../bus"
 
 function getAuthStatusIcon(status: MCP.AuthStatus): string {
   switch (status) {
@@ -227,6 +229,16 @@ export const McpAuthCommand = cmd({
         const spinner = prompts.spinner()
         spinner.start("Starting OAuth flow...")
 
+        // Subscribe to browser open failure events to show URL for manual opening
+        const unsubscribe = Bus.subscribe(MCP.BrowserOpenFailed, (evt) => {
+          if (evt.properties.mcpName === serverName) {
+            spinner.stop("Could not open browser automatically")
+            prompts.log.warn("Please open this URL in your browser to authenticate:")
+            prompts.log.info(evt.properties.url)
+            spinner.start("Waiting for authorization...")
+          }
+        })
+
         try {
           const status = await MCP.authenticate(serverName)
 
@@ -256,6 +268,8 @@ export const McpAuthCommand = cmd({
         } catch (error) {
           spinner.stop("Authentication failed", 1)
           prompts.log.error(error instanceof Error ? error.message : String(error))
+        } finally {
+          unsubscribe()
         }
 
         prompts.outro("Done")
@@ -669,6 +683,10 @@ export const McpDebugCommand = cmd({
 
             // Try to discover OAuth metadata
             const oauthConfig = typeof serverConfig.oauth === "object" ? serverConfig.oauth : undefined
+
+            // Start callback server
+            await McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri)
+
             const authProvider = new McpOAuthProvider(
               serverName,
               serverConfig.url,
@@ -676,6 +694,7 @@ export const McpDebugCommand = cmd({
                 clientId: oauthConfig?.clientId,
                 clientSecret: oauthConfig?.clientSecret,
                 scope: oauthConfig?.scope,
+                redirectUri: oauthConfig?.redirectUri,
               },
               {
                 onRedirect: async () => {},
