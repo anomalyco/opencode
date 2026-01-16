@@ -497,6 +497,45 @@ export namespace Server {
           },
         )
         .get(
+          "/auth/usage",
+          describeRoute({
+            summary: "Get auth usage",
+            description: "Get rate limit and usage information for authenticated providers.",
+            operationId: "auth.usage",
+            responses: {
+              200: {
+                description: "Usage information per provider and account",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.any().meta({ ref: "AuthUsage" })),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          async (c) => {
+            const all = await Auth.all()
+            const result: Record<
+              string,
+              {
+                accounts: Awaited<ReturnType<typeof Auth.OAuthPool.getUsage>>
+                anthropicUsage?: Awaited<ReturnType<typeof Auth.OAuthPool.fetchAnthropicUsage>>
+              }
+            > = {}
+
+            for (const [providerID, info] of Object.entries(all)) {
+              if (info.type === "oauth") {
+                const accounts = await Auth.OAuthPool.getUsage(providerID)
+                const anthropicUsage = await Auth.OAuthPool.fetchAnthropicUsage(providerID)
+                result[providerID] = { accounts, anthropicUsage: anthropicUsage ?? undefined }
+              }
+            }
+
+            return c.json(result)
+          },
+        )
+        .get(
           "/experimental/tool/ids",
           describeRoute({
             summary: "List tool IDs",
