@@ -168,6 +168,12 @@ export namespace MessageV2 {
     prompt: z.string(),
     description: z.string(),
     agent: z.string(),
+    model: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+      })
+      .optional(),
     command: z.string().optional(),
   })
   export type SubtaskPart = z.infer<typeof SubtaskPart>
@@ -531,6 +537,17 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: part.state.error,
+                callProviderMetadata: part.metadata,
+              })
+            // Handle pending/running tool calls to prevent dangling tool_use blocks
+            // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
+            if (part.state.status === "pending" || part.state.status === "running")
+              assistantMessage.parts.push({
+                type: ("tool-" + part.tool) as `tool-${string}`,
+                state: "output-error",
+                toolCallId: part.callID,
+                input: part.state.input,
+                errorText: "[Tool execution was interrupted]",
                 callProviderMetadata: part.metadata,
               })
           }

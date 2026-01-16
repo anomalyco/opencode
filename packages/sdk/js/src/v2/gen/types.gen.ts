@@ -429,6 +429,10 @@ export type Part =
       prompt: string
       description: string
       agent: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
       command?: string
     }
   | ReasoningPart
@@ -688,6 +692,14 @@ export type EventMcpToolsChanged = {
   }
 }
 
+export type EventMcpBrowserOpenFailed = {
+  type: "mcp.browser.open.failed"
+  properties: {
+    mcpName: string
+    url: string
+  }
+}
+
 export type EventCommandExecuted = {
   type: "command.executed"
   properties: {
@@ -871,6 +883,7 @@ export type Event =
   | EventTuiToastShow
   | EventTuiSessionSelect
   | EventMcpToolsChanged
+  | EventMcpBrowserOpenFailed
   | EventCommandExecuted
   | EventSessionCreated
   | EventSessionUpdated
@@ -1853,6 +1866,10 @@ export type SubtaskPartInput = {
   prompt: string
   description: string
   agent: string
+  model?: {
+    providerID: string
+    modelID: string
+  }
   command?: string
 }
 
