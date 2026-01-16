@@ -15,9 +15,15 @@ type JsonRecord<T = never> = Record<
   JSONValue | JSONValue[] | T | T[] | undefined
 >;
 
-export interface OpenAICompatibleSystemMessage extends JsonRecord {
+export interface OpenAICompatibleSystemMessage
+  extends JsonRecord<OpenAICompatibleSystemContentPart> {
   role: 'system';
-  content: string;
+  content: string | Array<OpenAICompatibleSystemContentPart>;
+}
+
+export interface OpenAICompatibleSystemContentPart extends JsonRecord {
+  type: 'text';
+  text: string;
 }
 
 export interface OpenAICompatibleUserMessage

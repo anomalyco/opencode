@@ -6,6 +6,9 @@ import {
 import type { OpenAICompatibleChatPrompt } from './openai-compatible-api-types';
 import { convertToBase64 } from '@ai-sdk/provider-utils';
 
+// Copilot-specific cache control added to all messages for prompt caching
+const CACHE_CONTROL = { copilot_cache_control: { type: 'ephemeral' as const } };
+
 function getOpenAIMetadata(message: {
   providerOptions?: SharedV2ProviderMetadata;
 }) {
@@ -20,7 +23,18 @@ export function convertToOpenAICompatibleChatMessages(
     const metadata = getOpenAIMetadata({ ...message });
     switch (role) {
       case 'system': {
-        messages.push({ role: 'system', content, ...metadata });
+        // Copilot uses content array format with cache control on each part
+        messages.push({
+          role: 'system',
+          content: [
+            {
+              type: 'text',
+              text: content,
+              ...CACHE_CONTROL,
+            },
+          ],
+          ...metadata,
+        });
         break;
       }
 
@@ -29,6 +43,7 @@ export function convertToOpenAICompatibleChatMessages(
           messages.push({
             role: 'user',
             content: content[0].text,
+            ...CACHE_CONTROL,
             ...getOpenAIMetadata(content[0]),
           });
           break;
@@ -67,6 +82,7 @@ export function convertToOpenAICompatibleChatMessages(
               }
             }
           }),
+          ...CACHE_CONTROL,
           ...metadata,
         });
 
@@ -107,6 +123,7 @@ export function convertToOpenAICompatibleChatMessages(
           role: 'assistant',
           content: text,
           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+          ...CACHE_CONTROL,
           ...metadata,
         });
 
@@ -135,6 +152,7 @@ export function convertToOpenAICompatibleChatMessages(
             role: 'tool',
             tool_call_id: toolResponse.toolCallId,
             content: contentValue,
+            ...CACHE_CONTROL,
             ...toolResponseMetadata,
           });
         }
