@@ -3671,6 +3671,7 @@ export type PermissionListResponse = PermissionListResponses[keyof PermissionLis
 export type ContextDirectoryData = {
   body?: {
     path: string
+    sessionID: string
   }
   path?: never
   query?: {

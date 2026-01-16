@@ -34,6 +34,7 @@ import { ProjectRoute } from "./project"
 import { ToolRegistry } from "../tool/registry"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { SessionPrompt } from "../session/prompt"
+import { IGNORE_PATTERNS } from "../tool/ls"
 import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
 import { lazy } from "../util/lazy"
@@ -1738,6 +1739,7 @@ export namespace Server {
             "json",
             z.object({
               path: z.string(),
+              sessionID: z.string(),
             }),
           ),
           async (c) => {
@@ -1764,6 +1766,20 @@ export namespace Server {
                 patterns: [path.join(resolved, "*")],
               })
             }
+
+            const globs = IGNORE_PATTERNS.map((p) => `!${p}*`)
+            const files: string[] = []
+            for await (const file of Ripgrep.files({ cwd: resolved, glob: globs })) {
+              files.push(file)
+              if (files.length >= 100) break
+            }
+            const listing = files.sort().join("\n")
+
+            await SessionPrompt.prompt({
+              sessionID: body.sessionID,
+              noReply: true,
+              parts: [{ type: "text", text: `Added directory to context: ${resolved}\n\n${listing}` }],
+            })
 
             return c.json({ path: resolved, granted })
           },

@@ -1801,6 +1801,7 @@ export class Context extends HeyApiClient {
     parameters?: {
       directory?: string
       path?: string
+      sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1811,6 +1812,7 @@ export class Context extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "body", key: "path" },
+            { in: "body", key: "sessionID" },
           ],
         },
       ],
