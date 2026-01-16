@@ -14,6 +14,9 @@ import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
+import { LLM } from "./llm"
+import { SystemPrompt } from "./system"
+import type { ModelMessage } from "ai"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -30,12 +33,66 @@ export namespace SessionCompaction {
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
     if (config.compaction?.auto === false) return false
-    const context = input.model.limit.context
-    if (context === 0) return false
+    const modelContextLimit = input.model.limit.context
+    if (modelContextLimit === 0) return false
+
+    // Use configured maxContext if provided, otherwise use model's context limit
+    const maxContext = config.compaction?.maxContext
+    const context = maxContext ? Math.min(maxContext, modelContextLimit) : modelContextLimit
+
+    // Use configured threshold (default: 0.9 = 90%)
+    const threshold = config.compaction?.threshold ?? 0.9
+
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
     const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
-    const usable = input.model.limit.input || context - output
-    return count > usable
+
+    // When maxContext is set, use it to calculate usable; otherwise use input limit if available
+    const usable = maxContext
+      ? Math.min(input.model.limit.input || context, context) - output
+      : input.model.limit.input || context - output
+    return count > usable * threshold
+  }
+
+  /**
+   * Check if estimated tokens exceed threshold, used by pre-check and post-check.
+   *
+   * Context limit determination:
+   * 1. Get model's maximum context (from model.limit.input or model.limit.context)
+   * 2. If user set compaction.maxContext, use the smaller of the two
+   *
+   * Example:
+   *   - Model supports: 2M tokens
+   *   - User set maxContext: 100k tokens
+   *   - Actual limit used: 100k tokens (user override)
+   *
+   * @returns needed=true if estimatedTokens > contextLimit * threshold
+   */
+  export async function shouldCompact(input: {
+    model: Provider.Model
+    agent: Agent.Info
+    messages: ModelMessage[]
+  }): Promise<{ needed: boolean; estimatedTokens: number; contextLimit: number; threshold: number }> {
+    const config = await Config.get()
+    const compactionThreshold = config.compaction?.threshold ?? 0.9
+    const maxContext = config.compaction?.maxContext
+    const modelContextLimit = input.model.limit.input || input.model.limit.context
+
+    if (!modelContextLimit) {
+      return { needed: false, estimatedTokens: 0, contextLimit: 0, threshold: compactionThreshold }
+    }
+
+    // Use the smaller value: user's maxContext or model's limit
+    // This allows users to cap context usage on large models for cost control
+    const contextLimit = maxContext ? Math.min(maxContext, modelContextLimit) : modelContextLimit
+    const system = await SystemPrompt.build({ model: input.model, agent: input.agent })
+    const estimatedTokens = LLM.estimateInputTokens(input.messages, system)
+
+    return {
+      needed: estimatedTokens > contextLimit * compactionThreshold,
+      estimatedTokens,
+      contextLimit,
+      threshold: compactionThreshold,
+    }
   }
 
   export const PRUNE_MINIMUM = 20_000

@@ -17,7 +17,6 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
 
-const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
 export const log = Log.create({ service: "bash-tool" })
@@ -51,15 +50,13 @@ const parser = lazy(async () => {
 })
 
 // TODO: we may wanna rename this tool so it works better on other shells
-export const BashTool = Tool.define("bash", async () => {
+export const BashTool = Tool.define("bash", async (initCtx) => {
   const shell = Shell.acceptable()
   log.info("bash tool using shell", { shell })
+  const maxBytes = Truncate.getMaxBytes(initCtx?.model)
+  const maxMetadata = Truncate.getMaxMetadata(initCtx?.model)
 
-  return {
-    description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
-      .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
-      .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
-    parameters: z.object({
+  const parameters = z.object({
       command: z.string().describe("The command to execute"),
       timeout: z.number().describe("Optional timeout in milliseconds").optional(),
       workdir: z
@@ -73,8 +70,14 @@ export const BashTool = Tool.define("bash", async () => {
         .describe(
           "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
         ),
-    }),
-    async execute(params, ctx) {
+  })
+
+  return {
+    description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
+      .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
+      .replaceAll("${maxBytes}", String(maxBytes)),
+    parameters,
+    async execute(params: z.infer<typeof parameters>, ctx) {
       const cwd = params.workdir || Instance.directory
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
@@ -179,7 +182,7 @@ export const BashTool = Tool.define("bash", async () => {
         ctx.metadata({
           metadata: {
             // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
-            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+            output: output.length > maxMetadata ? output.slice(0, maxMetadata) + "\n\n..." : output,
             description: params.description,
           },
         })
@@ -247,7 +250,7 @@ export const BashTool = Tool.define("bash", async () => {
       return {
         title: params.description,
         metadata: {
-          output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+          output: output.length > maxMetadata ? output.slice(0, maxMetadata) + "\n\n..." : output,
           exit: proc.exitCode,
           description: params.description,
         },

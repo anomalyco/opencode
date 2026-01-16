@@ -3,6 +3,7 @@ import type { MessageV2 } from "../session/message-v2"
 import type { Agent } from "../agent/agent"
 import type { PermissionNext } from "../permission/next"
 import { Truncate } from "./truncation"
+import type { Provider } from "../provider/provider"
 
 export namespace Tool {
   interface Metadata {
@@ -11,6 +12,7 @@ export namespace Tool {
 
   export interface InitContext {
     agent?: Agent.Info
+    model?: Provider.Model
   }
 
   export type Context<M extends Metadata = Metadata> = {
@@ -70,7 +72,7 @@ export namespace Tool {
           if (result.metadata.truncated !== undefined) {
             return result
           }
-          const truncated = await Truncate.output(result.output, {}, initCtx?.agent)
+          const truncated = await Truncate.output(result.output, { model: initCtx?.model }, initCtx?.agent)
           return {
             ...result,
             output: truncated.content,

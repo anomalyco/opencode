@@ -26,6 +26,7 @@ import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
+import type { Provider } from "../provider/provider"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -67,7 +68,7 @@ export namespace ToolRegistry {
         description: def.description,
         execute: async (args, ctx) => {
           const result = await def.execute(args as any, ctx)
-          const out = await Truncate.output(result, {}, initCtx?.agent)
+          const out = await Truncate.output(result, { model: initCtx?.model }, initCtx?.agent)
           return {
             title: "",
             output: out.truncated ? out.content : result,
@@ -119,7 +120,7 @@ export namespace ToolRegistry {
     return all().then((x) => x.map((t) => t.id))
   }
 
-  export async function tools(providerID: string, agent?: Agent.Info) {
+  export async function tools(providerID: string, agent?: Agent.Info, model?: Provider.Model) {
     const tools = await all()
     const result = await Promise.all(
       tools
@@ -134,7 +135,7 @@ export namespace ToolRegistry {
           using _ = log.time(t.id)
           return {
             id: t.id,
-            ...(await t.init({ agent })),
+            ...(await t.init({ agent, model })),
           }
         }),
     )

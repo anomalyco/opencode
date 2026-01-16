@@ -122,6 +122,105 @@ describe("Truncate", () => {
     })
   })
 
+  describe("getMaxBytes", () => {
+    test("returns fallback when no model provided", () => {
+      const result = Truncate.getMaxBytes()
+      expect(result).toBe(Truncate.MAX_BYTES)
+    })
+
+    test("returns fallback when model has no context limit", () => {
+      const model = { limit: {} } as any
+      const result = Truncate.getMaxBytes(model)
+      expect(result).toBe(Truncate.MAX_BYTES)
+    })
+
+    test("returns fallback when context limit is 0", () => {
+      const model = { limit: { context: 0 } } as any
+      const result = Truncate.getMaxBytes(model)
+      expect(result).toBe(Truncate.MAX_BYTES)
+    })
+
+    test("returns minimum 10KB for very small models", () => {
+      const model = { limit: { context: 1000 } } as any
+      const result = Truncate.getMaxBytes(model)
+      expect(result).toBe(10 * 1024) // Should hit minimum
+    })
+
+    test("calculates correctly for GPT-4 (128k context)", () => {
+      const model = { limit: { context: 128_000 } } as any
+      const result = Truncate.getMaxBytes(model)
+      // 128000 * 0.05 * 4 = 25600
+      expect(result).toBe(25_600)
+    })
+
+    test("calculates correctly for Claude (200k context)", () => {
+      const model = { limit: { context: 200_000 } } as any
+      const result = Truncate.getMaxBytes(model)
+      // 200000 * 0.05 * 4 = 40000
+      expect(result).toBe(40_000)
+    })
+
+    test("calculates correctly for Gemini (2M context)", () => {
+      const model = { limit: { context: 2_000_000 } } as any
+      const result = Truncate.getMaxBytes(model)
+      // 2000000 * 0.05 * 4 = 400000 (400KB, well under 2MB cap)
+      expect(result).toBe(400_000)
+    })
+
+    test("caps at maximum 2MB for extremely large models", () => {
+      const model = { limit: { context: 20_000_000 } } as any
+      const result = Truncate.getMaxBytes(model)
+      // Would calculate to 4000000 (4MB), but should cap at 2MB
+      expect(result).toBe(2 * 1024 * 1024)
+    })
+
+    test("uses 5% of context converted to bytes (4 chars/token)", () => {
+      const model = { limit: { context: 100_000 } } as any
+      const result = Truncate.getMaxBytes(model)
+      // 100000 * 0.05 * 4 = 20000
+      expect(result).toBe(20_000)
+    })
+  })
+
+  describe("getMaxMetadata", () => {
+    test("returns 60% of max bytes when no model provided", () => {
+      const result = Truncate.getMaxMetadata()
+      expect(result).toBe(Math.floor(Truncate.MAX_BYTES * 0.6))
+    })
+
+    test("returns 60% of calculated max bytes for GPT-4", () => {
+      const model = { limit: { context: 128_000 } } as any
+      const result = Truncate.getMaxMetadata(model)
+      const maxBytes = Truncate.getMaxBytes(model)
+      expect(result).toBe(Math.floor(maxBytes * 0.6))
+      expect(result).toBe(15_360) // 25600 * 0.6
+    })
+
+    test("returns 60% of calculated max bytes for Claude", () => {
+      const model = { limit: { context: 200_000 } } as any
+      const result = Truncate.getMaxMetadata(model)
+      const maxBytes = Truncate.getMaxBytes(model)
+      expect(result).toBe(Math.floor(maxBytes * 0.6))
+      expect(result).toBe(24_000) // 40000 * 0.6
+    })
+
+    test("returns 60% of calculated max bytes for Gemini", () => {
+      const model = { limit: { context: 2_000_000 } } as any
+      const result = Truncate.getMaxMetadata(model)
+      const maxBytes = Truncate.getMaxBytes(model)
+      expect(result).toBe(Math.floor(maxBytes * 0.6))
+      expect(result).toBe(240_000) // 400000 * 0.6
+    })
+
+    test("returns 60% of capped max bytes for extremely large models", () => {
+      const model = { limit: { context: 20_000_000 } } as any
+      const result = Truncate.getMaxMetadata(model)
+      const maxBytes = Truncate.getMaxBytes(model)
+      expect(result).toBe(Math.floor(maxBytes * 0.6))
+      expect(result).toBe(Math.floor(2 * 1024 * 1024 * 0.6))
+    })
+  })
+
   describe("cleanup", () => {
     const DAY_MS = 24 * 60 * 60 * 1000
     let oldFile: string

@@ -610,9 +610,21 @@ export namespace ProviderTransform {
     options: Record<string, any>,
     modelLimit: number,
     globalLimit: number,
+    contextWindow?: number,
+    estimatedInputTokens?: number,
   ): number {
     const modelCap = modelLimit || globalLimit
-    const standardLimit = Math.min(modelCap, globalLimit)
+    let standardLimit = Math.min(modelCap, globalLimit)
+
+    // Dynamic max_tokens calculation based on input size and context window
+    if (contextWindow && estimatedInputTokens) {
+      const SAFETY_BUFFER = 4000 // Buffer to account for estimation errors
+      const availableTokens = contextWindow - estimatedInputTokens - SAFETY_BUFFER
+
+      if (availableTokens > 0) {
+        standardLimit = Math.min(standardLimit, availableTokens)
+      }
+    }
 
     if (npm === "@ai-sdk/anthropic") {
       const thinking = options?.["thinking"]
@@ -627,7 +639,8 @@ export namespace ProviderTransform {
       }
     }
 
-    return standardLimit
+    // Ensure minimum of 1000 tokens
+    return Math.max(1000, standardLimit)
   }
 
   export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema) {

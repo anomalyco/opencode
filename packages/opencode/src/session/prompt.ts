@@ -33,6 +33,7 @@ import { spawn } from "child_process"
 import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
+import { Config } from "../config/config"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
@@ -507,8 +508,27 @@ export namespace SessionPrompt {
         continue
       }
 
-      // normal processing
+      // Pre-check: estimate input tokens before API call to prevent overflow errors
       const agent = await Agent.get(lastUser.agent)
+      const modelMessages = MessageV2.toModelMessage(msgs)
+      const check = await SessionCompaction.shouldCompact({ model, agent, messages: modelMessages })
+
+      if (check.needed) {
+        log.info("pre-check overflow", {
+          estimatedTokens: check.estimatedTokens,
+          contextLimit: check.contextLimit,
+          threshold: check.threshold,
+        })
+        await SessionCompaction.create({
+          sessionID,
+          agent: lastUser.agent,
+          model: lastUser.model,
+          auto: true,
+        })
+        continue
+      }
+
+      // normal processing
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
       msgs = await insertReminders({
@@ -685,7 +705,7 @@ export namespace SessionPrompt {
       },
     })
 
-    for (const item of await ToolRegistry.tools(input.model.providerID, input.agent)) {
+    for (const item of await ToolRegistry.tools(input.model.providerID, input.agent, input.model)) {
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,

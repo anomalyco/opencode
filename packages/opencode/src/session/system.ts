@@ -17,6 +17,7 @@ import PROMPT_CODEX from "./prompt/codex.txt"
 import PROMPT_CODEX_INSTRUCTIONS from "./prompt/codex_header.txt"
 import type { Provider } from "@/provider/provider"
 import { Flag } from "@/flag/flag"
+import type { Agent } from "@/agent/agent"
 
 export namespace SystemPrompt {
   export function header(providerID: string) {
@@ -35,6 +36,20 @@ export namespace SystemPrompt {
     if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
     if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
     return [PROMPT_ANTHROPIC_WITHOUT_TODO]
+  }
+
+  export async function build(input: { model: Provider.Model; agent: Agent.Info }): Promise<string[]> {
+    const system = header(input.model.providerID)
+    system.push(
+      [
+        ...(input.agent.prompt ? [input.agent.prompt] : provider(input.model)),
+        ...(await environment()),
+        ...(await custom()),
+      ]
+        .filter((x) => x)
+        .join("\n"),
+    )
+    return system
   }
 
   export async function environment() {

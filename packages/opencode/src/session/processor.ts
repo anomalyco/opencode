@@ -20,6 +20,28 @@ export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
+  // Detect context window overflow errors from various providers
+  function isContextWindowError(error: any): boolean {
+    const message = error?.message?.toLowerCase() || ""
+    const errorCode = error?.code?.toLowerCase() || ""
+
+    // Check common context window error patterns
+    const patterns = [
+      "context_length_exceeded",
+      "context window",
+      "context limit",
+      "maximum context length",
+      "token limit",
+      "too many tokens",
+      "request too large",
+      "prompt is too long",
+      "input is too long",
+      "exceeds the model's maximum",
+    ]
+
+    return patterns.some((pattern) => message.includes(pattern) || errorCode.includes(pattern))
+  }
+
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
 
@@ -189,6 +211,26 @@ export namespace SessionProcessor {
                     })
 
                     delete toolcalls[value.toolCallId]
+
+                    // Check if tool result might cause context overflow
+                    const msgs = await Session.messages({ sessionID: input.sessionID })
+                    const modelMessages = MessageV2.toModelMessage(msgs.map((m) => ({ info: m.info, parts: m.parts })))
+                    const agent = await Agent.get(input.assistantMessage.agent)
+                    const check = await SessionCompaction.shouldCompact({
+                      model: input.model,
+                      agent,
+                      messages: modelMessages,
+                    })
+
+                    if (check.needed) {
+                      log.info("context overflow after tool execution", {
+                        tool: match.tool,
+                        estimatedTokens: check.estimatedTokens,
+                        contextLimit: check.contextLimit,
+                        threshold: check.threshold,
+                      })
+                      needsCompaction = true
+                    }
                   }
                   break
                 }
@@ -341,6 +383,14 @@ export namespace SessionProcessor {
               error: e,
               stack: JSON.stringify(e.stack),
             })
+
+            // Check for context window overflow errors and trigger compaction
+            if (isContextWindowError(e)) {
+              log.info("context window overflow detected, triggering compaction")
+              needsCompaction = true
+              break
+            }
+
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
             const retry = SessionRetry.retryable(error)
             if (retry !== undefined) {

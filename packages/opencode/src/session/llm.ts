@@ -30,6 +30,36 @@ export namespace LLM {
 
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
+  // Estimate input tokens from messages and system prompt
+  // Uses standard tokenization estimate: ~4 characters per token for English text
+  export function estimateInputTokens(messages: ModelMessage[], systemPrompt: string[]): number {
+    let totalChars = 0
+
+    // Count system prompt
+    for (const sys of systemPrompt) {
+      totalChars += sys.length
+    }
+
+    // Count all messages
+    for (const msg of messages) {
+      if (typeof msg.content === "string") {
+        totalChars += msg.content.length
+      } else if (Array.isArray(msg.content)) {
+        for (const part of msg.content) {
+          if ("text" in part && typeof part.text === "string") {
+            totalChars += part.text.length
+          } else if ("image" in part) {
+            // Approximate image tokens (roughly 2000 tokens per image)
+            totalChars += 2000 * 4 // Convert to chars for consistent calculation
+          }
+        }
+      }
+    }
+
+    // Standard estimate: ~4 chars per token
+    return Math.ceil(totalChars / 4)
+  }
+
   export type StreamInput = {
     user: MessageV2.User
     sessionID: string
@@ -131,6 +161,10 @@ export namespace LLM {
       },
     )
 
+    // Estimate input tokens for dynamic max_tokens calculation
+    const estimatedInput = estimateInputTokens(input.messages, system)
+    const contextWindow = input.model.limit.input || input.model.limit.context
+
     const maxOutputTokens = isCodex
       ? undefined
       : ProviderTransform.maxOutputTokens(
@@ -138,6 +172,8 @@ export namespace LLM {
           params.options,
           input.model.limit.output,
           OUTPUT_TOKEN_MAX,
+          contextWindow,
+          estimatedInput,
         )
 
     const tools = await resolveTools(input)
