@@ -586,13 +586,6 @@ export namespace Provider {
     })
   export type Info = z.infer<typeof Info>
 
-  export function isAzureAnthropic(model: Model): boolean {
-    return (
-      model.providerID === "azure-cognitive-services" &&
-      (model.api.id.includes("claude") || model.api.id.includes("anthropic"))
-    )
-  }
-
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
     const m: Model = {
       id: model.id,
@@ -1013,16 +1006,9 @@ export namespace Provider {
         })
       }
 
-      // Special cases for providers that use different npm packages
-      if (isAzureAnthropic(model)) {
-        const resourceName = Env.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
-        if (resourceName) options["baseURL"] = `https://${resourceName}.services.ai.azure.com/anthropic/v1/`
-      }
-      const bundledKey = iife(() => {
-        if (model.providerID === "google-vertex-anthropic") return "@ai-sdk/google-vertex/anthropic"
-        if (isAzureAnthropic(model)) return "@ai-sdk/anthropic"
-        return model.api.npm
-      })
+      // Special case: google-vertex-anthropic uses a subpath import
+      const bundledKey =
+        model.providerID === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : model.api.npm
       const bundledFn = BUNDLED_PROVIDERS[bundledKey]
       if (bundledFn) {
         log.info("using bundled provider", { providerID: model.providerID, pkg: bundledKey })
@@ -1088,11 +1074,8 @@ export namespace Provider {
     const provider = s.providers[model.providerID]
     const sdk = await getSDK(model)
 
-    // Skip custom model loader for Azure Anthropic models since they use @ai-sdk/anthropic
-    const useCustomLoader = s.modelLoaders[model.providerID] && !isAzureAnthropic(model)
-
     try {
-      const language = useCustomLoader
+      const language = s.modelLoaders[model.providerID]
         ? await s.modelLoaders[model.providerID](sdk, model.api.id, provider.options)
         : sdk.languageModel(model.api.id)
       s.models.set(key, language)

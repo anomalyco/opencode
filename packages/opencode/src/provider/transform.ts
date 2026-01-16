@@ -16,17 +16,6 @@ function mimeToModality(mime: string): Modality | undefined {
 }
 
 export namespace ProviderTransform {
-  function isAzureAnthropic(model: Provider.Model): boolean {
-    return (
-      model.providerID === "azure-cognitive-services" &&
-      (model.api.id.includes("claude") || model.api.id.includes("anthropic"))
-    )
-  }
-
-  function usesAnthropicSDK(model: Provider.Model): boolean {
-    return model.api.npm === "@ai-sdk/anthropic" || isAzureAnthropic(model)
-  }
-
   function normalizeMessages(
     msgs: ModelMessage[],
     model: Provider.Model,
@@ -61,7 +50,7 @@ export namespace ProviderTransform {
 
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
-    if (usesAnthropicSDK(model)) {
+    if (model.api.npm === "@ai-sdk/anthropic") {
       msgs = msgs
         .map((msg) => {
           if (typeof msg.content === "string") {
@@ -267,7 +256,7 @@ export namespace ProviderTransform {
       model.providerID === "anthropic" ||
       model.api.id.includes("anthropic") ||
       model.api.id.includes("claude") ||
-      usesAnthropicSDK(model)
+      model.api.npm === "@ai-sdk/anthropic"
     ) {
       msgs = applyCaching(msgs, model.providerID)
     }
@@ -318,23 +307,6 @@ export namespace ProviderTransform {
 
     const id = model.id.toLowerCase()
     if (id.includes("deepseek") || id.includes("minimax") || id.includes("glm") || id.includes("mistral")) return {}
-
-    if (isAzureAnthropic(model)) {
-      return {
-        high: {
-          thinking: {
-            type: "enabled",
-            budgetTokens: 16000,
-          },
-        },
-        max: {
-          thinking: {
-            type: "enabled",
-            budgetTokens: 31999,
-          },
-        },
-      }
-    }
 
     switch (model.api.npm) {
       case "@openrouter/ai-sdk-provider":
@@ -606,9 +578,6 @@ export namespace ProviderTransform {
   }
 
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
-    if (isAzureAnthropic(model)) {
-      return { ["anthropic" as string]: options }
-    }
     switch (model.api.npm) {
       case "@ai-sdk/github-copilot":
       case "@ai-sdk/openai":
@@ -644,27 +613,16 @@ export namespace ProviderTransform {
     }
   }
 
-  export function maxOutputTokens(model: Provider.Model, options: Record<string, any>, globalLimit: number): number
   export function maxOutputTokens(
     npm: string,
     options: Record<string, any>,
     modelLimit: number,
     globalLimit: number,
-  ): number
-  export function maxOutputTokens(
-    arg1: Provider.Model | string,
-    options: Record<string, any>,
-    arg3: number,
-    arg4?: number,
   ): number {
-    const model = typeof arg1 === "object" ? arg1 : null
-    const npm = model ? model.api.npm : (arg1 as string)
-    const modelLimit = model ? model.limit.output : arg3
-    const globalLimit = model ? arg3 : arg4!
     const modelCap = modelLimit || globalLimit
     const standardLimit = Math.min(modelCap, globalLimit)
 
-    if (model ? usesAnthropicSDK(model) : npm === "@ai-sdk/anthropic") {
+    if (npm === "@ai-sdk/anthropic") {
       const thinking = options?.["thinking"]
       const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
       const enabled = thinking?.["type"] === "enabled"
