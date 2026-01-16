@@ -745,7 +745,10 @@ export default function Layout(props: ParentProps) {
         const directory = base64Decode(dir)
         setStore("lastSession", directory, id)
         notification.session.markViewed(id)
-        untrack(() => setStore("workspaceExpanded", directory, (current) => current ?? true))
+        const expanded = untrack(() => store.workspaceExpanded[directory])
+        if (expanded === false) {
+          setStore("workspaceExpanded", directory, true)
+        }
         requestAnimationFrame(() => scrollToSession(id, `${directory}:${id}`))
       },
       { defer: true },
