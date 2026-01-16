@@ -1,4 +1,6 @@
+import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { ProviderHelper, CommonRequest, CommonResponse, CommonChunk } from "./provider"
+import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 
 type Usage = {
   cache_creation?: {
@@ -14,65 +16,164 @@ type Usage = {
   }
 }
 
-export const anthropicHelper = {
-  format: "anthropic",
-  modifyUrl: (providerApi: string) => providerApi + "/messages",
-  modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
-    headers.set("x-api-key", apiKey)
-    headers.set("anthropic-version", headers.get("anthropic-version") ?? "2023-06-01")
-    if (body.model.startsWith("claude-sonnet-")) {
-      headers.set("anthropic-beta", "context-1m-2025-08-07")
-    }
-  },
-  modifyBody: (body: Record<string, any>) => {
-    return {
+export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => {
+  const isBedrockModelArn = providerModel.startsWith("arn:aws:bedrock:")
+  const isBedrockModelID = providerModel.startsWith("global.anthropic.")
+  const isBedrock = isBedrockModelArn || isBedrockModelID
+  const isSonnet = reqModel.includes("sonnet")
+  return {
+    format: "anthropic",
+    modifyUrl: (providerApi: string, isStream?: boolean) =>
+      isBedrock
+        ? `${providerApi}/model/${isBedrockModelArn ? encodeURIComponent(providerModel) : providerModel}/${isStream ? "invoke-with-response-stream" : "invoke"}`
+        : providerApi + "/messages",
+    modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
+      if (isBedrock) {
+        headers.set("Authorization", `Bearer ${apiKey}`)
+      } else {
+        headers.set("x-api-key", apiKey)
+        headers.set("anthropic-version", headers.get("anthropic-version") ?? "2023-06-01")
+        if (body.model.startsWith("claude-sonnet-")) {
+          headers.set("anthropic-beta", "context-1m-2025-08-07")
+        }
+      }
+    },
+    modifyBody: (body: Record<string, any>) => ({
       ...body,
-      service_tier: "standard_only",
-    }
-  },
-  streamSeparator: "\n\n",
-  createUsageParser: () => {
-    let usage: Usage
+      ...(isBedrock
+        ? {
+            anthropic_version: "bedrock-2023-05-31",
+            anthropic_beta: isSonnet ? "context-1m-2025-08-07" : undefined,
+            model: undefined,
+            stream: undefined,
+          }
+        : {
+            service_tier: "standard_only",
+          }),
+    }),
+    createBinaryStreamDecoder: () => {
+      if (!isBedrock) return undefined
 
-    return {
-      parse: (chunk: string) => {
-        const data = chunk.split("\n")[1]
-        if (!data.startsWith("data: ")) return
+      const decoder = new TextDecoder()
+      const encoder = new TextEncoder()
+      const codec = new EventStreamCodec(toUtf8, fromUtf8)
+      let buffer = new Uint8Array(0)
+      return (value: Uint8Array) => {
+        const newBuffer = new Uint8Array(buffer.length + value.length)
+        newBuffer.set(buffer)
+        newBuffer.set(value, buffer.length)
+        buffer = newBuffer
 
-        let json
+        if (buffer.length < 4) return
+        // The first 4 bytes are the total length (big-endian).
+        const totalLength = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength).getUint32(0, false)
+
+        // If we don't have the full message yet, wait for more chunks.
+        if (buffer.length < totalLength) return
+
         try {
-          json = JSON.parse(data.slice(6))
-        } catch (e) {
-          return
-        }
+          // Decode exactly the sub-slice for this event.
+          const subView = buffer.subarray(0, totalLength)
+          const decoded = codec.decode(subView)
 
-        const usageUpdate = json.usage ?? json.message?.usage
-        if (!usageUpdate) return
-        usage = {
-          ...usage,
-          ...usageUpdate,
-          cache_creation: {
-            ...usage?.cache_creation,
-            ...usageUpdate.cache_creation,
-          },
-          server_tool_use: {
-            ...usage?.server_tool_use,
-            ...usageUpdate.server_tool_use,
-          },
+          // Slice the used bytes out of the buffer, removing this message.
+          buffer = buffer.slice(totalLength)
+
+          // Process message
+          /* Example of Bedrock data
+      ```
+        {
+          bytes: 'eyJ0eXBlIjoibWVzc2FnZV9zdGFydCIsIm1lc3NhZ2UiOnsibW9kZWwiOiJjbGF1ZGUtb3B1cy00LTUtMjAyNTExMDEiLCJpZCI6Im1zZ19iZHJrXzAxMjVGdHRGb2lkNGlwWmZ4SzZMbktxeCIsInR5cGUiOiJtZXNzYWdlIiwicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOltdLCJzdG9wX3JlYXNvbiI6bnVsbCwic3RvcF9zZXF1ZW5jZSI6bnVsbCwidXNhZ2UiOnsiaW5wdXRfdG9rZW5zIjo0LCJjYWNoZV9jcmVhdGlvbl9pbnB1dF90b2tlbnMiOjEsImNhY2hlX3JlYWRfaW5wdXRfdG9rZW5zIjoxMTk2MywiY2FjaGVfY3JlYXRpb24iOnsiZXBoZW1lcmFsXzVtX2lucHV0X3Rva2VucyI6MSwiZXBoZW1lcmFsXzFoX2lucHV0X3Rva2VucyI6MH0sIm91dHB1dF90b2tlbnMiOjF9fX0=',
+          p: '...'
         }
-      },
-      retrieve: () => usage,
-    }
-  },
-  normalizeUsage: (usage: Usage) => ({
-    inputTokens: usage.input_tokens ?? 0,
-    outputTokens: usage.output_tokens ?? 0,
-    reasoningTokens: undefined,
-    cacheReadTokens: usage.cache_read_input_tokens ?? undefined,
-    cacheWrite5mTokens: usage.cache_creation?.ephemeral_5m_input_tokens ?? undefined,
-    cacheWrite1hTokens: usage.cache_creation?.ephemeral_1h_input_tokens ?? undefined,
-  }),
-} satisfies ProviderHelper
+      ```
+
+      Decoded bytes
+      ```
+        {
+          type: 'message_start',
+          message: {
+            model: 'claude-opus-4-5-20251101',
+            id: 'msg_bdrk_0125FttFoid4ipZfxK6LnKqx',
+            type: 'message',
+            role: 'assistant',
+            content: [],
+            stop_reason: null,
+            stop_sequence: null,
+            usage: {
+              input_tokens: 4,
+              cache_creation_input_tokens: 1,
+              cache_read_input_tokens: 11963,
+              cache_creation: [Object],
+              output_tokens: 1
+            }
+          }
+        }
+      ```
+      */
+
+          /* Example of Anthropic data
+      ```
+        event: message_delta
+        data: {"type":"message_start","message":{"model":"claude-opus-4-5-20251101","id":"msg_01ETvwVWSKULxzPdkQ1xAnk2","type":"message","role":"assistant","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":3,"cache_creation_input_tokens":11543,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":11543,"ephemeral_1h_input_tokens":0},"output_tokens":1,"service_tier":"standard"}}}
+      ```
+      */
+          if (decoded.headers[":message-type"]?.value !== "event") return
+          const data = decoder.decode(decoded.body, { stream: true })
+
+          const parsedDataResult = JSON.parse(data)
+          delete parsedDataResult.p
+          const utf8 = atob(parsedDataResult.bytes)
+          return encoder.encode(["event: message_start", "\n", "data: " + utf8, "\n\n"].join(""))
+        } catch (e) {
+          console.log(e)
+        }
+      }
+    },
+    streamSeparator: "\n\n",
+    createUsageParser: () => {
+      let usage: Usage
+
+      return {
+        parse: (chunk: string) => {
+          const data = chunk.split("\n")[1]
+          if (!data.startsWith("data: ")) return
+
+          let json
+          try {
+            json = JSON.parse(data.slice(6))
+          } catch (e) {
+            return
+          }
+
+          const usageUpdate = json.usage ?? json.message?.usage
+          if (!usageUpdate) return
+          usage = {
+            ...usage,
+            ...usageUpdate,
+            cache_creation: {
+              ...usage?.cache_creation,
+              ...usageUpdate.cache_creation,
+            },
+            server_tool_use: {
+              ...usage?.server_tool_use,
+              ...usageUpdate.server_tool_use,
+            },
+          }
+        },
+        retrieve: () => usage,
+      }
+    },
+    normalizeUsage: (usage: Usage) => ({
+      inputTokens: usage.input_tokens ?? 0,
+      outputTokens: usage.output_tokens ?? 0,
+      reasoningTokens: undefined,
+      cacheReadTokens: usage.cache_read_input_tokens ?? undefined,
+      cacheWrite5mTokens: usage.cache_creation?.ephemeral_5m_input_tokens ?? undefined,
+      cacheWrite1hTokens: usage.cache_creation?.ephemeral_1h_input_tokens ?? undefined,
+    }),
+  }
+}
 
 export function fromAnthropicRequest(body: any): CommonRequest {
   if (!body || typeof body !== "object") return body
