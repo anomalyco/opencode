@@ -1530,6 +1530,10 @@ export type McpOAuthConfig = {
    * OAuth scopes to request during authorization
    */
   scope?: string
+  /**
+   * OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).
+   */
+  redirectUri?: string
 }
 
 export type McpRemoteConfig = {
@@ -1662,7 +1666,7 @@ export type Config = {
     [key: string]: AgentConfig | undefined
   }
   /**
-   * Agent configuration, see https://opencode.ai/docs/agent
+   * Agent configuration, see https://opencode.ai/docs/agents
    */
   agent?: {
     plan?: AgentConfig

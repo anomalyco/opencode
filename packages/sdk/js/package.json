@@ -20,7 +20,7 @@
     "dist"
   ],
   "devDependencies": {
-    "@hey-api/openapi-ts": "0.88.1",
+    "@hey-api/openapi-ts": "0.90.4",
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",

@@ -9093,6 +9093,10 @@
           "scope": {
             "description": "OAuth scopes to request during authorization",
             "type": "string"
+          },
+          "redirectUri": {
+            "description": "OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).",
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -9312,7 +9316,7 @@
             }
           },
           "agent": {
-            "description": "Agent configuration, see https://opencode.ai/docs/agent",
+            "description": "Agent configuration, see https://opencode.ai/docs/agents",
             "type": "object",
             "properties": {
               "plan": {
