@@ -46,6 +46,14 @@ export namespace MCP {
     }),
   )
 
+  export const BrowserOpenFailed = BusEvent.define(
+    "mcp.browser.open.failed",
+    z.object({
+      mcpName: z.string(),
+      url: z.string(),
+    }),
+  )
+
   export const Failed = NamedError.create(
     "MCPFailed",
     z.object({
@@ -787,7 +795,32 @@ export namespace MCP {
     // The SDK has already added the state parameter to the authorization URL
     // We just need to open the browser
     log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
-    await open(authorizationUrl)
+    try {
+      const subprocess = await open(authorizationUrl)
+      // The open package spawns a detached process and returns immediately.
+      // We need to listen for errors which fire asynchronously:
+      // - "error" event: command not found (ENOENT)
+      // - "exit" with non-zero code: command exists but failed (e.g., no display)
+      await new Promise<void>((resolve, reject) => {
+        // Give the process a moment to fail if it's going to
+        const timeout = setTimeout(() => resolve(), 500)
+        subprocess.on("error", (error) => {
+          clearTimeout(timeout)
+          reject(error)
+        })
+        subprocess.on("exit", (code) => {
+          if (code !== null && code !== 0) {
+            clearTimeout(timeout)
+            reject(new Error(`Browser open failed with exit code ${code}`))
+          }
+        })
+      })
+    } catch (error) {
+      // Browser opening failed (e.g., in remote/headless sessions like SSH, devcontainers)
+      // Emit event so CLI can display the URL for manual opening
+      log.warn("failed to open browser, user must open URL manually", { mcpName, error })
+      Bus.publish(BrowserOpenFailed, { mcpName, url: authorizationUrl })
+    }
 
     // Wait for callback using the OAuth state parameter
     const code = await McpOAuthCallback.waitForCallback(oauthState)

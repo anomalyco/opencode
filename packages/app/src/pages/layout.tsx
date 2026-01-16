@@ -16,6 +16,7 @@ import {
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
+import { Persist, persisted } from "@/utils/persist"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
@@ -62,13 +63,16 @@ import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 
 export default function Layout(props: ParentProps) {
-  const [store, setStore] = createStore({
-    lastSession: {} as { [directory: string]: string },
-    activeProject: undefined as string | undefined,
-    activeWorkspace: undefined as string | undefined,
-    workspaceOrder: {} as Record<string, string[]>,
-    workspaceExpanded: {} as Record<string, boolean>,
-  })
+  const [store, setStore, , ready] = persisted(
+    Persist.global("layout", ["layout.v6"]),
+    createStore({
+      lastSession: {} as { [directory: string]: string },
+      activeProject: undefined as string | undefined,
+      activeWorkspace: undefined as string | undefined,
+      workspaceOrder: {} as Record<string, string[]>,
+      workspaceExpanded: {} as Record<string, boolean>,
+    }),
+  )
 
   let scrollContainerRef: HTMLDivElement | undefined
   const xlQuery = window.matchMedia("(min-width: 1280px)")
@@ -289,6 +293,7 @@ export default function Layout(props: ParentProps) {
   })
 
   createEffect(() => {
+    if (!ready()) return
     const project = currentProject()
     if (!project) return
 
@@ -708,7 +713,7 @@ export default function Layout(props: ParentProps) {
     const id = params.id
     setStore("lastSession", directory, id)
     notification.session.markViewed(id)
-    untrack(() => setStore("workspaceExpanded", directory, true))
+    untrack(() => setStore("workspaceExpanded", directory, (value) => value ?? true))
     requestAnimationFrame(() => scrollToSession(id))
   })
 
@@ -816,13 +821,13 @@ export default function Layout(props: ParentProps) {
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
-      <div class={`relative size-8 shrink-0 rounded-sm ${props.class ?? ""}`}>
-        <div class="size-full rounded-sm overflow-clip">
+      <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
+        <div class="size-full rounded overflow-clip">
           <Avatar
             fallback={name()}
             src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
             {...getAvatarColors(props.project.icon?.color)}
-            class="size-full rounded-sm"
+            class="size-full rounded"
             style={
               notifications().length > 0 && props.notify
                 ? { "-webkit-mask-image": mask, "mask-image": mask }
@@ -939,6 +944,17 @@ export default function Layout(props: ParentProps) {
     )
   }
 
+  const SessionSkeleton = (props: { count?: number }): JSX.Element => {
+    const items = Array.from({ length: props.count ?? 4 }, (_, index) => index)
+    return (
+      <div class="flex flex-col gap-1">
+        <For each={items}>
+          {() => <div class="h-8 w-full rounded-md bg-surface-raised-base opacity-60 animate-pulse" />}
+        </For>
+      </div>
+    )
+  }
+
   const SortableProject = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
     const sortable = createSortable(props.project.worktree)
     const selected = createMemo(() => {
@@ -977,7 +993,7 @@ export default function Layout(props: ParentProps) {
       <button
         type="button"
         classList={{
-          "flex items-center justify-center size-10 p-1 rounded-md border transition-colors cursor-default": true,
+          "flex items-center justify-center size-10 p-1 rounded-lg border transition-colors cursor-default": true,
           "bg-transparent border-icon-strong-base hover:bg-surface-base-hover": selected(),
           "bg-transparent border-transparent hover:bg-surface-base-hover hover:border-border-weak-base": !selected(),
         }}
@@ -1100,6 +1116,7 @@ export default function Layout(props: ParentProps) {
       return `${kind} : ${name}`
     })
     const open = createMemo(() => store.workspaceExpanded[props.directory] ?? true)
+    const loading = createMemo(() => open() && workspaceStore.status !== "complete" && sessions().length === 0)
     const hasMore = createMemo(() => local() && workspaceStore.sessionTotal > workspaceStore.session.length)
     const loadMore = async () => {
       if (!local()) return
@@ -1161,6 +1178,9 @@ export default function Layout(props: ParentProps) {
               >
                 New session
               </Button>
+              <Show when={loading()}>
+                <SessionSkeleton />
+              </Show>
               <For each={sessions()}>
                 {(session) => <SessionItem session={session} slug={slug()} mobile={props.mobile} />}
               </For>
@@ -1195,6 +1215,7 @@ export default function Layout(props: ParentProps) {
         .filter((session) => !session.parentID)
         .toSorted(sortSessions),
     )
+    const loading = createMemo(() => workspaceStore.status !== "complete" && sessions().length === 0)
     const hasMore = createMemo(() => workspaceStore.sessionTotal > workspaceStore.session.length)
     const loadMore = async () => {
       setWorkspaceStore("limit", (limit) => limit + 5)
@@ -1209,6 +1230,9 @@ export default function Layout(props: ParentProps) {
         class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar"
       >
         <nav class="flex flex-col gap-1 px-2">
+          <Show when={loading()}>
+            <SessionSkeleton />
+          </Show>
           <For each={sessions()}>
             {(session) => <SessionItem session={session} slug={slug()} mobile={props.mobile} />}
           </For>
