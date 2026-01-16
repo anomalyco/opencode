@@ -138,6 +138,20 @@ opencode run "Hello world"
 
 The custom directory is loaded after the global config and `.opencode` directories, so it **can override** their settings.
 
+### Custom data directory
+
+Specify a custom data directory using the `OPENCODE_DATA_DIR`
+environment variable. This controls where OpenCode stores runtime data
+like authentication tokens, logs, cached files, and LSP binaries.
+
+```bash
+export OPENCODE_DATA_DIR=/path/to/my/data-directory
+opencode run "Hello world"
+```
+
+By default, OpenCode stores data in `~/.local/share/opencode` on Linux/macOS
+or `%LOCALAPPDATA%\opencode` on Windows.
+
 ---
 
 ## Schema
