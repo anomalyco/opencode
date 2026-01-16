@@ -80,14 +80,11 @@ export function Titlebar() {
         onMouseDown={drag}
       >
         <Show when={mac()}>
-          <div class="w-[72px] h-full shrink-0" data-tauri-drag-region />
+          <div class="w-[72px] h-full shrink-0 xl:block hidden" data-tauri-drag-region />
         </Show>
-        <IconButton
-          icon="menu"
-          variant="ghost"
-          class="xl:hidden size-8 rounded-md"
-          onClick={layout.mobileSidebar.toggle}
-        />
+        <div class="xl:hidden w-[48px] shrink-0 flex items-center justify-center">
+          <IconButton icon="menu" variant="ghost" class="size-8 rounded-md" onClick={layout.mobileSidebar.toggle} />
+        </div>
         <TooltipKeybind
           class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0"}
           placement="bottom"
