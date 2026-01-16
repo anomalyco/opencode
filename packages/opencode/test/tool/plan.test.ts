@@ -1,3 +1,4 @@
+import { test, expect } from "bun:test"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
@@ -59,6 +60,7 @@ test("resolveImplementationAgent falls back to first visible primary when build 
 test("resolveImplementationAgent prefers non-plan custom agent over plan", async () => {
   await using tmp = await tmpdir({
     config: {
+      default_agent: "custom",
       agent: {
         build: { disable: true },
         custom: { mode: "primary" },
@@ -71,7 +73,6 @@ test("resolveImplementationAgent prefers non-plan custom agent over plan", async
       const build = await Agent.get("build")
       expect(build).toBeUndefined()
       const target = await resolveImplementationAgent()
-      // custom is primary, non-hidden, and not plan - should be selected
       expect(target).toBe("custom")
     },
   })

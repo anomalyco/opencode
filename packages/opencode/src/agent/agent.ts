@@ -247,6 +247,10 @@ export namespace Agent {
     return state().then((x) => x[agent])
   }
 
+  export function isPrimaryVisible(agent: Info) {
+    return agent.mode !== "subagent" && agent.hidden !== true
+  }
+
   export async function getOrDefault(name?: string): Promise<Info> {
     const agent = name ? await get(name) : undefined
     if (agent) return agent
@@ -277,7 +281,7 @@ export namespace Agent {
       return agent.name
     }
 
-    const primaryVisible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)
+    const primaryVisible = Object.values(agents).find((a) => isPrimaryVisible(a))
     if (!primaryVisible) throw new Error("no primary visible agent found")
     return primaryVisible.name
   }

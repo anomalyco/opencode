@@ -18,7 +18,7 @@ import ENTER_DESCRIPTION from "./plan-enter.txt"
  */
 export async function resolveImplementationAgent(): Promise<string> {
   const build = await Agent.get("build")
-  if (build) return "build"
+  if (build && Agent.isPrimaryVisible(build)) return "build"
 
   const agents = await Agent.list()
   const defaultName = await Agent.defaultAgent().catch(() => undefined)
@@ -26,11 +26,11 @@ export async function resolveImplementationAgent(): Promise<string> {
   // Prefer default_agent if it's a usable implementation agent (not plan, not subagent, not hidden)
   if (defaultName && defaultName !== "plan") {
     const agent = agents.find((a) => a.name === defaultName)
-    if (agent && agent.mode !== "subagent" && agent.hidden !== true) return defaultName
+    if (agent && Agent.isPrimaryVisible(agent)) return defaultName
   }
 
   // Fallback: first visible primary agent that is not "plan"
-  const fallback = agents.find((a) => a.mode !== "subagent" && a.hidden !== true && a.name !== "plan")
+  const fallback = agents.find((a) => Agent.isPrimaryVisible(a) && a.name !== "plan")
   if (fallback) return fallback.name
 
   // Last resort: use defaultAgent result even if it's "plan"

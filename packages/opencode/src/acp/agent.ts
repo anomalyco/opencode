@@ -1007,7 +1007,7 @@ export namespace ACP {
         })
 
       const availableModes = agents
-        .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
+        .filter((agent) => AgentModule.isPrimaryVisible(agent))
         .map((agent) => ({
           id: agent.name,
           name: agent.name,

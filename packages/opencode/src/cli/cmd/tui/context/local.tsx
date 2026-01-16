@@ -9,6 +9,7 @@ import { iife } from "@/util/iife"
 import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
 import { Provider } from "@/provider/provider"
+import { Agent } from "@/agent/agent"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
@@ -34,7 +35,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const agent = iife(() => {
-      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
+      const agents = createMemo(() => sync.data.agent.filter((x) => Agent.isPrimaryVisible(x)))
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
