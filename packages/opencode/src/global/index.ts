@@ -10,7 +10,7 @@ const data = Flag.OPENCODE_DATA_DIR || path.join(xdgData!, app)
 const cache = Flag.OPENCODE_CACHE_DIR || path.join(xdgCache!, app)
 const log = Flag.OPENCODE_LOG_DIR || path.join(data, "log")
 const config = path.join(xdgConfig!, app)
-const state = path.join(xdgState!, app)
+const state = Flag.OPENCODE_STATE_DIR || path.join(xdgState!, app)
 
 export namespace Global {
   export const Path = {

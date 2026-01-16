@@ -7,6 +7,7 @@ export namespace Flag {
   export const OPENCODE_DATA_DIR = process.env["OPENCODE_DATA_DIR"]
   export const OPENCODE_CACHE_DIR = process.env["OPENCODE_CACHE_DIR"]
   export const OPENCODE_LOG_DIR = process.env["OPENCODE_LOG_DIR"]
+  export const OPENCODE_STATE_DIR = process.env["OPENCODE_STATE_DIR"]
   export const OPENCODE_DISABLE_AUTOUPDATE = truthy("OPENCODE_DISABLE_AUTOUPDATE")
   export const OPENCODE_DISABLE_PRUNE = truthy("OPENCODE_DISABLE_PRUNE")
   export const OPENCODE_DISABLE_TERMINAL_TITLE = truthy("OPENCODE_DISABLE_TERMINAL_TITLE")
