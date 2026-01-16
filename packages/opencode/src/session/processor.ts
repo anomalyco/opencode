@@ -153,7 +153,7 @@ export namespace SessionProcessor {
                           JSON.stringify(p.state.input) === JSON.stringify(value.input),
                       )
                     ) {
-                      const agent = await Agent.getOrFallback(input.assistantMessage.agent)
+                      const agent = await Agent.getOrDefault(input.assistantMessage.agent)
                       await PermissionNext.ask({
                         permission: "doom_loop",
                         patterns: [value.toolName],

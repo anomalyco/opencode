@@ -251,8 +251,8 @@ export namespace Agent {
    * Get agent by name, falling back to default agent if not found.
    * Throws if neither the requested agent nor fallback exists.
    */
-  export async function getOrFallback(name: string): Promise<Info> {
-    const agent = await get(name)
+  export async function getOrDefault(name?: string): Promise<Info> {
+    const agent = name ? await get(name) : undefined
     if (agent) return agent
     const fallback = await defaultAgent()
     const resolved = await get(fallback)

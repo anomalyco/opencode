@@ -511,7 +511,7 @@ export namespace SessionPrompt {
       }
 
       // normal processing
-      const agent = await Agent.getOrFallback(lastUser.agent)
+      const agent = await Agent.getOrDefault(lastUser.agent)
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
       msgs = await insertReminders({
@@ -820,7 +820,7 @@ export namespace SessionPrompt {
   }
 
   async function createUserMessage(input: PromptInput) {
-    const agent = await Agent.getOrFallback(input.agent ?? (await Agent.defaultAgent()))
+    const agent = await Agent.getOrDefault(input.agent)
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -1351,7 +1351,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     if (session.revert) {
       SessionRevert.cleanup(session)
     }
-    const agent = await Agent.getOrFallback(input.agent)
+    const agent = await Agent.getOrDefault(input.agent)
     const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
     const userMsg: MessageV2.User = {
       id: Identifier.ascending("message"),
