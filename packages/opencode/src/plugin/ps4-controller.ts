@@ -91,7 +91,8 @@ class PS4Controller {
   async vibrate(duration: number = 500, intensity: number = 1.0) {
     if (!this.state.vibrationEnabled) return
     
-    // Note: intensity parameter is for future hardware support
+    // Note: intensity parameter is currently ignored in simulation mode but
+    // will be used for hardware support (0.0-1.0 maps to motor intensity 0-255)
     log.info("Controller vibration triggered", { duration, intensity })
     
     // In a real implementation, this would send a vibration command
@@ -115,7 +116,8 @@ class PS4Controller {
 export async function PS4ControllerPlugin(input: PluginInput): Promise<Hooks> {
   const controller = new PS4Controller()
 
-  // Store unsubscribe functions for cleanup
+  // Store unsubscribe functions for cleanup (note: OpenCode plugin system doesn't
+  // currently support cleanup hooks, but we store these for future use)
   const unsubscribers: Array<() => void> = []
 
   // Subscribe to session events to trigger vibration when agent needs attention
