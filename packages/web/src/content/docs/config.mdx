@@ -185,6 +185,22 @@ By default, OpenCode stores logs in the data directory at `$OPENCODE_DATA_DIR/lo
 
 ---
 
+### Custom state directory
+
+Specify a custom state directory using the `OPENCODE_STATE_DIR`
+environment variable. This controls where OpenCode stores UI state
+like model selection, prompt history, stashed prompts, and frecency data.
+
+```bash
+export OPENCODE_STATE_DIR=/path/to/my/state-directory
+opencode run "Hello world"
+```
+
+By default, OpenCode stores state in `~/.local/state/opencode` on Linux/macOS
+or `%LOCALAPPDATA%\opencode` on Windows.
+
+---
+
 ## Schema
 
 The config file has a schema that's defined in [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
