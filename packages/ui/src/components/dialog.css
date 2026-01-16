@@ -16,7 +16,6 @@
 [data-component="dialog"] {
   position: fixed;
   inset: 0;
-  margin-left: var(--dialog-left-margin);
   z-index: 50;
   display: flex;
   align-items: center;
