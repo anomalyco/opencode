@@ -18,14 +18,14 @@ import {
   IconRectangleStack,
   IconMagnifyingGlass,
   IconDocumentMagnifyingGlass,
-} from "../icons"
-import { IconMeta, IconRobot, IconOpenAI, IconGemini, IconAnthropic, IconBrain } from "../icons/custom"
+} from "@/components/icons"
+import { IconMeta, IconRobot, IconOpenAI, IconGemini, IconAnthropic, IconBrain } from "@/components/icons/custom"
 import { ContentCode } from "./content-code"
 import { ContentDiff } from "./content-diff"
 import { ContentText } from "./content-text"
 import { ContentBash } from "./content-bash"
 import { ContentError } from "./content-error"
-import { formatDuration } from "../share/common"
+import { formatDuration } from "@/components/share/common"
 import { ContentMarkdown } from "./content-markdown"
 import type { MessageV2 } from "opencode/session/message-v2"
 import type { Diagnostic } from "vscode-languageserver-types"

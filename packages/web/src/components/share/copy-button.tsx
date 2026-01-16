@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import { IconClipboard, IconCheckCircle } from "../icons"
+import { IconClipboard, IconCheckCircle } from "@/components/icons"
 import styles from "./copy-button.module.css"
 
 interface CopyButtonProps {

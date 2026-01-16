@@ -1,6 +1,6 @@
 import { createSignal, onCleanup, splitProps } from "solid-js"
 import type { JSX } from "solid-js/jsx-runtime"
-import { IconCheckCircle, IconHashtag } from "../icons"
+import { IconCheckCircle, IconHashtag } from "@/components/icons"
 
 interface AnchorProps extends JSX.HTMLAttributes<HTMLDivElement> {
   id: string

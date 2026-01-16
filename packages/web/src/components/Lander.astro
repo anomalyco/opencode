@@ -3,11 +3,11 @@ import { Image } from 'astro:assets';
 import config from "virtual:starlight/user-config";
 import type { Props } from '@astrojs/starlight/props';
 
-import CopyIcon from "../assets/lander/copy.svg";
-import CheckIcon from "../assets/lander/check.svg";
-import TuiScreenshot from "../assets/lander/screenshot-splash.png";
-import VscodeScreenshot from "../assets/lander/screenshot-vscode.png";
-import GithubScreenshot from "../assets/lander/screenshot-github.png";
+import CopyIcon from "@/assets/lander/copy.svg";
+import CheckIcon from "@/assets/lander/check.svg";
+import TuiScreenshot from "@/assets/lander/screenshot-splash.png";
+import VscodeScreenshot from "@/assets/lander/screenshot-vscode.png";
+import GithubScreenshot from "@/assets/lander/screenshot-github.png";
 
 const { data } = Astro.locals.starlightRoute.entry;
 const { title = data.title, tagline, image, actions = [] } = data.hero || {};

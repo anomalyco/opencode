@@ -8,6 +8,7 @@ import config from "./config.mjs"
 import { rehypeHeadingIds } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import { spawnSync } from "child_process"
+import { fileURLToPath } from "url"
 
 // https://astro.build/config
 export default defineConfig({
@@ -22,6 +23,13 @@ export default defineConfig({
   },
   server: {
     host: "0.0.0.0",
+  },
+  vite: {
+    resolve: {
+      alias: {
+        "@": fileURLToPath(new URL("./src", import.meta.url)),
+      },
+    },
   },
   markdown: {
     rehypePlugins: [rehypeHeadingIds, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
