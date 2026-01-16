@@ -7,7 +7,7 @@ import { Flag } from "../flag/flag"
 const app = "opencode"
 
 const data = Flag.OPENCODE_DATA_DIR || path.join(xdgData!, app)
-const cache = path.join(xdgCache!, app)
+const cache = Flag.OPENCODE_CACHE_DIR || path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 

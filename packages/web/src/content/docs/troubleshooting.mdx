@@ -129,6 +129,12 @@ To resolve provider package issues:
    rm -rf ~/.cache/opencode
    ```
 
+   Or if you have a custom cache directory set:
+
+   ```bash
+   rm -rf $OPENCODE_CACHE_DIR
+   ```
+
 2. Restart opencode to reinstall the latest provider packages
 
 This will force opencode to download the most recent versions of provider packages, which often resolves compatibility issues with model parameters and API changes.

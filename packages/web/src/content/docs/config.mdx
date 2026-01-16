@@ -154,6 +154,22 @@ or `%LOCALAPPDATA%\opencode` on Windows.
 
 ---
 
+### Custom cache directory
+
+Specify a custom cache directory using the `OPENCODE_CACHE_DIR`
+environment variable. This controls where OpenCode stores cached data
+like npm plugins and their dependencies.
+
+```bash
+export OPENCODE_CACHE_DIR=/path/to/my/cache-directory
+opencode run "Hello world"
+```
+
+By default, OpenCode stores cache in `~/.cache/opencode` on Linux/macOS
+or `%LOCALAPPDATA%\opencode` on Windows.
+
+---
+
 ## Schema
 
 The config file has a schema that's defined in [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
