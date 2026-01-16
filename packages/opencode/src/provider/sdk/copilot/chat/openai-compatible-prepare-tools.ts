@@ -1,6 +1,6 @@
 import {
-  LanguageModelV2CallOptions,
-  LanguageModelV2CallWarning,
+  type LanguageModelV2CallOptions,
+  type LanguageModelV2CallWarning,
   UnsupportedFunctionalityError,
 } from '@ai-sdk/provider';
 

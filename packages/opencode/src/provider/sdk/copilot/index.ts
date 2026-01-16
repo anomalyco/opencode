@@ -1,2 +1,2 @@
-export { createOpenaiCompatible, openaiCompatible } from "./openai-compatible-provider"
-export type { OpenaiCompatibleProvider, OpenaiCompatibleProviderSettings } from "./openai-compatible-provider"
+export { createOpenaiCompatible, openaiCompatible } from "./copilot-provider"
+export type { OpenaiCompatibleProvider, OpenaiCompatibleProviderSettings } from "./copilot-provider"

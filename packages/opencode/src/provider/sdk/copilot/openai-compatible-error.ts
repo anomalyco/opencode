@@ -1,4 +1,4 @@
-import { z, ZodType } from 'zod/v4';
+import { z, type ZodType } from 'zod/v4';
 
 export const openaiCompatibleErrorDataSchema = z.object({
   error: z.object({
