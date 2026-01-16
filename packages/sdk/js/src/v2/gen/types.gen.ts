@@ -1806,6 +1806,7 @@ export type Path = {
   home: string
   state: string
   config: string
+  chat: string
   worktree: string
   directory: string
 }

@@ -19,11 +19,31 @@ test("returns default native agents when no config", async () => {
       const names = agents.map((a) => a.name)
       expect(names).toContain("build")
       expect(names).toContain("plan")
+      expect(names).toContain("chat")
       expect(names).toContain("general")
       expect(names).toContain("explore")
       expect(names).toContain("compaction")
       expect(names).toContain("title")
       expect(names).toContain("summary")
+    },
+  })
+})
+
+test("chat agent has correct default properties and permissions", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const chat = await Agent.get("chat")
+      expect(chat).toBeDefined()
+      expect(chat?.mode).toBe("primary")
+      expect(chat?.native).toBe(true)
+      expect(evalPerm(chat, "chat_exit")).toBe("allow")
+      expect(evalPerm(chat, "question")).toBe("allow")
+      // Check for temporary directory permission
+      const chatDirPerm = chat!.permission.find((p) => p.permission === "external_directory" && p.pattern.includes("chat"))
+      expect(chatDirPerm).toBeDefined()
+      expect(chatDirPerm?.action).toBe("allow")
     },
   })
 })

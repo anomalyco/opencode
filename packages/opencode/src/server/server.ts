@@ -610,6 +610,7 @@ export namespace Server {
                           home: z.string(),
                           state: z.string(),
                           config: z.string(),
+                          chat: z.string(),
                           worktree: z.string(),
                           directory: z.string(),
                         })
@@ -627,6 +628,7 @@ export namespace Server {
               home: Global.Path.home,
               state: Global.Path.state,
               config: Global.Path.config,
+              chat: Global.Path.chat,
               worktree: Instance.worktree,
               directory: Instance.directory,
             })
