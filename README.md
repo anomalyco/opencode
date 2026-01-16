@@ -91,7 +91,8 @@ OpenCode includes an experimental PS4 DualShock controller plugin for CLI intera
 - **Button Mappings**: Use L2/R2 for cancel/accept, D-Pad for navigation
 - **Vibration Feedback**: Controller vibrates when the agent needs attention or encounters errors
 - **Visual Button Hints**: See button assignments directly in prompts
-- **Auto-loaded**: Enabled automatically as an internal plugin
+- **Simulation Mode**: Currently runs in simulation mode only. Controller hints appear in prompts even without physical hardware.
+- **Opt-out**: Set `OPENCODE_PS4_CONTROLLER=false` to disable the plugin if you prefer not to see controller hints.
 
 See the [PS4 Controller Plugin documentation](./packages/opencode/docs/PS4_CONTROLLER_PLUGIN.md) for details.
 

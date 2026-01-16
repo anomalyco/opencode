@@ -33,13 +33,23 @@ The controller vibrates in the following scenarios:
 | Permission requested | Medium vibration (400ms, 40% intensity) |
 | Error encountered | Long vibration (1000ms, 100% intensity) |
 
+**Note:** Vibration feedback is currently simulated only (no actual hardware vibration). In the current implementation, there is no way to disable vibration logging, but you can disable the entire plugin by setting `OPENCODE_PS4_CONTROLLER=false`. Support for configurable vibration patterns, including the ability to turn vibration off entirely, is planned for a future release.
+
 ## Usage
 
-The plugin is automatically loaded as an internal plugin when OpenCode starts. No additional configuration is required.
+The plugin is automatically loaded as an internal plugin when OpenCode starts and currently runs in **simulation mode** for all users. In this mode, the PS4 controller is always treated as "connected" by default (unless disabled), even if no physical controller is attached.
+
+### Disabling the Plugin
+
+To disable the PS4 controller plugin and prevent controller hints from appearing in prompts, set the environment variable:
+
+```bash
+export OPENCODE_PS4_CONTROLLER=false
+```
 
 ### Button Hints in Prompts
 
-When the controller is connected, prompts and questions will automatically include button hints:
+Because the controller is simulated as connected by default, prompts and questions may include button hints even if you do not have a physical controller attached:
 
 ```
 Continue with this action?

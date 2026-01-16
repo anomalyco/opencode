@@ -56,7 +56,7 @@ class PS4Controller {
     this.initialize()
   }
 
-  private async initialize() {
+  private initialize() {
     // In a real implementation, this would:
     // 1. Check for connected PS4 controllers via HID
     // 2. Initialize the controller connection
@@ -68,11 +68,16 @@ class PS4Controller {
     // - Bun FFI bindings to libusb/hidapi
     // - WebSocket bridge to browser Gamepad API
     
-    log.info("PS4 Controller plugin initializing")
-    this.state.connected = true
-    log.info("PS4 Controller ready (simulated mode)", {
-      buttonMappings: this.state.buttonLabels,
-    })
+    // Check if controller should be enabled via environment variable
+    const enabled = process.env.OPENCODE_PS4_CONTROLLER !== "false"
+    
+    log.info("PS4 Controller plugin initializing", { enabled })
+    this.state.connected = enabled
+    if (enabled) {
+      log.info("PS4 Controller ready (simulated mode)", {
+        buttonMappings: this.state.buttonLabels,
+      })
+    }
   }
 
   isConnected(): boolean {
@@ -86,6 +91,7 @@ class PS4Controller {
   async vibrate(duration: number = 500, intensity: number = 1.0) {
     if (!this.state.vibrationEnabled) return
     
+    // Note: intensity parameter is for future hardware support
     log.info("Controller vibration triggered", { duration, intensity })
     
     // In a real implementation, this would send a vibration command
@@ -104,39 +110,34 @@ class PS4Controller {
     // report[5] = 0;
     // hidDevice.write(report);
   }
-
-  async setLEDColor(r: number, g: number, b: number) {
-    log.info("Setting controller LED color", { r, g, b })
-    
-    // In a real implementation, this would send LED color commands
-    // to the controller. DualShock 4 supports RGB LED control.
-  }
 }
 
 export async function PS4ControllerPlugin(input: PluginInput): Promise<Hooks> {
   const controller = new PS4Controller()
 
-  // Subscribe to session events to trigger vibration when agent needs attention
-  Bus.subscribe(Session.Event.Error, async (event) => {
-    if (controller.isConnected()) {
-      // Strong vibration on errors to get user's attention
-      await controller.vibrate(1000, 1.0)
-    }
-  })
+  // Store unsubscribe functions for cleanup
+  const unsubscribers: Array<() => void> = []
 
-  Bus.subscribe(Question.Event.Asked, async (event) => {
-    if (controller.isConnected()) {
-      // Gentle vibration when question is asked
-      await controller.vibrate(300, 0.5)
-    }
-  })
+  // Subscribe to session events to trigger vibration when agent needs attention
+  unsubscribers.push(
+    Bus.subscribe(Session.Event.Error, async (event) => {
+      if (controller.isConnected()) {
+        // Strong vibration on errors to get user's attention
+        await controller.vibrate(1000, 1.0)
+      }
+    })
+  )
+
+  unsubscribers.push(
+    Bus.subscribe(Question.Event.Asked, async (event) => {
+      if (controller.isConnected()) {
+        // Gentle vibration when question is asked
+        await controller.vibrate(300, 0.5)
+      }
+    })
+  )
 
   return {
-    event: async ({ event }) => {
-      // Log controller-related events for debugging
-      log.debug("controller event received", { type: event.type })
-    },
-
     "permission.ask": async (input, output) => {
       // When permissions are requested, ensure controller feedback
       if (controller.isConnected()) {

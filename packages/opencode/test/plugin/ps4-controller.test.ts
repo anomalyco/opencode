@@ -16,20 +16,31 @@ const createMockPluginInput = (): PluginInput => {
 
 describe("plugin.ps4-controller", () => {
   let pluginInput: PluginInput
+  const originalEnv = process.env.OPENCODE_PS4_CONTROLLER
 
   beforeEach(() => {
     pluginInput = createMockPluginInput()
+    // Reset environment variable to default
+    delete process.env.OPENCODE_PS4_CONTROLLER
+  })
+
+  afterEach(() => {
+    // Restore original environment
+    if (originalEnv !== undefined) {
+      process.env.OPENCODE_PS4_CONTROLLER = originalEnv
+    } else {
+      delete process.env.OPENCODE_PS4_CONTROLLER
+    }
   })
 
   test("plugin initializes successfully", async () => {
     const hooks = await PS4ControllerPlugin(pluginInput)
     expect(hooks).toBeDefined()
-    expect(hooks.event).toBeDefined()
     expect(hooks["permission.ask"]).toBeDefined()
     expect(hooks["experimental.chat.system.transform"]).toBeDefined()
   })
 
-  test("plugin adds controller information to system prompts", async () => {
+  test("plugin adds controller information to system prompts when enabled", async () => {
     const hooks = await PS4ControllerPlugin(pluginInput)
     
     const input = { sessionID: "ses_test123" }
@@ -45,6 +56,19 @@ describe("plugin.ps4-controller", () => {
     expect(output.system[0]).toContain("Cancel")
   })
 
+  test("plugin does not add controller info when disabled via env var", async () => {
+    process.env.OPENCODE_PS4_CONTROLLER = "false"
+    
+    const hooks = await PS4ControllerPlugin(pluginInput)
+    
+    const input = { sessionID: "ses_test123" }
+    const output = { system: [] as string[] }
+    
+    await hooks["experimental.chat.system.transform"]?.(input, output)
+    
+    expect(output.system.length).toBe(0)
+  })
+
   test("plugin hook exists for permission asks", async () => {
     const hooks = await PS4ControllerPlugin(pluginInput)
     
@@ -58,16 +82,6 @@ describe("plugin.ps4-controller", () => {
     // Should not throw and should execute
     await hooks["permission.ask"]?.(permissionInput, output)
     expect(output.status).toBe("ask")
-  })
-
-  test("event hook is defined", async () => {
-    const hooks = await PS4ControllerPlugin(pluginInput)
-    
-    expect(hooks.event).toBeDefined()
-    expect(typeof hooks.event).toBe("function")
-    
-    // Should handle events without throwing
-    await hooks.event?.({ event: { type: "test.event", payload: {} } as any })
   })
 
   test("plugin provides correct button mappings", async () => {
