@@ -1,0 +1,146 @@
+---
+title: Get Started
+description: Set up your development environment
+---
+
+OpenCode is an open source AI coding agent. It helps you write code, understand codebases, and build features faster.
+
+---
+
+## Prerequisites
+
+You need **Bun 1.3+** to develop OpenCode. Bun is a fast JavaScript runtime and package manager that the project uses.
+
+---
+
+## Install dependencies
+
+Install all project dependencies from the root directory.
+
+```bash
+bun install
+```
+
+This will install packages across all workspaces using the monorepo structure.
+
+---
+
+## Start development
+
+Run the development server to start working on OpenCode.
+
+```bash
+bun dev
+```
+
+This starts OpenCode in the `packages/opencode` directory by default.
+
+---
+
+## Run against a different directory
+
+You can run OpenCode against any directory or repository.
+
+```bash
+bun dev <directory>
+```
+
+To run it in the root of the opencode repo itself.
+
+```bash
+bun dev .
+```
+
+---
+
+## Build a standalone executable
+
+Compile OpenCode into a standalone binary.
+
+```bash
+./packages/opencode/script/build.ts --single
+```
+
+Then run it from the dist folder.
+
+```bash
+./packages/opencode/dist/opencode-<platform>/bin/opencode
+```
+
+Replace `<platform>` with your system (e.g., `darwin-arm64`, `linux-x64`).
+
+---
+
+## Test the web app
+
+Test UI changes using the web development server.
+
+```bash
+bun run --cwd packages/app dev
+```
+
+This starts a local dev server at `http://localhost:5173`.
+
+---
+
+## Run the desktop app
+
+The desktop app is a native Tauri application wrapping the web UI.
+
+```bash
+bun run --cwd packages/desktop tauri dev
+```
+
+This opens the native window with a dev server at `http://localhost:1420`.
+
+---
+
+## Project structure
+
+The codebase is organized into several key packages:
+
+- `packages/opencode` - Core business logic and server
+- `packages/opencode/src/cli/cmd/tui/` - Terminal UI code in SolidJS
+- `packages/app` - Shared web UI components in SolidJS
+- `packages/desktop` - Native desktop app with Tauri
+- `packages/plugin` - Plugin source for `@opencode-ai/plugin`
+
+---
+
+## Regenerate the SDK
+
+If you make changes to the API or server code, regenerate the SDK.
+
+```bash
+./script/generate.ts
+```
+
+This updates the SDK and related files automatically.
+
+---
+
+## Type checking
+
+Run TypeScript type checking across the entire project.
+
+```bash
+bun turbo typecheck
+```
+
+This checks all packages in the monorepo for type errors.
+
+---
+
+## Contributing
+
+We welcome contributions! Read the [contributing docs](../../CONTRIBUTING.md) before submitting a pull request.
+
+Look for issues labeled `help wanted`, `good first issue`, `bug`, or `perf` to get started.
+
+---
+
+## Style guide
+
+Follow our [style guide](../../STYLE_GUIDE.md) when contributing to the codebase.
+
+Key points: prefer single-word variables, avoid `let` and `else` statements, use Bun APIs when possible.
