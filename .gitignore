@@ -25,3 +25,5 @@ target
 opencode-dev
 logs/
 *.bun-build
+bun.lock
+bun.lock
