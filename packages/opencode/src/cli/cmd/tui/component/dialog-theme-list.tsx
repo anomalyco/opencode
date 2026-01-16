@@ -26,7 +26,7 @@ export function DialogThemeList() {
       options={options}
       current={initial}
       onMove={(opt) => {
-        theme.set(opt.value)
+        if (opt) theme.set(opt.value)
       }}
       onSelect={(opt) => {
         theme.set(opt.value)
