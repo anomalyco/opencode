@@ -81,7 +81,7 @@ export namespace ModelsDev {
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
     if (result) return result as Record<string, Provider>
-    if (typeof data === "function") {
+    if (typeof data === "function" || typeof data === "string") {
       const json = await data()
       return JSON.parse(json) as Record<string, Provider>
     }
