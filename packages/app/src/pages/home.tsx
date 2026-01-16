@@ -1,4 +1,3 @@
-import { useGlobalSync } from "@/context/global-sync"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
@@ -12,6 +11,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
+import { useGlobalSync } from "@/context/global-sync"
 
 export default function Home() {
   const sync = useGlobalSync()
@@ -24,6 +24,7 @@ export default function Home() {
 
   function openProject(directory: string) {
     layout.projects.open(directory)
+    server.projects.touch(directory)
     navigate(`/${base64Encode(directory)}`)
   }
 
