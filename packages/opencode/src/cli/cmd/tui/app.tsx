@@ -14,6 +14,7 @@ import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
+import { DialogPermission } from "@tui/component/dialog-permission"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
@@ -423,6 +424,14 @@ function App() {
       value: "opencode.status",
       onSelect: () => {
         dialog.replace(() => <DialogStatus />)
+      },
+      category: "System",
+    },
+    {
+      title: "View permissions",
+      value: "permission.view",
+      onSelect: () => {
+        dialog.replace(() => <DialogPermission />)
       },
       category: "System",
     },

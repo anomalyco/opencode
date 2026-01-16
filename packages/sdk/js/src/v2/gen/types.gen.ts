@@ -3647,6 +3647,108 @@ export type PermissionListResponses = {
 
 export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
 
+export type PermissionDeleteData = {
+  body?: PermissionRule
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/permission/approved"
+}
+
+export type PermissionDeleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type PermissionDeleteError = PermissionDeleteErrors[keyof PermissionDeleteErrors]
+
+export type PermissionDeleteResponses = {
+  /**
+   * Permission deleted successfully
+   */
+  200: boolean
+}
+
+export type PermissionDeleteResponse = PermissionDeleteResponses[keyof PermissionDeleteResponses]
+
+export type PermissionApprovedData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/permission/approved"
+}
+
+export type PermissionApprovedResponses = {
+  /**
+   * List of approved permission rules
+   */
+  200: PermissionRuleset
+}
+
+export type PermissionApprovedResponse = PermissionApprovedResponses[keyof PermissionApprovedResponses]
+
+export type PermissionAddData = {
+  body?: PermissionRule
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/permission/approved"
+}
+
+export type PermissionAddErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type PermissionAddError = PermissionAddErrors[keyof PermissionAddErrors]
+
+export type PermissionAddResponses = {
+  /**
+   * Permission added successfully
+   */
+  200: boolean
+}
+
+export type PermissionAddResponse = PermissionAddResponses[keyof PermissionAddResponses]
+
+export type PermissionUpdateData = {
+  body?: {
+    oldRule: PermissionRule
+    newRule: PermissionRule
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/permission/approved"
+}
+
+export type PermissionUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type PermissionUpdateError = PermissionUpdateErrors[keyof PermissionUpdateErrors]
+
+export type PermissionUpdateResponses = {
+  /**
+   * Permission updated successfully
+   */
+  200: boolean
+}
+
+export type PermissionUpdateResponse = PermissionUpdateResponses[keyof PermissionUpdateResponses]
+
 export type QuestionListData = {
   body?: never
   path?: never

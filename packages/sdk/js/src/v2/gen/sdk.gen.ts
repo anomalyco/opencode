@@ -57,12 +57,20 @@ import type {
   PartUpdateErrors,
   PartUpdateResponses,
   PathGetResponses,
+  PermissionAddErrors,
+  PermissionAddResponses,
+  PermissionApprovedResponses,
+  PermissionDeleteErrors,
+  PermissionDeleteResponses,
   PermissionListResponses,
   PermissionReplyErrors,
   PermissionReplyResponses,
   PermissionRespondErrors,
   PermissionRespondResponses,
+  PermissionRule,
   PermissionRuleset,
+  PermissionUpdateErrors,
+  PermissionUpdateResponses,
   ProjectCurrentResponses,
   ProjectListResponses,
   ProjectUpdateErrors,
@@ -1785,6 +1793,132 @@ export class Permission extends HeyApiClient {
       url: "/permission",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Delete approved permission
+   *
+   * Remove a specific approved permission rule.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      permissionRule?: PermissionRule
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "permissionRule", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<PermissionDeleteResponses, PermissionDeleteErrors, ThrowOnError>({
+      url: "/permission/approved",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List approved permissions
+   *
+   * Get all approved permission rules for the current project.
+   */
+  public approved<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<PermissionApprovedResponses, unknown, ThrowOnError>({
+      url: "/permission/approved",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Add approved permission
+   *
+   * Add a new approved permission rule.
+   */
+  public add<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      permissionRule?: PermissionRule
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "permissionRule", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PermissionAddResponses, PermissionAddErrors, ThrowOnError>({
+      url: "/permission/approved",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Update approved permission
+   *
+   * Update a specific approved permission rule.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      oldRule?: PermissionRule
+      newRule?: PermissionRule
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "oldRule" },
+            { in: "body", key: "newRule" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<PermissionUpdateResponses, PermissionUpdateErrors, ThrowOnError>({
+      url: "/permission/approved",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }

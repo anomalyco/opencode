@@ -190,6 +190,11 @@ export namespace PermissionNext {
             action: "allow",
           })
         }
+        log.info("approved permission", {
+          permission: existing.info.permission,
+          patterns: existing.info.always,
+          total: s.approved.length,
+        })
 
         existing.resolve()
 
@@ -265,5 +270,39 @@ export namespace PermissionNext {
 
   export async function list() {
     return state().then((x) => Object.values(x.pending).map((x) => x.info))
+  }
+
+  export async function approved() {
+    const s = await state()
+    log.info("getting approved permissions", { count: s.approved.length, rules: s.approved })
+    return s.approved
+  }
+
+  export async function remove(rule: Rule) {
+    const s = await state()
+    const index = s.approved.findIndex(
+      (r) => r.permission === rule.permission && r.pattern === rule.pattern && r.action === rule.action,
+    )
+    if (index !== -1) {
+      s.approved.splice(index, 1)
+      log.info("removed permission", { rule, remaining: s.approved.length })
+    }
+  }
+
+  export async function update(oldRule: Rule, newRule: Rule) {
+    const s = await state()
+    const index = s.approved.findIndex(
+      (r) => r.permission === oldRule.permission && r.pattern === oldRule.pattern && r.action === oldRule.action,
+    )
+    if (index !== -1) {
+      s.approved[index] = newRule
+      log.info("updated permission", { oldRule, newRule })
+    }
+  }
+
+  export async function add(rule: Rule) {
+    const s = await state()
+    s.approved.push(rule)
+    log.info("added permission", { rule, total: s.approved.length })
   }
 }

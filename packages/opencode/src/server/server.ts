@@ -1708,6 +1708,103 @@ export namespace Server {
             return c.json(permissions)
           },
         )
+        .get(
+          "/permission/approved",
+          describeRoute({
+            summary: "List approved permissions",
+            description: "Get all approved permission rules for the current project.",
+            operationId: "permission.approved",
+            responses: {
+              200: {
+                description: "List of approved permission rules",
+                content: {
+                  "application/json": {
+                    schema: resolver(PermissionNext.Ruleset),
+                  },
+                },
+              },
+            },
+          }),
+          async (c) => {
+            const approved = await PermissionNext.approved()
+            return c.json(approved)
+          },
+        )
+        .delete(
+          "/permission/approved",
+          describeRoute({
+            summary: "Delete approved permission",
+            description: "Remove a specific approved permission rule.",
+            operationId: "permission.delete",
+            responses: {
+              200: {
+                description: "Permission deleted successfully",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator("json", PermissionNext.Rule),
+          async (c) => {
+            const rule = c.req.valid("json")
+            await PermissionNext.remove(rule)
+            return c.json(true)
+          },
+        )
+        .put(
+          "/permission/approved",
+          describeRoute({
+            summary: "Update approved permission",
+            description: "Update a specific approved permission rule.",
+            operationId: "permission.update",
+            responses: {
+              200: {
+                description: "Permission updated successfully",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator("json", z.object({ oldRule: PermissionNext.Rule, newRule: PermissionNext.Rule })),
+          async (c) => {
+            const { oldRule, newRule } = c.req.valid("json")
+            await PermissionNext.update(oldRule, newRule)
+            return c.json(true)
+          },
+        )
+        .post(
+          "/permission/approved",
+          describeRoute({
+            summary: "Add approved permission",
+            description: "Add a new approved permission rule.",
+            operationId: "permission.add",
+            responses: {
+              200: {
+                description: "Permission added successfully",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator("json", PermissionNext.Rule),
+          async (c) => {
+            const rule = c.req.valid("json")
+            await PermissionNext.add(rule)
+            return c.json(true)
+          },
+        )
         .route("/question", QuestionRoute)
         .get(
           "/command",
