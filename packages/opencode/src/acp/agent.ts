@@ -30,6 +30,7 @@ import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import { applyPatch } from "diff"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -104,6 +105,22 @@ export namespace ACP {
                     directory,
                   })
                   return
+                }
+                if (res.outcome.optionId !== "reject" && permission.permission == "edit") {
+                  const metadata = permission.metadata || {}
+                  const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
+                  const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
+
+                  const content = await Bun.file(filepath).text()
+                  const newContent = getNewContent(content, diff)
+
+                  if (newContent) {
+                    this.connection.writeTextFile({
+                      sessionId: sessionId,
+                      path: filepath,
+                      content: newContent,
+                    })
+                  }
                 }
                 await this.config.sdk.permission.reply({
                   requestID: permission.id,
@@ -714,6 +731,9 @@ export namespace ACP {
       const defaultAgentName = await AgentModule.defaultAgent()
       const currentModeId = availableModes.find((m) => m.name === defaultAgentName)?.id ?? availableModes[0].id
 
+      // Persist the default mode so prompt() uses it immediately
+      this.sessionManager.setMode(sessionId, currentModeId)
+
       const mcpServers: Record<string, Config.Mcp> = {}
       for (const server of params.mcpServers) {
         if ("type" in server) {
@@ -1094,5 +1114,14 @@ export namespace ACP {
         text: uri,
       }
     }
+  }
+
+  function getNewContent(fileOriginal: string, unifiedDiff: string): string | undefined {
+    const result = applyPatch(fileOriginal, unifiedDiff)
+    if (result === false) {
+      log.error("Failed to apply unified diff (context mismatch)")
+      return undefined
+    }
+    return result
   }
 }

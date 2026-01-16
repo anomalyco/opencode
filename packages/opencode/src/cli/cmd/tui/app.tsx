@@ -97,7 +97,16 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   })
 }
 
-export function tui(input: { url: string; args: Args; directory?: string; onExit?: () => Promise<void> }) {
+import type { EventSource } from "./context/sdk"
+
+export function tui(input: {
+  url: string
+  args: Args
+  directory?: string
+  fetch?: typeof fetch
+  events?: EventSource
+  onExit?: () => Promise<void>
+}) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
@@ -117,7 +126,12 @@ export function tui(input: { url: string; args: Args; directory?: string; onExit
                 <KVProvider>
                   <ToastProvider>
                     <RouteProvider>
-                      <SDKProvider url={input.url} directory={input.directory}>
+                      <SDKProvider
+                        url={input.url}
+                        directory={input.directory}
+                        fetch={input.fetch}
+                        events={input.events}
+                      >
                         <SyncProvider>
                           <ThemeProvider mode={mode}>
                             <LocalProvider>
@@ -588,15 +602,6 @@ function App() {
     toast.show({
       variant: "error",
       message,
-      duration: 5000,
-    })
-  })
-
-  sdk.event.on(Installation.Event.Updated.type, (evt) => {
-    toast.show({
-      variant: "success",
-      title: "Update Complete",
-      message: `OpenCode updated to v${evt.properties.version}`,
       duration: 5000,
     })
   })

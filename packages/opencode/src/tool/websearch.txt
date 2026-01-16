@@ -9,3 +9,6 @@ Usage notes:
   - Search types: 'auto' (balanced), 'fast' (quick results), 'deep' (comprehensive search)
   - Configurable context length for optimal LLM integration
   - Domain filtering and advanced search options available
+
+Today's date is {{date}}. You MUST use this year when searching for recent information or current events
+- Example: If today is 2025-07-15 and the user asks for "latest AI news", search for "AI news 2025", NOT "AI news 2024"

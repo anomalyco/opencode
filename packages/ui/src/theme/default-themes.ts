@@ -10,6 +10,8 @@ import ayuThemeJson from "./themes/ayu.json"
 import oneDarkProThemeJson from "./themes/onedarkpro.json"
 import shadesOfPurpleThemeJson from "./themes/shadesofpurple.json"
 import nightowlThemeJson from "./themes/nightowl.json"
+import vesperThemeJson from "./themes/vesper.json"
+import carbonfoxThemeJson from "./themes/carbonfox.json"
 
 export const oc1Theme = oc1ThemeJson as DesktopTheme
 export const tokyonightTheme = tokyoThemeJson as DesktopTheme
@@ -22,6 +24,8 @@ export const ayuTheme = ayuThemeJson as DesktopTheme
 export const oneDarkProTheme = oneDarkProThemeJson as DesktopTheme
 export const shadesOfPurpleTheme = shadesOfPurpleThemeJson as DesktopTheme
 export const nightowlTheme = nightowlThemeJson as DesktopTheme
+export const vesperTheme = vesperThemeJson as DesktopTheme
+export const carbonfoxTheme = carbonfoxThemeJson as DesktopTheme
 
 export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
   "oc-1": oc1Theme,
@@ -35,4 +39,6 @@ export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
   onedarkpro: oneDarkProTheme,
   shadesofpurple: shadesOfPurpleTheme,
   nightowl: nightowlTheme,
+  vesper: vesperTheme,
+  carbonfox: carbonfoxTheme,
 }
