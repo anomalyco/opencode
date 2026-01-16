@@ -144,6 +144,10 @@ export function Autocomplete(props: {
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
     input.insertText(append)
 
+    if (!needsSpace) {
+      input.cursorOffset = input.cursorOffset + 1
+    }
+
     const virtualText = "@" + text
     const extmarkStart = store.index
     const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
