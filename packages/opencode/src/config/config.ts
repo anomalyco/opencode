@@ -331,16 +331,37 @@ export namespace Config {
 
   /**
    * Extracts a canonical plugin name from a plugin specifier.
-   * - For file:// URLs: uses full URL as identity (to support multiple plugins in same directory)
+   * - For file:// URLs: extracts filename, or parent directory if filename is generic (index, main, plugin)
    * - For npm packages: extracts package name without version
    *
    * @example
-   * getPluginName("file:///path/to/plugin/foo.js") // "file:///path/to/plugin/foo.js"
+   * getPluginName("file:///path/to/plugin-a/index.js") // "plugin-a"
+   * getPluginName("file:///path/to/plugin-b/dist/index.js") // "plugin-b"
+   * getPluginName("file:///path/to/oh-my-opencode.js") // "oh-my-opencode"
    * getPluginName("oh-my-opencode@2.4.3") // "oh-my-opencode"
    * getPluginName("@scope/pkg@1.0.0") // "@scope/pkg"
    */
   export function getPluginName(plugin: string): string {
     if (plugin.startsWith("file://")) {
+      const pathname = new URL(plugin).pathname
+      const parts = pathname.split("/").filter(Boolean)
+      const filename = path.parse(pathname).name
+
+      // Generic names that don't uniquely identify a plugin
+      const genericNames = new Set(["index", "main", "plugin", "dist", "build", "out", "lib"])
+
+      if (!genericNames.has(filename)) {
+        return filename
+      }
+
+      // Filename is generic, walk up directories to find meaningful name
+      for (let i = parts.length - 2; i >= 0; i--) {
+        const dirName = parts[i]
+        if (!genericNames.has(dirName) && dirName !== ".opencode") {
+          return dirName
+        }
+      }
+
       return plugin
     }
     const lastAt = plugin.lastIndexOf("@")

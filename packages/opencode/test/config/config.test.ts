@@ -1294,6 +1294,13 @@ describe("getPluginName", () => {
     expect(Config.getPluginName("file:///some/path/my-plugin.js")).toBe("my-plugin")
   })
 
+  test("extracts parent directory name for generic filenames", () => {
+    expect(Config.getPluginName("file:///path/to/plugin-a/index.js")).toBe("plugin-a")
+    expect(Config.getPluginName("file:///path/to/plugin-b/dist/index.js")).toBe("plugin-b")
+    expect(Config.getPluginName("file:///path/to/oh-my-opencode/dist/index.js")).toBe("oh-my-opencode")
+    expect(Config.getPluginName("file:///path/to/my-plugin/build/main.js")).toBe("my-plugin")
+  })
+
   test("extracts name from npm package with version", () => {
     expect(Config.getPluginName("oh-my-opencode@2.4.3")).toBe("oh-my-opencode")
     expect(Config.getPluginName("some-plugin@1.0.0")).toBe("some-plugin")
@@ -1339,6 +1346,21 @@ describe("deduplicatePlugins", () => {
     const result = Config.deduplicatePlugins(plugins)
 
     expect(result).toEqual(["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"])
+  })
+
+  test("allows multiple plugins with same generic filename in different directories", () => {
+    const plugins = [
+      "file:///path/to/plugin-a/dist/index.js",
+      "file:///path/to/plugin-b/dist/index.js",
+      "file:///path/to/plugin-c/index.js",
+    ]
+
+    const result = Config.deduplicatePlugins(plugins)
+
+    expect(result.length).toBe(3)
+    expect(result).toContain("file:///path/to/plugin-a/dist/index.js")
+    expect(result).toContain("file:///path/to/plugin-b/dist/index.js")
+    expect(result).toContain("file:///path/to/plugin-c/index.js")
   })
 
   test("local plugin directory overrides global opencode.json plugin", async () => {
