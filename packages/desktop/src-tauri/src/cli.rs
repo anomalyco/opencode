@@ -158,14 +158,12 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
         .env("XDG_STATE_HOME", &state_dir);
 
     #[cfg(not(target_os = "windows"))]
-    return {
-        let sidecar = get_sidecar_path(app);
-        let shell = get_user_shell();
-        app.shell()
-            .command(&shell)
-            .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
-            .env("OPENCODE_CLIENT", "desktop")
-            .env("XDG_STATE_HOME", &state_dir)
-            .args(["-il", "-c", &format!("\"{}\" {}", sidecar.display(), args)])
-    };
+    return app
+        .shell()
+        .sidecar("opencode-cli")
+        .unwrap()
+        .args(args.split_whitespace())
+        .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
+        .env("OPENCODE_CLIENT", "desktop")
+        .env("XDG_STATE_HOME", &state_dir);
 }
