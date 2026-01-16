@@ -65,8 +65,31 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-INSTALL_DIR=$HOME/.opencode/bin
-mkdir -p "$INSTALL_DIR"
+# Determine installation directory with priority order
+# Priority: OPENCODE_INSTALL_DIR > XDG_BIN_DIR > $HOME/bin > $HOME/.opencode/bin
+if [ -n "${OPENCODE_INSTALL_DIR:-}" ]; then
+    INSTALL_DIR="$OPENCODE_INSTALL_DIR"
+elif [ -n "${XDG_BIN_DIR:-}" ]; then
+    INSTALL_DIR="$XDG_BIN_DIR"
+elif [ -d "$HOME/bin" ] || mkdir -p "$HOME/bin" 2>/dev/null; then
+    INSTALL_DIR="$HOME/bin"
+else
+    INSTALL_DIR="$HOME/.opencode/bin"
+fi
+
+# Create and validate the installation directory
+if ! mkdir -p "$INSTALL_DIR" 2>/dev/null; then
+    echo -e "${RED}Error: Failed to create installation directory: $INSTALL_DIR${NC}"
+    echo -e "${RED}Please check permissions or specify a different directory using OPENCODE_INSTALL_DIR${NC}"
+    exit 1
+fi
+
+# Verify the directory is writable
+if [ ! -w "$INSTALL_DIR" ]; then
+    echo -e "${RED}Error: Installation directory is not writable: $INSTALL_DIR${NC}"
+    echo -e "${RED}Please check permissions or specify a different directory using OPENCODE_INSTALL_DIR${NC}"
+    exit 1
+fi
 
 # If --binary is provided, skip all download/detection logic
 if [ -n "$binary_path" ]; then
