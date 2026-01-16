@@ -3,9 +3,15 @@ import type { LocalFile } from "@/context/local"
 import { useLocal } from "@/context/local"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Markdown } from "@opencode-ai/ui/markdown"
-import { getPreviewType, validateContent, formatFileSize } from "./utils"
+import { getPreviewType, validateContent, formatFileSize, getLanguageFromFilename, isSvgFile, getCsvDelimiter } from "./utils"
 import { TextPreview } from "./text-preview"
 import { HtmlPreview } from "./html-preview"
+import { CodePreview } from "./code-preview"
+import { ImagePreview } from "./image-preview"
+import { JsonPreview } from "./json-preview"
+import { XmlPreview } from "./xml-preview"
+import { CsvPreview } from "./csv-preview"
+import { PdfPreview } from "./pdf-preview"
 import type { FilePreviewProps, PreviewError } from "./types"
 import { SIZE_LIMITS } from "./types"
 import "./file-preview.css"
@@ -223,6 +229,48 @@ export function FilePreview(props: FilePreviewProps) {
                     Content truncated. Showing first 100KB.
                   </div>
                 </Show>
+              </Show>
+
+              {/* Code preview */}
+              <Show when={previewType() === "code"}>
+                <CodePreview
+                  content={preparedContent()!.content}
+                  language={getLanguageFromFilename(props.file?.name ?? "")}
+                  truncated={preparedContent()!.truncated}
+                />
+              </Show>
+
+              {/* JSON preview */}
+              <Show when={previewType() === "json"}>
+                <JsonPreview
+                  content={preparedContent()!.content}
+                  truncated={preparedContent()!.truncated}
+                />
+              </Show>
+
+              {/* XML preview */}
+              <Show when={previewType() === "xml"}>
+                <XmlPreview
+                  content={preparedContent()!.content}
+                  isSvg={isSvgFile(props.file?.name ?? "")}
+                  truncated={preparedContent()!.truncated}
+                />
+              </Show>
+
+              {/* CSV/TSV preview */}
+              <Show when={previewType() === "csv"}>
+                <CsvPreview
+                  content={preparedContent()!.content}
+                  delimiter={getCsvDelimiter(props.file?.name ?? "")}
+                  truncated={preparedContent()!.truncated}
+                />
+              </Show>
+
+              {/* PDF preview */}
+              <Show when={previewType() === "pdf"}>
+                <PdfPreview
+                  content={props.file?.content?.content ?? ""}
+                />
               </Show>
             </Show>
           </div>

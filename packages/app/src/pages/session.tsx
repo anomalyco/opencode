@@ -11,7 +11,6 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
@@ -750,7 +749,6 @@ export default function Page() {
       .filter((tab) => tab !== "context"),
   )
 
-  const reviewTab = createMemo(() => hasReview() || tabs().active() === "review")
   const mobileReview = createMemo(() => !isDesktop() && hasReview() && store.mobileTab === "review")
 
   const showTabs = createMemo(
@@ -760,12 +758,11 @@ export default function Page() {
   const activeTab = createMemo(() => {
     const active = tabs().active()
     if (active) return active
-    if (reviewTab()) return "review"
 
     const first = openedTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
-    return "review"
+    return undefined
   })
 
   createEffect(() => {
@@ -1045,30 +1042,6 @@ export default function Page() {
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
-        {/* Mobile tab bar - only shown on mobile when there are diffs */}
-        <Show when={!isDesktop() && hasReview()}>
-          <Tabs class="h-auto">
-            <Tabs.List>
-              <Tabs.Trigger
-                value="session"
-                class="w-1/2"
-                classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "session")}
-              >
-                Session
-              </Tabs.Trigger>
-              <Tabs.Trigger
-                value="review"
-                class="w-1/2 !border-r-0"
-                classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "review")}
-              >
-                {reviewCount()} Files Changed
-              </Tabs.Trigger>
-            </Tabs.List>
-          </Tabs>
-        </Show>
-
         {/* Session panel */}
         <div
           classList={{
@@ -1084,33 +1057,6 @@ export default function Page() {
             <Switch>
               <Match when={params.id}>
                 <Show when={activeMessage()}>
-                  <Show
-                    when={!mobileReview()}
-                    fallback={
-                      <div class="relative h-full overflow-hidden">
-                        <Show
-                          when={diffsReady()}
-                          fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
-                        >
-                          <SessionReviewTab
-                            diffs={diffs}
-                            view={view}
-                            diffStyle="unified"
-                            onViewFile={(path) => {
-                              const value = file.tab(path)
-                              tabs().open(value)
-                              file.load(path)
-                            }}
-                            classes={{
-                              root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
-                              header: "px-4",
-                              container: "px-4",
-                            }}
-                          />
-                        </Show>
-                      </div>
-                    }
-                  >
                     <div class="relative w-full h-full min-w-0">
                       <Show when={isDesktop()}>
                         <div class="absolute inset-0 pointer-events-none z-10">
@@ -1220,7 +1166,6 @@ export default function Page() {
                         </div>
                       </div>
                     </div>
-                  </Show>
                 </Show>
               </Match>
               <Match when={true}>
@@ -1277,35 +1222,19 @@ export default function Page() {
 
         {/* Desktop tabs panel (Review + Context + Files) - hidden on mobile */}
         <Show when={isDesktop() && showTabs()}>
-          <div class="relative flex-1 min-w-0 h-full border-l border-border-weak-base glass-sidebar">
-            <DragDropProvider
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onDragOver={handleDragOver}
-              collisionDetector={closestCenter}
-            >
+          <div class="relative flex flex-col flex-1 min-w-0 h-full border-l border-border-weak-base glass-sidebar">
+            <div class="flex-1 min-h-0 overflow-hidden">
+              <DragDropProvider
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onDragOver={handleDragOver}
+                collisionDetector={closestCenter}
+              >
               <DragDropSensors />
               <ConstrainDragYAxis />
               <Tabs value={activeTab()} onChange={openTab}>
                 <div class="sticky top-0 shrink-0 flex">
                   <Tabs.List>
-                    <Show when={reviewTab()}>
-                      <Tabs.Trigger value="review">
-                        <div class="flex items-center gap-3">
-                          <Show when={diffs()}>
-                            <DiffChanges changes={diffs()} variant="bars" />
-                          </Show>
-                          <div class="flex items-center gap-1.5">
-                            <div>Review</div>
-                            <Show when={info()?.summary?.files}>
-                              <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
-                                {info()?.summary?.files ?? 0}
-                              </div>
-                            </Show>
-                          </div>
-                        </div>
-                      </Tabs.Trigger>
-                    </Show>
                     <Show when={contextOpen()}>
                       <Tabs.Trigger
                         value="context"
@@ -1342,30 +1271,6 @@ export default function Page() {
                     </div>
                   </Tabs.List>
                 </div>
-                <Show when={reviewTab()}>
-                  <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                    <Show when={activeTab() === "review"}>
-                      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                        <Show
-                          when={diffsReady()}
-                          fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
-                        >
-                          <SessionReviewTab
-                            diffs={diffs}
-                            view={view}
-                            diffStyle={layout.review.diffStyle()}
-                            onDiffStyleChange={layout.review.setDiffStyle}
-                            onViewFile={(path) => {
-                              const value = file.tab(path)
-                              tabs().open(value)
-                              file.load(path)
-                            }}
-                          />
-                        </Show>
-                      </div>
-                    </Show>
-                  </Tabs.Content>
-                </Show>
                 <Show when={contextOpen()}>
                   <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
                     <Show when={activeTab() === "context"}>
@@ -1620,6 +1525,7 @@ export default function Page() {
                 </Show>
               </DragOverlay>
             </DragDropProvider>
+            </div>
           </div>
         </Show>
       </div>

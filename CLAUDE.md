@@ -9,6 +9,7 @@ Auto-generated from all feature plans. Last updated: 2026-01-14
 - In-memory Solid.js store (session-scoped, no persistence required) (003-file-activity-highlight)
 - TypeScript 5.8.2 (frontend), Rust 2024 Edition (Tauri backend) + Solid.js 1.9.10, @kobalte/core 0.13.11, Tailwind CSS 4.1.11, Vite 7.1.4, @tauri-apps/plugin-store (persistence), @solidjs/router (routing) (004-mcp-connectors)
 - File system (`.mcp.json` in workspace root), @tauri-apps/plugin-store for UI state persistence (004-mcp-connectors)
+- TypeScript 5.8.2 (frontend), Rust 2024 Edition (Tauri backend) + Solid.js 1.9.10, @kobalte/core 0.13.11, Tailwind CSS 4.1.11, Vite 7.1.4, @tauri-apps/api (filesystem), Zod (validation) (006-fix-mcp-api-alignment)
 
 - TypeScript 5.8.2 / Rust 2024 Edition (Tauri backend) + Solid.js 1.9.10, Tailwind CSS 4.1.11, @kobalte/core 0.13.11, Vite 7.1.4 (001-workspace-files-sidebar)
 
@@ -28,12 +29,31 @@ cargo test [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECH
 TypeScript 5.8.2 / Rust 2024 Edition (Tauri backend): Follow standard conventions
 
 ## Recent Changes
+- 006-fix-mcp-api-alignment: Added TypeScript 5.8.2 (frontend), Rust 2024 Edition (Tauri backend) + Solid.js 1.9.10, @kobalte/core 0.13.11, Tailwind CSS 4.1.11, Vite 7.1.4, @tauri-apps/api (filesystem), Zod (validation)
 - 004-mcp-connectors: Added TypeScript 5.8.2 (frontend), Rust 2024 Edition (Tauri backend) + Solid.js 1.9.10, @kobalte/core 0.13.11, Tailwind CSS 4.1.11, Vite 7.1.4, @tauri-apps/plugin-store (persistence), @solidjs/router (routing)
 - 003-file-activity-highlight: Added TypeScript 5.8.2 (frontend), Rust 2024 Edition (Tauri backend) + Solid.js 1.9.10, Tailwind CSS 4.1.11, @kobalte/core 0.13.11, Vite 7.1.4
-- 002-file-preview-viewer: Added TypeScript 5.8.2 / Rust 2024 Edition (Tauri backend) + Solid.js 1.9.10, Tailwind CSS 4.1.11, @kobalte/core 0.13.11, Vite 7.1.4, Marked (markdown parsing), DOMPurify (HTML sanitization)
 
 
 <!-- MANUAL ADDITIONS START -->
+
+## Developer Documentation
+
+For comprehensive documentation on the codebase architecture and patterns, see the `/docs` directory:
+
+### Architecture & Structure
+- [Architecture Overview](docs/ARCHITECTURE.md) - Project structure, packages, and data flow
+- [Code Conventions](docs/CODE_CONVENTIONS.md) - Naming, imports, TypeScript, and styling patterns
+- [Component Patterns](docs/COMPONENT_PATTERNS.md) - Solid.js component and context patterns
+
+### Technical Deep-Dives
+- [SDK/API Documentation](docs/SDK_API.md) - SDK architecture, endpoints, and integrations
+- [Tauri Backend](docs/TAURI_BACKEND.md) - Rust backend and MCP plugin patterns
+- [Plugin Development](docs/PLUGIN_DEVELOPMENT.md) - Creating custom plugins and tools
+
+### Getting Started
+- [Development Setup](docs/DEVELOPMENT_SETUP.md) - Local development environment setup
+- [Testing Guide](docs/TESTING.md) - Testing patterns and strategies
+- [CI/CD Pipeline](docs/CI_CD.md) - Continuous integration and deployment
 
 ## Tauri MCP Limitations
 

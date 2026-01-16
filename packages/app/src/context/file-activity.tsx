@@ -261,15 +261,51 @@ export const { use: useFileActivity, provider: FileActivityProvider } = createSi
     // T011-T013: Public API
     // =============================================================================
 
+    // Helper to normalize path - converts absolute path to relative if it matches workspace
+    const normalizePath = (path: string): string => {
+      if (!path.startsWith("/")) return path
+      const workspaceDir = sdk.directory
+      const normalizedWorkspace = workspaceDir.endsWith("/") ? workspaceDir : workspaceDir + "/"
+      if (path.startsWith(normalizedWorkspace)) {
+        return path.slice(normalizedWorkspace.length)
+      }
+      if (path.startsWith(workspaceDir + "/")) {
+        return path.slice(workspaceDir.length + 1)
+      }
+      return path
+    }
+
+    // Helper to convert relative path to absolute
+    const toAbsolutePath = (path: string): string => {
+      if (path.startsWith("/")) return path
+      const workspaceDir = sdk.directory
+      return workspaceDir.endsWith("/") ? workspaceDir + path : workspaceDir + "/" + path
+    }
+
+    // Helper to find activity - tries original path, normalized (relative), and absolute versions
+    const findActivityPath = (path: string): string | undefined => {
+      const files = currentSession().store.files
+      // Try exact match first
+      if (path in files) return path
+      // Try normalized (relative) version
+      const normalized = normalizePath(path)
+      if (normalized !== path && normalized in files) return normalized
+      // Try absolute version (if input was relative)
+      const absolute = toAbsolutePath(path)
+      if (absolute !== path && absolute in files) return absolute
+      return undefined
+    }
+
     return {
       // T011: Get activity state for a file
       get(path: string): FileActivityState | undefined {
-        return currentSession().store.files[path]
+        const actualPath = findActivityPath(path)
+        return actualPath ? currentSession().store.files[actualPath] : undefined
       },
 
       // T012: Check if file has activity
       has(path: string): boolean {
-        return path in currentSession().store.files
+        return findActivityPath(path) !== undefined
       },
 
       // T029: Get aggregated directory activity

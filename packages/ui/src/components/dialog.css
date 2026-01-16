@@ -16,17 +16,18 @@
 [data-component="dialog"] {
   position: fixed;
   inset: 0;
-  margin-left: var(--dialog-left-margin);
+  left: var(--dialog-left-margin, 0px);
   z-index: 50;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 24px;
 
   [data-slot="dialog-container"] {
     position: relative;
     z-index: 50;
-    width: min(calc(100vw - 16px), 480px);
-    height: min(calc(100vh - 16px), 512px);
+    width: min(calc(100% - 48px), 480px);
+    max-height: calc(100% - 48px);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -110,6 +111,7 @@
         flex-direction: column;
         flex: 1;
         overflow-y: auto;
+        padding: 0 24px 24px 24px;
 
         &:focus-visible {
           outline: none;

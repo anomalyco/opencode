@@ -5,9 +5,17 @@ import { useFileActivity } from "@/context/file-activity"
 import { useSync } from "@/context/sync"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Markdown } from "@opencode-ai/ui/markdown"
-import { getPreviewType, validateContent } from "./file-preview"
+import { getPreviewType, validateContent, getLanguageFromFilename, isSvgFile, getImageMimeType, getCsvDelimiter } from "./file-preview"
 import { TextPreview } from "./file-preview/text-preview"
 import { HtmlPreview } from "./file-preview/html-preview"
+import { CodePreview } from "./file-preview/code-preview"
+import { ImagePreview } from "./file-preview/image-preview"
+import { JsonPreview } from "./file-preview/json-preview"
+import { XmlPreview } from "./file-preview/xml-preview"
+import { CsvPreview } from "./file-preview/csv-preview"
+import { PdfPreview } from "./file-preview/pdf-preview"
+import { DocxPreview } from "./file-preview/docx-preview"
+import { XlsxPreview } from "./file-preview/xlsx-preview"
 import type { PreviewError } from "./file-preview/types"
 import "./file-preview/file-preview.css"
 
@@ -121,6 +129,12 @@ export function FilePreviewPanel() {
     const f = file()
     if (!f?.content?.content) return null
 
+    // Skip validation for binary files - they're handled separately
+    const type = previewType()
+    if (type === "image" || type === "pdf" || type === "docx" || type === "xlsx") {
+      return null // Binary files are rendered directly without text validation
+    }
+
     const result = validateContent(f.content.content)
     if (!result.valid) {
       setError(result.error)
@@ -188,7 +202,7 @@ export function FilePreviewPanel() {
         {/* Content */}
         <div
           data-slot="preview-content"
-          class="flex-1 overflow-auto min-h-0"
+          class="flex-1 overflow-hidden min-h-0 flex flex-col"
         >
           {/* Loading state */}
           <Show when={loading()}>
@@ -273,6 +287,71 @@ export function FilePreviewPanel() {
                 </div>
               </Show>
             </Show>
+
+            {/* Code preview */}
+            <Show when={previewType() === "code"}>
+              <CodePreview
+                content={preparedContent()!.content}
+                language={getLanguageFromFilename(file()?.name ?? "")}
+                truncated={preparedContent()!.truncated}
+              />
+            </Show>
+
+            {/* JSON preview */}
+            <Show when={previewType() === "json"}>
+              <JsonPreview
+                content={preparedContent()!.content}
+                truncated={preparedContent()!.truncated}
+              />
+            </Show>
+
+            {/* XML preview */}
+            <Show when={previewType() === "xml"}>
+              <XmlPreview
+                content={preparedContent()!.content}
+                isSvg={isSvgFile(file()?.name ?? "")}
+                truncated={preparedContent()!.truncated}
+              />
+            </Show>
+
+            {/* CSV/TSV preview */}
+            <Show when={previewType() === "csv"}>
+              <CsvPreview
+                content={preparedContent()!.content}
+                delimiter={getCsvDelimiter(file()?.name ?? "")}
+                truncated={preparedContent()!.truncated}
+              />
+            </Show>
+          </Show>
+
+          {/* Image preview - handled separately since images need special loading */}
+          <Show when={!loading() && !error() && previewType() === "image" && file()}>
+            <ImagePreview
+              src={`data:${getImageMimeType(file()!.name)};base64,${file()!.content?.content ?? ""}`}
+              alt={file()!.name}
+              class="h-full"
+            />
+          </Show>
+
+          {/* PDF preview - handled separately since PDFs are binary */}
+          <Show when={!loading() && !error() && previewType() === "pdf" && file()}>
+            <PdfPreview
+              content={file()!.content?.content ?? ""}
+            />
+          </Show>
+
+          {/* DOCX preview - handled separately since DOCX are binary */}
+          <Show when={!loading() && !error() && previewType() === "docx" && file()}>
+            <DocxPreview
+              content={file()!.content?.content ?? ""}
+            />
+          </Show>
+
+          {/* XLSX preview - handled separately since XLSX are binary */}
+          <Show when={!loading() && !error() && previewType() === "xlsx" && file()}>
+            <XlsxPreview
+              content={file()!.content?.content ?? ""}
+            />
           </Show>
         </div>
       </div>

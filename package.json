@@ -73,7 +73,9 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
-    "typescript": "catalog:"
+    "docx-preview": "0.3.7",
+    "typescript": "catalog:",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "repository": {
     "type": "git",

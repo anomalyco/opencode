@@ -866,62 +866,60 @@ export default function Layout(props: ParentProps) {
           class="group/session relative w-full rounded-md cursor-default transition-colors
                  hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
         >
-          <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
-            <A
-              href={`${props.slug}/session/${props.session.id}`}
-              class="flex flex-col min-w-0 text-left w-full focus:outline-none pl-4 pr-2 py-1"
-              onMouseEnter={() => prefetchSession(props.session, "high")}
-              onFocus={() => prefetchSession(props.session, "high")}
-            >
-              <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
-                <span
-                  classList={{
-                    "text-14-regular text-text-strong overflow-hidden text-ellipsis truncate": true,
-                    "animate-pulse": isWorking(),
-                  }}
-                >
-                  {props.session.title}
-                </span>
-                <div class="shrink-0 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
-                  <Switch>
-                    <Match when={isWorking()}>
-                      <Spinner class="size-2.5 mr-0.5" />
-                    </Match>
-                    <Match when={hasPermissions()}>
-                      <div class="size-1.5 mr-1.5 rounded-full bg-surface-warning-strong" />
-                    </Match>
-                    <Match when={hasError()}>
-                      <div class="size-1.5 mr-1.5 rounded-full bg-text-diff-delete-base" />
-                    </Match>
-                    <Match when={notifications().length > 0}>
-                      <div class="size-1.5 mr-1.5 rounded-full bg-text-interactive-base" />
-                    </Match>
-                    <Match when={true}>
-                      <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
-                        {Math.abs(updated().diffNow().as("seconds")) < 60
-                          ? "Now"
-                          : updated()
-                              .toRelative({
-                                style: "short",
-                                unit: ["days", "hours", "minutes"],
-                              })
-                              ?.replace(" ago", "")
-                              ?.replace(/ days?/, "d")
-                              ?.replace(" min.", "m")
-                              ?.replace(" hr.", "h")}
-                      </span>
-                    </Match>
-                  </Switch>
-                </div>
+          <A
+            href={`${props.slug}/session/${props.session.id}`}
+            class="flex flex-col min-w-0 text-left w-full focus:outline-none pl-4 pr-2 py-1"
+            onMouseEnter={() => prefetchSession(props.session, "high")}
+            onFocus={() => prefetchSession(props.session, "high")}
+          >
+            <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
+              <span
+                classList={{
+                  "text-14-regular text-text-strong overflow-hidden text-ellipsis truncate": true,
+                  "animate-pulse": isWorking(),
+                }}
+              >
+                {props.session.title}
+              </span>
+              <div class="shrink-0 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
+                <Switch>
+                  <Match when={isWorking()}>
+                    <Spinner class="size-2.5 mr-0.5" />
+                  </Match>
+                  <Match when={hasPermissions()}>
+                    <div class="size-1.5 mr-1.5 rounded-full bg-surface-warning-strong" />
+                  </Match>
+                  <Match when={hasError()}>
+                    <div class="size-1.5 mr-1.5 rounded-full bg-text-diff-delete-base" />
+                  </Match>
+                  <Match when={notifications().length > 0}>
+                    <div class="size-1.5 mr-1.5 rounded-full bg-text-interactive-base" />
+                  </Match>
+                  <Match when={true}>
+                    <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
+                      {Math.abs(updated().diffNow().as("seconds")) < 60
+                        ? "Now"
+                        : updated()
+                            .toRelative({
+                              style: "short",
+                              unit: ["days", "hours", "minutes"],
+                            })
+                            ?.replace(" ago", "")
+                            ?.replace(/ days?/, "d")
+                            ?.replace(" min.", "m")
+                            ?.replace(" hr.", "h")}
+                    </span>
+                  </Match>
+                </Switch>
               </div>
-              <Show when={props.session.summary?.files}>
-                <div class="flex justify-between items-center self-stretch">
-                  <span class="text-12-regular text-text-weak">{`${props.session.summary?.files || "No"} file${props.session.summary?.files !== 1 ? "s" : ""} changed`}</span>
-                  <Show when={props.session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
-                </div>
-              </Show>
-            </A>
-          </Tooltip>
+            </div>
+            <Show when={props.session.summary?.files}>
+              <div class="flex justify-between items-center self-stretch">
+                <span class="text-12-regular text-text-weak">{`${props.session.summary?.files || "No"} file${props.session.summary?.files !== 1 ? "s" : ""} changed`}</span>
+                <Show when={props.session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
+              </div>
+            </Show>
+          </A>
           <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
             <TooltipKeybind
               placement={props.mobile ? "bottom" : "right"}
@@ -1035,18 +1033,16 @@ export default function Layout(props: ParentProps) {
                     >
                       <div class="flex items-center self-stretch w-full">
                         <div class="flex-1 min-w-0">
-                          <Tooltip placement={props.mobile ? "bottom" : "right"} value="New session">
-                            <A
-                              href={`${defaultWorktree()}/session`}
-                              class="flex flex-col gap-1 min-w-0 text-left w-full focus:outline-none"
-                            >
-                              <div class="flex items-center self-stretch gap-6 justify-between">
-                                <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
-                                  New session
-                                </span>
-                              </div>
-                            </A>
-                          </Tooltip>
+                          <A
+                            href={`${defaultWorktree()}/session`}
+                            class="flex flex-col gap-1 min-w-0 text-left w-full focus:outline-none"
+                          >
+                            <div class="flex items-center self-stretch gap-6 justify-between">
+                              <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
+                                New session
+                              </span>
+                            </div>
+                          </A>
                         </div>
                       </div>
                     </div>

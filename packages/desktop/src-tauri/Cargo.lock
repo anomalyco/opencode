@@ -3115,7 +3115,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencode-desktop"
+name = "openwork-desktop"
 version = "0.0.0"
 dependencies = [
  "futures",

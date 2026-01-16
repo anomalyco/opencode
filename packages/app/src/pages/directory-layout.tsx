@@ -4,6 +4,7 @@ import { SDKProvider, useSDK } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
 import { FileActivityProvider } from "@/context/file-activity"
+import { McpConnectorsProvider } from "@/context/mcp-connectors"
 import { useLayout } from "@/context/layout"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { WorkspaceSidebar } from "@/components/workspace-sidebar"
@@ -58,6 +59,7 @@ export default function Layout(props: ParentProps) {
               >
                 <LocalProvider>
                   <FileActivityProvider>
+                    <McpConnectorsProvider>
                   <div class="flex size-full">
                     <div class="flex-1 min-w-0">{props.children}</div>
                     {/* Workspace Files Sidebar - Right Side */}
@@ -83,6 +85,7 @@ export default function Layout(props: ParentProps) {
                       </div>
                     </Show>
                   </div>
+                    </McpConnectorsProvider>
                   </FileActivityProvider>
                 </LocalProvider>
               </DataProvider>

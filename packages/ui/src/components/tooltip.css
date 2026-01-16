@@ -39,13 +39,8 @@
   line-height: var(--line-height-large); /* 166.667% */
   letter-spacing: var(--letter-spacing-normal);
 
-  &[data-expanded] {
-    opacity: 1;
-    /* transform: translate3d(0, 0, 0); */
-  }
-
   &[data-closed] {
-    opacity: 0;
+    display: none;
   }
 
   /* &[data-placement="top"] { */

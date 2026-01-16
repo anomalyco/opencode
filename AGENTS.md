@@ -1,7 +1,54 @@
-- To test opencode in the `packages/opencode` directory you can run `bun dev`
-- To regenerate the javascript SDK, run ./packages/sdk/js/script/build.ts
-- ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
-- the default branch in this repo is `dev`
+# OpenWork Agent Guide
+
+This guide helps AI agents get started working on the OpenWork codebase effectively.
+
+## Getting Started
+
+Before making changes, **read the documentation** to understand the codebase:
+
+| Document | When to Read |
+|----------|--------------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Understanding project structure, packages, data flow |
+| [docs/CODE_CONVENTIONS.md](docs/CODE_CONVENTIONS.md) | File naming, imports, TypeScript patterns, styling |
+| [docs/COMPONENT_PATTERNS.md](docs/COMPONENT_PATTERNS.md) | Solid.js components, contexts, state management |
+| [docs/SDK_API.md](docs/SDK_API.md) | SDK structure, REST API, providers, MCP integration |
+| [docs/TAURI_BACKEND.md](docs/TAURI_BACKEND.md) | Rust backend commands, plugins, async patterns |
+| [docs/DEVELOPMENT_SETUP.md](docs/DEVELOPMENT_SETUP.md) | Local dev setup, prerequisites |
+| [docs/TESTING.md](docs/TESTING.md) | Testing patterns for TypeScript and Rust |
+| [docs/PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md) | Creating custom plugins and tools |
+| [docs/GLOSSARY.md](docs/GLOSSARY.md) | Key terms and abbreviations |
+
+## Quick Reference
+
+- **Default branch:** `dev`
+- **Package manager:** Bun 1.3.5+
+- **Frontend:** Solid.js 1.9.10, Tailwind CSS 4.1.11
+- **Backend:** Tauri v2 (Rust 2024 Edition)
+- **Type checking:** `bun run typecheck`
+
+## Common Commands
+
+```bash
+# Run OpenCode CLI in dev mode
+bun run dev
+
+# Run desktop app
+cd packages/desktop && bun run tauri dev
+
+# Regenerate JavaScript SDK
+./packages/sdk/js/script/build.ts
+
+# Run tests
+bun test                    # TypeScript tests
+cargo test                  # Rust tests
+```
+
+## Key Principles
+
+1. **ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE** - maximize efficiency
+2. **Read before editing** - understand existing code before modifying
+3. **Follow conventions** - use kebab-case files, path aliases, existing patterns
+4. **Keep changes focused** - avoid over-engineering or unnecessary refactoring
 
 ## Desktop App Verification (MCP)
 

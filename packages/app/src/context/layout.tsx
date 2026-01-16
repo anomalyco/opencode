@@ -75,6 +75,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           width: 400,
           filePath: null as string | null,
         },
+        connectors: {
+          opened: true,
+          collapsed: false,
+        },
         sessionTabs: {} as Record<string, SessionTabs>,
         sessionView: {} as Record<string, SessionView>,
       }),
@@ -413,6 +417,38 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
           setStore("filePreview", "width", clampedWidth)
+        },
+      },
+      connectors: {
+        opened: createMemo(() => store.connectors?.opened ?? true),
+        collapsed: createMemo(() => store.connectors?.collapsed ?? false),
+        open() {
+          if (!store.connectors) {
+            setStore("connectors", { opened: true, collapsed: false })
+            return
+          }
+          setStore("connectors", "opened", true)
+        },
+        close() {
+          if (!store.connectors) {
+            setStore("connectors", { opened: false, collapsed: false })
+            return
+          }
+          setStore("connectors", "opened", false)
+        },
+        toggle() {
+          if (!store.connectors) {
+            setStore("connectors", { opened: true, collapsed: false })
+            return
+          }
+          setStore("connectors", "opened", (x) => !x)
+        },
+        setCollapsed(collapsed: boolean) {
+          if (!store.connectors) {
+            setStore("connectors", { opened: true, collapsed })
+            return
+          }
+          setStore("connectors", "collapsed", collapsed)
         },
       },
       view(sessionKey: string) {

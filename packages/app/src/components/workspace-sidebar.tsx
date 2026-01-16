@@ -4,6 +4,7 @@ import { useLocal, type LocalFile } from "@/context/local"
 import { useFileActivity } from "@/context/file-activity"
 import FileTree from "./file-tree"
 import { FileActivitySection } from "./file-activity-section"
+import { McpConnectorsSection } from "./mcp-connectors-section"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { getPreviewType } from "./file-preview"
 
@@ -138,6 +139,9 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
           />
         </Show>
       </div>
+
+      {/* MCP Connectors Section - Hidden for now */}
+      {/* <McpConnectorsSection /> */}
     </div>
   )
 }

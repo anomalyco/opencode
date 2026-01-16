@@ -135,6 +135,25 @@ async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Result<(
     Ok(())
 }
 
+#[tauri::command]
+async fn write_file(path: String, content: String) -> Result<(), String> {
+    use std::fs;
+    use std::path::Path;
+
+    let file_path = Path::new(&path);
+
+    // Create parent directories if they don't exist
+    if let Some(parent) = file_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create directories: {}", e))?;
+    }
+
+    fs::write(file_path, content)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+
+    Ok(())
+}
+
 fn get_sidecar_port() -> u32 {
     option_env!("OPENCODE_PORT")
         .map(|s| s.to_string())
@@ -261,7 +280,8 @@ pub fn run() {
             install_cli,
             ensure_server_ready,
             get_default_server_url,
-            set_default_server_url
+            set_default_server_url,
+            write_file
         ])
         .setup(move |app| {
             let app = app.handle().clone();

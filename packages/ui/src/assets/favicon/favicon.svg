@@ -1,7 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512"><svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="512" height="512" fill="#131010"></rect>
-<path d="M320 224V352H192V224H320Z" fill="#5A5858"></path>
-<path fill-rule="evenodd" clip-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z" fill="white"></path>
-</svg><style>@media (prefers-color-scheme: light) { :root { filter: none; } }
-@media (prefers-color-scheme: dark) { :root { filter: none; } }
-</style></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60" fill="none">
+  <!-- OpenWork OW Mark -->
+  <g stroke="#4a4a4a" stroke-width="3" fill="none">
+    <!-- O - outer circle -->
+    <circle cx="25" cy="30" r="18" />
+    <!-- O - inner circle -->
+    <circle cx="25" cy="30" r="10" />
+    <!-- W - left vertical -->
+    <line x1="55" y1="12" x2="55" y2="48" stroke-linecap="round" />
+    <!-- W - top diagonal -->
+    <line x1="55" y1="12" x2="72" y2="12" stroke-linecap="round" />
+    <!-- W - middle diagonal -->
+    <line x1="72" y1="12" x2="85" y2="30" stroke-linecap="round" />
+    <!-- W - right top diagonal -->
+    <line x1="85" y1="30" x2="98" y2="12" stroke-linecap="round" />
+    <!-- W - right vertical -->
+    <line x1="98" y1="12" x2="98" y2="48" stroke-linecap="round" />
+  </g>
+</svg>

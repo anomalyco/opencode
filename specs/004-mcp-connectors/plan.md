@@ -38,6 +38,26 @@ Create a "Connectors" section in the bottom right corner of the desktop app that
 
 **No violations** - feature aligns with existing architecture patterns.
 
+### Post-Design Re-evaluation (Phase 1 Complete)
+
+**Status**: ✓ PASS (Re-checked after completing research, data model, and contracts)
+
+**Design Review**:
+1. **Component-Based Architecture**: ✓ Confirmed - 3 components (Section, Item, Form) following FileActivitySection pattern
+2. **Type Safety**: ✓ Confirmed - Full TypeScript contracts defined in `/contracts/`, Zod validation for runtime
+3. **Reactive Patterns**: ✓ Confirmed - Using `createStore` for config, `createSignal` for UI state, `createEffect` for auto-save
+4. **Context Isolation**: ✓ Confirmed - `McpConnectorsContext` with clean API contract (see `contracts/mcp-connectors-context-api.ts`)
+5. **Testability**: ✓ Confirmed - Validation logic separated, file operations mockable via SDK client
+6. **Accessibility**: ✓ Confirmed - Using @kobalte/core Dialog, Collapsible, Button components
+
+**Additional Checks**:
+- ✓ No new dependencies added (uses existing stack)
+- ✓ No breaking changes to existing code (only extends layout store)
+- ✓ File structure follows monorepo conventions
+- ✓ Implementation scope is bounded (~1,110 LOC total)
+
+**Conclusion**: Design maintains architectural integrity. Ready for `/speckit.tasks` phase.
+
 ## Project Structure
 
 ### Documentation (this feature)
@@ -98,3 +118,93 @@ packages/
 > **Fill ONLY if Constitution Check has violations that must be justified**
 
 **Status**: N/A - No violations detected. Feature follows existing architectural patterns.
+
+---
+
+## Planning Phases Summary
+
+### Phase 0: Outline & Research ✓ COMPLETE
+
+**Artifacts Generated**:
+- ✅ [research.md](research.md) - Technical decisions and best practices
+  - 10 major decisions documented
+  - File format & schema (JSON with Zod validation)
+  - File I/O strategy (SDK client pattern)
+  - State management (McpConnectorsContext)
+  - UI layout integration (Layout store)
+  - Component architecture (3-component structure)
+  - Validation strategy (multi-layer)
+  - File watch strategy (Tauri fs-watch)
+  - Environment variable security (plain text with warnings)
+  - Initial load strategy (auto-create if missing)
+  - Inputs section management (P4 - minimal viable)
+
+### Phase 1: Design & Contracts ✓ COMPLETE
+
+**Artifacts Generated**:
+- ✅ [data-model.md](data-model.md) - Data structures and state management
+  - Core entities: McpConfig, McpServer, McpInput
+  - State transitions: Add, Edit, Remove, External changes
+  - Validation schema (Zod)
+  - Performance considerations
+  - Testing requirements
+
+- ✅ [contracts/mcp-connectors-context-api.ts](contracts/mcp-connectors-context-api.ts) - Context API contract
+  - Full TypeScript interface for McpConnectorsContextAPI
+  - 25+ methods documented
+  - Usage examples included
+  - Event types for file watcher
+
+- ✅ [contracts/component-props.ts](contracts/component-props.ts) - Component prop interfaces
+  - McpConnectorsSectionProps
+  - McpConnectorItemProps
+  - McpConnectorFormProps
+  - Supporting types (FormMode, ConnectorFormData, etc.)
+  - Usage examples for each component
+
+- ✅ [quickstart.md](quickstart.md) - Developer implementation guide
+  - 5-phase implementation plan
+  - Code examples for each phase
+  - Common pitfalls and debugging tips
+  - Performance optimization guidance
+  - Code review checklist
+
+- ✅ Agent context updated ([CLAUDE.md](../../CLAUDE.md))
+  - Added TypeScript 5.8.2 + Rust 2024 Edition
+  - Added Solid.js ecosystem dependencies
+  - Added file system storage details
+
+### Phase 2: Tasks ⏳ PENDING
+
+**Next Step**: Run `/speckit.tasks` to generate detailed implementation tasks
+
+---
+
+## Next Actions
+
+1. **Review Planning Artifacts**: Read through all generated documents
+2. **Ask Clarifying Questions**: If anything is unclear before implementation
+3. **Generate Tasks**: Run `/speckit.tasks` when ready to start implementation
+4. **Begin Implementation**: Follow the quickstart guide and tasks
+
+---
+
+## Artifacts Location
+
+All planning artifacts are in: `specs/004-mcp-connectors/`
+
+```
+specs/004-mcp-connectors/
+├── spec.md                           # ✅ Feature specification
+├── plan.md                           # ✅ This file - implementation plan
+├── research.md                       # ✅ Technical decisions & best practices
+├── data-model.md                     # ✅ Data structures & state management
+├── quickstart.md                     # ✅ Developer implementation guide
+├── contracts/
+│   ├── mcp-connectors-context-api.ts # ✅ Context API contract
+│   └── component-props.ts            # ✅ Component prop interfaces
+└── checklists/
+    └── requirements.md               # ✅ Spec quality validation
+```
+
+**Total Planning Output**: 7 documents, ~3,500 lines of technical documentation
