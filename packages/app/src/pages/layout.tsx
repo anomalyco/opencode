@@ -16,6 +16,7 @@ import {
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
+import { Persist, persisted } from "@/utils/persist"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
@@ -62,13 +63,18 @@ import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 
 export default function Layout(props: ParentProps) {
-  const [store, setStore] = createStore({
-    lastSession: {} as { [directory: string]: string },
-    activeProject: undefined as string | undefined,
-    activeWorkspace: undefined as string | undefined,
-    workspaceOrder: {} as Record<string, string[]>,
-    workspaceExpanded: {} as Record<string, boolean>,
-  })
+  const [store, setStore, , ready] = persisted(
+    Persist.global("layout.page", ["layout.page.v1"]),
+    createStore({
+      lastSession: {} as { [directory: string]: string },
+      activeProject: undefined as string | undefined,
+      activeWorkspace: undefined as string | undefined,
+      workspaceOrder: {} as Record<string, string[]>,
+      workspaceExpanded: {} as Record<string, boolean>,
+    }),
+  )
+
+  const pageReady = createMemo(() => ready())
 
   let scrollContainerRef: HTMLDivElement | undefined
   const xlQuery = window.matchMedia("(min-width: 1280px)")
@@ -81,6 +87,7 @@ export default function Layout(props: ParentProps) {
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const layout = useLayout()
+  const layoutReady = createMemo(() => layout.ready())
   const platform = usePlatform()
   const server = useServer()
   const notification = useNotification()
@@ -161,53 +168,64 @@ export default function Layout(props: ParentProps) {
   })
 
   onMount(() => {
+    const alerts = {
+      "permission.asked": {
+        title: "Permission required",
+        icon: "checklist" as const,
+        description: (sessionTitle: string, projectName: string) =>
+          `${sessionTitle} in ${projectName} needs permission`,
+      },
+      "question.asked": {
+        title: "Question",
+        icon: "bubble-5" as const,
+        description: (sessionTitle: string, projectName: string) => `${sessionTitle} in ${projectName} has a question`,
+      },
+    }
+
     const toastBySession = new Map<string, number>()
     const alertedAtBySession = new Map<string, number>()
-    const permissionAlertCooldownMs = 5000
+    const cooldownMs = 5000
 
     const unsub = globalSDK.event.listen((e) => {
-      if (e.details?.type !== "permission.asked") return
+      if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked") return
+      const config = alerts[e.details.type]
       const directory = e.name
-      const perm = e.details.properties
-      if (permission.autoResponds(perm, directory)) return
+      const props = e.details.properties
+      if (e.details.type === "permission.asked" && permission.autoResponds(e.details.properties, directory)) return
 
       const [store] = globalSync.child(directory)
-      const session = store.session.find((s) => s.id === perm.sessionID)
-      const sessionKey = `${directory}:${perm.sessionID}`
+      const session = store.session.find((s) => s.id === props.sessionID)
+      const sessionKey = `${directory}:${props.sessionID}`
 
       const sessionTitle = session?.title ?? "New session"
       const projectName = getFilename(directory)
-      const description = `${sessionTitle} in ${projectName} needs permission`
-      const href = `/${base64Encode(directory)}/session/${perm.sessionID}`
+      const description = config.description(sessionTitle, projectName)
+      const href = `/${base64Encode(directory)}/session/${props.sessionID}`
 
       const now = Date.now()
       const lastAlerted = alertedAtBySession.get(sessionKey) ?? 0
-      if (now - lastAlerted < permissionAlertCooldownMs) return
+      if (now - lastAlerted < cooldownMs) return
       alertedAtBySession.set(sessionKey, now)
 
-      void platform.notify("Permission required", description, href)
+      void platform.notify(config.title, description, href)
 
       const currentDir = params.dir ? base64Decode(params.dir) : undefined
       const currentSession = params.id
-      if (directory === currentDir && perm.sessionID === currentSession) return
+      if (directory === currentDir && props.sessionID === currentSession) return
       if (directory === currentDir && session?.parentID === currentSession) return
 
       const existingToastId = toastBySession.get(sessionKey)
-      if (existingToastId !== undefined) {
-        toaster.dismiss(existingToastId)
-      }
+      if (existingToastId !== undefined) toaster.dismiss(existingToastId)
 
       const toastId = showToast({
         persistent: true,
-        icon: "checklist",
-        title: "Permission required",
+        icon: config.icon,
+        title: config.title,
         description,
         actions: [
           {
             label: "Go to session",
-            onClick: () => {
-              navigate(href)
-            },
+            onClick: () => navigate(href),
           },
           {
             label: "Dismiss",
@@ -278,6 +296,8 @@ export default function Layout(props: ParentProps) {
   })
 
   createEffect(() => {
+    if (!pageReady()) return
+    if (!layoutReady()) return
     const project = currentProject()
     if (!project) return
 
@@ -299,6 +319,16 @@ export default function Layout(props: ParentProps) {
 
     if (merged.some((d, i) => d !== existing[i])) {
       setStore("workspaceOrder", project.worktree, merged)
+    }
+  })
+
+  createEffect(() => {
+    if (!pageReady()) return
+    if (!layoutReady()) return
+    for (const [directory, expanded] of Object.entries(store.workspaceExpanded)) {
+      if (layout.sidebar.workspaces(directory)()) continue
+      if (!expanded) continue
+      setStore("workspaceExpanded", directory, false)
     }
   })
 
@@ -692,12 +722,13 @@ export default function Layout(props: ParentProps) {
   }
 
   createEffect(() => {
+    if (!pageReady()) return
     if (!params.dir || !params.id) return
     const directory = base64Decode(params.dir)
     const id = params.id
     setStore("lastSession", directory, id)
     notification.session.markViewed(id)
-    untrack(() => setStore("workspaceExpanded", directory, true))
+    untrack(() => setStore("workspaceExpanded", directory, (value) => value ?? true))
     requestAnimationFrame(() => scrollToSession(id))
   })
 
@@ -805,13 +836,13 @@ export default function Layout(props: ParentProps) {
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
-      <div class={`relative size-8 shrink-0 rounded-sm ${props.class ?? ""}`}>
-        <div class="size-full rounded-sm overflow-clip">
+      <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
+        <div class="size-full rounded overflow-clip">
           <Avatar
             fallback={name()}
             src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
             {...getAvatarColors(props.project.icon?.color)}
-            class="size-full rounded-sm"
+            class="size-full rounded"
             style={
               notifications().length > 0 && props.notify
                 ? { "-webkit-mask-image": mask, "mask-image": mask }
@@ -848,7 +879,6 @@ export default function Layout(props: ParentProps) {
       return false
     })
     const isWorking = createMemo(() => {
-      if (props.session.id === params.id) return false
       if (hasPermissions()) return false
       const status = sessionStore.session_status[props.session.id]
       return status?.type === "busy" || status?.type === "retry"
@@ -870,10 +900,10 @@ export default function Layout(props: ParentProps) {
     return (
       <div
         data-session-id={props.session.id}
-        class="group/session relative w-full rounded-md cursor-default transition-colors px-3
-               hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
+        class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3
+               hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
       >
-        <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
+        <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={16} openDelay={1000}>
           <A
             href={`${props.slug}/session/${props.session.id}`}
             class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
@@ -885,7 +915,7 @@ export default function Layout(props: ParentProps) {
                 class="shrink-0 size-6 flex items-center justify-center"
                 style={{ color: tint() ?? "var(--icon-interactive-base)" }}
               >
-                <Switch>
+                <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
                   <Match when={isWorking()}>
                     <Spinner class="size-[15px]" />
                   </Match>
@@ -903,7 +933,13 @@ export default function Layout(props: ParentProps) {
               <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
                 {props.session.title}
               </span>
-              <Show when={props.session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
+              <Show when={props.session.summary}>
+                {(summary) => (
+                  <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
+                    <DiffChanges changes={summary()} />
+                  </div>
+                )}
+              </Show>
             </div>
           </A>
         </Tooltip>
@@ -914,10 +950,22 @@ export default function Layout(props: ParentProps) {
             placement={props.mobile ? "bottom" : "right"}
             title="Archive session"
             keybind={command.keybind("session.archive")}
+            gutter={8}
           >
             <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} />
           </TooltipKeybind>
         </div>
+      </div>
+    )
+  }
+
+  const SessionSkeleton = (props: { count?: number }): JSX.Element => {
+    const items = Array.from({ length: props.count ?? 4 }, (_, index) => index)
+    return (
+      <div class="flex flex-col gap-1">
+        <For each={items}>
+          {() => <div class="h-8 w-full rounded-md bg-surface-raised-base opacity-60 animate-pulse" />}
+        </For>
       </div>
     )
   }
@@ -960,9 +1008,10 @@ export default function Layout(props: ParentProps) {
       <button
         type="button"
         classList={{
-          "flex items-center justify-center size-10 p-1 rounded-md border transition-colors cursor-default": true,
-          "bg-surface-base-hover border-icon-strong-base": selected(),
-          "bg-transparent border-transparent hover:bg-surface-base-hover hover:border-border-weak-base": !selected(),
+          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
+          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
+          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+            !selected(),
         }}
         onClick={() => navigateToProject(props.project.worktree)}
       >
@@ -973,9 +1022,9 @@ export default function Layout(props: ParentProps) {
     return (
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-        <HoverCard openDelay={0} closeDelay={0} placement="right-start" gutter={10} trigger={trigger}>
+        <HoverCard openDelay={0} closeDelay={0} placement="right-start" gutter={8} trigger={trigger}>
           <div class="-m-3 flex flex-col w-72">
-            <div class="px-3 py-2 text-12-medium text-text-strong">Recent sessions</div>
+            <div class="px-3 py-2 text-12-medium text-text-weak">Recent sessions</div>
             <div class="px-2 pb-2 flex flex-col gap-2">
               <Show
                 when={workspaceEnabled()}
@@ -999,7 +1048,7 @@ export default function Layout(props: ParentProps) {
                         <div class="shrink-0 size-6 flex items-center justify-center">
                           <Icon name="branch" size="small" class="text-icon-base" />
                         </div>
-                        <span class="truncate text-14-medium text-text-strong">{label(directory)}</span>
+                        <span class="truncate text-14-medium text-text-base">{label(directory)}</span>
                       </div>
                       <For each={sessions(directory)}>
                         {(session) => (
@@ -1011,18 +1060,20 @@ export default function Layout(props: ParentProps) {
                 </For>
               </Show>
             </div>
-            <div class="px-2 py-2 border-t border-border-weak-base">
-              <Button
-                variant="ghost"
-                class="flex w-full text-left justify-start text-text-base px-2"
-                onClick={() => {
-                  layout.sidebar.open()
-                  navigateToProject(props.project.worktree)
-                }}
-              >
-                View all sessions
-              </Button>
-            </div>
+            <Show when={!selected()}>
+              <div class="px-2 py-2 border-t border-border-weak-base">
+                <Button
+                  variant="ghost"
+                  class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
+                  onClick={() => {
+                    layout.sidebar.open()
+                    navigateToProject(props.project.worktree)
+                  }}
+                >
+                  View all sessions
+                </Button>
+              </div>
+            </Show>
           </div>
         </HoverCard>
       </div>
@@ -1081,6 +1132,7 @@ export default function Layout(props: ParentProps) {
       return `${kind} : ${name}`
     })
     const open = createMemo(() => store.workspaceExpanded[props.directory] ?? true)
+    const loading = createMemo(() => open() && workspaceStore.status !== "complete" && sessions().length === 0)
     const hasMore = createMemo(() => local() && workspaceStore.sessionTotal > workspaceStore.session.length)
     const loadMore = async () => {
       if (!local()) return
@@ -1099,12 +1151,12 @@ export default function Layout(props: ParentProps) {
         >
           <div class="px-2 py-1">
             <div class="group/trigger relative">
-              <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover">
+              <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-2 py-1.5 rounded-md hover:bg-surface-raised-base-hover transition-all group-hover/trigger:pr-16 group-focus-within/trigger:pr-16">
                 <div class="flex items-center gap-1 min-w-0">
                   <div class="flex items-center justify-center shrink-0 size-6">
                     <Icon name="branch" size="small" />
                   </div>
-                  <span class="truncate text-14-medium text-text-strong">{title()}</span>
+                  <span class="truncate text-14-medium text-text-base">{title()}</span>
                   <Icon
                     name={open() ? "chevron-down" : "chevron-right"}
                     size="small"
@@ -1113,17 +1165,20 @@ export default function Layout(props: ParentProps) {
                 </div>
               </Collapsible.Trigger>
               <div class="absolute right-1 top-1/2 -translate-y-1/2 hidden items-center gap-0.5 pointer-events-none group-hover/trigger:flex group-focus-within/trigger:flex">
-                <Tooltip class="pointer-events-auto" value="More options" placement="top">
-                  <IconButton icon="dot-grid" variant="ghost" class="size-6 rounded-md" />
-                </Tooltip>
-                <Tooltip class="pointer-events-auto" value="New session" placement="top">
+                <IconButton icon="dot-grid" variant="ghost" class="size-6 rounded-md pointer-events-auto" />
+                <TooltipKeybind
+                  class="pointer-events-auto"
+                  placement="right"
+                  title="New session"
+                  keybind={command.keybind("session.new")}
+                >
                   <IconButton
                     icon="plus-small"
                     variant="ghost"
                     class="size-6 rounded-md"
                     onClick={() => navigate(`/${slug()}/session`)}
                   />
-                </Tooltip>
+                </TooltipKeybind>
               </div>
             </div>
           </div>
@@ -1139,6 +1194,9 @@ export default function Layout(props: ParentProps) {
               >
                 New session
               </Button>
+              <Show when={loading()}>
+                <SessionSkeleton />
+              </Show>
               <For each={sessions()}>
                 {(session) => <SessionItem session={session} slug={slug()} mobile={props.mobile} />}
               </For>
@@ -1146,9 +1204,12 @@ export default function Layout(props: ParentProps) {
                 <div class="relative w-full py-1">
                   <Button
                     variant="ghost"
-                    class="flex w-full text-left justify-start text-12-medium text-text-weak px-10"
+                    class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
                     size="large"
-                    onClick={loadMore}
+                    onClick={(e: MouseEvent) => {
+                      loadMore()
+                      ;(e.currentTarget as HTMLButtonElement).blur()
+                    }}
                   >
                     Load more
                   </Button>
@@ -1170,6 +1231,7 @@ export default function Layout(props: ParentProps) {
         .filter((session) => !session.parentID)
         .toSorted(sortSessions),
     )
+    const loading = createMemo(() => workspaceStore.status !== "complete" && sessions().length === 0)
     const hasMore = createMemo(() => workspaceStore.sessionTotal > workspaceStore.session.length)
     const loadMore = async () => {
       setWorkspaceStore("limit", (limit) => limit + 5)
@@ -1184,6 +1246,9 @@ export default function Layout(props: ParentProps) {
         class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar"
       >
         <nav class="flex flex-col gap-1 px-2">
+          <Show when={loading()}>
+            <SessionSkeleton />
+          </Show>
           <For each={sessions()}>
             {(session) => <SessionItem session={session} slug={slug()} mobile={props.mobile} />}
           </For>
@@ -1191,9 +1256,12 @@ export default function Layout(props: ParentProps) {
             <div class="relative w-full py-1">
               <Button
                 variant="ghost"
-                class="flex w-full text-left justify-start text-12-medium text-text-weak px-10"
+                class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
                 size="large"
-                onClick={loadMore}
+                onClick={(e: MouseEvent) => {
+                  loadMore()
+                  ;(e.currentTarget as HTMLButtonElement).blur()
+                }}
               >
                 Load more
               </Button>
@@ -1312,7 +1380,7 @@ export default function Layout(props: ParentProps) {
               {(p) => (
                 <>
                   <div class="shrink-0 px-2 py-1">
-                    <div class="flex items-start justify-between gap-2 p-2">
+                    <div class="group/project flex items-start justify-between gap-2 p-2 pr-1">
                       <div class="flex flex-col min-w-0">
                         <span class="text-16-medium text-text-strong truncate">{projectName()}</span>
                         <Tooltip placement="right" value={project()?.worktree} class="shrink-0">
@@ -1326,21 +1394,21 @@ export default function Layout(props: ParentProps) {
                           as={IconButton}
                           icon="dot-grid"
                           variant="ghost"
-                          class="shrink-0 size-6 rounded-md"
+                          class="shrink-0 size-6 rounded-md opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100 data-[expanded]:bg-surface-base-active"
                         />
                         <DropdownMenu.Portal>
-                          <DropdownMenu.Content>
+                          <DropdownMenu.Content class="mt-1">
                             <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
-                              <DropdownMenu.ItemLabel>Edit project</DropdownMenu.ItemLabel>
+                              <DropdownMenu.ItemLabel>Edit</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
-                              <DropdownMenu.ItemLabel>Close project</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Separator />
                             <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces(p.worktree)}>
                               <DropdownMenu.ItemLabel>
                                 {layout.sidebar.workspaces(p.worktree)() ? "Disable workspaces" : "Enable workspaces"}
                               </DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator />
+                            <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
+                              <DropdownMenu.ItemLabel>Close</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
                           </DropdownMenu.Content>
                         </DropdownMenu.Portal>
@@ -1356,7 +1424,7 @@ export default function Layout(props: ParentProps) {
                           <Button
                             size="large"
                             icon="plus-small"
-                            class="w-full"
+                            class="w-full max-w-[256px]"
                             onClick={() => {
                               navigate(`/${base64Encode(p.worktree)}/session`)
                               layout.mobileSidebar.hide()
@@ -1373,7 +1441,7 @@ export default function Layout(props: ParentProps) {
                   >
                     <>
                       <div class="py-4 px-3">
-                        <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
+                        <Button size="large" icon="plus-small" class="w-full max-w-[256px]" onClick={createWorkspace}>
                           New workspace
                         </Button>
                       </div>
@@ -1444,7 +1512,7 @@ export default function Layout(props: ParentProps) {
             "hidden xl:block": true,
             "relative shrink-0": true,
           }}
-          style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : "64px" }}
+          style={{ width: layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "64px" }}
         >
           <div class="@container w-full h-full contain-strict">
             <SidebarContent />
@@ -1453,9 +1521,9 @@ export default function Layout(props: ParentProps) {
             <ResizeHandle
               direction="horizontal"
               size={layout.sidebar.width()}
-              min={214}
+              min={244}
               max={window.innerWidth * 0.3 + 64}
-              collapseThreshold={144}
+              collapseThreshold={244}
               onResize={layout.sidebar.resize}
               onCollapse={layout.sidebar.close}
             />
@@ -1464,7 +1532,7 @@ export default function Layout(props: ParentProps) {
         <div class="xl:hidden">
           <div
             classList={{
-              "fixed inset-0 z-40 transition-opacity duration-200": true,
+              "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
               "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
               "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
             }}
@@ -1474,7 +1542,7 @@ export default function Layout(props: ParentProps) {
           />
           <div
             classList={{
-              "@container fixed inset-y-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
+              "@container fixed top-10 bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
               "translate-x-0": layout.mobileSidebar.opened(),
               "-translate-x-full": !layout.mobileSidebar.opened(),
             }}
@@ -1487,7 +1555,7 @@ export default function Layout(props: ParentProps) {
         <main
           classList={{
             "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base": true,
-            "border-l rounded-tl-sm": !layout.sidebar.opened(),
+            "xl:border-l xl:rounded-tl-sm": !layout.sidebar.opened(),
           }}
         >
           {props.children}
