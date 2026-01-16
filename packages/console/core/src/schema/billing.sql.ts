@@ -31,7 +31,11 @@ export const BillingTable = mysqlTable(
     subscriptionPlan: mysqlEnum("subscription_plan", ["20", "100", "200"] as const),
     timeSubscriptionBooked: utc("time_subscription_booked"),
   },
-  (table) => [...workspaceIndexes(table), uniqueIndex("global_customer_id").on(table.customerID)],
+  (table) => [
+    ...workspaceIndexes(table),
+    uniqueIndex("global_customer_id").on(table.customerID),
+    uniqueIndex("global_subscription_id").on(table.subscriptionID),
+  ],
 )
 
 export const SubscriptionTable = mysqlTable(
