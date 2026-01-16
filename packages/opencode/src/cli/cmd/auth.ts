@@ -157,11 +157,74 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
   return false
 }
 
+export const AuthUsageCommand = cmd({
+  command: "usage",
+  describe: "show rate limit usage for providers",
+  async handler() {
+    UI.empty()
+    prompts.intro("Usage")
+    const all = await Auth.all()
+    const database = await ModelsDev.get()
+
+    let hasOAuth = false
+    for (const [providerID, info] of Object.entries(all)) {
+      if (info.type !== "oauth") continue
+      hasOAuth = true
+
+      const name = database[providerID]?.name || providerID
+      const accounts = await Auth.OAuthPool.getUsage(providerID)
+
+      for (const account of accounts) {
+        const label = account.label || "default"
+        const status = account.isActive ? `${UI.Style.TEXT_SUCCESS}active` : UI.Style.TEXT_DIM + "inactive"
+        prompts.log.step(`${name} (${label}) - ${status}`)
+
+        if (account.health.cooldownUntil && account.health.cooldownUntil > Date.now()) {
+          const remaining = Math.ceil((account.health.cooldownUntil - Date.now()) / 1000)
+          prompts.log.warn(`  In cooldown for ${remaining}s`)
+        }
+
+        prompts.log.info(`  ${account.health.successCount} successful requests`)
+        if (account.health.failureCount > 0) {
+          prompts.log.warn(`  ${account.health.failureCount} failed requests`)
+        }
+      }
+
+      if (providerID === "anthropic") {
+        const usage = await Auth.OAuthPool.fetchAnthropicUsage(providerID)
+        if (usage) {
+          prompts.log.step("Anthropic Rate Limits:")
+          if (usage.fiveHour) {
+            prompts.log.info(`  5-Hour: ${usage.fiveHour.utilization}% used`)
+          }
+          if (usage.sevenDay) {
+            prompts.log.info(`  7-Day (All): ${usage.sevenDay.utilization}% used`)
+          }
+          if (usage.sevenDaySonnet) {
+            prompts.log.info(`  7-Day (Sonnet): ${usage.sevenDaySonnet.utilization}% used`)
+          }
+        }
+      }
+    }
+
+    if (!hasOAuth) {
+      prompts.log.warn("No OAuth providers configured")
+    }
+
+    prompts.outro("")
+  },
+})
+
 export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
   builder: (yargs) =>
-    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
+    yargs
+      .command(AuthLoginCommand)
+      .command(AuthLogoutCommand)
+      .command(AuthListCommand)
+      .command(AuthUsageCommand)
+      .demandCommand(),
   async handler() {},
 })
 
