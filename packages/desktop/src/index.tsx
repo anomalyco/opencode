@@ -13,7 +13,7 @@ import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
 import { Splash } from "@opencode-ai/ui/logo"
-import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
+import { createSignal, Show, Accessor, JSX, createResource } from "solid-js"
 
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
@@ -304,29 +304,26 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
 createMenu()
 
+let platformInstance: Platform | null = null
+
 // Stops mousewheel events from reaching Tauri's pinch-to-zoom handler
 root?.addEventListener("mousewheel", (e) => {
   e.stopPropagation()
 })
 
+// Handle external links - open in system browser instead of webview
+document.addEventListener("click", (e) => {
+  const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
+  if (link?.href && platformInstance) {
+    e.preventDefault()
+    platformInstance.openLink(link.href)
+  }
+})
+
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
   const platform = createPlatform(() => serverPassword())
-
-  function handleClick(e: MouseEvent) {
-    const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
-    if (link?.href) {
-      e.preventDefault()
-      platform.openLink(link.href)
-    }
-  }
-
-  onMount(() => {
-    document.addEventListener("click", handleClick)
-    onCleanup(() => {
-      document.removeEventListener("click", handleClick)
-    })
-  })
+  platformInstance = platform
 
   return (
     <PlatformProvider value={platform}>
