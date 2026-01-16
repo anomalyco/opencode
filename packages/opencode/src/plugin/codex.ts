@@ -108,7 +108,11 @@ interface TokenResponse {
 async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: PkceCodes): Promise<TokenResponse> {
   const response = await fetch(`${ISSUER}/oauth/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+      "User-Agent": "opencode",
+    },
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
@@ -118,7 +122,8 @@ async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: Pk
     }).toString(),
   })
   if (!response.ok) {
-    throw new Error(`Token exchange failed: ${response.status}`)
+    const text = await response.text().catch(() => "")
+    throw new Error(`Token exchange failed: ${response.status}${text ? ` ${text}` : ""}`)
   }
   return response.json()
 }
@@ -126,7 +131,11 @@ async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: Pk
 async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> {
   const response = await fetch(`${ISSUER}/oauth/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+      "User-Agent": "opencode",
+    },
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
@@ -134,7 +143,8 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> 
     }).toString(),
   })
   if (!response.ok) {
-    throw new Error(`Token refresh failed: ${response.status}`)
+    const text = await response.text().catch(() => "")
+    throw new Error(`Token refresh failed: ${response.status}${text ? ` ${text}` : ""}`)
   }
   return response.json()
 }

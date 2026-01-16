@@ -297,16 +297,17 @@ export function DialogConnectProvider(props: { provider: string }) {
                       }
 
                       setFormStore("error", undefined)
-                      const { error } = await globalSDK.client.provider.oauth.callback({
-                        providerID: props.provider,
-                        method: store.methodIndex,
-                        code,
-                      })
-                      if (!error) {
+                      try {
+                        await globalSDK.client.provider.oauth.callback({
+                          providerID: props.provider,
+                          method: store.methodIndex,
+                          code,
+                        })
                         await complete()
-                        return
+                      } catch (e) {
+                        const message = e instanceof Error ? e.message : String(e)
+                        setFormStore("error", message || "Invalid authorization code")
                       }
-                      setFormStore("error", "Invalid authorization code")
                     }
 
                     return (
@@ -346,16 +347,17 @@ export function DialogConnectProvider(props: { provider: string }) {
                     })
 
                     onMount(async () => {
-                      const result = await globalSDK.client.provider.oauth.callback({
-                        providerID: props.provider,
-                        method: store.methodIndex,
-                      })
-                      if (result.error) {
-                        // TODO: show error
-                        dialog.close()
-                        return
+                      try {
+                        await globalSDK.client.provider.oauth.callback({
+                          providerID: props.provider,
+                          method: store.methodIndex,
+                        })
+                        await complete()
+                      } catch (e) {
+                        const message = e instanceof Error ? e.message : String(e)
+                        setStore("state", "error")
+                        setStore("error", message)
                       }
-                      await complete()
                     })
 
                     return (
