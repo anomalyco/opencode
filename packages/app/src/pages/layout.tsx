@@ -1064,7 +1064,7 @@ export default function Layout(props: ParentProps) {
               <div class="px-2 py-2 border-t border-border-weak-base">
                 <Button
                   variant="ghost"
-                  class="flex w-full text-left justify-start text-text-base px-2"
+                  class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
                   onClick={() => {
                     layout.sidebar.open()
                     navigateToProject(props.project.worktree)
