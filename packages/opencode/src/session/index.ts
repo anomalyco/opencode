@@ -398,10 +398,25 @@ export namespace Session {
     }),
   ])
 
+  /**
+   * Memory buffer for parts being updated with deltas to avoid high-frequency disk I/O.
+   * Flushed on text-end/reasoning-end or periodic interval.
+   */
+  const partBuffer = new Map<string, MessageV2.Part>()
+
   export const updatePart = fn(UpdatePartInput, async (input) => {
     const part = "delta" in input ? input.part : input
     const delta = "delta" in input ? input.delta : undefined
-    await Storage.write(["part", part.messageID, part.id], part)
+
+    // If it's a delta update, we buffer the write to disk
+    if (delta !== undefined) {
+      partBuffer.set(part.id, part)
+    } else {
+      // Otherwise, we flush the buffer for this part and write to storage
+      partBuffer.delete(part.id)
+      await Storage.write(["part", part.messageID, part.id], part)
+    }
+
     Bus.publish(MessageV2.Event.PartUpdated, {
       part,
       delta,

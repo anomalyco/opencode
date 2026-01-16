@@ -265,7 +265,15 @@ export namespace Ripgrep {
     }
   }
 
+  const treeCache = new Map<string, { time: number; result: string }>()
+
   export async function tree(input: { cwd: string; limit?: number }) {
+    const cacheKey = `${input.cwd}:${input.limit ?? 50}`
+    const cached = treeCache.get(cacheKey)
+    if (cached && Date.now() - cached.time < 5000) {
+      return cached.result
+    }
+
     log.info("tree", input)
     const files = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd }))
     interface Node {
@@ -364,7 +372,10 @@ export namespace Ripgrep {
     }
     result.children.map((x) => render(x, 0))
 
-    return lines.join("\n")
+    const resultString = lines.join("\n")
+    treeCache.set(cacheKey, { time: Date.now(), result: resultString })
+
+    return resultString
   }
 
   export async function search(input: {
