@@ -7,6 +7,7 @@
 
   outputs =
     {
+      self,
       nixpkgs,
       ...
     }:
@@ -107,32 +108,9 @@
           };
         in
         {
-          default = opencodePkg;
+          default = self.packages.${system}.opencode;
+          opencode = opencodePkg;
           desktop = desktopPkg;
-        }
-      );
-
-      apps = forEachSystem (
-        system:
-        let
-          pkgs = pkgsFor system;
-        in
-        {
-          opencode-dev = {
-            type = "app";
-            meta = {
-              description = "Nix devshell shell for OpenCode";
-              runtimeInputs = [ pkgs.bun ];
-            };
-            program = "${
-              pkgs.writeShellApplication {
-                name = "opencode-dev";
-                text = ''
-                  exec bun run dev "$@"
-                '';
-              }
-            }/bin/opencode-dev";
-          };
         }
       );
     };
