@@ -5,6 +5,13 @@
 # Named after Spinoza's conatus: the striving to persist in one's being.
 
 CONATUS_DIR="/home/bryan/projects/opencode-analysis/packages/opencode"
+DEFAULT_MODEL="anthropic/claude-opus-4-5-20251101"
 
 cd "$CONATUS_DIR"
-exec bun run --conditions=browser ./src/index.ts "$@"
+
+# If no -m/--model flag provided, inject the default
+if [[ ! " $* " =~ " -m " ]] && [[ ! " $* " =~ " --model " ]]; then
+    exec bun run --conditions=browser ./src/index.ts -m "$DEFAULT_MODEL" "$@"
+else
+    exec bun run --conditions=browser ./src/index.ts "$@"
+fi
