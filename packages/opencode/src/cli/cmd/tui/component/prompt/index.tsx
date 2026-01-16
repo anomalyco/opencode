@@ -531,7 +531,7 @@ export function Prompt(props: PromptProps) {
     if (store.mode === "shell") {
       sdk.client.session.shell({
         sessionID,
-        agent: local.agent.current().name,
+        agent: local.agent.current()?.name ?? "build",
         model: {
           providerID: selectedModel.providerID,
           modelID: selectedModel.modelID,
@@ -552,7 +552,7 @@ export function Prompt(props: PromptProps) {
         sessionID,
         command: command.slice(1),
         arguments: args.join(" "),
-        agent: local.agent.current().name,
+        agent: local.agent.current()?.name ?? "build",
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
         variant,
@@ -569,7 +569,7 @@ export function Prompt(props: PromptProps) {
           sessionID,
           ...selectedModel,
           messageID,
-          agent: local.agent.current().name,
+          agent: local.agent.current()?.name ?? "build",
           model: selectedModel,
           variant,
           parts: [
@@ -690,7 +690,7 @@ export function Prompt(props: PromptProps) {
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
     if (store.mode === "shell") return theme.primary
-    return local.agent.color(local.agent.current().name)
+    return local.agent.color(local.agent.current()?.name ?? "build")
   })
 
   const showVariant = createMemo(() => {
@@ -701,7 +701,7 @@ export function Prompt(props: PromptProps) {
   })
 
   const spinnerDef = createMemo(() => {
-    const color = local.agent.color(local.agent.current().name)
+    const color = local.agent.color(local.agent.current()?.name ?? "build")
     return {
       frames: createFrames({
         color,
@@ -935,7 +935,7 @@ export function Prompt(props: PromptProps) {
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
               <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current()?.name ?? "build")}{" "}
               </text>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
