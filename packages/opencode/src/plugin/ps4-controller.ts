@@ -133,9 +133,8 @@ export async function PS4ControllerPlugin(input: PluginInput): Promise<Hooks> {
 
   return {
     event: async ({ event }) => {
-      // Log all events for debugging
-      // In a full implementation, this could map controller buttons
-      // to specific event types
+      // Log controller-related events for debugging
+      log.debug("controller event received", { type: event.type })
     },
 
     "permission.ask": async (input, output) => {
@@ -149,7 +148,6 @@ export async function PS4ControllerPlugin(input: PluginInput): Promise<Hooks> {
       // Add controller button hints to system prompts when controller is connected
       if (controller.isConnected()) {
         const buttonInfo = `
-
 ## Controller Support Active
 
 PS4 DualShock controller is connected. Button mappings:
@@ -158,7 +156,7 @@ PS4 DualShock controller is connected. Button mappings:
 - ${controller.getButtonLabel("up")}/${controller.getButtonLabel("down")} - Navigate options
 - ${controller.getButtonLabel("left")}/${controller.getButtonLabel("right")} - Switch tabs/panels
 
-When presenting options to the user, include button hints in format: "[R2] Accept" or "[L2] Cancel"`
+When presenting options to the user, include button hints in format: "[R2] Accept" or "[L2] Cancel"`.trim()
 
         output.system.push(buttonInfo)
       }
