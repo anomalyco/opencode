@@ -24,11 +24,13 @@ export namespace Debug {
     const ingestUrl = new URL(`/ingest/${input.sessionID}`, origin).toString()
     const logFileRelative = ".opencode/debug.log"
     const logFileAbsolute = Debug.logFileAbsolute(input.worktreeRoot)
+
     return [
       "<debug_config>",
       `ingestUrl: ${ingestUrl}`,
       `logFileRelative: ${logFileRelative}`,
       `logFileAbsolute: ${logFileAbsolute}`,
+      "instrumentation: POST JSON logs to ingestUrl (do not write debug.log directly; the server will write it)",
       "format: NDJSON (one JSON object per line)",
       "requiredFields: sessionId, runId, hypothesisId, location, message, data, timestamp",
       "</debug_config>",

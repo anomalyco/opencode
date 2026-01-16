@@ -56,6 +56,24 @@ export namespace Server {
     return _url ?? new URL("http://localhost:4096")
   }
 
+  function debugConfigRequestUrl(requestUrl: string): string {
+    try {
+      const parsed = new URL(requestUrl)
+      if (parsed.hostname !== "opencode.internal") return requestUrl
+
+      if (_url) return _url.toString()
+
+      try {
+        listen({ hostname: "127.0.0.1", port: 0 })
+      } catch {
+        return requestUrl
+      }
+
+      return (_url ?? parsed).toString()
+    } catch {}
+    return requestUrl
+  }
+
   export const Event = {
     Connected: BusEvent.define("server.connected", z.object({})),
     Disposed: BusEvent.define("global.disposed", z.object({})),
@@ -1064,7 +1082,11 @@ export namespace Server {
                 body.agent === "debug"
                   ? [
                       body.system,
-                      Debug.configSystemBlock({ requestUrl: c.req.url, sessionID, worktreeRoot: Instance.worktree }),
+                      Debug.configSystemBlock({
+                        requestUrl: debugConfigRequestUrl(c.req.url),
+                        sessionID,
+                        worktreeRoot: Instance.worktree,
+                      }),
                     ]
                       .filter(Boolean)
                       .join("\n\n")
@@ -1105,7 +1127,11 @@ export namespace Server {
                 body.agent === "debug"
                   ? [
                       body.system,
-                      Debug.configSystemBlock({ requestUrl: c.req.url, sessionID, worktreeRoot: Instance.worktree }),
+                      Debug.configSystemBlock({
+                        requestUrl: debugConfigRequestUrl(c.req.url),
+                        sessionID,
+                        worktreeRoot: Instance.worktree,
+                      }),
                     ]
                       .filter(Boolean)
                       .join("\n\n")
