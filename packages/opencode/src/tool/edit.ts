@@ -15,6 +15,7 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
+import { Config } from "../config"
 import { assertExternalDirectory } from "./external-directory"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
@@ -49,7 +50,11 @@ export const EditTool = Tool.define("edit", {
     await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
         contentNew = params.newString
-        diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+        diff = trimDiff(
+          createTwoFilesPatch(filePath, filePath, contentOld, contentNew, undefined, undefined, {
+            ignoreWhitespace: await Config.get().then((c) => c.tui?.whitespace_diff ?? true),
+          }),
+        )
         await ctx.ask({
           permission: "edit",
           patterns: [path.relative(Instance.worktree, filePath)],
@@ -75,8 +80,18 @@ export const EditTool = Tool.define("edit", {
       contentOld = await file.text()
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
 
+      const whitespaceDiff = await Config.get().then((c) => c.tui?.whitespace_diff ?? true)
+
       diff = trimDiff(
-        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+        createTwoFilesPatch(
+          filePath,
+          filePath,
+          normalizeLineEndings(contentOld),
+          normalizeLineEndings(contentNew),
+          undefined,
+          undefined,
+          { ignoreWhitespace: whitespaceDiff },
+        ),
       )
       await ctx.ask({
         permission: "edit",
@@ -94,7 +109,15 @@ export const EditTool = Tool.define("edit", {
       })
       contentNew = await file.text()
       diff = trimDiff(
-        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+        createTwoFilesPatch(
+          filePath,
+          filePath,
+          normalizeLineEndings(contentOld),
+          normalizeLineEndings(contentNew),
+          undefined,
+          undefined,
+          { ignoreWhitespace: whitespaceDiff },
+        ),
       )
       FileTime.read(ctx.sessionID, filePath)
     })
@@ -106,7 +129,7 @@ export const EditTool = Tool.define("edit", {
       additions: 0,
       deletions: 0,
     }
-    for (const change of diffLines(contentOld, contentNew)) {
+    for (const change of diffLines(contentOld, contentNew, { ignoreWhitespace: whitespaceDiff })) {
       if (change.added) filediff.additions += change.count || 0
       if (change.removed) filediff.deletions += change.count || 0
     }
