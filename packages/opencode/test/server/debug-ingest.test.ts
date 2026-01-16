@@ -53,6 +53,56 @@ describe("debug.ingest endpoint", () => {
     })
   })
 
+  test("accepts application/json array and appends all entries", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const worktreeRoot = tmp.path
+    const sessionId = "ses_ingest_json_array_1"
+
+    await Instance.provide({
+      directory: worktreeRoot,
+      fn: async () => {
+        const app = Server.App()
+        const entry1 = {
+          timestamp: Date.now(),
+          location: "a.ts:1",
+          message: "one",
+          data: { n: 1 },
+          sessionId,
+          runId: "run1",
+          hypothesisId: "A",
+        }
+        const entry2 = {
+          timestamp: Date.now(),
+          location: "b.ts:2",
+          message: "two",
+          data: { n: 2 },
+          sessionId,
+          runId: "run1",
+          hypothesisId: "B",
+        }
+
+        const response = await app.request(`/ingest/${sessionId}?directory=${encodeURIComponent(worktreeRoot)}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify([entry1, entry2]),
+        })
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ success: true, count: 2 })
+
+        const file = await fs.readFile(logPath(worktreeRoot), "utf8")
+        const lines = file
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean)
+        expect(lines.length).toBe(2)
+        expect(JSON.parse(lines[0]!)).toEqual(entry1)
+        expect(JSON.parse(lines[1]!)).toEqual(entry2)
+      },
+    })
+  })
+
   test("accepts NDJSON and appends all entries", async () => {
     await using tmp = await tmpdir({ git: true })
     const worktreeRoot = tmp.path
