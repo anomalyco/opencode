@@ -2,6 +2,7 @@ import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
+import { MCP } from "../mcp"
 
 import { Instance } from "../project/instance"
 import path from "path"
@@ -74,6 +75,27 @@ export namespace SystemPrompt {
 
   if (Flag.OPENCODE_CONFIG_DIR) {
     GLOBAL_RULE_FILES.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
+  }
+
+  export async function mcpServers() {
+    const config = await Config.get()
+    if (config.experimental?.mcp_lazy !== true) return []
+
+    const status = await MCP.status()
+    const servers = Object.entries(status)
+      .filter(([_, s]) => s.status === "connected")
+      .map(([name]) => name)
+
+    if (servers.length === 0) return []
+
+    return [
+      [
+        `<mcp_servers>`,
+        `Available MCP servers: ${servers.join(", ")}`,
+        `Use mcp_search tool to discover and call tools from these servers.`,
+        `</mcp_servers>`,
+      ].join("\n"),
+    ]
   }
 
   export async function custom() {
