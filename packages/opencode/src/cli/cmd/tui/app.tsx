@@ -403,17 +403,7 @@ function App() {
         local.model.variant.cycle()
       },
     },
-    {
-      title: "Agent cycle reverse",
-      value: "agent.cycle.reverse",
-      keybind: "agent_cycle_reverse",
-      category: "Agent",
-      disabled: true,
-      onSelect: () => {
-        local.agent.move(-1)
-      },
-    },
-    {
+        {
       title: "Connect provider",
       value: "provider.connect",
       suggested: !connected(),

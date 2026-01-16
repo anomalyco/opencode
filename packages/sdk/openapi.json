@@ -8318,12 +8318,12 @@
           },
           "agent_cycle": {
             "description": "Next agent",
-            "default": "tab",
+            "default": "shift+tab",
             "type": "string"
           },
           "agent_cycle_reverse": {
             "description": "Previous agent",
-            "default": "shift+tab",
+            "default": "tab",
             "type": "string"
           },
           "variant_cycle": {
