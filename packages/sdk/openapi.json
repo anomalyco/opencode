@@ -3165,6 +3165,356 @@
         ]
       }
     },
+    "/permission/approved": {
+      "get": {
+        "operationId": "permission.approved",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List approved permissions",
+        "description": "Get all approved permission rules for the current project.",
+        "responses": {
+          "200": {
+            "description": "List of approved permission rules",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRuleset"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.approved({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "permission.delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Delete approved permission",
+        "description": "Remove a specific approved permission rule.",
+        "responses": {
+          "200": {
+            "description": "Permission deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PermissionRule"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.delete({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "permission.update",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Update approved permission",
+        "description": "Update a specific approved permission rule.",
+        "responses": {
+          "200": {
+            "description": "Permission updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "oldRule": {
+                    "$ref": "#/components/schemas/PermissionRule"
+                  },
+                  "newRule": {
+                    "$ref": "#/components/schemas/PermissionRule"
+                  }
+                },
+                "required": ["oldRule", "newRule"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.update({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "permission.add",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Add approved permission",
+        "description": "Add a new approved permission rule.",
+        "responses": {
+          "200": {
+            "description": "Permission added successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PermissionRule"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.add({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/permission/all": {
+      "get": {
+        "operationId": "permission.all",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List all permissions with sources",
+        "description": "Get all permission rules including defaults, global config, project config, and session rules with source metadata.",
+        "responses": {
+          "200": {
+            "description": "List of all permission rules with source information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRulesetWithSource"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.all({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/permission/project": {
+      "put": {
+        "operationId": "permission.updateProject",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Update project permission",
+        "description": "Update a permission rule in the project config file.",
+        "responses": {
+          "200": {
+            "description": "Permission updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PermissionRule"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.updateProject({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "permission.deleteProject",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Delete project permission",
+        "description": "Remove a permission rule from the project config file.",
+        "responses": {
+          "200": {
+            "description": "Permission deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "permission": {
+                    "type": "string"
+                  },
+                  "pattern": {
+                    "type": "string"
+                  }
+                },
+                "required": ["permission", "pattern"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.deleteProject({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/question": {
       "get": {
         "operationId": "question.list",
@@ -9802,6 +10152,37 @@
           }
         },
         "required": ["type", "prompt", "description", "agent"]
+      },
+      "PermissionSource": {
+        "type": "string",
+        "enum": ["default", "global", "project", "session"]
+      },
+      "PermissionRuleWithSource": {
+        "type": "object",
+        "properties": {
+          "permission": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "action": {
+            "$ref": "#/components/schemas/PermissionAction"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PermissionSource"
+          },
+          "readonly": {
+            "type": "boolean"
+          }
+        },
+        "required": ["permission", "pattern", "action", "source", "readonly"]
+      },
+      "PermissionRulesetWithSource": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/PermissionRuleWithSource"
+        }
       },
       "Command": {
         "type": "object",

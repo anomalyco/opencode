@@ -33,6 +33,24 @@ export namespace PermissionNext {
   })
   export type Ruleset = z.infer<typeof Ruleset>
 
+  export const Source = z.enum(["default", "global", "project", "session"]).meta({
+    ref: "PermissionSource",
+  })
+  export type Source = z.infer<typeof Source>
+
+  export const RuleWithSource = Rule.extend({
+    source: Source,
+    readonly: z.boolean(),
+  }).meta({
+    ref: "PermissionRuleWithSource",
+  })
+  export type RuleWithSource = z.infer<typeof RuleWithSource>
+
+  export const RulesetWithSource = RuleWithSource.array().meta({
+    ref: "PermissionRulesetWithSource",
+  })
+  export type RulesetWithSource = z.infer<typeof RulesetWithSource>
+
   export function fromConfig(permission: Config.Permission) {
     const ruleset: Ruleset = []
     for (const [key, value] of Object.entries(permission)) {
@@ -276,6 +294,110 @@ export namespace PermissionNext {
     const s = await state()
     log.info("getting approved permissions", { count: s.approved.length, rules: s.approved })
     return s.approved
+  }
+
+  export async function all(agent?: string): Promise<RulesetWithSource> {
+    // Load configs separately to avoid automatic merging
+    const { Filesystem } = await import("@/util/filesystem")
+    const { Instance } = await import("@/project/instance")
+    const path = await import("path")
+
+    const [globalConfig, projectConfigFiles, sessionRules] = await Promise.all([
+      Config.global(),
+      Filesystem.findUp("opencode.json", Instance.directory, Instance.worktree),
+      approved(),
+    ])
+
+    // Load project config file directly (without global merged in)
+    let projectConfig: Config.Info | undefined
+    if (projectConfigFiles.length > 0) {
+      try {
+        const content = await Bun.file(projectConfigFiles[0]).text()
+        projectConfig = JSON.parse(content)
+      } catch (e) {
+        // Ignore if file doesn't exist or is invalid
+      }
+    }
+
+    const result: RulesetWithSource = []
+
+    // Build agent defaults manually (without user config)
+    if (agent) {
+      const { Truncate } = await import("@/tool/truncation")
+      const defaults = fromConfig({
+        "*": "allow",
+        doom_loop: "ask",
+        external_directory: {
+          "*": "ask",
+          [Truncate.DIR]: "allow",
+          [Truncate.GLOB]: "allow",
+        },
+        question: "deny",
+        plan_enter: "deny",
+        plan_exit: "deny",
+        read: {
+          "*": "allow",
+          "*.env": "ask",
+          "*.env.*": "ask",
+          "*.env.example": "allow",
+        },
+      })
+
+      // Add agent-specific overrides
+      const agentOverrides: Record<string, any> = {
+        build: {
+          question: "allow",
+          plan_enter: "allow",
+        },
+        plan: {
+          question: "allow",
+          plan_exit: "allow",
+        },
+        general: {
+          todoread: "deny",
+          todowrite: "deny",
+        },
+        explore: {
+          "*": "deny",
+          grep: "allow",
+          glob: "allow",
+          list: "allow",
+          bash: "allow",
+          read: "allow",
+        },
+      }
+
+      for (const rule of defaults) {
+        result.push({ ...rule, source: "default", readonly: true })
+      }
+
+      if (agentOverrides[agent]) {
+        for (const rule of fromConfig(agentOverrides[agent])) {
+          result.push({ ...rule, source: "default", readonly: true })
+        }
+      }
+    }
+
+    // Add global config rules
+    if (globalConfig.permission) {
+      for (const rule of fromConfig(globalConfig.permission)) {
+        result.push({ ...rule, source: "global", readonly: true })
+      }
+    }
+
+    // Add project config rules
+    if (projectConfig?.permission) {
+      for (const rule of fromConfig(projectConfig.permission)) {
+        result.push({ ...rule, source: "project", readonly: true })
+      }
+    }
+
+    // Add session rules (editable)
+    for (const rule of sessionRules) {
+      result.push({ ...rule, source: "session", readonly: false })
+    }
+
+    return result
   }
 
   export async function remove(rule: Rule) {

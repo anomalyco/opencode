@@ -59,8 +59,13 @@ import type {
   PathGetResponses,
   PermissionAddErrors,
   PermissionAddResponses,
+  PermissionAllResponses,
   PermissionApprovedResponses,
   PermissionDeleteErrors,
+  PermissionDeleteGlobalErrors,
+  PermissionDeleteGlobalResponses,
+  PermissionDeleteProjectErrors,
+  PermissionDeleteProjectResponses,
   PermissionDeleteResponses,
   PermissionListResponses,
   PermissionReplyErrors,
@@ -70,6 +75,10 @@ import type {
   PermissionRule,
   PermissionRuleset,
   PermissionUpdateErrors,
+  PermissionUpdateGlobalErrors,
+  PermissionUpdateGlobalResponses,
+  PermissionUpdateProjectErrors,
+  PermissionUpdateProjectResponses,
   PermissionUpdateResponses,
   ProjectCurrentResponses,
   ProjectListResponses,
@@ -1912,6 +1921,196 @@ export class Permission extends HeyApiClient {
     )
     return (options?.client ?? this.client).put<PermissionUpdateResponses, PermissionUpdateErrors, ThrowOnError>({
       url: "/permission/approved",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List all permissions with sources
+   *
+   * Get all permission rules including defaults, global config, project config, and session rules with source metadata.
+   */
+  public all<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<PermissionAllResponses, unknown, ThrowOnError>({
+      url: "/permission/all",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Delete project permission
+   *
+   * Remove a permission rule from the project config file.
+   */
+  public deleteProject<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      permission?: string
+      pattern?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "permission" },
+            { in: "body", key: "pattern" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      PermissionDeleteProjectResponses,
+      PermissionDeleteProjectErrors,
+      ThrowOnError
+    >({
+      url: "/permission/project",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Update project permission
+   *
+   * Update a permission rule in the project config file.
+   */
+  public updateProject<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      permissionRule?: PermissionRule
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "permissionRule", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      PermissionUpdateProjectResponses,
+      PermissionUpdateProjectErrors,
+      ThrowOnError
+    >({
+      url: "/permission/project",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete global permission
+   *
+   * Remove a permission rule from the global config file (~/.config/opencode/opencode.json). This affects all projects.
+   */
+  public deleteGlobal<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      permission?: string
+      pattern?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "permission" },
+            { in: "body", key: "pattern" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      PermissionDeleteGlobalResponses,
+      PermissionDeleteGlobalErrors,
+      ThrowOnError
+    >({
+      url: "/permission/global",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Update global permission
+   *
+   * Update a permission rule in the global config file (~/.config/opencode/opencode.json). This affects all projects.
+   */
+  public updateGlobal<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      permissionRule?: PermissionRule
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "permissionRule", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      PermissionUpdateGlobalResponses,
+      PermissionUpdateGlobalErrors,
+      ThrowOnError
+    >({
+      url: "/permission/global",
       ...options,
       ...params,
       headers: {

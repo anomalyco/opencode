@@ -1241,4 +1241,163 @@ export namespace Config {
   export async function directories() {
     return state().then((x) => x.directories)
   }
+
+  async function findProjectConfigFile(): Promise<string | null> {
+    const { Filesystem } = await import("@/util/filesystem")
+    const files = await Filesystem.findUp("opencode.json", Instance.directory, Instance.worktree)
+    return files.length > 0 ? files[0] : null
+  }
+
+  export async function updateProjectPermission(rule: { permission: string; pattern: string; action: string }) {
+    const configPath = await findProjectConfigFile()
+    if (!configPath) {
+      // Create new config file if it doesn't exist
+      const newPath = path.join(Instance.directory, "opencode.json")
+      await Bun.write(
+        newPath,
+        JSON.stringify(
+          {
+            $schema: "https://opencode.ai/config.json",
+            permission: {
+              [rule.permission]: {
+                [rule.pattern]: rule.action,
+              },
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+      )
+      await Instance.dispose()
+      return
+    }
+
+    // Read existing config
+    const content = await Bun.file(configPath).text()
+    const config = JSON.parse(content) as Info
+
+    // Initialize permission if not exists
+    if (!config.permission) {
+      config.permission = {}
+    }
+
+    // Update the permission rule
+    const perm = config.permission[rule.permission as keyof typeof config.permission]
+    if (typeof perm === "object" && perm !== null) {
+      ;(perm as Record<string, string>)[rule.pattern] = rule.action as any
+    } else {
+      // Convert to object if it was a simple string
+      config.permission[rule.permission as keyof typeof config.permission] = {
+        [rule.pattern]: rule.action,
+      } as any
+    }
+
+    // Write back
+    await Bun.write(configPath, JSON.stringify(config, null, 2) + "\n")
+    await Instance.dispose()
+  }
+
+  export async function removeProjectPermission(rule: { permission: string; pattern: string }) {
+    const configPath = await findProjectConfigFile()
+    if (!configPath) return
+
+    // Read existing config
+    const content = await Bun.file(configPath).text()
+    const config = JSON.parse(content) as Info
+
+    if (!config.permission) return
+
+    const perm = config.permission[rule.permission as keyof typeof config.permission]
+    if (typeof perm === "object" && perm !== null) {
+      delete (perm as Record<string, string>)[rule.pattern]
+
+      // If permission object is now empty, remove it entirely
+      if (Object.keys(perm).length === 0) {
+        delete config.permission[rule.permission as keyof typeof config.permission]
+      }
+    }
+
+    // Write back
+    await Bun.write(configPath, JSON.stringify(config, null, 2) + "\n")
+    await Instance.dispose()
+  }
+
+  export async function updateGlobalPermission(rule: { permission: string; pattern: string; action: string }) {
+    const configPath = path.join(Global.Path.config, "opencode.json")
+    const file = Bun.file(configPath)
+    const exists = await file.exists()
+
+    if (!exists) {
+      // Create new global config file if it doesn't exist
+      const dir = path.dirname(configPath)
+      await Bun.write(
+        configPath,
+        JSON.stringify(
+          {
+            $schema: "https://opencode.ai/config.json",
+            permission: {
+              [rule.permission]: {
+                [rule.pattern]: rule.action,
+              },
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+      )
+      await Instance.dispose()
+      return
+    }
+
+    // Read existing config
+    const content = await file.text()
+    const config = JSON.parse(content) as Info
+
+    // Initialize permission if not exists
+    if (!config.permission) {
+      config.permission = {}
+    }
+
+    // Update the permission rule
+    const perm = config.permission[rule.permission as keyof typeof config.permission]
+    if (typeof perm === "object" && perm !== null) {
+      ;(perm as Record<string, string>)[rule.pattern] = rule.action as any
+    } else {
+      // Convert to object if it was a simple string
+      config.permission[rule.permission as keyof typeof config.permission] = {
+        [rule.pattern]: rule.action,
+      } as any
+    }
+
+    // Write back
+    await Bun.write(configPath, JSON.stringify(config, null, 2) + "\n")
+    await Instance.dispose()
+  }
+
+  export async function removeGlobalPermission(rule: { permission: string; pattern: string }) {
+    const configPath = path.join(Global.Path.config, "opencode.json")
+    const file = Bun.file(configPath)
+    const exists = await file.exists()
+    if (!exists) return
+
+    // Read existing config
+    const content = await file.text()
+    const config = JSON.parse(content) as Info
+
+    if (!config.permission) return
+
+    const perm = config.permission[rule.permission as keyof typeof config.permission]
+    if (typeof perm === "object" && perm !== null) {
+      delete (perm as Record<string, string>)[rule.pattern]
+
+      // If permission object is now empty, remove it entirely
+      if (Object.keys(perm).length === 0) {
+        delete config.permission[rule.permission as keyof typeof config.permission]
+      }
+    }
+
+    // Write back
+    await Bun.write(configPath, JSON.stringify(config, null, 2) + "\n")
+    await Instance.dispose()
+  }
 }
