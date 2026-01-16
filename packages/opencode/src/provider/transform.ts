@@ -48,27 +48,30 @@ export namespace ProviderTransform {
       })
     }
 
-    // Anthropic rejects messages with empty content - filter out empty string messages
-    // and remove empty text/reasoning parts from array content
-    if (model.api.npm === "@ai-sdk/anthropic") {
-      msgs = msgs
-        .map((msg) => {
-          if (typeof msg.content === "string") {
-            if (msg.content === "") return undefined
-            return msg
-          }
-          if (!Array.isArray(msg.content)) return msg
-          const filtered = msg.content.filter((part) => {
+    // Provider APIs reject messages with empty or whitespace-only content
+    // Filter out empty/whitespace string messages and remove empty text/reasoning parts
+    msgs = msgs
+      .map((msg) => {
+        if (typeof msg.content === "string") {
+          const trimmed = msg.content.trim()
+          if (trimmed === "") return undefined
+          return { ...msg, content: trimmed }
+        }
+        if (!Array.isArray(msg.content)) return msg
+        const filtered = msg.content
+          .map((part) => {
             if (part.type === "text" || part.type === "reasoning") {
-              return part.text !== ""
+              const trimmed = part.text.trim()
+              if (trimmed === "") return undefined
+              return { ...part, text: trimmed }
             }
-            return true
+            return part
           })
-          if (filtered.length === 0) return undefined
-          return { ...msg, content: filtered }
-        })
-        .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
-    }
+          .filter((part): part is NonNullable<typeof part> => part !== undefined)
+        if (filtered.length === 0) return undefined
+        return { ...msg, content: filtered }
+      })
+      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
 
     if (model.api.id.includes("claude")) {
       return msgs.map((msg) => {

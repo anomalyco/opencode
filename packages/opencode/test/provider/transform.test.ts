@@ -448,7 +448,7 @@ describe("ProviderTransform.message - empty image handling", () => {
   })
 })
 
-describe("ProviderTransform.message - anthropic empty content filtering", () => {
+describe("ProviderTransform.message - empty and whitespace content filtering", () => {
   const anthropicModel = {
     id: "anthropic/claude-3-5-sonnet",
     providerID: "anthropic",
@@ -596,7 +596,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
   })
 
-  test("does not filter for non-anthropic providers", () => {
+  test("filters empty content for all providers including OpenAI", () => {
     const openaiModel = {
       ...anthropicModel,
       providerID: "openai",
@@ -608,18 +608,70 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     }
 
     const msgs = [
+      { role: "user", content: "Hello" },
       { role: "assistant", content: "" },
       {
         role: "assistant",
         content: [{ type: "text", text: "" }],
       },
+      { role: "user", content: "World" },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, openaiModel, {})
 
     expect(result).toHaveLength(2)
-    expect(result[0].content).toBe("")
-    expect(result[1].content).toHaveLength(1)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("filters whitespace-only string content", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "   " },
+      { role: "user", content: "\t\n" },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("filters whitespace-only text parts from array content", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "   " },
+          { type: "text", text: "Hello" },
+          { type: "text", text: "\t\n" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Hello" })
+  })
+
+  test("trims whitespace from text content", () => {
+    const msgs = [
+      { role: "user", content: "  Hello World  " },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "  Response  " }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello World")
+    expect(result[1].content[0]).toEqual({ type: "text", text: "Response" })
   })
 })
 
