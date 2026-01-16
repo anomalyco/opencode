@@ -1591,7 +1591,7 @@ export default function Layout(props: ParentProps) {
           </div>
           <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
             <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Settings">
-              <IconButton disabled icon="settings-gear" variant="ghost" size="large" />
+              <IconButton icon="settings-gear" variant="ghost" size="large" onClick={command.show} />
             </Tooltip>
             <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Help">
               <IconButton
