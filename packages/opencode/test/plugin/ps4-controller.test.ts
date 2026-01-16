@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from "bun:test"
+import { describe, expect, test, beforeEach } from "bun:test"
 import { PS4ControllerPlugin } from "../../src/plugin/ps4-controller"
 import type { PluginInput } from "@opencode-ai/plugin"
 

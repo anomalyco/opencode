@@ -121,7 +121,6 @@ interface ControllerConfig {
     // ... other mappings
   };
   vibrationIntensity: {
-    thinking: number;
     question: number;
     permission: number;
     error: number;
