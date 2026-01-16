@@ -108,6 +108,12 @@ export namespace Config {
       )),
     ]
 
+    log.debug("config directories discovered", {
+      directories,
+      instanceDirectory: Instance.directory,
+      worktree: Instance.worktree,
+    })
+
     if (Flag.OPENCODE_CONFIG_DIR) {
       directories.push(Flag.OPENCODE_CONFIG_DIR)
       log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
@@ -129,10 +135,25 @@ export namespace Config {
       const installing = installDependencies(dir)
       if (!exists) await installing
 
-      result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
-      result.agent = mergeDeep(result.agent, await loadAgent(dir))
-      result.agent = mergeDeep(result.agent, await loadMode(dir))
-      result.plugin.push(...(await loadPlugin(dir)))
+      const commands = await loadCommand(dir)
+      const agents = await loadAgent(dir)
+      const modes = await loadMode(dir)
+      const plugins = await loadPlugin(dir)
+
+      log.debug("loaded config from directory", {
+        dir,
+        commandCount: Object.keys(commands).length,
+        agentCount: Object.keys(agents).length,
+        modeCount: Object.keys(modes).length,
+        pluginCount: plugins.length,
+        commandNames: Object.keys(commands),
+        agentNames: Object.keys(agents),
+      })
+
+      result.command = mergeDeep(result.command ?? {}, commands)
+      result.agent = mergeDeep(result.agent, agents)
+      result.agent = mergeDeep(result.agent, modes)
+      result.plugin.push(...plugins)
     }
 
     // Migrate deprecated mode field to agent field
