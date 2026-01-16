@@ -1,0 +1,9 @@
+Search and call MCP server tools.
+
+Operations:
+- "list": List all MCP servers and their tools
+- "search": Find tools by name or description
+- "describe": Get tool's parameter schema
+- "call": Execute a tool
+
+You MUST call "describe" before "call". You SHOULD NOT call a tool without first checking its parameters.
