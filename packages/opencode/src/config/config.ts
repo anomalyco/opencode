@@ -1188,6 +1188,7 @@ export namespace Config {
       if (data.plugin) {
         for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
+          if (plugin.startsWith("file://")) continue // Already absolute
           try {
             data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
           } catch (err) {}
