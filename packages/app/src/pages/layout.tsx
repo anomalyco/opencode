@@ -75,7 +75,6 @@ export default function Layout(props: ParentProps) {
   )
 
   const pageReady = createMemo(() => ready())
-  const layoutReady = createMemo(() => layout.ready())
 
   let scrollContainerRef: HTMLDivElement | undefined
   const xlQuery = window.matchMedia("(min-width: 1280px)")
@@ -88,6 +87,7 @@ export default function Layout(props: ParentProps) {
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const layout = useLayout()
+  const layoutReady = createMemo(() => layout.ready())
   const platform = usePlatform()
   const server = useServer()
   const notification = useNotification()
@@ -915,7 +915,7 @@ export default function Layout(props: ParentProps) {
                 class="shrink-0 size-6 flex items-center justify-center"
                 style={{ color: tint() ?? "var(--icon-interactive-base)" }}
               >
-                <Switch>
+                <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
                   <Match when={isWorking()}>
                     <Spinner class="size-[15px]" />
                   </Match>
@@ -1008,9 +1008,10 @@ export default function Layout(props: ParentProps) {
       <button
         type="button"
         classList={{
-          "flex items-center justify-center size-10 p-1 rounded-lg border transition-colors cursor-default": true,
-          "bg-transparent border-icon-strong-base hover:bg-surface-base-hover": selected(),
-          "bg-transparent border-transparent hover:bg-surface-base-hover hover:border-border-weak-base": !selected(),
+          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
+          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
+          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+            !selected(),
         }}
         onClick={() => navigateToProject(props.project.worktree)}
       >
@@ -1063,7 +1064,7 @@ export default function Layout(props: ParentProps) {
               <div class="px-2 py-2 border-t border-border-weak-base">
                 <Button
                   variant="ghost"
-                  class="flex w-full text-left justify-start text-text-base px-2"
+                  class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
                   onClick={() => {
                     layout.sidebar.open()
                     navigateToProject(props.project.worktree)
@@ -1531,7 +1532,9 @@ export default function Layout(props: ParentProps) {
         <div class="xl:hidden">
           <div
             classList={{
-              "fixed inset-0 z-40 transition-opacity duration-200": true,
+              "fixed inset-x-0 bottom-0 z-40 transition-opacity duration-200": true,
+              "top-10": platform.platform === "desktop",
+              "top-0": platform.platform !== "desktop",
               "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
               "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
             }}
@@ -1541,7 +1544,9 @@ export default function Layout(props: ParentProps) {
           />
           <div
             classList={{
-              "@container fixed inset-y-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
+              "@container fixed bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
+              "top-10": platform.platform === "desktop",
+              "top-0": platform.platform !== "desktop",
               "translate-x-0": layout.mobileSidebar.opened(),
               "-translate-x-full": !layout.mobileSidebar.opened(),
             }}
@@ -1554,7 +1559,7 @@ export default function Layout(props: ParentProps) {
         <main
           classList={{
             "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base": true,
-            "border-l rounded-tl-sm": !layout.sidebar.opened(),
+            "xl:border-l xl:rounded-tl-sm": !layout.sidebar.opened(),
           }}
         >
           {props.children}
