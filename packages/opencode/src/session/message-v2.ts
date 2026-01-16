@@ -517,8 +517,11 @@ export namespace MessageV2 {
                 input: part.state.input,
                 output: part.state.time.compacted
                   ? "[Old tool result content cleared]"
-                  : { output: part.state.output, attachments: part.state.attachments },
-                callProviderMetadata: part.metadata,
+                  : {
+                      output: part.state.output,
+                      attachments: part.state.attachments?.filter((x) => x) ?? [],
+                    },
+                callProviderMetadata: part.metadata ?? {},
               })
             }
             if (part.state.status === "error")
@@ -556,12 +559,12 @@ export namespace MessageV2 {
       }
     }
 
-    return convertToModelMessages(
-      result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
-      {
-        tools: options?.tools,
-      },
-    )
+    const filtered = result
+      .filter((msg) => msg.parts.length > 0)
+      .filter((msg) => msg.parts.some((part) => part.type !== "step-start"))
+    return convertToModelMessages(filtered, {
+      tools: options?.tools,
+    })
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
