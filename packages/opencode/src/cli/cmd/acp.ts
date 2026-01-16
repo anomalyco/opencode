@@ -6,6 +6,7 @@ import { ACP } from "@/acp/agent"
 import { Server } from "@/server/server"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
+import { parseSessionUrl } from "@/util/parse-session-url"
 
 const log = Log.create({ service: "acp-command" })
 
@@ -24,8 +25,13 @@ export const AcpCommand = cmd({
         type: "string",
       })
       .option("attach", {
-        describe: "attach to existing server URL instead of starting new one",
+        describe: "attach to existing server URL or session URL instead of starting new one",
         type: "string",
+      })
+      .option("session", {
+        describe: "session id to continue",
+        type: "string",
+        alias: ["s"],
       })
   },
   handler: async (args) => {
@@ -33,14 +39,18 @@ export const AcpCommand = cmd({
     await bootstrap(process.cwd(), async () => {
       let server: ReturnType<typeof Server.listen> | undefined
       let baseUrl: string
+      let sessionId: string | undefined
 
       // If attach URL is provided, use it instead of starting a server
       if (args.attach) {
-        baseUrl = args.attach
+        const parsed = parseSessionUrl(args.attach)
+        baseUrl = parsed.baseUrl
+        sessionId = args.session ?? parsed.sessionId
       } else {
         const opts = await resolveNetworkOptions(args)
         server = Server.listen(opts)
         baseUrl = `http://${server.hostname}:${server.port}`
+        sessionId = args.session
       }
 
       const sdk = createOpencodeClient({
@@ -74,7 +84,7 @@ export const AcpCommand = cmd({
       const agent = await ACP.init({ sdk })
 
       new AgentSideConnection((conn) => {
-        return agent.create(conn, { sdk, initialPrompt: args.prompt })
+        return agent.create(conn, { sdk, initialPrompt: args.prompt, sessionId })
       }, stream)
 
       log.info("setup connection")

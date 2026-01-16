@@ -569,21 +569,48 @@ export namespace ACP {
 
     async newSession(params: NewSessionRequest) {
       const directory = params.cwd
+
+      // If sessionId is provided in config, delegate to loadSession with additional prompt handling
+      if (this.config.sessionId) {
+        const result = await this.loadSession({
+          sessionId: this.config.sessionId,
+          cwd: params.cwd,
+          mcpServers: params.mcpServers,
+        })
+
+        // Send initial prompt if provided (after replay completes)
+        if (this.config.initialPrompt) {
+          this.sdk.session
+            .prompt({
+              sessionID: this.config.sessionId,
+              directory,
+              parts: [
+                {
+                  type: "text",
+                  text: this.config.initialPrompt,
+                },
+              ],
+            })
+            .catch((err) => {
+              log.error("failed to send initial prompt", { error: err, sessionId: this.config.sessionId })
+            })
+        }
+
+        return {
+          sessionId: this.config.sessionId,
+          models: result.models,
+          modes: result.modes,
+          _meta: {},
+        }
+      }
+
+      // Normal new session creation
       try {
         const model = await defaultModel(this.config, directory)
 
-        let state: ACPSessionState
-        let sessionId: string
-
-        // If sessionId is provided in config, use existing session
-        if (this.config.sessionId) {
-          sessionId = this.config.sessionId
-          state = await this.sessionManager.load(sessionId, params.cwd, params.mcpServers, model)
-        } else {
-          // Store ACP session state
-          state = await this.sessionManager.create(params.cwd, params.mcpServers, model)
-          sessionId = state.id
-        }
+        // Store ACP session state
+        const state = await this.sessionManager.create(params.cwd, params.mcpServers, model)
+        const sessionId = state.id
 
         log.info("creating_session", { sessionId, mcpServers: params.mcpServers.length })
 
@@ -608,7 +635,7 @@ export namespace ACP {
               parts: [
                 {
                   type: "text",
-                  text: this.config.initialPrompt,
+                  text: this.config.initialPrompt!,
                 },
               ],
             })
