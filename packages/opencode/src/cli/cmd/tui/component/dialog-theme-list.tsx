@@ -1,6 +1,6 @@
-import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
-import { useTheme } from "../context/theme"
-import { useDialog } from "../ui/dialog"
+import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
+import { useTheme } from "@tui/context/theme"
+import { useDialog } from "@tui/ui/dialog"
 import { onCleanup, onMount } from "solid-js"
 
 export function DialogThemeList() {

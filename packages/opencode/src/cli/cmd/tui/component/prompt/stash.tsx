@@ -3,7 +3,7 @@ import { Global } from "@/global"
 import { onMount } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { clone } from "remeda"
-import { createSimpleContext } from "../../context/helper"
+import { createSimpleContext } from "@tui/context/helper"
 import { appendFile, writeFile } from "fs/promises"
 import type { PromptInfo } from "./history"
 

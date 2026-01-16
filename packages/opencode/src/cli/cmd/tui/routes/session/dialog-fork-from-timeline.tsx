@@ -5,7 +5,7 @@ import type { TextPart } from "@opencode-ai/sdk/v2"
 import { Locale } from "@/util/locale"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
-import { useDialog } from "../../ui/dialog"
+import { useDialog } from "@tui/ui/dialog"
 import type { PromptInfo } from "@tui/component/prompt/history"
 
 export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID: string) => void }) {

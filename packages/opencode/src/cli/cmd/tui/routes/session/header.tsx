@@ -6,7 +6,7 @@ import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
-import { useKeybind } from "../../context/keybind"
+import { useKeybind } from "@tui/context/keybind"
 import { Installation } from "@/installation"
 
 const Title = (props: { session: Accessor<Session> }) => {

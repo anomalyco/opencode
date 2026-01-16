@@ -3,39 +3,39 @@ import path from "path"
 import { createEffect, createMemo, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
-import aura from "./theme/aura.json" with { type: "json" }
-import ayu from "./theme/ayu.json" with { type: "json" }
-import catppuccin from "./theme/catppuccin.json" with { type: "json" }
-import catppuccinFrappe from "./theme/catppuccin-frappe.json" with { type: "json" }
-import catppuccinMacchiato from "./theme/catppuccin-macchiato.json" with { type: "json" }
-import cobalt2 from "./theme/cobalt2.json" with { type: "json" }
-import cursor from "./theme/cursor.json" with { type: "json" }
-import dracula from "./theme/dracula.json" with { type: "json" }
-import everforest from "./theme/everforest.json" with { type: "json" }
-import flexoki from "./theme/flexoki.json" with { type: "json" }
-import github from "./theme/github.json" with { type: "json" }
-import gruvbox from "./theme/gruvbox.json" with { type: "json" }
-import kanagawa from "./theme/kanagawa.json" with { type: "json" }
-import material from "./theme/material.json" with { type: "json" }
-import matrix from "./theme/matrix.json" with { type: "json" }
-import mercury from "./theme/mercury.json" with { type: "json" }
-import monokai from "./theme/monokai.json" with { type: "json" }
-import nightowl from "./theme/nightowl.json" with { type: "json" }
-import nord from "./theme/nord.json" with { type: "json" }
-import osakaJade from "./theme/osaka-jade.json" with { type: "json" }
-import onedark from "./theme/one-dark.json" with { type: "json" }
-import opencode from "./theme/opencode.json" with { type: "json" }
-import orng from "./theme/orng.json" with { type: "json" }
-import lucentOrng from "./theme/lucent-orng.json" with { type: "json" }
-import palenight from "./theme/palenight.json" with { type: "json" }
-import rosepine from "./theme/rosepine.json" with { type: "json" }
-import solarized from "./theme/solarized.json" with { type: "json" }
-import synthwave84 from "./theme/synthwave84.json" with { type: "json" }
-import tokyonight from "./theme/tokyonight.json" with { type: "json" }
-import vercel from "./theme/vercel.json" with { type: "json" }
-import vesper from "./theme/vesper.json" with { type: "json" }
-import zenburn from "./theme/zenburn.json" with { type: "json" }
-import carbonfox from "./theme/carbonfox.json" with { type: "json" }
+import aura from "@tui/context/theme/aura.json" with { type: "json" }
+import ayu from "@tui/context/theme/ayu.json" with { type: "json" }
+import catppuccin from "@tui/context/theme/catppuccin.json" with { type: "json" }
+import catppuccinFrappe from "@tui/context/theme/catppuccin-frappe.json" with { type: "json" }
+import catppuccinMacchiato from "@tui/context/theme/catppuccin-macchiato.json" with { type: "json" }
+import cobalt2 from "@tui/context/theme/cobalt2.json" with { type: "json" }
+import cursor from "@tui/context/theme/cursor.json" with { type: "json" }
+import dracula from "@tui/context/theme/dracula.json" with { type: "json" }
+import everforest from "@tui/context/theme/everforest.json" with { type: "json" }
+import flexoki from "@tui/context/theme/flexoki.json" with { type: "json" }
+import github from "@tui/context/theme/github.json" with { type: "json" }
+import gruvbox from "@tui/context/theme/gruvbox.json" with { type: "json" }
+import kanagawa from "@tui/context/theme/kanagawa.json" with { type: "json" }
+import material from "@tui/context/theme/material.json" with { type: "json" }
+import matrix from "@tui/context/theme/matrix.json" with { type: "json" }
+import mercury from "@tui/context/theme/mercury.json" with { type: "json" }
+import monokai from "@tui/context/theme/monokai.json" with { type: "json" }
+import nightowl from "@tui/context/theme/nightowl.json" with { type: "json" }
+import nord from "@tui/context/theme/nord.json" with { type: "json" }
+import osakaJade from "@tui/context/theme/osaka-jade.json" with { type: "json" }
+import onedark from "@tui/context/theme/one-dark.json" with { type: "json" }
+import opencode from "@tui/context/theme/opencode.json" with { type: "json" }
+import orng from "@tui/context/theme/orng.json" with { type: "json" }
+import lucentOrng from "@tui/context/theme/lucent-orng.json" with { type: "json" }
+import palenight from "@tui/context/theme/palenight.json" with { type: "json" }
+import rosepine from "@tui/context/theme/rosepine.json" with { type: "json" }
+import solarized from "@tui/context/theme/solarized.json" with { type: "json" }
+import synthwave84 from "@tui/context/theme/synthwave84.json" with { type: "json" }
+import tokyonight from "@tui/context/theme/tokyonight.json" with { type: "json" }
+import vercel from "@tui/context/theme/vercel.json" with { type: "json" }
+import vesper from "@tui/context/theme/vesper.json" with { type: "json" }
+import zenburn from "@tui/context/theme/zenburn.json" with { type: "json" }
+import carbonfox from "@tui/context/theme/carbonfox.json" with { type: "json" }
 import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"

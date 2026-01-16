@@ -2,7 +2,7 @@ import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
 import { createMemo } from "solid-js"
-import { useSDK } from "../context/sdk"
+import { useSDK } from "@tui/context/sdk"
 
 interface DialogSessionRenameProps {
   session: string

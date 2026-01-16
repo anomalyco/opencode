@@ -4,8 +4,8 @@ import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import type { TextPart } from "@opencode-ai/sdk/v2"
 import { Locale } from "@/util/locale"
 import { DialogMessage } from "./dialog-message"
-import { useDialog } from "../../ui/dialog"
-import type { PromptInfo } from "../../component/prompt/history"
+import { useDialog } from "@tui/ui/dialog"
+import type { PromptInfo } from "@tui/component/prompt/history"
 
 export function DialogTimeline(props: {
   sessionID: string

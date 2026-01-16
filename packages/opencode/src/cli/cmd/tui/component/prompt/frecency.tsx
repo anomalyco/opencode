@@ -2,7 +2,7 @@ import path from "path"
 import { Global } from "@/global"
 import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createSimpleContext } from "../../context/helper"
+import { createSimpleContext } from "@tui/context/helper"
 import { appendFile } from "fs/promises"
 
 function calculateFrecency(entry?: { frequency: number; lastOpen: number }): number {

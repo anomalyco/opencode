@@ -5,7 +5,7 @@ import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
-import { useKeybind } from "../context/keybind"
+import { useKeybind } from "@tui/context/keybind"
 import * as fuzzysort from "fuzzysort"
 
 export function useConnected() {

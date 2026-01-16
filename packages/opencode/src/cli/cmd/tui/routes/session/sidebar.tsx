@@ -1,16 +1,16 @@
 import { useSync } from "@tui/context/sync"
 import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useTheme } from "../../context/theme"
+import { useTheme } from "@tui/context/theme"
 import { Locale } from "@/util/locale"
 import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
 import { Installation } from "@/installation"
-import { useKeybind } from "../../context/keybind"
-import { useDirectory } from "../../context/directory"
-import { useKV } from "../../context/kv"
-import { TodoItem } from "../../component/todo-item"
+import { useKeybind } from "@tui/context/keybind"
+import { useDirectory } from "@tui/context/directory"
+import { useKV } from "@tui/context/kv"
+import { TodoItem } from "@tui/component/todo-item"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()

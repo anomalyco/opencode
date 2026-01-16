@@ -2,9 +2,9 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { createMemo, createSignal } from "solid-js"
 import { Locale } from "@/util/locale"
-import { useTheme } from "../context/theme"
-import { useKeybind } from "../context/keybind"
-import { usePromptStash, type StashEntry } from "./prompt/stash"
+import { useTheme } from "@tui/context/theme"
+import { useKeybind } from "@tui/context/keybind"
+import { usePromptStash, type StashEntry } from "@tui/component/prompt/stash"
 
 function getRelativeTime(timestamp: number): string {
   const now = Date.now()

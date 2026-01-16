@@ -1,5 +1,5 @@
 import { createSimpleContext } from "./helper"
-import type { PromptRef } from "../component/prompt"
+import type { PromptRef } from "@tui/component/prompt"
 
 export const { use: usePromptRef, provider: PromptRefProvider } = createSimpleContext({
   name: "PromptRef",

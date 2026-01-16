@@ -1,4 +1,4 @@
-import { useTheme } from "../context/theme"
+import { useTheme } from "@tui/context/theme"
 
 export interface TodoItemProps {
   status: string

@@ -1,10 +1,10 @@
 import { createMemo, Match, onCleanup, onMount, Show, Switch } from "solid-js"
-import { useTheme } from "../../context/theme"
-import { useSync } from "../../context/sync"
-import { useDirectory } from "../../context/directory"
-import { useConnected } from "../../component/dialog-model"
+import { useTheme } from "@tui/context/theme"
+import { useSync } from "@tui/context/sync"
+import { useDirectory } from "@tui/context/directory"
+import { useConnected } from "@tui/component/dialog-model"
 import { createStore } from "solid-js/store"
-import { useRoute } from "../../context/route"
+import { useRoute } from "@tui/context/route"
 
 export function Footer() {
   const { theme } = useTheme()

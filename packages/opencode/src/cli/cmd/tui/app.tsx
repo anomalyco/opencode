@@ -14,7 +14,7 @@ import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
-import { DialogHelp } from "./ui/dialog-help"
+import { DialogHelp } from "@tui/ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
@@ -22,20 +22,20 @@ import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
-import { PromptHistoryProvider } from "./component/prompt/history"
-import { FrecencyProvider } from "./component/prompt/frecency"
-import { PromptStashProvider } from "./component/prompt/stash"
-import { DialogAlert } from "./ui/dialog-alert"
-import { ToastProvider, useToast } from "./ui/toast"
-import { ExitProvider, useExit } from "./context/exit"
+import { PromptHistoryProvider } from "@tui/component/prompt/history"
+import { FrecencyProvider } from "@tui/component/prompt/frecency"
+import { PromptStashProvider } from "@tui/component/prompt/stash"
+import { DialogAlert } from "@tui/ui/dialog-alert"
+import { ToastProvider, useToast } from "@tui/ui/toast"
+import { ExitProvider, useExit } from "@tui/context/exit"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
-import { KVProvider, useKV } from "./context/kv"
+import { KVProvider, useKV } from "@tui/context/kv"
 import { Provider } from "@/provider/provider"
-import { ArgsProvider, useArgs, type Args } from "./context/args"
+import { ArgsProvider, useArgs, type Args } from "@tui/context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
-import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { PromptRefProvider, usePromptRef } from "@tui/context/prompt"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -97,7 +97,7 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   })
 }
 
-import type { EventSource } from "./context/sdk"
+import type { EventSource } from "@tui/context/sdk"
 
 export function tui(input: {
   url: string

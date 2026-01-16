@@ -1,5 +1,5 @@
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
-import { useTheme } from "../context/theme"
+import { useTheme } from "@tui/context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { onMount, Show, type JSX } from "solid-js"
