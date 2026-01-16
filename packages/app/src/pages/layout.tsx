@@ -1195,7 +1195,7 @@ export default function Layout(props: ParentProps) {
           <div class="px-2 py-1">
             <div class="group/trigger relative">
               <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover">
-                <div class="flex items-center gap-1 min-w-0">
+                <div class="flex items-center gap-1 min-w-0 flex-1">
                   <div class="flex items-center justify-center shrink-0 size-6">
                     <Icon name="branch" size="small" />
                   </div>
@@ -1203,7 +1203,7 @@ export default function Layout(props: ParentProps) {
                   <Show
                     when={!local()}
                     fallback={
-                      <span class="text-14-medium text-text-base">
+                      <span class="text-14-medium text-text-base min-w-0 truncate">
                         {workspaceStore.vcs?.branch ?? getFilename(props.directory)}
                       </span>
                     }
@@ -1217,8 +1217,8 @@ export default function Layout(props: ParentProps) {
                         renameWorkspace(props.directory, trimmed)
                         setEditor("value", workspaceValue())
                       }}
-                      class="text-14-medium text-text-base"
-                      displayClass="text-14-medium text-text-base"
+                      class="text-14-medium text-text-base min-w-0 truncate"
+                      displayClass="text-14-medium text-text-base min-w-0 truncate"
                       editing={workspaceEditActive()}
                       stopPropagation={false}
                       openOnDblClick={false}
