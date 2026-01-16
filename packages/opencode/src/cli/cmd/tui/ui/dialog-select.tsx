@@ -157,10 +157,26 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const keybind = useKeybind()
   useKeyboard((evt) => {
-    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
-    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
-    if (evt.name === "pageup") move(-10)
-    if (evt.name === "pagedown") move(10)
+    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      move(-1)
+    }
+    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      move(1)
+    }
+    if (evt.name === "pageup") {
+      evt.preventDefault()
+      evt.stopPropagation()
+      move(-10)
+    }
+    if (evt.name === "pagedown") {
+      evt.preventDefault()
+      evt.stopPropagation()
+      move(10)
+    }
     if (evt.name === "return") {
       const option = selected()
       if (option) {
