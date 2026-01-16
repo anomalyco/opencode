@@ -12,7 +12,7 @@ export namespace Plan {
   const log = Log.create({ service: "plan" })
 
   /** Directory where plan files are stored (global, not project-local) */
-  export const DIR = path.join(Global.Path.data, "plan")
+  export const DIR = path.join(Global.Path.data, "plans")
 
   export const Status = z.enum(["draft", "pending_review", "approved", "rejected"])
   export type Status = z.infer<typeof Status>
@@ -21,7 +21,7 @@ export namespace Plan {
     .object({
       id: Identifier.schema("plan"),
       sessionID: Identifier.schema("session"),
-      filePath: z.string(), // Absolute path, e.g., "/home/user/.local/share/opencode/plan/{sessionID}.md"
+      filePath: z.string(), // Absolute path, e.g., "/home/user/.local/share/opencode/plans/{sessionID}.md"
       status: Status,
       time: z.object({
         created: z.number(),
