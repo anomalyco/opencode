@@ -308,7 +308,14 @@ export namespace Session {
   export async function* list() {
     const project = Instance.project
     for (const item of await Storage.list(["session", project.id])) {
-      yield Storage.read<Info>(item)
+      try {
+        const session = await Storage.read<Info>(item)
+        if (session && session.id) {
+          yield session
+        }
+      } catch (e) {
+        log.warn("skipping corrupted session file", { path: item.join("/"), error: e })
+      }
     }
   }
 
@@ -316,9 +323,15 @@ export namespace Session {
     const project = Instance.project
     const result = [] as Session.Info[]
     for (const item of await Storage.list(["session", project.id])) {
-      const session = await Storage.read<Info>(item)
-      if (session.parentID !== parentID) continue
-      result.push(session)
+      try {
+        const session = await Storage.read<Info>(item)
+        if (!session || !session.id) continue
+        if (session.parentID !== parentID) continue
+        result.push(session)
+      } catch (e) {
+        log.warn("skipping corrupted session file", { path: item.join("/"), error: e })
+        continue
+      }
     }
     return result
   })
