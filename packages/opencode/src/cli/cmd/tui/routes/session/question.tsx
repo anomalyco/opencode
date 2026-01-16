@@ -198,6 +198,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       selectTab((store.tab + 1) % tabs())
     }
 
+    if (evt.name === "tab") {
+      evt.preventDefault()
+      const direction = evt.shift ? -1 : 1
+      selectTab((store.tab + direction + tabs()) % tabs())
+    }
+
     if (confirm()) {
       if (evt.name === "return") {
         evt.preventDefault()
