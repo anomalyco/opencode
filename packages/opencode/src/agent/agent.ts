@@ -13,6 +13,8 @@ import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
+import { Global } from "@/global"
+import path from "path"
 
 export namespace Agent {
   export const Info = z
@@ -50,13 +52,16 @@ export namespace Agent {
       external_directory: {
         "*": "ask",
         [Truncate.DIR]: "allow",
+        [Truncate.GLOB]: "allow",
       },
       question: "deny",
+      plan_enter: "deny",
+      plan_exit: "deny",
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
       read: {
         "*": "allow",
-        "*.env": "deny",
-        "*.env.*": "deny",
+        "*.env": "ask",
+        "*.env.*": "ask",
         "*.env.example": "allow",
       },
     })
@@ -70,6 +75,7 @@ export namespace Agent {
           defaults,
           PermissionNext.fromConfig({
             question: "allow",
+            plan_enter: "allow",
           }),
           user,
         ),
@@ -83,9 +89,14 @@ export namespace Agent {
           defaults,
           PermissionNext.fromConfig({
             question: "allow",
+            plan_exit: "allow",
+            external_directory: {
+              [path.join(Global.Path.data, "plans", "*")]: "allow",
+            },
             edit: {
               "*": "deny",
-              ".opencode/plan/*.md": "allow",
+              [path.join(".opencode", "plans", "*.md")]: "allow",
+              [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
             },
           }),
           user,
@@ -124,6 +135,7 @@ export namespace Agent {
             read: "allow",
             external_directory: {
               [Truncate.DIR]: "allow",
+              [Truncate.GLOB]: "allow",
             },
           }),
           user,
@@ -213,14 +225,16 @@ export namespace Agent {
     // Ensure Truncate.DIR is allowed unless explicitly configured
     for (const name in result) {
       const agent = result[name]
-      const explicit = agent.permission.some(
-        (r) => r.permission === "external_directory" && r.pattern === Truncate.DIR && r.action === "deny",
-      )
+      const explicit = agent.permission.some((r) => {
+        if (r.permission !== "external_directory") return false
+        if (r.action !== "deny") return false
+        return r.pattern === Truncate.DIR || r.pattern === Truncate.GLOB
+      })
       if (explicit) continue
 
       result[name].permission = PermissionNext.merge(
         result[name].permission,
-        PermissionNext.fromConfig({ external_directory: { [Truncate.DIR]: "allow" } }),
+        PermissionNext.fromConfig({ external_directory: { [Truncate.DIR]: "allow", [Truncate.GLOB]: "allow" } }),
       )
     }
 
@@ -241,7 +255,20 @@ export namespace Agent {
   }
 
   export async function defaultAgent() {
-    return state().then((x) => Object.keys(x)[0])
+    const cfg = await Config.get()
+    const agents = await state()
+
+    if (cfg.default_agent) {
+      const agent = agents[cfg.default_agent]
+      if (!agent) throw new Error(`default agent "${cfg.default_agent}" not found`)
+      if (agent.mode === "subagent") throw new Error(`default agent "${cfg.default_agent}" is a subagent`)
+      if (agent.hidden === true) throw new Error(`default agent "${cfg.default_agent}" is hidden`)
+      return agent.name
+    }
+
+    const primaryVisible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)
+    if (!primaryVisible) throw new Error("no primary visible agent found")
+    return primaryVisible.name
   }
 
   export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {

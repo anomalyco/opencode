@@ -46,6 +46,14 @@ export namespace MCP {
     }),
   )
 
+  export const BrowserOpenFailed = BusEvent.define(
+    "mcp.browser.open.failed",
+    z.object({
+      mcpName: z.string(),
+      url: z.string(),
+    }),
+  )
+
   export const Failed = NamedError.create(
     "MCPFailed",
     z.object({
@@ -109,7 +117,7 @@ export namespace MCP {
   }
 
   // Convert MCP tool definition to AI SDK Tool type
-  async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient): Promise<Tool> {
+  async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Promise<Tool> {
     const inputSchema = mcpTool.inputSchema
 
     // Spread first, then override type to ensure it's always "object"
@@ -119,7 +127,6 @@ export namespace MCP {
       properties: (inputSchema.properties ?? {}) as JSONSchema7["properties"],
       additionalProperties: false,
     }
-    const config = await Config.get()
 
     return dynamicTool({
       description: mcpTool.description ?? "",
@@ -133,7 +140,7 @@ export namespace MCP {
           CallToolResultSchema,
           {
             resetTimeoutOnProgress: true,
-            timeout: config.experimental?.mcp_timeout,
+            timeout,
           },
         )
       },
@@ -266,6 +273,13 @@ export namespace MCP {
         status: s.status,
       }
     }
+    // Close existing client if present to prevent memory leaks
+    const existingClient = s.clients[name]
+    if (existingClient) {
+      await existingClient.close().catch((error) => {
+        log.error("Failed to close existing MCP client", { name, error })
+      })
+    }
     s.clients[name] = result.mcpClient
     s.status[name] = result.status
 
@@ -294,6 +308,8 @@ export namespace MCP {
       let authProvider: McpOAuthProvider | undefined
 
       if (!oauthDisabled) {
+        await McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri)
+
         authProvider = new McpOAuthProvider(
           key,
           mcp.url,
@@ -301,6 +317,7 @@ export namespace MCP {
             clientId: oauthConfig?.clientId,
             clientSecret: oauthConfig?.clientSecret,
             scope: oauthConfig?.scope,
+            redirectUri: oauthConfig?.redirectUri,
           },
           {
             onRedirect: async (url) => {
@@ -330,6 +347,7 @@ export namespace MCP {
 
       let lastError: Error | undefined
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
+
       for (const { name, transport } of transports) {
         try {
           const client = new Client({
@@ -523,6 +541,13 @@ export namespace MCP {
     const s = await state()
     s.status[name] = result.status
     if (result.mcpClient) {
+      // Close existing client if present to prevent memory leaks
+      const existingClient = s.clients[name]
+      if (existingClient) {
+        await existingClient.close().catch((error) => {
+          log.error("Failed to close existing MCP client", { name, error })
+        })
+      }
       s.clients[name] = result.mcpClient
     }
   }
@@ -542,11 +567,15 @@ export namespace MCP {
   export async function tools() {
     const result: Record<string, Tool> = {}
     const s = await state()
+    const cfg = await Config.get()
+    const config = cfg.mcp ?? {}
     const clientsSnapshot = await clients()
+    const defaultTimeout = cfg.experimental?.mcp_timeout
 
     for (const [clientName, client] of Object.entries(clientsSnapshot)) {
       // Only include tools from connected MCPs (skip disabled ones)
-      if (s.status[clientName]?.status !== "connected") {
+      const clientStatus = s.status[clientName]?.status
+      if (clientStatus !== "connected") {
         continue
       }
 
@@ -563,10 +592,13 @@ export namespace MCP {
       if (!toolsResult) {
         continue
       }
+      const mcpConfig = config[clientName]
+      const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
+      const timeout = entry?.timeout ?? defaultTimeout
       for (const mcpTool of toolsResult.tools) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client)
+        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, timeout)
       }
     }
     return result
@@ -693,8 +725,10 @@ export namespace MCP {
       throw new Error(`MCP server ${mcpName} has OAuth explicitly disabled`)
     }
 
-    // Start the callback server
-    await McpOAuthCallback.ensureRunning()
+    // OAuth config is optional - if not provided, we'll use auto-discovery
+    const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
+
+    await McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri)
 
     // Generate and store a cryptographically secure state parameter BEFORE creating the provider
     // The SDK will call provider.state() to read this value
@@ -704,8 +738,6 @@ export namespace MCP {
     await McpAuth.updateOAuthState(mcpName, oauthState)
 
     // Create a new auth provider for this flow
-    // OAuth config is optional - if not provided, we'll use auto-discovery
-    const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
     let capturedUrl: URL | undefined
     const authProvider = new McpOAuthProvider(
       mcpName,
@@ -714,6 +746,7 @@ export namespace MCP {
         clientId: oauthConfig?.clientId,
         clientSecret: oauthConfig?.clientSecret,
         scope: oauthConfig?.scope,
+        redirectUri: oauthConfig?.redirectUri,
       },
       {
         onRedirect: async (url) => {
@@ -742,6 +775,7 @@ export namespace MCP {
         pendingOAuthTransports.set(mcpName, transport)
         return { authorizationUrl: capturedUrl.toString() }
       }
+
       throw error
     }
   }
@@ -751,9 +785,9 @@ export namespace MCP {
    * Opens the browser and waits for callback.
    */
   export async function authenticate(mcpName: string): Promise<Status> {
-    const { authorizationUrl } = await startAuth(mcpName)
+    const result = await startAuth(mcpName)
 
-    if (!authorizationUrl) {
+    if (!result.authorizationUrl) {
       // Already authenticated
       const s = await state()
       return s.status[mcpName] ?? { status: "connected" }
@@ -767,8 +801,33 @@ export namespace MCP {
 
     // The SDK has already added the state parameter to the authorization URL
     // We just need to open the browser
-    log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
-    await open(authorizationUrl)
+    log.info("opening browser for oauth", { mcpName, url: result.authorizationUrl, state: oauthState })
+    try {
+      const subprocess = await open(result.authorizationUrl)
+      // The open package spawns a detached process and returns immediately.
+      // We need to listen for errors which fire asynchronously:
+      // - "error" event: command not found (ENOENT)
+      // - "exit" with non-zero code: command exists but failed (e.g., no display)
+      await new Promise<void>((resolve, reject) => {
+        // Give the process a moment to fail if it's going to
+        const timeout = setTimeout(() => resolve(), 500)
+        subprocess.on("error", (error) => {
+          clearTimeout(timeout)
+          reject(error)
+        })
+        subprocess.on("exit", (code) => {
+          if (code !== null && code !== 0) {
+            clearTimeout(timeout)
+            reject(new Error(`Browser open failed with exit code ${code}`))
+          }
+        })
+      })
+    } catch (error) {
+      // Browser opening failed (e.g., in remote/headless sessions like SSH, devcontainers)
+      // Emit event so CLI can display the URL for manual opening
+      log.warn("failed to open browser, user must open URL manually", { mcpName, error })
+      Bus.publish(BrowserOpenFailed, { mcpName, url: result.authorizationUrl })
+    }
 
     // Wait for callback using the OAuth state parameter
     const code = await McpOAuthCallback.waitForCallback(oauthState)

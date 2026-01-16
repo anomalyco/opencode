@@ -45,9 +45,9 @@ Desktop app issues:
 
 #### zen
 
-**Only** add if the issue mentions "zen" or "opencode zen". Zen is our gateway for coding models. **Do not** add for other gateways or inference providers.
+**Only** add if the issue mentions "zen" or "opencode zen" or "opencode black".
 
-If the issue doesn't have "zen" in it then don't add zen label
+If the issue doesn't have "zen" or "opencode black" in it then don't add zen label
 
 #### docs
 
