@@ -47,7 +47,7 @@ export namespace Agent {
     const cfg = await Config.get()
 
     const defaults = PermissionNext.fromConfig({
-      "*": "allow",
+      "*": "ask",
       doom_loop: "ask",
       external_directory: {
         "*": "ask",
