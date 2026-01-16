@@ -17,6 +17,7 @@ import type {
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
+  EventUiDialogRequest,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
@@ -46,6 +47,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       question: {
         [sessionID: string]: QuestionRequest[]
       }
+      pendingDialog: EventUiDialogRequest["properties"] | null
       config: Config
       session: Session[]
       session_status: {
@@ -85,6 +87,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       agent: [],
       permission: {},
       question: {},
+      pendingDialog: null,
       command: [],
       provider: [],
       provider_default: {},
@@ -182,6 +185,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               draft.splice(match.index, 0, request)
             }),
           )
+          break
+        }
+
+        case "ui.dialog.request": {
+          const request = event.properties
+          setStore("pendingDialog", request)
+          break
+        }
+        case "ui.dialog.reply": {
+          setStore("pendingDialog", null)
           break
         }
 

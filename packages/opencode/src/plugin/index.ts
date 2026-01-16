@@ -11,6 +11,7 @@ import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
+import { Dialog } from "@/dialog"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -35,6 +36,9 @@ export namespace Plugin {
       directory: Instance.directory,
       serverUrl: Server.url(),
       $: Bun.$,
+      dialog: {
+        show: Dialog.show,
+      },
     }
 
     for (const plugin of INTERNAL_PLUGINS) {

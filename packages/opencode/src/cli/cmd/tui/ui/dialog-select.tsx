@@ -13,6 +13,7 @@ import { Locale } from "@/util/locale"
 
 export interface DialogSelectProps<T> {
   title: string
+  message?: string
   placeholder?: string
   options: DialogSelectOption<T>[]
   ref?: (ref: DialogSelectRef<T>) => void
@@ -219,6 +220,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           </text>
           <text fg={theme.textMuted}>esc</text>
         </box>
+        <Show when={props.message}>
+          <box paddingTop={1}>
+            <text fg={theme.textMuted}>{props.message}</text>
+          </box>
+        </Show>
         <box paddingTop={1} paddingBottom={1}>
           <input
             onInput={(e) => {

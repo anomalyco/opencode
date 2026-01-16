@@ -30,6 +30,7 @@ export type PluginInput = {
   worktree: string
   serverUrl: URL
   $: BunShell
+  dialog: { show<T = any>(input: DialogShowInput): Promise<DialogResult<T>> }
 }
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>
@@ -144,6 +145,36 @@ export type AuthOuathResult = { url: string; instructions: string } & (
       >
     }
 )
+
+export interface DialogOption<T = any> {
+  value: T
+  title: string
+  description?: string
+  category?: string
+  disabled?: boolean
+}
+
+export interface DialogKeybind<T = any> {
+  key: string
+  ctrl?: boolean
+  meta?: boolean
+  shift?: boolean
+  value: T
+  label?: string
+}
+
+type DialogBase = {
+  mode?: "modal" | "inline"
+  keybind?: DialogKeybind[]
+}
+
+export type DialogShowInput =
+  | ({ type: "select"; title: string; options: DialogOption[] } & DialogBase)
+  | ({ type: "confirm"; title: string; message?: string } & DialogBase)
+  | ({ type: "alert"; title: string; message?: string } & DialogBase)
+  | ({ type: "prompt"; title: string; placeholder?: string; defaultValue?: string } & DialogBase)
+
+export type DialogResult<T = any> = { value?: T; dismissed: boolean }
 
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>

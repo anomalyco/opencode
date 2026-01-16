@@ -860,6 +860,42 @@ export type EventPtyDeleted = {
   }
 }
 
+export type EventUiDialogRequest = {
+  type: "ui.dialog.request"
+  properties: {
+    id: string
+    type: "select" | "confirm" | "alert" | "prompt"
+    title: string
+    message?: string
+    options?: Array<{
+      value: unknown
+      title: string
+      description?: string
+      category?: string
+      disabled?: boolean
+    }>
+    placeholder?: string
+    defaultValue?: string
+    mode?: "modal" | "inline"
+    keybind?: Array<{
+      key: string
+      ctrl?: boolean
+      meta?: boolean
+      shift?: boolean
+      value: unknown
+      label?: string
+    }>
+  }
+}
+
+export type EventUiDialogReply = {
+  type: "ui.dialog.reply"
+  properties: {
+    dialogID: string
+    response: unknown
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -901,6 +937,8 @@ export type Event =
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
+  | EventUiDialogRequest
+  | EventUiDialogReply
 
 export type GlobalEvent = {
   directory: string
@@ -4640,6 +4678,42 @@ export type TuiControlResponseResponses = {
 }
 
 export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
+
+export type DialogReplyData = {
+  body?: {
+    value?: unknown
+    dismissed: boolean
+  }
+  path: {
+    dialogID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/dialog/{dialogID}/reply"
+}
+
+export type DialogReplyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type DialogReplyError = DialogReplyErrors[keyof DialogReplyErrors]
+
+export type DialogReplyResponses = {
+  /**
+   * Dialog replied successfully
+   */
+  200: boolean
+}
+
+export type DialogReplyResponse = DialogReplyResponses[keyof DialogReplyResponses]
 
 export type InstanceDisposeData = {
   body?: never
