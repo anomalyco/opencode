@@ -242,11 +242,8 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
       content.push({ type: 'text', text });
     }
 
-    // reasoning content (supports both OpenAI and Copilot formats):
-    const reasoning =
-      choice.message.reasoning_content ??
-      choice.message.reasoning ??
-      choice.message.reasoning_text;
+    // reasoning content (Copilot uses reasoning_text):
+    const reasoning = choice.message.reasoning_text;
     if (reasoning != null && reasoning.length > 0) {
       content.push({
         type: 'reasoning',
@@ -490,9 +487,8 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
               reasoningOpaque = delta.reasoning_opaque;
             }
 
-            // enqueue reasoning before text deltas (supports both OpenAI and Copilot formats):
-            const reasoningContent =
-              delta.reasoning_content ?? delta.reasoning ?? delta.reasoning_text;
+            // enqueue reasoning before text deltas (Copilot uses reasoning_text):
+            const reasoningContent = delta.reasoning_text;
             if (reasoningContent) {
               if (!isActiveReasoning) {
                 controller.enqueue({
@@ -768,8 +764,6 @@ const OpenAICompatibleChatResponseSchema = z.object({
       message: z.object({
         role: z.literal('assistant').nullish(),
         content: z.string().nullish(),
-        reasoning_content: z.string().nullish(),
-        reasoning: z.string().nullish(),
         // Copilot-specific reasoning fields
         reasoning_text: z.string().nullish(),
         reasoning_opaque: z.string().nullish(),
@@ -809,10 +803,6 @@ const createOpenAICompatibleChatChunkSchema = <
             .object({
               role: z.enum(['assistant']).nullish(),
               content: z.string().nullish(),
-              // Most openai-compatible models set `reasoning_content`, but some
-              // providers serving `gpt-oss` set `reasoning`. See #7866
-              reasoning_content: z.string().nullish(),
-              reasoning: z.string().nullish(),
               // Copilot-specific reasoning fields
               reasoning_text: z.string().nullish(),
               reasoning_opaque: z.string().nullish(),
