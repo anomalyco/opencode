@@ -246,7 +246,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                     // GitHub OAuth API may return the new interval in seconds in the response.
                     // We should try to use that if provided with safety margin.
                     const serverInterval = data.interval
-                    if (serverInterval && typeof serverInterval === 'number' && serverInterval > 0) {
+                    if (serverInterval && typeof serverInterval === "number" && serverInterval > 0) {
                       newInterval = serverInterval * 1000
                     }
 
