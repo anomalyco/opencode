@@ -242,13 +242,19 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
       content.push({ type: 'text', text });
     }
 
-    // reasoning content:
+    // reasoning content (supports both OpenAI and Copilot formats):
     const reasoning =
-      choice.message.reasoning_content ?? choice.message.reasoning;
+      choice.message.reasoning_content ??
+      choice.message.reasoning ??
+      choice.message.reasoning_text;
     if (reasoning != null && reasoning.length > 0) {
       content.push({
         type: 'reasoning',
         text: reasoning,
+        // Include reasoning_opaque for Copilot multi-turn reasoning
+        providerMetadata: choice.message.reasoning_opaque
+          ? { copilot: { reasoningOpaque: choice.message.reasoning_opaque } }
+          : undefined,
       });
     }
 
@@ -379,6 +385,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
     const providerOptionsName = this.providerOptionsName;
     let isActiveReasoning = false;
     let isActiveText = false;
+    let reasoningOpaque: string | undefined;
 
     return {
       stream: response.pipeThrough(
@@ -471,8 +478,14 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
 
             const delta = choice.delta;
 
-            // enqueue reasoning before text deltas:
-            const reasoningContent = delta.reasoning_content ?? delta.reasoning;
+            // Capture reasoning_opaque for Copilot multi-turn reasoning
+            if (delta.reasoning_opaque) {
+              reasoningOpaque = delta.reasoning_opaque;
+            }
+
+            // enqueue reasoning before text deltas (supports both OpenAI and Copilot formats):
+            const reasoningContent =
+              delta.reasoning_content ?? delta.reasoning ?? delta.reasoning_text;
             if (reasoningContent) {
               if (!isActiveReasoning) {
                 controller.enqueue({
@@ -490,6 +503,19 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
             }
 
             if (delta.content) {
+              // If reasoning was active and we're starting text, end reasoning first
+              // This handles the case where reasoning_opaque and content come in the same chunk
+              if (isActiveReasoning && !isActiveText) {
+                controller.enqueue({
+                  type: 'reasoning-end',
+                  id: 'reasoning-0',
+                  providerMetadata: reasoningOpaque
+                    ? { copilot: { reasoningOpaque } }
+                    : undefined,
+                });
+                isActiveReasoning = false;
+              }
+
               if (!isActiveText) {
                 controller.enqueue({ type: 'text-start', id: 'txt-0' });
                 isActiveText = true;
@@ -503,6 +529,18 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
             }
 
             if (delta.tool_calls != null) {
+              // If reasoning was active and we're starting tool calls, end reasoning first
+              // This handles the case where reasoning goes directly to tool calls with no content
+              if (isActiveReasoning) {
+                controller.enqueue({
+                  type: 'reasoning-end',
+                  id: 'reasoning-0',
+                  providerMetadata: reasoningOpaque
+                    ? { copilot: { reasoningOpaque } }
+                    : undefined,
+                });
+                isActiveReasoning = false;
+              }
               for (const toolCallDelta of delta.tool_calls) {
                 const index = toolCallDelta.index;
 
@@ -617,7 +655,14 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
 
           flush(controller) {
             if (isActiveReasoning) {
-              controller.enqueue({ type: 'reasoning-end', id: 'reasoning-0' });
+              controller.enqueue({
+                type: 'reasoning-end',
+                id: 'reasoning-0',
+                // Include reasoning_opaque for Copilot multi-turn reasoning
+                providerMetadata: reasoningOpaque
+                  ? { copilot: { reasoningOpaque } }
+                  : undefined,
+              });
             }
 
             if (isActiveText) {
@@ -643,6 +688,10 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
 
             const providerMetadata: SharedV2ProviderMetadata = {
               [providerOptionsName]: {},
+              // Include reasoning_opaque for Copilot multi-turn reasoning
+              ...(reasoningOpaque
+                ? { copilot: { reasoningOpaque } }
+                : {}),
               ...metadataExtractor?.buildMetadata(),
             };
             if (
@@ -714,6 +763,9 @@ const OpenAICompatibleChatResponseSchema = z.object({
         content: z.string().nullish(),
         reasoning_content: z.string().nullish(),
         reasoning: z.string().nullish(),
+        // Copilot-specific reasoning fields
+        reasoning_text: z.string().nullish(),
+        reasoning_opaque: z.string().nullish(),
         tool_calls: z
           .array(
             z.object({
@@ -754,6 +806,9 @@ const createOpenAICompatibleChatChunkSchema = <
               // providers serving `gpt-oss` set `reasoning`. See #7866
               reasoning_content: z.string().nullish(),
               reasoning: z.string().nullish(),
+              // Copilot-specific reasoning fields
+              reasoning_text: z.string().nullish(),
+              reasoning_opaque: z.string().nullish(),
               tool_calls: z
                 .array(
                   z.object({
