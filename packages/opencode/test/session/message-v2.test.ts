@@ -1,7 +1,34 @@
 import { describe, expect, test } from "bun:test"
 import { MessageV2 } from "../../src/session/message-v2"
+import type { ToolSet } from "ai"
 
 const sessionID = "session"
+
+// Mock tool that transforms output to content format with media support
+function createMockTools(): ToolSet {
+  return {
+    bash: {
+      description: "mock bash tool",
+      inputSchema: { type: "object", properties: {} } as any,
+      toModelOutput(result: { output: string; attachments?: MessageV2.FilePart[] }) {
+        return {
+          type: "content" as const,
+          value: [
+            { type: "text" as const, text: result.output },
+            ...(result.attachments?.map((attachment) => {
+              const base64 = attachment.url.startsWith("data:") ? attachment.url.split(",", 2)[1] : attachment.url
+              return {
+                type: "media" as const,
+                data: base64,
+                mediaType: attachment.mime,
+              }
+            }) ?? []),
+          ],
+        }
+      },
+    },
+  } as ToolSet
+}
 
 function userInfo(id: string): MessageV2.User {
   return {
@@ -259,22 +286,10 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessage(input, { tools: createMockTools() })).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
-      },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "Tool bash returned an attachment:" },
-          {
-            type: "file",
-            mediaType: "image/png",
-            filename: "attachment.png",
-            data: "https://example.com/attachment.png",
-          },
-        ],
       },
       {
         role: "assistant",
@@ -297,7 +312,13 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-result",
             toolCallId: "call-1",
             toolName: "bash",
-            output: { type: "text", value: "ok" },
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "ok" },
+                { type: "media", data: "https://example.com/attachment.png", mediaType: "image/png" },
+              ],
+            },
             providerOptions: { openai: { tool: "meta" } },
           },
         ],
@@ -341,7 +362,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessage(input, { tools: createMockTools() })).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -365,7 +386,10 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-result",
             toolCallId: "call-1",
             toolName: "bash",
-            output: { type: "text", value: "[Old tool result content cleared]" },
+            output: {
+              type: "content",
+              value: [{ type: "text", text: "[Old tool result content cleared]" }],
+            },
           },
         ],
       },
@@ -568,5 +592,95 @@ describe("session.message-v2.toModelMessage", () => {
     ]
 
     expect(MessageV2.toModelMessage(input)).toStrictEqual([])
+  })
+
+  test("converts pending/running tool calls to error results to prevent dangling tool_use", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-pending",
+            tool: "bash",
+            state: {
+              status: "pending",
+              input: { cmd: "ls" },
+              raw: "",
+            },
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "tool",
+            callID: "call-running",
+            tool: "read",
+            state: {
+              status: "running",
+              input: { path: "/tmp" },
+              time: { start: 0 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = MessageV2.toModelMessage(input)
+
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-pending",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+          {
+            type: "tool-call",
+            toolCallId: "call-running",
+            toolName: "read",
+            input: { path: "/tmp" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-pending",
+            toolName: "bash",
+            output: { type: "error-text", value: "[Tool execution was interrupted]" },
+          },
+          {
+            type: "tool-result",
+            toolCallId: "call-running",
+            toolName: "read",
+            output: { type: "error-text", value: "[Tool execution was interrupted]" },
+          },
+        ],
+      },
+    ])
   })
 })
