@@ -170,6 +170,21 @@ or `%LOCALAPPDATA%\opencode` on Windows.
 
 ---
 
+### Custom log directory
+
+Specify a custom log directory using the `OPENCODE_LOG_DIR`
+environment variable. This controls where OpenCode stores log files.
+
+```bash
+export OPENCODE_LOG_DIR=/path/to/my/log-directory
+opencode run "Hello world"
+```
+
+By default, OpenCode stores logs in the data directory at `$OPENCODE_DATA_DIR/log`
+(or `~/.local/share/opencode/log` if `OPENCODE_DATA_DIR` is not set).
+
+---
+
 ## Schema
 
 The config file has a schema that's defined in [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
