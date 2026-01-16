@@ -247,10 +247,6 @@ export namespace Agent {
     return state().then((x) => x[agent])
   }
 
-  /**
-   * Get agent by name, falling back to default agent if not found.
-   * Throws if neither the requested agent nor fallback exists.
-   */
   export async function getOrDefault(name?: string): Promise<Info> {
     const agent = name ? await get(name) : undefined
     if (agent) return agent

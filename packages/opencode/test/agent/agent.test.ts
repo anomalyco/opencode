@@ -636,3 +636,72 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
     },
   })
 })
+
+test("getOrDefault returns agent when name exists", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.getOrDefault("build")
+      expect(agent).toBeDefined()
+      expect(agent.name).toBe("build")
+    },
+  })
+})
+
+test("getOrDefault returns default agent when name is undefined", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.getOrDefault()
+      expect(agent).toBeDefined()
+      expect(agent.name).toBe("build") // default agent
+    },
+  })
+})
+
+test("getOrDefault returns default agent when name does not exist", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.getOrDefault("nonexistent_agent")
+      expect(agent).toBeDefined()
+      expect(agent.name).toBe("build") // falls back to default
+    },
+  })
+})
+
+test("getOrDefault respects custom default_agent config", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      default_agent: "plan",
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.getOrDefault()
+      expect(agent).toBeDefined()
+      expect(agent.name).toBe("plan")
+    },
+  })
+})
+
+test("getOrDefault throws when both name and fallback do not exist", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        build: { disable: true },
+        plan: { disable: true },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await expect(Agent.getOrDefault("nonexistent")).rejects.toThrow()
+    },
+  })
+})
