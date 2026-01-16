@@ -636,23 +636,27 @@ export namespace ProviderTransform {
     }
   }
 
+  export function maxOutputTokens(model: Provider.Model, options: Record<string, any>, globalLimit: number): number
   export function maxOutputTokens(
     npm: string,
     options: Record<string, any>,
     modelLimit: number,
     globalLimit: number,
-    providerID?: string,
-    modelApiId?: string,
+  ): number
+  export function maxOutputTokens(
+    arg1: Provider.Model | string,
+    options: Record<string, any>,
+    arg3: number,
+    arg4?: number,
   ): number {
+    const model = typeof arg1 === "object" ? arg1 : null
+    const npm = model ? model.api.npm : (arg1 as string)
+    const modelLimit = model ? model.limit.output : arg3
+    const globalLimit = model ? arg3 : arg4!
     const modelCap = modelLimit || globalLimit
     const standardLimit = Math.min(modelCap, globalLimit)
 
-    const isAzureAnthropicModel =
-      providerID === "azure-cognitive-services" &&
-      modelApiId &&
-      (modelApiId.includes("claude") || modelApiId.includes("anthropic"))
-
-    if (npm === "@ai-sdk/anthropic" || isAzureAnthropicModel) {
+    if (model ? usesAnthropicSDK(model) : npm === "@ai-sdk/anthropic") {
       const thinking = options?.["thinking"]
       const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
       const enabled = thinking?.["type"] === "enabled"
