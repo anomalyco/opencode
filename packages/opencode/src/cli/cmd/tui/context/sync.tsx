@@ -9,6 +9,7 @@ import type {
   Command,
   PermissionRequest,
   QuestionRequest,
+  ReproductionStepsRequest,
   LspStatus,
   McpStatus,
   McpResource,
@@ -45,6 +46,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       question: {
         [sessionID: string]: QuestionRequest[]
+      }
+      reproduction_steps: {
+        [sessionID: string]: ReproductionStepsRequest[]
       }
       config: Config
       session: Session[]
@@ -85,6 +89,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       agent: [],
       permission: {},
       question: {},
+      reproduction_steps: {},
       command: [],
       provider: [],
       provider_default: {},
@@ -177,6 +182,44 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           setStore(
             "question",
+            request.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 0, request)
+            }),
+          )
+          break
+        }
+
+        case "reproduction.steps.replied":
+        case "reproduction.steps.rejected": {
+          const requests = store.reproduction_steps[event.properties.sessionID]
+          if (!requests) break
+          const match = Binary.search(requests, event.properties.requestID, (r) => r.id)
+          if (!match.found) break
+          setStore(
+            "reproduction_steps",
+            event.properties.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 1)
+            }),
+          )
+          break
+        }
+
+        case "reproduction.steps.asked": {
+          const request = event.properties
+          const requests = store.reproduction_steps[request.sessionID]
+          if (!requests) {
+            setStore("reproduction_steps", request.sessionID, [request])
+            break
+          }
+          const match = Binary.search(requests, request.id, (r) => r.id)
+          if (match.found) {
+            setStore("reproduction_steps", request.sessionID, match.index, reconcile(request))
+            break
+          }
+          setStore(
+            "reproduction_steps",
             request.sessionID,
             produce((draft) => {
               draft.splice(match.index, 0, request)

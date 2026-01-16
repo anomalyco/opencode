@@ -1,4 +1,5 @@
 import { QuestionTool } from "./question"
+import { ReproductionSteps } from "./reproduction-steps"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
@@ -94,7 +95,7 @@ export namespace ToolRegistry {
 
     return [
       InvalidTool,
-      ...(["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) ? [QuestionTool] : []),
+      ...(["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) ? [QuestionTool, ReproductionSteps] : []),
       BashTool,
       ReadTool,
       GlobTool,

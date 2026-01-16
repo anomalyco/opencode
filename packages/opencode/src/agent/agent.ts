@@ -83,23 +83,6 @@ export namespace Agent {
         mode: "primary",
         native: true,
       },
-      debug: {
-        name: "debug",
-        description:
-          "Evidence-based debugging mode. Use this to generate hypotheses, add runtime instrumentation, analyze logs, and only then implement fixes.",
-        prompt: PROMPT_DEBUG,
-        options: {},
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            question: "allow",
-            plan_enter: "allow",
-          }),
-          user,
-        ),
-        mode: "primary",
-        native: true,
-      },
       plan: {
         name: "plan",
         options: {},
@@ -116,6 +99,23 @@ export namespace Agent {
               [path.join(".opencode", "plans", "*.md")]: "allow",
               [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
             },
+          }),
+          user,
+        ),
+        mode: "primary",
+        native: true,
+      },
+      debug: {
+        name: "debug",
+        description:
+          "Evidence-based debugging mode. Use this to generate hypotheses, add runtime instrumentation, analyze logs, and only then implement fixes.",
+        prompt: PROMPT_DEBUG,
+        options: {},
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+            plan_enter: "allow",
           }),
           user,
         ),

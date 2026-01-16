@@ -606,6 +606,49 @@ export type EventSessionCompacted = {
   }
 }
 
+export type ReproductionStepsRequest = {
+  id: string
+  sessionID: string
+  /**
+   * Numbered reproduction steps
+   */
+  steps: Array<string>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventReproductionStepsAsked = {
+  type: "reproduction.steps.asked"
+  properties: ReproductionStepsRequest
+}
+
+export type ReproductionStepsAction = "proceed" | "fixed" | "skipped"
+
+export type EventReproductionStepsReplied = {
+  type: "reproduction.steps.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    action: ReproductionStepsAction
+  }
+}
+
+export type EventReproductionStepsRejected = {
+  type: "reproduction.steps.rejected"
+  properties: {
+    sessionID: string
+    requestID: string
+  }
+}
+
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
 export type Todo = {
   /**
    * Brief description of the task
@@ -877,6 +920,9 @@ export type Event =
   | EventQuestionReplied
   | EventQuestionRejected
   | EventSessionCompacted
+  | EventReproductionStepsAsked
+  | EventReproductionStepsReplied
+  | EventReproductionStepsRejected
   | EventTodoUpdated
   | EventTuiPromptAppend
   | EventTuiCommandExecute
@@ -1796,6 +1842,9 @@ export type Config = {
   }
 }
 
+export type ReproductionStepsReply = {
+  action: ReproductionStepsAction
+}
 export type Model = {
   id: string
   providerID: string
@@ -3761,6 +3810,89 @@ export type QuestionRejectResponses = {
 
 export type QuestionRejectResponse = QuestionRejectResponses[keyof QuestionRejectResponses]
 
+export type ReproductionStepsListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/reproduction-steps"
+}
+
+export type ReproductionStepsListResponses = {
+  /**
+   * List of pending debug reproduction requests
+   */
+  200: Array<ReproductionStepsRequest>
+}
+
+export type ReproductionStepsListResponse = ReproductionStepsListResponses[keyof ReproductionStepsListResponses]
+
+export type ReproductionStepsReplyData = {
+  body?: ReproductionStepsReply
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/reproduction-steps/{requestID}/reply"
+}
+
+export type ReproductionStepsReplyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ReproductionStepsReplyError = ReproductionStepsReplyErrors[keyof ReproductionStepsReplyErrors]
+
+export type ReproductionStepsReplyResponses = {
+  /**
+   * Debug reproduction request answered successfully
+   */
+  200: boolean
+}
+
+export type ReproductionStepsReplyResponse = ReproductionStepsReplyResponses[keyof ReproductionStepsReplyResponses]
+
+export type ReproductionStepsRejectData = {
+  body?: never
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/reproduction-steps/{requestID}/reject"
+}
+
+export type ReproductionStepsRejectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ReproductionStepsRejectError = ReproductionStepsRejectErrors[keyof ReproductionStepsRejectErrors]
+
+export type ReproductionStepsRejectResponses = {
+  /**
+   * Debug reproduction request rejected successfully
+   */
+  200: boolean
+}
+
+export type ReproductionStepsRejectResponse = ReproductionStepsRejectResponses[keyof ReproductionStepsRejectResponses]
 export type ProviderListData = {
   body?: never
   path?: never

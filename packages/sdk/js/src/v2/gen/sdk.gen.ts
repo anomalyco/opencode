@@ -93,6 +93,12 @@ import type {
   QuestionRejectResponses,
   QuestionReplyErrors,
   QuestionReplyResponses,
+  ReproductionStepsListResponses,
+  ReproductionStepsRejectErrors,
+  ReproductionStepsRejectResponses,
+  ReproductionStepsReply,
+  ReproductionStepsReplyErrors,
+  ReproductionStepsReplyResponses,
   SessionAbortErrors,
   SessionAbortResponses,
   SessionChildrenErrors,
@@ -1865,6 +1871,122 @@ export class Question extends HeyApiClient {
   }
 }
 
+export class ReproductionSteps extends HeyApiClient {
+  /**
+   * List pending debug reproduction prompts
+   *
+   * Get all pending debug reproduction requests across all sessions.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<ReproductionStepsListResponses, unknown, ThrowOnError>({
+      url: "/reproduction-steps",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reply to debug reproduction prompt
+   *
+   * Provide the action for a debug reproduction request from the AI assistant.
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+      reproductionStepsReply?: ReproductionStepsReply
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { key: "reproductionStepsReply", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ReproductionStepsReplyResponses,
+      ReproductionStepsReplyErrors,
+      ThrowOnError
+    >({
+      url: "/reproduction-steps/{requestID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reject debug reproduction prompt
+   *
+   * Reject a debug reproduction request from the AI assistant.
+   */
+  public reject<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ReproductionStepsRejectResponses,
+      ReproductionStepsRejectErrors,
+      ThrowOnError
+    >({
+      url: "/reproduction-steps/{requestID}/reject",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Command extends HeyApiClient {
+  /**
+   * List commands
+   *
+   * Get a list of all available commands in the OpenCode system.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<CommandListResponses, unknown, ThrowOnError>({
+      url: "/command",
+      ...options,
+      ...params,
+    })
+  }
+}
 export class Oauth extends HeyApiClient {
   /**
    * OAuth authorize
@@ -3113,6 +3235,11 @@ export class OpencodeClient extends HeyApiClient {
   private _file?: File
   get file(): File {
     return (this._file ??= new File({ client: this.client }))
+  }
+
+  private _reproductionSteps?: ReproductionSteps
+  get reproductionSteps(): ReproductionSteps {
+    return (this._reproductionSteps ??= new ReproductionSteps({ client: this.client }))
   }
 
   private _mcp?: Mcp

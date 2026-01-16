@@ -91,63 +91,6 @@
         ]
       }
     },
-    "/ingest/{sessionId}": {
-      "post": {
-        "operationId": "debug.ingest",
-        "summary": "Ingest debug logs",
-        "description": "Ingest Cursor-style debug logs (NDJSON or JSON) and append them to .opencode/debug.log in the worktree root.",
-        "responses": {
-          "200": {
-            "description": "Logs ingested",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "const": true
-                    },
-                    "count": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991
-                    }
-                  },
-                  "required": ["success", "count"]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "in": "path",
-            "name": "sessionId",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          }
-        ],
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.debug.ingest({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/project": {
       "get": {
         "operationId": "project.list",

@@ -42,7 +42,7 @@ Phase 2: Instrumentation
 Phase 3: Reproduction
 - Before each reproduction run, CLEAR the log file at logFileAbsolute from <debug_config>.
 - Use the write tool to clear it by writing an empty string (do not use shell rm).
-- Provide reproduction steps inside a <reproduction_steps>...</reproduction_steps> block with a numbered list only.
+- Call the reproduction_steps tool with an ordered steps array to show the reproduction prompt.
 - Remind the user if a restart is needed for instrumentation to take effect.
 
 Phase 4: Log Analysis

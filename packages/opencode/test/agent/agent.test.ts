@@ -18,12 +18,28 @@ test("returns default native agents when no config", async () => {
       const agents = await Agent.list()
       const names = agents.map((a) => a.name)
       expect(names).toContain("build")
+      expect(names).toContain("debug")
       expect(names).toContain("plan")
       expect(names).toContain("general")
       expect(names).toContain("explore")
       expect(names).toContain("compaction")
       expect(names).toContain("title")
       expect(names).toContain("summary")
+    },
+  })
+})
+
+test("debug agent has correct default properties", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const debug = await Agent.get("debug")
+      expect(debug).toBeDefined()
+      expect(debug?.mode).toBe("primary")
+      expect(debug?.native).toBe(true)
+      expect(evalPerm(debug, "question")).toBe("allow")
+      expect(evalPerm(debug, "plan_enter")).toBe("allow")
     },
   })
 })
@@ -625,13 +641,14 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
       agent: {
         build: { disable: true },
         plan: { disable: true },
+        debug: { disable: true },
       },
     },
   })
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      // build and plan are disabled, no primary-capable agents remain
+      // build/plan/debug are disabled, no primary-capable agents remain
       await expect(Agent.defaultAgent()).rejects.toThrow("no primary visible agent found")
     },
   })
