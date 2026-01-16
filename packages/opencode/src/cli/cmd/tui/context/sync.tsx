@@ -26,7 +26,7 @@ import type { Snapshot } from "@/snapshot"
 import type { PlanReview } from "@/session/plan-review"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onMount, createSignal } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
 
@@ -35,6 +35,9 @@ type PlanReviewRequest = PlanReview.Request
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
+    // Signal to force reactivity when plan_review changes
+    const [planReviewVersion, setPlanReviewVersion] = createSignal(0)
+
     const [store, setStore] = createStore<{
       status: "loading" | "partial" | "complete"
       provider: Provider[]
@@ -196,37 +199,24 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         case "plan_review.rejected": {
           const requests = store.plan_review[event.properties.sessionID]
           if (!requests) break
-          const match = Binary.search(requests, event.properties.requestID, (r) => r.id)
-          if (!match.found) break
-          setStore(
-            "plan_review",
-            event.properties.sessionID,
-            produce((draft) => {
-              draft.splice(match.index, 1)
-            }),
-          )
+
+          const filtered = requests.filter((r) => r.id !== event.properties.requestID)
+          if (filtered.length === requests.length) break // Not found
+
+          // Set to empty array (not delete) to properly trigger reactivity
+          // Setting directly on the key ensures Solid tracks the change
+          setStore("plan_review", event.properties.sessionID, filtered)
+          // Increment version to force memo re-evaluation
+          setPlanReviewVersion((v) => v + 1)
           break
         }
 
         case "plan_review.requested": {
           const request = event.properties
-          const requests = store.plan_review[request.sessionID]
-          if (!requests) {
-            setStore("plan_review", request.sessionID, [request])
-            break
-          }
-          const match = Binary.search(requests, request.id, (r) => r.id)
-          if (match.found) {
-            setStore("plan_review", request.sessionID, match.index, reconcile(request))
-            break
-          }
-          setStore(
-            "plan_review",
-            request.sessionID,
-            produce((draft) => {
-              draft.splice(match.index, 0, request)
-            }),
-          )
+          // Replace any existing plan reviews for this session with the new one
+          // (only one plan review should be pending per session at a time)
+          setStore("plan_review", request.sessionID, [request])
+          setPlanReviewVersion((v) => v + 1)
           break
         }
 
@@ -419,6 +409,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const result = {
       data: store,
       set: setStore,
+      planReviewVersion,
       get status() {
         return store.status
       },

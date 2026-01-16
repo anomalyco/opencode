@@ -511,6 +511,17 @@ export namespace MessageV2 {
               type: "step-start",
             })
           if (part.type === "tool") {
+            // Skip tool parts if the tool isn't in the current tools object
+            // This handles cases like plan→build transition where exit_plan_mode
+            // was used by plan agent but isn't available to build agent
+            if (options?.tools && !options.tools[part.tool]) {
+              // Convert to a text summary instead of a tool call
+              assistantMessage.parts.push({
+                type: "text",
+                text: `[Tool ${part.tool} was called${part.state.status === "completed" ? " and completed successfully" : ""}]`,
+              })
+              continue
+            }
             if (part.state.status === "completed") {
               if (part.state.attachments?.length) {
                 result.push({

@@ -10,30 +10,90 @@ import type { PlanReview } from "@/session/plan-review"
 
 type PlanReviewRequest = PlanReview.Request
 
-export function PlanReviewPrompt(props: { request: PlanReviewRequest }) {
+/**
+ * Inline plan content that displays in the chat history (scrollable)
+ * This is ephemeral - it disappears when the plan is approved/rejected
+ */
+export function PlanReviewContent(props: { request: PlanReviewRequest }) {
+  const { theme, syntax } = useTheme()
+
+  const [content, setContent] = createSignal<string | null>(null)
+  const [loading, setLoading] = createSignal(true)
+
+  // Load plan content - tracks props.request.id reactively
+  createEffect(() => {
+    const filePath = props.request.filePath
+    setLoading(true)
+    setContent(null)
+
+    Bun.file(filePath).text()
+      .then((result) => {
+        setContent(result)
+      })
+      .catch(() => {
+        setContent("(Unable to read plan file)")
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  })
+
+  return (
+    <box
+      marginTop={1}
+      border={["left"]}
+      borderColor={theme.warning}
+      customBorderChars={SplitBorder.customBorderChars}
+    >
+      <box
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        backgroundColor={theme.backgroundPanel}
+        flexShrink={0}
+        gap={1}
+      >
+        {/* Header */}
+        <text fg={theme.text}>
+          <span style={{ bold: true }}>Plan Review</span>
+          <span style={{ fg: theme.textMuted }}> · {props.request.filePath}</span>
+        </text>
+
+        {/* Content with markdown rendering */}
+        <Show when={loading()}>
+          <text fg={theme.textMuted}>Loading plan...</text>
+        </Show>
+
+        <Show when={!loading() && content()}>
+          <box paddingTop={1}>
+            <code
+              filetype="markdown"
+              drawUnstyledText={false}
+              streaming={false}
+              syntaxStyle={syntax()}
+              content={content()!}
+              conceal={false}
+              fg={theme.text}
+            />
+          </box>
+        </Show>
+      </box>
+    </box>
+  )
+}
+
+/**
+ * Docked controls for plan review (keyboard hints, feedback input)
+ */
+export function PlanReviewControls(props: { request: PlanReviewRequest }) {
   const sdk = useSDK()
   const { theme } = useTheme()
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
 
-  const [content, setContent] = createSignal<string | null>(null)
-  const [loading, setLoading] = createSignal(true)
   const [rejectMode, setRejectMode] = createSignal(false)
-  const [scrollOffset, setScrollOffset] = createSignal(0)
 
   let textarea: TextareaRenderable | undefined
-
-  // Load plan content on mount
-  createEffect(async () => {
-    try {
-      const result = await Bun.file(props.request.filePath).text()
-      setContent(result)
-    } catch {
-      setContent("(Unable to read plan file)")
-    } finally {
-      setLoading(false)
-    }
-  })
 
   function approve() {
     sdk.client.planReview.approve({
@@ -47,22 +107,6 @@ export function PlanReviewPrompt(props: { request: PlanReviewRequest }) {
       feedback,
     })
   }
-
-  const contentLines = () => {
-    const c = content()
-    if (!c) return []
-    return c.split("\n")
-  }
-
-  const visibleLines = () => {
-    const lines = contentLines()
-    const offset = scrollOffset()
-    const maxVisible = 20 // Show max 20 lines at a time
-    return lines.slice(offset, offset + maxVisible)
-  }
-
-  const canScrollUp = () => scrollOffset() > 0
-  const canScrollDown = () => scrollOffset() + 20 < contentLines().length
 
   useKeyboard((evt) => {
     // When in reject mode (typing feedback)
@@ -100,77 +144,24 @@ export function PlanReviewPrompt(props: { request: PlanReviewRequest }) {
       reject()
       return
     }
-
-    // Scroll navigation
-    if (evt.name === "up" || evt.name === "k") {
-      evt.preventDefault()
-      if (canScrollUp()) {
-        setScrollOffset((o) => o - 1)
-      }
-      return
-    }
-
-    if (evt.name === "down" || evt.name === "j") {
-      evt.preventDefault()
-      if (canScrollDown()) {
-        setScrollOffset((o) => o + 1)
-      }
-      return
-    }
-
-    if (evt.name === "pageup") {
-      evt.preventDefault()
-      setScrollOffset((o) => Math.max(0, o - 10))
-      return
-    }
-
-    if (evt.name === "pagedown") {
-      evt.preventDefault()
-      setScrollOffset((o) => Math.min(contentLines().length - 20, o + 10))
-      return
-    }
   })
 
   return (
     <box
       backgroundColor={theme.backgroundPanel}
       border={["left"]}
-      borderColor={theme.accent}
+      borderColor={theme.warning}
       customBorderChars={SplitBorder.customBorderChars}
     >
-      <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
-        {/* Header */}
-        <box paddingLeft={1}>
-          <text>
-            <span style={{ fg: theme.text, bold: true }}>Plan Review</span>
-          </text>
-        </box>
-
-        <box paddingLeft={1}>
-          <text fg={theme.textMuted}>{props.request.filePath}</text>
-        </box>
-
-        {/* Content */}
-        <Show when={loading()}>
-          <box paddingLeft={1}>
-            <text fg={theme.textMuted}>Loading plan...</text>
-          </box>
-        </Show>
-
-        <Show when={!loading()}>
-          <box paddingLeft={1} flexDirection="column">
-            {visibleLines().map((line) => (
-              <text fg={theme.text}>{line || " "}</text>
-            ))}
-            <Show when={canScrollDown()}>
-              <text fg={theme.textMuted}>... ({contentLines().length - scrollOffset() - 20} more lines)</text>
-            </Show>
-          </box>
-        </Show>
+      <box paddingLeft={2} paddingRight={3} paddingTop={1} paddingBottom={1} gap={1}>
+        {/* Awaiting Approval badge */}
+        <text fg={theme.textMuted}>
+          <span style={{ bg: theme.warning, fg: theme.background, bold: true }}> AWAITING APPROVAL </span>
+        </text>
 
         {/* Reject feedback input */}
         <Show when={rejectMode()}>
-          <box paddingLeft={1} gap={1}>
+          <box gap={1}>
             <text fg={theme.text}>Feedback (optional):</text>
             <textarea
               ref={(val: TextareaRenderable) => (textarea = val)}
@@ -183,39 +174,26 @@ export function PlanReviewPrompt(props: { request: PlanReviewRequest }) {
             />
           </box>
         </Show>
-      </box>
 
-      {/* Footer with keybindings */}
-      <box
-        flexDirection="row"
-        flexShrink={0}
-        gap={1}
-        paddingLeft={2}
-        paddingRight={3}
-        paddingBottom={1}
-        justifyContent="space-between"
-      >
+        {/* Keyboard hints */}
         <box flexDirection="row" gap={2}>
           <Show when={!rejectMode()}>
-            <text fg={theme.text}>
-              {"↑↓"} <span style={{ fg: theme.textMuted }}>scroll</span>
+            <text fg={theme.textMuted}>
+              <span style={{ fg: theme.text }}>enter</span> approve
             </text>
-            <text fg={theme.text}>
-              enter <span style={{ fg: theme.textMuted }}>approve</span>
+            <text fg={theme.textMuted}>
+              <span style={{ fg: theme.text }}>r</span> reject
             </text>
-            <text fg={theme.text}>
-              r <span style={{ fg: theme.textMuted }}>reject</span>
-            </text>
-            <text fg={theme.text}>
-              esc <span style={{ fg: theme.textMuted }}>dismiss</span>
+            <text fg={theme.textMuted}>
+              <span style={{ fg: theme.text }}>esc</span> dismiss
             </text>
           </Show>
           <Show when={rejectMode()}>
-            <text fg={theme.text}>
-              enter <span style={{ fg: theme.textMuted }}>submit feedback</span>
+            <text fg={theme.textMuted}>
+              <span style={{ fg: theme.text }}>enter</span> submit feedback
             </text>
-            <text fg={theme.text}>
-              esc <span style={{ fg: theme.textMuted }}>cancel</span>
+            <text fg={theme.textMuted}>
+              <span style={{ fg: theme.text }}>esc</span> cancel
             </text>
           </Show>
         </box>

@@ -32,7 +32,7 @@ import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
-import { PlanReviewInline } from "@/components/plan-review-inline"
+import { PlanReviewContent, PlanReviewControls } from "@/components/plan-review-inline"
 import { useCommand } from "@/context/command"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
@@ -212,12 +212,32 @@ export default function Page() {
     })
   }
 
-  // Get pending plan review for current session
-  const pendingPlanReview = createMemo(() => {
+  // Get current session
+  const session = createMemo(() => {
     const id = params.id
     if (!id) return undefined
-    const requests = sync.data.plan_review[id]
-    return requests?.[0]
+    return sync.data.session.find((s) => s.id === id)
+  })
+
+  // Get all child sessions (including current session)
+  const childSessions = createMemo(() => {
+    const current = session()
+    if (!current) return []
+    const parentID = current.parentID ?? current.id
+    return sync.data.session
+      .filter((x) => x.parentID === parentID || x.id === parentID)
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  })
+
+  // Get pending plan review from all child sessions (not if we're a child session ourselves)
+  const pendingPlanReview = createMemo(() => {
+    const current = session()
+    if (!current) return undefined
+    // Don't show plan reviews if we're viewing a child session
+    if (current.parentID) return undefined
+    // Aggregate plan reviews from all child sessions
+    const reviews = childSessions().flatMap((x) => sync.data.plan_review[x.id] ?? [])
+    return reviews[0]
   })
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
@@ -1216,6 +1236,15 @@ export default function Page() {
                               )
                             }}
                           </For>
+
+                          {/* Plan review inline - ephemeral message in chat */}
+                          <Show when={pendingPlanReview()}>
+                            {(request) => (
+                              <div class="min-w-0 w-full max-w-full">
+                                <PlanReviewContent request={request()} />
+                              </div>
+                            )}
+                          </Show>
                         </div>
                       </div>
                     </div>
@@ -1255,11 +1284,11 @@ export default function Page() {
                 "md:max-w-200": !showTabs(),
               }}
             >
-              {/* Plan review inline - shown when a plan is awaiting approval */}
+              {/* Plan review controls docked - visible when plan is pending */}
               <Show when={pendingPlanReview()}>
                 {(request) => (
                   <div class="mb-4">
-                    <PlanReviewInline request={request()} />
+                    <PlanReviewControls request={request()} />
                   </div>
                 )}
               </Show>

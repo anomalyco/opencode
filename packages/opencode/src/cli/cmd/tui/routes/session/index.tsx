@@ -72,7 +72,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Global } from "@/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
-import { PlanReviewPrompt } from "./plan-review"
+import { PlanReviewContent, PlanReviewControls } from "./plan-review"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 
@@ -129,8 +129,23 @@ export function Session() {
     return children().flatMap((x) => sync.data.question[x.id] ?? [])
   })
   const planReviews = createMemo(() => {
+    // Access version to establish dependency when plan reviews change
+    // (accessing the signal creates the reactive dependency, even if value unused)
+    void sync.planReviewVersion()
+
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.plan_review[x.id] ?? [])
+    const childIDs = children().map((x) => x.id)
+
+    // Access store properties directly through the proxy (NOT Object.entries)
+    // This ensures Solid.js tracks reactivity properly
+    const result: typeof sync.data.plan_review[string] = []
+    for (const sessionID of childIDs) {
+      const sessionReviews = sync.data.plan_review[sessionID]
+      if (sessionReviews && sessionReviews.length > 0) {
+        result.push(...sessionReviews)
+      }
+    }
+    return result
   })
 
   const pending = createMemo(() => {
@@ -1026,6 +1041,13 @@ export function Session() {
                   </Switch>
                 )}
               </For>
+
+              {/* Plan review content inline - use box with dynamic id to force scrollbox update */}
+              <box id={`plan-review-wrapper-${planReviews()[0]?.id ?? "none"}`}>
+                <Show when={permissions().length === 0 && questions().length === 0 && planReviews()[0]} keyed>
+                  {(request) => <PlanReviewContent request={request} />}
+                </Show>
+              </box>
             </scrollbox>
             <box flexShrink={0}>
               <Show when={permissions().length > 0}>
@@ -1034,8 +1056,8 @@ export function Session() {
               <Show when={permissions().length === 0 && questions().length > 0}>
                 <QuestionPrompt request={questions()[0]} />
               </Show>
-              <Show when={permissions().length === 0 && questions().length === 0 && planReviews().length > 0}>
-                <PlanReviewPrompt request={planReviews()[0]} />
+              <Show when={permissions().length === 0 && questions().length === 0 && planReviews()[0]} keyed>
+                {(request) => <PlanReviewControls request={request} />}
               </Show>
               <Prompt
                 visible={!session()?.parentID && permissions().length === 0 && questions().length === 0 && planReviews().length === 0}
