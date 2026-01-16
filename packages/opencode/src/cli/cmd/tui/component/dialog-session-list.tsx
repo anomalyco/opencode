@@ -38,8 +38,9 @@ export function DialogSessionList() {
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
+    const currentDirectory = sync.data.path.directory || process.cwd()
     return sessions()
-      .filter((x) => x.parentID === undefined)
+      .filter((x) => x.parentID === undefined && x.directory === currentDirectory)
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .map((x) => {
         const date = new Date(x.time.updated)
