@@ -25,7 +25,6 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Mark } from "@opencode-ai/ui/logo"
 import { getFilename } from "@opencode-ai/util/path"
@@ -913,12 +912,6 @@ export default function Layout(props: ParentProps) {
                 </Switch>
               </div>
             </div>
-            <Show when={props.session.summary?.files}>
-              <div class="flex justify-between items-center self-stretch">
-                <span class="text-12-regular text-text-weak">{`${props.session.summary?.files || "No"} file${props.session.summary?.files !== 1 ? "s" : ""} changed`}</span>
-                <Show when={props.session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
-              </div>
-            </Show>
           </A>
           <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
             <TooltipKeybind

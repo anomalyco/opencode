@@ -8,24 +8,17 @@ import {
   UserMessage,
 } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
-import { useDiffComponent } from "../context/diff"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 import { Binary } from "@opencode-ai/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
 import { Message, Part } from "./message-part"
 import { Markdown } from "./markdown"
-import { Accordion } from "./accordion"
-import { StickyAccordionHeader } from "./sticky-accordion-header"
-import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { IconButton } from "./icon-button"
 import { Tooltip } from "./tooltip"
 import { Card } from "./card"
-import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
 import { Spinner } from "./spinner"
 import { createStore } from "solid-js/store"
@@ -130,7 +123,6 @@ export function SessionTurn(
   }>,
 ) {
   const data = useData()
-  const diffComponent = useDiffComponent()
 
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
@@ -328,7 +320,6 @@ export function SessionTurn(
 
   const response = createMemo(() => lastTextPart()?.text)
   const responsePartId = createMemo(() => lastTextPart()?.id)
-  const hasDiffs = createMemo(() => message()?.summary?.diffs?.length)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
   const [responseCopied, setResponseCopied] = createSignal(false)
@@ -362,30 +353,14 @@ export function SessionTurn(
     onUserInteracted: props.onUserInteracted,
   })
 
-  const diffInit = 20
-  const diffBatch = 20
-
   const [store, setStore] = createStore({
     stickyTitleRef: undefined as HTMLDivElement | undefined,
     stickyTriggerRef: undefined as HTMLDivElement | undefined,
     stickyHeaderHeight: 0,
     retrySeconds: 0,
-    diffsOpen: [] as string[],
-    diffLimit: diffInit,
     status: rawStatus(),
     duration: duration(),
   })
-
-  createEffect(
-    on(
-      () => message()?.id,
-      () => {
-        setStore("diffsOpen", [])
-        setStore("diffLimit", diffInit)
-      },
-      { defer: true },
-    ),
-  )
 
   createEffect(() => {
     const r = retry()
@@ -566,7 +541,7 @@ export function SessionTurn(
                       </div>
                     </Show>
                     {/* Response */}
-                    <Show when={!working() && (response() || hasDiffs())}>
+                    <Show when={!working() && response()}>
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-copy">
                           <Tooltip value={responseCopied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
@@ -581,83 +556,10 @@ export function SessionTurn(
                           <h2 data-slot="session-turn-summary-title">Response</h2>
                           <Markdown
                             data-slot="session-turn-markdown"
-                            data-diffs={hasDiffs()}
                             text={response() ?? ""}
                             cacheKey={responsePartId()}
                           />
                         </div>
-                        <Accordion
-                          data-slot="session-turn-accordion"
-                          multiple
-                          value={store.diffsOpen}
-                          onChange={(value) => {
-                            if (!Array.isArray(value)) return
-                            setStore("diffsOpen", value)
-                          }}
-                        >
-                          <For each={(msg().summary?.diffs ?? []).slice(0, store.diffLimit)}>
-                            {(diff) => (
-                              <Accordion.Item value={diff.file}>
-                                <StickyAccordionHeader>
-                                  <Accordion.Trigger>
-                                    <div data-slot="session-turn-accordion-trigger-content">
-                                      <div data-slot="session-turn-file-info">
-                                        <FileIcon
-                                          node={{ path: diff.file, type: "file" }}
-                                          data-slot="session-turn-file-icon"
-                                        />
-                                        <div data-slot="session-turn-file-path">
-                                          <Show when={diff.file.includes("/")}>
-                                            <span data-slot="session-turn-directory">
-                                              {getDirectory(diff.file)}&lrm;
-                                            </span>
-                                          </Show>
-                                          <span data-slot="session-turn-filename">{getFilename(diff.file)}</span>
-                                        </div>
-                                      </div>
-                                      <div data-slot="session-turn-accordion-actions">
-                                        <DiffChanges changes={diff} />
-                                        <Icon name="chevron-grabber-vertical" size="small" />
-                                      </div>
-                                    </div>
-                                  </Accordion.Trigger>
-                                </StickyAccordionHeader>
-                                <Accordion.Content data-slot="session-turn-accordion-content">
-                                  <Show when={store.diffsOpen.includes(diff.file!)}>
-                                    <Dynamic
-                                      component={diffComponent}
-                                      before={{
-                                        name: diff.file!,
-                                        contents: diff.before!,
-                                      }}
-                                      after={{
-                                        name: diff.file!,
-                                        contents: diff.after!,
-                                      }}
-                                    />
-                                  </Show>
-                                </Accordion.Content>
-                              </Accordion.Item>
-                            )}
-                          </For>
-                        </Accordion>
-                        <Show when={(msg().summary?.diffs?.length ?? 0) > store.diffLimit}>
-                          <Button
-                            data-slot="session-turn-accordion-more"
-                            variant="ghost"
-                            size="small"
-                            onClick={() => {
-                              const total = msg().summary?.diffs?.length ?? 0
-                              setStore("diffLimit", (limit) => {
-                                const next = limit + diffBatch
-                                if (next > total) return total
-                                return next
-                              })
-                            }}
-                          >
-                            Show more changes ({(msg().summary?.diffs?.length ?? 0) - store.diffLimit})
-                          </Button>
-                        </Show>
                       </div>
                     </Show>
                     <Show when={error() && !props.stepsExpanded}>
