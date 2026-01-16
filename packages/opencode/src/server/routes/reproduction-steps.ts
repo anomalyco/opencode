@@ -1,10 +1,10 @@
 import { Hono } from "hono"
 import { describeRoute, validator } from "hono-openapi"
 import { resolver } from "hono-openapi"
-import { ReproductionSteps } from "../debug/repro"
+import { ReproductionSteps } from "../../debug/repro"
 import z from "zod"
-import { errors } from "./error"
-import { lazy } from "../util/lazy"
+import { errors } from "../error"
+import { lazy } from "../../util/lazy"
 
 export const ReproductionStepsRoutes = lazy(() =>
   new Hono()
