@@ -487,7 +487,7 @@ export function Prompt(props: PromptProps) {
     if (!store.prompt.input) return
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
-      exit()
+      exit(undefined, true)
       return
     }
     const selectedModel = local.model.current()

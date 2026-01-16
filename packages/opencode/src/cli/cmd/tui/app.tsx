@@ -122,9 +122,9 @@ export function tui(input: {
             fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} mode={mode} />}
           >
             <ArgsProvider {...input.args}>
-              <ExitProvider onExit={onExit}>
-                <KVProvider>
-                  <ToastProvider>
+              <ToastProvider>
+                <ExitProvider onExit={onExit}>
+                  <KVProvider>
                     <RouteProvider>
                       <SDKProvider
                         url={input.url}
@@ -155,9 +155,9 @@ export function tui(input: {
                         </SyncProvider>
                       </SDKProvider>
                     </RouteProvider>
-                  </ToastProvider>
-                </KVProvider>
-              </ExitProvider>
+                  </KVProvider>
+                </ExitProvider>
+              </ToastProvider>
             </ArgsProvider>
           </ErrorBoundary>
         )
@@ -473,7 +473,7 @@ function App() {
     {
       title: "Exit the app",
       value: "app.exit",
-      onSelect: () => exit(),
+      onSelect: () => exit(undefined, true),
       category: "System",
     },
     {
