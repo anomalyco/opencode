@@ -97,6 +97,14 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
     return []
   }
 
+  const getFirstLeaf = (pane: TabPane, panelId: string): string | undefined => {
+    const panel = pane.panels[panelId]
+    if (!panel) return undefined
+    if (panel.ptyId) return panelId
+    if (panel.children?.[0]) return getFirstLeaf(pane, panel.children[0])
+    return undefined
+  }
+
   const migrate = (terminals: LocalPTY[]) =>
     terminals.map((p) => ((p as { tabId?: string }).tabId ? p : { ...p, tabId: p.id }))
 
@@ -353,7 +361,9 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
           }),
         )
 
-        const newFocused = sibling.ptyId ? panel.parentId! : (sibling.children?.[0] ?? panel.parentId!)
+        const newFocused = sibling.ptyId
+          ? panel.parentId!
+          : (getFirstLeaf(pane, sibling.children![0]) ?? panel.parentId!)
         setStore("panes", tabId, "focused", newFocused)
 
         setStore(

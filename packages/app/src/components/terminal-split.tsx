@@ -143,6 +143,7 @@ export function TerminalSplit(props: TerminalSplitProps) {
               >
                 <Terminal
                   pty={pty}
+                  focused={isFocused()}
                   onCleanup={terminal.update}
                   onConnectError={() => terminal.clone(pty.id)}
                   onExit={() => handleClose(pty.id)}

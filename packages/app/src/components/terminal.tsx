@@ -7,6 +7,7 @@ import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@openco
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
+  focused?: boolean
   onSubmit?: () => void
   onCleanup?: (pty: LocalPTY) => void
   onConnectError?: (error: unknown) => void
@@ -39,7 +40,7 @@ export const Terminal = (props: TerminalProps) => {
   const sdk = useSDK()
   const theme = useTheme()
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnectError"])
+  const [local, others] = splitProps(props, ["pty", "focused", "class", "classList", "onConnectError"])
   let ws: WebSocket | undefined
   let term: Term | undefined
   let ghostty: Ghostty
@@ -90,6 +91,11 @@ export const Terminal = (props: TerminalProps) => {
     t.focus()
     setTimeout(() => t.textarea?.focus(), 0)
   }
+
+  createEffect(() => {
+    if (local.focused) focusTerminal()
+  })
+
   const handlePointerDown = () => {
     const activeElement = document.activeElement
     if (activeElement instanceof HTMLElement && activeElement !== container) {
