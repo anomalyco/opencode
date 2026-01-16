@@ -24,18 +24,25 @@ export namespace ProviderTransform {
     // Strip openai itemId metadata following what codex does
     if (model.api.npm === "@ai-sdk/openai" || options.store === false) {
       msgs = msgs.map((msg) => {
-        if (!Array.isArray(msg.content)) return msg
-        const content = msg.content.map((part) => {
-          if (!part.providerOptions?.openai) return part
-          const { itemId, reasoningEncryptedContent, ...rest } = part.providerOptions.openai as Record<string, unknown>
-          const openai = Object.keys(rest).length > 0 ? rest : undefined
-          return {
-            ...part,
-            providerOptions: {
-              ...part.providerOptions,
-              openai,
-            },
+        if (msg.providerOptions) {
+          for (const options of Object.values(msg.providerOptions)) {
+            if (options && typeof options === "object") {
+              delete options["itemId"]
+            }
           }
+        }
+        if (!Array.isArray(msg.content)) {
+          return msg
+        }
+        const content = msg.content.map((part) => {
+          if (part.providerOptions) {
+            for (const options of Object.values(part.providerOptions)) {
+              if (options && typeof options === "object") {
+                delete options["itemId"]
+              }
+            }
+          }
+          return part
         })
         return { ...msg, content } as typeof msg
       })

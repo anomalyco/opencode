@@ -681,7 +681,6 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
 
     expect(result).toHaveLength(1)
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
-    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBeUndefined()
     expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
   })
 
@@ -721,7 +720,6 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
 
     expect(result).toHaveLength(1)
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
-    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBeUndefined()
     expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
   })
 
@@ -805,6 +803,82 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     const result = ProviderTransform.message(msgs, anthropicModel, { store: false }) as any[]
 
     expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+  })
+
+  test("strips metadata using providerID key when store is false", () => {
+    const opencodeModel = {
+      ...openaiModel,
+      providerID: "opencode",
+      api: {
+        id: "opencode-test",
+        url: "https://api.opencode.ai",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "Hello",
+            providerOptions: {
+              opencode: {
+                itemId: "msg_123",
+                otherOption: "value",
+              },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, opencodeModel, { store: false }) as any[]
+
+    expect(result[0].content[0].providerOptions?.opencode?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.opencode?.otherOption).toBe("value")
+  })
+
+  test("strips itemId across all providerOptions keys", () => {
+    const opencodeModel = {
+      ...openaiModel,
+      providerID: "opencode",
+      api: {
+        id: "opencode-test",
+        url: "https://api.opencode.ai",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        providerOptions: {
+          openai: { itemId: "msg_root" },
+          opencode: { itemId: "msg_opencode" },
+          extra: { itemId: "msg_extra" },
+        },
+        content: [
+          {
+            type: "text",
+            text: "Hello",
+            providerOptions: {
+              openai: { itemId: "msg_openai_part" },
+              opencode: { itemId: "msg_opencode_part" },
+              extra: { itemId: "msg_extra_part" },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, opencodeModel, { store: false }) as any[]
+
+    expect(result[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].providerOptions?.opencode?.itemId).toBeUndefined()
+    expect(result[0].providerOptions?.extra?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.opencode?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.extra?.itemId).toBeUndefined()
   })
 
   test("does not strip metadata for non-openai packages when store is not false", () => {
