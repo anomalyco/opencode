@@ -1,0 +1,57 @@
+name: "opencode Gitea Action"
+description: "Run opencode in Gitea Actions workflows"
+
+inputs:
+  model:
+    description: "Model to use (e.g. anthropic/claude-sonnet-4-20250514)"
+    required: true
+
+  agent:
+    description: "Agent to use. Must be a primary agent. Falls back to 'build' if not found."
+    required: false
+
+  prompt:
+    description: "Custom prompt to override the default prompt"
+    required: false
+
+  mentions:
+    description: "Comma-separated list of trigger phrases (case-insensitive). Defaults to '/opencode,/oc'"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get opencode version
+      id: version
+      shell: bash
+      run: |
+        VERSION=$(curl -sf https://api.github.com/repos/anomalyco/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+        echo "version=${VERSION:-latest}" >> $GITHUB_OUTPUT
+
+    - name: Cache opencode
+      id: cache
+      uses: https://github.com/actions/cache@v4
+      with:
+        path: ~/.opencode/bin
+        key: opencode-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
+
+    - name: Install opencode
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: curl -fsSL https://opencode.ai/install | bash
+
+    - name: Add opencode to PATH
+      shell: bash
+      run: echo "$HOME/.opencode/bin" >> $GITHUB_PATH
+
+    - name: Run opencode
+      shell: bash
+      id: run_opencode
+      run: opencode gitea run
+      env:
+        MODEL: ${{ inputs.model }}
+        AGENT: ${{ inputs.agent }}
+        PROMPT: ${{ inputs.prompt }}
+        MENTIONS: ${{ inputs.mentions }}
+        OPENCODE_GIT_TOKEN: ${{ secrets.OPENCODE_GIT_TOKEN }}
+        OPENCODE_GIT_URL: ${{ gitea.server_url }}
