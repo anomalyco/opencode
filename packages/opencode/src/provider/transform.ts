@@ -487,7 +487,7 @@ export namespace ProviderTransform {
     if (
       input.model.providerID === "openai" ||
       input.model.api.npm === "@ai-sdk/openai" ||
-      input.model.providerID.startsWith("github-copilot")
+      input.model.api.npm === "@ai-sdk/github-copilot"
     ) {
       result["store"] = false
     }
