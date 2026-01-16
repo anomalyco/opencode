@@ -914,7 +914,7 @@ export namespace Provider {
           log.info("detect models", { providerID })
         }
         catch (error) {
-          log.warn(`detect models ${error}`, { providerID })
+          log.warn(`failed to detect models\n${error}`, { providerID })
         }
       })
     )
