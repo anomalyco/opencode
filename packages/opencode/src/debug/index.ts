@@ -20,8 +20,12 @@ export namespace Debug {
   }
 
   export function configSystemBlock(input: { requestUrl: string; sessionID: string; worktreeRoot: string }) {
-    const origin = new URL(input.requestUrl).origin
-    const ingestUrl = new URL(`/ingest/${input.sessionID}`, origin).toString()
+    const url = new URL(input.requestUrl)
+    if (url.hostname === "opencode.internal") {
+      url.hostname = "localhost"
+      if (!url.port) url.port = "4096"
+    }
+    const ingestUrl = new URL(`/ingest/${input.sessionID}`, url.origin).toString()
     const logFileRelative = ".opencode/debug.log"
     const logFileAbsolute = Debug.logFileAbsolute(input.worktreeRoot)
 
@@ -35,6 +39,18 @@ export namespace Debug {
       "requiredFields: sessionId, runId, hypothesisId, location, message, data, timestamp",
       "</debug_config>",
     ].join("\n")
+  }
+
+  export function shouldAppendDebugConfig(agent?: string, system?: string): boolean {
+    return agent === "debug" && !system?.includes("<debug_config>")
+  }
+
+  export function appendDebugConfig(
+    system: string | undefined,
+    config: { requestUrl: string; sessionID: string; worktreeRoot: string },
+  ): string {
+    const block = configSystemBlock(config)
+    return system ? [system, block].join("\n\n") : block
   }
 
   export async function appendLogLines(input: { worktreeRoot: string; lines: string[] }) {

@@ -14,6 +14,8 @@ import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
+import { Debug } from "@/debug"
+import { Instance } from "@/project/instance"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -726,7 +728,14 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async (stream) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
+          const system = Debug.shouldAppendDebugConfig(body.agent, body.system)
+            ? Debug.appendDebugConfig(body.system, {
+                requestUrl: c.req.url,
+                sessionID,
+                worktreeRoot: Instance.worktree,
+              })
+            : body.system
+          const msg = await SessionPrompt.prompt({ ...body, sessionID, system })
           stream.write(JSON.stringify(msg))
         })
       },
@@ -758,7 +767,14 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async () => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          SessionPrompt.prompt({ ...body, sessionID })
+          const system = Debug.shouldAppendDebugConfig(body.agent, body.system)
+            ? Debug.appendDebugConfig(body.system, {
+                requestUrl: c.req.url,
+                sessionID,
+                worktreeRoot: Instance.worktree,
+              })
+            : body.system
+          SessionPrompt.prompt({ ...body, sessionID, system })
         })
       },
     )

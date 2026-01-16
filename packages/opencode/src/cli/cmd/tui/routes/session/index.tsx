@@ -1037,29 +1037,6 @@ export function Session() {
               <Show when={permissions().length === 0 && questions().length === 0 && reproductionSteps().length > 0}>
                 <ReproductionStepsPrompt request={reproductionSteps()[0]} />
               </Show>
-              <Show
-                when={
-                  permissions().length === 0 &&
-                  questions().length === 0 &&
-                  !session()?.parentID &&
-                  local.agent.current().name === "debug"
-                }
-              >
-                <box
-                  flexShrink={0}
-                  marginTop={1}
-                  border={["left"]}
-                  customBorderChars={SplitBorder.customBorderChars}
-                  borderColor={theme.warning}
-                >
-                  <box paddingTop={1} paddingBottom={1} paddingLeft={2} backgroundColor={theme.backgroundPanel}>
-                    <text fg={theme.textMuted}>
-                      Debug mode active — logs: <span style={{ fg: theme.text }}> .opencode/debug.log</span> (worktree
-                      root). Ingest URL is injected automatically.
-                    </text>
-                  </box>
-                </box>
-              </Show>
               <Prompt
                 visible={
                   !session()?.parentID &&
