@@ -85,6 +85,7 @@ export function Autocomplete(props: {
     index: 0,
     selected: 0,
     visible: false as AutocompleteRef["visible"],
+    mouseHasMoved: false,
   })
 
   const [positionTick, setPositionTick] = createSignal(0)
@@ -588,8 +589,16 @@ export function Autocomplete(props: {
     setStore({
       visible: mode,
       index: props.input().cursorOffset,
+      mouseHasMoved: false,
     })
   }
+
+  // Reset mouse movement tracking when filter changes to prevent accidental selection
+  // when items change position under a stationary cursor
+  createEffect(() => {
+    filter()
+    setStore("mouseHasMoved", false)
+  })
 
   function hide() {
     const text = props.input().plainText
@@ -723,41 +732,54 @@ export function Autocomplete(props: {
       {...SplitBorder}
       borderColor={theme.border}
     >
-      <scrollbox
-        ref={(r: ScrollBoxRenderable) => (scroll = r)}
-        backgroundColor={theme.backgroundMenu}
-        height={height()}
-        scrollbarOptions={{ visible: false }}
-      >
-        <Index
-          each={options()}
-          fallback={
-            <box paddingLeft={1} paddingRight={1}>
-              <text fg={theme.textMuted}>No matching items</text>
-            </box>
-          }
+      <box onMouseMove={() => setStore("mouseHasMoved", true)}>
+        <scrollbox
+          ref={(r: ScrollBoxRenderable) => (scroll = r)}
+          backgroundColor={theme.backgroundMenu}
+          height={height()}
+          scrollbarOptions={{ visible: false }}
         >
-          {(option, index) => (
-            <box
-              paddingLeft={1}
-              paddingRight={1}
-              backgroundColor={index === store.selected ? theme.primary : undefined}
-              flexDirection="row"
-              onMouseOver={() => moveTo(index)}
-              onMouseUp={() => select()}
-            >
-              <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
-                {option().display}
-              </text>
-              <Show when={option().description}>
-                <text fg={index === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
-                  {option().description}
+          <Index
+            each={options()}
+            fallback={
+              <box paddingLeft={1} paddingRight={1}>
+                <text fg={theme.textMuted}>No matching items</text>
+              </box>
+            }
+          >
+            {(option, index) => (
+              <box
+                paddingLeft={1}
+                paddingRight={1}
+                backgroundColor={index === store.selected ? theme.primary : undefined}
+                flexDirection="row"
+                onMouseMove={() => {
+                  // Once mouse moves, enable hover selection and immediately select this item
+                  if (!store.mouseHasMoved) {
+                    setStore("mouseHasMoved", true)
+                    moveTo(index)
+                  }
+                }}
+                onMouseOver={() => {
+                  // Only select on hover if mouse has moved (prevents accidental selection)
+                  if (!store.mouseHasMoved) return
+                  moveTo(index)
+                }}
+                onMouseUp={() => select()}
+              >
+                <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
+                  {option().display}
                 </text>
-              </Show>
-            </box>
-          )}
-        </Index>
-      </scrollbox>
+                <Show when={option().description}>
+                  <text fg={index === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
+                    {option().description}
+                  </text>
+                </Show>
+              </box>
+            )}
+          </Index>
+        </scrollbox>
+      </box>
     </box>
   )
 }
