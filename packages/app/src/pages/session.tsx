@@ -1240,7 +1240,12 @@ export default function Page() {
                           {/* Plan review inline - ephemeral message in chat */}
                           <Show when={pendingPlanReview()}>
                             {(request) => (
-                              <div class="min-w-0 w-full max-w-full">
+                              <div
+                                classList={{
+                                  "min-w-0 w-full": true,
+                                  "md:max-w-200 md:mx-auto": !showTabs(),
+                                }}
+                              >
                                 <PlanReviewContent request={request()} />
                               </div>
                             )}

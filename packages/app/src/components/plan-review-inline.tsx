@@ -3,8 +3,10 @@ import { Button } from "@opencode-ai/ui/button"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Markdown } from "@opencode-ai/ui/markdown"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { useSDK } from "@/context/sdk"
 import type { PlanReviewRequest } from "@opencode-ai/sdk/v2/client"
+import { getFilename } from "@opencode-ai/util/path"
 
 /**
  * Inline plan content that displays in the chat history (scrollable)
@@ -28,18 +30,23 @@ export const PlanReviewContent: Component<{ request: PlanReviewRequest }> = (pro
   })
 
   return (
-    <div class="px-4 md:px-6 py-4 border-l-4 border-l-yellow-500 bg-yellow-500/5">
-      {/* Header row with icon and title */}
+    <div class="px-4 md:px-6 py-4">
+      {/* Header */}
       <div class="flex items-center gap-2 mb-3">
-        <Icon name="checklist" class="size-4 text-yellow-600" />
-        <span class="text-14-semibold text-text-base">Plan Review</span>
+        <div class="flex items-center justify-center size-6 rounded-md bg-surface-warning-weaker">
+          <Icon name="checklist" class="size-4 text-icon-warning" />
+        </div>
+        <span class="text-14-semibold text-text-strong">Plan</span>
+        <span class="text-12-regular text-text-subtle">{getFilename(props.request.filePath)}</span>
       </div>
-      <div class="text-12-regular text-text-weak mb-3">{props.request.filePath}</div>
 
       {/* Plan content with markdown */}
-      <div class="border border-border-base rounded-md overflow-hidden bg-background-base">
+      <div class="rounded-md border border-border-base bg-surface-inset-base overflow-hidden">
         <Show when={loading()}>
-          <div class="p-4 text-text-weak">Loading plan...</div>
+          <div class="p-4 flex items-center gap-2 text-text-weak">
+            <Spinner />
+            <span class="text-14-regular">Loading plan...</span>
+          </div>
         </Show>
         <Show when={!loading()}>
           <div class="p-4 prose prose-sm max-w-none">
@@ -93,54 +100,68 @@ export const PlanReviewControls: Component<{ request: PlanReviewRequest }> = (pr
   }
 
   return (
-    <div class="border-l-4 border-l-yellow-500 bg-yellow-500/5 px-4 md:px-6 py-3">
-      {/* Awaiting Approval badge */}
-      <div class="flex items-center gap-2 mb-3">
-        <span class="text-11-medium text-yellow-600 bg-yellow-500/15 px-1.5 py-0.5 rounded">
-          Awaiting Approval
-        </span>
-      </div>
-
-      {/* Feedback input (shown in reject mode) */}
-      <Show when={rejectMode()}>
-        <div class="mb-3">
-          <TextField
-            autofocus
-            label="Feedback (optional)"
-            placeholder="Enter feedback for revision..."
-            value={feedback()}
-            onChange={setFeedback}
-            onKeyDown={(e: KeyboardEvent) => {
-              if (e.key === "Enter" && !submitting()) {
-                e.preventDefault()
-                handleReject()
-              }
-            }}
-          />
+    <div class="bg-surface-raised-stronger-non-alpha shadow-xs-border rounded-md overflow-clip">
+      <div class="px-4 py-3">
+        {/* Header row */}
+        <div class="flex items-center justify-between gap-4 mb-3">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="flex items-center justify-center size-6 rounded-md bg-surface-warning-weaker shrink-0">
+              <Icon name="checklist" class="size-4 text-icon-warning" />
+            </div>
+            <span class="text-14-semibold text-text-strong">Plan Review</span>
+            <span class="text-12-regular text-text-subtle truncate">{getFilename(props.request.filePath)}</span>
+          </div>
+          <span class="text-11-medium text-text-warning bg-surface-warning-weaker px-1.5 py-0.5 rounded shrink-0">
+            Awaiting Approval
+          </span>
         </div>
-      </Show>
 
-      {/* Actions */}
-      <div class="flex justify-end gap-2">
-        <Show when={!rejectMode()}>
-          <Button type="button" variant="ghost" size="normal" onClick={handleDismiss} disabled={submitting()}>
-            Dismiss
-          </Button>
-          <Button type="button" variant="ghost" size="normal" onClick={handleReject} disabled={submitting()}>
-            Reject
-          </Button>
-          <Button type="button" variant="primary" size="normal" onClick={handleApprove} disabled={submitting()}>
-            {submitting() ? "Approving..." : "Approve"}
-          </Button>
-        </Show>
+        {/* Description */}
+        <p class="text-12-regular text-text-weak mb-3">
+          Review the plan above. Approve to begin implementation, or reject with feedback to revise.
+        </p>
+
+        {/* Feedback input (shown in reject mode) */}
         <Show when={rejectMode()}>
-          <Button type="button" variant="ghost" size="normal" onClick={handleCancelReject} disabled={submitting()}>
-            Cancel
-          </Button>
-          <Button type="button" variant="primary" size="normal" onClick={handleReject} disabled={submitting()}>
-            {submitting() ? "Submitting..." : "Submit Feedback"}
-          </Button>
+          <div class="mb-3">
+            <TextField
+              autofocus
+              label="Feedback (optional)"
+              placeholder="Enter feedback for revision..."
+              value={feedback()}
+              onChange={setFeedback}
+              onKeyDown={(e: KeyboardEvent) => {
+                if (e.key === "Enter" && !submitting()) {
+                  e.preventDefault()
+                  handleReject()
+                }
+              }}
+            />
+          </div>
         </Show>
+
+        {/* Actions */}
+        <div class="flex justify-end gap-2">
+          <Show when={!rejectMode()}>
+            <Button type="button" variant="ghost" size="normal" onClick={handleDismiss} disabled={submitting()}>
+              Dismiss
+            </Button>
+            <Button type="button" variant="ghost" size="normal" onClick={handleReject} disabled={submitting()}>
+              Reject
+            </Button>
+            <Button type="button" variant="primary" size="normal" onClick={handleApprove} disabled={submitting()}>
+              {submitting() ? "Approving..." : "Approve"}
+            </Button>
+          </Show>
+          <Show when={rejectMode()}>
+            <Button type="button" variant="ghost" size="normal" onClick={handleCancelReject} disabled={submitting()}>
+              Cancel
+            </Button>
+            <Button type="button" variant="primary" size="normal" onClick={handleReject} disabled={submitting()}>
+              {submitting() ? "Submitting..." : "Submit Feedback"}
+            </Button>
+          </Show>
+        </div>
       </div>
     </div>
   )
