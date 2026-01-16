@@ -25,22 +25,7 @@ export namespace Billing {
   export const get = async () => {
     return Database.use(async (tx) =>
       tx
-        .select({
-          customerID: BillingTable.customerID,
-          subscriptionID: BillingTable.subscriptionID,
-          paymentMethodID: BillingTable.paymentMethodID,
-          paymentMethodType: BillingTable.paymentMethodType,
-          paymentMethodLast4: BillingTable.paymentMethodLast4,
-          balance: BillingTable.balance,
-          reload: BillingTable.reload,
-          reloadAmount: BillingTable.reloadAmount,
-          reloadTrigger: BillingTable.reloadTrigger,
-          monthlyLimit: BillingTable.monthlyLimit,
-          monthlyUsage: BillingTable.monthlyUsage,
-          timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
-          reloadError: BillingTable.reloadError,
-          timeReloadError: BillingTable.timeReloadError,
-        })
+        .select()
         .from(BillingTable)
         .where(eq(BillingTable.workspaceID, Actor.workspace()))
         .then((r) => r[0]),
