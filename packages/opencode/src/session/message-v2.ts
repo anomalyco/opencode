@@ -1,7 +1,14 @@
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
-import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
+import {
+  APICallError,
+  convertToModelMessages,
+  LoadAPIKeyError,
+  type ModelMessage,
+  type UIMessage,
+  type ToolSet,
+} from "ai"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
@@ -168,6 +175,12 @@ export namespace MessageV2 {
     prompt: z.string(),
     description: z.string(),
     agent: z.string(),
+    model: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+      })
+      .optional(),
     command: z.string().optional(),
   })
   export type SubtaskPart = z.infer<typeof SubtaskPart>
@@ -426,7 +439,7 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function toModelMessage(input: WithParts[]): ModelMessage[] {
+  export function toModelMessage(input: WithParts[], options?: { tools?: ToolSet }): ModelMessage[] {
     const result: UIMessage[] = []
 
     for (const msg of input) {
@@ -497,30 +510,14 @@ export namespace MessageV2 {
             })
           if (part.type === "tool") {
             if (part.state.status === "completed") {
-              if (part.state.attachments?.length) {
-                result.push({
-                  id: Identifier.ascending("message"),
-                  role: "user",
-                  parts: [
-                    {
-                      type: "text",
-                      text: `Tool ${part.tool} returned an attachment:`,
-                    },
-                    ...part.state.attachments.map((attachment) => ({
-                      type: "file" as const,
-                      url: attachment.url,
-                      mediaType: attachment.mime,
-                      filename: attachment.filename,
-                    })),
-                  ],
-                })
-              }
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-available",
                 toolCallId: part.callID,
                 input: part.state.input,
-                output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
+                output: part.state.time.compacted
+                  ? "[Old tool result content cleared]"
+                  : { output: part.state.output, attachments: part.state.attachments },
                 callProviderMetadata: part.metadata,
               })
             }
@@ -531,6 +528,17 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: part.state.error,
+                callProviderMetadata: part.metadata,
+              })
+            // Handle pending/running tool calls to prevent dangling tool_use blocks
+            // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
+            if (part.state.status === "pending" || part.state.status === "running")
+              assistantMessage.parts.push({
+                type: ("tool-" + part.tool) as `tool-${string}`,
+                state: "output-error",
+                toolCallId: part.callID,
+                input: part.state.input,
+                errorText: "[Tool execution was interrupted]",
                 callProviderMetadata: part.metadata,
               })
           }
@@ -548,7 +556,12 @@ export namespace MessageV2 {
       }
     }
 
-    return convertToModelMessages(result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")))
+    return convertToModelMessages(
+      result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
+      {
+        tools: options?.tools,
+      },
+    )
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {

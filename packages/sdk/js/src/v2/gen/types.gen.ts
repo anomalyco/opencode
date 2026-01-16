@@ -429,6 +429,10 @@ export type Part =
       prompt: string
       description: string
       agent: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
       command?: string
     }
   | ReasoningPart
@@ -688,6 +692,14 @@ export type EventMcpToolsChanged = {
   }
 }
 
+export type EventMcpBrowserOpenFailed = {
+  type: "mcp.browser.open.failed"
+  properties: {
+    mcpName: string
+    url: string
+  }
+}
+
 export type EventCommandExecuted = {
   type: "command.executed"
   properties: {
@@ -871,6 +883,7 @@ export type Event =
   | EventTuiToastShow
   | EventTuiSessionSelect
   | EventMcpToolsChanged
+  | EventMcpBrowserOpenFailed
   | EventCommandExecuted
   | EventSessionCreated
   | EventSessionUpdated
@@ -1499,7 +1512,7 @@ export type McpLocalConfig = {
    */
   enabled?: boolean
   /**
-   * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
+   * Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.
    */
   timeout?: number
 }
@@ -1517,6 +1530,10 @@ export type McpOAuthConfig = {
    * OAuth scopes to request during authorization
    */
   scope?: string
+  /**
+   * OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).
+   */
+  redirectUri?: string
 }
 
 export type McpRemoteConfig = {
@@ -1543,7 +1560,7 @@ export type McpRemoteConfig = {
    */
   oauth?: McpOAuthConfig | false
   /**
-   * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
+   * Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.
    */
   timeout?: number
 }
@@ -1853,6 +1870,10 @@ export type SubtaskPartInput = {
   prompt: string
   description: string
   agent: string
+  model?: {
+    providerID: string
+    modelID: string
+  }
   command?: string
 }
 
