@@ -19,7 +19,7 @@ on:
 jobs:
   update-flake:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
       TITLE: flake.lock
 
@@ -101,9 +101,9 @@ jobs:
       matrix:
         include:
           - system: x86_64-linux
-            host: ubuntu-latest
+            host: blacksmith-4vcpu-ubuntu-2404
           - system: aarch64-linux
-            host: ubuntu-22.04-arm
+            host: blacksmith-4vcpu-ubuntu-2404-arm
           - system: x86_64-darwin
             host: macos-15-intel
           - system: aarch64-darwin

@@ -28,6 +28,8 @@ import {
   batch,
   createContext,
   createEffect,
+  getOwner,
+  runWithOwner,
   useContext,
   onCleanup,
   onMount,
@@ -89,6 +91,8 @@ type VcsCache = {
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()
+  const owner = getOwner()
+  if (!owner) throw new Error("GlobalSync must be created within owner")
   const vcsCache = new Map<string, VcsCache>()
   const [globalStore, setGlobalStore] = createStore<{
     ready: boolean
@@ -109,10 +113,13 @@ function createGlobalSync() {
   function child(directory: string) {
     if (!directory) console.error("No directory provided")
     if (!children[directory]) {
-      const cache = persisted(
-        Persist.workspace(directory, "vcs", ["vcs.v1"]),
-        createStore({ value: undefined as VcsInfo | undefined }),
+      const cache = runWithOwner(owner, () =>
+        persisted(
+          Persist.workspace(directory, "vcs", ["vcs.v1"]),
+          createStore({ value: undefined as VcsInfo | undefined }),
+        ),
       )
+      if (!cache) throw new Error("Failed to create persisted cache")
       vcsCache.set(directory, { store: cache[0], setStore: cache[1], ready: cache[3] })
 
       children[directory] = createStore<State>({
