@@ -23,12 +23,12 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
 
     // Make git commits in tests independent from developers' global git config.
     // In particular, some setups enforce sign-off via hooks.
-    await $`git config user.email opencode-test@localhost`.cwd(dirpath).quiet()
-    await $`git config user.name opencode-test`.cwd(dirpath).quiet()
+    await $`git config --local user.email opencode-test@localhost`.cwd(dirpath).quiet()
+    await $`git config --local user.name opencode-test`.cwd(dirpath).quiet()
 
     const hookspath = path.join(dirpath, ".githooks")
     await fs.mkdir(hookspath, { recursive: true })
-    await $`git config core.hooksPath ${hookspath}`.cwd(dirpath).quiet()
+    await $`git config --local core.hooksPath ${hookspath}`.cwd(dirpath).quiet()
 
     await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).quiet()
   }
