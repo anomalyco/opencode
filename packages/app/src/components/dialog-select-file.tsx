@@ -1,6 +1,7 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Keybind } from "@opencode-ai/ui/keybind"
 import { List } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { useParams } from "@solidjs/router"
@@ -169,7 +170,7 @@ export function DialogSelectFile() {
                 </Show>
               </div>
               <Show when={item.keybind}>
-                <span class="text-12-regular text-text-subtle shrink-0">{formatKeybind(item.keybind ?? "")}</span>
+                <Keybind>{formatKeybind(item.keybind ?? "")}</Keybind>
               </Show>
             </div>
           </Show>
