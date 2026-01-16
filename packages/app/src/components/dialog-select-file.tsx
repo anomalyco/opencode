@@ -136,7 +136,7 @@ export function DialogSelectFile() {
   return (
     <Dialog title="Search">
       <List
-        search={{ placeholder: "Search files and commands", autofocus: true }}
+        search={{ placeholder: "Search files and commands", autofocus: true, hideIcon: true, class: "px-3" }}
         emptyMessage="No results found"
         items={items}
         key={(item) => item.id}
