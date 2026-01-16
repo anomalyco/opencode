@@ -169,7 +169,7 @@ export function parseRedirectUri(redirectUri?: string): { port: number; path: st
 
   try {
     const url = new URL(redirectUri)
-    const port = url.port ? parseInt(url.port, 10) : (url.protocol === "https:" ? 443 : 80)
+    const port = url.port ? parseInt(url.port, 10) : url.protocol === "https:" ? 443 : 80
     const path = url.pathname || OAUTH_CALLBACK_PATH
     return { port, path }
   } catch {
