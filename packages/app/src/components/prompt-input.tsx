@@ -319,7 +319,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!messages) return false
     return messages.some((m) => m.role === "user")
   })
-
   const [history, setHistory] = persisted(
     Persist.global("prompt-history", ["prompt-history.v1"]),
     createStore<{
@@ -348,6 +347,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       t: (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
     }),
   )
+
+  const placeholderText = createMemo(() => {
+    const agent = local.agent.current()
+    const hint = (agent?.description || agent?.prompt || "").trim()
+    if (agent?.name === "build" || !hint) {
+      // TODO: Padding workaround for rendering bug where ghost characters from previous
+      // placeholder remain visible when switching to shorter text. Browser doesn't properly
+      // clear cached text layout with truncate/ellipsis CSS. Proper fix would be to force
+      // element recreation or use a different rendering approach.
+      return placeholder().padEnd(70, " ")
+    }
+    return hint.replace(/\s+/g, " ").padEnd(70, " ")
+  })
+
+  const shouldRotatePlaceholder = createMemo(() => {
+    const agent = local.agent.current()
+    const hint = (agent?.description || agent?.prompt || "").trim()
+    return agent?.name === "build" || !hint
+  })
 
   const historyComments = () => {
     const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))
@@ -529,6 +547,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     params.id
     if (params.id) return
     if (!suggest()) return
+    if (!shouldRotatePlaceholder()) return
     const interval = setInterval(() => {
       setStore("placeholder", (prev) => (prev + 1) % EXAMPLES.length)
     }, 6500)
@@ -1385,7 +1404,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 classList={{ "font-mono!": store.mode === "shell" }}
                 style={{ "padding-bottom": space }}
               >
-                {placeholder()}
+                {placeholderText()}
               </div>
             </Show>
           </div>
