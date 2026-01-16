@@ -7,8 +7,35 @@ import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Provider } from "../provider/provider"
 import { Instance } from "../project/instance"
+import { Agent } from "../agent/agent"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 import ENTER_DESCRIPTION from "./plan-enter.txt"
+
+/**
+ * Resolve target agent for plan_exit.
+ * Prefers "build" if available, otherwise falls back to default_agent or first visible primary.
+ * Exported for testing.
+ */
+export async function resolveImplementationAgent(): Promise<string> {
+  const build = await Agent.get("build")
+  if (build) return "build"
+
+  const agents = await Agent.list()
+  const defaultName = await Agent.defaultAgent().catch(() => undefined)
+
+  // Prefer default_agent if it's a usable implementation agent (not plan, not subagent, not hidden)
+  if (defaultName && defaultName !== "plan") {
+    const agent = agents.find((a) => a.name === defaultName)
+    if (agent && agent.mode !== "subagent" && agent.hidden !== true) return defaultName
+  }
+
+  // Fallback: first visible primary agent that is not "plan"
+  const fallback = agents.find((a) => a.mode !== "subagent" && a.hidden !== true && a.name !== "plan")
+  if (fallback) return fallback.name
+
+  // Last resort: use defaultAgent result even if it's "plan"
+  return defaultName ?? "plan"
+}
 
 async function getLastModel(sessionID: string) {
   for await (const item of MessageV2.stream(sessionID)) {
@@ -23,15 +50,17 @@ export const PlanExitTool = Tool.define("plan_exit", {
   async execute(_params, ctx) {
     const session = await Session.get(ctx.sessionID)
     const plan = path.relative(Instance.worktree, Session.plan(session))
+    const target = await resolveImplementationAgent()
+
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
       questions: [
         {
-          question: `Plan at ${plan} is complete. Would you like to switch to the build agent and start implementing?`,
-          header: "Build Agent",
+          question: `Plan at ${plan} is complete. Would you like to switch to the ${target} agent and start implementing?`,
+          header: "Switch Agent",
           custom: false,
           options: [
-            { label: "Yes", description: "Switch to build agent and start implementing the plan" },
+            { label: "Yes", description: `Switch to ${target} agent and start implementing the plan` },
             { label: "No", description: "Stay with plan agent to continue refining the plan" },
           ],
         },
@@ -51,7 +80,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
       time: {
         created: Date.now(),
       },
-      agent: "build",
+      agent: target,
       model,
     }
     await Session.updateMessage(userMsg)
@@ -65,9 +94,9 @@ export const PlanExitTool = Tool.define("plan_exit", {
     } satisfies MessageV2.TextPart)
 
     return {
-      title: "Switching to build agent",
-      output: "User approved switching to build agent. Wait for further instructions.",
-      metadata: {},
+      title: `Switching to ${target} agent`,
+      output: `User approved switching to ${target} agent. Wait for further instructions.`,
+      metadata: { agent: target },
     }
   },
 })
@@ -124,7 +153,7 @@ export const PlanEnterTool = Tool.define("plan_enter", {
     return {
       title: "Switching to plan agent",
       output: `User confirmed to switch to plan mode. A new message has been created to switch you to plan mode. The plan file will be at ${plan}. Begin planning.`,
-      metadata: {},
+      metadata: { agent: "plan" },
     }
   },
 })

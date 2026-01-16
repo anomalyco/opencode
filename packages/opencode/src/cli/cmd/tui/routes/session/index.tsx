@@ -205,10 +205,12 @@ export function Session() {
     if (part.id === lastSwitch) return
 
     if (part.tool === "plan_exit") {
-      local.agent.set("build")
+      const target = (part.state.metadata as { agent?: string })?.agent ?? "build"
+      local.agent.set(target)
       lastSwitch = part.id
     } else if (part.tool === "plan_enter") {
-      local.agent.set("plan")
+      const target = (part.state.metadata as { agent?: string })?.agent ?? "plan"
+      local.agent.set(target)
       lastSwitch = part.id
     }
   })

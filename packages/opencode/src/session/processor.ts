@@ -153,7 +153,13 @@ export namespace SessionProcessor {
                           JSON.stringify(p.state.input) === JSON.stringify(value.input),
                       )
                     ) {
-                      const agent = await Agent.get(input.assistantMessage.agent)
+                      let agent = await Agent.get(input.assistantMessage.agent)
+                      if (!agent) {
+                        const fallback = await Agent.defaultAgent()
+                        agent = await Agent.get(fallback)
+                        if (!agent)
+                          throw new Error(`Agent not found for doom loop check: ${input.assistantMessage.agent}`)
+                      }
                       await PermissionNext.ask({
                         permission: "doom_loop",
                         patterns: [value.toolName],
