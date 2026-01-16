@@ -67,6 +67,7 @@ import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
+import { useArgs } from "../../context/args"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
 import { Global } from "@/global"
@@ -189,10 +190,19 @@ export function Session() {
   const toast = useToast()
   const sdk = useSDK()
 
-  // Handle initial prompt from fork
+  // Handle initial prompt from fork or from --prompt flag (when using --continue)
+  const args = useArgs()
+  let initialPromptHandled = false
   createEffect(() => {
+    if (initialPromptHandled) return
     if (route.initialPrompt && prompt) {
       prompt.set(route.initialPrompt)
+      initialPromptHandled = true
+    } else if (args.prompt && prompt && sync.status !== "loading") {
+      // Handle --prompt flag when using --continue
+      prompt.set({ input: args.prompt, parts: [] })
+      initialPromptHandled = true
+      prompt.submit()
     }
   })
 
