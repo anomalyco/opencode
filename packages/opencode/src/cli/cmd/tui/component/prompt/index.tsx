@@ -539,6 +539,22 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+    } else if (inputText.startsWith("/add-dir ")) {
+      const dirPath = inputText.slice("/add-dir ".length).trim()
+      if (!dirPath) {
+        toast.show({ title: "Usage: /add-dir <path>", message: "Please provide a directory path", variant: "error" })
+        return
+      }
+      const result = await sdk.client.context.directory({ path: dirPath })
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+      const resolved = result.data!.path
+      input.clear()
+      setStore("prompt", { input: "", parts: [] })
+      toast.show({ title: "Directory added", message: resolved, variant: "success" })
+      return
     } else if (
       inputText.startsWith("/") &&
       iife(() => {

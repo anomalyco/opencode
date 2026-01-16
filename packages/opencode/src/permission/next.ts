@@ -266,4 +266,21 @@ export namespace PermissionNext {
   export async function list() {
     return state().then((x) => Object.values(x.pending).map((x) => x.info))
   }
+
+  export const grant = fn(
+    z.object({
+      permission: z.string(),
+      patterns: z.string().array(),
+    }),
+    async (input) => {
+      const s = await state()
+      for (const pattern of input.patterns) {
+        s.approved.push({
+          permission: input.permission,
+          pattern,
+          action: "allow",
+        })
+      }
+    },
+  )
 }

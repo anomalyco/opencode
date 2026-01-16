@@ -55,6 +55,8 @@ import { QuestionRoute } from "./question"
 import { Installation } from "@/installation"
 import { MDNS } from "./mdns"
 import { Worktree } from "../worktree"
+import * as path from "node:path"
+import * as fs from "node:fs/promises"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1706,6 +1708,64 @@ export namespace Server {
           async (c) => {
             const permissions = await PermissionNext.list()
             return c.json(permissions)
+          },
+        )
+        .post(
+          "/context/directory",
+          describeRoute({
+            summary: "Add directory to context",
+            description:
+              "Add a directory to the conversation context. If the directory is outside the project, grants external_directory permission.",
+            operationId: "context.directory",
+            responses: {
+              200: {
+                description: "Directory added successfully",
+                content: {
+                  "application/json": {
+                    schema: resolver(
+                      z.object({
+                        path: z.string(),
+                        granted: z.boolean(),
+                      }),
+                    ),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "json",
+            z.object({
+              path: z.string(),
+            }),
+          ),
+          async (c) => {
+            const body = c.req.valid("json")
+            const input = body.path
+
+            const expanded = input.startsWith("~/")
+              ? path.join(process.env.HOME || process.env.USERPROFILE || "", input.slice(2))
+              : input.startsWith("~")
+                ? path.join(process.env.HOME || process.env.USERPROFILE || "", input.slice(1))
+                : input
+
+            const absolute = path.isAbsolute(expanded) ? expanded : path.resolve(Instance.directory, expanded)
+
+            const info = await fs.stat(absolute).catch(() => null)
+            if (!info) return c.json({ error: "Directory does not exist" }, 400)
+            if (!info.isDirectory()) return c.json({ error: "Path is not a directory" }, 400)
+
+            const resolved = await fs.realpath(absolute)
+            const granted = !Instance.containsPath(resolved)
+            if (granted) {
+              await PermissionNext.grant({
+                permission: "external_directory",
+                patterns: [path.join(resolved, "*")],
+              })
+            }
+
+            return c.json({ path: resolved, granted })
           },
         )
         .route("/question", QuestionRoute)

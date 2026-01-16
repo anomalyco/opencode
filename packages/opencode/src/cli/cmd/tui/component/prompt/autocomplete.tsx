@@ -405,6 +405,17 @@ export function Autocomplete(props: {
           description: "toggle thinking visibility",
           onSelect: () => command.trigger("session.toggle.thinking"),
         },
+        {
+          display: "/add-dir",
+          description: "add directory to context",
+          onSelect: () => {
+            const newText = "/add-dir "
+            const cursor = props.input().logicalCursor
+            props.input().deleteRange(0, 0, cursor.row, cursor.col)
+            props.input().insertText(newText)
+            props.input().cursorOffset = Bun.stringWidth(newText)
+          },
+        },
       )
       if (sync.data.config.share !== "disabled") {
         results.push({

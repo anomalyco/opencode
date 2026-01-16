@@ -3668,6 +3668,38 @@ export type PermissionListResponses = {
 
 export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
 
+export type ContextDirectoryData = {
+  body?: {
+    path: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/context/directory"
+}
+
+export type ContextDirectoryErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ContextDirectoryError = ContextDirectoryErrors[keyof ContextDirectoryErrors]
+
+export type ContextDirectoryResponses = {
+  /**
+   * Directory added successfully
+   */
+  200: {
+    path: string
+    granted: boolean
+  }
+}
+
+export type ContextDirectoryResponse = ContextDirectoryResponses[keyof ContextDirectoryResponses]
+
 export type QuestionListData = {
   body?: never
   path?: never
