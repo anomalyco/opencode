@@ -7,6 +7,7 @@ import { Instance } from "../project/instance"
 import { Truncate } from "../tool/truncation"
 
 import PROMPT_GENERATE from "./generate.txt"
+import PROMPT_CHAT from "./prompt/chat.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
@@ -57,6 +58,8 @@ export namespace Agent {
       question: "deny",
       plan_enter: "deny",
       plan_exit: "deny",
+      chat_enter: "deny",
+      chat_exit: "deny",
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
       read: {
         "*": "allow",
@@ -76,6 +79,25 @@ export namespace Agent {
           PermissionNext.fromConfig({
             question: "allow",
             plan_enter: "allow",
+            chat_enter: "allow",
+          }),
+          user,
+        ),
+        mode: "primary",
+        native: true,
+      },
+      chat: {
+        name: "chat",
+        prompt: PROMPT_CHAT,
+        options: {},
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+            chat_exit: "allow",
+            external_directory: {
+              [path.join(Global.Path.state, "chat", "*")]: "allow",
+            },
           }),
           user,
         ),

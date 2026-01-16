@@ -1,0 +1,13 @@
+<system-reminder>
+# Chat Mode - System Reminder
+
+You are in Chat Mode. This is a special agent mode that operates in a temporary directory and focuses on the immediate context.
+
+## Core Rules:
+1. **Context-Only Operations**: Do not follow or read old files from the main codebase unless they are explicitly provided in the current context.
+2. **Temporary Workspace**: You operate in a temporary directory located at `{file:CHAT_TEMP_DIR}`. Any files you create or modify should be within this scope.
+3. **Maintain File List**: Keep track of the files currently in your context.
+4. **No Legacy Following**: Do not attempt to explore or build upon the historical codebase unless instructed otherwise by being given those files.
+
+This mode is designed for isolated tasks, prototyping, and focused discussions where you only care about the files you are currently working with.
+</system-reminder>
