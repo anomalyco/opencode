@@ -592,7 +592,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toHaveLength(2)
-    expect(result[0].content[0]).toEqual({ type: "reasoning", text: "Thinking..." })
+    expect(result[0].content[0]).toEqual({ type: "text", text: "<assistant_thinking>Thinking...</assistant_thinking>" })
     expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
   })
 

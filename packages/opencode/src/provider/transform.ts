@@ -71,20 +71,62 @@ export namespace ProviderTransform {
     }
 
     if (model.api.id.includes("claude")) {
-      return msgs.map((msg) => {
+      const thinkingEnabled = (options as any)?.thinking?.type === "enabled"
+      const convertedThinkingMsgIndices = new Set<number>()
+
+      msgs = msgs.map((msg, msgIdx) => {
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
-          msg.content = msg.content.map((part) => {
-            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
-              return {
-                ...part,
-                toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+          let hadThinkingBlock = false
+          msg.content = msg.content
+            .map((part: any) => {
+              if (part.type === "thinking" && part.signature) {
+                const text = part.thinking || part.text || ""
+                hadThinkingBlock = true
+                if (!text) return null
+                return {
+                  type: "text" as const,
+                  text: `<assistant_thinking>${text}</assistant_thinking>`,
+                }
               }
-            }
-            return part
-          })
+              if (part.type === "reasoning") {
+                const text = part.text || ""
+                if (!text) return null
+                return {
+                  type: "text" as const,
+                  text: `<assistant_thinking>${text}</assistant_thinking>`,
+                }
+              }
+              if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
+                return {
+                  ...part,
+                  toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+                }
+              }
+              return part
+            })
+            .filter((part: any) => part !== null)
+          if (hadThinkingBlock) convertedThinkingMsgIndices.add(msgIdx)
         }
         return msg
       })
+
+      if (thinkingEnabled) {
+        const lastAssistantIdx = msgs.findLastIndex((m) => m.role === "assistant")
+        if (lastAssistantIdx >= 0) {
+          const lastAssistant = msgs[lastAssistantIdx]
+          const hadConvertedThinking = convertedThinkingMsgIndices.has(lastAssistantIdx)
+          if (Array.isArray(lastAssistant.content) && lastAssistant.content.length > 0 && !hadConvertedThinking) {
+            const firstPart = lastAssistant.content[0] as any
+            const startsWithThinking = firstPart.type === "thinking" || firstPart.type === "redacted_thinking"
+            const hasToolCall = lastAssistant.content.some((p: any) => p.type === "tool-call")
+            if (!startsWithThinking && !hasToolCall) {
+              msgs = msgs.filter((_, i) => i !== lastAssistantIdx)
+            }
+          }
+        }
+      }
+
+      return msgs
     }
     if (model.providerID === "mistral" || model.api.id.toLowerCase().includes("mistral")) {
       const result: ModelMessage[] = []
