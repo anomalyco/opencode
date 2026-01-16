@@ -237,17 +237,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <Show when={diff().length <= 2 || expanded.diff}>
                   <For each={diff() || []}>
                     {(item) => {
-                      const file = createMemo(() => {
-                        const splits = item.file.split(path.sep).filter(Boolean)
-                        const last = splits.at(-1)!
-                        const rest = splits.slice(0, -1).join(path.sep)
-                        if (!rest) return last
-                        return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
-                      })
                       return (
                         <box flexDirection="row" gap={1} justifyContent="space-between">
-                          <text fg={theme.textMuted} wrapMode="char">
-                            {file()}
+                          <text fg={theme.textMuted} wrapMode="none">
+                            {item.file}
                           </text>
                           <box flexDirection="row" gap={1} flexShrink={0}>
                             <Show when={item.additions}>
