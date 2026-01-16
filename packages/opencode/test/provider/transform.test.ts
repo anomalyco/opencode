@@ -604,7 +604,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       { role: "user", content: "World" },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, anthropicModel)
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
 
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe("Hello")
@@ -625,7 +625,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, anthropicModel)
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toHaveLength(2)
@@ -646,7 +646,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       { role: "user", content: "World" },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, anthropicModel)
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
 
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe("Hello")
@@ -659,7 +659,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       { role: "assistant", content: "  World\t\n" },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, anthropicModel)
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
 
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe("Hello")
@@ -678,7 +678,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, anthropicModel)
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toHaveLength(3)
