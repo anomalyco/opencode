@@ -643,7 +643,7 @@ export namespace Config {
       session_rename: z.string().optional().default("ctrl+r").describe("Rename session"),
       session_delete: z.string().optional().default("ctrl+d").describe("Delete session"),
       stash_delete: z.string().optional().default("ctrl+d").describe("Delete stash entry"),
-      model_provider_list: z.string().optional().default("ctrl+a").describe("Open provider list from model dialog"),
+      model_provider_list: z.string().optional().default("ctrl+alt+m").describe("Open provider list from model dialog"),
       model_favorite_toggle: z.string().optional().default("ctrl+f").describe("Toggle model favorite status"),
       session_share: z.string().optional().default("none").describe("Share current session"),
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
@@ -682,7 +682,8 @@ export namespace Config {
       agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
       variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
-      input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
+      input_copy: z.string().optional().default("ctrl+c,super+c").describe("Copy from input"),
+      input_paste: z.string().optional().default("ctrl+v,super+v").describe("Paste from clipboard"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
       input_newline: z
         .string()
@@ -691,8 +692,8 @@ export namespace Config {
         .describe("Insert newline in input"),
       input_move_left: z.string().optional().default("left,ctrl+b").describe("Move cursor left in input"),
       input_move_right: z.string().optional().default("right,ctrl+f").describe("Move cursor right in input"),
-      input_move_up: z.string().optional().default("up").describe("Move cursor up in input"),
-      input_move_down: z.string().optional().default("down").describe("Move cursor down in input"),
+      input_move_up: z.string().optional().default("up,ctrl+p").describe("Move cursor up in input"),
+      input_move_down: z.string().optional().default("down,ctrl+n").describe("Move cursor down in input"),
       input_select_left: z.string().optional().default("shift+left").describe("Select left in input"),
       input_select_right: z.string().optional().default("shift+right").describe("Select right in input"),
       input_select_up: z.string().optional().default("shift+up").describe("Select up in input"),
@@ -762,8 +763,8 @@ export namespace Config {
         .optional()
         .default("ctrl+w,ctrl+backspace,alt+backspace")
         .describe("Delete word backward in input"),
-      history_previous: z.string().optional().default("up").describe("Previous history item"),
-      history_next: z.string().optional().default("down").describe("Next history item"),
+      history_previous: z.string().optional().default("up,ctrl+p").describe("Previous history item"),
+      history_next: z.string().optional().default("down,ctrl+n").describe("Next history item"),
       session_child_cycle: z.string().optional().default("<leader>right").describe("Next child session"),
       session_child_cycle_reverse: z.string().optional().default("<leader>left").describe("Previous child session"),
       session_parent: z.string().optional().default("<leader>up").describe("Go to parent session"),
