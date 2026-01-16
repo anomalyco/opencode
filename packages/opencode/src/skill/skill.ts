@@ -1,4 +1,5 @@
 import z from "zod"
+import path from "path"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { NamedError } from "@opencode-ai/util/error"
@@ -7,6 +8,9 @@ import { Log } from "../util/log"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/flag/flag"
+import { Bus } from "@/bus"
+import { TuiEvent } from "@/cli/cmd/tui/event"
+import { Session } from "@/session"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -42,10 +46,16 @@ export namespace Skill {
     const skills: Record<string, Info> = {}
 
     const addSkill = async (match: string) => {
-      const md = await ConfigMarkdown.parse(match)
-      if (!md) {
-        return
-      }
+      const md = await ConfigMarkdown.parse(match).catch((err) => {
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? err.data.message
+          : `Failed to parse skill ${match}`
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load skill", { skill: match, err })
+        return undefined
+      })
+
+      if (!md) return
 
       const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
       if (!parsed.success) return
