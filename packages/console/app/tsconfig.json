@@ -12,7 +12,7 @@
     "allowJs": true,
     "strict": true,
     "noEmit": true,
-    "types": ["vite/client"],
+    "types": ["vite/client", "@webgpu/types"],
     "isolatedModules": true,
     "paths": {
       "~/*": ["./src/*"]

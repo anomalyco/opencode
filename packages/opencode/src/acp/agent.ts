@@ -731,6 +731,9 @@ export namespace ACP {
       const defaultAgentName = await AgentModule.defaultAgent()
       const currentModeId = availableModes.find((m) => m.name === defaultAgentName)?.id ?? availableModes[0].id
 
+      // Persist the default mode so prompt() uses it immediately
+      this.sessionManager.setMode(sessionId, currentModeId)
+
       const mcpServers: Record<string, Config.Mcp> = {}
       for (const server of params.mcpServers) {
         if ("type" in server) {
