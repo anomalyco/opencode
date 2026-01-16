@@ -26,6 +26,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
+import { TerminalSplit } from "@/components/terminal-split"
 import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
@@ -170,6 +171,7 @@ export default function Page() {
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
+  const activeTerminal = createMemo(() => terminal.active())
 
   if (import.meta.env.DEV) {
     createEffect(
@@ -380,7 +382,7 @@ export default function Page() {
   createEffect(() => {
     if (!view().terminal.opened()) return
     if (!terminal.ready()) return
-    if (terminal.all().length !== 0) return
+    if (terminal.tabs().length !== 0) return
     terminal.new()
   })
 
@@ -428,7 +430,7 @@ export default function Page() {
     {
       id: "file.open",
       title: "Open file",
-      description: "Search and open a file",
+      description: "Search files and commands",
       category: "File",
       keybind: "mod+p",
       slash: "open",
@@ -458,6 +460,30 @@ export default function Page() {
       category: "Terminal",
       keybind: "ctrl+shift+`",
       onSelect: () => terminal.new(),
+    },
+    {
+      id: "terminal.split.vertical",
+      title: "Split terminal right",
+      description: "Split the current terminal vertically",
+      category: "Terminal",
+      keybind: "mod+d",
+      disabled: !terminal.active(),
+      onSelect: () => {
+        const active = terminal.active()
+        if (active) terminal.split(active, "vertical")
+      },
+    },
+    {
+      id: "terminal.split.horizontal",
+      title: "Split terminal down",
+      description: "Split the current terminal horizontally",
+      category: "Terminal",
+      keybind: "mod+shift+d",
+      disabled: !terminal.active(),
+      onSelect: () => {
+        const active = terminal.active()
+        if (active) terminal.split(active, "horizontal")
+      },
     },
     {
       id: "steps.toggle",
@@ -707,7 +733,7 @@ export default function Page() {
   const handleTerminalDragOver = (event: DragEvent) => {
     const { draggable, droppable } = event
     if (draggable && droppable) {
-      const terminals = terminal.all()
+      const terminals = terminal.tabs()
       const fromIndex = terminals.findIndex((t: LocalPTY) => t.id === draggable.id.toString())
       const toIndex = terminals.findIndex((t: LocalPTY) => t.id === droppable.id.toString())
       if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
@@ -885,6 +911,19 @@ export default function Page() {
     window.history.replaceState(null, "", `#${anchor(id)}`)
   }
 
+  const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
+    const root = scroller
+    if (!root) {
+      el.scrollIntoView({ behavior, block: "start" })
+      return
+    }
+
+    const a = el.getBoundingClientRect()
+    const b = root.getBoundingClientRect()
+    const top = a.top - b.top + root.scrollTop
+    root.scrollTo({ top, behavior })
+  }
+
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
     setActiveMessage(message)
 
@@ -896,7 +935,7 @@ export default function Page() {
 
       requestAnimationFrame(() => {
         const el = document.getElementById(anchor(message.id))
-        if (el) el.scrollIntoView({ behavior, block: "start" })
+        if (el) scrollToElement(el, behavior)
       })
 
       updateHash(message.id)
@@ -904,7 +943,7 @@ export default function Page() {
     }
 
     const el = document.getElementById(anchor(message.id))
-    if (el) el.scrollIntoView({ behavior, block: "start" })
+    if (el) scrollToElement(el, behavior)
     updateHash(message.id)
   }
 
@@ -956,7 +995,7 @@ export default function Page() {
 
       const hashTarget = document.getElementById(hash)
       if (hashTarget) {
-        hashTarget.scrollIntoView({ behavior: "auto", block: "start" })
+        scrollToElement(hashTarget, "auto")
         return
       }
 
@@ -996,7 +1035,7 @@ export default function Page() {
 
   createEffect(() => {
     if (!terminal.ready()) return
-    handoff.terminals = terminal.all().map((t) => t.title)
+    handoff.terminals = terminal.tabs().map((t) => t.title)
   })
 
   createEffect(() => {
@@ -1653,10 +1692,10 @@ export default function Page() {
             >
               <DragDropSensors />
               <ConstrainDragYAxis />
-              <Tabs variant="alt" value={terminal.active()} onChange={terminal.open}>
+              <Tabs variant="alt" value={activeTerminal()} onChange={terminal.open}>
                 <Tabs.List class="h-10">
-                  <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
-                    <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
+                  <SortableProvider ids={terminal.tabs().map((t: LocalPTY) => t.id)}>
+                    <For each={terminal.tabs()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
                   </SortableProvider>
                   <div class="h-full flex items-center justify-center">
                     <TooltipKeybind
@@ -1668,10 +1707,10 @@ export default function Page() {
                     </TooltipKeybind>
                   </div>
                 </Tabs.List>
-                <For each={terminal.all()}>
+                <For each={terminal.tabs()}>
                   {(pty) => (
-                    <Tabs.Content value={pty.id}>
-                      <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
+                    <Tabs.Content value={pty.id} class="h-[calc(100%-2.5rem)]">
+                      <TerminalSplit tabId={pty.id} />
                     </Tabs.Content>
                   )}
                 </For>
@@ -1679,7 +1718,7 @@ export default function Page() {
               <DragOverlay>
                 <Show when={store.activeTerminalDraggable}>
                   {(draggedId) => {
-                    const pty = createMemo(() => terminal.all().find((t: LocalPTY) => t.id === draggedId()))
+                    const pty = createMemo(() => terminal.tabs().find((t: LocalPTY) => t.id === draggedId()))
                     return (
                       <Show when={pty()}>
                         {(t) => (
