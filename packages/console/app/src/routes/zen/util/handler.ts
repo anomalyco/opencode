@@ -1,14 +1,15 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { and, Database, eq, isNull, lt, or, sql } from "@opencode-ai/console-core/drizzle/index.js"
 import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
-import { BillingTable, UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
+import { BillingTable, SubscriptionTable, UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { centsToMicroCents } from "@opencode-ai/console-core/util/price.js"
+import { getWeekBounds } from "@opencode-ai/console-core/util/date.js"
 import { Identifier } from "@opencode-ai/console-core/identifier.js"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { ZenData } from "@opencode-ai/console-core/model.js"
-import { BlackData } from "@opencode-ai/console-core/black.js"
+import { Black, BlackData } from "@opencode-ai/console-core/black.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
@@ -80,12 +81,13 @@ export async function handler(
     const isTrial = await trialLimiter?.isTrial()
     const rateLimiter = createRateLimiter(modelInfo.rateLimit, ip)
     await rateLimiter?.check()
-    const stickyTracker = createStickyTracker(modelInfo.stickyProvider ?? false, sessionId)
+    const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
     const stickyProvider = await stickyTracker?.get()
     const authInfo = await authenticate(modelInfo)
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
       const providerInfo = selectProvider(
+        model,
         zenData,
         authInfo,
         modelInfo,
@@ -100,7 +102,7 @@ export async function handler(
       logger.metric({ provider: providerInfo.id })
 
       const startTimestamp = Date.now()
-      const reqUrl = providerInfo.modifyUrl(providerInfo.api, providerInfo.model, isStream)
+      const reqUrl = providerInfo.modifyUrl(providerInfo.api, isStream)
       const reqBody = JSON.stringify(
         providerInfo.modifyBody({
           ...createBodyConverter(opts.format, providerInfo.format)(body),
@@ -134,7 +136,7 @@ export async function handler(
         // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
         res.status !== 404 &&
         // ie. cannot change codex model providers mid-session
-        !modelInfo.stickyProvider &&
+        modelInfo.stickyProvider !== "strict" &&
         modelInfo.fallbackProvider &&
         providerInfo.id !== modelInfo.fallbackProvider
       ) {
@@ -193,17 +195,19 @@ export async function handler(
     // Handle streaming response
     const streamConverter = createStreamPartConverter(providerInfo.format, opts.format)
     const usageParser = providerInfo.createUsageParser()
+    const binaryDecoder = providerInfo.createBinaryStreamDecoder()
     const stream = new ReadableStream({
       start(c) {
         const reader = res.body?.getReader()
         const decoder = new TextDecoder()
         const encoder = new TextEncoder()
+
         let buffer = ""
         let responseLength = 0
 
         function pump(): Promise<void> {
           return (
-            reader?.read().then(async ({ done, value }) => {
+            reader?.read().then(async ({ done, value: rawValue }) => {
               if (done) {
                 logger.metric({
                   response_length: responseLength,
@@ -229,6 +233,10 @@ export async function handler(
                   "timestamp.first_byte": now,
                 })
               }
+
+              const value = binaryDecoder ? binaryDecoder(rawValue) : rawValue
+              if (!value) return
+
               responseLength += value.length
               buffer += decoder.decode(value, { stream: true })
               dataDumper?.provideStream(buffer)
@@ -330,6 +338,7 @@ export async function handler(
   }
 
   function selectProvider(
+    reqModel: string,
     zenData: ZenData,
     authInfo: AuthInfo,
     modelInfo: ModelInfo,
@@ -338,7 +347,7 @@ export async function handler(
     retry: RetryOptions,
     stickyProvider: string | undefined,
   ) {
-    const provider = (() => {
+    const modelProvider = (() => {
       if (authInfo?.provider?.credentials) {
         return modelInfo.providers.find((provider) => provider.id === modelInfo.byokProvider)
       }
@@ -371,18 +380,19 @@ export async function handler(
       return providers[index || 0]
     })()
 
-    if (!provider) throw new ModelError("No provider available")
-    if (!(provider.id in zenData.providers)) throw new ModelError(`Provider ${provider.id} not supported`)
+    if (!modelProvider) throw new ModelError("No provider available")
+    if (!(modelProvider.id in zenData.providers)) throw new ModelError(`Provider ${modelProvider.id} not supported`)
 
     return {
-      ...provider,
-      ...zenData.providers[provider.id],
+      ...modelProvider,
+      ...zenData.providers[modelProvider.id],
       ...(() => {
-        const format = zenData.providers[provider.id].format
-        if (format === "anthropic") return anthropicHelper
-        if (format === "google") return googleHelper
-        if (format === "openai") return openaiHelper
-        return oaCompatHelper
+        const format = zenData.providers[modelProvider.id].format
+        const providerModel = modelProvider.model
+        if (format === "anthropic") return anthropicHelper({ reqModel, providerModel })
+        if (format === "google") return googleHelper({ reqModel, providerModel })
+        if (format === "openai") return openaiHelper({ reqModel, providerModel })
+        return oaCompatHelper({ reqModel, providerModel })
       })(),
     }
   }
@@ -415,11 +425,11 @@ export async function handler(
             timeMonthlyUsageUpdated: UserTable.timeMonthlyUsageUpdated,
           },
           subscription: {
-            timeSubscribed: UserTable.timeSubscribed,
-            subIntervalUsage: UserTable.subIntervalUsage,
-            subMonthlyUsage: UserTable.subMonthlyUsage,
-            timeSubIntervalUsageUpdated: UserTable.timeSubIntervalUsageUpdated,
-            timeSubMonthlyUsageUpdated: UserTable.timeSubMonthlyUsageUpdated,
+            id: SubscriptionTable.id,
+            rollingUsage: SubscriptionTable.rollingUsage,
+            fixedUsage: SubscriptionTable.fixedUsage,
+            timeRollingUpdated: SubscriptionTable.timeRollingUpdated,
+            timeFixedUpdated: SubscriptionTable.timeFixedUpdated,
           },
           provider: {
             credentials: ProviderTable.credentials,
@@ -440,6 +450,14 @@ export async function handler(
               )
             : sql`false`,
         )
+        .leftJoin(
+          SubscriptionTable,
+          and(
+            eq(SubscriptionTable.workspaceID, KeyTable.workspaceID),
+            eq(SubscriptionTable.userID, KeyTable.userID),
+            isNull(SubscriptionTable.timeDeleted),
+          ),
+        )
         .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
         .then((rows) => rows[0]),
     )
@@ -448,7 +466,7 @@ export async function handler(
     logger.metric({
       api_key: data.apiKey,
       workspace: data.workspaceID,
-      isSubscription: data.subscription.timeSubscribed ? true : false,
+      isSubscription: data.subscription ? true : false,
     })
 
     return {
@@ -456,7 +474,7 @@ export async function handler(
       workspaceID: data.workspaceID,
       billing: data.billing,
       user: data.user,
-      subscription: data.subscription.timeSubscribed ? data.subscription : undefined,
+      subscription: data.subscription,
       provider: data.provider,
       isFree: FREE_WORKSPACES.includes(data.workspaceID),
       isDisabled: !!data.timeDisabled,
@@ -484,43 +502,30 @@ export async function handler(
         return `${minutes}min`
       }
 
-      // Check monthly limit (based on subscription billing cycle)
-      if (
-        sub.subMonthlyUsage &&
-        sub.timeSubMonthlyUsageUpdated &&
-        sub.subMonthlyUsage >= centsToMicroCents(black.monthlyLimit * 100)
-      ) {
-        const subscribeDay = sub.timeSubscribed!.getUTCDate()
-        const cycleStart = new Date(
-          Date.UTC(
-            now.getUTCFullYear(),
-            now.getUTCDate() >= subscribeDay ? now.getUTCMonth() : now.getUTCMonth() - 1,
-            subscribeDay,
-          ),
-        )
-        const cycleEnd = new Date(Date.UTC(cycleStart.getUTCFullYear(), cycleStart.getUTCMonth() + 1, subscribeDay))
-        if (sub.timeSubMonthlyUsageUpdated >= cycleStart && sub.timeSubMonthlyUsageUpdated < cycleEnd) {
-          const retryAfter = Math.ceil((cycleEnd.getTime() - now.getTime()) / 1000)
+      // Check weekly limit
+      if (sub.fixedUsage && sub.timeFixedUpdated) {
+        const result = Black.analyzeWeeklyUsage({
+          usage: sub.fixedUsage,
+          timeUpdated: sub.timeFixedUpdated,
+        })
+        if (result.status === "rate-limited")
           throw new SubscriptionError(
-            `Subscription quota exceeded. Retry in ${formatRetryTime(retryAfter)}.`,
-            retryAfter,
+            `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+            result.resetInSec,
           )
-        }
       }
 
-      // Check interval limit
-      const intervalMs = black.intervalLength * 3600 * 1000
-      if (sub.subIntervalUsage && sub.timeSubIntervalUsageUpdated) {
-        const currentInterval = Math.floor(now.getTime() / intervalMs)
-        const usageInterval = Math.floor(sub.timeSubIntervalUsageUpdated.getTime() / intervalMs)
-        if (currentInterval === usageInterval && sub.subIntervalUsage >= centsToMicroCents(black.intervalLimit * 100)) {
-          const nextInterval = (currentInterval + 1) * intervalMs
-          const retryAfter = Math.ceil((nextInterval - now.getTime()) / 1000)
+      // Check rolling limit
+      if (sub.rollingUsage && sub.timeRollingUpdated) {
+        const result = Black.analyzeRollingUsage({
+          usage: sub.rollingUsage,
+          timeUpdated: sub.timeRollingUpdated,
+        })
+        if (result.status === "rate-limited")
           throw new SubscriptionError(
-            `Subscription quota exceeded. Retry in ${formatRetryTime(retryAfter)}.`,
-            retryAfter,
+            `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+            result.resetInSec,
           )
-        }
       }
 
       return
@@ -661,38 +666,39 @@ export async function handler(
           .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
         ...(authInfo.subscription
           ? (() => {
-              const now = new Date()
-              const subscribeDay = authInfo.subscription.timeSubscribed!.getUTCDate()
-              const cycleStart = new Date(
-                Date.UTC(
-                  now.getUTCFullYear(),
-                  now.getUTCDate() >= subscribeDay ? now.getUTCMonth() : now.getUTCMonth() - 1,
-                  subscribeDay,
-                ),
-              )
-              const cycleEnd = new Date(
-                Date.UTC(cycleStart.getUTCFullYear(), cycleStart.getUTCMonth() + 1, subscribeDay),
-              )
+              const black = BlackData.get()
+              const week = getWeekBounds(new Date())
+              const rollingWindowSeconds = black.rollingWindow * 3600
               return [
                 db
-                  .update(UserTable)
+                  .update(SubscriptionTable)
                   .set({
-                    subMonthlyUsage: sql`
+                    fixedUsage: sql`
               CASE
-                WHEN ${UserTable.timeSubMonthlyUsageUpdated} >= ${cycleStart} AND ${UserTable.timeSubMonthlyUsageUpdated} < ${cycleEnd} THEN ${UserTable.subMonthlyUsage} + ${cost}
+                WHEN ${SubscriptionTable.timeFixedUpdated} >= ${week.start} THEN ${SubscriptionTable.fixedUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-                    timeSubMonthlyUsageUpdated: sql`now()`,
-                    subIntervalUsage: sql`
+                    timeFixedUpdated: sql`now()`,
+                    rollingUsage: sql`
               CASE
-                WHEN FLOOR(UNIX_TIMESTAMP(${UserTable.timeSubIntervalUsageUpdated}) / (${BlackData.get().intervalLength} * 3600)) = FLOOR(UNIX_TIMESTAMP(now()) / (${BlackData.get().intervalLength} * 3600)) THEN ${UserTable.subIntervalUsage} + ${cost}
+                WHEN UNIX_TIMESTAMP(${SubscriptionTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${SubscriptionTable.rollingUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-                    timeSubIntervalUsageUpdated: sql`now()`,
+                    timeRollingUpdated: sql`
+              CASE
+                WHEN UNIX_TIMESTAMP(${SubscriptionTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${SubscriptionTable.timeRollingUpdated}
+                ELSE now()
+              END
+            `,
                   })
-                  .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id))),
+                  .where(
+                    and(
+                      eq(SubscriptionTable.workspaceID, authInfo.workspaceID),
+                      eq(SubscriptionTable.userID, authInfo.user.id),
+                    ),
+                  ),
               ]
             })()
           : [
