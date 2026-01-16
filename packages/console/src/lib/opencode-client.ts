@@ -109,9 +109,74 @@ export interface ProvidersResponse {
 
 export class OpenCodeClient {
   private baseURL: string
+  private eventSource: EventSource | null = null
+  private eventHandlers: Map<string, Set<(event: any) => void>> = new Map()
 
   constructor(baseURL: string = 'http://localhost:4096') {
     this.baseURL = baseURL
+  }
+
+  /**
+   * Connect to event stream for real-time updates
+   */
+  connectEventStream(onError?: (error: Event) => void): void {
+    if (this.eventSource) {
+      return // Already connected
+    }
+
+    const eventURL = `${this.baseURL}/event`
+    this.eventSource = new EventSource(eventURL)
+
+    this.eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        const handlers = this.eventHandlers.get(data.type)
+        if (handlers) {
+          handlers.forEach(handler => handler(data))
+        }
+      } catch (err) {
+        console.error('Failed to parse event:', err)
+      }
+    }
+
+    this.eventSource.onerror = (error) => {
+      console.error('EventSource error:', error)
+      onError?.(error)
+      // Reconnect after error
+      this.disconnectEventStream()
+      setTimeout(() => this.connectEventStream(onError), 5000)
+    }
+  }
+
+  /**
+   * Disconnect from event stream
+   */
+  disconnectEventStream(): void {
+    if (this.eventSource) {
+      this.eventSource.close()
+      this.eventSource = null
+    }
+  }
+
+  /**
+   * Subscribe to specific event types
+   */
+  onEvent(eventType: string, handler: (event: any) => void): () => void {
+    if (!this.eventHandlers.has(eventType)) {
+      this.eventHandlers.set(eventType, new Set())
+    }
+    this.eventHandlers.get(eventType)!.add(handler)
+
+    // Return unsubscribe function
+    return () => {
+      const handlers = this.eventHandlers.get(eventType)
+      if (handlers) {
+        handlers.delete(handler)
+        if (handlers.size === 0) {
+          this.eventHandlers.delete(eventType)
+        }
+      }
+    }
   }
 
   /**
@@ -181,13 +246,10 @@ export class OpenCodeClient {
   }
 
   /**
-   * Send a message and receive streaming response
-   * The server returns JSON, not SSE - it streams the complete response
+   * Send a message - response will come through event stream
+   * This method triggers the message but doesn't wait for completion
    */
-  async sendMessage(
-    request: SendMessageRequest,
-    onResponse: (response: SessionMessageResponse) => void
-  ): Promise<void> {
+  async sendMessage(request: SendMessageRequest): Promise<void> {
     const response = await fetch(
       `${this.baseURL}/session/${request.sessionId}/message`,
       {
@@ -203,31 +265,13 @@ export class OpenCodeClient {
       throw new Error(`Failed to send message: ${response.statusText}`)
     }
 
-    // The server streams JSON - collect all chunks
+    // Read and discard the response body - updates come via event stream
+    // We still need to consume the response to avoid memory leaks
     const reader = response.body?.getReader()
-    const decoder = new TextDecoder()
-
-    if (!reader) {
-      throw new Error('No response body')
-    }
-
-    let buffer = ''
-    while (true) {
-      const { done, value } = await reader.read()
-
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-    }
-
-    // Parse the complete JSON response
-    if (buffer.trim()) {
-      try {
-        const data = JSON.parse(buffer)
-        onResponse(data)
-      } catch (err) {
-        console.error('Failed to parse response:', err, buffer)
-        throw new Error('Failed to parse server response')
+    if (reader) {
+      while (true) {
+        const { done } = await reader.read()
+        if (done) break
       }
     }
   }

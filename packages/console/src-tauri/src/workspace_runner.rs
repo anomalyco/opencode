@@ -4,13 +4,41 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::io::{BufRead, BufReader};
 use std::thread;
+use std::fs;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 
 /// Port range for dev servers
 const PORT_MIN: u16 = 3000;
 const PORT_MAX: u16 = 4000;
+
+/// Trusted workspaces file name
+const TRUSTED_WORKSPACES_FILE: &str = "trusted_workspaces.json";
+
+/// Trusted workspaces storage
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct TrustedWorkspaces {
+    trusted_paths: Vec<String>,
+}
+
+impl TrustedWorkspaces {
+    fn new() -> Self {
+        Self {
+            trusted_paths: Vec::new(),
+        }
+    }
+
+    fn is_trusted(&self, path: &str) -> bool {
+        self.trusted_paths.iter().any(|p| p == path)
+    }
+
+    fn add_trusted(&mut self, path: String) {
+        if !self.is_trusted(&path) {
+            self.trusted_paths.push(path);
+        }
+    }
+}
 
 /// Package manager detection
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -89,6 +117,8 @@ pub enum InstallStatus {
 pub struct WorkspaceRunner {
     processes: Arc<Mutex<HashMap<String, ProcessHandle>>>,
     port_allocator: Arc<Mutex<PortAllocator>>,
+    trusted_workspaces: Arc<Mutex<TrustedWorkspaces>>,
+    app_handle: Arc<Mutex<Option<AppHandle>>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -172,12 +202,122 @@ fn is_port_available(port: u16) -> bool {
     std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
+/// Parse port number from dev server output
+/// Supports formats like:
+/// - "Local:   http://localhost:5173/"
+/// - "listening on http://localhost:3000"
+/// - "started server on 0.0.0.0:3000"
+/// - "Server running at http://127.0.0.1:8080"
+fn parse_port_from_output(line: &str) -> Option<u16> {
+    // Try to find a URL pattern first
+    if let Some(url_start) = line.find("http://") {
+        let url_part = &line[url_start..];
+        // Find the port after the host
+        if let Some(colon_pos) = url_part[7..].find(':') {
+            let port_start = 7 + colon_pos + 1;
+            let port_str: String = url_part[port_start..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if let Ok(port) = port_str.parse::<u16>() {
+                return Some(port);
+            }
+        }
+    }
+    
+    // Try to find https:// pattern
+    if let Some(url_start) = line.find("https://") {
+        let url_part = &line[url_start..];
+        if let Some(colon_pos) = url_part[8..].find(':') {
+            let port_start = 8 + colon_pos + 1;
+            let port_str: String = url_part[port_start..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if let Ok(port) = port_str.parse::<u16>() {
+                return Some(port);
+            }
+        }
+    }
+    
+    // Try pattern like "0.0.0.0:3000" or "127.0.0.1:8080"
+    for pattern in ["0.0.0.0:", "127.0.0.1:", "localhost:"] {
+        if let Some(pos) = line.find(pattern) {
+            let port_start = pos + pattern.len();
+            let port_str: String = line[port_start..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if let Ok(port) = port_str.parse::<u16>() {
+                return Some(port);
+            }
+        }
+    }
+    
+    None
+}
+
+/// Load trusted workspaces from file
+fn load_trusted_workspaces(app_handle: &AppHandle) -> TrustedWorkspaces {
+    let app_data_dir = match app_handle.path().app_data_dir() {
+        Ok(dir) => dir,
+        Err(_) => return TrustedWorkspaces::new(),
+    };
+
+    let trusted_file_path = app_data_dir.join(TRUSTED_WORKSPACES_FILE);
+    
+    if !trusted_file_path.exists() {
+        return TrustedWorkspaces::new();
+    }
+
+    match fs::read_to_string(&trusted_file_path) {
+        Ok(content) => {
+            serde_json::from_str(&content).unwrap_or_else(|_| TrustedWorkspaces::new())
+        }
+        Err(_) => TrustedWorkspaces::new(),
+    }
+}
+
+/// Save trusted workspaces to file
+fn save_trusted_workspaces(app_handle: &AppHandle, trusted: &TrustedWorkspaces) -> Result<(), String> {
+    let app_data_dir = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+
+    // Ensure the directory exists
+    if !app_data_dir.exists() {
+        fs::create_dir_all(&app_data_dir)
+            .map_err(|e| format!("Failed to create app data dir: {}", e))?;
+    }
+
+    let trusted_file_path = app_data_dir.join(TRUSTED_WORKSPACES_FILE);
+    
+    let json = serde_json::to_string_pretty(trusted)
+        .map_err(|e| format!("Failed to serialize trusted workspaces: {}", e))?;
+
+    fs::write(&trusted_file_path, json)
+        .map_err(|e| format!("Failed to write trusted workspaces file: {}", e))?;
+
+    Ok(())
+}
+
 impl WorkspaceRunner {
     pub fn new() -> Self {
         Self {
             processes: Arc::new(Mutex::new(HashMap::new())),
             port_allocator: Arc::new(Mutex::new(PortAllocator::new())),
+            trusted_workspaces: Arc::new(Mutex::new(TrustedWorkspaces::new())),
+            app_handle: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// Initialize the runner with app handle and load trusted workspaces
+    pub fn init(&self, app_handle: AppHandle) {
+        // Store app handle
+        *self.app_handle.lock().unwrap() = Some(app_handle.clone());
+        
+        // Load trusted workspaces
+        let trusted = load_trusted_workspaces(&app_handle);
+        *self.trusted_workspaces.lock().unwrap() = trusted;
     }
 }
 
@@ -294,6 +434,11 @@ pub async fn workspace_dev_start(
     let mut child = Command::new(pkg_manager.install_command())
         .args(&dev_args)
         .current_dir(&root_path)
+        // Force unbuffered/colored output - many CLI tools buffer output when not in a TTY
+        .env("FORCE_COLOR", "1")           // Force colored output (triggers streaming in many tools)
+        .env("CI", "false")                 // Not in CI mode
+        .env("NO_COLOR", "")                // Clear NO_COLOR if set
+        .env("TERM", "xterm-256color")      // Emulate terminal
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -320,17 +465,73 @@ pub async fn workspace_dev_start(
         .unwrap()
         .insert(workspace_id.clone(), handle);
 
-    // 8. Spawn log readers
+    // 8. Spawn log readers that also detect server ready state
+    let server_ready = Arc::new(Mutex::new(false));
+    
     if let Some(stdout) = stdout {
         let workspace_id_clone = workspace_id.clone();
         let app_handle_clone = app_handle.clone();
+        let processes_clone = runner.processes.clone();
+        let server_ready_clone = server_ready.clone();
+        let allocated_port = port;
         thread::spawn(move || {
             let reader = BufReader::new(stdout);
             for line in reader.lines() {
                 if let Ok(line) = line {
+                    // Try to parse the actual URL/port from the server output
+                    // Common formats:
+                    // - "Local:   http://localhost:5173/"
+                    // - "listening on http://localhost:3000"
+                    // - "started server on 0.0.0.0:3000"
+                    let actual_port = parse_port_from_output(&line).unwrap_or(allocated_port);
+                    
+                    // Check if the server is ready (common patterns from dev servers)
+                    let is_ready = line.contains("Local:") 
+                        || line.contains("ready in")
+                        || line.contains("listening on")
+                        || line.contains("started server on")
+                        || line.contains("Server running");
+                    
+                    if is_ready && !*server_ready_clone.lock().unwrap() {
+                        *server_ready_clone.lock().unwrap() = true;
+                        
+                        // Update status and port to Running
+                        {
+                            let mut processes = processes_clone.lock().unwrap();
+                            if let Some(handle) = processes.get_mut(&workspace_id_clone) {
+                                handle.status = ProcessStatus::Running;
+                                // Update port if we detected a different one
+                                if actual_port != allocated_port {
+                                    handle.port = actual_port;
+                                }
+                            }
+                        }
+                        
+                        // Get the updated port
+                        let final_port = processes_clone.lock().unwrap()
+                            .get(&workspace_id_clone)
+                            .map(|h| h.port)
+                            .unwrap_or(actual_port);
+                        
+                        // Emit status change event with correct port
+                        let status_info = DevServerInfo {
+                            url: format!("http://localhost:{}", final_port),
+                            port: final_port,
+                            status: ProcessStatus::Running,
+                        };
+                        let _ = app_handle_clone.emit(&format!("dev-status:{}", workspace_id_clone), &status_info);
+                    }
+                    
+                    // Detect runtime errors (errors that happen after server starts)
+                    // These often appear in stdout, not stderr
+                    let is_error = line.contains("Internal server error") 
+                        || line.contains("[vite] Internal server error")
+                        || line.contains("error:")
+                        || line.contains("Error:");
+                    
                     let log = LogEntry {
                         timestamp: chrono::Utc::now().timestamp_millis(),
-                        level: LogLevel::Info,
+                        level: if is_error { LogLevel::Error } else { LogLevel::Info },
                         message: line,
                     };
                     let _ = app_handle_clone.emit(&format!("dev-log:{}", workspace_id_clone), &log);
@@ -339,13 +540,20 @@ pub async fn workspace_dev_start(
         });
     }
 
+    // Channel to collect stderr lines for error reporting
+    let (error_tx, error_rx) = std::sync::mpsc::channel::<String>();
+    
     if let Some(stderr) = stderr {
         let workspace_id_clone = workspace_id.clone();
         let app_handle_clone = app_handle.clone();
+        let error_tx_clone = error_tx.clone();
         thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 if let Ok(line) = line {
+                    // Send error line to the error collector
+                    let _ = error_tx_clone.send(line.clone());
+                    
                     let log = LogEntry {
                         timestamp: chrono::Utc::now().timestamp_millis(),
                         level: LogLevel::Error,
@@ -356,14 +564,65 @@ pub async fn workspace_dev_start(
             }
         });
     }
+    
+    // Drop the original sender so the receiver knows when stderr is closed
+    drop(error_tx);
 
-    // 9. Update status to Running after a short delay (simulate startup)
+    // 9. Spawn process monitor to detect crashes/exits
     let processes_clone = runner.processes.clone();
+    let port_allocator_clone = runner.port_allocator.clone();
     let workspace_id_clone = workspace_id.clone();
-    tokio::spawn(async move {
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        if let Some(handle) = processes_clone.lock().unwrap().get_mut(&workspace_id_clone) {
-            handle.status = ProcessStatus::Running;
+    let app_handle_clone = app_handle.clone();
+    let child_arc = runner.processes.lock().unwrap()
+        .get(&workspace_id)
+        .map(|h| h.child.clone())
+        .unwrap();
+    
+    thread::spawn(move || {
+        // Collect stderr lines for error message
+        let mut error_lines: Vec<String> = Vec::new();
+        while let Ok(line) = error_rx.recv() {
+            error_lines.push(line);
+            // Keep only last 20 lines to avoid memory issues
+            if error_lines.len() > 20 {
+                error_lines.remove(0);
+            }
+        }
+        
+        // Wait for the process to exit
+        if let Some(mut child) = child_arc.lock().unwrap().take() {
+            match child.wait() {
+                Ok(exit_status) => {
+                    let mut processes = processes_clone.lock().unwrap();
+                    if let Some(handle) = processes.get_mut(&workspace_id_clone) {
+                        // Only update if not already stopped (e.g., by user)
+                        if handle.status != ProcessStatus::Stopped {
+                            let error_msg = if error_lines.is_empty() {
+                                format!("Process exited with status: {}", exit_status)
+                            } else {
+                                error_lines.join("\n")
+                            };
+                            
+                            handle.status = ProcessStatus::Error(error_msg.clone());
+                            
+                            // Emit status change event
+                            let status_info = DevServerInfo {
+                                url: format!("http://localhost:{}", handle.port),
+                                port: handle.port,
+                                status: ProcessStatus::Error(error_msg),
+                            };
+                            let _ = app_handle_clone.emit(&format!("dev-status:{}", workspace_id_clone), &status_info);
+                        }
+                    }
+                    // Release port
+                    if let Some(handle) = processes.get(&workspace_id_clone) {
+                        port_allocator_clone.lock().unwrap().release(handle.port);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to wait for process: {}", e);
+                }
+            }
         }
     });
 
@@ -442,8 +701,18 @@ pub async fn get_dev_server_status(
 pub async fn request_dev_permission(
     _workspace_id: String,
     root_path: String,
+    runner: tauri::State<'_, WorkspaceRunner>,
     app: AppHandle,
 ) -> Result<bool, String> {
+    // Check if workspace is already trusted
+    {
+        let trusted = runner.trusted_workspaces.lock().unwrap();
+        if trusted.is_trusted(&root_path) {
+            return Ok(true);
+        }
+    }
+
+    // Show security warning dialog
     let message = format!(
         "Build Studio will run code from:\n{}\n\n\
         This may execute arbitrary commands. Only proceed if you trust this workspace.",
@@ -456,7 +725,23 @@ pub async fn request_dev_permission(
         .buttons(MessageDialogButtons::OkCancel)
         .blocking_show_with_result();
 
-    Ok(matches!(result, MessageDialogResult::Ok))
+    let granted = matches!(result, MessageDialogResult::Ok);
+
+    // If user granted permission, add to trusted list and save
+    if granted {
+        {
+            let mut trusted = runner.trusted_workspaces.lock().unwrap();
+            trusted.add_trusted(root_path.clone());
+            
+            // Save to file
+            if let Err(e) = save_trusted_workspaces(&app, &trusted) {
+                eprintln!("Warning: Failed to save trusted workspaces: {}", e);
+                // Don't fail the operation, just log the warning
+            }
+        }
+    }
+
+    Ok(granted)
 }
 
 /// Explicitly install dependencies in a workspace

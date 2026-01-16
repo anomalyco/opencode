@@ -162,6 +162,11 @@ bun install
 
 ### Development
 
+#### Start OpenCode Server
+```bash
+bun run --cwd packages/opencode dev serve
+```
+
 #### Web App (SolidStart)
 
 ```bash

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { LintResultPanel } from './'
+import type { LintResult } from '../hooks'
 
 interface DevServerInfo {
   url: string
@@ -28,6 +30,9 @@ interface InstallProgress {
 interface PreviewTabProps {
   workspaceId?: string
   rootPath?: string
+  lintResult?: LintResult | null
+  isLintChecking?: boolean
+  onFixLintErrors?: () => void
 }
 
 type ViewportType = 'desktop' | 'iphone-se' | 'iphone-14-pro'
@@ -45,7 +50,13 @@ const VIEWPORTS: Record<ViewportType, ViewportConfig> = {
   'iphone-14-pro': { name: 'iPhone 14 Pro', width: 390, height: 844, icon: '📱' },
 }
 
-export default function PreviewTab({ workspaceId, rootPath }: PreviewTabProps) {
+export default function PreviewTab({ 
+  workspaceId, 
+  rootPath,
+  lintResult,
+  isLintChecking,
+  onFixLintErrors,
+}: PreviewTabProps) {
   const [devServerInfo, setDevServerInfo] = useState<DevServerInfo | null>(null)
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [showLogs, setShowLogs] = useState(false)
@@ -67,6 +78,10 @@ export default function PreviewTab({ workspaceId, rootPath }: PreviewTabProps) {
     // Listen to log events
     const unlistenLogPromise = listen<LogEntry>(`dev-log:${workspaceId}`, (event) => {
       setLogs((prev) => [...prev, event.payload])
+      // Auto-show logs when an error is detected
+      if (event.payload.level === 'error') {
+        setShowLogs(true)
+      }
     })
 
     // Listen to install progress events
@@ -77,9 +92,21 @@ export default function PreviewTab({ workspaceId, rootPath }: PreviewTabProps) {
       }
     })
 
+    // Listen to dev server status change events
+    const unlistenStatusPromise = listen<DevServerInfo>(`dev-status:${workspaceId}`, (event) => {
+      setDevServerInfo(event.payload)
+    })
+
+    // Poll for status updates as a fallback (every 2 seconds while in Starting state)
+    const pollInterval = setInterval(() => {
+      checkDevServerStatus()
+    }, 2000)
+
     return () => {
       unlistenLogPromise.then((unlisten) => unlisten())
       unlistenInstallPromise.then((unlisten) => unlisten())
+      unlistenStatusPromise.then((unlisten) => unlisten())
+      clearInterval(pollInterval)
     }
   }, [workspaceId, rootPath])
 
@@ -194,6 +221,57 @@ export default function PreviewTab({ workspaceId, rootPath }: PreviewTabProps) {
     }
   }
 
+  // Start preview: install deps and then start dev server
+  const startPreview = async () => {
+    if (!workspaceId || !rootPath) return
+    
+    setIsLoading(true)
+    setError(null)
+    
+    try {
+      // First, install dependencies if not installed
+      if (!depsInstalled) {
+        setInstallProgress({
+          status: 'installing',
+          package_manager: '',
+          message: 'Installing dependencies...',
+        })
+        
+        const installResult = await invoke<InstallProgress>('workspace_install_deps', {
+          workspaceId,
+          rootPath,
+        })
+        setInstallProgress(installResult)
+        setDepsInstalled(true)
+      }
+      
+      // Then start the dev server
+      const granted = await invoke<boolean>('request_dev_permission', {
+        workspaceId,
+        rootPath,
+      })
+
+      if (!granted) {
+        setError('Permission denied to start dev server')
+        setIsLoading(false)
+        return
+      }
+
+      const info = await invoke<DevServerInfo>('workspace_dev_start', {
+        workspaceId,
+        rootPath,
+      })
+
+      setDevServerInfo(info)
+      setLogs([])
+    } catch (err: any) {
+      setError(err?.toString() || 'Failed to start preview')
+    } finally {
+      setIsLoading(false)
+      setInstallProgress(null)
+    }
+  }
+
   // No workspace selected
   if (!workspaceId || !rootPath) {
     return (
@@ -209,6 +287,19 @@ export default function PreviewTab({ workspaceId, rootPath }: PreviewTabProps) {
           <p className="text-gray-500 text-xs mt-1">Open a workspace to preview</p>
         </div>
       </div>
+    )
+  }
+
+  // Show lint result panel if lint check is in progress or has results
+  // Only show if dev server is not running
+  if ((isLintChecking || lintResult) && (!devServerInfo || devServerInfo.status.type === 'Stopped')) {
+    return (
+      <LintResultPanel
+        lintResult={lintResult ?? null}
+        isChecking={isLintChecking ?? false}
+        onFixErrors={onFixLintErrors}
+        onStartPreview={startPreview}
+      />
     )
   }
 
@@ -295,17 +386,61 @@ export default function PreviewTab({ workspaceId, rootPath }: PreviewTabProps) {
 
   // Dev server starting
   if (devServerInfo.status.type === 'Starting') {
+    const errorLogs = logs.filter((log) => log.level === 'error')
+    const hasErrors = errorLogs.length > 0
+    
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-gray-800 gap-4">
-        <div className="text-center">
-          <div className="text-blue-500 mb-4 animate-spin">
-            <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
+      <div className="flex flex-col h-full bg-gray-800">
+        {/* Main content */}
+        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+          <div className="text-center">
+            <div className="text-blue-500 mb-4 animate-spin">
+              <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </div>
+            <p className="text-gray-400 text-sm mb-2">Starting dev server...</p>
+            <p className="text-gray-500 text-xs">Port: {devServerInfo.port}</p>
+            {hasErrors && (
+              <p className="text-yellow-400 text-xs mt-2">
+                {errorLogs.length} error(s) detected - check logs below
+              </p>
+            )}
+            <button
+              onClick={stopDevServer}
+              disabled={isLoading}
+              className="mt-4 px-3 py-1 text-xs text-white bg-red-600 rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
           </div>
-          <p className="text-gray-400 text-sm mb-2">Starting dev server...</p>
-          <p className="text-gray-500 text-xs">Port: {devServerInfo.port}</p>
         </div>
+        
+        {/* Show logs during starting state if there are any */}
+        {logs.length > 0 && (
+          <div className="h-48 overflow-y-auto bg-black p-2 border-t border-gray-700 font-mono text-xs">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-gray-400">Server Logs ({logs.length})</span>
+              {hasErrors && (
+                <span className="text-red-400 text-xs">{errorLogs.length} error(s)</span>
+              )}
+            </div>
+            {logs.map((log, idx) => (
+              <div
+                key={idx}
+                className={`mb-1 ${
+                  log.level === 'error'
+                    ? 'text-red-400'
+                    : log.level === 'warn'
+                    ? 'text-yellow-400'
+                    : 'text-gray-300'
+                }`}
+              >
+                <span className="text-gray-500">[{new Date(log.timestamp).toLocaleTimeString()}]</span> {log.message}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     )
   }
@@ -313,22 +448,63 @@ export default function PreviewTab({ workspaceId, rootPath }: PreviewTabProps) {
   // Dev server error
   if (devServerInfo.status.type === 'Error') {
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-gray-800 gap-4">
-        <div className="text-center max-w-md">
+      <div className="flex flex-col h-full bg-gray-800">
+        {/* Error header */}
+        <div className="flex-shrink-0 p-4 text-center border-b border-gray-700">
           <div className="text-red-500 mb-4">
-            <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
           <p className="text-gray-400 text-sm mb-2">Dev server error</p>
-          <p className="text-red-400 text-xs mb-4">{devServerInfo.status.message}</p>
-          <button
-            onClick={restartDevServer}
-            disabled={isLoading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-          >
-            {isLoading ? 'Restarting...' : 'Restart Server'}
-          </button>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={restartDevServer}
+              disabled={isLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {isLoading ? 'Restarting...' : 'Restart Server'}
+            </button>
+            <button
+              onClick={() => {
+                setDevServerInfo(null)
+                setLogs([])
+              }}
+              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+        
+        {/* Error details - scrollable */}
+        <div className="flex-1 overflow-y-auto bg-black p-4 font-mono text-xs">
+          <div className="text-gray-400 mb-2">Error Output:</div>
+          <pre className="text-red-400 whitespace-pre-wrap break-words">
+            {devServerInfo.status.message}
+          </pre>
+          
+          {logs.length > 0 && (
+            <>
+              <div className="text-gray-400 mt-4 mb-2 border-t border-gray-700 pt-4">
+                Full Logs ({logs.length} entries):
+              </div>
+              {logs.map((log, idx) => (
+                <div
+                  key={idx}
+                  className={`mb-1 ${
+                    log.level === 'error'
+                      ? 'text-red-400'
+                      : log.level === 'warn'
+                      ? 'text-yellow-400'
+                      : 'text-gray-300'
+                  }`}
+                >
+                  <span className="text-gray-500">[{new Date(log.timestamp).toLocaleTimeString()}]</span> {log.message}
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
     )
@@ -336,6 +512,8 @@ export default function PreviewTab({ workspaceId, rootPath }: PreviewTabProps) {
 
   const currentViewport = VIEWPORTS[viewport]
   const isMobile = viewport !== 'desktop'
+  const errorLogs = logs.filter((log) => log.level === 'error')
+  const hasRuntimeErrors = errorLogs.length > 0
 
   // Dev server running - show iframe
   return (
@@ -344,7 +522,7 @@ export default function PreviewTab({ workspaceId, rootPath }: PreviewTabProps) {
       <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <div className={`w-2 h-2 rounded-full animate-pulse ${hasRuntimeErrors ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
             <span className="text-sm text-gray-300">Running on port {devServerInfo.port}</span>
           </div>
           <a
@@ -355,6 +533,11 @@ export default function PreviewTab({ workspaceId, rootPath }: PreviewTabProps) {
           >
             {devServerInfo.url}
           </a>
+          {hasRuntimeErrors && (
+            <span className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-0.5 rounded">
+              {errorLogs.length} error(s) - check logs
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {/* Viewport Selector */}
@@ -383,7 +566,11 @@ export default function PreviewTab({ workspaceId, rootPath }: PreviewTabProps) {
 
           <button
             onClick={() => setShowLogs(!showLogs)}
-            className="px-3 py-1 text-xs text-gray-300 bg-gray-700 rounded hover:bg-gray-600 transition-colors"
+            className={`px-3 py-1 text-xs rounded transition-colors ${
+              hasRuntimeErrors 
+                ? 'text-yellow-300 bg-yellow-900/50 hover:bg-yellow-800/50' 
+                : 'text-gray-300 bg-gray-700 hover:bg-gray-600'
+            }`}
           >
             {showLogs ? 'Hide' : 'Show'} Logs ({logs.length})
           </button>
@@ -449,7 +636,6 @@ export default function PreviewTab({ workspaceId, rootPath }: PreviewTabProps) {
                   src={devServerInfo.url}
                   className="w-full h-full border-0"
                   title="Preview"
-                  sandbox="allow-same-origin allow-scripts allow-forms allow-modals allow-popups"
                 />
               </div>
 
@@ -463,7 +649,6 @@ export default function PreviewTab({ workspaceId, rootPath }: PreviewTabProps) {
             src={devServerInfo.url}
             className="w-full h-full border-0"
             title="Preview"
-            sandbox="allow-same-origin allow-scripts allow-forms allow-modals allow-popups"
           />
         )}
       </div>

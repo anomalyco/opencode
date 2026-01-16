@@ -1,40 +1,38 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Agent Foundry Build Studio",
-  "version": "0.0.1",
-  "identifier": "com.agent-foundry.console",
-  "build": {
-    "beforeDevCommand": "bun run dev",
-    "devUrl": "http://localhost:1421",
-    "beforeBuildCommand": "bun run build",
-    "frontendDist": "../dist"
-  },
-  "app": {
-    "windows": [
-      {
-        "title": "Agent Foundry Build Studio",
-        "width": 1400,
-        "height": 900,
-        "minWidth": 1200,
-        "minHeight": 700,
-        "decorations": true,
-        "resizable": true
-      }
-    ],
-    "security": {
-      "csp": null
-    }
-  },
-  "bundle": {
-    "active": true,
-    "targets": "all",
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ]
-  },
-  "plugins": {}
+    "$schema": "https://schema.tauri.app/config/2",
+    "productName": "Agent Foundry Build Studio",
+    "version": "0.0.1",
+    "identifier": "com.agent-foundry.console",
+    "build": {
+        "beforeDevCommand": "bun run dev",
+        "devUrl": "http://localhost:1421",
+        "beforeBuildCommand": "bun run build",
+        "frontendDist": "../dist"
+    },
+    "app": {
+        "windows": [{
+            "title": "Agent Foundry Build Studio",
+            "width": 1400,
+            "height": 900,
+            "minWidth": 1200,
+            "minHeight": 700,
+            "decorations": true,
+            "resizable": true
+        }],
+        "security": {
+            "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' http://localhost:* ws://localhost:* wss://localhost:*; frame-src http://localhost:* https://localhost:*; img-src 'self' data: blob: http://localhost:* https://localhost:*; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:*; style-src 'self' 'unsafe-inline' http://localhost:*; font-src 'self' data: http://localhost:*"
+        }
+    },
+    "bundle": {
+        "active": true,
+        "targets": "all",
+        "icon": [
+            "icons/32x32.png",
+            "icons/128x128.png",
+            "icons/128x128@2x.png",
+            "icons/icon.icns",
+            "icons/icon.ico"
+        ]
+    },
+    "plugins": {}
 }

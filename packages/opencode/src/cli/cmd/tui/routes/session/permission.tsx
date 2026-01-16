@@ -56,7 +56,7 @@ function EditBody(props: { request: PermissionRequest }) {
   const view = createMemo(() => {
     const diffStyle = sync.data.config.tui?.diff_style
     if (diffStyle === "stacked") return "unified"
-    return dimensions().width > 120 ? "split" : "unified"
+    return dimensions().width > 80 ? "split" : "unified"
   })
 
   const ft = createMemo(() => filetype(filepath()))
@@ -75,7 +75,7 @@ function EditBody(props: { request: PermissionRequest }) {
             filetype={ft()}
             syntaxStyle={syntax()}
             showLineNumbers={true}
-            width="100%"
+            width={Math.min(dimensions().width - 2, dimensions().width)}
             wrapMode="word"
             fg={theme.text}
             addedBg={theme.diffAddedBg}

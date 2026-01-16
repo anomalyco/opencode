@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -375,4 +376,252 @@ dist
         .map_err(|e| format!("Failed to create .gitignore: {}", e))?;
 
     Ok(workspace_path.to_string_lossy().to_string())
+}
+
+/// Lint error structure
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LintError {
+    pub file: String,
+    pub line: u32,
+    pub column: u32,
+    pub message: String,
+    pub severity: String, // "error" or "warning"
+    pub rule: Option<String>,
+}
+
+/// Lint check result
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LintResult {
+    pub success: bool,
+    pub errors: Vec<LintError>,
+    pub error_count: usize,
+    pub warning_count: usize,
+}
+
+/// Run TypeScript/JavaScript lint check on a project
+#[tauri::command]
+pub async fn run_lint_check(path: String) -> Result<LintResult, String> {
+    let project_path = Path::new(&path);
+
+    if !project_path.exists() {
+        return Err("Project directory does not exist".to_string());
+    }
+
+    // Detect package manager
+    let package_manager = if project_path.join("bun.lockb").exists() {
+        "bun"
+    } else if project_path.join("pnpm-lock.yaml").exists() {
+        "pnpm"
+    } else if project_path.join("yarn.lock").exists() {
+        "yarn"
+    } else {
+        "npm"
+    };
+
+    // Try running tsc first for TypeScript type checking
+    let tsc_result = run_tsc_check(&path, package_manager);
+    
+    // If tsc found errors, return them
+    if let Ok(result) = tsc_result {
+        if !result.success {
+            return Ok(result);
+        }
+    }
+
+    // If tsc passed or wasn't available, try ESLint
+    let eslint_result = run_eslint_check(&path, package_manager);
+    
+    if let Ok(result) = eslint_result {
+        return Ok(result);
+    }
+
+    // If both failed, return success (no lint tools found)
+    Ok(LintResult {
+        success: true,
+        errors: vec![],
+        error_count: 0,
+        warning_count: 0,
+    })
+}
+
+fn run_tsc_check(path: &str, package_manager: &str) -> Result<LintResult, String> {
+    let npx_cmd = match package_manager {
+        "bun" => "bunx",
+        "pnpm" => "pnpm",
+        "yarn" => "yarn",
+        _ => "npx",
+    };
+
+    let output = Command::new(npx_cmd)
+        .args(["tsc", "--noEmit", "--pretty", "false"])
+        .current_dir(path)
+        .output()
+        .map_err(|e| format!("Failed to run tsc: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{}\n{}", stdout, stderr);
+
+    parse_tsc_output(&combined, path)
+}
+
+fn parse_tsc_output(output: &str, base_path: &str) -> Result<LintResult, String> {
+    let mut errors = Vec::new();
+
+    for line in output.lines() {
+        // TSC output format: file(line,column): error TS1234: message
+        if let Some(parsed) = parse_tsc_line(line, base_path) {
+            errors.push(parsed);
+        }
+    }
+
+    let error_count = errors.iter().filter(|e| e.severity == "error").count();
+    let warning_count = errors.iter().filter(|e| e.severity == "warning").count();
+
+    Ok(LintResult {
+        success: errors.is_empty(),
+        errors,
+        error_count,
+        warning_count,
+    })
+}
+
+fn parse_tsc_line(line: &str, base_path: &str) -> Option<LintError> {
+    // Format: path/to/file.ts(10,5): error TS2304: Cannot find name 'foo'.
+    let line = line.trim();
+    if line.is_empty() {
+        return None;
+    }
+
+    // Find the position info in parentheses
+    let paren_start = line.find('(')?;
+    let paren_end = line.find(')')?;
+    
+    if paren_start >= paren_end {
+        return None;
+    }
+
+    let file_path = &line[..paren_start];
+    let pos_info = &line[paren_start + 1..paren_end];
+    let rest = &line[paren_end + 1..];
+
+    // Parse line,column
+    let parts: Vec<&str> = pos_info.split(',').collect();
+    if parts.len() < 2 {
+        return None;
+    }
+
+    let line_num: u32 = parts[0].trim().parse().ok()?;
+    let col_num: u32 = parts[1].trim().parse().ok()?;
+
+    // Parse severity and message
+    let rest = rest.trim_start_matches(':').trim();
+    let (severity, message, rule) = if rest.starts_with("error") {
+        let msg = rest.strip_prefix("error")?.trim();
+        // Extract error code like TS2304
+        let (rule, msg) = if let Some(colon_pos) = msg.find(':') {
+            let code = msg[..colon_pos].trim();
+            let message = msg[colon_pos + 1..].trim();
+            (Some(code.to_string()), message.to_string())
+        } else {
+            (None, msg.to_string())
+        };
+        ("error", msg, rule)
+    } else if rest.starts_with("warning") {
+        let msg = rest.strip_prefix("warning")?.trim();
+        let (rule, msg) = if let Some(colon_pos) = msg.find(':') {
+            let code = msg[..colon_pos].trim();
+            let message = msg[colon_pos + 1..].trim();
+            (Some(code.to_string()), message.to_string())
+        } else {
+            (None, msg.to_string())
+        };
+        ("warning", msg, rule)
+    } else {
+        return None;
+    };
+
+    // Make file path relative to base_path
+    let relative_file = file_path
+        .strip_prefix(base_path)
+        .unwrap_or(file_path)
+        .trim_start_matches(['/', '\\']);
+
+    Some(LintError {
+        file: relative_file.to_string(),
+        line: line_num,
+        column: col_num,
+        message,
+        severity: severity.to_string(),
+        rule,
+    })
+}
+
+fn run_eslint_check(path: &str, package_manager: &str) -> Result<LintResult, String> {
+    let npx_cmd = match package_manager {
+        "bun" => "bunx",
+        "pnpm" => "pnpm",
+        "yarn" => "yarn",
+        _ => "npx",
+    };
+
+    let output = Command::new(npx_cmd)
+        .args(["eslint", ".", "--format", "json", "--ext", ".ts,.tsx,.js,.jsx"])
+        .current_dir(path)
+        .output()
+        .map_err(|e| format!("Failed to run eslint: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_eslint_output(&stdout, path)
+}
+
+fn parse_eslint_output(output: &str, base_path: &str) -> Result<LintResult, String> {
+    // ESLint JSON format
+    let parsed: Result<Vec<serde_json::Value>, _> = serde_json::from_str(output);
+    
+    let mut errors = Vec::new();
+    let mut error_count = 0;
+    let mut warning_count = 0;
+
+    if let Ok(files) = parsed {
+        for file in files {
+            let file_path = file.get("filePath")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            
+            let relative_file = file_path
+                .strip_prefix(base_path)
+                .unwrap_or(file_path)
+                .trim_start_matches(['/', '\\']);
+
+            if let Some(messages) = file.get("messages").and_then(|v| v.as_array()) {
+                for msg in messages {
+                    let severity_num = msg.get("severity").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let severity = if severity_num >= 2 { "error" } else { "warning" };
+                    
+                    if severity == "error" {
+                        error_count += 1;
+                    } else {
+                        warning_count += 1;
+                    }
+
+                    errors.push(LintError {
+                        file: relative_file.to_string(),
+                        line: msg.get("line").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                        column: msg.get("column").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                        message: msg.get("message").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        severity: severity.to_string(),
+                        rule: msg.get("ruleId").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(LintResult {
+        success: error_count == 0,
+        errors,
+        error_count,
+        warning_count,
+    })
 }

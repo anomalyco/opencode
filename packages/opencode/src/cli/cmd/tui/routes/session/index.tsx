@@ -148,7 +148,7 @@ export function Session() {
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
 
-  const wide = createMemo(() => dimensions().width > 120)
+  const wide = createMemo(() => dimensions().width > 80)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
     if (sidebarOpen()) return true
@@ -156,7 +156,9 @@ export function Session() {
     return false
   })
   const showTimestamps = createMemo(() => timestamps() === "show")
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const contentWidth = createMemo(
+    () => dimensions().width - (sidebarVisible() ? Math.min(42, Math.floor(dimensions().width * 0.35)) : 0) - 4,
+  )
 
   const scrollAcceleration = createMemo(() => {
     const tui = sync.data.config.tui

@@ -24,7 +24,9 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // Initialize workspace runner
-            app.manage(WorkspaceRunner::new());
+            let runner = WorkspaceRunner::new();
+            runner.init(app.handle().clone());
+            app.manage(runner);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -45,6 +47,7 @@ fn main() {
             fs_utils::create_file,
             fs_utils::delete_file,
             fs_utils::create_new_workspace,
+            fs_utils::run_lint_check,
             deploy::deploy_build_workspace,
             deploy::bundle_dist,
             deploy::upload_to_oss,

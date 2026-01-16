@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { FileItem, FileTreeState } from '../types'
 
@@ -8,30 +8,41 @@ interface UseFileTreeOptions {
 }
 
 export function useFileTree({ rootPath, onFileSelect }: UseFileTreeOptions) {
-  const [state, setState] = useState<FileTreeState>({
+  const [state, setState] = useState<Omit<FileTreeState, 'loadedDirectories'>>({
     expandedFolders: new Set<string>(),
     selectedFile: undefined,
-    loadedDirectories: new Map<string, FileItem[]>(),
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Use ref to store loaded directories - doesn't trigger re-renders
+  const loadedDirectoriesRef = useRef<Map<string, FileItem[]>>(new Map())
+  const loadingDirectoriesRef = useRef<Set<string>>(new Set())
+  const [, forceUpdate] = useState({})
 
   // Load directory contents
   const loadDirectory = useCallback(async (path: string) => {
-    if (state.loadedDirectories.has(path)) {
-      return state.loadedDirectories.get(path)!
+    // Check if already loaded
+    if (loadedDirectoriesRef.current.has(path)) {
+      return loadedDirectoriesRef.current.get(path)!
+    }
+
+    // Check if already loading
+    if (loadingDirectoriesRef.current.has(path)) {
+      return []
     }
 
     try {
+      loadingDirectoriesRef.current.add(path)
       setIsLoading(true)
       const items = await invoke<FileItem[]>('read_directory', { path })
 
-      setState(prevState => ({
-        ...prevState,
-        loadedDirectories: new Map(prevState.loadedDirectories).set(path, items),
-      }))
-
+      // Store in ref instead of state
+      loadedDirectoriesRef.current.set(path, items)
+      
       setError(null)
+      // Force re-render to show the loaded items
+      forceUpdate({})
       return items
     } catch (err: any) {
       const errorMessage = err?.toString() || 'Failed to load directory'
@@ -39,9 +50,10 @@ export function useFileTree({ rootPath, onFileSelect }: UseFileTreeOptions) {
       console.error('Failed to load directory:', err)
       return []
     } finally {
+      loadingDirectoriesRef.current.delete(path)
       setIsLoading(false)
     }
-  }, [state.loadedDirectories])
+  }, [])
 
   // Toggle folder expansion
   const toggleFolder = useCallback(async (folderPath: string) => {
@@ -55,7 +67,7 @@ export function useFileTree({ rootPath, onFileSelect }: UseFileTreeOptions) {
         // Expand folder
         newExpandedFolders.add(folderPath)
         // Load directory contents if not already loaded
-        if (!prevState.loadedDirectories.has(folderPath)) {
+        if (!loadedDirectoriesRef.current.has(folderPath)) {
           loadDirectory(folderPath)
         }
       }
@@ -79,19 +91,24 @@ export function useFileTree({ rootPath, onFileSelect }: UseFileTreeOptions) {
   // Load root directory when rootPath changes
   useEffect(() => {
     if (rootPath) {
+      // Clear previous loaded directories
+      loadedDirectoriesRef.current.clear()
+      loadingDirectoriesRef.current.clear()
+      
       setState({
         expandedFolders: new Set([rootPath]),
         selectedFile: undefined,
-        loadedDirectories: new Map(),
       })
+      
+      // Load root directory - no need to add loadDirectory to deps
       loadDirectory(rootPath)
     }
-  }, [rootPath, loadDirectory])
+  }, [rootPath])
 
   // Get items for a specific directory
   const getDirectoryItems = useCallback((path: string): FileItem[] => {
-    return state.loadedDirectories.get(path) || []
-  }, [state.loadedDirectories])
+    return loadedDirectoriesRef.current.get(path) || []
+  }, [])
 
   // Check if a folder is expanded
   const isFolderExpanded = useCallback((path: string): boolean => {
@@ -100,15 +117,12 @@ export function useFileTree({ rootPath, onFileSelect }: UseFileTreeOptions) {
 
   // Check if a folder is loaded
   const isFolderLoaded = useCallback((path: string): boolean => {
-    return state.loadedDirectories.has(path)
-  }, [state.loadedDirectories])
+    return loadedDirectoriesRef.current.has(path)
+  }, [])
 
   // Refresh a directory
   const refreshDirectory = useCallback(async (path: string) => {
-    setState(prevState => ({
-      ...prevState,
-      loadedDirectories: new Map([...prevState.loadedDirectories].filter(([key]) => key !== path)),
-    }))
+    loadedDirectoriesRef.current.delete(path)
     await loadDirectory(path)
   }, [loadDirectory])
 

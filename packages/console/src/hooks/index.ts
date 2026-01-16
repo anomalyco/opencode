@@ -2,6 +2,7 @@
 export { useCodeMirror } from './useCodeMirror'
 export { useDeploy } from './useDeploy'
 export { useFileTree } from './useFileTree'
+export { useLintCheck, type LintError, type LintResult } from './useLintCheck'
 export { useOpenFiles } from './useOpenFiles'
 export { useProviders, type FreeModel, type SelectedModel } from './useProviders'
 export { useSession } from './useSession'

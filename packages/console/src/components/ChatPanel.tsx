@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, type MutableRefObject } from 'react'
 import { useSession, type SelectedModel } from '../hooks'
 import type { Message, MessagePart } from '../lib'
 
@@ -6,9 +6,17 @@ interface ChatPanelProps {
   workspaceId?: string
   rootPath?: string
   selectedModel?: SelectedModel | null
+  onResponseComplete?: () => void
+  sendMessageRef?: MutableRefObject<((content: string) => void) | null>
 }
 
-export default function ChatPanel({ workspaceId, rootPath, selectedModel }: ChatPanelProps) {
+export default function ChatPanel({ 
+  workspaceId, 
+  rootPath, 
+  selectedModel,
+  onResponseComplete,
+  sendMessageRef,
+}: ChatPanelProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const {
@@ -19,7 +27,17 @@ export default function ChatPanel({ workspaceId, rootPath, selectedModel }: Chat
     error,
     serverStatus,
     sendMessage,
-  } = useSession(workspaceId, rootPath, selectedModel)
+    createNewSession,
+  } = useSession(workspaceId, rootPath, selectedModel, {
+    onResponseComplete,
+  })
+
+  // Expose sendMessage to parent via ref
+  useEffect(() => {
+    if (sendMessageRef) {
+      sendMessageRef.current = sendMessage
+    }
+  }, [sendMessage, sendMessageRef])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -44,13 +62,31 @@ export default function ChatPanel({ workspaceId, rootPath, selectedModel }: Chat
     <div className="flex flex-col h-full bg-gray-900">
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-gray-300">Chat</h2>
-        {serverStatus === 'stopped' && (
-          <span className="text-xs text-yellow-400">⚠ OpenCode Server offline</span>
-        )}
-        {serverStatus === 'running' && session && (
-          <span className="text-xs text-green-400">● Connected</span>
-        )}
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-medium text-gray-300">Chat</h2>
+          {/* New Session Button */}
+          {session && serverStatus === 'running' && (
+            <button
+              onClick={createNewSession}
+              disabled={isLoading || isSending}
+              className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Start a new session"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              New
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {serverStatus === 'stopped' && (
+            <span className="text-xs text-yellow-400">⚠ OpenCode Server offline</span>
+          )}
+          {serverStatus === 'running' && session && (
+            <span className="text-xs text-green-400">● Connected</span>
+          )}
+        </div>
       </div>
 
       {/* Messages Area */}

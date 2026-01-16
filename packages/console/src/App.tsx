@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import {
   ActionsBar,
   ChatPanel,
@@ -7,7 +7,7 @@ import {
   WorkspaceDropdown,
   WorkspacePanel,
 } from './components'
-import { useSplitPane, useWorkspaceHistory, type SelectedModel } from './hooks'
+import { useSplitPane, useWorkspaceHistory, useLintCheck, type SelectedModel, type LintResult } from './hooks'
 
 interface Workspace {
   id: string
@@ -20,6 +20,18 @@ function App() {
   const [selectedModel, setSelectedModel] = useState<SelectedModel | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const { addToHistory } = useWorkspaceHistory()
+  
+  // Lint check state
+  const {
+    lintResult,
+    isChecking: isLintChecking,
+    runLintCheck,
+    formatErrorForAI,
+    clearLintResult,
+  } = useLintCheck({ rootPath: workspace?.rootPath })
+  
+  // Ref to send message for lint fix
+  const sendLintFixRef = useRef<((content: string) => void) | null>(null)
 
   const {
     leftWidth,
@@ -32,11 +44,27 @@ function App() {
   const handleSelectWorkspace = (ws: Workspace) => {
     setWorkspace(ws)
     addToHistory(ws)
+    clearLintResult() // Clear lint result when workspace changes
   }
 
   const handleModelChange = (model: SelectedModel) => {
     setSelectedModel(model)
   }
+
+  // Handle AI response complete - trigger lint check
+  const handleResponseComplete = useCallback(() => {
+    if (workspace?.rootPath) {
+      runLintCheck(workspace.rootPath)
+    }
+  }, [workspace?.rootPath, runLintCheck])
+
+  // Handle fix lint errors - send message to AI
+  const handleFixLintErrors = useCallback(() => {
+    const message = formatErrorForAI()
+    if (message && sendLintFixRef.current) {
+      sendLintFixRef.current(message)
+    }
+  }, [formatErrorForAI])
 
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-white">
@@ -70,6 +98,8 @@ function App() {
             workspaceId={workspace?.id}
             rootPath={workspace?.rootPath}
             selectedModel={selectedModel}
+            onResponseComplete={handleResponseComplete}
+            sendMessageRef={sendLintFixRef}
           />
         </div>
 
@@ -85,6 +115,9 @@ function App() {
           <WorkspacePanel
             workspaceId={workspace?.id}
             rootPath={workspace?.rootPath}
+            lintResult={lintResult}
+            isLintChecking={isLintChecking}
+            onFixLintErrors={handleFixLintErrors}
           />
         </div>
       </div>
