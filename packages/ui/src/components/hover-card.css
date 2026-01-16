@@ -1,0 +1,55 @@
+[data-slot="hover-card-trigger"] {
+  display: inline-flex;
+}
+
+[data-component="hover-card-content"] {
+  z-index: 50;
+  min-width: 200px;
+  max-width: 320px;
+  border-radius: var(--radius-md);
+  background-color: var(--surface-raised-stronger-non-alpha);
+
+  border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);
+  background-clip: padding-box;
+  box-shadow: var(--shadow-md);
+
+  transform-origin: var(--kb-hovercard-content-transform-origin);
+
+  &:focus-within {
+    outline: none;
+  }
+
+  &[data-closed] {
+    animation: hover-card-close 0.15s ease-out;
+  }
+
+  &[data-expanded] {
+    animation: hover-card-open 0.15s ease-out;
+  }
+
+  [data-slot="hover-card-body"] {
+    padding: 12px;
+  }
+}
+
+@keyframes hover-card-open {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes hover-card-close {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
