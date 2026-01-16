@@ -2645,6 +2645,8 @@ export namespace Server {
                 session_compact: "session.compact",
                 messages_page_up: "session.page.up",
                 messages_page_down: "session.page.down",
+                messages_line_up: "session.line.up",
+                messages_line_down: "session.line.down",
                 messages_half_page_up: "session.half.page.up",
                 messages_half_page_down: "session.half.page.down",
                 messages_first: "session.first",
