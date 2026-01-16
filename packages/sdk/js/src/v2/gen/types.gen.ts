@@ -429,6 +429,10 @@ export type Part =
       prompt: string
       description: string
       agent: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
       command?: string
     }
   | ReasoningPart
@@ -1853,6 +1857,10 @@ export type SubtaskPartInput = {
   prompt: string
   description: string
   agent: string
+  model?: {
+    providerID: string
+    modelID: string
+  }
   command?: string
 }
 
