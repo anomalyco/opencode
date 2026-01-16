@@ -170,7 +170,7 @@ export function DialogSelectFile() {
                 </Show>
               </div>
               <Show when={item.keybind}>
-                <Keybind>{formatKeybind(item.keybind ?? "")}</Keybind>
+                <Keybind class="rounded-[4px]">{formatKeybind(item.keybind ?? "")}</Keybind>
               </Show>
             </div>
           </Show>
