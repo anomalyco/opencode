@@ -831,10 +831,10 @@ export namespace Config {
           }),
         )
         .optional(),
-      defaults: z
+      requestOptions: z
         .record(z.string(), z.any())
         .optional()
-        .describe("Default model options applied to all models for this provider"),
+        .describe("Default per-request model options applied to all models for this provider"),
       options: z
         .object({
           apiKey: z.string().optional(),
@@ -863,9 +863,9 @@ export namespace Config {
     .strict()
     .transform((provider) => {
       const store = provider.options?.store
-      const defaults = {
-        ...(provider.defaults ?? {}),
-        ...(typeof store === "boolean" && provider.defaults?.store === undefined ? { store } : {}),
+      const requestOptions = {
+        ...(provider.requestOptions ?? {}),
+        ...(typeof store === "boolean" && provider.requestOptions?.store === undefined ? { store } : {}),
       }
 
       const options =
@@ -873,12 +873,12 @@ export namespace Config {
           ? undefined
           : Object.fromEntries(Object.entries(provider.options).filter(([key]) => key !== "store"))
 
-      const hasDefaults = Object.keys(defaults).length > 0
+      const hasRequestOptions = Object.keys(requestOptions).length > 0
 
       return {
         ...provider,
         options,
-        defaults: hasDefaults ? defaults : undefined,
+        requestOptions: hasRequestOptions ? requestOptions : undefined,
       }
     })
     .meta({

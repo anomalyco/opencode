@@ -505,7 +505,7 @@ export namespace ProviderTransform {
     model: Provider.Model
     sessionID: string
     providerOptions?: Record<string, any>
-    defaults?: Record<string, any>
+    requestOptions?: Record<string, any>
   }): Record<string, any> {
     const result: Record<string, any> = {}
 
@@ -515,8 +515,8 @@ export namespace ProviderTransform {
       result["store"] = false
     }
 
-    if (openai && typeof input.defaults?.store === "boolean") {
-      result["store"] = input.defaults.store
+    if (openai && typeof input.requestOptions?.store === "boolean") {
+      result["store"] = input.requestOptions.store
     }
 
     if (input.model.api.npm === "@openrouter/ai-sdk-provider") {
