@@ -82,7 +82,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
       return
     }
     const element = scrollRef()?.querySelector(`[data-key="${active()}"]`)
-    element?.scrollIntoView({ block: "center", behavior: "smooth" })
+    element?.scrollIntoView({ block: "center" })
   })
 
   createEffect(() => {
