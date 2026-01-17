@@ -379,6 +379,8 @@ function createGlobalSync() {
               }),
             )
           }
+          if (event.properties.info.parentID) break
+          setStore("sessionTotal", (value) => Math.max(0, value - 1))
           break
         }
         if (result.found) {
