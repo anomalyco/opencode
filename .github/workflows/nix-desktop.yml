@@ -9,6 +9,7 @@ on:
       - "nix/**"
       - "packages/app/**"
       - "packages/desktop/**"
+      - ".github/workflows/nix-desktop.yml"
   pull_request:
     paths:
       - "flake.nix"
@@ -16,6 +17,7 @@ on:
       - "nix/**"
       - "packages/app/**"
       - "packages/desktop/**"
+      - ".github/workflows/nix-desktop.yml"
   workflow_dispatch:
 
 jobs:
@@ -25,6 +27,8 @@ jobs:
       matrix:
         os:
           - blacksmith-4vcpu-ubuntu-2404
+          - blacksmith-4vcpu-ubuntu-2404-arm
+          - macos-15-intel
           - macos-latest
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -33,7 +37,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup Nix
-        uses: DeterminateSystems/nix-installer-action@v21
+        uses: nixbuild/nix-quick-install-action@v34
 
       - name: Build desktop via flake
         run: |
