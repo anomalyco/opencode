@@ -1338,6 +1338,8 @@ export default function Layout(props: ParentProps) {
 
     const workspaces = createMemo(() => workspaceIds(props.project).slice(0, 2))
     const workspaceEnabled = createMemo(() => layout.sidebar.workspaces(props.project.worktree)())
+    const [open, setOpen] = createSignal(false)
+
     const label = (directory: string) => {
       const [data] = globalSync.child(directory)
       const kind = directory === props.project.worktree ? "local" : "sandbox"
@@ -1370,7 +1372,8 @@ export default function Layout(props: ParentProps) {
           "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
           "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
           "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
-            !selected(),
+            !selected() && !open(),
+          "bg-surface-base-hover border border-border-weak-base": !selected() && open(),
         }}
         onClick={() => navigateToProject(props.project.worktree)}
       >
@@ -1381,7 +1384,14 @@ export default function Layout(props: ParentProps) {
     return (
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-        <HoverCard openDelay={0} closeDelay={0} placement="right-start" gutter={6} trigger={trigger}>
+        <HoverCard
+          openDelay={0}
+          closeDelay={0}
+          placement="right-start"
+          gutter={6}
+          trigger={trigger}
+          onOpenChange={setOpen}
+        >
           <div class="-m-3 flex flex-col w-72">
             <div class="px-4 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
             <div class="px-4 pb-2 text-12-medium text-text-weak">Recent sessions</div>
