@@ -26,7 +26,6 @@ import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
-import { TerminalSplit } from "@/components/terminal-split"
 import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
@@ -171,7 +170,6 @@ export default function Page() {
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
-  const activeTerminal = createMemo(() => terminal.active())
 
   if (import.meta.env.DEV) {
     createEffect(
@@ -382,7 +380,7 @@ export default function Page() {
   createEffect(() => {
     if (!view().terminal.opened()) return
     if (!terminal.ready()) return
-    if (terminal.tabs().length !== 0) return
+    if (terminal.all().length !== 0) return
     terminal.new()
   })
 
@@ -421,7 +419,6 @@ export default function Page() {
     {
       id: "session.new",
       title: "New session",
-      description: "Create a new session",
       category: "Session",
       keybind: "mod+shift+s",
       slash: "new",
@@ -439,7 +436,7 @@ export default function Page() {
     {
       id: "terminal.toggle",
       title: "Toggle terminal",
-      description: "Show or hide the terminal",
+      description: "",
       category: "View",
       keybind: "ctrl+`",
       slash: "terminal",
@@ -448,7 +445,7 @@ export default function Page() {
     {
       id: "review.toggle",
       title: "Toggle review",
-      description: "Show or hide the review panel",
+      description: "",
       category: "View",
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
@@ -460,30 +457,6 @@ export default function Page() {
       category: "Terminal",
       keybind: "ctrl+shift+`",
       onSelect: () => terminal.new(),
-    },
-    {
-      id: "terminal.split.vertical",
-      title: "Split terminal right",
-      description: "Split the current terminal vertically",
-      category: "Terminal",
-      keybind: "mod+d",
-      disabled: !terminal.active(),
-      onSelect: () => {
-        const active = terminal.active()
-        if (active) terminal.split(active, "vertical")
-      },
-    },
-    {
-      id: "terminal.split.horizontal",
-      title: "Split terminal down",
-      description: "Split the current terminal horizontally",
-      category: "Terminal",
-      keybind: "mod+shift+d",
-      disabled: !terminal.active(),
-      onSelect: () => {
-        const active = terminal.active()
-        if (active) terminal.split(active, "horizontal")
-      },
     },
     {
       id: "steps.toggle",
@@ -733,7 +706,7 @@ export default function Page() {
   const handleTerminalDragOver = (event: DragEvent) => {
     const { draggable, droppable } = event
     if (draggable && droppable) {
-      const terminals = terminal.tabs()
+      const terminals = terminal.all()
       const fromIndex = terminals.findIndex((t: LocalPTY) => t.id === draggable.id.toString())
       const toIndex = terminals.findIndex((t: LocalPTY) => t.id === droppable.id.toString())
       if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
@@ -1035,7 +1008,7 @@ export default function Page() {
 
   createEffect(() => {
     if (!terminal.ready()) return
-    handoff.terminals = terminal.tabs().map((t) => t.title)
+    handoff.terminals = terminal.all().map((t) => t.title)
   })
 
   createEffect(() => {
@@ -1692,10 +1665,10 @@ export default function Page() {
             >
               <DragDropSensors />
               <ConstrainDragYAxis />
-              <Tabs variant="alt" value={activeTerminal()} onChange={terminal.open}>
+              <Tabs variant="alt" value={terminal.active()} onChange={terminal.open}>
                 <Tabs.List class="h-10">
-                  <SortableProvider ids={terminal.tabs().map((t: LocalPTY) => t.id)}>
-                    <For each={terminal.tabs()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
+                  <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
+                    <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
                   </SortableProvider>
                   <div class="h-full flex items-center justify-center">
                     <TooltipKeybind
@@ -1707,10 +1680,10 @@ export default function Page() {
                     </TooltipKeybind>
                   </div>
                 </Tabs.List>
-                <For each={terminal.tabs()}>
+                <For each={terminal.all()}>
                   {(pty) => (
-                    <Tabs.Content value={pty.id} class="h-[calc(100%-2.5rem)]">
-                      <TerminalSplit tabId={pty.id} />
+                    <Tabs.Content value={pty.id}>
+                      <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
                     </Tabs.Content>
                   )}
                 </For>
@@ -1718,7 +1691,7 @@ export default function Page() {
               <DragOverlay>
                 <Show when={store.activeTerminalDraggable}>
                   {(draggedId) => {
-                    const pty = createMemo(() => terminal.tabs().find((t: LocalPTY) => t.id === draggedId()))
+                    const pty = createMemo(() => terminal.all().find((t: LocalPTY) => t.id === draggedId()))
                     return (
                       <Show when={pty()}>
                         {(t) => (

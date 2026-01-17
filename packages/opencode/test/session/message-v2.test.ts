@@ -267,7 +267,7 @@ describe("session.message-v2.toModelMessage", () => {
       {
         role: "user",
         content: [
-          { type: "text", text: "Tool bash returned an attachment:" },
+          { type: "text", text: "The tool bash returned the following attachments:" },
           {
             type: "file",
             mediaType: "image/png",
