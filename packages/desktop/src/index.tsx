@@ -26,6 +26,18 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   )
 }
 
+const isWindows = ostype() === "windows"
+if (isWindows) {
+  const originalGetComputedStyle = window.getComputedStyle
+  window.getComputedStyle = ((elt: Element, pseudoElt?: string | null) => {
+    if (!(elt instanceof Element)) {
+      // WebView2 can call into Floating UI with non-elements; fall back to a safe element.
+      return originalGetComputedStyle(document.documentElement, pseudoElt ?? undefined)
+    }
+    return originalGetComputedStyle(elt, pseudoElt ?? undefined)
+  }) as typeof window.getComputedStyle
+}
+
 let update: Update | null = null
 
 const createPlatform = (password: Accessor<string | null>): Platform => ({
