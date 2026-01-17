@@ -837,6 +837,104 @@
         ]
       }
     },
+    "/experimental/tool/execute": {
+      "post": {
+        "operationId": "tool.execute",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Execute tool",
+        "description": "Execute a specific tool with the provided arguments. Returns the tool output.",
+        "responses": {
+          "200": {
+            "description": "Tool execution result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolExecuteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "description": "Session ID for context",
+                    "type": "string"
+                  },
+                  "messageID": {
+                    "description": "Message ID for context",
+                    "type": "string"
+                  },
+                  "providerID": {
+                    "description": "Provider ID for tool filtering",
+                    "type": "string"
+                  },
+                  "toolID": {
+                    "description": "Tool ID to execute",
+                    "type": "string"
+                  },
+                  "args": {
+                    "description": "Tool arguments",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  },
+                  "agent": {
+                    "description": "Agent name (optional)",
+                    "type": "string"
+                  },
+                  "callID": {
+                    "description": "Tool call ID (optional)",
+                    "type": "string"
+                  }
+                },
+                "required": ["sessionID", "messageID", "providerID", "toolID", "args"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.tool.execute({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/experimental/worktree": {
       "post": {
         "operationId": "worktree.create",
@@ -10071,6 +10169,25 @@
         "items": {
           "$ref": "#/components/schemas/ToolListItem"
         }
+      },
+      "ToolExecuteResult": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": ["title", "output"]
       },
       "Worktree": {
         "type": "object",

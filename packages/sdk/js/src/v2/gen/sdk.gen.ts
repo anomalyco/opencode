@@ -136,6 +136,8 @@ import type {
   SessionUpdateResponses,
   SubtaskPartInput,
   TextPartInput,
+  ToolExecuteErrors,
+  ToolExecuteResponses,
   ToolIdsErrors,
   ToolIdsResponses,
   ToolListErrors,
@@ -656,6 +658,57 @@ export class Tool extends HeyApiClient {
       url: "/experimental/tool",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Execute tool
+   *
+   * Execute a specific tool with the provided arguments. Returns the tool output.
+   */
+  public execute<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      messageID?: string
+      providerID?: string
+      modelID?: string
+      toolID?: string
+      args?: {
+        [key: string]: unknown
+      }
+      agent?: string
+      callID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "messageID" },
+            { in: "body", key: "providerID" },
+            { in: "body", key: "modelID" },
+            { in: "body", key: "toolID" },
+            { in: "body", key: "args" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "callID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ToolExecuteResponses, ToolExecuteErrors, ThrowOnError>({
+      url: "/experimental/tool/execute",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }
