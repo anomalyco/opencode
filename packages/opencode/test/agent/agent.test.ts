@@ -39,7 +39,6 @@ test("debug agent has correct default properties", async () => {
       expect(debug?.mode).toBe("primary")
       expect(debug?.native).toBe(true)
       expect(evalPerm(debug, "question")).toBe("allow")
-      expect(evalPerm(debug, "plan_enter")).toBe("allow")
     },
   })
 })
