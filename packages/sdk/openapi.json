@@ -2258,6 +2258,20 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "in": "query",
+            "name": "ts_before",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "breakpoint",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "summary": "Get session messages",
