@@ -944,7 +944,24 @@ export namespace SessionPrompt {
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
               const filepath = fileURLToPath(part.url)
-              const stat = await Bun.file(filepath).stat()
+              const file = Bun.file(filepath)
+              const exists = await file.exists()
+
+              if (!exists) {
+                log.error("referenced file not found", { filepath })
+                return [
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `File not found: ${filepath}\n\nThe file may have been moved or deleted since it was originally referenced.`,
+                  },
+                ]
+              }
+
+              const stat = await file.stat()
 
               if (stat.isDirectory()) {
                 part.mime = "application/x-directory"
@@ -1098,7 +1115,6 @@ export namespace SessionPrompt {
                 ]
               }
 
-              const file = Bun.file(filepath)
               FileTime.read(input.sessionID, filepath)
               return [
                 {
