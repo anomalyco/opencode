@@ -16,6 +16,7 @@ import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
+import { TaskManager } from "@/task"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -73,6 +74,12 @@ export const BashTool = Tool.define("bash", async () => {
         .describe(
           "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
         ),
+      run_in_background: z
+        .boolean()
+        .describe(
+          "If true, run the command in background and return immediately. Use TaskOutput to read the output later. The command will continue running even if the session ends.",
+        )
+        .optional(),
     }),
     async execute(params, ctx) {
       const cwd = params.workdir || Instance.directory
@@ -152,6 +159,31 @@ export const BashTool = Tool.define("bash", async () => {
           always: Array.from(always),
           metadata: {},
         })
+      }
+
+      // Handle background task execution
+      if (params.run_in_background) {
+        const task = await TaskManager.create({
+          command: params.command,
+          workdir: cwd,
+          description: params.description,
+          reconnectable: true,
+        })
+
+        const output = `Background task started with ID: ${task.id}\nPID: ${task.pid}\nLog file: ${task.logFile}\n\nUse TaskOutput tool to read output later.`
+
+        return {
+          title: params.description,
+          metadata: {
+            output,
+            description: params.description,
+            taskId: task.id,
+            pid: task.pid,
+            logFile: task.logFile,
+            background: true,
+          } as Record<string, any>,
+          output,
+        }
       }
 
       const proc = spawn(params.command, {

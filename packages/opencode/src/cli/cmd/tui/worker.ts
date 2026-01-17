@@ -10,6 +10,7 @@ import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import type { BunWebSocketData } from "hono/bun"
 import { Flag } from "@/flag/flag"
+import { TaskManager, type TaskInfo } from "@/task"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -139,6 +140,71 @@ export const rpc = {
     if (eventStream.abort) eventStream.abort.abort()
     await Instance.disposeAll()
     if (server) server.stop(true)
+  },
+
+  // Task management RPC handlers
+  async taskList(input: { directory: string }): Promise<TaskInfo[]> {
+    return Instance.provide({
+      directory: input.directory,
+      init: InstanceBootstrap,
+      fn: () => TaskManager.list(),
+    })
+  },
+
+  async taskGet(input: { directory: string; taskId: string }): Promise<TaskInfo | undefined> {
+    return Instance.provide({
+      directory: input.directory,
+      init: InstanceBootstrap,
+      fn: () => TaskManager.get(input.taskId),
+    })
+  },
+
+  async taskKill(input: { directory: string; taskId: string }): Promise<boolean> {
+    return Instance.provide({
+      directory: input.directory,
+      init: InstanceBootstrap,
+      fn: () => TaskManager.kill(input.taskId),
+    })
+  },
+
+  async taskRead(input: { directory: string; taskId: string }): Promise<string> {
+    return Instance.provide({
+      directory: input.directory,
+      init: InstanceBootstrap,
+      fn: () => TaskManager.read(input.taskId),
+    })
+  },
+
+  async taskTail(input: { directory: string; taskId: string; lines?: number }): Promise<string> {
+    return Instance.provide({
+      directory: input.directory,
+      init: InstanceBootstrap,
+      fn: () => TaskManager.tail(input.taskId, input.lines ?? 50),
+    })
+  },
+
+  async taskInput(input: { directory: string; taskId: string; data: string }): Promise<boolean> {
+    return Instance.provide({
+      directory: input.directory,
+      init: InstanceBootstrap,
+      fn: () => TaskManager.input(input.taskId, input.data),
+    })
+  },
+
+  async taskCleanup(input: { directory: string; maxAge?: number }): Promise<number> {
+    return Instance.provide({
+      directory: input.directory,
+      init: InstanceBootstrap,
+      fn: () => TaskManager.cleanup(input.maxAge),
+    })
+  },
+
+  async taskRemove(input: { directory: string; taskId: string }): Promise<boolean> {
+    return Instance.provide({
+      directory: input.directory,
+      init: InstanceBootstrap,
+      fn: () => TaskManager.remove(input.taskId),
+    })
   },
 }
 
