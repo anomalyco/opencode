@@ -152,13 +152,15 @@ jobs:
           mv "$TMP_JSON" "$HASH_FILE"
 
           MODULES_ATTR=".#packages.${SYSTEM}.default.node_modules"
+          DRV_PATH="$(nix eval --raw "${MODULES_ATTR}.drvPath")"
 
           echo "Building node_modules for ${SYSTEM} to discover correct hash..."
-          BUILD_PATH="$(nix build "$MODULES_ATTR" --print-out-paths -L 2>&1 | tee "$BUILD_LOG" | head -n1 || true)"
+          echo "Attempting to realize derivation: ${DRV_PATH}"
+          REALISE_OUT=$(nix-store --realise "$DRV_PATH" --keep-failed 2>&1 | tee "$BUILD_LOG" || true)
 
+          BUILD_PATH=$(echo "$REALISE_OUT" | grep "^/nix/store/" | head -n1 || true)
           CORRECT_HASH=""
 
-          # Try to get hash from successful build
           if [ -n "$BUILD_PATH" ] && [ -d "$BUILD_PATH" ]; then
             echo "Realized node_modules output: $BUILD_PATH"
             CORRECT_HASH=$(nix hash path --sri "$BUILD_PATH" 2>/dev/null || true)
