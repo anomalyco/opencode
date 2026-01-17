@@ -53,8 +53,7 @@ export function SessionHeader() {
     copied: false,
     timer: undefined as number | undefined,
   })
-  const shareUrl = () => currentSession()?.share?.url ?? ""
-  const shared = createMemo(() => !!shareUrl())
+  const shareUrl = createMemo(() => currentSession()?.share?.url)
 
   createEffect(() => {
     const url = shareUrl()
@@ -156,7 +155,7 @@ export function SessionHeader() {
       </Show>
       <Show when={rightMount()}>
         {(mount) => (
-          <Portal mount={mount()!}>
+          <Portal mount={mount()}>
             <div class="flex items-center gap-3">
               {/* <div class="hidden md:flex items-center gap-1"> */}
               {/*   <Button */}
@@ -247,13 +246,13 @@ export function SessionHeader() {
                   <Popover
                     title="Publish on web"
                     description={
-                      shared()
+                      shareUrl()
                         ? "This session is public on the web. It is accessible to anyone with the link."
                         : "Share session publicly on the web. It will be accessible to anyone with the link."
                     }
                     trigger={
                       <Tooltip class="shrink-0" value="Share session">
-                        <Button variant="secondary" classList={{ "rounded-r-none": shared() }}>
+                        <Button variant="secondary" classList={{ "rounded-r-none": shareUrl() !== undefined }}>
                           Share
                         </Button>
                       </Tooltip>
@@ -261,7 +260,7 @@ export function SessionHeader() {
                   >
                     <div class="flex flex-col gap-2">
                       <Show
-                        when={shared()}
+                        when={shareUrl()}
                         fallback={
                           <div class="flex">
                             <Button
@@ -277,24 +276,12 @@ export function SessionHeader() {
                         }
                       >
                         <div class="flex flex-col gap-2 w-72">
-                          <TextField value={shareUrl()} readOnly copyable class="w-full" />
-                          <div class="flex gap-3">
-                            <Button
-                              size="large"
-                              variant="secondary"
-                              class="flex-1"
-                              onClick={unshareSession}
-                              disabled={state.unshare}
-                            >
+                          <TextField value={shareUrl() ?? ""} readOnly copyable class="w-full" />
+                          <div class="grid grid-cols-2 gap-2">
+                            <Button size="large" variant="secondary" onClick={unshareSession} disabled={state.unshare}>
                               {state.unshare ? "Unpublishing..." : "Unpublish"}
                             </Button>
-                            <Button
-                              size="large"
-                              variant="primary"
-                              class="flex-1"
-                              onClick={viewShare}
-                              disabled={state.unshare}
-                            >
+                            <Button size="large" variant="primary" onClick={viewShare} disabled={state.unshare}>
                               View
                             </Button>
                           </div>
@@ -302,7 +289,7 @@ export function SessionHeader() {
                       </Show>
                     </div>
                   </Popover>
-                  <Show when={shared()}>
+                  <Show when={shareUrl()}>
                     <Tooltip value={state.copied ? "Copied" : "Copy link"} placement="top" gutter={8}>
                       <IconButton
                         icon={state.copied ? "check" : "copy"}
