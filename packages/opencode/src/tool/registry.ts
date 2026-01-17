@@ -26,6 +26,7 @@ import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
+import { ProcessQueryTool } from "./process-query"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -102,6 +103,7 @@ export namespace ToolRegistry {
       EditTool,
       WriteTool,
       TaskTool,
+      ProcessQueryTool,
       WebFetchTool,
       TodoWriteTool,
       TodoReadTool,
