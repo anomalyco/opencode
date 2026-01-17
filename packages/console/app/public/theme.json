@@ -25,8 +25,8 @@
             },
             {
               "type": "string",
-              "enum": ["none"],
-              "description": "No color (uses terminal default)"
+              "enum": ["none", "system"],
+              "description": "No color (uses terminal default or system-calculated color)"
             }
           ]
         }
@@ -110,8 +110,8 @@
         },
         {
           "type": "string",
-          "enum": ["none"],
-          "description": "No color (uses terminal default)"
+          "enum": ["none", "system"],
+          "description": "No color (uses terminal default) or system-calculated color"
         },
         {
           "type": "string",
@@ -136,8 +136,8 @@
                 },
                 {
                   "type": "string",
-                  "enum": ["none"],
-                  "description": "No color (uses terminal default)"
+                  "enum": ["none", "system"],
+                  "description": "No color (uses terminal default or system-calculated color)"
                 },
                 {
                   "type": "string",
@@ -161,8 +161,8 @@
                 },
                 {
                   "type": "string",
-                  "enum": ["none"],
-                  "description": "No color (uses terminal default)"
+                  "enum": ["none", "system"],
+                  "description": "No color (uses terminal default or system-calculated color)"
                 },
                 {
                   "type": "string",

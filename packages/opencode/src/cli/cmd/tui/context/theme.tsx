@@ -42,6 +42,7 @@ import { useRenderer } from "@opentui/solid"
 import { createStore } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { iife } from "@/util/iife"
 
 type ThemeColors = {
   primary: RGBA
@@ -123,21 +124,26 @@ export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
 
 type HexColor = `#${string}`
 type RefName = string
-type RGBAVariant = { dark: RGBA; light: RGBA }
-type Variant = {
-  dark: HexColor | RefName | RGBA
-  light: HexColor | RefName | RGBA
-}
-type ColorValue = HexColor | RefName | Variant | RGBA
-type ThemeJson = {
+type AnsiCode = number
+type PrimitiveColor = HexColor | RefName | AnsiCode | RGBA
+type Variant = { dark: PrimitiveColor; light: PrimitiveColor }
+type ColorValue = PrimitiveColor | Variant
+
+type BaseThemeJson<V> = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
-    selectedListItemText?: ColorValue
-    backgroundMenu?: ColorValue
+  theme: Omit<Record<keyof ThemeColors, V>, "selectedListItemText" | "backgroundMenu"> & {
+    selectedListItemText?: V
+    backgroundMenu?: V
     thinkingOpacity?: number
   }
 }
+
+type ThemeJson = BaseThemeJson<ColorValue>
+
+type RGBAVariant = { dark: RGBA; light: RGBA }
+type RGBAValue = RGBA | RGBAVariant
+type SystemThemeJson = BaseThemeJson<RGBAValue>
 
 export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   aura,
@@ -178,43 +184,51 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
 const FALLBACK_THEME_KEY = "opencode"
 const SYSTEM_THEME_KEY = "system"
 
-type ThemeStore = Record<string, ThemeJson>
+type ThemeStore = Record<string, ThemeJson | SystemThemeJson>
 
-function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
+function resolveTheme(theme: ThemeJson, systemTheme: SystemThemeJson | undefined, mode: "dark" | "light") {
   const defs = theme.defs ?? {}
-  function resolveColor(c: ColorValue): RGBA {
-    if (c instanceof RGBA) return c
-    if (typeof c === "string") {
-      if (c === "transparent" || c === "none") return RGBA.fromInts(0, 0, 0, 0)
 
-      if (c.startsWith("#")) return RGBA.fromHex(c)
+  function resolveColor(value: ColorValue, systemKey: keyof ThemeColors): RGBA {
+    if (value instanceof RGBA) return value
+    if (typeof value === "number") return ansiToRgba(value)
+    if (typeof value !== "string") return resolveColor(value[mode], systemKey)
 
-      if (defs[c] != null) {
-        return resolveColor(defs[c])
-      } else if (theme.theme[c as keyof ThemeColors] !== undefined) {
-        return resolveColor(theme.theme[c as keyof ThemeColors]!)
-      } else {
-        throw new Error(`Color reference "${c}" not found in defs or theme`)
+    switch (value) {
+      case "transparent":
+      case "none":
+        return RGBA.fromInts(0, 0, 0, 0)
+      case "system": {
+        const newValue = systemTheme?.theme[systemKey]
+        if (newValue === undefined) return RGBA.fromInts(0, 0, 0, 0)
+        return resolveColor(newValue, systemKey)
       }
     }
-    if (typeof c === "number") {
-      return ansiToRgba(c)
-    }
-    return resolveColor(c[mode])
+
+    if (value.startsWith("#")) return RGBA.fromHex(value)
+    if (defs[value] !== undefined) return resolveColor(defs[value], systemKey)
+
+    const newKey = value as keyof ThemeColors
+    const newValue = theme.theme[newKey]
+    if (newValue !== undefined)
+      // Cross-referencing must update `systemKey`.
+      return resolveColor(newValue, newKey)
+
+    throw new Error(`Color reference "${value}" not found in defs or theme`)
   }
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
       .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
       .map(([key, value]) => {
-        return [key, resolveColor(value as ColorValue)]
+        return [key, resolveColor(value as ColorValue, key as keyof ThemeColors)]
       }),
   ) as Partial<ThemeColors>
 
   // Handle selectedListItemText separately since it's optional
   const hasSelectedListItemText = theme.theme.selectedListItemText !== undefined
   if (hasSelectedListItemText) {
-    resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText!)
+    resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText!, "selectedListItemText")
   } else {
     // Backward compatibility: if selectedListItemText is not defined, use background color
     // This preserves the current behavior for all existing themes
@@ -223,7 +237,7 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   // Handle backgroundMenu - optional with fallback to backgroundElement
   if (theme.theme.backgroundMenu !== undefined) {
-    resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu)
+    resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu, "backgroundMenu")
   } else {
     resolved.backgroundMenu = resolved.backgroundElement
   }
@@ -328,10 +342,14 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       const systemState = systemLoader.loaded.state
 
       if (key in DEFAULT_THEMES) {
+        /**
+         * This bakes the assumption that _none_ of the  preloaded default
+         * themes reference system colors.
+         */
         return "succeeded"
       }
 
-      if (key === SYSTEM_THEME_KEY) {
+      const systemStatus = iife(() => {
         switch (systemState) {
           case "ready":
             return "succeeded"
@@ -340,6 +358,10 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           default:
             return "pending"
         }
+      })
+
+      if (key === SYSTEM_THEME_KEY) {
+        return systemStatus
       }
 
       switch (customState) {
@@ -348,6 +370,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           const theme = themes[key]
 
           if (!theme) return "errored"
+          if (referencesSystemTheme(theme)) return systemStatus
 
           return "succeeded"
         }
@@ -435,7 +458,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const values = createMemo(() => {
       const theme = store.themes[store.active] ?? store.themes[FALLBACK_THEME_KEY]
-      return resolveTheme(theme, store.mode)
+      const systemTheme = store.themes[SYSTEM_THEME_KEY] as SystemThemeJson | undefined
+      return resolveTheme(theme, systemTheme, store.mode)
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
@@ -515,7 +539,18 @@ async function detectSystemColors(renderer: CliRenderer) {
   throw new Error("System color detection failed")
 }
 
-function generateSystemTheme(colors: TerminalColors): ThemeJson {
+function referencesSystemTheme(value: unknown) {
+  switch (typeof value) {
+    case "object":
+      return Object.values(value || {}).some(referencesSystemTheme)
+    case "string":
+      return value === "system"
+    default:
+      return false
+  }
+}
+
+function generateSystemTheme(colors: TerminalColors): SystemThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
 

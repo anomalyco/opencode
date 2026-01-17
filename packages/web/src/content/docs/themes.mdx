@@ -120,6 +120,7 @@ Themes use a flexible JSON format with support for:
 - **Color references**: `"primary"` or custom definitions
 - **Dark/light variants**: `{"dark": "#000", "light": "#fff"}`
 - **No color**: `"none"` - Uses the terminal's default color or transparent
+- **System colors**: `"system"` - Uses colors detected from terminal palette
 
 ---
 
@@ -135,6 +136,26 @@ The special value `"none"` can be used for any color to inherit the terminal's d
 
 - `"text": "none"` - Uses terminal's default foreground color
 - `"background": "none"` - Uses terminal's default background color
+
+---
+
+### System color references
+
+Custom themes can use `"system"` as a color value to inherit colors from your terminal's palette. This lets you create themes that blend custom branding with your terminal's native colors:
+
+```json title="my-system-theme.json"
+{
+  "theme": {
+    "background": "system",
+    "text": "system",
+    "primary": "#ff5500",
+    "secondary": "system",
+    ...
+  }
+}
+```
+
+Colors set to `"system"` will update when your terminal's palette changes (after sending SIGUSR2 to reload).
 
 ---
 
