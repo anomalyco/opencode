@@ -233,7 +233,7 @@ export namespace SessionProcessor {
                   })
                   break
 
-                case "finish-step":
+                case "finish-step": {
                   const usage = Session.getUsage({
                     model: input.model,
                     usage: value.usage,
@@ -242,6 +242,8 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
+                  const responseId = (value.providerMetadata as any)?.openai?.responseId
+                  if (responseId) input.assistantMessage.responseId = responseId
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,
@@ -275,6 +277,7 @@ export namespace SessionProcessor {
                     needsCompaction = true
                   }
                   break
+                }
 
                 case "text-start":
                   currentText = {

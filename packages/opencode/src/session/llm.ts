@@ -41,6 +41,7 @@ export namespace LLM {
     small?: boolean
     tools: Record<string, Tool>
     retries?: number
+    previousResponseId?: string
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
@@ -100,7 +101,10 @@ export namespace LLM {
       : ProviderTransform.options({
           model: input.model,
           sessionID: input.sessionID,
-          providerOptions: provider.options,
+          providerOptions: {
+            ...provider.options,
+            previousResponseId: input.previousResponseId,
+          },
         })
     const options: Record<string, any> = pipe(
       base,

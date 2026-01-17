@@ -385,6 +385,7 @@ export namespace MessageV2 {
       }),
     }),
     finish: z.string().optional(),
+    responseId: z.string().optional(),
   }).meta({
     ref: "AssistantMessage",
   })

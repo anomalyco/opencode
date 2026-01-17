@@ -141,6 +141,10 @@ export namespace SessionCompaction {
     const defaultPrompt =
       "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation."
     const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+    // Find the last assistant message's responseId for Codex API optimization
+    const prevAssistant = input.messages.findLast((m) => m.info.role === "assistant")
+    const previousResponseId = prevAssistant?.info.role === "assistant" ? prevAssistant.info.responseId : undefined
+
     const result = await processor.process({
       user: userMessage,
       agent,
@@ -161,6 +165,7 @@ export namespace SessionCompaction {
         },
       ],
       model,
+      previousResponseId,
     })
 
     if (result === "continue" && input.auto) {
