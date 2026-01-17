@@ -177,7 +177,7 @@ export function DialogSessionList(
         selection: option.value,
         scrollTop: dialogRef?.scrollTop ?? 0,
       }
-      const confirmed = await DialogConfirm.show(dialog, "Switch directory", `Switch to ${display} to open this session?`)
+      const confirmed = await DialogConfirm.show(dialog, "Switch project", `Switch to ${display} to open this session?`)
       if (!confirmed) {
         setTimeout(() => {
           dialog.replace(() => (
@@ -252,7 +252,7 @@ export function DialogSessionList(
         },
         {
           keybind: directoryKeybind(),
-          title: "directory",
+          title: "project",
           onTrigger: showDirectorySelect,
         },
       ]}
@@ -333,8 +333,8 @@ function DialogDirectorySelect(props: {
 
   return (
     <DialogSelect
-      title="Select directory"
-      placeholder="Search directories"
+      title="Select project"
+      placeholder="Search projects"
       options={options()}
       current={currentSelection()}
       onSelect={(option) => {
