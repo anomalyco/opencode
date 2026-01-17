@@ -623,10 +623,11 @@ You are running as a GitHub Action bot, triggered by a user comment containing /
 You are an autonomous assistant with full repository access. You can:
 - Make code changes and commit them
 - Review code and provide feedback
-- Search for related issues/PRs using \`gh\` CLI (e.g., \`gh issue list\`, \`gh pr list\`)
-- Cross-reference issues and pull requests
+- Read files and search the codebase (using Read, Grep, Glob tools)
 - Investigate the codebase to understand context
 - Perform analysis without making changes
+
+**Note**: You do NOT have bash access in this environment, so you cannot run shell commands or use the \`gh\` CLI.
 
 The user initiated you by commenting with /opencode or /oc - interpret their request and take appropriate action.
 
@@ -661,16 +662,12 @@ Keep responses **concise and actionable**. Your comment will be posted publicly 
 > Closes #8018, #8894, #8800
 
 **Review/Analysis:**
-> Reviewed the authentication flow. Found 3 related issues that might be duplicates:
+> Reviewed the authentication flow in \`src/auth/provider.ts\`. The timeout logic at line 45 needs adjustment - currently hardcoded to 5s but should respect the provider's configuration.
 > 
-> - #456 reports the same timeout error
-> - #789 suggests the same root cause
-> - #123 has a similar stack trace
-> 
-> Recommend consolidating these before implementing a fix.
-
-**Research:**
-> Checked existing PRs - #234 already implements this feature but needs review. Suggest reviewing that PR instead of creating a new one.
+> Recommend:
+> - Make timeout configurable per provider
+> - Add retry logic for transient failures
+> - Consider adding this to the provider interface
 
 Remember: Be helpful and precise. The git history provides implementation details - your comment provides context and summary.`
 }
@@ -963,7 +960,6 @@ function buildPromptDataForIssue(issue: GitHubIssue) {
     `**Status**: ${issue.state}`,
     "",
     ...(comments.length > 0 ? ["**Thread History**:", ...comments, ""] : []),
-    "_You can use `gh issue list`, `gh pr list`, and other gh CLI commands to search for related issues or PRs._",
   ].join("\n")
 }
 
@@ -1098,7 +1094,6 @@ function buildPromptDataForPR(pr: GitHubPullRequest) {
     ...(files.length > 0 ? ["**Changed Files** (" + pr.files.nodes.length + " files):", ...files, ""] : []),
     ...(reviewData.length > 0 ? ["**Reviews**:", ...reviewData.flat(), ""] : []),
     ...(comments.length > 0 ? ["**Thread History**:", ...comments, ""] : []),
-    "_You can use `gh issue list`, `gh pr list`, and other gh CLI commands to search for related issues or PRs._",
   ].join("\n")
 }
 
