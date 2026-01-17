@@ -134,6 +134,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "ZEN_MODELS8": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "ZEN_SESSION_SECRET": {
       "type": "sst.sst.Secret"
       "value": string
