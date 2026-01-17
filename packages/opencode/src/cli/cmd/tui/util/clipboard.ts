@@ -9,14 +9,47 @@ import path from "path"
  * Writes text to clipboard via OSC 52 escape sequence.
  * This allows clipboard operations to work over SSH by having
  * the terminal emulator handle the clipboard locally.
+ *
+ * Supports:
+ * - Direct terminal output
+ * - tmux passthrough (with nested tmux support)
+ * - GNU Screen passthrough
+ * - Kitty, iTerm2, and other modern terminals
  */
 function writeOsc52(text: string): void {
   if (!process.stdout.isTTY) return
+
   const base64 = Buffer.from(text).toString("base64")
-  const osc52 = `\x1b]52;c;${base64}\x07`
-  // tmux and screen require DCS passthrough wrapping
-  const passthrough = process.env["TMUX"] || process.env["STY"]
-  const sequence = passthrough ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
+
+  // Use ST (String Terminator) instead of BEL for better compatibility
+  // Some terminals don't handle BEL correctly inside DCS sequences
+  const osc52 = `\x1b]52;c;${base64}\x1b\\`
+
+  let sequence: string
+
+  if (process.env["TMUX"]) {
+    // tmux requires DCS passthrough with tmux; prefix
+    // The escape character must be doubled inside the passthrough
+    // Format: DCS tmux; ESC <sequence> ST
+    // For nested tmux, we need to double the escapes for each level
+    const tmuxLevel = (process.env["TMUX"]?.match(/,/g) || []).length + 1
+    let wrapped = osc52
+    for (let i = 0; i < tmuxLevel; i++) {
+      // Double all escape characters and wrap in DCS passthrough
+      wrapped = wrapped.replace(/\x1b/g, "\x1b\x1b")
+      wrapped = `\x1bPtmux;${wrapped}\x1b\\`
+    }
+    sequence = wrapped
+  } else if (process.env["STY"]) {
+    // GNU Screen requires DCS passthrough without the tmux; prefix
+    // Format: DCS ESC <sequence> ST
+    const wrapped = osc52.replace(/\x1b/g, "\x1b\x1b")
+    sequence = `\x1bP${wrapped}\x1b\\`
+  } else {
+    // Direct output for terminals that support OSC52 natively
+    sequence = osc52
+  }
+
   process.stdout.write(sequence)
 }
 
