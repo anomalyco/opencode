@@ -2,8 +2,8 @@ name: Sync Fork with Upstream
 
 on:
   schedule:
-    # Runs daily at midnight UTC
-    - cron: "0 0 * * *"
+    # Runs weekly on Sunday at midnight UTC
+    - cron: "0 0 * * 0"
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
 jobs:
@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout Fork
@@ -27,11 +28,31 @@ jobs:
       - name: Add Upstream Remote
         run: git remote add upstream https://github.com/anomalyco/opencode.git
 
-      - name: Fetch Upstream
-        run: git fetch upstream
-
-      - name: Sync Main Branch
+      - name: Fetch and Merge Upstream
         run: |
-          git checkout main
-          git merge upstream/main --no-edit --allow-unrelated-histories || true
-          git push origin main
+          git fetch upstream
+          git checkout -b upstream-sync-${{ github.run_id }}
+          git merge upstream/main --no-edit --strategy-option=theirs || true
+
+      - name: Restore Fork Workflows
+        run: |
+          # Discard any workflow changes from upstream - keep our workflows
+          git checkout HEAD~1 -- .github/workflows/ 2>/dev/null || true
+          git add .github/workflows/
+          git commit --amend --no-edit || true
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: upstream-sync-${{ github.run_id }}
+          base: main
+          title: "⬆️ Sync with upstream"
+          body: |
+            This PR syncs the fork with the latest changes from upstream.
+
+            **Upstream:** [anomalyco/opencode](https://github.com/anomalyco/opencode)
+
+            > ⚠️ Please review changes carefully before merging to ensure fork-specific customizations are preserved.
+          labels: upstream-sync
+          delete-branch: true

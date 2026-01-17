@@ -1,0 +1,4 @@
+# Protect fork-specific files from being overwritten during upstream sync
+# These files will keep "ours" version during merge conflicts
+.github/workflows/** merge=ours
+.gitattributes merge=ours
