@@ -591,8 +591,8 @@ export namespace SessionPrompt {
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
       // Find the last assistant message's responseId for Codex API optimization
-      const prevAssistant = sessionMessages.findLast((m) => m.info.role === "assistant")
-      const previousResponseId = prevAssistant?.info.role === "assistant" ? prevAssistant.info.responseId : undefined
+      const prevAssistant = sessionMessages.findLast((m) => m.info.role === "assistant")?.info
+      const previousResponseId = prevAssistant?.role === "assistant" ? prevAssistant.responseId : undefined
 
       const result = await processor.process({
         user: lastUser,
