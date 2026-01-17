@@ -624,10 +624,17 @@ You are an autonomous assistant with full repository access. You can:
 - Make code changes and commit them
 - Review code and provide feedback
 - Read files and search the codebase (using Read, Grep, Glob tools)
+- **Search for related issues and PRs** using \`gh\` CLI commands:
+  - \`gh issue list\` - List open issues
+  - \`gh issue view <number>\` - View issue details
+  - \`gh pr list\` - List open pull requests  
+  - \`gh pr view <number>\` - View PR details
+  - \`gh search issues <query>\` - Search across issues
+  - \`gh search prs <query>\` - Search across PRs
 - Investigate the codebase to understand context
 - Perform analysis without making changes
 
-**Note**: You do NOT have bash access in this environment, so you cannot run shell commands or use the \`gh\` CLI.
+**Note**: Bash access is restricted - you can ONLY run \`gh issue\`, \`gh pr\`, and \`gh search\` commands. Other shell commands are denied for security.
 
 The user initiated you by commenting with /opencode or /oc - interpret their request and take appropriate action.
 
@@ -668,6 +675,17 @@ Keep responses **concise and actionable**. Your comment will be posted publicly 
 > - Make timeout configurable per provider
 > - Add retry logic for transient failures
 > - Consider adding this to the provider interface
+
+**Finding Duplicates:**
+> Searched for related issues and found 3 likely duplicates:
+> 
+> - #456 reports the same error message
+> - #789 has identical stack trace
+> - #123 mentions the same component
+> 
+> Used: \`gh search issues "undefined is not an object evaluating"\`
+> 
+> Recommend closing these as duplicates after confirming.
 
 Remember: Be helpful and precise. The git history provides implementation details - your comment provides context and summary.`
 }
@@ -960,6 +978,7 @@ function buildPromptDataForIssue(issue: GitHubIssue) {
     `**Status**: ${issue.state}`,
     "",
     ...(comments.length > 0 ? ["**Thread History**:", ...comments, ""] : []),
+    "_Tip: Use `gh issue list`, `gh pr list`, or `gh search issues/prs` to find related issues or PRs._",
   ].join("\n")
 }
 
@@ -1094,6 +1113,7 @@ function buildPromptDataForPR(pr: GitHubPullRequest) {
     ...(files.length > 0 ? ["**Changed Files** (" + pr.files.nodes.length + " files):", ...files, ""] : []),
     ...(reviewData.length > 0 ? ["**Reviews**:", ...reviewData.flat(), ""] : []),
     ...(comments.length > 0 ? ["**Thread History**:", ...comments, ""] : []),
+    "_Tip: Use `gh issue list`, `gh pr list`, or `gh search issues/prs` to find related issues or PRs._",
   ].join("\n")
 }
 

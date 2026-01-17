@@ -29,6 +29,7 @@ jobs:
         uses: anomalyco/opencode/github@latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OPENCODE_PERMISSION: '{"bash": "deny"}'
+          OPENCODE_PERMISSION: '{"bash": {"gh issue *": "allow", "gh pr *": "allow", "gh search *": "allow", "*": "deny"}}'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           model: opencode/claude-opus-4-5
