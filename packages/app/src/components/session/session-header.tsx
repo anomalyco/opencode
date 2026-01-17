@@ -156,7 +156,7 @@ export function SessionHeader() {
       </Show>
       <Show when={rightMount()}>
         {(mount) => (
-          <Portal mount={mount() as HTMLElement}>
+          <Portal mount={mount()!}>
             <div class="flex items-center gap-3">
               {/* <div class="hidden md:flex items-center gap-1"> */}
               {/*   <Button */}
