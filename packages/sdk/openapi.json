@@ -4979,20 +4979,29 @@
           "content": {
             "application/json": {
               "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/Event.tui.prompt.append"
-                  },
-                  {
-                    "$ref": "#/components/schemas/Event.tui.command.execute"
-                  },
-                  {
-                    "$ref": "#/components/schemas/Event.tui.toast.show"
-                  },
-                  {
-                    "$ref": "#/components/schemas/Event.tui.session.select"
+                "type": "object",
+                "properties": {
+                  "body": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Event.tui.prompt.append"
+                      },
+                      {
+                        "$ref": "#/components/schemas/Event.tui.command.execute"
+                      },
+                      {
+                        "$ref": "#/components/schemas/Event.tui.toast.show"
+                      },
+                      {
+                        "$ref": "#/components/schemas/Event.tui.session.select"
+                      },
+                      {
+                        "$ref": "#/components/schemas/Event.tui.window.focus"
+                      }
+                    ]
                   }
-                ]
+                },
+                "required": ["body"]
               }
             }
           }
@@ -7483,6 +7492,25 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.tui.window.focus": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.window.focus"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "focused": {
+                "type": "boolean"
+              }
+            },
+            "required": ["focused"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.mcp.tools.changed": {
         "type": "object",
         "properties": {
@@ -8063,6 +8091,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.tui.session.select"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.window.focus"
           },
           {
             "$ref": "#/components/schemas/Event.mcp.tools.changed"

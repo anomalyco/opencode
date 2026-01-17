@@ -43,4 +43,5 @@ export const TuiEvent = {
       sessionID: z.string().regex(/^ses/).describe("Session ID to navigate to"),
     }),
   ),
+  WindowFocus: BusEvent.define("tui.window.focus", z.object({ focused: z.boolean() })),
 }

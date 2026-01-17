@@ -685,6 +685,13 @@ export type EventTuiSessionSelect = {
   }
 }
 
+export type EventTuiWindowFocus = {
+  type: "tui.window.focus"
+  properties: {
+    focused: boolean
+  }
+}
+
 export type EventMcpToolsChanged = {
   type: "mcp.tools.changed"
   properties: {
@@ -882,6 +889,7 @@ export type Event =
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventTuiSessionSelect
+  | EventTuiWindowFocus
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -4466,7 +4474,17 @@ export type TuiShowToastResponses = {
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
 export type TuiPublishData = {
-  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+  body?: {
+    /**
+     * TUI event body
+     */
+    body:
+      | EventTuiPromptAppend
+      | EventTuiCommandExecute
+      | EventTuiToastShow
+      | EventTuiSessionSelect
+      | EventTuiWindowFocus
+  }
   path?: never
   query?: {
     directory?: string

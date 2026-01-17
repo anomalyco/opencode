@@ -2,7 +2,19 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createSignal,
+  onMount,
+  batch,
+  Show,
+  on,
+  onCleanup,
+} from "solid-js"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -36,6 +48,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { windowFocus } from "./util/window-focus"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -253,6 +266,29 @@ function App() {
           sessionID: args.sessionID,
         })
       }
+    })
+
+    const publish = (focused: boolean) =>
+      sdk.client.tui.publish({
+        directory: process.cwd(),
+        body: { type: TuiEvent.WindowFocus.type, properties: { focused } },
+      })
+
+    publish(true)
+
+    const stop = windowFocus({
+      renderer: {
+        on: renderer.on.bind(renderer),
+        off: renderer.off?.bind(renderer),
+        removeListener: renderer.removeListener?.bind(renderer),
+      },
+      publish(focused) {
+        publish(focused)
+      },
+    })
+
+    onCleanup(() => {
+      stop()
     })
   })
 

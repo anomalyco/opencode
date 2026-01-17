@@ -266,21 +266,22 @@ export const TuiRoutes = lazy(() =>
       validator("json", z.object({ command: z.string() })),
       async (c) => {
         const command = c.req.valid("json").command
+        const mapped = {
+          session_new: "session.new",
+          session_share: "session.share",
+          session_interrupt: "session.interrupt",
+          session_compact: "session.compact",
+          messages_page_up: "session.page.up",
+          messages_page_down: "session.page.down",
+          messages_half_page_up: "session.half.page.up",
+          messages_half_page_down: "session.half.page.down",
+          messages_first: "session.first",
+          messages_last: "session.last",
+          agent_cycle: "agent.cycle",
+        }[command]
+        if (!mapped) return c.json(false)
         await Bus.publish(TuiEvent.CommandExecute, {
-          // @ts-expect-error
-          command: {
-            session_new: "session.new",
-            session_share: "session.share",
-            session_interrupt: "session.interrupt",
-            session_compact: "session.compact",
-            messages_page_up: "session.page.up",
-            messages_page_down: "session.page.down",
-            messages_half_page_up: "session.half.page.up",
-            messages_half_page_down: "session.half.page.down",
-            messages_first: "session.first",
-            messages_last: "session.last",
-            agent_cycle: "agent.cycle",
-          }[command],
+          command: mapped,
         })
         return c.json(true)
       },
@@ -328,25 +329,31 @@ export const TuiRoutes = lazy(() =>
       }),
       validator(
         "json",
-        z.union(
-          Object.values(TuiEvent).map((def) => {
-            return z
-              .object({
-                type: z.literal(def.type),
-                properties: def.properties,
-              })
-              .meta({
-                ref: "Event" + "." + def.type,
-              })
-          }),
-        ),
+        z.object({
+          body: z
+            .union(
+              Object.values(TuiEvent).map((def) => {
+                return z
+                  .object({
+                    type: z.literal(def.type),
+                    properties: def.properties,
+                  })
+                  .meta({
+                    ref: "Event" + "." + def.type,
+                  })
+              }),
+            )
+            .describe("TUI event body"),
+        }),
       ),
       async (c) => {
-        const evt = c.req.valid("json")
-        await Bus.publish(Object.values(TuiEvent).find((def) => def.type === evt.type)!, evt.properties)
+        const evt = c.req.valid("json").body
+        const eventDef = Object.values(TuiEvent).find((def) => def.type === evt.type)!
+        await Bus.publish(eventDef, evt.properties)
         return c.json(true)
       },
     )
+
     .post(
       "/select-session",
       describeRoute({
