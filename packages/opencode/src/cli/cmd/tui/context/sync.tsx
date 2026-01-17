@@ -25,7 +25,7 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
 
@@ -104,7 +104,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const sdk = useSDK()
 
-    sdk.event.listen((e) => {
+    const unsubscribe = sdk.event.listen((e) => {
       const event = e.details
       switch (event.type) {
         case "server.instance.disposed":
@@ -342,6 +342,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
       }
     })
+
+    // Clean up event listener on unmount to prevent memory leak
+    onCleanup(unsubscribe)
 
     const exit = useExit()
     const args = useArgs()
