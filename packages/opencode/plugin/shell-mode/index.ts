@@ -15,3 +15,9 @@ export {
   type ExecOptions,
   type ExecResult,
 } from "./session-shell"
+export {
+  getCompletions,
+  applyCompletion,
+  findCommonPrefix,
+  type CompletionResult,
+} from "./completion"

@@ -30,7 +30,7 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
-import { useExecutionMode, handleModeToggleKey, determineRouting } from "@tui-integration"
+import { useExecutionMode, handleModeToggleKey, determineRouting, handleShellTabCompletion, shouldUseShellCompletion, applyCompletionAtIndex, type CompletionCycleState } from "@tui-integration"
 import { ExecutionMode } from "@shell-mode"
 
 export type PromptProps = {
@@ -121,6 +121,7 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    completionCycle: CompletionCycleState | null
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     prompt: {
@@ -130,6 +131,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    completionCycle: null,
   })
 
   // Initialize agent/model/variant from last user message when session changes
@@ -835,6 +837,76 @@ export function Prompt(props: PromptProps) {
                 if (handleModeToggleKey(e, { setMode: executionMode.setMode })) {
                   e.preventDefault()
                   return
+                }
+                // Handle tab for shell completion in shell/auto mode
+                if (e.name === "tab" && shouldUseShellCompletion(store.mode, executionMode.mode())) {
+                  e.preventDefault()
+
+                  // Check if we're already cycling through completions
+                  if (store.completionCycle) {
+                    // Cycle to next completion
+                    const cycle = store.completionCycle
+                    const nextIndex = (cycle.currentIndex + 1) % cycle.completions.length
+                    const { newInput, newCursorPosition } = applyCompletionAtIndex(cycle, nextIndex)
+
+                    input.setText(newInput)
+                    input.cursorOffset = newCursorPosition
+                    setStore("prompt", "input", newInput)
+                    setStore("completionCycle", "currentIndex", nextIndex)
+
+                    // Show current position in toast
+                    toast.show({
+                      variant: "info",
+                      message: `(${nextIndex + 1}/${cycle.completions.length}) ${cycle.completions[nextIndex]}`,
+                      duration: 1500,
+                    })
+                    return
+                  }
+
+                  // Start new completion
+                  const result = await handleShellTabCompletion({
+                    input: store.prompt.input,
+                    cursorPosition: input.cursorOffset,
+                    cwd: sync.data.path.cwd || sync.data.path.directory,
+                  })
+
+                  if (result.applied) {
+                    input.setText(result.newInput)
+                    input.cursorOffset = result.newCursorPosition
+                    setStore("prompt", "input", result.newInput)
+                    // Clear any previous cycle state since we applied a completion
+                    setStore("completionCycle", null)
+                  } else if (result.completions.length > 1) {
+                    // Multiple completions with no common prefix - start cycling
+                    // Apply the first completion immediately
+                    const cycleState: CompletionCycleState = {
+                      originalInput: store.prompt.input,
+                      originalCursor: input.cursorOffset,
+                      completions: result.completions,
+                      currentIndex: 0,
+                      replaceFrom: result.replaceFrom,
+                      replaceTo: result.replaceTo,
+                    }
+
+                    const { newInput, newCursorPosition } = applyCompletionAtIndex(cycleState, 0)
+                    input.setText(newInput)
+                    input.cursorOffset = newCursorPosition
+                    setStore("prompt", "input", newInput)
+                    setStore("completionCycle", cycleState)
+
+                    // Show current position in toast
+                    toast.show({
+                      variant: "info",
+                      message: `(1/${result.completions.length}) ${result.completions[0]}`,
+                      duration: 1500,
+                    })
+                  }
+                  return
+                }
+
+                // Reset completion cycle on any other key press
+                if (store.completionCycle && e.name !== "tab") {
+                  setStore("completionCycle", null)
                 }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()

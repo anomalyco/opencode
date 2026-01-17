@@ -6,4 +6,14 @@
 
 export { ExecutionModeProvider, useExecutionMode } from "./execution-mode-provider"
 export { WorkingDirProvider, useWorkingDir } from "./working-dir-provider"
-export { handleModeToggleKey, determineRouting, type ModeToggleContext } from "./hooks"
+export {
+  handleModeToggleKey,
+  determineRouting,
+  handleShellTabCompletion,
+  shouldUseShellCompletion,
+  applyCompletionAtIndex,
+  type ModeToggleContext,
+  type TabCompletionContext,
+  type TabCompletionResult,
+  type CompletionCycleState,
+} from "./hooks"
