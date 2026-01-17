@@ -137,7 +137,6 @@ export namespace ProviderModelDetection.OpenAICompatible {
               url: baseURL,
               npm: "@ai-sdk/openai-compatible",
             },
-            name: model.id,
           },
         ])
     )
