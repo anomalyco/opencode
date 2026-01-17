@@ -85,7 +85,8 @@ export namespace ModelsDev {
       const json = await data()
       return JSON.parse(json) as Record<string, Provider>
     }
-    const json = await fetch("https://models.dev/api.json").then((x) => x.text())
+    const url = Bun.env.MODELS_DEV_URL || "https://models.dev"
+    const json = await fetch(`${url}/api.json`).then((x) => x.text())
     return JSON.parse(json) as Record<string, Provider>
   }
 
@@ -95,7 +96,8 @@ export namespace ModelsDev {
     log.info("refreshing", {
       file,
     })
-    const result = await fetch("https://models.dev/api.json", {
+    const url = Bun.env.MODELS_DEV_URL || "https://models.dev"
+    const result = await fetch(`${url}/api.json`, {
       headers: {
         "User-Agent": Installation.USER_AGENT,
       },
