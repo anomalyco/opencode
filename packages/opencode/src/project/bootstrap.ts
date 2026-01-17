@@ -11,6 +11,7 @@ import { Instance } from "./instance"
 import { Vcs } from "./vcs"
 import { Log } from "@/util/log"
 import { ShareNext } from "@/share/share-next"
+import { AuthKeepAlive } from "@/auth/keepalive"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
@@ -28,4 +29,6 @@ export async function InstanceBootstrap() {
       await Project.setInitialized(Instance.project.id)
     }
   })
+
+  AuthKeepAlive.init()
 }
