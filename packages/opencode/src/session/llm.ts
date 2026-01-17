@@ -131,14 +131,13 @@ export namespace LLM {
       },
     )
 
+    // Azure Cognitive Services with Claude models uses Anthropic SDK
+    const isAzureClaude = input.model.providerID === "azure-cognitive-services" && input.model.api.id.includes("claude")
+    const npm = isAzureClaude ? "@ai-sdk/anthropic" : input.model.api.npm
+
     const maxOutputTokens = isCodex
       ? undefined
-      : ProviderTransform.maxOutputTokens(
-          input.model.api.npm,
-          params.options,
-          input.model.limit.output,
-          OUTPUT_TOKEN_MAX,
-        )
+      : ProviderTransform.maxOutputTokens(npm, params.options, input.model.limit.output, OUTPUT_TOKEN_MAX)
 
     const tools = await resolveTools(input)
 

@@ -1006,9 +1006,20 @@ export namespace Provider {
         })
       }
 
+      // Special case: Azure Cognitive Services with Anthropic models uses @ai-sdk/anthropic
+      const isAzureClaude = model.providerID === "azure-cognitive-services" && model.api.id.includes("claude")
+      if (isAzureClaude) {
+        const resourceName = Env.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
+        if (resourceName) options["baseURL"] = `https://${resourceName}.services.ai.azure.com/anthropic/v1/`
+      }
+
       // Special case: google-vertex-anthropic uses a subpath import
       const bundledKey =
-        model.providerID === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : model.api.npm
+        model.providerID === "google-vertex-anthropic"
+          ? "@ai-sdk/google-vertex/anthropic"
+          : isAzureClaude
+            ? "@ai-sdk/anthropic"
+            : model.api.npm
       const bundledFn = BUNDLED_PROVIDERS[bundledKey]
       if (bundledFn) {
         log.info("using bundled provider", { providerID: model.providerID, pkg: bundledKey })
@@ -1074,10 +1085,13 @@ export namespace Provider {
     const provider = s.providers[model.providerID]
     const sdk = await getSDK(model)
 
+    // Skip custom model loader for Azure Cognitive Services with Claude models
+    // since they use @ai-sdk/anthropic which uses sdk.languageModel()
+    const isAzureClaude = model.providerID === "azure-cognitive-services" && model.api.id.includes("claude")
+    const loader = isAzureClaude ? undefined : s.modelLoaders[model.providerID]
+
     try {
-      const language = s.modelLoaders[model.providerID]
-        ? await s.modelLoaders[model.providerID](sdk, model.api.id, provider.options)
-        : sdk.languageModel(model.api.id)
+      const language = loader ? await loader(sdk, model.api.id, provider.options) : sdk.languageModel(model.api.id)
       s.models.set(key, language)
       return language
     } catch (e) {

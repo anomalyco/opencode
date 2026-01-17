@@ -46,7 +46,8 @@ export namespace ProviderTransform {
 
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
-    if (model.api.npm === "@ai-sdk/anthropic") {
+    const isAzureClaude = model.providerID === "azure-cognitive-services" && model.api.id.includes("claude")
+    if (model.api.npm === "@ai-sdk/anthropic" || isAzureClaude) {
       msgs = msgs
         .map((msg) => {
           if (typeof msg.content === "string") {
@@ -303,6 +304,15 @@ export namespace ProviderTransform {
 
     const id = model.id.toLowerCase()
     if (id.includes("deepseek") || id.includes("minimax") || id.includes("glm") || id.includes("mistral")) return {}
+
+    // Azure Cognitive Services with Claude models uses Anthropic thinking config
+    const isAzureClaude = model.providerID === "azure-cognitive-services" && model.api.id.includes("claude")
+    if (isAzureClaude) {
+      return {
+        high: { thinking: { type: "enabled", budgetTokens: 16000 } },
+        max: { thinking: { type: "enabled", budgetTokens: 31999 } },
+      }
+    }
 
     switch (model.api.npm) {
       case "@openrouter/ai-sdk-provider":
@@ -574,6 +584,12 @@ export namespace ProviderTransform {
   }
 
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
+    // Azure Cognitive Services with Claude models uses Anthropic provider options
+    const isAzureClaude = model.providerID === "azure-cognitive-services" && model.api.id.includes("claude")
+    if (isAzureClaude) {
+      return { ["anthropic" as string]: options }
+    }
+
     switch (model.api.npm) {
       case "@ai-sdk/github-copilot":
       case "@ai-sdk/openai":
