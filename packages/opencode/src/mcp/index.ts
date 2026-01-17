@@ -308,8 +308,6 @@ export namespace MCP {
       let authProvider: McpOAuthProvider | undefined
 
       if (!oauthDisabled) {
-        await McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri)
-
         authProvider = new McpOAuthProvider(
           key,
           mcp.url,
@@ -317,7 +315,6 @@ export namespace MCP {
             clientId: oauthConfig?.clientId,
             clientSecret: oauthConfig?.clientSecret,
             scope: oauthConfig?.scope,
-            redirectUri: oauthConfig?.redirectUri,
           },
           {
             onRedirect: async (url) => {
@@ -347,7 +344,6 @@ export namespace MCP {
 
       let lastError: Error | undefined
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
-
       for (const { name, transport } of transports) {
         try {
           const client = new Client({
@@ -574,8 +570,7 @@ export namespace MCP {
 
     for (const [clientName, client] of Object.entries(clientsSnapshot)) {
       // Only include tools from connected MCPs (skip disabled ones)
-      const clientStatus = s.status[clientName]?.status
-      if (clientStatus !== "connected") {
+      if (s.status[clientName]?.status !== "connected") {
         continue
       }
 
@@ -725,10 +720,8 @@ export namespace MCP {
       throw new Error(`MCP server ${mcpName} has OAuth explicitly disabled`)
     }
 
-    // OAuth config is optional - if not provided, we'll use auto-discovery
-    const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
-
-    await McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri)
+    // Start the callback server
+    await McpOAuthCallback.ensureRunning()
 
     // Generate and store a cryptographically secure state parameter BEFORE creating the provider
     // The SDK will call provider.state() to read this value
@@ -738,6 +731,8 @@ export namespace MCP {
     await McpAuth.updateOAuthState(mcpName, oauthState)
 
     // Create a new auth provider for this flow
+    // OAuth config is optional - if not provided, we'll use auto-discovery
+    const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
     let capturedUrl: URL | undefined
     const authProvider = new McpOAuthProvider(
       mcpName,
@@ -746,7 +741,6 @@ export namespace MCP {
         clientId: oauthConfig?.clientId,
         clientSecret: oauthConfig?.clientSecret,
         scope: oauthConfig?.scope,
-        redirectUri: oauthConfig?.redirectUri,
       },
       {
         onRedirect: async (url) => {
@@ -775,7 +769,6 @@ export namespace MCP {
         pendingOAuthTransports.set(mcpName, transport)
         return { authorizationUrl: capturedUrl.toString() }
       }
-
       throw error
     }
   }
@@ -785,9 +778,9 @@ export namespace MCP {
    * Opens the browser and waits for callback.
    */
   export async function authenticate(mcpName: string): Promise<Status> {
-    const result = await startAuth(mcpName)
+    const { authorizationUrl } = await startAuth(mcpName)
 
-    if (!result.authorizationUrl) {
+    if (!authorizationUrl) {
       // Already authenticated
       const s = await state()
       return s.status[mcpName] ?? { status: "connected" }
@@ -801,9 +794,9 @@ export namespace MCP {
 
     // The SDK has already added the state parameter to the authorization URL
     // We just need to open the browser
-    log.info("opening browser for oauth", { mcpName, url: result.authorizationUrl, state: oauthState })
+    log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
     try {
-      const subprocess = await open(result.authorizationUrl)
+      const subprocess = await open(authorizationUrl)
       // The open package spawns a detached process and returns immediately.
       // We need to listen for errors which fire asynchronously:
       // - "error" event: command not found (ENOENT)
@@ -826,7 +819,7 @@ export namespace MCP {
       // Browser opening failed (e.g., in remote/headless sessions like SSH, devcontainers)
       // Emit event so CLI can display the URL for manual opening
       log.warn("failed to open browser, user must open URL manually", { mcpName, error })
-      Bus.publish(BrowserOpenFailed, { mcpName, url: result.authorizationUrl })
+      Bus.publish(BrowserOpenFailed, { mcpName, url: authorizationUrl })
     }
 
     // Wait for callback using the OAuth state parameter
