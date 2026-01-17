@@ -33,7 +33,7 @@
     border-radius: 6px;
     overflow: hidden;
     background: var(--surface-base);
-    border: 1px solid var(--border-base);
+    border: 1px solid var(--border-weak-base);
     transition: border-color 0.15s ease;
 
     &:hover {
@@ -416,7 +416,30 @@
     box-shadow: var(--shadow-xs-border-base);
     background-color: var(--surface-raised-base);
     overflow: visible;
+    overflow-anchor: none;
 
+    & > *:first-child {
+      border-top-left-radius: 6px;
+      border-top-right-radius: 6px;
+      overflow: hidden;
+    }
+
+    & > *:last-child {
+      border-bottom-left-radius: 6px;
+      border-bottom-right-radius: 6px;
+      overflow: hidden;
+    }
+
+    [data-component="collapsible"] {
+      border: none;
+    }
+
+    [data-component="card"] {
+      border: none;
+    }
+  }
+
+  &[data-permission="true"] {
     &::before {
       content: "";
       position: absolute;
@@ -438,26 +461,11 @@
       pointer-events: none;
       z-index: -1;
     }
+  }
 
-    & > *:first-child {
-      border-top-left-radius: 6px;
-      border-top-right-radius: 6px;
-      overflow: hidden;
-    }
-
-    & > *:last-child {
-      border-bottom-left-radius: 6px;
-      border-bottom-right-radius: 6px;
-      overflow: hidden;
-    }
-
-    [data-component="collapsible"] {
-      border: none;
-    }
-
-    [data-component="card"] {
-      border: none;
-    }
+  &[data-question="true"] {
+    background: var(--background-base);
+    border: 1px solid var(--border-weak-base);
   }
 }
 
