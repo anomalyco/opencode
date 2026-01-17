@@ -72,5 +72,15 @@ export function createLruCache<K = any, V = any>(opts: LruCacheOpts = {}) {
     get size() {
       return cache.size
     },
+
+    *[Symbol.iterator](): IterableIterator<[K, V]> {
+      for (const [key, entry] of cache) {
+        yield [key, entry.value]
+      }
+    },
+
+    entries(): IterableIterator<[K, V]> {
+      return this[Symbol.iterator]()
+    },
   }
 }

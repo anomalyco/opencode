@@ -1077,7 +1077,7 @@ export namespace Provider {
 
       const key = Bun.hash.xxHash32(JSON.stringify({ providerID: model.providerID, npm: model.api.npm, options }))
       const existing = s.sdk.get(key)
-      if (existing) return existing.value
+      if (existing) return existing
 
       const customFetch = options["fetch"]
 
@@ -1128,7 +1128,7 @@ export namespace Provider {
           name: model.providerID,
           ...options,
         })
-        s.sdk.set(key, loaded.value)
+        s.sdk.set(key, loaded)
         return loaded as SDK
       }
 
@@ -1147,7 +1147,7 @@ export namespace Provider {
         name: model.providerID,
         ...options,
       })
-      s.sdk.set(key, loaded.value)
+      s.sdk.set(key, loaded)
       return loaded as SDK
     } catch (e) {
       throw new InitError({ providerID: model.providerID }, { cause: e })
