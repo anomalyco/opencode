@@ -134,7 +134,7 @@ export function DialogSelectFile() {
   })
 
   return (
-    <Dialog class="pt-3 pb-0">
+    <Dialog class="pt-3 pb-0 !max-h-[480px]">
       <List
         search={{ placeholder: "Search files and commands", autofocus: true, hideIcon: true, class: "pl-3 pr-2 !mb-0" }}
         emptyMessage="No results found"
