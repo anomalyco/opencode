@@ -40,10 +40,10 @@ import { LoadAPIKeyError } from "ai"
 import type { OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 
-const DEFAULT_VARIANT_VALUE = "default"
-
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
+
+const DEFAULT_VARIANT_VALUE = "default"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -1367,6 +1367,16 @@ export namespace ACP {
     return result
   }
 
+  function sortProvidersByName<T extends { name: string }>(providers: T[]): T[] {
+    return [...providers].sort((a, b) => {
+      const nameA = a.name.toLowerCase()
+      const nameB = b.name.toLowerCase()
+      if (nameA < nameB) return -1
+      if (nameA > nameB) return 1
+      return 0
+    })
+  }
+
   function modelVariantsFromProviders(
     providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
     model: { providerID: string; modelID: string },
@@ -1376,16 +1386,6 @@ export namespace ACP {
     const modelInfo = provider.models[model.modelID]
     if (!modelInfo?.variants) return []
     return Object.keys(modelInfo.variants)
-  }
-
-  function sortProvidersByName<T extends { name: string }>(providers: T[]): T[] {
-    return [...providers].sort((a, b) => {
-      const nameA = a.name.toLowerCase()
-      const nameB = b.name.toLowerCase()
-      if (nameA < nameB) return -1
-      if (nameA > nameB) return 1
-      return 0
-    })
   }
 
   function buildAvailableModels(
@@ -1409,6 +1409,55 @@ export namespace ACP {
         return [base, ...variantOptions]
       })
     })
+  }
+
+  function detectConfigOptionsSupport(params: InitializeRequest): boolean {
+    const override = Flag.OPENCODE_ACP_CONFIG_OPTIONS_FALLBACK?.toLowerCase()
+    if (override) {
+      if (["1", "true", "on", "force", "fallback"].includes(override)) return false
+      if (["0", "false", "off", "disable", "disabled"].includes(override)) return true
+    }
+    // Default to fallback unless client explicitly signals config options support.
+    return params.clientCapabilities?._meta?.["config_options"] === true
+  }
+
+  function formatModelIdWithVariant(
+    model: { providerID: string; modelID: string },
+    variant: string | undefined,
+    availableVariants: string[],
+    includeVariant: boolean,
+  ) {
+    const base = `${model.providerID}/${model.modelID}`
+    if (!includeVariant || !variant || !availableVariants.includes(variant)) return base
+    return `${base}/${variant}`
+  }
+
+  function parseModelSelection(
+    modelId: string,
+    providers: Array<{ id: string; name: string; models: Record<string, any> }>,
+  ) {
+    const parsed = Provider.parseModel(modelId)
+    const provider = providers.find((entry) => entry.id === parsed.providerID)
+    if (!provider) return { model: { providerID: parsed.providerID, modelID: parsed.modelID }, variant: undefined }
+
+    if (provider.models[parsed.modelID]) {
+      return { model: { providerID: parsed.providerID, modelID: parsed.modelID }, variant: undefined }
+    }
+
+    const segments = parsed.modelID.split("/")
+    if (segments.length > 1) {
+      const candidateVariant = segments[segments.length - 1]
+      const baseModelId = segments.slice(0, -1).join("/")
+      if (provider.models[baseModelId]) {
+        const baseModel = { providerID: parsed.providerID, modelID: baseModelId }
+        const availableVariants = modelVariantsFromProviders(providers, baseModel)
+        if (availableVariants.includes(candidateVariant)) {
+          return { model: baseModel, variant: candidateVariant }
+        }
+      }
+    }
+
+    return { model: { providerID: parsed.providerID, modelID: parsed.modelID }, variant: undefined }
   }
 
   function buildConfigOptions(input: {
@@ -1488,15 +1537,6 @@ export namespace ACP {
     }
   }
 
-  function buildVariantConfigOptions(input: {
-    modelId: string
-    availableVariants: string[]
-    currentVariant?: string
-  }): SessionConfigOption[] {
-    const option = buildVariantConfigOption(input)
-    return option ? [option] : []
-  }
-
   function buildVariantConfigOption(input: {
     modelId: string
     availableVariants: string[]
@@ -1563,52 +1603,4 @@ export namespace ACP {
     }
   }
 
-  function detectConfigOptionsSupport(params: InitializeRequest): boolean {
-    const override = Flag.OPENCODE_ACP_CONFIG_OPTIONS_FALLBACK?.toLowerCase()
-    if (override) {
-      if (["1", "true", "on", "force", "fallback"].includes(override)) return false
-      if (["0", "false", "off", "disable", "disabled"].includes(override)) return true
-    }
-    // Default to fallback unless client explicitly signals config options support.
-    return params.clientCapabilities?._meta?.["config_options"] === true
-  }
-
-  function formatModelIdWithVariant(
-    model: { providerID: string; modelID: string },
-    variant: string | undefined,
-    availableVariants: string[],
-    includeVariant: boolean,
-  ) {
-    const base = `${model.providerID}/${model.modelID}`
-    if (!includeVariant || !variant || !availableVariants.includes(variant)) return base
-    return `${base}/${variant}`
-  }
-
-  function parseModelSelection(
-    modelId: string,
-    providers: Array<{ id: string; name: string; models: Record<string, any> }>,
-  ) {
-    const parsed = Provider.parseModel(modelId)
-    const provider = providers.find((entry) => entry.id === parsed.providerID)
-    if (!provider) return { model: { providerID: parsed.providerID, modelID: parsed.modelID }, variant: undefined }
-
-    if (provider.models[parsed.modelID]) {
-      return { model: { providerID: parsed.providerID, modelID: parsed.modelID }, variant: undefined }
-    }
-
-    const segments = parsed.modelID.split("/")
-    if (segments.length > 1) {
-      const candidateVariant = segments[segments.length - 1]
-      const baseModelId = segments.slice(0, -1).join("/")
-      if (provider.models[baseModelId]) {
-        const baseModel = { providerID: parsed.providerID, modelID: baseModelId }
-        const availableVariants = modelVariantsFromProviders(providers, baseModel)
-        if (availableVariants.includes(candidateVariant)) {
-          return { model: baseModel, variant: candidateVariant }
-        }
-      }
-    }
-
-    return { model: { providerID: parsed.providerID, modelID: parsed.modelID }, variant: undefined }
-  }
 }
