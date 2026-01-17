@@ -18,7 +18,7 @@ const fromBilling = await Database.use((tx) =>
     .select({
       customerID: BillingTable.customerID,
       subscriptionID: BillingTable.subscriptionID,
-      subscriptionCouponID: BillingTable.subscriptionCouponID,
+      subscription: BillingTable.subscription,
       paymentMethodID: BillingTable.paymentMethodID,
       paymentMethodType: BillingTable.paymentMethodType,
       paymentMethodLast4: BillingTable.paymentMethodLast4,
@@ -119,7 +119,7 @@ await Database.transaction(async (tx) => {
     .set({
       customerID: fromPrevPayment.customerID,
       subscriptionID: null,
-      subscriptionCouponID: null,
+      subscription: null,
       paymentMethodID: fromPrevPaymentMethods.data[0].id,
       paymentMethodLast4: fromPrevPaymentMethods.data[0].card?.last4 ?? null,
       paymentMethodType: fromPrevPaymentMethods.data[0].type,
@@ -131,7 +131,7 @@ await Database.transaction(async (tx) => {
     .set({
       customerID: fromBilling.customerID,
       subscriptionID: fromBilling.subscriptionID,
-      subscriptionCouponID: fromBilling.subscriptionCouponID,
+      subscription: fromBilling.subscription,
       paymentMethodID: fromBilling.paymentMethodID,
       paymentMethodLast4: fromBilling.paymentMethodLast4,
       paymentMethodType: fromBilling.paymentMethodType,
