@@ -505,12 +505,18 @@ export namespace ProviderTransform {
     model: Provider.Model
     sessionID: string
     providerOptions?: Record<string, any>
+    defaults?: Record<string, any>
   }): Record<string, any> {
     const result: Record<string, any> = {}
 
     // openai and providers using openai package should set store to false by default.
-    if (input.model.providerID === "openai" || input.model.api.npm === "@ai-sdk/openai") {
+    const openai = input.model.providerID === "openai" || input.model.api.npm === "@ai-sdk/openai"
+    if (openai) {
       result["store"] = false
+    }
+
+    if (openai && typeof input.defaults?.store === "boolean") {
+      result["store"] = input.defaults.store
     }
 
     if (input.model.api.npm === "@openrouter/ai-sdk-provider") {

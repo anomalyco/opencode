@@ -101,6 +101,7 @@ export namespace LLM {
           model: input.model,
           sessionID: input.sessionID,
           providerOptions: provider.options,
+          defaults: provider.defaults,
         })
     const options: Record<string, any> = pipe(
       base,
