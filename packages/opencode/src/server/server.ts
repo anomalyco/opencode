@@ -555,6 +555,10 @@ export namespace Server {
 
     _url = server.url
 
+    // Export server URL to environment for child processes
+    process.env.OPENCODE_SERVER_URL = server.url.toString()
+    process.env.OPENCODE_SERVER_PORT = server.port.toString()
+
     const shouldPublishMDNS =
       opts.mdns &&
       server.port &&
@@ -570,6 +574,9 @@ export namespace Server {
     const originalStop = server.stop.bind(server)
     server.stop = async (closeActiveConnections?: boolean) => {
       if (shouldPublishMDNS) MDNS.unpublish()
+      // Clean up environment variables
+      delete process.env.OPENCODE_SERVER_URL
+      delete process.env.OPENCODE_SERVER_PORT
       return originalStop(closeActiveConnections)
     }
 
