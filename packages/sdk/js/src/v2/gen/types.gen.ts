@@ -1530,10 +1530,6 @@ export type McpOAuthConfig = {
    * OAuth scopes to request during authorization
    */
   scope?: string
-  /**
-   * OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).
-   */
-  redirectUri?: string
 }
 
 export type McpRemoteConfig = {
