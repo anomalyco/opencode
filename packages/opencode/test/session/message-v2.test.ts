@@ -265,6 +265,18 @@ describe("session.message-v2.toModelMessage", () => {
         content: [{ type: "text", text: "run tool" }],
       },
       {
+        role: "user",
+        content: [
+          { type: "text", text: "The tool bash returned the following attachments:" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "attachment.png",
+            data: "https://example.com/attachment.png",
+          },
+        ],
+      },
+      {
         role: "assistant",
         content: [
           { type: "text", text: "done", providerOptions: { openai: { assistant: "meta" } } },
@@ -285,21 +297,7 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-result",
             toolCallId: "call-1",
             toolName: "bash",
-            output: {
-              type: "json",
-              value: {
-                output: "ok",
-                attachments: [
-                  {
-                    ...basePart(assistantID, "file-1"),
-                    type: "file",
-                    mime: "image/png",
-                    filename: "attachment.png",
-                    url: "https://example.com/attachment.png",
-                  },
-                ],
-              },
-            },
+            output: { type: "text", value: "ok" },
             providerOptions: { openai: { tool: "meta" } },
           },
         ],
