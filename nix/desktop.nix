@@ -14,9 +14,8 @@
   libappindicator-gtk3 ? null,
   cargo,
   rustc,
+  cargo-tauri,
   makeBinaryWrapper,
-  copyDesktopItems,
-  makeDesktopItem,
   nodejs,
   jq,
 }:
@@ -59,26 +58,11 @@ rustPlatform.buildRustPackage rec {
     pkg-config
     bun
     makeBinaryWrapper
-    copyDesktopItems
     cargo
     rustc
     nodejs
     jq
-  ];
-
-  # based on packages/desktop/src-tauri/release/appstream.metainfo.xml
-  desktopItems = lib.optionals stdenv.isLinux [
-    (makeDesktopItem {
-      name = "ai.opencode.opencode";
-      desktopName = "OpenCode";
-      comment = "Open source AI coding agent";
-      exec = "opencode-desktop";
-      icon = "opencode";
-      terminal = false;
-      type = "Application";
-      categories = [ "Development" "IDE" ];
-      startupWMClass = "opencode";
-    })
+    cargo-tauri.hook
   ];
 
   buildInputs = [
@@ -116,35 +100,24 @@ rustPlatform.buildRustPackage rec {
     targetTriple=${stdenv.hostPlatform.rust.rustcTarget}
     cp ${args.opencode}/bin/opencode packages/desktop/src-tauri/sidecars/opencode-cli-$targetTriple
 
-    # Merge prod config into tauri.conf.json
-    if ! jq -s '.[0] * .[1]' \
-      packages/desktop/src-tauri/tauri.conf.json \
-      packages/desktop/src-tauri/tauri.prod.conf.json \
-      > packages/desktop/src-tauri/tauri.conf.json.tmp; then
-      echo "Error: failed to merge tauri.conf.json with tauri.prod.conf.json" >&2
-      exit 1
-    fi
-    mv packages/desktop/src-tauri/tauri.conf.json.tmp packages/desktop/src-tauri/tauri.conf.json
-
-    # Build the frontend
-    cd packages/desktop
-
-    # The 'build' script runs 'bun run typecheck && vite build'.
-    bun run build
-
     popd
   '';
 
   # Tauri bundles the assets during the rust build phase (which happens after preBuild).
   # It looks for them in the location specified in tauri.conf.json.
 
-  postInstall = lib.optionalString stdenv.isLinux ''
-    # Install icon
-    mkdir -p $out/share/icons/hicolor/128x128/apps
-    cp ../../../packages/desktop/src-tauri/icons/prod/128x128.png $out/share/icons/hicolor/128x128/apps/opencode.png
+  # Configurations are merged in the order they are provided
+  tauriBuildFlags = [
+    "--config"
+    "tauri.conf.json"
+    "--config"
+    "tauri.prod.conf.json"
+    "--no-sign"
+  ];
 
+  postInstall = lib.optionalString stdenv.isLinux ''
     # Wrap the binary to ensure it finds the libraries
-    wrapProgram $out/bin/opencode-desktop \
+    wrapProgram $out/bin/OpenCode \
       --prefix LD_LIBRARY_PATH : ${
         lib.makeLibraryPath [
           gtk3
@@ -161,7 +134,7 @@ rustPlatform.buildRustPackage rec {
     homepage = "https://opencode.ai";
     license = licenses.mit;
     maintainers = with maintainers; [ ];
-    mainProgram = "opencode-desktop";
+    mainProgram = "OpenCode";
     platforms = platforms.linux ++ platforms.darwin;
   };
 }
