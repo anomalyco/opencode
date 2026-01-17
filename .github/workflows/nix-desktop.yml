@@ -24,8 +24,8 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - blacksmith-4vcpu-ubuntu-2404
-          - blacksmith-4vcpu-ubuntu-2404-arm
+          - ubuntu-latest
+          - ubuntu-24.04-arm
           - macos-15
           - macos-latest
     runs-on: ${{ matrix.os }}
