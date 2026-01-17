@@ -94,7 +94,7 @@
 
     [data-slot="list-empty-state"] {
       display: flex;
-      padding: 32px 0px;
+      padding: 32px 48px;
       flex-direction: column;
       justify-content: center;
       align-items: center;
@@ -106,8 +106,9 @@
         justify-content: center;
         align-items: center;
         gap: 2px;
+        max-width: 100%;
         color: var(--text-weak);
-        text-align: center;
+        white-space: nowrap;
 
         /* text-14-regular */
         font-family: var(--font-family-sans);
@@ -120,6 +121,8 @@
 
       [data-slot="list-filter"] {
         color: var(--text-strong);
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
     }
 
