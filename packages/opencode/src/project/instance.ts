@@ -16,6 +16,14 @@ export interface Shape {
 const context = Context.create<Shape>("instance")
 const cache = createLruCache<string, Promise<Shape>>({
   maxEntries: 20,
+  onEvict: async (_key, value) => {
+    const ctx = await value.catch(() => null)
+    if (ctx) {
+      await context.provide(ctx, async () => {
+        await State.dispose(ctx.directory)
+      })
+    }
+  },
 })
 
 const disposal = {
