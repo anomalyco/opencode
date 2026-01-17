@@ -162,7 +162,7 @@ export function DialogSelectFile() {
               </div>
             }
           >
-            <div class="w-full flex items-center justify-between gap-4 pl-2">
+            <div class="w-full flex items-center justify-between gap-4 pl-1">
               <div class="flex items-center gap-2 min-w-0">
                 <span class="text-14-regular text-text-strong whitespace-nowrap">{item.title}</span>
                 <Show when={item.description}>
