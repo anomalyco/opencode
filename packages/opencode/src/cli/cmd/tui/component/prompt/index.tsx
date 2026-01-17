@@ -727,6 +727,21 @@ export function Prompt(props: PromptProps) {
     return !!current
   })
 
+  // Mode prefix color for the input
+  const modePrefixColor = createMemo(() => {
+    const modeDisplay = executionMode.getModeDisplay()
+    switch (modeDisplay.color) {
+      case "primary":
+        return theme.primary
+      case "secondary":
+        return theme.secondary
+      case "success":
+        return theme.success
+      case "border":
+        return theme.border
+    }
+  })
+
   const spinnerDef = createMemo(() => {
     const color = local.agent.color(local.agent.current().name)
     return {
@@ -798,7 +813,10 @@ export function Prompt(props: PromptProps) {
             backgroundColor={theme.backgroundElement}
             flexGrow={1}
           >
-            <textarea
+            <box flexDirection="row" alignItems="flex-start">
+              <text fg={modePrefixColor()}>{executionMode.getModeDisplay().icon} </text>
+              <box flexGrow={1}>
+                <textarea
               placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
               textColor={keybind.leader ? theme.textMuted : theme.text}
               focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
@@ -1045,7 +1063,9 @@ export function Prompt(props: PromptProps) {
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={theme.text}
               syntaxStyle={syntax()}
-            />
+                />
+              </box>
+            </box>
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
               <text fg={highlight()}>
                 {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
@@ -1177,7 +1197,7 @@ export function Prompt(props: PromptProps) {
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
-                  <text fg={executionMode.mode() === ExecutionMode.Shell ? theme.secondary : theme.textMuted}>
+                  <text fg={modePrefixColor()}>
                     [{executionMode.getModeDisplay().name}]
                   </text>
                   <text fg={theme.text}>

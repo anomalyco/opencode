@@ -1,5 +1,7 @@
 # Shell/Agent Execution Mode Feature Specification
 
+the shell/agent/auto  mode is completely independent from the build, plan, etc. mode.
+
 ## Overview
 
 This feature adds intelligent input routing between direct shell execution and AI agent processing. Users can work in three modes:
