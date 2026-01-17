@@ -525,7 +525,7 @@ export const AuthLoginCommand = cmd({
 
 export const AuthLogoutCommand = cmd({
   command: "logout",
-  describe: "log out from a configured provider",
+  describe: "log out from a configured provider or individual account",
   async handler() {
     UI.empty()
     const credentials = await Auth.all().then((x) => Object.entries(x))
@@ -543,6 +543,44 @@ export const AuthLogoutCommand = cmd({
       })),
     })
     if (prompts.isCancel(providerID)) throw new UI.CancelledError()
+
+    const info = credentials.find(([key]) => key === providerID)?.[1]
+    if (info?.type === "oauth") {
+      const accounts = await Auth.OAuthPool.list(providerID)
+      if (accounts.length > 1) {
+        const options = [
+          { label: "Remove all accounts", value: "__all__", hint: `${accounts.length} accounts` },
+          ...accounts.map((account, index) => ({
+            label: `Account ${index + 1}${account.label && account.label !== "default" ? ` (${account.label})` : ""}`,
+            value: account.id,
+            hint: `ID: ${account.id.slice(0, 8)}...`,
+          })),
+        ]
+
+        const selection = await prompts.select({
+          message: "Remove which account?",
+          options,
+        })
+        if (prompts.isCancel(selection)) throw new UI.CancelledError()
+
+        if (selection === "__all__") {
+          await Auth.remove(providerID)
+          prompts.log.success(`Removed all ${accounts.length} accounts`)
+        } else {
+          const result = await Auth.OAuthPool.removeRecord(providerID, selection)
+          if (result.removed) {
+            prompts.log.success(
+              `Account removed. ${result.remaining} account${result.remaining !== 1 ? "s" : ""} remaining.`,
+            )
+          } else {
+            prompts.log.error("Failed to remove account")
+          }
+        }
+        prompts.outro("Done")
+        return
+      }
+    }
+
     await Auth.remove(providerID)
     prompts.outro("Logout successful")
   },

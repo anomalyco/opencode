@@ -635,6 +635,47 @@ export namespace Auth {
       })
     }
 
+    export async function removeRecord(
+      providerID: string,
+      recordID: string,
+      namespace = "default",
+    ): Promise<{ removed: boolean; remaining: number }> {
+      return updateStore<{ removed: boolean; remaining: number }>((store) => {
+        const provider = store.providers[providerID]
+        if (!provider || provider.type !== "oauth") return { value: { removed: false, remaining: 0 }, changed: false }
+
+        const index = provider.records.findIndex((r) => r.id === recordID && r.namespace === namespace)
+        if (index === -1) return { value: { removed: false, remaining: provider.records.length }, changed: false }
+
+        // Remove the record
+        provider.records.splice(index, 1)
+
+        // Update order array
+        const order = provider.order[namespace] ?? []
+        provider.order[namespace] = order.filter((id) => id !== recordID)
+
+        // If the removed record was active, set a new active
+        if (provider.active[namespace] === recordID) {
+          const remaining = recordIDsForNamespace(provider, namespace)
+          provider.active[namespace] = remaining[0]
+        }
+
+        // If no records left for this namespace, clean up
+        const remaining = provider.records.filter((r) => r.namespace === namespace).length
+        if (remaining === 0) {
+          delete provider.order[namespace]
+          delete provider.active[namespace]
+        }
+
+        // If no records left at all, remove the provider entry
+        if (provider.records.length === 0) {
+          delete store.providers[providerID]
+        }
+
+        return { value: { removed: true, remaining }, changed: true }
+      })
+    }
+
     export async function fetchAnthropicUsage(
       providerID: string,
       namespace = "default",

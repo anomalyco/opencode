@@ -204,6 +204,45 @@ export namespace Server {
             return c.json({ success, anthropicUsage: anthropicUsage ?? undefined })
           },
         )
+        .delete(
+          "/auth/account",
+          describeRoute({
+            summary: "Remove OAuth account",
+            description:
+              "Remove an OAuth account from a provider. If this is the last account, the provider will be disconnected.",
+            operationId: "auth.removeAccount",
+            responses: {
+              200: {
+                description: "Account removed",
+                content: {
+                  "application/json": {
+                    schema: resolver(
+                      z.object({
+                        removed: z.boolean(),
+                        remaining: z.number(),
+                      }),
+                    ),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "json",
+            z.object({
+              providerID: z.string(),
+              recordID: z.string(),
+              namespace: z.string().optional(),
+            }),
+          ),
+          async (c) => {
+            const body = c.req.valid("json")
+            const namespace = body.namespace ?? "default"
+            const result = await Auth.OAuthPool.removeRecord(body.providerID, body.recordID, namespace)
+            return c.json(result)
+          },
+        )
         .post(
           "/instance/dispose",
           describeRoute({
