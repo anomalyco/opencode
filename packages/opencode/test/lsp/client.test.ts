@@ -24,72 +24,85 @@ describe("LSPClient interop", () => {
   test("handles workspace/workspaceFolders request", async () => {
     const handle = spawnFakeServer() as any
 
-    const client = await Instance.provide({
-      directory: process.cwd(),
-      fn: () =>
-        LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: process.cwd(),
-        }),
-    })
+    try {
+      const client = await Instance.provide({
+        directory: process.cwd(),
+        fn: () =>
+          LSPClient.create({
+            serverID: "fake",
+            server: handle as unknown as LSPServer.Handle,
+            root: process.cwd(),
+          }),
+      })
 
-    await client.connection.sendNotification("test/trigger", {
-      method: "workspace/workspaceFolders",
-    })
+      await client.connection.sendNotification("test/trigger", {
+        method: "workspace/workspaceFolders",
+      })
 
-    await new Promise((r) => setTimeout(r, 100))
+      await new Promise((r) => setTimeout(r, 100))
 
-    expect(client.connection).toBeDefined()
+      expect(client.connection).toBeDefined()
 
-    await client.shutdown()
+      await client.shutdown()
+    } finally {
+      // Ensure fake LSP server process is always killed, even if test fails
+      handle.process.kill()
+    }
   })
 
   test("handles client/registerCapability request", async () => {
     const handle = spawnFakeServer() as any
 
-    const client = await Instance.provide({
-      directory: process.cwd(),
-      fn: () =>
-        LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: process.cwd(),
-        }),
-    })
+    try {
+      const client = await Instance.provide({
+        directory: process.cwd(),
+        fn: () =>
+          LSPClient.create({
+            serverID: "fake",
+            server: handle as unknown as LSPServer.Handle,
+            root: process.cwd(),
+          }),
+      })
 
-    await client.connection.sendNotification("test/trigger", {
-      method: "client/registerCapability",
-    })
+      await client.connection.sendNotification("test/trigger", {
+        method: "client/registerCapability",
+      })
 
-    await new Promise((r) => setTimeout(r, 100))
+      await new Promise((r) => setTimeout(r, 100))
 
-    expect(client.connection).toBeDefined()
+      expect(client.connection).toBeDefined()
 
-    await client.shutdown()
+      await client.shutdown()
+    } finally {
+      handle.process.kill()
+    }
   })
 
   test("handles client/unregisterCapability request", async () => {
     const handle = spawnFakeServer() as any
 
-    const client = await Instance.provide({
-      directory: process.cwd(),
-      fn: () =>
-        LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: process.cwd(),
-        }),
-    })
+    try {
+      const client = await Instance.provide({
+        directory: process.cwd(),
+        fn: () =>
+          LSPClient.create({
+            serverID: "fake",
+            server: handle as unknown as LSPServer.Handle,
+            root: process.cwd(),
+          }),
+      })
 
-    await client.connection.sendNotification("test/trigger", {
-      method: "client/unregisterCapability",
-    })
+      await client.connection.sendNotification("test/trigger", {
+        method: "client/unregisterCapability",
+      })
 
-    await new Promise((r) => setTimeout(r, 100))
+      await new Promise((r) => setTimeout(r, 100))
 
-    expect(client.connection).toBeDefined()
+      expect(client.connection).toBeDefined()
 
-    await client.shutdown()
+      await client.shutdown()
+    } finally {
+      handle.process.kill()
+    }
   })
 })
