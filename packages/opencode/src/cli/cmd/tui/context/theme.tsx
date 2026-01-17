@@ -1,8 +1,9 @@
-import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
+import { SyntaxStyle, RGBA, type TerminalColors, CliRenderer } from "@opentui/core"
 import path from "path"
-import { createEffect, createMemo, onMount } from "solid-js"
+import { createEffect, createMemo, createResource, on } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
+import { useToast } from "../ui/toast"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
@@ -38,10 +39,9 @@ import zenburn from "./theme/zenburn.json" with { type: "json" }
 import carbonfox from "./theme/carbonfox.json" with { type: "json" }
 import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
-import { createStore, produce } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
-import { useSDK } from "./sdk"
 
 type ThemeColors = {
   primary: RGBA
@@ -175,6 +175,11 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   carbonfox,
 }
 
+const FALLBACK_THEME_KEY = "opencode"
+const SYSTEM_THEME_KEY = "system"
+
+type ThemeStore = Record<string, ThemeJson>
+
 function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   const defs = theme.defs ?? {}
   function resolveColor(c: ColorValue): RGBA {
@@ -283,78 +288,154 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   init: (props: { mode: "dark" | "light" }) => {
     const sync = useSync()
     const kv = useKV()
+
+    const requested = sync.data.config.theme
+      || (kv.get("theme") as string | undefined)
+      || FALLBACK_THEME_KEY
+
     const [store, setStore] = createStore({
-      themes: DEFAULT_THEMES,
+      themes: { ...DEFAULT_THEMES },
       mode: kv.get("theme_mode", props.mode),
-      active: (sync.data.config.theme ?? kv.get("theme", "opencode")) as string,
+      requested, active: requested,
       ready: false,
     })
 
-    createEffect(() => {
-      const theme = sync.data.config.theme
-      if (theme) setStore("active", theme)
-    })
+    const createLoader = (loader: () => Promise<ThemeStore>) => {
+      const [loaded, { refetch: reload }] =
+        createResource(async () => {
+          const themes = await loader();
+          setStore("themes", themes)
+          return themes
+        })
 
-    function init() {
-      resolveSystemTheme()
-      getCustomThemes()
-        .then((custom) => {
-          setStore(
-            produce((draft) => {
-              Object.assign(draft.themes, custom)
-            }),
-          )
-        })
-        .catch(() => {
-          setStore("active", "opencode")
-        })
-        .finally(() => {
-          if (store.active !== "system") {
-            setStore("ready", true)
-          }
-        })
+      return {
+        loaded,
+        reload,
+      }
     }
 
-    onMount(init)
-
-    function resolveSystemTheme() {
-      console.log("resolveSystemTheme")
-      renderer
-        .getPalette({
-          size: 16,
-        })
-        .then((colors) => {
-          console.log(colors.palette)
-          if (!colors.palette[0]) {
-            if (store.active === "system") {
-              setStore(
-                produce((draft) => {
-                  draft.active = "opencode"
-                  draft.ready = true
-                }),
-              )
-            }
-            return
-          }
-          setStore(
-            produce((draft) => {
-              draft.themes.system = generateSystem(colors)
-              if (store.active === "system") {
-                draft.ready = true
-              }
-            }),
-          )
-        })
-    }
+    const customLoader = createLoader(loadCustomThemes)
 
     const renderer = useRenderer()
-    process.on("SIGUSR2", async () => {
-      renderer.clearPaletteCache()
-      init()
+    const systemLoader = createLoader(async () => {
+      const colors = await detectSystemColors(renderer)
+      const theme = generateSystemTheme(colors)
+      return { [SYSTEM_THEME_KEY]: theme }
     })
 
+    const getStatus = (key: string) => {
+      const customState = customLoader.loaded.state
+      const systemState = systemLoader.loaded.state
+
+      if (key in DEFAULT_THEMES) {
+        return "succeeded"
+      }
+
+      if (key === SYSTEM_THEME_KEY) {
+        switch (systemState) {
+          case "ready":
+            return "succeeded"
+          case "errored":
+            return "errored"
+          default:
+            return "pending"
+        }
+      }
+
+      switch (customState) {
+        case "ready": {
+          const themes = customLoader.loaded.latest
+          const theme = themes[key]
+
+          if (!theme) return "errored"
+
+          return "succeeded"
+        }
+        case "errored": {
+          return "errored"
+        }
+        default: {
+          return "pending"
+        }
+      }
+    }
+
+    const requestedStatus = createMemo(
+      () => {
+        const key = store.requested
+        const status = getStatus(key)
+        return { key, status }
+      },
+      undefined,
+      {
+        equals: (prev, next) => (
+          next.key === prev.key &&
+          next.status === prev.status
+        )
+      }
+    )
+
+    const toast = useToast()
+    createEffect(on(
+      requestedStatus,
+      ({ key, status }) => {
+        console.debug("theme", "requested", { key, status })
+
+        const promote = (override?: string) => {
+          const active = override ?? key
+          console.debug("theme", "active", { key: active })
+
+          setStore({
+            ready: true,
+            active,
+          })
+        }
+
+        switch(status) {
+          case "pending": {
+            return
+          }
+          case "succeeded": {
+            promote()
+            return
+          }
+          case "errored": {
+            toast.show({
+              message: `Theme ${key} may not have resolved correctly`,
+              variant: "warning", duration: 3000,
+            })
+
+            if (key in store.themes) {
+              promote()
+              return
+            }
+
+            if (!store.ready) {
+              promote(FALLBACK_THEME_KEY)
+              return
+            }
+
+            return
+          }
+        }
+      }))
+
+    createEffect(on(
+      () => sync.data.config_generation,
+      () => {
+        renderer.clearPaletteCache()
+        systemLoader.reload()
+        customLoader.reload()
+
+        const key = sync.data.config.theme || store.active
+        setStore("requested", key)
+      },
+      { defer: true }
+    ))
+
     const values = createMemo(() => {
-      return resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
+      const theme = store.themes[store.active] ?? store.themes[FALLBACK_THEME_KEY]
+      return resolveTheme(theme, store.mode)
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
@@ -382,9 +463,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         setStore("mode", mode)
         kv.set("theme_mode", mode)
       },
-      set(theme: string) {
-        setStore("active", theme)
-        kv.set("theme", theme)
+      set(themeKey: string) {
+        setStore("requested", themeKey)
+        kv.set("theme", themeKey)
       },
       get ready() {
         return store.ready
@@ -394,7 +475,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 })
 
 const CUSTOM_THEME_GLOB = new Bun.Glob("themes/*.json")
-async function getCustomThemes() {
+async function loadCustomThemes() {
   const directories = [
     Global.Path.config,
     ...(await Array.fromAsync(
@@ -427,7 +508,14 @@ export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
   return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
 }
 
-function generateSystem(colors: TerminalColors): ThemeJson {
+async function detectSystemColors(renderer: CliRenderer) {
+  const colors = await renderer.getPalette({ size: 16 })
+  if (colors.palette[0]) return colors
+
+  throw new Error("System color detection failed")
+}
+
+function generateSystemTheme(colors: TerminalColors): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
 

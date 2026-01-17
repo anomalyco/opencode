@@ -73,6 +73,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
       path: Path
+      config_generation: number
     }>({
       provider_next: {
         all: [],
@@ -100,6 +101,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: [],
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
+      config_generation: 0,
     })
 
     const sdk = useSDK()
@@ -331,7 +333,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           })
         }),
         sdk.client.app.agents({}, { throwOnError: true }).then((x) => setStore("agent", reconcile(x.data ?? []))),
-        sdk.client.config.get({}, { throwOnError: true }).then((x) => setStore("config", reconcile(x.data!))),
+        sdk.client.config.get({}, { throwOnError: true }).then((x) => {
+          batch(() => {
+            setStore("config", reconcile(x.data!))
+            setStore("config_generation", (g) => g + 1)
+          })
+        }),
         ...(args.continue ? [sessionListPromise] : []),
       ]
 
