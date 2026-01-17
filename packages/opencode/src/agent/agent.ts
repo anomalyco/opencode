@@ -115,7 +115,6 @@ export namespace Agent {
           defaults,
           PermissionNext.fromConfig({
             question: "allow",
-            plan_enter: "allow",
           }),
           user,
         ),
