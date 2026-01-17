@@ -495,7 +495,7 @@ export namespace Auth {
     export async function snapshot(
       providerID: string,
       namespace = "default",
-    ): Promise<{ records: OAuthRecordMeta[]; orderedIDs: string[] }> {
+    ): Promise<{ records: OAuthRecordMeta[]; orderedIDs: string[]; activeID?: string }> {
       const store = await loadStoreFile()
       const provider = store.providers[providerID]
       if (!provider || provider.type !== "oauth") return { records: [], orderedIDs: [] }
@@ -503,8 +503,9 @@ export namespace Auth {
       const normalized = namespace.trim() || "default"
       const records = provider.records.filter((record) => record.namespace === normalized).map(toMeta)
       const orderedIDs = recordIDsForNamespace(provider, normalized)
+      const activeID = provider.active[normalized]
 
-      return { records, orderedIDs }
+      return { records, orderedIDs, activeID }
     }
 
     export async function list(providerID: string, namespace = "default"): Promise<OAuthRecordMeta[]> {
@@ -593,12 +594,15 @@ export namespace Auth {
 
       const orderedIDs = recordIDsForNamespace(provider, namespace)
       const now = Date.now()
+      // Use explicitly set active account if it exists, otherwise fall back to first non-cooldown
       const activeID =
+        provider.active[namespace] ??
         orderedIDs.find((id) => {
           const record = provider.records.find((r) => r.id === id)
           const cooldownUntil = record?.health.cooldownUntil
           return !cooldownUntil || cooldownUntil <= now
-        }) ?? orderedIDs[0]
+        }) ??
+        orderedIDs[0]
 
       return provider.records
         .filter((record) => record.namespace === namespace)
@@ -615,9 +619,26 @@ export namespace Auth {
         }))
     }
 
+    export async function setActive(providerID: string, namespace: string, recordID: string): Promise<boolean> {
+      return updateStore((store) => {
+        const provider = store.providers[providerID]
+        if (!provider || provider.type !== "oauth") return { value: false, changed: false }
+
+        const record = findOAuthRecord(provider, recordID)
+        if (!record || record.namespace !== namespace) return { value: false, changed: false }
+
+        const order = recordIDsForNamespace(provider, namespace)
+        provider.order[namespace] = [recordID, ...order.filter((id) => id !== recordID)]
+        provider.active[namespace] = recordID
+
+        return { value: true, changed: true }
+      })
+    }
+
     export async function fetchAnthropicUsage(
       providerID: string,
       namespace = "default",
+      recordID?: string,
     ): Promise<{
       fiveHour?: { utilization: number; resetsAt?: string }
       sevenDay?: { utilization: number; resetsAt?: string }
@@ -631,12 +652,16 @@ export namespace Auth {
 
       const orderedIDs = recordIDsForNamespace(provider, namespace)
       const now = Date.now()
+      // Use explicit recordID, then provider.active, then first non-cooldown, then first in order
       const activeID =
+        recordID ??
+        provider.active[namespace] ??
         orderedIDs.find((id) => {
           const rec = provider.records.find((r) => r.id === id)
           const cooldownUntil = rec?.health.cooldownUntil
           return !cooldownUntil || cooldownUntil <= now
-        }) ?? orderedIDs[0]
+        }) ??
+        orderedIDs[0]
       const record = provider.records.find((r) => r.id === activeID && r.namespace === namespace)
       if (!record?.access) return null
 

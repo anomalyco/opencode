@@ -163,6 +163,48 @@ export namespace Server {
         .route("/mcp", McpRoutes())
         .route("/tui", TuiRoutes())
         .post(
+          "/auth/active",
+          describeRoute({
+            summary: "Set active OAuth account",
+            description:
+              "Set the active OAuth account for a provider. This account will be used for requests until rate limited.",
+            operationId: "auth.setActive",
+            responses: {
+              200: {
+                description: "Active account updated",
+                content: {
+                  "application/json": {
+                    schema: resolver(
+                      z.object({
+                        success: z.boolean(),
+                        anthropicUsage: z.any().optional(),
+                      }),
+                    ),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "json",
+            z.object({
+              providerID: z.string(),
+              recordID: z.string(),
+              namespace: z.string().optional(),
+            }),
+          ),
+          async (c) => {
+            const body = c.req.valid("json")
+            const namespace = body.namespace ?? "default"
+            const success = await Auth.OAuthPool.setActive(body.providerID, namespace, body.recordID)
+            const anthropicUsage = success
+              ? await Auth.OAuthPool.fetchAnthropicUsage(body.providerID, namespace, body.recordID)
+              : null
+            return c.json({ success, anthropicUsage: anthropicUsage ?? undefined })
+          },
+        )
+        .post(
           "/instance/dispose",
           describeRoute({
             summary: "Dispose instance",

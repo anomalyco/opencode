@@ -165,43 +165,46 @@ export const AuthUsageCommand = cmd({
     prompts.intro("Usage")
     const all = await Auth.all()
     const database = await ModelsDev.get()
+    const sorted = Object.entries(all).sort((a, b) => {
+      const nameA = database[a[0]]?.name || a[0]
+      const nameB = database[b[0]]?.name || b[0]
+      return nameA.localeCompare(nameB)
+    })
 
     let hasOAuth = false
-    for (const [providerID, info] of Object.entries(all)) {
+    for (const [providerID, info] of sorted) {
       if (info.type !== "oauth") continue
       hasOAuth = true
 
       const name = database[providerID]?.name || providerID
       const accounts = await Auth.OAuthPool.getUsage(providerID)
 
+      prompts.log.step(`${name} (${accounts.length} account${accounts.length !== 1 ? "s" : ""})`)
+
       for (const account of accounts) {
         const label = account.label || "default"
         const status = account.isActive ? `${UI.Style.TEXT_SUCCESS}active` : UI.Style.TEXT_DIM + "inactive"
-        prompts.log.step(`${name} (${label}) - ${status}`)
+        prompts.log.info(`  Account: ${label} - ${status}`)
 
         if (account.health.cooldownUntil && account.health.cooldownUntil > Date.now()) {
           const remaining = Math.ceil((account.health.cooldownUntil - Date.now()) / 1000)
-          prompts.log.warn(`  In cooldown for ${remaining}s`)
+          prompts.log.warn(`    In cooldown for ${remaining}s`)
         }
 
-        prompts.log.info(`  ${account.health.successCount} successful requests`)
-        if (account.health.failureCount > 0) {
-          prompts.log.warn(`  ${account.health.failureCount} failed requests`)
-        }
-      }
+        prompts.log.info(
+          `    ${account.health.successCount} successful, ${account.health.failureCount} failed requests`,
+        )
 
-      if (providerID === "anthropic") {
-        const usage = await Auth.OAuthPool.fetchAnthropicUsage(providerID)
-        if (usage) {
-          prompts.log.step("Anthropic Rate Limits:")
-          if (usage.fiveHour) {
-            prompts.log.info(`  5-Hour: ${usage.fiveHour.utilization}% used`)
-          }
-          if (usage.sevenDay) {
-            prompts.log.info(`  7-Day (All): ${usage.sevenDay.utilization}% used`)
-          }
-          if (usage.sevenDaySonnet) {
-            prompts.log.info(`  7-Day (Sonnet): ${usage.sevenDaySonnet.utilization}% used`)
+        if (providerID === "anthropic") {
+          const usage = await Auth.OAuthPool.fetchAnthropicUsage(providerID, "default", account.id)
+          if (usage) {
+            const parts: string[] = []
+            if (usage.fiveHour) parts.push(`5h: ${usage.fiveHour.utilization}%`)
+            if (usage.sevenDay) parts.push(`7d: ${usage.sevenDay.utilization}%`)
+            if (usage.sevenDaySonnet) parts.push(`7d-sonnet: ${usage.sevenDaySonnet.utilization}%`)
+            if (parts.length > 0) {
+              prompts.log.info(`    Rate Limits: ${parts.join(", ")}`)
+            }
           }
         }
       }
@@ -209,6 +212,81 @@ export const AuthUsageCommand = cmd({
 
     if (!hasOAuth) {
       prompts.log.warn("No OAuth providers configured")
+    }
+
+    prompts.outro("")
+  },
+})
+
+export const AuthSwitchCommand = cmd({
+  command: "switch",
+  describe: "switch active OAuth account for a provider",
+  async handler() {
+    UI.empty()
+    prompts.intro("Switch Account")
+    const all = await Auth.all()
+    const database = await ModelsDev.get()
+
+    const oauthProviders = Object.entries(all)
+      .filter(([, info]) => info.type === "oauth")
+      .sort((a, b) => {
+        const nameA = database[a[0]]?.name || a[0]
+        const nameB = database[b[0]]?.name || b[0]
+        return nameA.localeCompare(nameB)
+      })
+    if (oauthProviders.length === 0) {
+      prompts.log.warn("No OAuth providers configured")
+      prompts.outro("")
+      return
+    }
+
+    const providerID = await prompts.select({
+      message: "Select provider",
+      options: oauthProviders.map(([id]) => ({
+        label: database[id]?.name || id,
+        value: id,
+      })),
+    })
+    if (prompts.isCancel(providerID)) throw new UI.CancelledError()
+
+    const accounts = await Auth.OAuthPool.getUsage(providerID)
+    if (accounts.length < 2) {
+      prompts.log.warn("Only one account configured for this provider")
+      prompts.outro("")
+      return
+    }
+
+    const accountOptions = []
+    for (const account of accounts) {
+      const label = account.label || "default"
+      const status = account.isActive ? " (active)" : ""
+      let hint = `${account.health.successCount} requests`
+
+      if (providerID === "anthropic") {
+        const usage = await Auth.OAuthPool.fetchAnthropicUsage(providerID, "default", account.id)
+        if (usage?.fiveHour) {
+          hint = `5h: ${usage.fiveHour.utilization}%`
+        }
+      }
+
+      accountOptions.push({
+        label: `${label}${status}`,
+        value: account.id,
+        hint,
+      })
+    }
+
+    const recordID = await prompts.select({
+      message: "Select account to activate",
+      options: accountOptions,
+    })
+    if (prompts.isCancel(recordID)) throw new UI.CancelledError()
+
+    const success = await Auth.OAuthPool.setActive(providerID, "default", recordID)
+    if (success) {
+      prompts.log.success("Account switched successfully")
+    } else {
+      prompts.log.error("Failed to switch account")
     }
 
     prompts.outro("")
@@ -224,6 +302,7 @@ export const AuthCommand = cmd({
       .command(AuthLogoutCommand)
       .command(AuthListCommand)
       .command(AuthUsageCommand)
+      .command(AuthSwitchCommand)
       .demandCommand(),
   async handler() {},
 })
@@ -238,8 +317,12 @@ export const AuthListCommand = cmd({
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-    const results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
+    const results = Object.entries(await Auth.all()).sort((a, b) => {
+      const nameA = database[a[0]]?.name || a[0]
+      const nameB = database[b[0]]?.name || b[0]
+      return nameA.localeCompare(nameB)
+    })
 
     for (const [providerID, result] of results) {
       const name = database[providerID]?.name || providerID
@@ -271,7 +354,7 @@ export const AuthListCommand = cmd({
       UI.empty()
       prompts.intro("Environment")
 
-      for (const { provider, envVar } of activeEnvVars) {
+      for (const { provider, envVar } of activeEnvVars.sort((a, b) => a.provider.localeCompare(b.provider))) {
         prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
       }
 

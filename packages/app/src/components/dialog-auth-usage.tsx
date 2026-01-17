@@ -2,7 +2,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Spinner } from "@opencode-ai/ui/spinner"
-import { createResource, For, Show, createMemo } from "solid-js"
+import { createResource, For, Show, createMemo, createSignal } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 
 interface AccountUsage {
@@ -73,8 +73,9 @@ function UsageBarPercent(props: { label: string; utilization: number; resetsAt?:
 
 export function DialogAuthUsage() {
   const globalSDK = useGlobalSDK()
+  const [switching, setSwitching] = createSignal<string | null>(null)
 
-  const [usage, { refetch }] = createResource(async () => {
+  const [usage, { refetch, mutate }] = createResource(async () => {
     const result = await globalSDK.client.auth.usage({})
     return result.data as AuthUsageData
   })
@@ -84,6 +85,36 @@ export function DialogAuthUsage() {
     if (!data) return []
     return Object.entries(data).filter(([_, info]) => info.accounts.length > 0)
   })
+
+  const switchAccount = async (providerID: string, recordID: string) => {
+    setSwitching(recordID)
+    try {
+      const result = await fetch(`${globalSDK.url}/auth/active`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providerID, recordID }),
+      }).then((r) => r.json())
+
+      if (result.success) {
+        const current = usage()
+        if (current && current[providerID]) {
+          mutate({
+            ...current,
+            [providerID]: {
+              ...current[providerID],
+              accounts: current[providerID].accounts.map((acc) => ({
+                ...acc,
+                isActive: acc.id === recordID,
+              })),
+              anthropicUsage: result.anthropicUsage ?? current[providerID].anthropicUsage,
+            },
+          })
+        }
+      }
+    } finally {
+      setSwitching(null)
+    }
+  }
 
   return (
     <Dialog title="Rate Limits & Usage">
@@ -114,7 +145,7 @@ export function DialogAuthUsage() {
               {/* Anthropic Usage Limits */}
               <Show when={info.anthropicUsage}>
                 <div class="flex flex-col gap-3 p-3 rounded-lg bg-fill-brand-ghost border border-fill-brand-base">
-                  <div class="text-13-medium text-text-strong">Usage Limits</div>
+                  <div class="text-13-medium text-text-strong">Usage Limits (Active Account)</div>
                   <Show when={info.anthropicUsage?.fiveHour}>
                     <UsageBarPercent
                       label="5-Hour Limit"
@@ -146,7 +177,12 @@ export function DialogAuthUsage() {
               </Show>
 
               {/* Account Details */}
-              <div class="text-12-medium text-text-muted">Accounts</div>
+              <div class="text-12-medium text-text-muted">
+                Accounts
+                <Show when={info.accounts.length > 1}>
+                  <span class="text-text-weak"> (click to switch)</span>
+                </Show>
+              </div>
               <For each={info.accounts}>
                 {(account, index) => {
                   const isInCooldown = () => {
@@ -161,17 +197,26 @@ export function DialogAuthUsage() {
                     const secs = Math.ceil(diff / 1000)
                     return secs > 60 ? `${Math.ceil(secs / 60)}m` : `${secs}s`
                   }
+                  const isSwitching = () => switching() === account.id
+                  const canSwitch = () => info.accounts.length > 1 && !account.isActive && !isSwitching()
 
                   return (
-                    <div
-                      class="flex flex-col gap-2 p-3 rounded-lg"
+                    <button
+                      type="button"
+                      disabled={!canSwitch() && !account.isActive}
+                      onClick={() => canSwitch() && switchAccount(providerID, account.id)}
+                      class="flex flex-col gap-2 p-3 rounded-lg text-left transition-all"
                       classList={{
-                        "bg-fill-ghost-base": !account.isActive,
+                        "bg-fill-ghost-base hover:bg-fill-ghost-strong cursor-pointer": canSwitch(),
+                        "bg-fill-ghost-base opacity-60": !canSwitch() && !account.isActive,
                         "bg-fill-success-ghost border border-fill-success-base": account.isActive,
                       }}
                     >
-                      <div class="flex justify-between items-center">
+                      <div class="flex justify-between items-center w-full">
                         <div class="flex items-center gap-2">
+                          <Show when={isSwitching()}>
+                            <Spinner class="size-3" />
+                          </Show>
                           <span class="text-13-medium text-text-base">
                             Account {index() + 1}
                             <Show when={account.label && account.label !== "default"}>
@@ -197,7 +242,7 @@ export function DialogAuthUsage() {
                           {account.health.failureCount} failed requests
                         </div>
                       </Show>
-                    </div>
+                    </button>
                   )
                 }}
               </For>

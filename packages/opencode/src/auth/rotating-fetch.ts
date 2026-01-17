@@ -113,11 +113,15 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
   const namespace = (opts.namespace ?? "default").trim() || "default"
 
   return (async (input: any, init?: any) => {
-    const { records, orderedIDs } = await Auth.OAuthPool.snapshot(opts.providerID, namespace)
+    const { records, orderedIDs, activeID } = await Auth.OAuthPool.snapshot(opts.providerID, namespace)
     if (records.length === 0) return fetchFn(input, init)
 
     const recordByID = new Map(records.map((record) => [record.id, record]))
-    const candidates = orderedIDs.filter((id) => recordByID.has(id))
+    // Prefer activeID first, then follow the order
+    const candidates =
+      activeID && recordByID.has(activeID)
+        ? [activeID, ...orderedIDs.filter((id) => id !== activeID && recordByID.has(id))]
+        : orderedIDs.filter((id) => recordByID.has(id))
     if (candidates.length === 0) return fetchFn(input, init)
     const inputIsRequest = isRequest(input)
     let allowRetry =
@@ -125,10 +129,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
 
     const rateLimitCooldownMs = opts.rateLimitCooldownMs ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS
     const authFailureCooldownMs = opts.authFailureCooldownMs ?? DEFAULT_AUTH_FAILURE_COOLDOWN_MS
-    const configuredNetworkRetryAttempts = Math.max(
-      0,
-      opts.networkRetryAttempts ?? DEFAULT_NETWORK_RETRY_ATTEMPTS,
-    )
+    const configuredNetworkRetryAttempts = Math.max(0, opts.networkRetryAttempts ?? DEFAULT_NETWORK_RETRY_ATTEMPTS)
     const maxAttemptBudget = opts.maxAttempts ?? candidates.length
     let maxAttempts = Math.max(1, maxAttemptBudget)
     if (!allowRetry) {
