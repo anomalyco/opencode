@@ -65,7 +65,6 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
         buffer = newBuffer
 
         const messages = []
-
         while (buffer.length >= 4) {
           // first 4 bytes are the total length (big-endian)
           const totalLength = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength).getUint32(0, false)
@@ -121,7 +120,9 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
 
               const parsedDataResult = JSON.parse(data)
               delete parsedDataResult.p
-              const bytes = atob(parsedDataResult.bytes)
+              const binary = atob(parsedDataResult.bytes)
+              const uint8 = Uint8Array.from(binary, (c) => c.charCodeAt(0))
+              const bytes = decoder.decode(uint8)
               const eventName = JSON.parse(bytes).type
               messages.push([`event: ${eventName}`, "\n", `data: ${bytes}`, "\n\n"].join(""))
             }
