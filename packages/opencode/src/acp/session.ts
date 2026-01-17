@@ -13,6 +13,14 @@ export class ACPSessionManager {
     this.sdk = sdk
   }
 
+  delete(sessionId: string): boolean {
+    return this.sessions.delete(sessionId)
+  }
+
+  clear(): void {
+    this.sessions.clear()
+  }
+
   tryGet(sessionId: string): ACPSessionState | undefined {
     return this.sessions.get(sessionId)
   }

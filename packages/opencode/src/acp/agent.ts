@@ -259,6 +259,12 @@ export namespace ACP {
           return
         }
 
+        case "session.deleted": {
+          const sessionId = event.properties.info.id
+          this.closeSession(sessionId)
+          return
+        }
+
         case "message.part.updated": {
           log.info("message part updated", { event: event.properties })
           const props = event.properties
@@ -1431,6 +1437,34 @@ export namespace ACP {
         },
         { throwOnError: true },
       )
+    }
+
+    /**
+     * Dispose of all session resources including event streams and session map entries.
+     * This should be called when the agent is being destroyed to prevent memory leaks.
+     */
+    async dispose() {
+      log.info("disposing agent", { sessionCount: this.sessionManager["sessions"].size })
+
+      // Abort global event stream
+      this.eventAbort.abort()
+
+      // Clear all sessions from the manager
+      this.sessionManager.clear()
+    }
+
+    /**
+     * Close a specific session and clean up its resources.
+     * This should be called when a session is explicitly closed/ended.
+     */
+    closeSession(sessionId: string) {
+      log.info("closing session", { sessionId })
+
+      // Remove from session manager
+      this.sessionManager.delete(sessionId)
+
+      // Clean up permission queue if present
+      this.permissionQueues.delete(sessionId)
     }
   }
 
