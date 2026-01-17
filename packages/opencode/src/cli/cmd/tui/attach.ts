@@ -1,17 +1,5 @@
-import path from "path"
 import { cmd } from "../cmd"
 import { tui } from "./app"
-
-const localHosts = new Set(["localhost", "127.0.0.1", "0.0.0.0"])
-
-function resolveDir(url: string, dir?: string) {
-  if (!dir) return dir
-  const target = URL.canParse(url) ? new URL(url) : new URL(`http://${url}`)
-  if (!localHosts.has(target.hostname)) return dir
-  if (path.isAbsolute(dir)) return dir
-  const base = process.env.PWD ?? process.cwd()
-  return path.resolve(base, dir)
-}
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -33,10 +21,19 @@ export const AttachCommand = cmd({
         describe: "session id to continue",
       }),
   handler: async (args) => {
+    let directory = args.dir
+    if (args.dir) {
+      try {
+        process.chdir(args.dir)
+        directory = process.cwd()
+      } catch {
+        // If the directory doesn't exist locally (remote attach), pass it through.
+      }
+    }
     await tui({
       url: args.url,
       args: { sessionID: args.session },
-      directory: resolveDir(args.url, args.dir),
+      directory,
     })
   },
 })
