@@ -258,7 +258,7 @@ export namespace ProviderTransform {
 
     // Remap providerOptions keys from stored providerID to expected SDK key
     const key = sdkKey(model.api.npm)
-    if (key && key !== model.providerID) {
+    if (key && key !== model.providerID && model.api.npm !== "@ai-sdk/azure") {
       const remap = (opts: Record<string, any> | undefined) => {
         if (!opts) return opts
         if (!(model.providerID in opts)) return opts
