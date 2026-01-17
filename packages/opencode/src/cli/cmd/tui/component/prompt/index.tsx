@@ -114,10 +114,12 @@ export function Prompt(props: PromptProps) {
   })
 
   const [store, setStore] = createStore<{
+
     prompt: PromptInfo
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
+    quitArmed: boolean
     placeholder: number
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
@@ -128,6 +130,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    quitArmed: false,
   })
 
   // Initialize agent/model/variant from last user message when session changes
@@ -807,7 +810,19 @@ export function Prompt(props: PromptProps) {
                 }
                 if (keybind.match("app_exit", e)) {
                   if (store.prompt.input === "") {
-                    await exit()
+                    if (store.quitArmed) {
+                      await exit()
+                    } else {
+                      setStore("quitArmed", true)
+                      toast.show({
+                        message: "Press Ctrl+C again to exit",
+                        variant: "info",
+                        duration: 3000,
+                      })
+                      setTimeout(() => {
+                        setStore("quitArmed", false)
+                      }, 3000)
+                    }
                     // Don't preventDefault - let textarea potentially handle the event
                     e.preventDefault()
                     return
