@@ -50,6 +50,7 @@ export namespace ACP {
     private sessionManager: ACPSessionManager
     private eventAbort = new AbortController()
     private eventStarted = false
+    private permissionQueues = new Map<string, Promise<void>>()
     private permissionOptions: PermissionOption[] = [
       { optionId: "once", kind: "allow_once", name: "Allow once" },
       { optionId: "always", kind: "allow_always", name: "Always allow" },
@@ -96,67 +97,81 @@ export namespace ACP {
           const permission = event.properties
           const session = this.sessionManager.tryGet(permission.sessionID)
           if (!session) return
-          const directory = session.cwd
 
-          const res = await this.connection
-            .requestPermission({
-              sessionId: permission.sessionID,
-              toolCall: {
-                toolCallId: permission.tool?.callID ?? permission.id,
-                status: "pending",
-                title: permission.permission,
-                rawInput: permission.metadata,
-                kind: toToolKind(permission.permission),
-                locations: toLocations(permission.permission, permission.metadata),
-              },
-              options: this.permissionOptions,
-            })
-            .catch(async (error) => {
-              log.error("failed to request permission from ACP", {
-                error,
-                permissionID: permission.id,
-                sessionID: permission.sessionID,
-              })
+          const prev = this.permissionQueues.get(permission.sessionID) ?? Promise.resolve()
+          const next = prev
+            .then(async () => {
+              const directory = session.cwd
+
+              const res = await this.connection
+                .requestPermission({
+                  sessionId: permission.sessionID,
+                  toolCall: {
+                    toolCallId: permission.tool?.callID ?? permission.id,
+                    status: "pending",
+                    title: permission.permission,
+                    rawInput: permission.metadata,
+                    kind: toToolKind(permission.permission),
+                    locations: toLocations(permission.permission, permission.metadata),
+                  },
+                  options: this.permissionOptions,
+                })
+                .catch(async (error) => {
+                  log.error("failed to request permission from ACP", {
+                    error,
+                    permissionID: permission.id,
+                    sessionID: permission.sessionID,
+                  })
+                  await this.sdk.permission.reply({
+                    requestID: permission.id,
+                    reply: "reject",
+                    directory,
+                  })
+                  return undefined
+                })
+
+              if (!res) return
+              if (res.outcome.outcome !== "selected") {
+                await this.sdk.permission.reply({
+                  requestID: permission.id,
+                  reply: "reject",
+                  directory,
+                })
+                return
+              }
+
+              if (res.outcome.optionId !== "reject" && permission.permission == "edit") {
+                const metadata = permission.metadata || {}
+                const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
+                const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
+
+                const content = await Bun.file(filepath).text()
+                const newContent = getNewContent(content, diff)
+
+                if (newContent) {
+                  this.connection.writeTextFile({
+                    sessionId: session.id,
+                    path: filepath,
+                    content: newContent,
+                  })
+                }
+              }
+
               await this.sdk.permission.reply({
                 requestID: permission.id,
-                reply: "reject",
+                reply: res.outcome.optionId as "once" | "always" | "reject",
                 directory,
               })
-              return undefined
             })
-
-          if (!res) return
-          if (res.outcome.outcome !== "selected") {
-            await this.sdk.permission.reply({
-              requestID: permission.id,
-              reply: "reject",
-              directory,
+            .catch((error) => {
+              log.error("failed to handle permission", { error, permissionID: permission.id })
             })
-            return
-          }
-
-          if (res.outcome.optionId !== "reject" && permission.permission == "edit") {
-            const metadata = permission.metadata || {}
-            const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
-            const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
-
-            const content = await Bun.file(filepath).text()
-            const newContent = getNewContent(content, diff)
-
-            if (newContent) {
-              this.connection.writeTextFile({
-                sessionId: session.id,
-                path: filepath,
-                content: newContent,
-              })
-            }
-          }
-
-          await this.sdk.permission.reply({
-            requestID: permission.id,
-            reply: res.outcome.optionId as "once" | "always" | "reject",
-            directory,
-          })
+            .finally(() => {
+              if (this.permissionQueues.get(permission.sessionID) === next) {
+                this.permissionQueues.delete(permission.sessionID)
+              }
+            })
+          this.permissionQueues.set(permission.sessionID, next)
           return
         }
 

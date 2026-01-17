@@ -189,7 +189,7 @@ function createFakeAgent() {
     ;(agent as any).eventAbort.abort()
   }
 
-  return { agent, controller, calls, updates, chunks, stop }
+  return { agent, controller, calls, updates, chunks, stop, sdk, connection }
 }
 
 describe("acp.agent event subscription", () => {
@@ -300,6 +300,134 @@ describe("acp.agent event subscription", () => {
         await agent.loadSession({ sessionId, cwd, mcpServers: [] } as any)
 
         expect(calls.eventSubscribe).toBe(1)
+
+        stop()
+      },
+    })
+  })
+
+  test("permission.asked events are handled and replied", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const permissionReplies: string[] = []
+        const { agent, controller, stop, sdk } = createFakeAgent()
+        sdk.permission.reply = async (params: any) => {
+          permissionReplies.push(params.requestID)
+          return { data: true }
+        }
+        const cwd = "/tmp/opencode-acp-test"
+
+        const sessionA = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "permission.asked",
+            properties: {
+              id: "perm_1",
+              sessionID: sessionA,
+              permission: "bash",
+              patterns: ["*"],
+              metadata: {},
+              always: [],
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(permissionReplies).toContain("perm_1")
+
+        stop()
+      },
+    })
+  })
+
+  test("permission prompt on session A does not block message updates for session B", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const permissionReplies: string[] = []
+        let resolvePermissionA: (() => void) | undefined
+        const permissionABlocking = new Promise<void>((r) => {
+          resolvePermissionA = r
+        })
+
+        const { agent, controller, chunks, stop, sdk, connection } = createFakeAgent()
+
+        // Make permission request for session A block until we release it
+        const originalRequestPermission = connection.requestPermission.bind(connection)
+        let permissionCalls = 0
+        connection.requestPermission = async (params: RequestPermissionParams) => {
+          permissionCalls++
+          if (params.sessionId.endsWith("1")) {
+            await permissionABlocking
+          }
+          return originalRequestPermission(params)
+        }
+
+        sdk.permission.reply = async (params: any) => {
+          permissionReplies.push(params.requestID)
+          return { data: true }
+        }
+
+        const cwd = "/tmp/opencode-acp-test"
+
+        const sessionA = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const sessionB = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        // Push permission.asked for session A (will block)
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "permission.asked",
+            properties: {
+              id: "perm_a",
+              sessionID: sessionA,
+              permission: "bash",
+              patterns: ["*"],
+              metadata: {},
+              always: [],
+            },
+          },
+        } as any)
+
+        // Give time for permission handling to start
+        await new Promise((r) => setTimeout(r, 10))
+
+        // Push message for session B while A's permission is pending
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              part: {
+                sessionID: sessionB,
+                messageID: "msg_b",
+                type: "text",
+                synthetic: false,
+              },
+              delta: "session_b_message",
+            },
+          },
+        } as any)
+
+        // Wait for session B's message to be processed
+        await new Promise((r) => setTimeout(r, 20))
+
+        // Session B should have received message even though A's permission is still pending
+        expect(chunks.get(sessionB) ?? "").toContain("session_b_message")
+        expect(permissionReplies).not.toContain("perm_a")
+
+        // Release session A's permission
+        resolvePermissionA!()
+        await new Promise((r) => setTimeout(r, 20))
+
+        // Now session A's permission should be replied
+        expect(permissionReplies).toContain("perm_a")
 
         stop()
       },
