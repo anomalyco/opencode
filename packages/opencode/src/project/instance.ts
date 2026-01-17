@@ -3,6 +3,7 @@ import { disposeInstance } from "@/effect/instance-registry"
 import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
+import { createLruCache } from "@/util/cache"
 import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
@@ -13,7 +14,9 @@ export interface Shape {
   project: Project.Info
 }
 const context = Context.create<Shape>("instance")
-const cache = new Map<string, Promise<Shape>>()
+const cache = createLruCache<string, Promise<Shape>>({
+  maxEntries: 20,
+})
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
