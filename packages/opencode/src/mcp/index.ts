@@ -315,6 +315,7 @@ export namespace MCP {
             clientId: oauthConfig?.clientId,
             clientSecret: oauthConfig?.clientSecret,
             scope: oauthConfig?.scope,
+            redirectUri: oauthConfig?.redirectUri,
           },
           {
             onRedirect: async (url) => {
@@ -720,8 +721,11 @@ export namespace MCP {
       throw new Error(`MCP server ${mcpName} has OAuth explicitly disabled`)
     }
 
-    // Start the callback server
-    await McpOAuthCallback.ensureRunning()
+    // OAuth config is optional - if not provided, we'll use auto-discovery
+    const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
+
+    // Start the callback server with custom redirectUri if configured
+    await McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri)
 
     // Generate and store a cryptographically secure state parameter BEFORE creating the provider
     // The SDK will call provider.state() to read this value
@@ -731,8 +735,6 @@ export namespace MCP {
     await McpAuth.updateOAuthState(mcpName, oauthState)
 
     // Create a new auth provider for this flow
-    // OAuth config is optional - if not provided, we'll use auto-discovery
-    const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
     let capturedUrl: URL | undefined
     const authProvider = new McpOAuthProvider(
       mcpName,
@@ -741,6 +743,7 @@ export namespace MCP {
         clientId: oauthConfig?.clientId,
         clientSecret: oauthConfig?.clientSecret,
         scope: oauthConfig?.scope,
+        redirectUri: oauthConfig?.redirectUri,
       },
       {
         onRedirect: async (url) => {
