@@ -47,7 +47,7 @@ describe("debug system injection", () => {
           expect(capturedSystem).toBeDefined()
           expect(capturedSystem).toContain("BASE_SYSTEM")
           expect(capturedSystem).toContain("<debug_config>")
-          expect(capturedSystem).toContain(`ingestUrl: http://localhost/ingest/${sessionID}`)
+          expect(capturedSystem).toContain(`ingestUrl: http://localhost:4096/ingest/${sessionID}`)
           expect(capturedSystem).toContain("logFileRelative: .opencode/debug.log")
           expect(capturedSystem).toContain("</debug_config>")
         },
