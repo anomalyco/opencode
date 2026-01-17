@@ -1,7 +1,14 @@
 version: "3"
 
 tasks:
+  app:
+    desc: Build the web UI
+    dir: packages/app
+    cmds:
+      - bun run build
+
   build:
     desc: Compile single binary for current platform
+    deps: [app]
     cmds:
       - bun ./packages/opencode/script/build.ts --single

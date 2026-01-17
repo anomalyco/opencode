@@ -1,3 +1,4 @@
+import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Log } from "../util/log"
@@ -503,8 +504,42 @@ export namespace Server {
           },
         )
         .all("/*", async (c) => {
-          const path = c.req.path
-          const response = await proxy(`https://app.opencode.ai${path}`, {
+          const reqPath = c.req.path
+
+          // Serve from local directory if OPENCODE_APP_DIR is set
+          if (Flag.OPENCODE_APP_DIR) {
+            const filePath = reqPath === "/" ? "/index.html" : reqPath
+            const fullPath = path.join(Flag.OPENCODE_APP_DIR, filePath)
+            const file = Bun.file(fullPath)
+
+            if (await file.exists()) {
+              return new Response(file, {
+                headers: {
+                  "Content-Type": file.type,
+                  "Content-Security-Policy":
+                    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'",
+                },
+              })
+            }
+
+            // SPA fallback: serve index.html for non-asset routes
+            const indexPath = path.join(Flag.OPENCODE_APP_DIR, "index.html")
+            const indexFile = Bun.file(indexPath)
+            if (await indexFile.exists()) {
+              return new Response(indexFile, {
+                headers: {
+                  "Content-Type": "text/html",
+                  "Content-Security-Policy":
+                    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'",
+                },
+              })
+            }
+
+            return c.notFound()
+          }
+
+          // Fall back to proxying to app.opencode.ai
+          const response = await proxy(`https://app.opencode.ai${reqPath}`, {
             ...c.req,
             headers: {
               ...c.req.raw.headers,
