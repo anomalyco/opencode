@@ -134,14 +134,14 @@ export function DialogSelectFile() {
   })
 
   return (
-    <Dialog title="Search">
+    <Dialog class="pt-3 pb-0">
       <List
-        search={{ placeholder: "Search files and commands", autofocus: true, hideIcon: true, class: "px-3" }}
+        search={{ placeholder: "Search files and commands", autofocus: true, hideIcon: true, class: "pl-3 pr-2 !mb-0" }}
         emptyMessage="No results found"
         items={items}
         key={(item) => item.id}
         filterKeys={["title", "description", "category"]}
-        groupBy={(item) => (grouped() ? item.category : "")}
+        groupBy={(item) => item.category}
         onMove={handleMove}
         onSelect={handleSelect}
       >
