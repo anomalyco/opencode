@@ -1,6 +1,7 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Keybind } from "@opencode-ai/ui/keybind"
 import { List } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { useParams } from "@solidjs/router"
@@ -133,14 +134,14 @@ export function DialogSelectFile() {
   })
 
   return (
-    <Dialog title="Search">
+    <Dialog class="pt-3 pb-0 !max-h-[480px]">
       <List
-        search={{ placeholder: "Search files and commands", autofocus: true }}
+        search={{ placeholder: "Search files and commands", autofocus: true, hideIcon: true, class: "pl-3 pr-2 !mb-0" }}
         emptyMessage="No results found"
         items={items}
         key={(item) => item.id}
         filterKeys={["title", "description", "category"]}
-        groupBy={(item) => (grouped() ? item.category : "")}
+        groupBy={(item) => item.category}
         onMove={handleMove}
         onSelect={handleSelect}
       >
@@ -161,7 +162,7 @@ export function DialogSelectFile() {
               </div>
             }
           >
-            <div class="w-full flex items-center justify-between gap-4">
+            <div class="w-full flex items-center justify-between gap-4 pl-1">
               <div class="flex items-center gap-2 min-w-0">
                 <span class="text-14-regular text-text-strong whitespace-nowrap">{item.title}</span>
                 <Show when={item.description}>
@@ -169,7 +170,7 @@ export function DialogSelectFile() {
                 </Show>
               </div>
               <Show when={item.keybind}>
-                <span class="text-12-regular text-text-subtle shrink-0">{formatKeybind(item.keybind ?? "")}</span>
+                <Keybind class="rounded-[4px]">{formatKeybind(item.keybind ?? "")}</Keybind>
               </Show>
             </div>
           </Show>

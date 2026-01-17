@@ -501,7 +501,7 @@ export default function Layout(props: ParentProps) {
         const [dirStore] = globalSync.child(dir)
         const dirSessions = dirStore.session
           .filter((session) => session.directory === dirStore.path.directory)
-          .filter((session) => !session.parentID)
+          .filter((session) => !session.parentID && !session.time?.archived)
           .toSorted(sortSessions)
         result.push(...dirSessions)
       }
@@ -510,7 +510,7 @@ export default function Layout(props: ParentProps) {
     const [projectStore] = globalSync.child(project.worktree)
     return projectStore.session
       .filter((session) => session.directory === projectStore.path.directory)
-      .filter((session) => !session.parentID)
+      .filter((session) => !session.parentID && !session.time?.archived)
       .toSorted(sortSessions)
   })
 
@@ -1203,7 +1203,7 @@ export default function Layout(props: ParentProps) {
     const sessions = createMemo(() =>
       workspaceStore.session
         .filter((session) => session.directory === workspaceStore.path.directory)
-        .filter((session) => !session.parentID)
+        .filter((session) => !session.parentID && !session.time?.archived)
         .toSorted(sortSessions),
     )
     const local = createMemo(() => props.directory === props.project.worktree)
@@ -1349,7 +1349,7 @@ export default function Layout(props: ParentProps) {
       const [data] = globalSync.child(directory)
       return data.session
         .filter((session) => session.directory === data.path.directory)
-        .filter((session) => !session.parentID)
+        .filter((session) => !session.parentID && !session.time?.archived)
         .toSorted(sortSessions)
         .slice(0, 2)
     }
@@ -1358,7 +1358,7 @@ export default function Layout(props: ParentProps) {
       const [data] = globalSync.child(props.project.worktree)
       return data.session
         .filter((session) => session.directory === data.path.directory)
-        .filter((session) => !session.parentID)
+        .filter((session) => !session.parentID && !session.time?.archived)
         .toSorted(sortSessions)
         .slice(0, 2)
     }
@@ -1381,7 +1381,7 @@ export default function Layout(props: ParentProps) {
     return (
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-        <HoverCard openDelay={0} closeDelay={0} placement="right-start" gutter={8} trigger={trigger}>
+        <HoverCard openDelay={0} closeDelay={0} placement="right-start" gutter={6} trigger={trigger}>
           <div class="-m-3 flex flex-col w-72">
             <div class="px-3 py-2 text-12-medium text-text-weak">Recent sessions</div>
             <div class="px-2 pb-2 flex flex-col gap-2">
@@ -1445,7 +1445,7 @@ export default function Layout(props: ParentProps) {
     const sessions = createMemo(() =>
       workspaceStore.session
         .filter((session) => session.directory === workspaceStore.path.directory)
-        .filter((session) => !session.parentID)
+        .filter((session) => !session.parentID && !session.time?.archived)
         .toSorted(sortSessions),
     )
     const loading = createMemo(() => workspaceStore.status !== "complete" && sessions().length === 0)
