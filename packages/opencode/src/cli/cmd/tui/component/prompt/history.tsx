@@ -27,6 +27,11 @@ export type PromptInfo = {
 
 const MAX_HISTORY_ENTRIES = 50
 
+export function createPromptHistoryStoreForTest(initialHistory: PromptInfo[] = []) {
+  // Use a lightweight helper implementation to avoid Solid/Bun runtime imports in tests
+  return require("./history-helper").createPromptHistoryStoreForTest(initialHistory)
+}
+
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
@@ -61,11 +66,50 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
     })
 
     return {
+      resetIndex() {
+        setStore("index", 0)
+      },
       move(direction: 1 | -1, input: string) {
         if (!store.history.length) return undefined
+        // If a prefix is provided, search the next matching entry that startsWith(prefix)
+        if (input && input.length) {
+          let idx = store.index
+          while (true) {
+            const next = idx + direction
+            if (Math.abs(next) > store.history.length) break
+            // When going down and reaching index 0, return the prefix as the "last" item
+            if (next >= 0) {
+              if (direction === 1) {
+                setStore(
+                  produce((draft) => {
+                    draft.index = 0
+                  }),
+                )
+                return { input: input, parts: [] }
+              }
+              break
+            }
+            const candidate = store.history.at(next)
+            if (!candidate) {
+              idx = next
+              continue
+            }
+            if (candidate.input.startsWith(input)) {
+              // update index and return the matching candidate directly
+              setStore(
+                produce((draft) => {
+                  draft.index = next
+                }),
+              )
+              return candidate
+            }
+            idx = next
+          }
+          return
+        }
+
         const current = store.history.at(store.index)
         if (!current) return undefined
-        if (current.input !== input && input.length) return
         setStore(
           produce((draft) => {
             const next = store.index + direction
