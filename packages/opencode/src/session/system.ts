@@ -131,7 +131,7 @@ export namespace SystemPrompt {
                 Flag.OPENCODE_CONFIG_DIR
               ).catch(() => [])
             } else {
-              // No trusted base for relative path - skip with warning (Law 4: Fail Loud)
+              // No trusted base for relative path - skip with warning
               log.warn(`Skipping relative instruction "${instruction}" - no OPENCODE_CONFIG_DIR set while project discovery is disabled`)
               continue
             }
