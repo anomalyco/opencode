@@ -559,9 +559,9 @@ export namespace MessageV2 {
       }
     }
 
-    const filtered = result
-      .filter((msg) => msg.parts.length > 0)
-      .filter((msg) => msg.parts.some((part) => part.type !== "step-start"))
+    const filtered = result.filter(
+      (msg) => msg.parts.length > 0 && msg.parts.some((part) => part.type !== "step-start"),
+    )
     return convertToModelMessages(filtered, {
       tools: options?.tools,
     })
