@@ -152,6 +152,28 @@ export namespace MCP {
   type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
   const pendingOAuthTransports = new Map<string, TransportWithAuth>()
 
+  // Helper function to close a transport properly
+  async function closeTransport(transport: TransportWithAuth | undefined): Promise<void> {
+    if (!transport) return
+    try {
+      // The transport should have a close method or similar cleanup
+      if (typeof (transport as any).close === "function") {
+        await (transport as any).close()
+      }
+    } catch (error) {
+      log.error("Failed to close transport", { error })
+    }
+  }
+
+  // Helper function to set a transport while properly cleaning up the old one
+  async function setPendingOAuthTransport(key: string, transport: TransportWithAuth): Promise<void> {
+    const existing = pendingOAuthTransports.get(key)
+    if (existing) {
+      await closeTransport(existing)
+    }
+    pendingOAuthTransports.set(key, transport)
+  }
+
   // Prompt cache types
   type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
 
@@ -418,7 +440,7 @@ export namespace MCP {
               }).catch((e) => log.debug("failed to show toast", { error: e }))
             } else {
               // Store transport for later finishAuth call
-              pendingOAuthTransports.set(key, transport)
+              await setPendingOAuthTransport(key, transport)
               status = { status: "needs_auth" as const }
               // Show toast for needs_auth
               Bus.publish(TuiEvent.ToastShow, {
@@ -812,7 +834,7 @@ export namespace MCP {
     } catch (error) {
       if (error instanceof UnauthorizedError && capturedUrl) {
         // Store transport for finishAuth
-        pendingOAuthTransports.set(mcpName, transport)
+        await setPendingOAuthTransport(mcpName, transport)
         return { authorizationUrl: capturedUrl.toString() }
       }
       throw error
@@ -939,6 +961,9 @@ export namespace MCP {
   export async function removeAuth(mcpName: string): Promise<void> {
     await McpAuth.remove(mcpName)
     McpOAuthCallback.cancelPending(mcpName)
+    // Properly close the transport before removing it
+    const transport = pendingOAuthTransports.get(mcpName)
+    await closeTransport(transport)
     pendingOAuthTransports.delete(mcpName)
     await McpAuth.clearOAuthState(mcpName)
     log.info("removed oauth credentials", { mcpName })
