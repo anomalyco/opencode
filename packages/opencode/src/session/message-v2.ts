@@ -510,7 +510,7 @@ export namespace MessageV2 {
                   parts: [
                     {
                       type: "text",
-                      text: `Tool ${part.tool} returned an attachment:`,
+                      text: `The tool ${part.tool} returned the following attachments:`,
                     },
                     ...part.state.attachments.map((attachment) => ({
                       type: "file" as const,
