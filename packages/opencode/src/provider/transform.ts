@@ -43,6 +43,35 @@ export namespace ProviderTransform {
     model: Provider.Model,
     options: Record<string, unknown>,
   ): ModelMessage[] {
+    // Strip openai itemId metadata following what codex does
+    if (model.api.npm === "@ai-sdk/openai" || options.store === false) {
+      msgs = msgs.map((msg) => {
+        if (msg.providerOptions) {
+          for (const options of Object.values(msg.providerOptions)) {
+            if (options && typeof options === "object") {
+              delete options["itemId"]
+              delete options["reasoningEncryptedContent"]
+            }
+          }
+        }
+        if (!Array.isArray(msg.content)) {
+          return msg
+        }
+        const content = msg.content.map((part) => {
+          if (part.providerOptions) {
+            for (const options of Object.values(part.providerOptions)) {
+              if (options && typeof options === "object") {
+                delete options["itemId"]
+                delete options["reasoningEncryptedContent"]
+              }
+            }
+          }
+          return part
+        })
+        return { ...msg, content } as typeof msg
+      })
+    }
+
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
     if (model.api.npm === "@ai-sdk/anthropic") {
