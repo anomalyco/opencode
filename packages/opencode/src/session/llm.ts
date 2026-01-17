@@ -12,6 +12,8 @@ import {
   tool,
   jsonSchema,
   extractReasoningMiddleware,
+  type UIMessage,
+  convertToModelMessages,
 } from "ai"
 import { clone, mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
@@ -162,6 +164,8 @@ export namespace LLM {
         })
       : tools
 
+    const messages = toModelMessages(input.messages, finalTools)
+
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.
     // Add a dummy tool that is never called to satisfy this validation.
@@ -173,7 +177,7 @@ export namespace LLM {
       input.model.providerID.toLowerCase().includes("litellm") ||
       input.model.api.id.toLowerCase().includes("litellm")
 
-    if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
+    if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(messages)) {
       tools["_noop"] = tool({
         description:
           "Placeholder for LiteLLM/Anthropic proxy compatibility - required when message history contains tool calls but no active tools are needed",
@@ -254,7 +258,7 @@ export namespace LLM {
                 content: x,
               }),
             )),
-        ...input.messages,
+        ...messages,
       ],
       model: wrapLanguageModel({
         model: language,
@@ -262,8 +266,13 @@ export namespace LLM {
           {
             async transformParams(args) {
               if (args.type === "stream") {
+                // AI SDK prompt can be UIMessage[] depending on call site/version.
+                // Ensure transforms always run on ModelMessage[].
+                const prompt = args.params.prompt
                 // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
+                args.params.prompt = Array.isArray(prompt)
+                  ? ProviderTransform.message(toModelMessages(prompt, finalTools), input.model, options)
+                  : prompt
               }
               return args.params
             },
@@ -296,4 +305,17 @@ export namespace LLM {
     }
     return false
   }
+}
+
+function toModelMessages(messages: ModelMessage[] | UIMessage[], tools: ToolSet): ModelMessage[] {
+  if (messages.length === 0) return messages as ModelMessage[]
+  const first = messages[0] as unknown
+  const isUI = (() => {
+    if (typeof first !== "object" || first === null) return false
+    const msg = first as Record<string, unknown>
+    if (Array.isArray(msg["parts"])) return true
+    return typeof msg["id"] === "string"
+  })()
+  if (isUI) return convertToModelMessages(messages as UIMessage[], { tools })
+  return messages as ModelMessage[]
 }
