@@ -1,5 +1,4 @@
-import { useGlobalSync } from "@/context/global-sync"
-import { createMemo, For, Match, Show, Switch, createEffect } from "solid-js"
+import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { useLayout } from "@/context/layout"
@@ -12,6 +11,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
+import { useGlobalSync } from "@/context/global-sync"
 
 export default function Home() {
   const sync = useGlobalSync()
@@ -22,19 +22,10 @@ export default function Home() {
   const server = useServer()
   const homedir = createMemo(() => sync.data.path.home)
 
-  createEffect(() => {
-    if (sync.ready && sync.data.project.length === 0 && sync.data.path.chat) {
-      startChat()
-    }
-  })
-
   function openProject(directory: string) {
     layout.projects.open(directory)
+    server.projects.touch(directory)
     navigate(`/${base64Encode(directory)}`)
-  }
-
-  function startChat() {
-    openProject(sync.data.path.chat)
   }
 
   async function chooseProject() {
@@ -81,12 +72,6 @@ export default function Home() {
         />
         {server.name}
       </Button>
-      <div class="mt-8 flex justify-center">
-        <Button size="large" onClick={startChat} class="px-8 py-4 bg-accent-base text-white rounded-lg shadow-lg hover:scale-105 transition-transform">
-          <Icon name="speech-bubble" class="mr-2" />
-          Start Chatting
-        </Button>
-      </div>
       <Switch>
         <Match when={sync.data.project.length > 0}>
           <div class="mt-20 w-full flex flex-col gap-4">
