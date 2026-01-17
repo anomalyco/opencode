@@ -28,6 +28,7 @@ import {
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
+import { parseDiffStats, formatDiffStats } from "@/cli/cmd/tui/util/diff"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
 import type { Tool } from "@/tool/tool"
@@ -1600,11 +1601,26 @@ function Bash(props: ToolProps<typeof BashTool>) {
 }
 
 function Write(props: ToolProps<typeof WriteTool>) {
+  const ctx = use()
   const { theme, syntax } = useTheme()
+  const sync = useSync()
+
   const code = createMemo(() => {
     if (!props.input.content) return ""
     return props.input.content
   })
+
+  // Check if minimal mode is enabled
+  const diffDisplay = createMemo(() => sync.data.config.tui?.diff_display ?? "full")
+
+  // Calculate line count
+  const lineCount = createMemo(() => code().split("\n").length)
+
+  // Expanded/collapsed state
+  const [expanded, setExpanded] = createSignal(false)
+
+  // Should show collapsed view
+  const showCollapsed = createMemo(() => diffDisplay() === "minimal" && !expanded())
 
   const diagnostics = createMemo(() => {
     const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
@@ -1614,24 +1630,56 @@ function Write(props: ToolProps<typeof WriteTool>) {
   return (
     <Switch>
       <Match when={props.metadata.diagnostics !== undefined}>
-        <BlockTool title={"# Wrote " + normalizePath(props.input.filePath!)} part={props.part}>
-          <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
-            <code
-              conceal={false}
-              fg={theme.text}
-              filetype={filetype(props.input.filePath!)}
-              syntaxStyle={syntax()}
-              content={code()}
-            />
-          </line_number>
-          <Show when={diagnostics().length}>
-            <For each={diagnostics()}>
-              {(diagnostic) => (
-                <text fg={theme.error}>
-                  Error [{diagnostic.range.start.line}:{diagnostic.range.start.character}]: {diagnostic.message}
-                </text>
-              )}
-            </For>
+        <BlockTool
+          title={"# Wrote " + normalizePath(props.input.filePath!)}
+          part={props.part}
+          onClick={() => {
+            if (diffDisplay() === "minimal") {
+              setExpanded(!expanded())
+            }
+          }}
+        >
+          <Show
+            when={showCollapsed()}
+            fallback={
+              // Full content display (when expanded or full mode)
+              <>
+                <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
+                  <code
+                    conceal={false}
+                    fg={theme.text}
+                    filetype={filetype(props.input.filePath!)}
+                    syntaxStyle={syntax()}
+                    content={code()}
+                  />
+                </line_number>
+                <Show when={diagnostics().length}>
+                  <For each={diagnostics()}>
+                    {(diagnostic) => (
+                      <text fg={theme.error}>
+                        Error [{diagnostic.range.start.line}:{diagnostic.range.start.character}]: {diagnostic.message}
+                      </text>
+                    )}
+                  </For>
+                </Show>
+              </>
+            }
+          >
+            {/* Collapsed view */}
+            <box paddingLeft={3} paddingTop={1} paddingBottom={1}>
+              <text fg={theme.textMuted}>
+                {lineCount()} lines [press Enter to expand]
+              </text>
+            </box>
+            <Show when={diagnostics().length}>
+              <For each={diagnostics()}>
+                {(diagnostic) => (
+                  <text fg={theme.error} paddingLeft={1}>
+                    Error [{diagnostic.range.start.line}:{diagnostic.range.start.character}]: {diagnostic.message}
+                  </text>
+                )}
+              </For>
+            </Show>
           </Show>
         </BlockTool>
       </Match>
@@ -1781,6 +1829,21 @@ function Edit(props: ToolProps<typeof EditTool>) {
 
   const diffContent = createMemo(() => props.metadata.diff)
 
+  // Check if minimal mode is enabled
+  const diffDisplay = createMemo(() => ctx.sync.data.config.tui?.diff_display ?? "full")
+
+  // Parse diff statistics
+  const diffStats = createMemo(() => {
+    if (!props.metadata.diff) return null
+    return parseDiffStats(props.metadata.diff)
+  })
+
+  // Expanded/collapsed state
+  const [expanded, setExpanded] = createSignal(false)
+
+  // Should show collapsed view
+  const showCollapsed = createMemo(() => diffDisplay() === "minimal" && !expanded())
+
   const diagnostics = createMemo(() => {
     const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
     const arr = props.metadata.diagnostics?.[filePath] ?? []
@@ -1790,39 +1853,74 @@ function Edit(props: ToolProps<typeof EditTool>) {
   return (
     <Switch>
       <Match when={props.metadata.diff !== undefined}>
-        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part}>
-          <box paddingLeft={1}>
-            <diff
-              diff={diffContent()}
-              view={view()}
-              filetype={ft()}
-              syntaxStyle={syntax()}
-              showLineNumbers={true}
-              width="100%"
-              wrapMode={ctx.diffWrapMode()}
-              fg={theme.text}
-              addedBg={theme.diffAddedBg}
-              removedBg={theme.diffRemovedBg}
-              contextBg={theme.diffContextBg}
-              addedSignColor={theme.diffHighlightAdded}
-              removedSignColor={theme.diffHighlightRemoved}
-              lineNumberFg={theme.diffLineNumber}
-              lineNumberBg={theme.diffContextBg}
-              addedLineNumberBg={theme.diffAddedLineNumberBg}
-              removedLineNumberBg={theme.diffRemovedLineNumberBg}
-            />
-          </box>
-          <Show when={diagnostics().length}>
-            <box>
-              <For each={diagnostics()}>
-                {(diagnostic) => (
-                  <text fg={theme.error}>
-                    Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}]{" "}
-                    {diagnostic.message}
-                  </text>
-                )}
-              </For>
+        <BlockTool
+          title={"← Edit " + normalizePath(props.input.filePath!)}
+          part={props.part}
+          onClick={() => {
+            if (diffDisplay() === "minimal") {
+              setExpanded(!expanded())
+            }
+          }}
+        >
+          <Show
+            when={showCollapsed()}
+            fallback={
+              // Full diff display (when expanded or full mode)
+              <>
+                <box paddingLeft={1}>
+                  <diff
+                    diff={diffContent()}
+                    view={view()}
+                    filetype={ft()}
+                    syntaxStyle={syntax()}
+                    showLineNumbers={true}
+                    width="100%"
+                    wrapMode={ctx.diffWrapMode()}
+                    fg={theme.text}
+                    addedBg={theme.diffAddedBg}
+                    removedBg={theme.diffRemovedBg}
+                    contextBg={theme.diffContextBg}
+                    addedSignColor={theme.diffHighlightAdded}
+                    removedSignColor={theme.diffHighlightRemoved}
+                    lineNumberFg={theme.diffLineNumber}
+                    lineNumberBg={theme.diffContextBg}
+                    addedLineNumberBg={theme.diffAddedLineNumberBg}
+                    removedLineNumberBg={theme.diffRemovedLineNumberBg}
+                  />
+                </box>
+                <Show when={diagnostics().length}>
+                  <box>
+                    <For each={diagnostics()}>
+                      {(diagnostic) => (
+                        <text fg={theme.error}>
+                          Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}]{" "}
+                          {diagnostic.message}
+                        </text>
+                      )}
+                    </For>
+                  </box>
+                </Show>
+              </>
+            }
+          >
+            {/* Collapsed view */}
+            <box paddingLeft={3} paddingTop={1} paddingBottom={1}>
+              <text fg={theme.textMuted}>
+                {formatDiffStats(diffStats()!)} [press Enter to expand]
+              </text>
             </box>
+            <Show when={diagnostics().length}>
+              <box paddingLeft={1}>
+                <For each={diagnostics()}>
+                  {(diagnostic) => (
+                    <text fg={theme.error}>
+                      Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}]{" "}
+                      {diagnostic.message}
+                    </text>
+                  )}
+                </For>
+              </box>
+            </Show>
           </Show>
         </BlockTool>
       </Match>

@@ -790,6 +790,10 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    diff_display: z
+      .enum(["full", "minimal"])
+      .optional()
+      .describe("Control diff display mode: 'full' shows complete diff, 'minimal' shows collapsed by default with line statistics"),
   })
 
   export const Server = z
