@@ -1,7 +1,8 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createSignal, For, Show, Switch, Match, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
+import { useRoute } from "../../context/route"
 import { Locale } from "@/util/locale"
 import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
@@ -11,20 +12,61 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import "opentui-spinner/solid"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
+  const route = useRoute()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+
+  // Active Agents: child sessions spawned from this session
+  const activeAgents = createMemo(() => {
+    const parentID = props.sessionID
+    return sync.data.session
+      .filter((s) => s.parentID === parentID)
+      .map((s) => ({
+        ...s,
+        status: sync.data.session_status[s.id],
+      }))
+  })
+
+  // Lab detection: derive lab from session title or directory
+  const labInfo = createMemo(() => {
+    const s = session()
+    if (!s) return null
+    const title = s.title?.toLowerCase() || ""
+    const dir = s.directory?.toLowerCase() || ""
+    
+    // The four official labs only
+    const labs: { pattern: RegExp; name: string; icon: string }[] = [
+      { pattern: /bootstrap/, name: "Bootstrap Lab", icon: "⚡" },
+      { pattern: /study[-_]?lab|the[-_]?study/, name: "Study Lab", icon: "📚" },
+      { pattern: /teach[-_]?lab|the[-_]?teach/, name: "Teach Lab", icon: "🎓" },
+      { pattern: /govern[-_]?lab|the[-_]?govern/, name: "Govern Lab", icon: "⚖️" },
+    ]
+    
+    for (const lab of labs) {
+      if (lab.pattern.test(title) || lab.pattern.test(dir)) {
+        return { name: lab.name, icon: lab.icon }
+      }
+    }
+    return null
+  })
+
+  // Animation frames for smooth status indicators
+  const spinnerFrames = ["◐", "◓", "◑", "◒"]
+  const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
     diff: true,
     todo: true,
     lsp: true,
+    agents: true,
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -85,6 +127,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.text}>
                 <b>{session().title}</b>
               </text>
+              <Show when={labInfo()}>
+                <text fg={theme.accent}>
+                  {labInfo()!.icon} {labInfo()!.name}
+                </text>
+              </Show>
               <Show when={session().share?.url}>
                 <text fg={theme.textMuted}>{session().share!.url}</text>
               </Show>
@@ -292,6 +339,75 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   <text fg={theme.textMuted}>/connect</text>
                 </box>
               </box>
+            </box>
+          </Show>
+          <Show when={activeAgents().length > 0}>
+            <box paddingTop={1}>
+              <box
+                flexDirection="row"
+                gap={1}
+                onMouseDown={() => activeAgents().length > 2 && setExpanded("agents", !expanded.agents)}
+              >
+                <Show when={activeAgents().length > 2}>
+                  <text fg={theme.text}>{expanded.agents ? "▼" : "▶"}</text>
+                </Show>
+                <text fg={theme.text}>
+                  <b>Active Agents</b>
+                  <Show when={!expanded.agents}>
+                    <span style={{ fg: theme.textMuted }}>
+                      {" "}
+                      ({activeAgents().filter((a) => a.status?.type === "busy").length} working)
+                    </span>
+                  </Show>
+                </text>
+              </box>
+              <Show when={activeAgents().length <= 2 || expanded.agents}>
+                <For each={activeAgents()}>
+                  {(agent) => {
+                    const isBusy = agent.status?.type === "busy"
+                    const isRetrying = agent.status?.type === "retry"
+                    const statusColor = isBusy ? theme.success : isRetrying ? theme.warning : theme.textMuted
+                    const [hover, setHover] = createSignal(false)
+                    
+                    return (
+                      <box
+                        flexDirection="row"
+                        gap={1}
+                        paddingLeft={1}
+                        paddingRight={1}
+                        backgroundColor={hover() ? theme.backgroundElement : undefined}
+                        onMouseOver={() => setHover(true)}
+                        onMouseOut={() => setHover(false)}
+                        onMouseDown={() => route.navigate({ type: "session", sessionID: agent.id })}
+                      >
+                        <Show 
+                          when={animationsEnabled() && (isBusy || isRetrying)} 
+                          fallback={
+                            <text flexShrink={0} fg={statusColor}>
+                              {isBusy ? "●" : isRetrying ? "○" : "○"}
+                            </text>
+                          }
+                        >
+                          <spinner 
+                            frames={spinnerFrames} 
+                            interval={180} 
+                            color={statusColor} 
+                          />
+                        </Show>
+                        <text fg={theme.text} wrapMode="word">
+                          {agent.title}{" "}
+                          <span style={{ fg: theme.textMuted }}>
+                            <Switch fallback="idle">
+                              <Match when={isBusy}>working</Match>
+                              <Match when={isRetrying}>retrying</Match>
+                            </Switch>
+                          </span>
+                        </text>
+                      </box>
+                    )
+                  }}
+                </For>
+              </Show>
             </box>
           </Show>
           <text>

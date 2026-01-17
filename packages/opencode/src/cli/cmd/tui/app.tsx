@@ -18,6 +18,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
+import { DialogLabList } from "@tui/component/dialog-lab-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -295,6 +296,16 @@ function App() {
       suggested: sync.data.session.length > 0,
       onSelect: () => {
         dialog.replace(() => <DialogSessionList />)
+      },
+    },
+    {
+      title: "Switch lab",
+      value: "lab.list",
+      keybind: "lab_list",
+      category: "Session",
+      suggested: true,
+      onSelect: () => {
+        dialog.replace(() => <DialogLabList />)
       },
     },
     {
