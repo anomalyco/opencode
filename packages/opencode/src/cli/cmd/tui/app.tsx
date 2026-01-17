@@ -18,7 +18,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
-import { DialogLabList } from "@tui/component/dialog-lab-list"
+import { DialogLabList, LABS } from "@tui/component/dialog-lab-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -299,7 +299,20 @@ function App() {
       },
     },
     {
-      title: "Switch lab",
+      title: (() => {
+        // Show current lab in title if we're in a lab session
+        if (route.data.type === "session") {
+          const session = sync.session.get(route.data.sessionID)
+          if (session) {
+            const title = session.title?.toLowerCase() || ""
+            const lab = LABS.find(
+              (l) => title.includes(l.id.toLowerCase()) || title.includes(l.name.toLowerCase())
+            )
+            if (lab) return `Switch lab (${lab.icon} ${lab.name})`
+          }
+        }
+        return "Switch lab"
+      })(),
       value: "lab.list",
       keybind: "lab_list",
       category: "Session",
