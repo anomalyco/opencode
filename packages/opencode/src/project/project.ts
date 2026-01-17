@@ -275,7 +275,7 @@ export namespace Project {
     const projects = await Promise.all(keys.map((x) => Storage.read<Info>(x)))
     return projects.map((project) => ({
       ...project,
-      sandboxes: project.sandboxes.filter((x) => existsSync(x)),
+      sandboxes: project.sandboxes?.filter((x) => existsSync(x)),
     }))
   }
 

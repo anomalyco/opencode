@@ -16,6 +16,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Popover } from "@opencode-ai/ui/popover"
 import { TextField } from "@opencode-ai/ui/text-field"
+import { Keybind } from "@opencode-ai/ui/keybind"
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
@@ -54,21 +55,17 @@ export function SessionHeader() {
           <Portal mount={mount()}>
             <button
               type="button"
-              class="hidden md:flex w-[320px] h-8 p-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
+              class="hidden md:flex w-[320px] p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
               onClick={() => command.trigger("file.open")}
             >
               <div class="flex items-center gap-2">
                 <Icon name="magnifying-glass" size="normal" class="icon-base" />
-                <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate">Search {name()}</span>
+                <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate h-3.5 flex items-center overflow-visible">
+                  Search {name()}
+                </span>
               </div>
 
-              <Show when={hotkey()}>
-                {(keybind) => (
-                  <span class="shrink-0 flex items-center justify-center h-5 px-2 rounded-[2px] border border-border-weak-base bg-surface-base text-12-medium text-text-weak">
-                    {keybind()}
-                  </span>
-                )}
-              </Show>
+              <Show when={hotkey()}>{(keybind) => <Keybind>{keybind()}</Keybind>}</Show>
             </button>
           </Portal>
         )}

@@ -10,6 +10,7 @@ import {
   onCleanup,
   type JSX,
 } from "solid-js"
+import stripAnsi from "strip-ansi"
 import { Dynamic } from "solid-js/web"
 import {
   AgentPart,
@@ -926,7 +927,7 @@ ToolRegistry.register({
       >
         <div data-component="tool-output" data-scrollable>
           <Markdown
-            text={`\`\`\`command\n$ ${props.input.command ?? props.metadata.command ?? ""}${props.output ? "\n\n" + props.output : ""}\n\`\`\``}
+            text={`\`\`\`command\n$ ${props.input.command ?? props.metadata.command ?? ""}${props.output || props.metadata.output ? "\n\n" + stripAnsi(props.output || props.metadata.output) : ""}\n\`\`\``}
           />
         </div>
       </BasicTool>

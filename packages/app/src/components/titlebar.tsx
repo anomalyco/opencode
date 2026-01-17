@@ -17,6 +17,7 @@ export function Titlebar() {
   const reserve = createMemo(
     () => platform.platform === "desktop" && (platform.os === "windows" || platform.os === "linux"),
   )
+  const web = createMemo(() => platform.platform === "web")
 
   const getWin = () => {
     if (platform.platform !== "desktop") return
@@ -80,15 +81,17 @@ export function Titlebar() {
       >
         <Show when={mac()}>
           <div class="w-[72px] h-full shrink-0" data-tauri-drag-region />
+          <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">
+            <IconButton icon="menu" variant="ghost" class="size-8 rounded-md" onClick={layout.mobileSidebar.toggle} />
+          </div>
         </Show>
-        <IconButton
-          icon="menu"
-          variant="ghost"
-          class="xl:hidden size-8 rounded-md"
-          onClick={layout.mobileSidebar.toggle}
-        />
+        <Show when={!mac()}>
+          <div class="xl:hidden w-[48px] shrink-0 flex items-center justify-center">
+            <IconButton icon="menu" variant="ghost" class="size-8 rounded-md" onClick={layout.mobileSidebar.toggle} />
+          </div>
+        </Show>
         <TooltipKeybind
-          class="hidden xl:flex shrink-0 ml-14"
+          class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0"}
           placement="bottom"
           title="Toggle sidebar"
           keybind={command.keybind("sidebar.toggle")}
