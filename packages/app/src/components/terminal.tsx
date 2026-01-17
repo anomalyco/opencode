@@ -7,11 +7,9 @@ import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@openco
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
-  focused?: boolean
   onSubmit?: () => void
   onCleanup?: (pty: LocalPTY) => void
   onConnectError?: (error: unknown) => void
-  onExit?: () => void
 }
 
 type TerminalColors = {
@@ -40,7 +38,7 @@ export const Terminal = (props: TerminalProps) => {
   const sdk = useSDK()
   const theme = useTheme()
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "focused", "class", "classList", "onConnectError"])
+  const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnectError"])
   let ws: WebSocket | undefined
   let term: Term | undefined
   let ghostty: Ghostty
@@ -51,7 +49,6 @@ export const Terminal = (props: TerminalProps) => {
   let handleTextareaBlur: () => void
   let reconnect: number | undefined
   let disposed = false
-  let cleaning = false
 
   const getTerminalColors = (): TerminalColors => {
     const mode = theme.mode()
@@ -91,11 +88,6 @@ export const Terminal = (props: TerminalProps) => {
     t.focus()
     setTimeout(() => t.textarea?.focus(), 0)
   }
-
-  createEffect(() => {
-    if (local.focused) focusTerminal()
-  })
-
   const handlePointerDown = () => {
     const activeElement = document.activeElement
     if (activeElement instanceof HTMLElement && activeElement !== container) {
@@ -174,11 +166,6 @@ export const Terminal = (props: TerminalProps) => {
         return true
       }
 
-      // allow cmd+d and cmd+shift+d for terminal splitting
-      if (event.metaKey && key === "d") {
-        return true
-      }
-
       return false
     })
 
@@ -244,6 +231,7 @@ export const Terminal = (props: TerminalProps) => {
     // console.log("Scroll position:", ydisp)
     // })
     socket.addEventListener("open", () => {
+      console.log("WebSocket connected")
       sdk.client.pty
         .update({
           ptyID: local.pty.id,
@@ -262,9 +250,7 @@ export const Terminal = (props: TerminalProps) => {
       props.onConnectError?.(error)
     })
     socket.addEventListener("close", () => {
-      if (!cleaning) {
-        props.onExit?.()
-      }
+      console.log("WebSocket disconnected")
     })
   })
 
@@ -288,7 +274,6 @@ export const Terminal = (props: TerminalProps) => {
       })
     }
 
-    cleaning = true
     ws?.close()
     t?.dispose()
   })
