@@ -44,10 +44,11 @@ Config sources are loaded in this order (later sources override earlier ones):
 
 1. **Remote config** (from `.well-known/opencode`) - organizational defaults
 2. **Global config** (`~/.config/opencode/opencode.json`) - user preferences
-3. **Custom config** (`OPENCODE_CONFIG` env var) - custom overrides
-4. **Project config** (`opencode.json` in project) - project-specific settings
-5. **`.opencode` directories** - agents, commands, plugins
-6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime overrides
+3. **Global config.d** (`~/.config/opencode/config.d/*.json[c]`) - drop-in config files
+4. **Custom config** (`OPENCODE_CONFIG` env var) - custom overrides
+5. **Project config** (`opencode.json` in project) - project-specific settings
+6. **`.opencode` directories** - agents, commands, plugins, and config.d files
+7. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime overrides
 
 This means project configs can override global defaults, and global configs can override remote organizational defaults.
 
@@ -137,6 +138,44 @@ opencode run "Hello world"
 ```
 
 The custom directory is loaded after the global config and `.opencode` directories, so it **can override** their settings.
+
+---
+
+### Split config
+
+You can split your configuration into multiple files using the `config.d/` directory. Files are loaded alphabetically and merged after the main config.
+
+```bash title="Directory structure"
+~/.config/opencode/
+├── opencode.jsonc           # main config
+└── config.d/
+    ├── 00-base.jsonc        # loaded first
+    ├── 10-permissions.jsonc
+    └── 99-overrides.jsonc   # loaded last
+```
+
+Use numeric prefixes to control load order. Each file can contain any subset of the config schema.
+
+```jsonc title="~/.config/opencode/config.d/10-permissions.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "*": "ask",
+      "~/trusted-projects/*": "allow",
+    },
+  },
+}
+```
+
+The `config.d/` pattern works in both locations:
+
+- `~/.config/opencode/config.d/` - global
+- `.opencode/config.d/` - project-specific
+
+:::tip
+Files in `config.d/` support `{env:VAR}` and `{file:path}` substitutions.
+:::
 
 ---
 

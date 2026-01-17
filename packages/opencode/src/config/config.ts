@@ -122,6 +122,8 @@ export namespace Config {
           result.mode ??= {}
           result.plugin ??= []
         }
+        // Load config.d/ files (alphabetically, after main config files)
+        result = mergeConfigConcatArrays(result, await loadConfigDir(dir))
       }
 
       const exists = existsSync(path.join(dir, "node_modules"))
@@ -1084,6 +1086,9 @@ export namespace Config {
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
     )
 
+    // Load config.d/ files (alphabetically, after main config files)
+    result = mergeConfigConcatArrays(result, await loadConfigDir(Global.Path.config))
+
     await import(path.join(Global.Path.config, "config"), {
       with: {
         type: "toml",
@@ -1112,6 +1117,26 @@ export namespace Config {
       })
     if (!text) return {}
     return load(text, filepath)
+  }
+
+  const CONFIG_D_GLOB = new Bun.Glob("*.{json,jsonc}")
+
+  async function loadConfigDir(dir: string): Promise<Info> {
+    const configDir = path.join(dir, "config.d")
+    if (!existsSync(configDir)) return {}
+
+    const files: string[] = []
+    for await (const file of CONFIG_D_GLOB.scan({ cwd: configDir, absolute: true })) {
+      files.push(file)
+    }
+    files.sort() // alphabetical order
+
+    let result: Info = {}
+    for (const file of files) {
+      log.debug(`loading config from ${file}`)
+      result = mergeConfigConcatArrays(result, await loadFile(file))
+    }
+    return result
   }
 
   async function load(text: string, configFilepath: string) {

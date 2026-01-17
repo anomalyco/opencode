@@ -1311,6 +1311,297 @@ describe("getPluginName", () => {
   })
 })
 
+// config.d/ directory tests
+
+test("loads config from .opencode/config.d directory", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      const configDDir = path.join(opencodeDir, "config.d")
+      await fs.mkdir(configDDir, { recursive: true })
+
+      await Bun.write(
+        path.join(configDDir, "10-theme.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          theme: "dracula",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.theme).toBe("dracula")
+    },
+  })
+})
+
+test("config.d files are loaded in alphabetical order", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      const configDDir = path.join(opencodeDir, "config.d")
+      await fs.mkdir(configDDir, { recursive: true })
+
+      // Later alphabetically should override earlier
+      await Bun.write(
+        path.join(configDDir, "00-base.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          theme: "base-theme",
+          username: "base-user",
+        }),
+      )
+      await Bun.write(
+        path.join(configDDir, "50-override.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          theme: "override-theme",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.theme).toBe("override-theme")
+      expect(config.username).toBe("base-user")
+    },
+  })
+})
+
+test("config.d supports both .json and .jsonc files", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      const configDDir = path.join(opencodeDir, "config.d")
+      await fs.mkdir(configDDir, { recursive: true })
+
+      await Bun.write(
+        path.join(configDDir, "01-json.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          theme: "json-theme",
+        }),
+      )
+      await Bun.write(
+        path.join(configDDir, "02-jsonc.jsonc"),
+        `{
+          // This is a comment
+          "$schema": "https://opencode.ai/config.json",
+          "username": "jsonc-user"
+        }`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.theme).toBe("json-theme")
+      expect(config.username).toBe("jsonc-user")
+    },
+  })
+})
+
+test("config.d overrides main config file", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      const configDDir = path.join(opencodeDir, "config.d")
+      await fs.mkdir(configDDir, { recursive: true })
+
+      // Main config in .opencode
+      await Bun.write(
+        path.join(opencodeDir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          theme: "main-theme",
+          username: "main-user",
+        }),
+      )
+      // config.d file overrides theme
+      await Bun.write(
+        path.join(configDDir, "override.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          theme: "fragment-theme",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.theme).toBe("fragment-theme")
+      expect(config.username).toBe("main-user")
+    },
+  })
+})
+
+test("config.d supports file and env substitution", async () => {
+  const originalEnv = process.env["TEST_CONFIG_D_VAR"]
+  process.env["TEST_CONFIG_D_VAR"] = "env-theme"
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const opencodeDir = path.join(dir, ".opencode")
+        const configDDir = path.join(opencodeDir, "config.d")
+        await fs.mkdir(configDDir, { recursive: true })
+
+        await Bun.write(path.join(configDDir, "secret.txt"), "secret-user")
+        await Bun.write(
+          path.join(configDDir, "substitutions.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            theme: "{env:TEST_CONFIG_D_VAR}",
+            username: "{file:secret.txt}",
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.theme).toBe("env-theme")
+        expect(config.username).toBe("secret-user")
+      },
+    })
+  } finally {
+    if (originalEnv !== undefined) {
+      process.env["TEST_CONFIG_D_VAR"] = originalEnv
+    } else {
+      delete process.env["TEST_CONFIG_D_VAR"]
+    }
+  }
+})
+
+test("config.d throws error for invalid JSON", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      const configDDir = path.join(opencodeDir, "config.d")
+      await fs.mkdir(configDDir, { recursive: true })
+
+      await Bun.write(path.join(configDDir, "invalid.json"), "{ invalid json }")
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await expect(Config.get()).rejects.toThrow()
+    },
+  })
+})
+
+test("config.d loads permissions from .opencode/config.d", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      const configDDir = path.join(opencodeDir, "config.d")
+      await fs.mkdir(configDDir, { recursive: true })
+
+      await Bun.write(
+        path.join(configDDir, "permissions.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          permission: {
+            external_directory: {
+              "*": "ask",
+              "~/allowed/*": "allow",
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.permission?.external_directory).toEqual({
+        "*": "ask",
+        "~/allowed/*": "allow",
+      })
+    },
+  })
+})
+
+test("config.d merges plugin arrays correctly", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      const configDDir = path.join(opencodeDir, "config.d")
+      await fs.mkdir(configDDir, { recursive: true })
+
+      await Bun.write(
+        path.join(opencodeDir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["main-plugin"],
+        }),
+      )
+      await Bun.write(
+        path.join(configDDir, "plugins.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["fragment-plugin"],
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      const plugins = config.plugin ?? []
+      expect(plugins.some((p) => p.includes("main-plugin"))).toBe(true)
+      expect(plugins.some((p) => p.includes("fragment-plugin"))).toBe(true)
+    },
+  })
+})
+
+test("handles empty config.d directory gracefully", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      const configDDir = path.join(opencodeDir, "config.d")
+      await fs.mkdir(configDDir, { recursive: true })
+      // Empty directory - no files
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config).toBeDefined()
+    },
+  })
+})
+
+test("handles non-existent config.d directory gracefully", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+      // No config.d directory
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config).toBeDefined()
+    },
+  })
+})
+
 describe("deduplicatePlugins", () => {
   test("removes duplicates keeping higher priority (later entries)", () => {
     const plugins = ["global-plugin@1.0.0", "shared-plugin@1.0.0", "local-plugin@2.0.0", "shared-plugin@2.0.0"]
