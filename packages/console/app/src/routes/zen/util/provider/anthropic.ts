@@ -64,23 +64,20 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
         newBuffer.set(value, buffer.length)
         buffer = newBuffer
 
-        if (buffer.length < 4) return
-        // The first 4 bytes are the total length (big-endian).
-        const totalLength = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength).getUint32(0, false)
+        const messages = []
+        while (buffer.length >= 4) {
+          // first 4 bytes are the total length (big-endian)
+          const totalLength = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength).getUint32(0, false)
 
-        // If we don't have the full message yet, wait for more chunks.
-        if (buffer.length < totalLength) return
+          // wait for more chunks
+          if (buffer.length < totalLength) break
 
-        try {
-          // Decode exactly the sub-slice for this event.
-          const subView = buffer.subarray(0, totalLength)
-          const decoded = codec.decode(subView)
+          try {
+            const subView = buffer.subarray(0, totalLength)
+            const decoded = codec.decode(subView)
+            buffer = buffer.slice(totalLength)
 
-          // Slice the used bytes out of the buffer, removing this message.
-          buffer = buffer.slice(totalLength)
-
-          // Process message
-          /* Example of Bedrock data
+            /* Example of Bedrock data
       ```
         {
           bytes: 'eyJ0eXBlIjoibWVzc2FnZV9zdGFydCIsIm1lc3NhZ2UiOnsibW9kZWwiOiJjbGF1ZGUtb3B1cy00LTUtMjAyNTExMDEiLCJpZCI6Im1zZ19iZHJrXzAxMjVGdHRGb2lkNGlwWmZ4SzZMbktxeCIsInR5cGUiOiJtZXNzYWdlIiwicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOltdLCJzdG9wX3JlYXNvbiI6bnVsbCwic3RvcF9zZXF1ZW5jZSI6bnVsbCwidXNhZ2UiOnsiaW5wdXRfdG9rZW5zIjo0LCJjYWNoZV9jcmVhdGlvbl9pbnB1dF90b2tlbnMiOjEsImNhY2hlX3JlYWRfaW5wdXRfdG9rZW5zIjoxMTk2MywiY2FjaGVfY3JlYXRpb24iOnsiZXBoZW1lcmFsXzVtX2lucHV0X3Rva2VucyI6MSwiZXBoZW1lcmFsXzFoX2lucHV0X3Rva2VucyI6MH0sIm91dHB1dF90b2tlbnMiOjF9fX0=',
@@ -112,22 +109,30 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
       ```
       */
 
-          /* Example of Anthropic data
+            /* Example of Anthropic data
       ```
         event: message_delta
         data: {"type":"message_start","message":{"model":"claude-opus-4-5-20251101","id":"msg_01ETvwVWSKULxzPdkQ1xAnk2","type":"message","role":"assistant","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":3,"cache_creation_input_tokens":11543,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":11543,"ephemeral_1h_input_tokens":0},"output_tokens":1,"service_tier":"standard"}}}
       ```
       */
-          if (decoded.headers[":message-type"]?.value !== "event") return
-          const data = decoder.decode(decoded.body, { stream: true })
+            if (decoded.headers[":message-type"]?.value === "event") {
+              const data = decoder.decode(decoded.body, { stream: true })
 
-          const parsedDataResult = JSON.parse(data)
-          delete parsedDataResult.p
-          const utf8 = atob(parsedDataResult.bytes)
-          return encoder.encode(["event: message_start", "\n", "data: " + utf8, "\n\n"].join(""))
-        } catch (e) {
-          console.log(e)
+              const parsedDataResult = JSON.parse(data)
+              delete parsedDataResult.p
+              const binary = atob(parsedDataResult.bytes)
+              const uint8 = Uint8Array.from(binary, (c) => c.charCodeAt(0))
+              const bytes = decoder.decode(uint8)
+              const eventName = JSON.parse(bytes).type
+              messages.push([`event: ${eventName}`, "\n", `data: ${bytes}`, "\n\n"].join(""))
+            }
+          } catch (e) {
+            console.log("@@@EE@@@")
+            console.log(e)
+            break
+          }
         }
+        return encoder.encode(messages.join(""))
       }
     },
     streamSeparator: "\n\n",
