@@ -123,9 +123,10 @@ export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
 
 type HexColor = `#${string}`
 type RefName = string
+type RGBAVariant = { dark: RGBA; light: RGBA }
 type Variant = {
-  dark: HexColor | RefName
-  light: HexColor | RefName
+  dark: HexColor | RefName | RGBA
+  light: HexColor | RefName | RGBA
 }
 type ColorValue = HexColor | RefName | Variant | RGBA
 type ThemeJson = {
@@ -337,7 +338,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           }
           setStore(
             produce((draft) => {
-              draft.themes.system = generateSystem(colors, store.mode)
+              draft.themes.system = generateSystem(colors)
               if (store.active === "system") {
                 draft.ready = true
               }
@@ -426,10 +427,9 @@ export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
   return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
 }
 
-function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
+function generateSystem(colors: TerminalColors): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
-  const isDark = mode == "dark"
 
   const col = (i: number) => {
     const value = colors.palette[i]
@@ -438,8 +438,22 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
   }
 
   // Generate gray scale based on terminal background
-  const grays = generateGrayScale(bg, isDark)
-  const textMuted = generateMutedTextColor(bg, isDark)
+  const graysLight = generateGrayScale(bg, false)
+  const graysDark = generateGrayScale(bg, true)
+  const grays: Record<number, RGBAVariant> = {}
+
+  Object.keys(graysDark).forEach((index) => {
+    const i = Number(index)
+    grays[i] = {
+      dark: graysDark[i],
+      light: graysLight[i],
+    }
+  })
+
+  const textMuted: RGBAVariant = {
+    dark: generateMutedTextColor(bg, true),
+    light: generateMutedTextColor(bg, false),
+  }
 
   // ANSI color references
   const ansiColors = {
@@ -455,11 +469,30 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
     greenBright: col(10),
   }
 
-  const diffAlpha = isDark ? 0.22 : 0.14
-  const diffAddedBg = tint(bg, ansiColors.green, diffAlpha)
-  const diffRemovedBg = tint(bg, ansiColors.red, diffAlpha)
-  const diffAddedLineNumberBg = tint(grays[3], ansiColors.green, diffAlpha)
-  const diffRemovedLineNumberBg = tint(grays[3], ansiColors.red, diffAlpha)
+  const diffAlpha = {
+    dark: 0.22,
+    light: 0.14,
+  }
+
+  const diffAddedBg: RGBAVariant = {
+    dark: tint(bg, ansiColors.green, diffAlpha.dark),
+    light: tint(bg, ansiColors.green, diffAlpha.light),
+  }
+
+  const diffRemovedBg: RGBAVariant = {
+    dark: tint(bg, ansiColors.red, diffAlpha.dark),
+    light: tint(bg, ansiColors.red, diffAlpha.light),
+  }
+
+  const diffAddedLineNumberBg: RGBAVariant = {
+    dark: tint(graysDark[3], ansiColors.green, diffAlpha.dark),
+    light: tint(graysLight[3], ansiColors.green, diffAlpha.light),
+  }
+
+  const diffRemovedLineNumberBg: RGBAVariant = {
+    dark: tint(graysDark[3], ansiColors.red, diffAlpha.dark),
+    light: tint(graysLight[3], ansiColors.red, diffAlpha.light),
+  }
 
   return {
     theme: {
