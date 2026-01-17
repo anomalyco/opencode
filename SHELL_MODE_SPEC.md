@@ -376,17 +376,18 @@ async function submit() {
 
 #### Visual Indicators
 
-**Prompt character:**
-- `!` = Shell mode
-- `A` = Agent mode
-- `>` = Auto mode
+**Input prefix (colored icon before text input):**
+- `>` = Shell mode (cyan/primary)
+- `◆` = Agent mode (magenta/secondary)
+- `☯` = Auto mode (green/success)
 
 **Border color:**
-- `theme.secondary` = Shell mode
-- `theme.border` = Agent/Auto modes
+- `theme.primary` = Shell mode (cyan)
+- `theme.secondary` = Agent mode (magenta)
+- `theme.success` = Auto mode (green)
 
 **Status bar:**
-- Shows current mode name: `Shell`, `Agent`, or `Auto`
+- Shows current mode name with matching color: `[Shell]`, `[Agent]`, or `[Auto]`
 
 #### Command Dialog Registration
 
@@ -582,11 +583,11 @@ setStore("message", incoming.sessionID, result.index, (previous) => {
 
 ### Mode Indicators
 
-| Mode | Prompt Char | Border Color | Status Text |
-|------|-------------|--------------|-------------|
-| Shell | `!` | `theme.secondary` | "Shell" |
-| Agent | `A` | `theme.border` | "Agent" |
-| Auto | `>` | `theme.border` | "Auto" |
+| Mode | Input Prefix | Color | Status Text |
+|------|--------------|-------|-------------|
+| Shell | `>` | `theme.primary` (cyan) | "[Shell]" |
+| Agent | `◆` | `theme.secondary` (magenta) | "[Agent]" |
+| Auto | `☯` | `theme.success` (green) | "[Auto]" |
 
 ### Keyboard Shortcuts Summary
 

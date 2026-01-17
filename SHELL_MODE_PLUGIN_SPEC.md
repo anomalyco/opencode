@@ -188,6 +188,37 @@ export function getModeController(): ModeController {
 }
 ```
 
+#### Visual Indicators
+
+The `getModeDisplay()` method returns icon, name, and color for each mode:
+
+| Mode | Icon | Color | Theme Color |
+|------|------|-------|-------------|
+| Shell | `>` | `primary` | cyan |
+| Agent | `◆` | `secondary` | magenta |
+| Auto | `☯` | `success` | green |
+
+```typescript
+type ModeDisplay = {
+  name: string
+  icon: string
+  color: "primary" | "secondary" | "success" | "border"
+}
+
+getModeDisplay(): ModeDisplay {
+  switch (this.currentMode) {
+    case ExecutionMode.Shell:
+      return { name: "Shell", icon: ">", color: "primary" }
+    case ExecutionMode.Agent:
+      return { name: "Agent", icon: "◆", color: "secondary" }
+    case ExecutionMode.Auto:
+      return { name: "Auto", icon: "☯", color: "success" }
+  }
+}
+```
+
+The input prefix shows the mode icon with the corresponding color, and the status bar displays `[Mode]` with matching color.
+
 ### 2. TUI Overrides (`plugin/tui-overrides/`)
 
 **`plugin/tui-overrides/hooks.ts`:**
