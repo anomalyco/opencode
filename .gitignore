@@ -26,3 +26,4 @@ target
 opencode-dev
 logs/
 *.bun-build
+.opencode/

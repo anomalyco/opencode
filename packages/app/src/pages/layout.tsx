@@ -501,7 +501,7 @@ export default function Layout(props: ParentProps) {
         const [dirStore] = globalSync.child(dir)
         const dirSessions = dirStore.session
           .filter((session) => session.directory === dirStore.path.directory)
-          .filter((session) => !session.parentID && !session.time?.archived)
+          .filter((session) => !session.parentID)
           .toSorted(sortSessions)
         result.push(...dirSessions)
       }
@@ -510,7 +510,7 @@ export default function Layout(props: ParentProps) {
     const [projectStore] = globalSync.child(project.worktree)
     return projectStore.session
       .filter((session) => session.directory === projectStore.path.directory)
-      .filter((session) => !session.parentID && !session.time?.archived)
+      .filter((session) => !session.parentID)
       .toSorted(sortSessions)
   })
 
@@ -1018,7 +1018,7 @@ export default function Layout(props: ParentProps) {
     const notifications = createMemo(() => notification.project.unseen(props.project.worktree))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
     const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
-    const mask = "radial-gradient(circle 5px at calc(100% - 4px) 4px, transparent 5px, black 5.5px)"
+    const mask = "radial-gradient(circle 6px at calc(100% - 3px) 3px, transparent 6px, black 6.5px)"
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
@@ -1039,7 +1039,7 @@ export default function Layout(props: ParentProps) {
         <Show when={notifications().length > 0 && props.notify}>
           <div
             classList={{
-              "absolute top-px right-px size-1.5 rounded-full z-10": true,
+              "absolute -top-px -right-px size-2 rounded-full z-10": true,
               "bg-icon-critical-base": hasError(),
               "bg-text-interactive-base": !hasError(),
             }}
@@ -1203,7 +1203,7 @@ export default function Layout(props: ParentProps) {
     const sessions = createMemo(() =>
       workspaceStore.session
         .filter((session) => session.directory === workspaceStore.path.directory)
-        .filter((session) => !session.parentID && !session.time?.archived)
+        .filter((session) => !session.parentID)
         .toSorted(sortSessions),
     )
     const local = createMemo(() => props.directory === props.project.worktree)
@@ -1349,7 +1349,7 @@ export default function Layout(props: ParentProps) {
       const [data] = globalSync.child(directory)
       return data.session
         .filter((session) => session.directory === data.path.directory)
-        .filter((session) => !session.parentID && !session.time?.archived)
+        .filter((session) => !session.parentID)
         .toSorted(sortSessions)
         .slice(0, 2)
     }
@@ -1358,7 +1358,7 @@ export default function Layout(props: ParentProps) {
       const [data] = globalSync.child(props.project.worktree)
       return data.session
         .filter((session) => session.directory === data.path.directory)
-        .filter((session) => !session.parentID && !session.time?.archived)
+        .filter((session) => !session.parentID)
         .toSorted(sortSessions)
         .slice(0, 2)
     }
@@ -1383,8 +1383,7 @@ export default function Layout(props: ParentProps) {
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
         <HoverCard openDelay={0} closeDelay={0} placement="right-start" gutter={6} trigger={trigger}>
           <div class="-m-3 flex flex-col w-72">
-            <div class="px-3 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
-            <div class="px-3 pb-2 text-12-medium text-text-weak">Recent sessions</div>
+            <div class="px-3 py-2 text-12-medium text-text-weak">Recent sessions</div>
             <div class="px-2 pb-2 flex flex-col gap-2">
               <Show
                 when={workspaceEnabled()}
@@ -1446,7 +1445,7 @@ export default function Layout(props: ParentProps) {
     const sessions = createMemo(() =>
       workspaceStore.session
         .filter((session) => session.directory === workspaceStore.path.directory)
-        .filter((session) => !session.parentID && !session.time?.archived)
+        .filter((session) => !session.parentID)
         .toSorted(sortSessions),
     )
     const loading = createMemo(() => workspaceStore.status !== "complete" && sessions().length === 0)
