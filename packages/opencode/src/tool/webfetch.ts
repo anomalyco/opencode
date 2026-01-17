@@ -62,15 +62,18 @@ export const WebFetchTool = Tool.define("webfetch", {
       "Accept-Language": "en-US,en;q=0.9",
     }
 
-    const initial = await fetch(params.url, { signal, headers })
+    let initial: Response
+    try {
+      initial = await fetch(params.url, { signal, headers })
+    } finally {
+      clearTimeout()
+    }
 
     // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
     const response =
       initial.status === 403 && initial.headers.get("cf-mitigated") === "challenge"
         ? await fetch(params.url, { signal, headers: { ...headers, "User-Agent": "opencode" } })
         : initial
-
-    clearTimeout()
 
     if (!response.ok) {
       throw new Error(`Request failed with status code: ${response.status}`)
