@@ -16,7 +16,33 @@ function mimeToModality(mime: string): Modality | undefined {
 }
 
 export namespace ProviderTransform {
-  function normalizeMessages(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+  // Maps npm package to the key the AI SDK expects for providerOptions
+  function sdkKey(npm: string): string | undefined {
+    switch (npm) {
+      case "@ai-sdk/github-copilot":
+      case "@ai-sdk/openai":
+      case "@ai-sdk/azure":
+        return "openai"
+      case "@ai-sdk/amazon-bedrock":
+        return "bedrock"
+      case "@ai-sdk/anthropic":
+        return "anthropic"
+      case "@ai-sdk/google-vertex":
+      case "@ai-sdk/google":
+        return "google"
+      case "@ai-sdk/gateway":
+        return "gateway"
+      case "@openrouter/ai-sdk-provider":
+        return "openrouter"
+    }
+    return undefined
+  }
+
+  function normalizeMessages(
+    msgs: ModelMessage[],
+    model: Provider.Model,
+    options: Record<string, unknown>,
+  ): ModelMessage[] {
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
     if (model.api.npm === "@ai-sdk/anthropic") {
@@ -218,9 +244,9 @@ export namespace ProviderTransform {
     })
   }
 
-  export function message(msgs: ModelMessage[], model: Provider.Model) {
+  export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
-    msgs = normalizeMessages(msgs, model)
+    msgs = normalizeMessages(msgs, model, options)
     if (
       model.providerID === "anthropic" ||
       model.api.id.includes("anthropic") ||
@@ -228,6 +254,28 @@ export namespace ProviderTransform {
       model.api.npm === "@ai-sdk/anthropic"
     ) {
       msgs = applyCaching(msgs, model.providerID)
+    }
+
+    // Remap providerOptions keys from stored providerID to expected SDK key
+    const key = sdkKey(model.api.npm)
+    if (key && key !== model.providerID && model.api.npm !== "@ai-sdk/azure") {
+      const remap = (opts: Record<string, any> | undefined) => {
+        if (!opts) return opts
+        if (!(model.providerID in opts)) return opts
+        const result = { ...opts }
+        result[key] = result[model.providerID]
+        delete result[model.providerID]
+        return result
+      }
+
+      msgs = msgs.map((msg) => {
+        if (!Array.isArray(msg.content)) return { ...msg, providerOptions: remap(msg.providerOptions) }
+        return {
+          ...msg,
+          providerOptions: remap(msg.providerOptions),
+          content: msg.content.map((part) => ({ ...part, providerOptions: remap(part.providerOptions) })),
+        } as typeof msg
+      })
     }
 
     return msgs
@@ -453,64 +501,69 @@ export namespace ProviderTransform {
     return {}
   }
 
-  export function options(
-    model: Provider.Model,
-    sessionID: string,
-    providerOptions?: Record<string, any>,
-  ): Record<string, any> {
+  export function options(input: {
+    model: Provider.Model
+    sessionID: string
+    providerOptions?: Record<string, any>
+  }): Record<string, any> {
     const result: Record<string, any> = {}
 
-    if (model.api.npm === "@openrouter/ai-sdk-provider") {
+    // openai and providers using openai package should set store to false by default.
+    if (input.model.providerID === "openai" || input.model.api.npm === "@ai-sdk/openai") {
+      result["store"] = false
+    }
+
+    if (input.model.api.npm === "@openrouter/ai-sdk-provider") {
       result["usage"] = {
         include: true,
       }
-      if (model.api.id.includes("gemini-3")) {
+      if (input.model.api.id.includes("gemini-3")) {
         result["reasoning"] = { effort: "high" }
       }
     }
 
     if (
-      model.providerID === "baseten" ||
-      (model.providerID === "opencode" && ["kimi-k2-thinking", "glm-4.6"].includes(model.api.id))
+      input.model.providerID === "baseten" ||
+      (input.model.providerID === "opencode" && ["kimi-k2-thinking", "glm-4.6"].includes(input.model.api.id))
     ) {
       result["chat_template_args"] = { enable_thinking: true }
     }
 
-    if (["zai", "zhipuai"].includes(model.providerID) && model.api.npm === "@ai-sdk/openai-compatible") {
+    if (["zai", "zhipuai"].includes(input.model.providerID) && input.model.api.npm === "@ai-sdk/openai-compatible") {
       result["thinking"] = {
         type: "enabled",
         clear_thinking: false,
       }
     }
 
-    if (model.providerID === "openai" || providerOptions?.setCacheKey) {
-      result["promptCacheKey"] = sessionID
+    if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
+      result["promptCacheKey"] = input.sessionID
     }
 
-    if (model.api.npm === "@ai-sdk/google" || model.api.npm === "@ai-sdk/google-vertex") {
+    if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
       result["thinkingConfig"] = {
         includeThoughts: true,
       }
-      if (model.api.id.includes("gemini-3")) {
+      if (input.model.api.id.includes("gemini-3")) {
         result["thinkingConfig"]["thinkingLevel"] = "high"
       }
     }
 
-    if (model.api.id.includes("gpt-5") && !model.api.id.includes("gpt-5-chat")) {
-      if (model.providerID.includes("codex")) {
+    if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
+      if (input.model.providerID.includes("codex")) {
         result["store"] = false
       }
 
-      if (!model.api.id.includes("codex") && !model.api.id.includes("gpt-5-pro")) {
+      if (!input.model.api.id.includes("codex") && !input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
       }
 
-      if (model.api.id.endsWith("gpt-5.") && model.providerID !== "azure") {
+      if (input.model.api.id.endsWith("gpt-5.") && input.model.providerID !== "azure") {
         result["textVerbosity"] = "low"
       }
 
-      if (model.providerID.startsWith("opencode")) {
-        result["promptCacheKey"] = sessionID
+      if (input.model.providerID.startsWith("opencode")) {
+        result["promptCacheKey"] = input.sessionID
         result["include"] = ["reasoning.encrypted_content"]
         result["reasoningSummary"] = "auto"
       }
@@ -542,39 +595,8 @@ export namespace ProviderTransform {
   }
 
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
-    switch (model.api.npm) {
-      case "@ai-sdk/github-copilot":
-      case "@ai-sdk/openai":
-      case "@ai-sdk/azure":
-        return {
-          ["openai" as string]: options,
-        }
-      case "@ai-sdk/amazon-bedrock":
-        return {
-          ["bedrock" as string]: options,
-        }
-      case "@ai-sdk/anthropic":
-        return {
-          ["anthropic" as string]: options,
-        }
-      case "@ai-sdk/google-vertex":
-      case "@ai-sdk/google":
-        return {
-          ["google" as string]: options,
-        }
-      case "@ai-sdk/gateway":
-        return {
-          ["gateway" as string]: options,
-        }
-      case "@openrouter/ai-sdk-provider":
-        return {
-          ["openrouter" as string]: options,
-        }
-      default:
-        return {
-          [model.providerID]: options,
-        }
-    }
+    const key = sdkKey(model.api.npm) ?? model.providerID
+    return { [key]: options }
   }
 
   export function maxOutputTokens(
@@ -668,7 +690,10 @@ export namespace ProviderTransform {
 
   export function error(providerID: string, error: APICallError) {
     let message = error.message
-    if (providerID === "github-copilot" && message.includes("The requested model is not supported")) {
+    if (providerID.includes("github-copilot") && error.statusCode === 403) {
+      return "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode."
+    }
+    if (providerID.includes("github-copilot") && message.includes("The requested model is not supported")) {
       return (
         message +
         "\n\nMake sure the model is enabled in your copilot settings: https://github.com/settings/copilot/features"
