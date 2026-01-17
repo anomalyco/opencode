@@ -162,7 +162,9 @@ export namespace LLM {
       })
     }
 
-    return streamText({
+    const startTime = Date.now()
+
+    const result = streamText({
       onError(error) {
         l.error("stream error", {
           error,
@@ -253,6 +255,28 @@ export namespace LLM {
       }),
       experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
     })
+
+    // Wrap fullStream to log duration on completion
+    const originalFullStream = result.fullStream
+    const wrappedFullStream = (async function* () {
+      try {
+        for await (const chunk of originalFullStream) {
+          yield chunk
+        }
+      } finally {
+        const duration = Date.now() - startTime
+        l.info("stream completed", {
+          modelID: input.model.id,
+          providerID: input.model.providerID,
+          duration,
+        })
+      }
+    })()
+
+    return {
+      ...result,
+      fullStream: wrappedFullStream,
+    }
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
