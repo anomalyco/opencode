@@ -2,6 +2,7 @@ import z from "zod"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
+import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
 import { createRequire } from "module"
@@ -71,7 +72,10 @@ export namespace BunProc {
       await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
       return result
     })
-    if (parsed.dependencies[pkg] === version) return mod
+    const dependencies = parsed.dependencies ?? {}
+    if (!parsed.dependencies) parsed.dependencies = dependencies
+    const modExists = await Filesystem.exists(mod)
+    if (dependencies[pkg] === version && modExists) return mod
 
     const proxied = !!(
       process.env.HTTP_PROXY ||
