@@ -717,6 +717,17 @@ export namespace Provider {
       providers[providerID] = mergeDeep(match, provider)
     }
 
+    // Normalize model API ID for providers that use org/model format
+    // If modelID contains '/' (e.g., "deepseek-ai/DeepSeek-V3.2"),
+    // use only the model name part for API calls
+    function normalizeModelAPIID(modelID: string): string {
+      const parts = modelID.split("/")
+      if (parts.length > 1) {
+        return parts[parts.length - 1]
+      }
+      return modelID
+    }
+
     // extend database from config
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
@@ -739,7 +750,7 @@ export namespace Provider {
         const parsedModel: Model = {
           id: modelID,
           api: {
-            id: model.id ?? existingModel?.api.id ?? modelID,
+            id: model.id ?? existingModel?.api.id ?? normalizeModelAPIID(modelID),
             npm:
               model.provider?.npm ??
               provider.npm ??

@@ -2146,4 +2146,64 @@ test("custom model with variants enabled and disabled", async () => {
       expect(model.variants!["custom"].disabled).toBeUndefined()
     },
   })
+
+  test("model IDs with slashes are normalized for API calls", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              abacus: {
+                name: "Abacus",
+                npm: "@ai-sdk/openai-compatible",
+                env: [],
+                models: {
+                  "deepseek-ai/DeepSeek-V3.2": {
+                    name: "DeepSeek V3.2",
+                    tool_call: true,
+                  },
+                  "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo": {
+                    name: "Llama 3.1 405B",
+                  },
+                  "Qwen/Qwen2.5-72B-Instruct": {
+                    name: "Qwen 2.5 72B",
+                  },
+                },
+                options: { apiKey: "test-key" },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await Provider.list()
+        const abacus = providers["abacus"]
+
+        // Model with slash in ID should retain full ID for internal lookups
+        const deepseekModel = abacus.models["deepseek-ai/DeepSeek-V3.2"]
+        expect(deepseekModel).toBeDefined()
+        expect(deepseekModel.id).toBe("deepseek-ai/DeepSeek-V3.2")
+
+        // API ID should be normalized to use only the model name
+        expect(deepseekModel.api.id).toBe("DeepSeek-V3.2")
+
+        // Test another model with slash
+        const llamaModel = abacus.models["meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo"]
+        expect(llamaModel).toBeDefined()
+        expect(llamaModel.id).toBe("meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo")
+        expect(llamaModel.api.id).toBe("Meta-Llama-3.1-405B-Instruct-Turbo")
+
+        // Test model with multiple slashes
+        const qwenModel = abacus.models["Qwen/Qwen2.5-72B-Instruct"]
+        expect(qwenModel).toBeDefined()
+        expect(qwenModel.id).toBe("Qwen/Qwen2.5-72B-Instruct")
+        expect(qwenModel.api.id).toBe("Qwen2.5-72B-Instruct")
+      },
+    })
+  })
 })
