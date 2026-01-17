@@ -700,12 +700,16 @@ export namespace ACP {
       sessionId: string,
     ): Promise<{ availableModes: ModeOption[]; currentModeId?: string }> {
       const availableModes = await this.loadAvailableModes(directory)
-      let currentModeId = this.sessionManager.get(sessionId).modeId
-      if (!currentModeId && availableModes.length) {
-        const defaultAgentName = await AgentModule.defaultAgent()
-        currentModeId = availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
-        this.sessionManager.setMode(sessionId, currentModeId)
-      }
+      const currentModeId =
+        this.sessionManager.get(sessionId).modeId ||
+        (await (async () => {
+          if (!availableModes.length) return undefined
+          const defaultAgentName = await AgentModule.defaultAgent()
+          const resolvedModeId =
+            availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
+          this.sessionManager.setMode(sessionId, resolvedModeId)
+          return resolvedModeId
+        })())
 
       return { availableModes, currentModeId }
     }
@@ -723,8 +727,14 @@ export namespace ACP {
         this.sessionManager.setVariant(sessionId, undefined)
       }
       const availableModels = buildAvailableModels(entries, { includeVariants: true })
-      const { availableModes, currentModeId } = await this.resolveModeState(directory, sessionId)
-      const modeState = currentModeId ? { availableModes, currentModeId } : undefined
+      const modeState = await this.resolveModeState(directory, sessionId)
+      const currentModeId = modeState.currentModeId
+      const modes = currentModeId
+        ? {
+            availableModes: modeState.availableModes,
+            currentModeId,
+          }
+        : undefined
 
       const commands = await this.config.sdk.command
         .list(
@@ -802,7 +812,7 @@ export namespace ACP {
           currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
           availableModels,
         },
-        modes: modeState,
+        modes,
         _meta: buildVariantMeta({
           model,
           variant: this.sessionManager.getVariant(sessionId),
@@ -817,17 +827,17 @@ export namespace ACP {
         .providers({ directory: session.cwd }, { throwOnError: true })
         .then((x) => x.data!.providers)
 
-      const { model, variant } = parseModelSelection(params.modelId, providers)
-      this.sessionManager.setModel(session.id, model)
-      this.sessionManager.setVariant(session.id, variant)
+      const selection = parseModelSelection(params.modelId, providers)
+      this.sessionManager.setModel(session.id, selection.model)
+      this.sessionManager.setVariant(session.id, selection.variant)
 
       const entries = sortProvidersByName(providers)
-      const availableVariants = modelVariantsFromProviders(entries, model)
+      const availableVariants = modelVariantsFromProviders(entries, selection.model)
 
       return {
         _meta: buildVariantMeta({
-          model,
-          variant,
+          model: selection.model,
+          variant: selection.variant,
           availableVariants,
         }),
       }
