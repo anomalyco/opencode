@@ -14,7 +14,7 @@ export namespace ConfigMarkdown {
     return Array.from(template.matchAll(SHELL_REGEX))
   }
 
-<<<<<<< HEAD
+
   // Perform {env:VAR} interpolation on frontmatter data only
   function interpolateEnvironmentVariables(obj: any): any {
     if (typeof obj === "string") {
