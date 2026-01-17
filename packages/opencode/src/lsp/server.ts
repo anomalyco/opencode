@@ -502,6 +502,57 @@ export namespace LSPServer {
     },
   }
 
+  export const Ruff: Info = {
+    id: "ruff",
+    extensions: [".py", ".pyi"],
+    root: NearestRoot([
+      "pyproject.toml",
+      "ruff.toml",
+      ".ruff.toml",
+      "setup.py",
+      "setup.cfg",
+      "requirements.txt",
+      "Pipfile",
+    ]),
+    async spawn(root) {
+      if (!Flag.OPENCODE_EXPERIMENTAL_LSP_RUFF) {
+        return undefined
+      }
+
+      const venvs = [process.env["VIRTUAL_ENV"], path.join(root, ".venv"), path.join(root, "venv")].filter(
+        (p): p is string => p !== undefined,
+      )
+
+      const binary = await (async () => {
+        const direct = Bun.which("ruff")
+        if (direct) return direct
+
+        for (const venv of venvs) {
+          const windows = process.platform === "win32"
+          const candidate = windows ? path.join(venv, "Scripts", "ruff.exe") : path.join(venv, "bin", "ruff")
+          if (await Bun.file(candidate).exists()) {
+            return candidate
+          }
+        }
+
+        return undefined
+      })()
+
+      if (!binary) {
+        log.error("ruff not found, please install ruff first")
+        return
+      }
+
+      const proc = spawn(binary, ["server"], {
+        cwd: root,
+      })
+
+      return {
+        process: proc,
+      }
+    },
+  }
+
   export const Pyright: Info = {
     id: "pyright",
     extensions: [".py", ".pyi"],
