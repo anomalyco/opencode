@@ -217,6 +217,17 @@ export namespace LSP {
         return existing
       }
 
+      // Add process exit handler for crash detection
+      handle.process.on("exit", (code, signal) => {
+        const idx = s.clients.findIndex((x) => x.root === root && x.serverID === server.id)
+        if (idx !== -1) {
+          s.clients.splice(idx, 1)
+          s.broken.add(key)
+          log.error(`LSP process ${server.id} exited unexpectedly`, { code, signal, root })
+          Bus.publish(Event.Updated, {})
+        }
+      })
+
       s.clients.push(client)
       return client
     }
