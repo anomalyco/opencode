@@ -10,6 +10,7 @@ import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
+import { SessionRetry } from "../session/retry"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -85,7 +86,7 @@ export namespace LSP {
       if (cfg.lsp === false) {
         log.info("all LSPs are disabled")
         return {
-          broken: new Set<string>(),
+          broken: new Map<string, { failTime: number; attemptCount: number }>(),
           servers,
           clients,
           spawning: new Map<string, Promise<LSPClient.Info | undefined>>(),
@@ -132,7 +133,7 @@ export namespace LSP {
       })
 
       return {
-        broken: new Set<string>(),
+        broken: new Map<string, { failTime: number; attemptCount: number }>(),
         servers,
         clients,
         spawning: new Map<string, Promise<LSPClient.Info | undefined>>(),
@@ -174,6 +175,37 @@ export namespace LSP {
     })
   }
 
+  /**
+   * Check if a broken server should be retried based on exponential backoff.
+   * @returns true if the server is still broken (should be skipped), false if it should be retried
+   */
+  function isBrokenWithBackoff(
+    s: { broken: Map<string, { failTime: number; attemptCount: number }> },
+    key: string,
+  ): boolean {
+    const brokenEntry = s.broken.get(key)
+    if (!brokenEntry) return false
+
+    const now = Date.now()
+    const elapsed = now - brokenEntry.failTime
+
+    // Calculate exponential backoff delay
+    const retryDelay = SessionRetry.delay(brokenEntry.attemptCount)
+
+    if (elapsed >= retryDelay) {
+      // Time to retry - remove from broken set
+      log.info(`Retrying broken LSP server ${key}`, {
+        attemptCount: brokenEntry.attemptCount,
+        elapsed,
+        retryDelay,
+      })
+      s.broken.delete(key)
+      return false
+    }
+
+    return true
+  }
+
   async function getClients(file: string) {
     const s = await state()
     const extension = path.parse(file).ext || file
@@ -183,11 +215,21 @@ export namespace LSP {
       const handle = await server
         .spawn(root)
         .then((value) => {
-          if (!value) s.broken.add(key)
+          if (!value) {
+            const existing = s.broken.get(key)
+            s.broken.set(key, {
+              failTime: Date.now(),
+              attemptCount: (existing?.attemptCount ?? 0) + 1,
+            })
+          }
           return value
         })
         .catch((err) => {
-          s.broken.add(key)
+          const existing = s.broken.get(key)
+          s.broken.set(key, {
+            failTime: Date.now(),
+            attemptCount: (existing?.attemptCount ?? 0) + 1,
+          })
           log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
           return undefined
         })
@@ -200,7 +242,11 @@ export namespace LSP {
         server: handle,
         root,
       }).catch((err) => {
-        s.broken.add(key)
+        const existing = s.broken.get(key)
+        s.broken.set(key, {
+          failTime: Date.now(),
+          attemptCount: (existing?.attemptCount ?? 0) + 1,
+        })
         handle.process.kill()
         log.error(`Failed to initialize LSP client ${server.id}`, { error: err })
         return undefined
@@ -214,6 +260,8 @@ export namespace LSP {
       const existing = s.clients.find((x) => x.root === root && x.serverID === server.id)
       if (existing) {
         handle.process.kill()
+        // Server was already connected - clear broken state
+        s.broken.delete(key)
         return existing
       }
 
@@ -222,13 +270,19 @@ export namespace LSP {
         const idx = s.clients.findIndex((x) => x.root === root && x.serverID === server.id)
         if (idx !== -1) {
           s.clients.splice(idx, 1)
-          s.broken.add(key)
+          const brokenEntry = s.broken.get(key)
+          s.broken.set(key, {
+            failTime: Date.now(),
+            attemptCount: (brokenEntry?.attemptCount ?? 0) + 1,
+          })
           log.error(`LSP process ${server.id} exited unexpectedly`, { code, signal, root })
           Bus.publish(Event.Updated, {})
         }
       })
 
       s.clients.push(client)
+      // Successfully connected - clear broken state
+      s.broken.delete(key)
       return client
     }
 
@@ -237,7 +291,7 @@ export namespace LSP {
 
       const root = await server.root(file)
       if (!root) continue
-      if (s.broken.has(root + server.id)) continue
+      if (isBrokenWithBackoff(s, root + server.id)) continue
 
       const match = s.clients.find((x) => x.root === root && x.serverID === server.id)
       if (match) {
@@ -279,7 +333,7 @@ export namespace LSP {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
       const root = await server.root(file)
       if (!root) continue
-      if (s.broken.has(root + server.id)) continue
+      if (isBrokenWithBackoff(s, root + server.id)) continue
       return true
     }
     return false
