@@ -1,0 +1,7 @@
+version: "3"
+
+tasks:
+  build:
+    desc: Compile single binary for current platform
+    cmds:
+      - bun ./packages/opencode/script/build.ts --single
