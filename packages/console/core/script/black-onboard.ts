@@ -12,7 +12,7 @@ const email = process.argv[3]
 console.log(`Onboarding workspace ${workspaceID} for email ${email}`)
 
 if (!workspaceID || !email) {
-  console.error("Usage: bun onboard-zen-black.ts <workspaceID> <email>")
+  console.error("Usage: bun foo.ts <workspaceID> <email>")
   process.exit(1)
 }
 
@@ -50,7 +50,7 @@ const existingSubscription = await Database.use((tx) =>
   tx
     .select({ workspaceID: BillingTable.workspaceID })
     .from(BillingTable)
-    .where(eq(BillingTable.subscriptionID, subscriptionID))
+    .where(sql`JSON_EXTRACT(${BillingTable.subscription}, '$.id') = ${subscriptionID}`)
     .then((rows) => rows[0]),
 )
 if (existingSubscription) {
@@ -128,10 +128,15 @@ await Database.transaction(async (tx) => {
     .set({
       customerID,
       subscriptionID,
-      subscriptionCouponID: couponID,
       paymentMethodID,
       paymentMethodLast4,
       paymentMethodType,
+      subscription: {
+        status: "subscribed",
+        coupon: couponID,
+        seats: 1,
+        plan: "200",
+      },
     })
     .where(eq(BillingTable.workspaceID, workspaceID))
 
