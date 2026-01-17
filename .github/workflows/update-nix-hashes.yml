@@ -245,8 +245,6 @@ jobs:
           set -euo pipefail
 
           HASH_FILE="nix/hashes.json"
-          TMP_JSON=$(mktemp)
-          trap 'rm -f "$TMP_JSON"' EXIT
 
           if [ ! -f "$HASH_FILE" ]; then
             mkdir -p "$(dirname "$HASH_FILE")"
@@ -268,8 +266,8 @@ jobs:
             hash=$(cat "$f")
             echo "  $system: $hash"
             jq --arg sys "$system" --arg h "$hash" \
-              '.nodeModules = (.nodeModules // {}) | .nodeModules[$sys] = $h' "$HASH_FILE" > "$TMP_JSON"
-            mv "$TMP_JSON" "$HASH_FILE"
+              '.nodeModules = (.nodeModules // {}) | .nodeModules[$sys] = $h' "$HASH_FILE" > "${HASH_FILE}.tmp"
+            mv "${HASH_FILE}.tmp" "$HASH_FILE"
           done
 
           echo "All hashes merged:"
