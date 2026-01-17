@@ -84,11 +84,8 @@ describe("issue-8862 regression test", () => {
             toolCallId: "call-1",
             toolName: "bash",
             output: {
-              type: "json",
-              value: {
-                output: "ok",
-                attachments: [],
-              },
+              type: "text",
+              value: "ok",
             },
             providerOptions: {},
           },
