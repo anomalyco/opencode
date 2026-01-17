@@ -151,6 +151,12 @@ export const TuiThreadCommand = cmd({
         model: args.model,
         prompt,
       },
+      startServer: shouldStartServer
+        ? undefined
+        : async () => {
+            const server = await client.call("server", networkOpts)
+            return server.url
+          },
       onExit: async () => {
         await client.call("shutdown", undefined)
       },

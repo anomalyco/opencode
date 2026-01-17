@@ -105,6 +105,7 @@ export function tui(input: {
   directory?: string
   fetch?: typeof fetch
   events?: EventSource
+  startServer?: () => Promise<string>
   onExit?: () => Promise<void>
 }) {
   // promise to prevent immediate exit
@@ -131,6 +132,7 @@ export function tui(input: {
                         directory={input.directory}
                         fetch={input.fetch}
                         events={input.events}
+                        startServer={input.startServer}
                       >
                         <SyncProvider>
                           <ThemeProvider mode={mode}>
@@ -464,17 +466,36 @@ function App() {
     {
       title: "Open WebUI",
       value: "webui.open",
-      onSelect: () => {
+      onSelect: async () => {
+        let url = sdk.url
         if (sdk.url.includes("opencode.internal")) {
+          if (!sdk.startServer) {
+            toast.show({
+              variant: "warning",
+              message: "WebUI requires server mode. Restart with: opencode --port 4096",
+              duration: 5000,
+            })
+            dialog.clear()
+            return
+          }
           toast.show({
-            variant: "warning",
-            message: "WebUI requires server mode. Restart with: opencode --port 4096",
-            duration: 5000,
+            variant: "info",
+            message: "Starting server...",
+            duration: 2000,
           })
-          dialog.clear()
-          return
+          try {
+            url = await sdk.startServer()
+          } catch (e) {
+            toast.show({
+              variant: "error",
+              message: "Failed to start server",
+              duration: 3000,
+            })
+            dialog.clear()
+            return
+          }
         }
-        open(sdk.url).catch(() => {})
+        open(url).catch(() => {})
         dialog.clear()
       },
       category: "System",
