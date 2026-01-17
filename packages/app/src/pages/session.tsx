@@ -31,6 +31,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
+import { DialogFork } from "@/components/dialog-fork"
 import { useCommand } from "@/context/command"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
@@ -418,7 +419,6 @@ export default function Page() {
     {
       id: "session.new",
       title: "New session",
-      description: "Create a new session",
       category: "Session",
       keybind: "mod+shift+s",
       slash: "new",
@@ -427,7 +427,7 @@ export default function Page() {
     {
       id: "file.open",
       title: "Open file",
-      description: "Search and open a file",
+      description: "Search files and commands",
       category: "File",
       keybind: "mod+p",
       slash: "open",
@@ -436,7 +436,7 @@ export default function Page() {
     {
       id: "terminal.toggle",
       title: "Toggle terminal",
-      description: "Show or hide the terminal",
+      description: "",
       category: "View",
       keybind: "ctrl+`",
       slash: "terminal",
@@ -445,7 +445,7 @@ export default function Page() {
     {
       id: "review.toggle",
       title: "Toggle review",
-      description: "Show or hide the review panel",
+      description: "",
       category: "View",
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
@@ -644,6 +644,15 @@ export default function Page() {
           providerID: model.provider.id,
         })
       },
+    },
+    {
+      id: "session.fork",
+      title: "Fork from message",
+      description: "Create a new session from a previous message",
+      category: "Session",
+      slash: "fork",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: () => dialog.show(() => <DialogFork />),
     },
   ])
 
@@ -875,6 +884,19 @@ export default function Page() {
     window.history.replaceState(null, "", `#${anchor(id)}`)
   }
 
+  const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
+    const root = scroller
+    if (!root) {
+      el.scrollIntoView({ behavior, block: "start" })
+      return
+    }
+
+    const a = el.getBoundingClientRect()
+    const b = root.getBoundingClientRect()
+    const top = a.top - b.top + root.scrollTop
+    root.scrollTo({ top, behavior })
+  }
+
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
     setActiveMessage(message)
 
@@ -886,7 +908,7 @@ export default function Page() {
 
       requestAnimationFrame(() => {
         const el = document.getElementById(anchor(message.id))
-        if (el) el.scrollIntoView({ behavior, block: "start" })
+        if (el) scrollToElement(el, behavior)
       })
 
       updateHash(message.id)
@@ -894,7 +916,7 @@ export default function Page() {
     }
 
     const el = document.getElementById(anchor(message.id))
-    if (el) el.scrollIntoView({ behavior, block: "start" })
+    if (el) scrollToElement(el, behavior)
     updateHash(message.id)
   }
 
@@ -946,7 +968,7 @@ export default function Page() {
 
       const hashTarget = document.getElementById(hash)
       if (hashTarget) {
-        hashTarget.scrollIntoView({ behavior: "auto", block: "start" })
+        scrollToElement(hashTarget, "auto")
         return
       }
 

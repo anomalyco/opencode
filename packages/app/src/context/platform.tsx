@@ -5,6 +5,9 @@ export type Platform = {
   /** Platform discriminator */
   platform: "web" | "desktop"
 
+  /** Desktop OS (Tauri only) */
+  os?: "macos" | "windows" | "linux"
+
   /** App version */
   version?: string
 
@@ -37,6 +40,12 @@ export type Platform = {
 
   /** Fetch override */
   fetch?: typeof fetch
+
+  /** Get the configured default server URL (desktop only) */
+  getDefaultServerUrl?(): Promise<string | null>
+
+  /** Set the default server URL to use on app startup (desktop only) */
+  setDefaultServerUrl?(url: string | null): Promise<void>
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({

@@ -15,6 +15,8 @@
   cargo,
   rustc,
   makeBinaryWrapper,
+  copyDesktopItems,
+  makeDesktopItem,
   nodejs,
   jq,
 }:
@@ -57,10 +59,26 @@ rustPlatform.buildRustPackage rec {
     pkg-config
     bun
     makeBinaryWrapper
+    copyDesktopItems
     cargo
     rustc
     nodejs
     jq
+  ];
+
+  # based on packages/desktop/src-tauri/release/appstream.metainfo.xml
+  desktopItems = lib.optionals stdenv.isLinux [
+    (makeDesktopItem {
+      name = "ai.opencode.opencode";
+      desktopName = "OpenCode";
+      comment = "Open source AI coding agent";
+      exec = "opencode-desktop";
+      icon = "opencode";
+      terminal = false;
+      type = "Application";
+      categories = [ "Development" "IDE" ];
+      startupWMClass = "opencode";
+    })
   ];
 
   buildInputs = [
@@ -121,6 +139,10 @@ rustPlatform.buildRustPackage rec {
   # It looks for them in the location specified in tauri.conf.json.
 
   postInstall = lib.optionalString stdenv.isLinux ''
+    # Install icon
+    mkdir -p $out/share/icons/hicolor/128x128/apps
+    cp ../../../packages/desktop/src-tauri/icons/prod/128x128.png $out/share/icons/hicolor/128x128/apps/opencode.png
+
     # Wrap the binary to ensure it finds the libraries
     wrapProgram $out/bin/opencode-desktop \
       --prefix LD_LIBRARY_PATH : ${

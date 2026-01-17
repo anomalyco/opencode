@@ -5,13 +5,14 @@ import {
   type PermissionRequest,
   TextPart,
   ToolPart,
+  UserMessage,
 } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 import { Binary } from "@opencode-ai/util/binary"
-import { createEffect, createMemo, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -21,6 +22,10 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
+import { ProviderIcon } from "./provider-icon"
+import type { IconName } from "./provider-icons/types"
+import { IconButton } from "./icon-button"
+import { Tooltip } from "./tooltip"
 import { Card } from "./card"
 import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
@@ -328,6 +333,15 @@ export function SessionTurn(
   const hasDiffs = createMemo(() => message()?.summary?.diffs?.length)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
+  const [responseCopied, setResponseCopied] = createSignal(false)
+  const handleCopyResponse = async () => {
+    const content = response()
+    if (!content) return
+    await navigator.clipboard.writeText(content)
+    setResponseCopied(true)
+    setTimeout(() => setResponseCopied(false), 2000)
+  }
+
   function duration() {
     const msg = message()
     if (!msg) return ""
@@ -481,6 +495,21 @@ export function SessionTurn(
                             </Match>
                           </Switch>
                         </div>
+                        <div data-slot="session-turn-user-badges">
+                          <Show when={(msg() as UserMessage).agent}>
+                            <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
+                          </Show>
+                          <Show when={(msg() as UserMessage).model?.modelID}>
+                            <span data-slot="session-turn-badge" class="inline-flex items-center gap-1">
+                              <ProviderIcon
+                                id={(msg() as UserMessage).model!.providerID as IconName}
+                                class="size-3.5 shrink-0"
+                              />
+                              {(msg() as UserMessage).model?.modelID}
+                            </span>
+                          </Show>
+                          <span data-slot="session-turn-badge">{(msg() as UserMessage).variant || "default"}</span>
+                        </div>
                       </div>
                     </div>
                     {/* User Message */}
@@ -556,6 +585,15 @@ export function SessionTurn(
                     {/* Response */}
                     <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
+                        <div data-slot="session-turn-summary-copy">
+                          <Tooltip value={responseCopied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
+                            <IconButton
+                              icon={responseCopied() ? "check" : "copy"}
+                              variant="secondary"
+                              onClick={handleCopyResponse}
+                            />
+                          </Tooltip>
+                        </div>
                         <div data-slot="session-turn-summary-header">
                           <h2 data-slot="session-turn-summary-title">Response</h2>
                           <Markdown
