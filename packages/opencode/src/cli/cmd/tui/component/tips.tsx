@@ -150,4 +150,5 @@ const TIPS = [
   "Use {highlight}/details{/highlight} to toggle tool execution details visibility",
   "Use {highlight}/rename{/highlight} to rename the current session",
   "Press {highlight}Ctrl+Z{/highlight} to suspend the terminal and return to your shell",
+  "Press {highlight}Ctrl+L{/highlight} to switch between lab sessions (Bootstrap, Study, Teach, Govern)",
 ]
