@@ -501,7 +501,7 @@ export default function Layout(props: ParentProps) {
         const [dirStore] = globalSync.child(dir)
         const dirSessions = dirStore.session
           .filter((session) => session.directory === dirStore.path.directory)
-          .filter((session) => !session.parentID)
+          .filter((session) => !session.parentID && !session.time?.archived)
           .toSorted(sortSessions)
         result.push(...dirSessions)
       }
@@ -510,7 +510,7 @@ export default function Layout(props: ParentProps) {
     const [projectStore] = globalSync.child(project.worktree)
     return projectStore.session
       .filter((session) => session.directory === projectStore.path.directory)
-      .filter((session) => !session.parentID)
+      .filter((session) => !session.parentID && !session.time?.archived)
       .toSorted(sortSessions)
   })
 
@@ -1203,7 +1203,7 @@ export default function Layout(props: ParentProps) {
     const sessions = createMemo(() =>
       workspaceStore.session
         .filter((session) => session.directory === workspaceStore.path.directory)
-        .filter((session) => !session.parentID)
+        .filter((session) => !session.parentID && !session.time?.archived)
         .toSorted(sortSessions),
     )
     const local = createMemo(() => props.directory === props.project.worktree)
@@ -1349,7 +1349,7 @@ export default function Layout(props: ParentProps) {
       const [data] = globalSync.child(directory)
       return data.session
         .filter((session) => session.directory === data.path.directory)
-        .filter((session) => !session.parentID)
+        .filter((session) => !session.parentID && !session.time?.archived)
         .toSorted(sortSessions)
         .slice(0, 2)
     }
@@ -1358,7 +1358,7 @@ export default function Layout(props: ParentProps) {
       const [data] = globalSync.child(props.project.worktree)
       return data.session
         .filter((session) => session.directory === data.path.directory)
-        .filter((session) => !session.parentID)
+        .filter((session) => !session.parentID && !session.time?.archived)
         .toSorted(sortSessions)
         .slice(0, 2)
     }
@@ -1445,7 +1445,7 @@ export default function Layout(props: ParentProps) {
     const sessions = createMemo(() =>
       workspaceStore.session
         .filter((session) => session.directory === workspaceStore.path.directory)
-        .filter((session) => !session.parentID)
+        .filter((session) => !session.parentID && !session.time?.archived)
         .toSorted(sortSessions),
     )
     const loading = createMemo(() => workspaceStore.status !== "complete" && sessions().length === 0)
