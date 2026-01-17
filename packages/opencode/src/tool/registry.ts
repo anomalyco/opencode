@@ -26,13 +26,14 @@ import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
 import { BrowserTools } from "@/browser/tools"
 import { Truncate } from "./truncation"
+import { PlanExitTool, PlanEnterTool } from "./plan"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
   export const state = Instance.state(async () => {
     const custom = [] as Tool.Info[]
-    const glob = new Bun.Glob("tool/*.{js,ts}")
+    const glob = new Bun.Glob("{tool,tools}/*.{js,ts}")
 
     for (const dir of await Config.directories()) {
       for await (const match of glob.scan({
@@ -94,7 +95,7 @@ export namespace ToolRegistry {
 
     return [
       InvalidTool,
-      ...(Flag.OPENCODE_CLIENT === "cli" ? [QuestionTool] : []),
+      ...(["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) ? [QuestionTool] : []),
       BashTool,
       ReadTool,
       GlobTool,
@@ -111,6 +112,7 @@ export namespace ToolRegistry {
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(Flag.OPENCODE_ENABLE_BROWSER || config.experimental?.browser === true ? BrowserTools : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
+      ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool, PlanEnterTool] : []),
       ...custom,
     ]
   }

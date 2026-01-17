@@ -8,6 +8,8 @@ import { TextField } from "./text-field"
 export interface ListSearchProps {
   placeholder?: string
   autofocus?: boolean
+  hideIcon?: boolean
+  class?: string
 }
 
 export interface ListProps<T> extends FilteredListProps<T> {
@@ -67,7 +69,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     if (!props.current) return
     const key = props.key(props.current)
     requestAnimationFrame(() => {
-      const element = scrollRef()!.querySelector(`[data-key="${key}"]`)
+      const element = scrollRef()?.querySelector(`[data-key="${key}"]`)
       element?.scrollIntoView({ block: "center" })
     })
   })
@@ -80,7 +82,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
       return
     }
     const element = scrollRef()?.querySelector(`[data-key="${active()}"]`)
-    element?.scrollIntoView({ block: "center", behavior: "smooth" })
+    element?.scrollIntoView({ block: "center" })
   })
 
   createEffect(() => {
@@ -116,7 +118,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     setScrollRef,
   })
 
-  function GroupHeader(props: { category: string }): JSX.Element {
+  function GroupHeader(groupProps: { category: string }): JSX.Element {
     const [stuck, setStuck] = createSignal(false)
     const [header, setHeader] = createSignal<HTMLDivElement | undefined>(undefined)
 
@@ -138,7 +140,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
     return (
       <div data-slot="list-header" data-stuck={stuck()} ref={setHeader}>
-        {props.category}
+        {groupProps.category}
       </div>
     )
   }
@@ -146,9 +148,11 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   return (
     <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
       <Show when={!!props.search}>
-        <div data-slot="list-search">
+        <div data-slot="list-search" classList={{ [searchProps().class ?? ""]: !!searchProps().class }}>
           <div data-slot="list-search-container">
-            <Icon name="magnifying-glass" />
+            <Show when={!searchProps().hideIcon}>
+              <Icon name="magnifying-glass" />
+            </Show>
             <TextField
               autofocus={searchProps().autofocus}
               variant="ghost"

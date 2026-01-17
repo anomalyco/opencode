@@ -429,6 +429,7 @@ permission:
     "*": ask
     "git diff": allow
     "git log*": allow
+    "grep *": allow
   webfetch: deny
 ---
 
@@ -444,7 +445,8 @@ You can set permissions for specific bash commands.
     "build": {
       "permission": {
         "bash": {
-          "git push": "ask"
+          "git push": "ask",
+          "grep *": "allow"
         }
       }
     }
@@ -480,7 +482,7 @@ Since the last matching rule takes precedence, put the `*` wildcard first and sp
       "permission": {
         "bash": {
           "*": "ask",
-          "git status": "allow"
+          "git status *": "allow"
         }
       }
     }
@@ -625,7 +627,7 @@ Here are some common use cases for different agents.
 
 ## Examples
 
-Here are some examples agents you might find useful.
+Here are some example agents you might find useful.
 
 :::tip
 Do you have an agent you'd like to share? [Submit a PR](https://github.com/anomalyco/opencode).

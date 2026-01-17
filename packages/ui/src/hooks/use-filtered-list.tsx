@@ -24,11 +24,12 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [grouped, { refetch }] = createResource(
     () => ({
       filter: store.filter,
-      items: typeof props.items === "function" ? undefined : props.items,
+      items: typeof props.items === "function" ? props.items(store.filter) : props.items,
     }),
     async ({ filter, items }) => {
-      const needle = filter?.toLowerCase()
-      const all = (items ?? (await (props.items as (filter: string) => T[] | Promise<T[]>)(needle))) || []
+      const query = filter ?? ""
+      const needle = query.toLowerCase()
+      const all = (await Promise.resolve(items)) || []
       const result = pipe(
         all,
         (x) => {
@@ -82,6 +83,8 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
       const selected = flat()[selectedIndex]
       if (selected) props.onSelect?.(selected, selectedIndex)
     } else {
+      // Skip list navigation for text editing shortcuts (e.g., Option+Arrow, Option+Backspace on macOS)
+      if (event.altKey || event.metaKey) return
       list.onKeyDown(event)
     }
   }

@@ -19,6 +19,7 @@ import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
 import { existsSync } from "fs"
+import { Bus } from "@/bus"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -178,6 +179,8 @@ export namespace Config {
       result.compaction = { ...result.compaction, prune: false }
     }
 
+    result.plugin = deduplicatePlugins(result.plugin ?? [])
+
     return {
       config: result,
       directories,
@@ -207,6 +210,19 @@ export namespace Config {
     await BunProc.run(["install"], { cwd: dir }).catch(() => {})
   }
 
+  function rel(item: string, patterns: string[]) {
+    for (const pattern of patterns) {
+      const index = item.indexOf(pattern)
+      if (index === -1) continue
+      return item.slice(index + pattern.length)
+    }
+  }
+
+  function trim(file: string) {
+    const ext = path.extname(file)
+    return ext.length ? file.slice(0, -ext.length) : file
+  }
+
   const COMMAND_GLOB = new Bun.Glob("{command,commands}/**/*.md")
   async function loadCommand(dir: string) {
     const result: Record<string, Command> = {}
@@ -216,19 +232,20 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const md = await ConfigMarkdown.parse(item)
-      if (!md.data) continue
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? err.data.message
+          : `Failed to parse command ${item}`
+        const { Session } = await import("@/session")
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load command", { command: item, err })
+        return undefined
+      })
+      if (!md) continue
 
-      const name = (() => {
-        const patterns = ["/.opencode/command/", "/command/"]
-        const pattern = patterns.find((p) => item.includes(p))
-
-        if (pattern) {
-          const index = item.indexOf(pattern)
-          return item.slice(index + pattern.length, -3)
-        }
-        return path.basename(item, ".md")
-      })()
+      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
+      const file = rel(item, patterns) ?? path.basename(item)
+      const name = trim(file)
 
       const config = {
         name,
@@ -255,23 +272,20 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const md = await ConfigMarkdown.parse(item)
-      if (!md.data) continue
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? err.data.message
+          : `Failed to parse agent ${item}`
+        const { Session } = await import("@/session")
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load agent", { agent: item, err })
+        return undefined
+      })
+      if (!md) continue
 
-      // Extract relative path from agent folder for nested agents
-      let agentName = path.basename(item, ".md")
-      const agentFolderPath = item.includes("/.opencode/agent/")
-        ? item.split("/.opencode/agent/")[1]
-        : item.includes("/agent/")
-          ? item.split("/agent/")[1]
-          : agentName + ".md"
-
-      // If agent is in a subfolder, include folder path in name
-      if (agentFolderPath.includes("/")) {
-        const relativePath = agentFolderPath.replace(".md", "")
-        const pathParts = relativePath.split("/")
-        agentName = pathParts.slice(0, -1).join("/") + "/" + pathParts[pathParts.length - 1]
-      }
+      const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
+      const file = rel(item, patterns) ?? path.basename(item)
+      const agentName = trim(file)
 
       const config = {
         name: agentName,
@@ -297,8 +311,16 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const md = await ConfigMarkdown.parse(item)
-      if (!md.data) continue
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? err.data.message
+          : `Failed to parse mode ${item}`
+        const { Session } = await import("@/session")
+        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load mode", { mode: item, err })
+        return undefined
+      })
+      if (!md) continue
 
       const config = {
         name: path.basename(item, ".md"),
@@ -332,6 +354,58 @@ export namespace Config {
     return plugins
   }
 
+  /**
+   * Extracts a canonical plugin name from a plugin specifier.
+   * - For file:// URLs: extracts filename without extension
+   * - For npm packages: extracts package name without version
+   *
+   * @example
+   * getPluginName("file:///path/to/plugin/foo.js") // "foo"
+   * getPluginName("oh-my-opencode@2.4.3") // "oh-my-opencode"
+   * getPluginName("@scope/pkg@1.0.0") // "@scope/pkg"
+   */
+  export function getPluginName(plugin: string): string {
+    if (plugin.startsWith("file://")) {
+      return path.parse(new URL(plugin).pathname).name
+    }
+    const lastAt = plugin.lastIndexOf("@")
+    if (lastAt > 0) {
+      return plugin.substring(0, lastAt)
+    }
+    return plugin
+  }
+
+  /**
+   * Deduplicates plugins by name, with later entries (higher priority) winning.
+   * Priority order (highest to lowest):
+   * 1. Local plugin/ directory
+   * 2. Local opencode.json
+   * 3. Global plugin/ directory
+   * 4. Global opencode.json
+   *
+   * Since plugins are added in low-to-high priority order,
+   * we reverse, deduplicate (keeping first occurrence), then restore order.
+   */
+  export function deduplicatePlugins(plugins: string[]): string[] {
+    // seenNames: canonical plugin names for duplicate detection
+    // e.g., "oh-my-opencode", "@scope/pkg"
+    const seenNames = new Set<string>()
+
+    // uniqueSpecifiers: full plugin specifiers to return
+    // e.g., "oh-my-opencode@2.4.3", "file:///path/to/plugin.js"
+    const uniqueSpecifiers: string[] = []
+
+    for (const specifier of plugins.toReversed()) {
+      const name = getPluginName(specifier)
+      if (!seenNames.has(name)) {
+        seenNames.add(name)
+        uniqueSpecifiers.push(specifier)
+      }
+    }
+
+    return uniqueSpecifiers.toReversed()
+  }
+
   export const McpLocal = z
     .object({
       type: z.literal("local").describe("Type of MCP server connection"),
@@ -346,9 +420,7 @@ export namespace Config {
         .int()
         .positive()
         .optional()
-        .describe(
-          "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
-        ),
+        .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
     })
     .strict()
     .meta({
@@ -387,9 +459,7 @@ export namespace Config {
         .int()
         .positive()
         .optional()
-        .describe(
-          "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
-        ),
+        .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
     })
     .strict()
     .meta({
@@ -572,7 +642,11 @@ export namespace Config {
       session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
       session_timeline: z.string().optional().default("<leader>g").describe("Show session timeline"),
       session_fork: z.string().optional().default("none").describe("Fork session from message"),
-      session_rename: z.string().optional().default("none").describe("Rename session"),
+      session_rename: z.string().optional().default("ctrl+r").describe("Rename session"),
+      session_delete: z.string().optional().default("ctrl+d").describe("Delete session"),
+      stash_delete: z.string().optional().default("ctrl+d").describe("Delete stash entry"),
+      model_provider_list: z.string().optional().default("ctrl+a").describe("Open provider list from model dialog"),
+      model_favorite_toggle: z.string().optional().default("ctrl+f").describe("Toggle model favorite status"),
       session_share: z.string().optional().default("none").describe("Share current session"),
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
       session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
@@ -866,7 +940,7 @@ export namespace Config {
         })
         .catchall(Agent)
         .optional()
-        .describe("Agent configuration, see https://opencode.ai/docs/agent"),
+        .describe("Agent configuration, see https://opencode.ai/docs/agents"),
       provider: z
         .record(z.string(), Provider)
         .optional()
@@ -1111,7 +1185,7 @@ export namespace Config {
     if (parsed.success) {
       if (!parsed.data.$schema) {
         parsed.data.$schema = "https://opencode.ai/config.json"
-        await Bun.write(configFilepath, JSON.stringify(parsed.data, null, 2))
+        await Bun.write(configFilepath, JSON.stringify(parsed.data, null, 2)).catch(() => {})
       }
       const data = parsed.data
       if (data.plugin) {

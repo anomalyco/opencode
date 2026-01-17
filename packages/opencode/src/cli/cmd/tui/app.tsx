@@ -97,7 +97,16 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   })
 }
 
-export function tui(input: { url: string; args: Args; directory?: string; onExit?: () => Promise<void> }) {
+import type { EventSource } from "./context/sdk"
+
+export function tui(input: {
+  url: string
+  args: Args
+  directory?: string
+  fetch?: typeof fetch
+  events?: EventSource
+  onExit?: () => Promise<void>
+}) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
@@ -117,7 +126,12 @@ export function tui(input: { url: string; args: Args; directory?: string; onExit
                 <KVProvider>
                   <ToastProvider>
                     <RouteProvider>
-                      <SDKProvider url={input.url} directory={input.directory}>
+                      <SDKProvider
+                        url={input.url}
+                        directory={input.directory}
+                        fetch={input.fetch}
+                        events={input.events}
+                      >
                         <SyncProvider>
                           <ThemeProvider mode={mode}>
                             <LocalProvider>
@@ -186,11 +200,6 @@ function App() {
   renderer.console.onCopySelection = async (text: string) => {
     if (!text || text.length === 0) return
 
-    const base64 = Buffer.from(text).toString("base64")
-    const osc52 = `\x1b]52;c;${base64}\x07`
-    const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-    // @ts-expect-error writeOut is not in type definitions
-    renderer.writeOut(finalOsc52)
     await Clipboard.copy(text)
       .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
       .catch(toast.error)
@@ -592,15 +601,6 @@ function App() {
     })
   })
 
-  sdk.event.on(Installation.Event.Updated.type, (evt) => {
-    toast.show({
-      variant: "success",
-      title: "Update Complete",
-      message: `OpenCode updated to v${evt.properties.version}`,
-      duration: 5000,
-    })
-  })
-
   sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
     toast.show({
       variant: "info",
@@ -622,11 +622,6 @@ function App() {
         }
         const text = renderer.getSelection()?.getSelectedText()
         if (text && text.length > 0) {
-          const base64 = Buffer.from(text).toString("base64")
-          const osc52 = `\x1b]52;c;${base64}\x07`
-          const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-          /* @ts-expect-error */
-          renderer.writeOut(finalOsc52)
           await Clipboard.copy(text)
             .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
             .catch(toast.error)
@@ -653,9 +648,17 @@ function ErrorComponent(props: {
   mode?: "dark" | "light"
 }) {
   const term = useTerminalDimensions()
+  const renderer = useRenderer()
+
+  const handleExit = async () => {
+    renderer.setTerminalTitle("")
+    renderer.destroy()
+    props.onExit()
+  }
+
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
-      props.onExit()
+      handleExit()
     }
   })
   const [copied, setCopied] = createSignal(false)
@@ -708,7 +711,7 @@ function ErrorComponent(props: {
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Reset TUI</text>
         </box>
-        <box onMouseUp={props.onExit} backgroundColor={colors.primary} padding={1}>
+        <box onMouseUp={handleExit} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Exit</text>
         </box>
       </box>
