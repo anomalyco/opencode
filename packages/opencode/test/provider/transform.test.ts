@@ -3,40 +3,40 @@ import { ProviderTransform } from "../../src/provider/transform"
 
 const OUTPUT_TOKEN_MAX = 32000
 
+const mockModel = {
+  id: "anthropic/claude-3-5-sonnet",
+  providerID: "anthropic",
+  api: {
+    id: "claude-3-5-sonnet-20241022",
+    url: "https://api.anthropic.com",
+    npm: "@ai-sdk/anthropic",
+  },
+  name: "Claude 3.5 Sonnet",
+  capabilities: {
+    temperature: true,
+    reasoning: false,
+    attachment: true,
+    toolcall: true,
+    input: { text: true, audio: false, image: true, video: false, pdf: true },
+    output: { text: true, audio: false, image: false, video: false, pdf: false },
+    interleaved: false,
+  },
+  cost: {
+    input: 0.003,
+    output: 0.015,
+    cache: { read: 0.0003, write: 0.00375 },
+  },
+  limit: {
+    context: 200000,
+    output: 8192,
+  },
+  status: "active",
+  options: {},
+  headers: {},
+} as any
+
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
-
-  const mockModel = {
-    id: "anthropic/claude-3-5-sonnet",
-    providerID: "anthropic",
-    api: {
-      id: "claude-3-5-sonnet-20241022",
-      url: "https://api.anthropic.com",
-      npm: "@ai-sdk/anthropic",
-    },
-    name: "Claude 3.5 Sonnet",
-    capabilities: {
-      temperature: true,
-      reasoning: false,
-      attachment: true,
-      toolcall: true,
-      input: { text: true, audio: false, image: true, video: false, pdf: true },
-      output: { text: true, audio: false, image: false, video: false, pdf: false },
-      interleaved: false,
-    },
-    cost: {
-      input: 0.003,
-      output: 0.015,
-      cache: { read: 0.0003, write: 0.00375 },
-    },
-    limit: {
-      context: 200000,
-      output: 8192,
-    },
-    status: "active",
-    options: {},
-    headers: {},
-  } as any
 
   test("should set promptCacheKey when providerOptions.setCacheKey is true", () => {
     const result = ProviderTransform.options({
@@ -100,6 +100,64 @@ describe("ProviderTransform.options - setCacheKey", () => {
       providerOptions: {},
     })
     expect(result.store).toBe(false)
+  })
+})
+
+describe("ProviderTransform.options - previousResponseId", () => {
+  const sessionID = "test-session-123"
+
+  test("should set previousResponseId when provided in providerOptions", () => {
+    const openaiModel = {
+      ...mockModel,
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: openaiModel,
+      sessionID,
+      providerOptions: { previousResponseId: "resp_abc123" },
+    })
+    expect(result.previousResponseId).toBe("resp_abc123")
+  })
+
+  test("should not set previousResponseId when not provided", () => {
+    const openaiModel = {
+      ...mockModel,
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: openaiModel,
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.previousResponseId).toBeUndefined()
+  })
+
+  test("should not set previousResponseId when providerOptions is undefined", () => {
+    const result = ProviderTransform.options({
+      model: mockModel,
+      sessionID,
+      providerOptions: undefined,
+    })
+    expect(result.previousResponseId).toBeUndefined()
+  })
+
+  test("should set previousResponseId for non-openai providers when provided", () => {
+    const result = ProviderTransform.options({
+      model: mockModel,
+      sessionID,
+      providerOptions: { previousResponseId: "resp_xyz789" },
+    })
+    expect(result.previousResponseId).toBe("resp_xyz789")
   })
 })
 

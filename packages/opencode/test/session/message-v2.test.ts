@@ -3,6 +3,47 @@ import { MessageV2 } from "../../src/session/message-v2"
 
 const sessionID = "session"
 
+describe("session.message-v2.Assistant schema", () => {
+  test("responseId field is optional and stores string", () => {
+    const assistant: MessageV2.Assistant = {
+      id: "msg-1",
+      sessionID,
+      role: "assistant",
+      time: { created: Date.now() },
+      parentID: "parent-1",
+      modelID: "gpt-4",
+      providerID: "openai",
+      mode: "normal",
+      agent: "coder",
+      path: { cwd: "/", root: "/" },
+      cost: 0,
+      tokens: { input: 100, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
+      responseId: "resp_abc123xyz",
+    }
+
+    expect(assistant.responseId).toBe("resp_abc123xyz")
+  })
+
+  test("responseId field can be undefined", () => {
+    const assistant: MessageV2.Assistant = {
+      id: "msg-2",
+      sessionID,
+      role: "assistant",
+      time: { created: Date.now() },
+      parentID: "parent-2",
+      modelID: "gpt-4",
+      providerID: "openai",
+      mode: "normal",
+      agent: "coder",
+      path: { cwd: "/", root: "/" },
+      cost: 0,
+      tokens: { input: 100, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
+    }
+
+    expect(assistant.responseId).toBeUndefined()
+  })
+})
+
 function userInfo(id: string): MessageV2.User {
   return {
     id,
