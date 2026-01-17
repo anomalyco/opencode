@@ -1,14 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
-import {
-  APICallError,
-  convertToModelMessages,
-  LoadAPIKeyError,
-  type ModelMessage,
-  type ToolSet,
-  type UIMessage,
-} from "ai"
+import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
@@ -439,7 +432,7 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function toModelMessage(input: WithParts[], options?: { tools?: ToolSet }): ModelMessage[] {
+  export function toModelMessage(input: WithParts[]): ModelMessage[] {
     const result: UIMessage[] = []
 
     for (const msg of input) {
@@ -510,14 +503,30 @@ export namespace MessageV2 {
             })
           if (part.type === "tool") {
             if (part.state.status === "completed") {
+              if (part.state.attachments?.length) {
+                result.push({
+                  id: Identifier.ascending("message"),
+                  role: "user",
+                  parts: [
+                    {
+                      type: "text",
+                      text: `The tool ${part.tool} returned the following attachments:`,
+                    },
+                    ...part.state.attachments.map((attachment) => ({
+                      type: "file" as const,
+                      url: attachment.url,
+                      mediaType: attachment.mime,
+                      filename: attachment.filename,
+                    })),
+                  ],
+                })
+              }
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-available",
                 toolCallId: part.callID,
                 input: part.state.input,
-                output: part.state.time.compacted
-                  ? { output: "[Old tool result content cleared]" }
-                  : { output: part.state.output, attachments: part.state.attachments },
+                output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
                 callProviderMetadata: part.metadata,
               })
             }
@@ -556,10 +565,7 @@ export namespace MessageV2 {
       }
     }
 
-    return convertToModelMessages(
-      result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
-      { tools: options?.tools },
-    )
+    return convertToModelMessages(result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")))
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {

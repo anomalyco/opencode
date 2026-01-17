@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.1.23",
+  "version": "1.1.25",
   "type": "module",
   "license": "MIT",
   "exports": {
@@ -59,6 +59,7 @@
     "shiki": "catalog:",
     "solid-js": "catalog:",
     "solid-list": "catalog:",
+    "strip-ansi": "7.1.2",
     "virtua": "catalog:"
   }
 }
