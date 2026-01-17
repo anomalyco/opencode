@@ -21,10 +21,9 @@ export namespace Debug {
 
   export function configSystemBlock(input: { requestUrl: string; sessionID: string; worktreeRoot: string }) {
     const url = new URL(input.requestUrl)
-    if (url.hostname === "opencode.internal") {
-      url.hostname = "localhost"
-      if (!url.port) url.port = "4096"
-    }
+
+    if (url.hostname === "opencode.internal") url.hostname = "127.0.0.1"
+    if (!url.port) url.port = "4096"
     const ingestUrl = new URL(`/ingest/${input.sessionID}`, url.origin).toString()
     const logFileRelative = ".opencode/debug.log"
     const logFileAbsolute = Debug.logFileAbsolute(input.worktreeRoot)
