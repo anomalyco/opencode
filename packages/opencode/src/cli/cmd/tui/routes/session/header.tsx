@@ -8,25 +8,17 @@ import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { Installation } from "@/installation"
+import { LABS, type Lab } from "../../component/dialog-lab-list"
 
-// Lab detection logic
-const LABS = [
-  { pattern: /bootstrap/i, name: "Bootstrap", icon: "\u26a1" },
-  { pattern: /study[-_]?lab|the[-_]?study/i, name: "Study", icon: "\ud83d\udcda" },
-  { pattern: /teach[-_]?lab|the[-_]?teach/i, name: "Teach", icon: "\ud83c\udf93" },
-  { pattern: /govern[-_]?lab|the[-_]?govern/i, name: "Govern", icon: "\u2696\ufe0f" },
-]
-
-function detectLab(session: Session) {
+// Detect which lab a session belongs to
+function detectLab(session: Session): Lab | undefined {
   const title = session.title?.toLowerCase() || ""
   const dir = session.directory?.toLowerCase() || ""
   
-  for (const lab of LABS) {
-    if (lab.pattern.test(title) || lab.pattern.test(dir)) {
-      return lab
-    }
-  }
-  return null
+  return LABS.find(
+    (lab) => title.includes(lab.id.toLowerCase()) || title.includes(lab.name.toLowerCase()) ||
+             dir.includes(lab.id.toLowerCase()) || dir.includes(lab.name.toLowerCase())
+  )
 }
 
 const Title = (props: { session: Accessor<Session> }) => {
@@ -36,9 +28,11 @@ const Title = (props: { session: Accessor<Session> }) => {
   return (
     <box flexDirection="row" gap={1} alignItems="center">
       <Show when={lab()}>
-        <text fg={theme.accent}>
-          {lab()!.icon}
-        </text>
+        {(labInfo) => (
+          <text fg={theme[labInfo().color]}>
+            {labInfo().icon}
+          </text>
+        )}
       </Show>
       <text fg={theme.text}>
         <span style={{ bold: true }}>#</span> <span style={{ bold: true }}>{props.session().title}</span>

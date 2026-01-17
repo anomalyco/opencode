@@ -12,6 +12,7 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { LABS } from "../../component/dialog-lab-list"
 import "opentui-spinner/solid"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
@@ -34,27 +35,19 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
       }))
   })
 
-  // Lab detection: derive lab from session title or directory
+  // Lab detection: derive lab from session title or directory using shared LABS
   const labInfo = createMemo(() => {
     const s = session()
     if (!s) return null
     const title = s.title?.toLowerCase() || ""
     const dir = s.directory?.toLowerCase() || ""
     
-    // The four official labs only
-    const labs: { pattern: RegExp; name: string; icon: string }[] = [
-      { pattern: /bootstrap/, name: "Bootstrap Lab", icon: "⚡" },
-      { pattern: /study[-_]?lab|the[-_]?study/, name: "Study Lab", icon: "📚" },
-      { pattern: /teach[-_]?lab|the[-_]?teach/, name: "Teach Lab", icon: "🎓" },
-      { pattern: /govern[-_]?lab|the[-_]?govern/, name: "Govern Lab", icon: "⚖️" },
-    ]
+    const lab = LABS.find(
+      (lab) => title.includes(lab.id.toLowerCase()) || title.includes(lab.name.toLowerCase()) ||
+               dir.includes(lab.id.toLowerCase()) || dir.includes(lab.name.toLowerCase())
+    )
     
-    for (const lab of labs) {
-      if (lab.pattern.test(title) || lab.pattern.test(dir)) {
-        return { name: lab.name, icon: lab.icon }
-      }
-    }
-    return null
+    return lab ? { name: `${lab.name} Lab`, icon: lab.icon, color: lab.color } : null
   })
 
   // Animation frames for smooth status indicators
@@ -128,9 +121,11 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <b>{session().title}</b>
               </text>
               <Show when={labInfo()}>
-                <text fg={theme.accent}>
-                  {labInfo()!.icon} {labInfo()!.name}
-                </text>
+                {(lab) => (
+                  <text fg={theme[lab().color]}>
+                    {lab().icon} {lab().name}
+                  </text>
+                )}
               </Show>
               <Show when={session().share?.url}>
                 <text fg={theme.textMuted}>{session().share!.url}</text>
