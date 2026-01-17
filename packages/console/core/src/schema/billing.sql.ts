@@ -21,8 +21,13 @@ export const BillingTable = mysqlTable(
     reloadError: varchar("reload_error", { length: 255 }),
     timeReloadError: utc("time_reload_error"),
     timeReloadLockedTill: utc("time_reload_locked_till"),
+    subscription: json("subscription").$type<{
+      status: "subscribed"
+      coupon?: string
+      seats: number
+      plan: "20" | "100" | "200"
+    }>(),
     subscriptionID: varchar("subscription_id", { length: 28 }),
-    subscriptionCouponID: varchar("subscription_coupon_id", { length: 28 }),
     subscriptionPlan: mysqlEnum("subscription_plan", ["20", "100", "200"] as const),
     timeSubscriptionBooked: utc("time_subscription_booked"),
   },

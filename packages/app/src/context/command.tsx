@@ -104,7 +104,15 @@ export function formatKeybind(config: string): string {
   if (kb.meta) parts.push(IS_MAC ? "⌘" : "Meta")
 
   if (kb.key) {
-    const displayKey = kb.key.length === 1 ? kb.key.toUpperCase() : kb.key.charAt(0).toUpperCase() + kb.key.slice(1)
+    const arrows: Record<string, string> = {
+      arrowup: "↑",
+      arrowdown: "↓",
+      arrowleft: "←",
+      arrowright: "→",
+    }
+    const displayKey =
+      arrows[kb.key.toLowerCase()] ??
+      (kb.key.length === 1 ? kb.key.toUpperCase() : kb.key.charAt(0).toUpperCase() + kb.key.slice(1))
     parts.push(displayKey)
   }
 
