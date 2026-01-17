@@ -9,12 +9,41 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { Installation } from "@/installation"
 
+// Lab detection logic
+const LABS = [
+  { pattern: /bootstrap/i, name: "Bootstrap", icon: "\u26a1" },
+  { pattern: /study[-_]?lab|the[-_]?study/i, name: "Study", icon: "\ud83d\udcda" },
+  { pattern: /teach[-_]?lab|the[-_]?teach/i, name: "Teach", icon: "\ud83c\udf93" },
+  { pattern: /govern[-_]?lab|the[-_]?govern/i, name: "Govern", icon: "\u2696\ufe0f" },
+]
+
+function detectLab(session: Session) {
+  const title = session.title?.toLowerCase() || ""
+  const dir = session.directory?.toLowerCase() || ""
+  
+  for (const lab of LABS) {
+    if (lab.pattern.test(title) || lab.pattern.test(dir)) {
+      return lab
+    }
+  }
+  return null
+}
+
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
+  const lab = createMemo(() => detectLab(props.session()))
+  
   return (
-    <text fg={theme.text}>
-      <span style={{ bold: true }}>#</span> <span style={{ bold: true }}>{props.session().title}</span>
-    </text>
+    <box flexDirection="row" gap={1} alignItems="center">
+      <Show when={lab()}>
+        <text fg={theme.accent}>
+          {lab()!.icon}
+        </text>
+      </Show>
+      <text fg={theme.text}>
+        <span style={{ bold: true }}>#</span> <span style={{ bold: true }}>{props.session().title}</span>
+      </text>
+    </box>
   )
 }
 
