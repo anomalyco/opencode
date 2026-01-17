@@ -266,7 +266,7 @@ export function SessionHeader() {
                             <Button
                               size="large"
                               variant="primary"
-                              class="w-40"
+                              class="w-1/2"
                               onClick={shareSession}
                               disabled={state.share}
                             >
@@ -278,10 +278,22 @@ export function SessionHeader() {
                         <div class="flex flex-col gap-2 w-72">
                           <TextField value={shareUrl() ?? ""} readOnly copyable class="w-full" />
                           <div class="grid grid-cols-2 gap-2">
-                            <Button size="large" variant="secondary" onClick={unshareSession} disabled={state.unshare}>
+                            <Button
+                              size="large"
+                              variant="secondary"
+                              class="w-full shadow-none border border-border-weak-base"
+                              onClick={unshareSession}
+                              disabled={state.unshare}
+                            >
                               {state.unshare ? "Unpublishing..." : "Unpublish"}
                             </Button>
-                            <Button size="large" variant="primary" onClick={viewShare} disabled={state.unshare}>
+                            <Button
+                              size="large"
+                              variant="primary"
+                              class="w-full"
+                              onClick={viewShare}
+                              disabled={state.unshare}
+                            >
                               View
                             </Button>
                           </div>
