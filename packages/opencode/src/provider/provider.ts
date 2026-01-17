@@ -942,6 +942,17 @@ export namespace Provider {
         continue
       }
 
+      if (!modelLoaders[providerID]) {
+        const isAzure = Object.values(provider.models).some((model) => model.api.npm === "@ai-sdk/azure")
+        if (isAzure) {
+          modelLoaders[providerID] = async (sdk: any, modelID: string, options?: Record<string, any>) => {
+            const useCompletionUrls = options?.["useCompletionUrls"] === true
+            if (useCompletionUrls) return sdk.chat(modelID)
+            return sdk.responses(modelID)
+          }
+        }
+      }
+
       log.info("found", { providerID })
     }
 
@@ -1093,9 +1104,8 @@ export namespace Provider {
     const sdk = await getSDK(model)
 
     try {
-      const language = s.modelLoaders[model.providerID]
-        ? await s.modelLoaders[model.providerID](sdk, model.api.id, provider.options)
-        : sdk.languageModel(model.api.id)
+      const loader = s.modelLoaders[model.providerID]
+      const language = loader ? await loader(sdk, model.api.id, provider.options) : sdk.languageModel(model.api.id)
       s.models.set(key, language)
       return language
     } catch (e) {
