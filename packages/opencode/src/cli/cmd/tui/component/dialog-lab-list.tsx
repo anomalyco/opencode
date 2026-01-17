@@ -6,7 +6,7 @@ import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
 import { useKV } from "../context/kv"
-import { RGBA } from "@opentui/core"
+import { useToast } from "../ui/toast"
 import "opentui-spinner/solid"
 
 /**
@@ -76,6 +76,7 @@ export function DialogLabList() {
   const { theme } = useTheme()
   const sdk = useSDK()
   const kv = useKV()
+  const toast = useToast()
 
   // Animation frames for working indicator
   const workingFrames = ["\u25d0", "\u25d3", "\u25d1", "\u25d2"]
@@ -175,6 +176,11 @@ export function DialogLabList() {
         sessionID: existingSession.id,
       })
       dialog.clear()
+      toast.show({
+        message: `Switched to ${lab.name}`,
+        variant: "success",
+        duration: 2000,
+      })
     } else {
       // Create new session for this lab
       setSwitching(lab.id)
@@ -187,11 +193,21 @@ export function DialogLabList() {
             type: "session",
             sessionID: result.data.id,
           })
+          toast.show({
+            message: `Created ${lab.name} session`,
+            variant: "success",
+            duration: 2000,
+          })
         }
         dialog.clear()
       } catch (error) {
         console.error("Failed to create lab session:", error)
         setSwitching(null)
+        toast.show({
+          message: `Failed to create ${lab.name} session`,
+          variant: "error",
+          duration: 3000,
+        })
       }
     }
   }

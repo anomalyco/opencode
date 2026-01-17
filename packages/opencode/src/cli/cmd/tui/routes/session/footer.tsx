@@ -5,11 +5,14 @@ import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/dialog-model"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
+import { LABS } from "../../component/dialog-lab-list"
+import { useKeybind } from "../../context/keybind"
 
 export function Footer() {
   const { theme } = useTheme()
   const sync = useSync()
   const route = useRoute()
+  const keybind = useKeybind()
   const mcp = createMemo(() => Object.values(sync.data.mcp).filter((x) => x.status === "connected").length)
   const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
   const lsp = createMemo(() => Object.keys(sync.data.lsp))
@@ -19,6 +22,17 @@ export function Footer() {
   })
   const directory = useDirectory()
   const connected = useConnected()
+  
+  // Detect if current session belongs to a lab
+  const currentLab = createMemo(() => {
+    if (route.data.type !== "session") return undefined
+    const session = sync.session.get(route.data.sessionID)
+    if (!session) return undefined
+    const title = session.title?.toLowerCase() || ""
+    return LABS.find(
+      (lab) => title.includes(lab.id.toLowerCase()) || title.includes(lab.name.toLowerCase())
+    )
+  })
 
   const [store, setStore] = createStore({
     welcome: false,
@@ -51,7 +65,18 @@ export function Footer() {
 
   return (
     <box flexDirection="row" justifyContent="space-between" gap={1} flexShrink={0}>
-      <text fg={theme.textMuted}>{directory()}</text>
+      <box flexDirection="row" gap={1} flexShrink={1} overflow="hidden">
+        <Show when={currentLab()}>
+          {(lab) => (
+            <text fg={theme[lab().color]} flexShrink={0}>
+              {lab().icon} {lab().name}
+            </text>
+          )}
+        </Show>
+        <Show when={!currentLab()}>
+          <text fg={theme.textMuted}>{directory()}</text>
+        </Show>
+      </box>
       <box gap={2} flexDirection="row" flexShrink={0}>
         <Switch>
           <Match when={store.welcome}>
@@ -82,7 +107,9 @@ export function Footer() {
                 {mcp()} MCP
               </text>
             </Show>
-            <text fg={theme.textMuted}>/status</text>
+            <text fg={theme.textMuted}>
+              <span style={{ fg: theme.accent }}>⚡</span> {keybind.print("lab_list")}
+            </text>
           </Match>
         </Switch>
       </box>
