@@ -131,7 +131,12 @@ export function Home() {
           </Show>
         </box>
         <box flexGrow={1} />
-        <box flexShrink={0}>
+        <box gap={1} flexDirection="row" flexShrink={0}>
+          <text fg={theme.textMuted}>
+            <span style={{ fg: theme.accent }}>⚡</span> Labs{" "}
+            <span style={{ fg: theme.text }}>{keybind.print("lab_list")}</span>
+          </text>
+          <text fg={theme.textMuted}>·</text>
           <text fg={theme.textMuted}>{Installation.VERSION}</text>
         </box>
       </box>
