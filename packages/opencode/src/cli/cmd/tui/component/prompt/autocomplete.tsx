@@ -12,7 +12,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
-import { useDirectoryState } from "@tui/context/directory"
+import { useProjectState } from "@tui/context/directory"
 import path from "path"
 
 function removeLineRange(input: string) {
@@ -79,7 +79,7 @@ export function Autocomplete(props: {
   const sdk = useSDK()
   const sync = useSync()
   const command = useCommandDialog()
-  const directoryState = useDirectoryState()
+  const projectState = useProjectState()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
@@ -228,7 +228,7 @@ export function Autocomplete(props: {
         })
 
         const width = props.anchor().width - 4
-        const root = sync.data.path.directory || directoryState.current || process.cwd()
+        const root = sync.data.path.directory || projectState.current || process.cwd()
         options.push(
           ...sortedFiles.map((item): AutocompleteOption => {
             const urlPath = path.join(root, item)

@@ -13,15 +13,15 @@ export function useDirectory() {
   })
 }
 
-export const { use: useDirectoryState, provider: DirectoryProvider } = createSimpleContext({
-  name: "DirectoryState",
-  init: (props: { directory?: string; onSwitch?: (directory: string) => Promise<void> }) => {
-    const [current, setCurrent] = createSignal(props.directory ?? process.cwd())
+export const { use: useProjectState, provider: ProjectProvider } = createSimpleContext({
+  name: "ProjectState",
+  init: (props: { project?: string; onSwitch?: (project: string) => Promise<void> }) => {
+    const [current, setCurrent] = createSignal(props.project ?? process.cwd())
 
-    const switchTo = async (directory: string) => {
-      if (directory === current()) return true
-      await props.onSwitch?.(directory)
-      setCurrent(directory)
+    const switchTo = async (project: string) => {
+      if (project === current()) return true
+      await props.onSwitch?.(project)
+      setCurrent(project)
       return true
     }
 

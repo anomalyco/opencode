@@ -10,7 +10,7 @@ import { DialogProvider as DialogProviderList } from "@tui/component/dialog-prov
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
-import { DirectoryProvider, useDirectoryState } from "@tui/context/directory"
+import { ProjectProvider, useProjectState } from "@tui/context/directory"
 import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
@@ -107,7 +107,7 @@ export function tui(input: {
   fetch?: typeof fetch
   events?: EventSource
   onExit?: () => Promise<void>
-  switchDirectory?: (directory: string) => Promise<void>
+  switchProject?: (project: string) => Promise<void>
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
@@ -128,9 +128,9 @@ export function tui(input: {
                 <KVProvider>
                   <ToastProvider>
                     <RouteProvider>
-                      <DirectoryProvider directory={input.directory} onSwitch={input.switchDirectory}>
-                        <DirectoryShell url={input.url} fetch={input.fetch} events={input.events} mode={mode} />
-                      </DirectoryProvider>
+                      <ProjectProvider project={input.directory} onSwitch={input.switchProject}>
+                        <ProjectShell url={input.url} fetch={input.fetch} events={input.events} mode={mode} />
+                      </ProjectProvider>
                     </RouteProvider>
                   </ToastProvider>
                 </KVProvider>
@@ -157,11 +157,11 @@ export function tui(input: {
   })
 }
 
-function DirectoryShell(props: { url: string; fetch?: typeof fetch; events?: EventSource; mode: "dark" | "light" }) {
-  const directoryState = useDirectoryState()
+function ProjectShell(props: { url: string; fetch?: typeof fetch; events?: EventSource; mode: "dark" | "light" }) {
+  const projectState = useProjectState()
 
   return (
-    <SDKProvider url={props.url} directory={directoryState.current} fetch={props.fetch} events={props.events}>
+    <SDKProvider url={props.url} directory={projectState.current} fetch={props.fetch} events={props.events}>
       <SyncProvider>
         <ThemeProvider mode={props.mode}>
           <LocalProvider>

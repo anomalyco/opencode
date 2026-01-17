@@ -968,13 +968,13 @@ export type KeybindsConfig = {
    */
   session_list?: string
   /**
-   * Open session directory selector
+   * Open session project selector
    */
-  session_directory?: string
+  session_project?: string
   /**
-   * Refresh session directory list
+   * Refresh session project list
    */
-  session_directory_refresh?: string
+  session_project_refresh?: string
   /**
    * Show session timeline
    */

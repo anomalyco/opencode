@@ -121,8 +121,8 @@ export const rpc = {
     server = Server.listen(input)
     return { url: server.url.toString() }
   },
-  async switchDirectory(input: { directory: string }) {
-    startEventStream(input.directory)
+  async switchProject(input: { project: string }) {
+    startEventStream(input.project)
   },
   async checkUpgrade(input: { directory: string }) {
     await Instance.provide({

@@ -12,7 +12,7 @@ import { useSDK } from "../context/sdk"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { useKV } from "../context/kv"
 import { createDebouncedSignal } from "../util/signal"
-import { useDirectoryState } from "../context/directory"
+import { useProjectState } from "../context/directory"
 import { Global } from "@/global"
 import path from "path"
 import "opentui-spinner/solid"
@@ -24,7 +24,7 @@ type SessionOptionValue = {
 
 export function DialogSessionList(
   props: {
-    directory?: string
+    project?: string
     initialSearch?: string
     initialSelection?: SessionOptionValue
     initialScrollTop?: number
@@ -37,7 +37,7 @@ export function DialogSessionList(
   const { theme } = useTheme()
   const sdk = useSDK()
   const kv = useKV()
-  const directoryState = useDirectoryState()
+  const projectState = useProjectState()
   const clientCache = new Map<string, ReturnType<typeof sdk.createClient>>()
   const sessionCache = new Map<string, typeof sync.data.session>()
   let dialogRef: DialogSelectRef<SessionOptionValue> | undefined
@@ -45,17 +45,17 @@ export function DialogSessionList(
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal(props.initialSearch ?? "", 150)
 
-  const currentDirectory = createMemo(() => sync.data.path.directory || directoryState.current || process.cwd())
-  const activeDirectory = createMemo(() => props.directory ?? currentDirectory())
-  const isCurrentDirectory = createMemo(() => activeDirectory() === currentDirectory())
+  const currentProject = createMemo(() => sync.data.path.directory || projectState.current || process.cwd())
+  const activeProject = createMemo(() => props.project ?? currentProject())
+  const isCurrentProject = createMemo(() => activeProject() === currentProject())
 
-  const clientFor = (directory: string) => {
-    const current = currentDirectory()
-    if (directory === current) return sdk.client
-    const cached = clientCache.get(directory)
+  const clientFor = (project: string) => {
+    const current = currentProject()
+    if (project === current) return sdk.client
+    const cached = clientCache.get(project)
     if (cached) return cached
-    const client = sdk.createClient(directory)
-    clientCache.set(directory, client)
+    const client = sdk.createClient(project)
+    clientCache.set(project, client)
     return client
   }
 
@@ -63,7 +63,7 @@ export function DialogSessionList(
     () => {
       const query = search()
       if (!query) return undefined
-      return { query, directory: activeDirectory() }
+      return { query, directory: activeProject() }
     },
     async (input) => {
       if (!input) return undefined
@@ -73,32 +73,32 @@ export function DialogSessionList(
     },
   )
 
-  const [directorySessions] = createResource(activeDirectory, async (directory) => {
-    const current = currentDirectory()
-    if (!directory) return undefined
-    if (directory === current) return undefined
-    const cached = sessionCache.get(directory)
+  const [projectSessions] = createResource(activeProject, async (project) => {
+    const current = currentProject()
+    if (!project) return undefined
+    if (project === current) return undefined
+    const cached = sessionCache.get(project)
     if (cached) return cached
-    const client = clientFor(directory)
-    const result = await client.session.list({ limit: 200, directory })
+    const client = clientFor(project)
+    const result = await client.session.list({ limit: 200, directory: project })
     const data = result.data ?? []
-    sessionCache.set(directory, data)
+    sessionCache.set(project, data)
     return data
   })
 
-  const directoryKeybind = createMemo(() => keybind.all.session_directory?.[0])
+  const projectKeybind = createMemo(() => keybind.all.session_project?.[0])
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
 
   const sessions = createMemo(() => {
     const searched = searchResults()
     if (searched !== undefined) return searched
-    if (!isCurrentDirectory()) {
-      const scoped = directorySessions()
+    if (!isCurrentProject()) {
+      const scoped = projectSessions()
       if (scoped !== undefined) return scoped
-      return sessionCache.get(activeDirectory()) ?? []
+      return sessionCache.get(activeProject()) ?? []
     }
-    const current = currentDirectory()
+    const current = currentProject()
     return sync.data.session.filter((item) => item.directory === current)
   })
 
@@ -144,22 +144,22 @@ export function DialogSessionList(
 
   useKeyboard((evt) => {
     if (options().length > 0) return
-    if (!keybind.match("session_directory", evt)) return
+    if (!keybind.match("session_project", evt)) return
     evt.preventDefault()
     evt.stopPropagation()
-    showDirectorySelect()
+    showProjectSelect()
   })
 
-  const showDirectorySelect = () => {
-    const current = activeDirectory()
+  const showProjectSelect = () => {
+    const current = activeProject()
     dialog.replace(() => (
-      <DialogDirectorySelect
+      <DialogProjectSelect
         current={current}
-        onSelect={(directory) => {
-          dialog.replace(() => <DialogSessionList directory={directory} />)
+        onSelect={(project: string) => {
+          dialog.replace(() => <DialogSessionList project={project} />)
         }}
         onCancel={() => {
-          dialog.replace(() => <DialogSessionList directory={current} />)
+          dialog.replace(() => <DialogSessionList project={current} />)
         }}
       />
     ))
@@ -167,12 +167,12 @@ export function DialogSessionList(
 
   const openSession = async (option: { value: SessionOptionValue }) => {
     const sessionID = option.value.id
-    const directory = option.value.directory
-    const current = currentDirectory()
-    if (directory !== current) {
-      const display = directory.replace(Global.Path.home, "~")
+    const project = option.value.directory
+    const current = currentProject()
+    if (project !== current) {
+      const display = project.replace(Global.Path.home, "~")
       const restore = {
-        directory: activeDirectory(),
+        project: activeProject(),
         search: dialogRef?.filter ?? search(),
         selection: option.value,
         scrollTop: dialogRef?.scrollTop ?? 0,
@@ -182,7 +182,7 @@ export function DialogSessionList(
         setTimeout(() => {
           dialog.replace(() => (
             <DialogSessionList
-              directory={restore.directory}
+              project={restore.project}
               initialSearch={restore.search}
               initialSelection={restore.selection}
               initialScrollTop={restore.scrollTop}
@@ -191,7 +191,7 @@ export function DialogSessionList(
         }, 1)
         return
       }
-      await directoryState.switchTo(directory)
+      await projectState.switchTo(project)
       await sync.bootstrap()
       route.navigate({
         type: "session",
@@ -230,7 +230,7 @@ export function DialogSessionList(
         {
           keybind: keybind.all.session_delete?.[0],
           title: "delete",
-          disabled: !isCurrentDirectory(),
+          disabled: !isCurrentProject(),
           onTrigger: async (option) => {
             if (toDelete() === option.value.id) {
               sdk.client.session.delete({
@@ -245,36 +245,32 @@ export function DialogSessionList(
         {
           keybind: keybind.all.session_rename?.[0],
           title: "rename",
-          disabled: !isCurrentDirectory(),
+          disabled: !isCurrentProject(),
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value.id} />)
           },
         },
         {
-          keybind: directoryKeybind(),
+          keybind: projectKeybind(),
           title: "project",
-          onTrigger: showDirectorySelect,
+          onTrigger: showProjectSelect,
         },
       ]}
     />
   )
 }
 
-function DialogDirectorySelect(props: {
-  current: string
-  onSelect: (directory: string) => void
-  onCancel: () => void
-}) {
+function DialogProjectSelect(props: { current: string; onSelect: (project: string) => void; onCancel: () => void }) {
   const dialog = useDialog()
   const sdk = useSDK()
   const keybind = useKeybind()
 
-  const [directories, { refetch }] = createResource(async () => {
-    const projects = (await sdk.client.project.list().catch(() => ({ data: [] }))).data ?? []
-    if (projects.length === 0) return []
+  const [projects, { refetch }] = createResource(async () => {
+    const entries = (await sdk.client.project.list().catch(() => ({ data: [] }))).data ?? []
+    if (entries.length === 0) return []
     const lists = await Promise.all(
-      projects.map(async (project) => {
-        const client = sdk.createClient(project.worktree)
+      entries.map(async (entry) => {
+        const client = sdk.createClient(entry.worktree)
         return (await client.session.list({ limit: 200 }).catch(() => ({ data: [] }))).data ?? []
       }),
     )
@@ -299,7 +295,7 @@ function DialogDirectorySelect(props: {
   })
 
   const options = createMemo(() => {
-    const list = directories()
+    const list = projects()
     if (!list) return []
     return list.map((entry) => {
       const display = entry.directory.replace(Global.Path.home, "~")
@@ -308,13 +304,13 @@ function DialogDirectorySelect(props: {
         title,
         value: entry.directory,
         description: Locale.truncate(display, 60),
-        footer: directories.loading ? "Refreshing…" : Locale.time(entry.updated),
+        footer: projects.loading ? "Refreshing…" : Locale.time(entry.updated),
       }
     })
   })
 
   const currentSelection = createMemo(() => {
-    const list = directories()
+    const list = projects()
     if (!list) return undefined
     if (list.some((entry) => entry.directory === props.current)) return props.current
     return undefined
@@ -342,7 +338,7 @@ function DialogDirectorySelect(props: {
       }}
       keybind={[
         {
-          keybind: keybind.all.session_directory_refresh?.[0],
+          keybind: keybind.all.session_project_refresh?.[0],
           title: "refresh",
           onTrigger: () => {
             refetch()
