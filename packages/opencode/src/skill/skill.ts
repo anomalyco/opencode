@@ -11,6 +11,7 @@ import { Flag } from "@/flag/flag"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Session } from "@/session"
+import { SkillRegistry } from "./registry"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -60,12 +61,11 @@ export namespace Skill {
       const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
       if (!parsed.success) return
 
-      // Warn on duplicate skill names
       if (skills[parsed.data.name]) {
-        log.warn("duplicate skill name", {
+        log.info("skill override", {
           name: parsed.data.name,
-          existing: skills[parsed.data.name].location,
-          duplicate: match,
+          previous: skills[parsed.data.name].location,
+          new: match,
         })
       }
 
@@ -76,22 +76,42 @@ export namespace Skill {
       }
     }
 
-    // Scan .claude/skills/ directories (project-level)
-    const claudeDirs = await Array.fromAsync(
-      Filesystem.up({
-        targets: [".claude"],
-        start: Instance.directory,
-        stop: Instance.worktree,
-      }),
-    )
-    // Also include global ~/.claude/skills/
+    // Priority 1 (lowest): Global ~/.claude/skills/
     const globalClaude = `${Global.Path.home}/.claude`
-    if (await Filesystem.isDir(globalClaude)) {
-      claudeDirs.push(globalClaude)
+    if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS && (await Filesystem.isDir(globalClaude))) {
+      const matches = await Array.fromAsync(
+        CLAUDE_SKILL_GLOB.scan({
+          cwd: globalClaude,
+          absolute: true,
+          onlyFiles: true,
+          followSymlinks: true,
+          dot: true,
+        }),
+      ).catch((error) => {
+        log.error("failed global .claude directory scan for skills", { dir: globalClaude, error })
+        return []
+      })
+      for (const match of matches) {
+        await addSkill(match)
+      }
     }
 
+    // Priority 2: Skills from plugins
+    for (const skillPath of SkillRegistry.paths()) {
+      const skillFile = path.join(skillPath, "SKILL.md")
+      await addSkill(skillFile)
+    }
+
+    // Priority 3: Project-level .claude/skills/ directories
     if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS) {
-      for (const dir of claudeDirs) {
+      const projectClaudeDirs = await Array.fromAsync(
+        Filesystem.up({
+          targets: [".claude"],
+          start: Instance.directory,
+          stop: Instance.worktree,
+        }),
+      )
+      for (const dir of projectClaudeDirs) {
         const matches = await Array.fromAsync(
           CLAUDE_SKILL_GLOB.scan({
             cwd: dir,
@@ -104,14 +124,13 @@ export namespace Skill {
           log.error("failed .claude directory scan for skills", { dir, error })
           return []
         })
-
         for (const match of matches) {
           await addSkill(match)
         }
       }
     }
 
-    // Scan .opencode/skill/ directories
+    // Priority 4 (highest): Project-level .opencode/skill/ directories
     for (const dir of await Config.directories()) {
       for await (const match of OPENCODE_SKILL_GLOB.scan({
         cwd: dir,
