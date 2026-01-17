@@ -257,7 +257,12 @@ export namespace ProviderTransform {
     })
   }
 
-  export async function message(msgs: ModelMessage[], model: Provider.Model, sessionID?: string) {
+  export async function message(
+    msgs: ModelMessage[],
+    model: Provider.Model,
+    options: Record<string, unknown> = {},
+    sessionID?: string,
+  ) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
     if (
