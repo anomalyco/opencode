@@ -18,13 +18,7 @@ import {
   type ToolCallContent,
   type ToolKind,
 } from "@agentclientprotocol/sdk"
-import type {
-  SessionConfigOption,
-  SessionConfigOptionCategory,
-  SessionConfigSelectOption,
-  SetSessionConfigOptionRequest,
-  SetSessionConfigOptionResponse,
-} from "@agentclientprotocol/sdk/dist/schema/index.js"
+
 import { Log } from "../util/log"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig, ACPSessionState } from "./types"
@@ -34,7 +28,6 @@ import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
-import { Flag } from "@/flag/flag"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
@@ -61,7 +54,6 @@ export namespace ACP {
     private config: ACPConfig
     private sdk: OpencodeClient
     private sessionManager
-    private configOptionsSupported = false
 
     constructor(connection: AgentSideConnection, config: ACPConfig) {
       this.connection = connection
@@ -363,7 +355,6 @@ export namespace ACP {
 
     async initialize(params: InitializeRequest): Promise<InitializeResponse> {
       log.info("initialize", { protocolVersion: params.protocolVersion })
-      this.configOptionsSupported = detectConfigOptionsSupport(params)
 
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",
@@ -403,10 +394,6 @@ export namespace ACP {
       }
     }
 
-    private shouldUseConfigOptionsFallback() {
-      return !this.configOptionsSupported
-    }
-
     async authenticate(_params: AuthenticateRequest) {
       throw new Error("Authentication not implemented")
     }
@@ -434,7 +421,6 @@ export namespace ACP {
           sessionId,
           models: load.models,
           modes: load.modes,
-          configOptions: load.configOptions,
           _meta: load._meta,
         }
       } catch (e) {
@@ -690,25 +676,6 @@ export namespace ACP {
       }
     }
 
-    private async sendConfigOptionsUpdate(sessionId: string, configOptions: SessionConfigOption[]) {
-      const updates = ["config_option_update", "config_options_update"] as const
-      await Promise.all(
-        updates.map(async (sessionUpdate) => {
-          await this.connection
-            .sessionUpdate({
-              sessionId,
-              update: {
-                sessionUpdate,
-                configOptions,
-              },
-            } as unknown as Parameters<AgentSideConnection["sessionUpdate"]>[0])
-            .catch((err) => {
-              log.error("failed to send config options update", { error: err, sessionUpdate })
-            })
-        }),
-      )
-    }
-
     private async loadAvailableModes(directory: string): Promise<ModeOption[]> {
       const agents = await this.config.sdk.app
         .agents(
@@ -748,8 +715,6 @@ export namespace ACP {
       const model = await defaultModel(this.config, directory)
       const sessionId = params.sessionId
 
-      const fallbackEnabled = this.shouldUseConfigOptionsFallback()
-
       const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
       const entries = sortProvidersByName(providers)
       const availableVariants = modelVariantsFromProviders(entries, model)
@@ -757,17 +722,8 @@ export namespace ACP {
       if (currentVariant && !availableVariants.includes(currentVariant)) {
         this.sessionManager.setVariant(sessionId, undefined)
       }
-      const availableModels = buildAvailableModels(entries, { includeVariants: fallbackEnabled })
+      const availableModels = buildAvailableModels(entries, { includeVariants: true })
       const { availableModes, currentModeId } = await this.resolveModeState(directory, sessionId)
-      const baseModelId = `${model.providerID}/${model.modelID}`
-      const configOptions = buildConfigOptions({
-        availableModes,
-        currentModeId,
-        availableModels,
-        currentModelId: baseModelId,
-        availableVariants,
-        currentVariant: this.sessionManager.getVariant(sessionId),
-      })
       const modeState = currentModeId ? { availableModes, currentModeId } : undefined
 
       const commands = await this.config.sdk.command
@@ -840,18 +796,13 @@ export namespace ACP {
         })
       }, 0)
 
-      setTimeout(() => {
-        void this.sendConfigOptionsUpdate(sessionId, configOptions)
-      }, 0)
-
       return {
         sessionId,
         models: {
-          currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, fallbackEnabled),
+          currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
           availableModels,
         },
         modes: modeState,
-        configOptions: configOptions.length ? configOptions : undefined,
         _meta: buildVariantMeta({
           model,
           variant: this.sessionManager.getVariant(sessionId),
@@ -862,144 +813,21 @@ export namespace ACP {
 
     async unstable_setSessionModel(params: SetSessionModelRequest) {
       const session = this.sessionManager.get(params.sessionId)
-
-      const fallbackEnabled = this.shouldUseConfigOptionsFallback()
-
       const providers = await this.sdk.config
         .providers({ directory: session.cwd }, { throwOnError: true })
         .then((x) => x.data!.providers)
+
+      const { model, variant } = parseModelSelection(params.modelId, providers)
+      this.sessionManager.setModel(session.id, model)
+      this.sessionManager.setVariant(session.id, variant)
+
       const entries = sortProvidersByName(providers)
-
-      const selection = fallbackEnabled
-        ? parseModelSelection(params.modelId, entries)
-        : { model: Provider.parseModel(params.modelId), variant: undefined }
-      const model = selection.model
-
-      this.sessionManager.setModel(session.id, {
-        providerID: model.providerID,
-        modelID: model.modelID,
-      })
-      if (fallbackEnabled) {
-        this.sessionManager.setVariant(session.id, selection.variant)
-      }
       const availableVariants = modelVariantsFromProviders(entries, model)
-      const currentVariant = this.sessionManager.getVariant(session.id)
-      if (currentVariant && !availableVariants.includes(currentVariant)) {
-        this.sessionManager.setVariant(session.id, undefined)
-      }
-
-      const availableModels = buildAvailableModels(entries, { includeVariants: fallbackEnabled })
-      const { availableModes, currentModeId } = await this.resolveModeState(session.cwd, session.id)
-      const baseModelId = `${model.providerID}/${model.modelID}`
-      const configOptions = buildConfigOptions({
-        availableModes,
-        currentModeId,
-        availableModels,
-        currentModelId: baseModelId,
-        availableVariants,
-        currentVariant: this.sessionManager.getVariant(session.id),
-      })
-      await this.sendConfigOptionsUpdate(session.id, configOptions)
 
       return {
         _meta: buildVariantMeta({
           model,
-          variant: this.sessionManager.getVariant(session.id),
-          availableVariants,
-        }),
-      }
-    }
-
-    async unstable_setSessionConfigOption(
-      params: SetSessionConfigOptionRequest,
-    ): Promise<SetSessionConfigOptionResponse> {
-      const session = this.sessionManager.get(params.sessionId)
-      const directory = session.cwd
-      const fallbackEnabled = this.shouldUseConfigOptionsFallback()
-      let model = session.model ?? (await defaultModel(this.config, directory))
-      if (!session.model) {
-        this.sessionManager.setModel(session.id, model)
-      }
-
-      const providers = await this.sdk.config
-        .providers({ directory }, { throwOnError: true })
-        .then((x) => x.data!.providers)
-      const entries = sortProvidersByName(providers)
-      const availableModels = buildAvailableModels(entries, { includeVariants: fallbackEnabled })
-      const { availableModes, currentModeId } = await this.resolveModeState(directory, session.id)
-
-      let availableVariants = modelVariantsFromProviders(entries, model)
-      if (params.configId === "variant" && availableVariants.length === 0) {
-        throw RequestError.invalidParams({ configId: params.configId }, "No variants available")
-      }
-
-      switch (params.configId) {
-        case "variant": {
-          let nextVariant: string | undefined
-          if (params.value === DEFAULT_VARIANT_VALUE) {
-            nextVariant = undefined
-          } else if (availableVariants.includes(params.value)) {
-            nextVariant = params.value
-          } else {
-            throw RequestError.invalidParams({ value: params.value }, "Unsupported variant value")
-          }
-
-          const previousVariant = this.sessionManager.getVariant(session.id)
-          if (previousVariant !== nextVariant) {
-            this.sessionManager.setVariant(session.id, nextVariant)
-          }
-          break
-        }
-        case "mode": {
-          if (!availableModes.some((mode) => mode.id === params.value)) {
-            throw RequestError.invalidParams({ value: params.value }, "Unsupported mode value")
-          }
-          this.sessionManager.setMode(session.id, params.value)
-          break
-        }
-        case "model": {
-          if (!availableModels.some((option) => option.modelId === params.value)) {
-            throw RequestError.invalidParams({ value: params.value }, "Unsupported model value")
-          }
-          const selection = fallbackEnabled
-            ? parseModelSelection(params.value, entries)
-            : { model: Provider.parseModel(params.value), variant: undefined }
-          const nextModel = selection.model
-          model = { providerID: nextModel.providerID, modelID: nextModel.modelID }
-          this.sessionManager.setModel(session.id, model)
-          if (fallbackEnabled) {
-            this.sessionManager.setVariant(session.id, selection.variant)
-          }
-
-          availableVariants = modelVariantsFromProviders(entries, model)
-          const currentVariant = this.sessionManager.getVariant(session.id)
-          if (currentVariant && !availableVariants.includes(currentVariant)) {
-            this.sessionManager.setVariant(session.id, undefined)
-          }
-          break
-        }
-        default:
-          throw RequestError.invalidParams({ configId: params.configId }, "Unsupported config option")
-      }
-
-      const currentMode = this.sessionManager.get(session.id).modeId ?? currentModeId
-      const currentModelId = `${model.providerID}/${model.modelID}`
-      const configOptions = buildConfigOptions({
-        availableModes,
-        currentModeId: currentMode,
-        availableModels,
-        currentModelId,
-        availableVariants,
-        currentVariant: this.sessionManager.getVariant(session.id),
-      })
-
-      await this.sendConfigOptionsUpdate(session.id, configOptions)
-
-      return {
-        configOptions,
-        _meta: buildVariantMeta({
-          model,
-          variant: this.sessionManager.getVariant(session.id),
+          variant,
           availableVariants,
         }),
       }
@@ -1012,29 +840,6 @@ export namespace ACP {
         throw new Error(`Agent not found: ${params.modeId}`)
       }
       this.sessionManager.setMode(params.sessionId, params.modeId)
-
-      const fallbackEnabled = this.shouldUseConfigOptionsFallback()
-      const model = session.model ?? (await defaultModel(this.config, session.cwd))
-      if (!session.model) {
-        this.sessionManager.setModel(session.id, model)
-      }
-
-      const providers = await this.sdk.config
-        .providers({ directory: session.cwd }, { throwOnError: true })
-        .then((x) => x.data!.providers)
-      const entries = sortProvidersByName(providers)
-      const availableVariants = modelVariantsFromProviders(entries, model)
-      const availableModels = buildAvailableModels(entries, { includeVariants: fallbackEnabled })
-      const configOptions = buildConfigOptions({
-        availableModes,
-        currentModeId: params.modeId,
-        availableModels,
-        currentModelId: `${model.providerID}/${model.modelID}`,
-        availableVariants,
-        currentVariant: this.sessionManager.getVariant(session.id),
-      })
-
-      await this.sendConfigOptionsUpdate(session.id, configOptions)
     }
 
     async prompt(params: PromptRequest) {
@@ -1046,34 +851,6 @@ export namespace ACP {
       const model = current ?? (await defaultModel(this.config, directory))
       if (!current) {
         this.sessionManager.setModel(session.id, model)
-      }
-      const previousVariant = this.sessionManager.getVariant(sessionID)
-      const requestedVariant = (params._meta as { opencode?: { variant?: string } } | null)?.opencode?.variant
-      if (typeof requestedVariant === "string") {
-        const providers = await this.sdk.config
-          .providers({ directory }, { throwOnError: true })
-          .then((x) => x.data!.providers)
-        const entries = sortProvidersByName(providers)
-        const availableVariants = modelVariantsFromProviders(entries, model)
-        if (availableVariants.includes(requestedVariant)) {
-          this.sessionManager.setVariant(sessionID, requestedVariant)
-        } else {
-          this.sessionManager.setVariant(sessionID, undefined)
-        }
-        const nextVariant = this.sessionManager.getVariant(sessionID)
-        if (nextVariant !== previousVariant) {
-          const availableModels = buildAvailableModels(entries, { includeVariants: this.shouldUseConfigOptionsFallback() })
-          const { availableModes, currentModeId } = await this.resolveModeState(directory, sessionID)
-          const configOptions = buildConfigOptions({
-            availableModes,
-            currentModeId,
-            availableModels,
-            currentModelId: `${model.providerID}/${model.modelID}`,
-            availableVariants,
-            currentVariant: nextVariant,
-          })
-          await this.sendConfigOptionsUpdate(sessionID, configOptions)
-        }
       }
       const agent = session.modeId ?? (await AgentModule.defaultAgent())
 
@@ -1411,16 +1188,6 @@ export namespace ACP {
     })
   }
 
-  function detectConfigOptionsSupport(params: InitializeRequest): boolean {
-    const override = Flag.OPENCODE_ACP_CONFIG_OPTIONS_FALLBACK?.toLowerCase()
-    if (override) {
-      if (["1", "true", "on", "force", "fallback"].includes(override)) return false
-      if (["0", "false", "off", "disable", "disabled"].includes(override)) return true
-    }
-    // Default to fallback unless client explicitly signals config options support.
-    return params.clientCapabilities?._meta?.["config_options"] === true
-  }
-
   function formatModelIdWithVariant(
     model: { providerID: string; modelID: string },
     variant: string | undefined,
@@ -1430,163 +1197,6 @@ export namespace ACP {
     const base = `${model.providerID}/${model.modelID}`
     if (!includeVariant || !variant || !availableVariants.includes(variant)) return base
     return `${base}/${variant}`
-  }
-
-  function parseModelSelection(
-    modelId: string,
-    providers: Array<{ id: string; name: string; models: Record<string, any> }>,
-  ) {
-    const parsed = Provider.parseModel(modelId)
-    const provider = providers.find((entry) => entry.id === parsed.providerID)
-    if (!provider) return { model: { providerID: parsed.providerID, modelID: parsed.modelID }, variant: undefined }
-
-    if (provider.models[parsed.modelID]) {
-      return { model: { providerID: parsed.providerID, modelID: parsed.modelID }, variant: undefined }
-    }
-
-    const segments = parsed.modelID.split("/")
-    if (segments.length > 1) {
-      const candidateVariant = segments[segments.length - 1]
-      const baseModelId = segments.slice(0, -1).join("/")
-      if (provider.models[baseModelId]) {
-        const baseModel = { providerID: parsed.providerID, modelID: baseModelId }
-        const availableVariants = modelVariantsFromProviders(providers, baseModel)
-        if (availableVariants.includes(candidateVariant)) {
-          return { model: baseModel, variant: candidateVariant }
-        }
-      }
-    }
-
-    return { model: { providerID: parsed.providerID, modelID: parsed.modelID }, variant: undefined }
-  }
-
-  function buildConfigOptions(input: {
-    availableModes: ModeOption[]
-    currentModeId?: string
-    availableModels: ModelOption[]
-    currentModelId: string
-    availableVariants: string[]
-    currentVariant?: string
-  }): SessionConfigOption[] {
-    const configOptions: SessionConfigOption[] = []
-
-    const modeOption = buildModeConfigOption({
-      availableModes: input.availableModes,
-      currentModeId: input.currentModeId,
-    })
-    if (modeOption) configOptions.push(modeOption)
-
-    const modelOption = buildModelConfigOption({
-      availableModels: input.availableModels,
-      currentModelId: input.currentModelId,
-    })
-    if (modelOption) configOptions.push(modelOption)
-
-    const variantOption = buildVariantConfigOption({
-      modelId: input.currentModelId,
-      availableVariants: input.availableVariants,
-      currentVariant: input.currentVariant,
-    })
-    if (variantOption) configOptions.push(variantOption)
-
-    return configOptions
-  }
-
-  function buildModeConfigOption(input: {
-    availableModes: ModeOption[]
-    currentModeId?: string
-  }): SessionConfigOption | undefined {
-    if (!input.availableModes.length || !input.currentModeId) return undefined
-
-    const options: SessionConfigSelectOption[] = input.availableModes.map((mode) => ({
-      name: mode.name,
-      value: mode.id,
-      description: mode.description ?? undefined,
-    }))
-    const category: SessionConfigOptionCategory = "mode"
-
-    return {
-      id: "mode",
-      name: "Mode",
-      type: "select",
-      currentValue: input.currentModeId,
-      options,
-      category,
-    }
-  }
-
-  function buildModelConfigOption(input: {
-    availableModels: ModelOption[]
-    currentModelId: string
-  }): SessionConfigOption | undefined {
-    if (!input.availableModels.length) return undefined
-
-    const options: SessionConfigSelectOption[] = input.availableModels.map((model) => ({
-      name: model.name,
-      value: model.modelId,
-    }))
-    const category: SessionConfigOptionCategory = "model"
-
-    return {
-      id: "model",
-      name: "Model",
-      type: "select",
-      currentValue: input.currentModelId,
-      options,
-      category,
-    }
-  }
-
-  function buildVariantConfigOption(input: {
-    modelId: string
-    availableVariants: string[]
-    currentVariant?: string
-  }): SessionConfigOption | undefined {
-    const variants = input.availableVariants.filter((variant) => variant !== DEFAULT_VARIANT_VALUE)
-    if (variants.length === 0) return undefined
-
-    const selectedVariant =
-      input.currentVariant && variants.includes(input.currentVariant) ? input.currentVariant : undefined
-    const options: SessionConfigSelectOption[] = [
-      {
-        name: "Default",
-        value: DEFAULT_VARIANT_VALUE,
-      },
-      ...variants.map((variant) => ({
-        name: variant,
-        value: variant,
-      })),
-    ]
-    const category: SessionConfigOptionCategory = "thought_level"
-
-    return {
-      id: "variant",
-      name: "Thinking Level",
-      type: "select",
-      currentValue: selectedVariant ?? DEFAULT_VARIANT_VALUE,
-      options,
-      category,
-      _meta: buildVariantConfigMeta({
-        modelId: input.modelId,
-        currentVariant: selectedVariant,
-        availableVariants: variants,
-      }),
-    }
-  }
-
-  function buildVariantConfigMeta(input: {
-    modelId: string
-    currentVariant?: string
-    availableVariants: string[]
-  }) {
-    return {
-      opencode: {
-        modelId: input.modelId,
-        currentVariant: input.currentVariant ?? null,
-        availableVariants: input.availableVariants,
-        hasVariants: input.availableVariants.length > 0,
-      },
-    }
   }
 
   function buildVariantMeta(input: {
@@ -1601,6 +1211,38 @@ export namespace ACP {
         availableVariants: input.availableVariants,
       },
     }
+  }
+
+  function parseModelSelection(
+    modelId: string,
+    providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
+  ): { model: { providerID: string; modelID: string }; variant?: string } {
+    const parsed = Provider.parseModel(modelId)
+    const provider = providers.find((p) => p.id === parsed.providerID)
+    if (!provider) {
+      return { model: parsed, variant: undefined }
+    }
+
+    // Check if modelID exists directly
+    if (provider.models[parsed.modelID]) {
+      return { model: parsed, variant: undefined }
+    }
+
+    // Try to extract variant from end of modelID (e.g., "claude-sonnet-4/high" -> model: "claude-sonnet-4", variant: "high")
+    const segments = parsed.modelID.split("/")
+    if (segments.length > 1) {
+      const candidateVariant = segments[segments.length - 1]
+      const baseModelId = segments.slice(0, -1).join("/")
+      const baseModelInfo = provider.models[baseModelId]
+      if (baseModelInfo?.variants && candidateVariant in baseModelInfo.variants) {
+        return {
+          model: { providerID: parsed.providerID, modelID: baseModelId },
+          variant: candidateVariant,
+        }
+      }
+    }
+
+    return { model: parsed, variant: undefined }
   }
 
 }
