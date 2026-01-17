@@ -419,7 +419,6 @@ export default function Page() {
     {
       id: "session.new",
       title: "New session",
-      description: "Create a new session",
       category: "Session",
       keybind: "mod+shift+s",
       slash: "new",
@@ -437,7 +436,7 @@ export default function Page() {
     {
       id: "terminal.toggle",
       title: "Toggle terminal",
-      description: "Show or hide the terminal",
+      description: "",
       category: "View",
       keybind: "ctrl+`",
       slash: "terminal",
@@ -446,7 +445,7 @@ export default function Page() {
     {
       id: "review.toggle",
       title: "Toggle review",
-      description: "Show or hide the review panel",
+      description: "",
       category: "View",
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
