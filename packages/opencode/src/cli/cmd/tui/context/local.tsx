@@ -223,6 +223,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             provider: provider?.name ?? value.providerID,
             model: info?.name ?? value.modelID,
             reasoning: info?.capabilities?.reasoning ?? false,
+            input: info?.capabilities?.input,
           }
         }),
         cycle(direction: 1 | -1) {

@@ -85,14 +85,6 @@ export function Prompt(props: PromptProps) {
     }
   }
 
-  function canPasteImage() {
-    const model = local.model.current()
-    if (!model) return false
-    const provider = sync.data.provider.find((x) => x.id === model.providerID)
-    const info = provider?.models[model.modelID]
-    return info?.capabilities?.input?.image ?? false
-  }
-
   const textareaKeybindings = useTextareaKeybindings()
 
   const fileStyleId = syntax().getStyleId("extmark.file")!
@@ -666,10 +658,10 @@ export function Prompt(props: PromptProps) {
   }
 
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
-    if (!canPasteImage()) {
+    if (!local.model.parsed().input?.image) {
       toast.show({
         variant: "warning",
-        message: "Current model does not support images",
+        message: `${local.model.parsed().model} doesn't support image as input`,
         duration: 3000,
       })
       return
