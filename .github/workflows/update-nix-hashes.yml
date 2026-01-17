@@ -258,14 +258,25 @@ jobs:
           shopt -s nullglob
           files=(hash-*.txt)
           if [ ${#files[@]} -eq 0 ]; then
-            echo "ERROR: No hash files found"
-            exit 1
+            echo "No hash files found, nothing to update"
+            exit 0
           fi
+
+          EXPECTED_SYSTEMS="x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin"
+          for sys in $EXPECTED_SYSTEMS; do
+            if [ ! -f "hash-${sys}.txt" ]; then
+              echo "WARNING: Missing hash file for $sys"
+            fi
+          done
 
           for f in "${files[@]}"; do
             system="${f#hash-}"
             system="${system%.txt}"
             hash=$(cat "$f")
+            if [ -z "$hash" ]; then
+              echo "WARNING: Empty hash for $system, skipping"
+              continue
+            fi
             echo "  $system: $hash"
             jq --arg sys "$system" --arg h "$hash" \
               '.nodeModules = (.nodeModules // {}) | .nodeModules[$sys] = $h' "$HASH_FILE" > "${HASH_FILE}.tmp"
