@@ -41,6 +41,23 @@ import { ProviderTransform } from "./transform"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
+  const CODEX_GPT_5_CONTEXT_WINDOW = 272_000
+  const CODEX_GPT_4_1_CONTEXT_WINDOW = 1_047_576
+  const CODEX_GPT_4O_CONTEXT_WINDOW = 128_000
+  const CODEX_GPT_3_5_CONTEXT_WINDOW = 16_385
+  const CODEX_GPT_OSS_CONTEXT_WINDOW = 96_000
+
+  function codexContextWindowForModelID(modelID: string): number | undefined {
+    const parts = modelID.split("/")
+    const slug = parts[parts.length - 1] ?? modelID
+    if (slug.startsWith("gpt-4.1")) return CODEX_GPT_4_1_CONTEXT_WINDOW
+    if (slug.startsWith("gpt-oss")) return CODEX_GPT_OSS_CONTEXT_WINDOW
+    if (slug.startsWith("gpt-4o")) return CODEX_GPT_4O_CONTEXT_WINDOW
+    if (slug.startsWith("gpt-3.5")) return CODEX_GPT_3_5_CONTEXT_WINDOW
+    if (slug.startsWith("gpt-5")) return CODEX_GPT_5_CONTEXT_WINDOW
+    return undefined
+  }
+
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,
@@ -587,6 +604,7 @@ export namespace Provider {
   export type Info = z.infer<typeof Info>
 
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
+    const codexContextWindow = codexContextWindowForModelID(model.id)
     const m: Model = {
       id: model.id,
       providerID: provider.id,
@@ -619,7 +637,7 @@ export namespace Provider {
           : undefined,
       },
       limit: {
-        context: model.limit.context,
+        context: codexContextWindow ?? model.limit.context,
         input: model.limit.input,
         output: model.limit.output,
       },
