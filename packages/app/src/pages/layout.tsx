@@ -12,6 +12,7 @@ import {
   Show,
   Switch,
   untrack,
+  type Accessor,
   type JSX,
 } from "solid-js"
 import { A, useNavigate, useParams } from "@solidjs/router"
@@ -24,6 +25,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
@@ -71,6 +73,7 @@ export default function Layout(props: ParentProps) {
       activeProject: undefined as string | undefined,
       activeWorkspace: undefined as string | undefined,
       workspaceOrder: {} as Record<string, string[]>,
+      workspaceName: {} as Record<string, string>,
       workspaceExpanded: {} as Record<string, boolean>,
     }),
   )
@@ -85,6 +88,7 @@ export default function Layout(props: ParentProps) {
   onCleanup(() => xlQuery.removeEventListener("change", handleViewportChange))
 
   const params = useParams()
+  const [autoselect, setAutoselect] = createSignal(!params.dir)
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const layout = useLayout()
@@ -98,12 +102,111 @@ export default function Layout(props: ParentProps) {
   const dialog = useDialog()
   const command = useCommand()
   const theme = useTheme()
+  const initialDir = params.dir
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeLabel: Record<ColorScheme, string> = {
     system: "System",
     light: "Light",
     dark: "Dark",
+  }
+
+  const [editor, setEditor] = createStore({
+    active: "" as string,
+    value: "",
+  })
+  const editorRef = { current: undefined as HTMLInputElement | undefined }
+
+  const editorOpen = (id: string) => editor.active === id
+  const editorValue = () => editor.value
+
+  const openEditor = (id: string, value: string) => {
+    if (!id) return
+    setEditor({ active: id, value })
+    queueMicrotask(() => editorRef.current?.focus())
+  }
+
+  const closeEditor = () => setEditor({ active: "", value: "" })
+
+  const saveEditor = (callback: (next: string) => void) => {
+    const next = editor.value.trim()
+    if (!next) {
+      closeEditor()
+      return
+    }
+    closeEditor()
+    callback(next)
+  }
+
+  const editorKeyDown = (event: KeyboardEvent, callback: (next: string) => void) => {
+    if (event.key === "Enter") {
+      event.preventDefault()
+      saveEditor(callback)
+      return
+    }
+    if (event.key === "Escape") {
+      event.preventDefault()
+      closeEditor()
+    }
+  }
+
+  const InlineEditor = (props: {
+    id: string
+    value: Accessor<string>
+    onSave: (next: string) => void
+    class?: string
+    displayClass?: string
+    editing?: boolean
+    stopPropagation?: boolean
+    openOnDblClick?: boolean
+  }) => {
+    const isEditing = () => props.editing ?? editorOpen(props.id)
+    const stopEvents = () => props.stopPropagation ?? false
+    const allowDblClick = () => props.openOnDblClick ?? true
+    const stopPropagation = (event: Event) => {
+      if (!stopEvents()) return
+      event.stopPropagation()
+    }
+    const handleDblClick = (event: MouseEvent) => {
+      if (!allowDblClick()) return
+      stopPropagation(event)
+      openEditor(props.id, props.value())
+    }
+
+    return (
+      <Show
+        when={isEditing()}
+        fallback={
+          <span
+            class={props.displayClass ?? props.class}
+            onDblClick={handleDblClick}
+            onPointerDown={stopPropagation}
+            onMouseDown={stopPropagation}
+            onClick={stopPropagation}
+            onTouchStart={stopPropagation}
+          >
+            {props.value()}
+          </span>
+        }
+      >
+        <InlineInput
+          ref={(el) => {
+            editorRef.current = el
+          }}
+          value={editorValue()}
+          class={props.class}
+          onInput={(event) => setEditor("value", event.currentTarget.value)}
+          onKeyDown={(event) => editorKeyDown(event, props.onSave)}
+          onBlur={() => closeEditor()}
+          onPointerDown={stopPropagation}
+          onClick={stopPropagation}
+          onDblClick={stopPropagation}
+          onMouseDown={stopPropagation}
+          onMouseUp={stopPropagation}
+          onTouchStart={stopPropagation}
+        />
+      </Show>
+    )
   }
 
   function cycleTheme(direction = 1) {
@@ -298,6 +401,49 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
     return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
   })
+
+  createEffect(
+    on(
+      () => ({ ready: pageReady(), project: currentProject() }),
+      (value) => {
+        if (!value.ready) return
+        const project = value.project
+        if (!project) return
+        const last = server.projects.last()
+        if (last === project.worktree) return
+        server.projects.touch(project.worktree)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => ({ ready: pageReady(), layoutReady: layoutReady(), dir: params.dir, list: layout.projects.list() }),
+      (value) => {
+        if (!value.ready) return
+        if (!value.layoutReady) return
+        if (!autoselect()) return
+        if (initialDir) return
+        if (value.dir) return
+        if (value.list.length === 0) return
+
+        const last = server.projects.last()
+        const next = value.list.find((project) => project.worktree === last) ?? value.list[0]
+        if (!next) return
+        setAutoselect(false)
+        openProject(next.worktree, false)
+        navigateToProject(next.worktree)
+      },
+      { defer: true },
+    ),
+  )
+
+  const workspaceName = (directory: string) => store.workspaceName[directory]
+  const workspaceLabel = (directory: string, branch?: string) =>
+    workspaceName(directory) ?? branch ?? getFilename(directory)
+
+  const isWorkspaceEditing = () => editor.active.startsWith("workspace:")
 
   const workspaceSetting = createMemo(() => {
     const project = currentProject()
@@ -684,6 +830,7 @@ export default function Layout(props: ParentProps) {
 
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
+    server.projects.touch(directory)
     const lastSession = store.lastSession[directory]
     navigate(`/${base64Encode(directory)}${lastSession ? `/session/${lastSession}` : ""}`)
     layout.mobileSidebar.hide()
@@ -698,6 +845,31 @@ export default function Layout(props: ParentProps) {
   function openProject(directory: string, navigate = true) {
     layout.projects.open(directory)
     if (navigate) navigateToProject(directory)
+  }
+
+  const displayName = (project: LocalProject) => project.name || getFilename(project.worktree)
+
+  async function renameProject(project: LocalProject, next: string) {
+    if (!project.id) return
+    const current = displayName(project)
+    if (next === current) return
+    const name = next === getFilename(project.worktree) ? "" : next
+    await globalSDK.client.project.update({ projectID: project.id, name })
+  }
+
+  async function renameSession(session: Session, next: string) {
+    if (next === session.title) return
+    await globalSDK.client.session.update({
+      directory: session.directory,
+      sessionID: session.id,
+      title: next,
+    })
+  }
+
+  const renameWorkspace = (directory: string, next: string) => {
+    const current = workspaceName(directory) ?? getFilename(directory)
+    if (current === next) return
+    setStore("workspaceName", directory, next)
   }
 
   function closeProject(directory: string) {
@@ -768,15 +940,6 @@ export default function Layout(props: ParentProps) {
     }
 
     globalSync.project.loadSessions(project.worktree)
-  })
-
-  createEffect(() => {
-    if (isLargeViewport()) {
-      const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 64
-      document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
-      return
-    }
-    document.documentElement.style.setProperty("--dialog-left-margin", "0px")
   })
 
   function getDraggableId(event: unknown): string | undefined {
@@ -953,9 +1116,14 @@ export default function Layout(props: ParentProps) {
                   </Match>
                 </Switch>
               </div>
-              <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
-                {props.session.title}
-              </span>
+              <InlineEditor
+                id={`session:${props.session.id}`}
+                value={() => props.session.title}
+                onSave={(next) => renameSession(props.session, next)}
+                class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
+                displayClass="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
+                stopPropagation
+              />
               <Show when={props.session.summary}>
                 {(summary) => (
                   <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
@@ -993,116 +1161,6 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const SortableProject = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
-    const sortable = createSortable(props.project.worktree)
-    const selected = createMemo(() => {
-      const current = params.dir ? base64Decode(params.dir) : ""
-      return props.project.worktree === current || props.project.sandboxes?.includes(current)
-    })
-
-    const workspaces = createMemo(() => workspaceIds(props.project).slice(0, 2))
-    const workspaceEnabled = createMemo(() => layout.sidebar.workspaces(props.project.worktree)())
-    const label = (directory: string) => {
-      const [data] = globalSync.child(directory)
-      const kind = directory === props.project.worktree ? "local" : "sandbox"
-      const name = data.vcs?.branch ?? getFilename(directory)
-      return `${kind} : ${name}`
-    }
-
-    const sessions = (directory: string) => {
-      const [data] = globalSync.child(directory)
-      return data.session
-        .filter((session) => session.directory === data.path.directory)
-        .filter((session) => !session.parentID)
-        .toSorted(sortSessions)
-        .slice(0, 2)
-    }
-
-    const projectSessions = () => {
-      const [data] = globalSync.child(props.project.worktree)
-      return data.session
-        .filter((session) => session.directory === data.path.directory)
-        .filter((session) => !session.parentID)
-        .toSorted(sortSessions)
-        .slice(0, 2)
-    }
-
-    const trigger = (
-      <button
-        type="button"
-        classList={{
-          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
-          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
-          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
-            !selected(),
-        }}
-        onClick={() => navigateToProject(props.project.worktree)}
-      >
-        <ProjectIcon project={props.project} notify />
-      </button>
-    )
-
-    return (
-      // @ts-ignore
-      <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-        <HoverCard openDelay={0} closeDelay={0} placement="right-start" gutter={8} trigger={trigger}>
-          <div class="-m-3 flex flex-col w-72">
-            <div class="px-3 py-2 text-12-medium text-text-weak">Recent sessions</div>
-            <div class="px-2 pb-2 flex flex-col gap-2">
-              <Show
-                when={workspaceEnabled()}
-                fallback={
-                  <For each={projectSessions()}>
-                    {(session) => (
-                      <SessionItem
-                        session={session}
-                        slug={base64Encode(props.project.worktree)}
-                        dense
-                        mobile={props.mobile}
-                      />
-                    )}
-                  </For>
-                }
-              >
-                <For each={workspaces()}>
-                  {(directory) => (
-                    <div class="flex flex-col gap-1">
-                      <div class="px-2 py-0.5 flex items-center gap-1 min-w-0">
-                        <div class="shrink-0 size-6 flex items-center justify-center">
-                          <Icon name="branch" size="small" class="text-icon-base" />
-                        </div>
-                        <span class="truncate text-14-medium text-text-base">{label(directory)}</span>
-                      </div>
-                      <For each={sessions(directory)}>
-                        {(session) => (
-                          <SessionItem session={session} slug={base64Encode(directory)} dense mobile={props.mobile} />
-                        )}
-                      </For>
-                    </div>
-                  )}
-                </For>
-              </Show>
-            </div>
-            <Show when={!selected()}>
-              <div class="px-2 py-2 border-t border-border-weak-base">
-                <Button
-                  variant="ghost"
-                  class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
-                  onClick={() => {
-                    layout.sidebar.open()
-                    navigateToProject(props.project.worktree)
-                  }}
-                >
-                  View all sessions
-                </Button>
-              </div>
-            </Show>
-          </div>
-        </HoverCard>
-      </div>
-    )
-  }
-
   const ProjectDragOverlay = (): JSX.Element => {
     const project = createMemo(() => layout.projects.list().find((p) => p.worktree === store.activeProject))
     return (
@@ -1125,7 +1183,7 @@ export default function Layout(props: ParentProps) {
 
       const [workspaceStore] = globalSync.child(directory)
       const kind = directory === project.worktree ? "local" : "sandbox"
-      const name = workspaceStore.vcs?.branch ?? getFilename(directory)
+      const name = workspaceLabel(directory, workspaceStore.vcs?.branch)
       return `${kind} : ${name}`
     })
 
@@ -1149,10 +1207,9 @@ export default function Layout(props: ParentProps) {
         .toSorted(sortSessions),
     )
     const local = createMemo(() => props.directory === props.project.worktree)
-    const title = createMemo(() => {
-      const kind = local() ? "local" : "sandbox"
+    const workspaceValue = createMemo(() => {
       const name = workspaceStore.vcs?.branch ?? getFilename(props.directory)
-      return `${kind} : ${name}`
+      return workspaceName(props.directory) ?? name
     })
     const open = createMemo(() => store.workspaceExpanded[props.directory] ?? true)
     const loading = createMemo(() => open() && workspaceStore.status !== "complete" && sessions().length === 0)
@@ -1163,23 +1220,50 @@ export default function Layout(props: ParentProps) {
       await globalSync.project.loadSessions(props.directory)
     }
 
+    const workspaceEditActive = createMemo(() => editorOpen(`workspace:${props.directory}`))
+
+    const openWrapper = (value: boolean) => {
+      setStore("workspaceExpanded", props.directory, value)
+      if (value) return
+      if (editorOpen(`workspace:${props.directory}`)) closeEditor()
+    }
+
     return (
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-        <Collapsible
-          variant="ghost"
-          open={open()}
-          class="shrink-0"
-          onOpenChange={(value) => setStore("workspaceExpanded", props.directory, value)}
-        >
+        <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
           <div class="px-2 py-1">
             <div class="group/trigger relative">
-              <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-2 py-1.5 rounded-md hover:bg-surface-raised-base-hover transition-all group-hover/trigger:pr-16 group-focus-within/trigger:pr-16">
-                <div class="flex items-center gap-1 min-w-0">
+              <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover">
+                <div class="flex items-center gap-1 min-w-0 flex-1">
                   <div class="flex items-center justify-center shrink-0 size-6">
                     <Icon name="branch" size="small" />
                   </div>
-                  <span class="truncate text-14-medium text-text-base">{title()}</span>
+                  <span class="text-14-medium text-text-base shrink-0">{local() ? "local" : "sandbox"} :</span>
+                  <Show
+                    when={!local()}
+                    fallback={
+                      <span class="text-14-medium text-text-base min-w-0 truncate">
+                        {workspaceStore.vcs?.branch ?? getFilename(props.directory)}
+                      </span>
+                    }
+                  >
+                    <InlineEditor
+                      id={`workspace:${props.directory}`}
+                      value={workspaceValue}
+                      onSave={(next) => {
+                        const trimmed = next.trim()
+                        if (!trimmed) return
+                        renameWorkspace(props.directory, trimmed)
+                        setEditor("value", workspaceValue())
+                      }}
+                      class="text-14-medium text-text-base min-w-0 truncate"
+                      displayClass="text-14-medium text-text-base min-w-0 truncate"
+                      editing={workspaceEditActive()}
+                      stopPropagation={false}
+                      openOnDblClick={false}
+                    />
+                  </Show>
                   <Icon
                     name={open() ? "chevron-down" : "chevron-right"}
                     size="small"
@@ -1245,6 +1329,116 @@ export default function Layout(props: ParentProps) {
     )
   }
 
+  const SortableProject = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
+    const sortable = createSortable(props.project.worktree)
+    const selected = createMemo(() => {
+      const current = params.dir ? base64Decode(params.dir) : ""
+      return props.project.worktree === current || props.project.sandboxes?.includes(current)
+    })
+
+    const workspaces = createMemo(() => workspaceIds(props.project).slice(0, 2))
+    const workspaceEnabled = createMemo(() => layout.sidebar.workspaces(props.project.worktree)())
+    const label = (directory: string) => {
+      const [data] = globalSync.child(directory)
+      const kind = directory === props.project.worktree ? "local" : "sandbox"
+      const name = workspaceLabel(directory, data.vcs?.branch)
+      return `${kind} : ${name}`
+    }
+
+    const sessions = (directory: string) => {
+      const [data] = globalSync.child(directory)
+      return data.session
+        .filter((session) => session.directory === data.path.directory)
+        .filter((session) => !session.parentID)
+        .toSorted(sortSessions)
+        .slice(0, 2)
+    }
+
+    const projectSessions = () => {
+      const [data] = globalSync.child(props.project.worktree)
+      return data.session
+        .filter((session) => session.directory === data.path.directory)
+        .filter((session) => !session.parentID)
+        .toSorted(sortSessions)
+        .slice(0, 2)
+    }
+
+    const trigger = (
+      <button
+        type="button"
+        classList={{
+          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
+          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
+          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+            !selected(),
+        }}
+        onClick={() => navigateToProject(props.project.worktree)}
+      >
+        <ProjectIcon project={props.project} notify />
+      </button>
+    )
+
+    return (
+      // @ts-ignore
+      <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
+        <HoverCard openDelay={0} closeDelay={0} placement="right-start" gutter={6} trigger={trigger}>
+          <div class="-m-3 flex flex-col w-72">
+            <div class="px-3 py-2 text-12-medium text-text-weak">Recent sessions</div>
+            <div class="px-2 pb-2 flex flex-col gap-2">
+              <Show
+                when={workspaceEnabled()}
+                fallback={
+                  <For each={projectSessions()}>
+                    {(session) => (
+                      <SessionItem
+                        session={session}
+                        slug={base64Encode(props.project.worktree)}
+                        dense
+                        mobile={props.mobile}
+                      />
+                    )}
+                  </For>
+                }
+              >
+                <For each={workspaces()}>
+                  {(directory) => (
+                    <div class="flex flex-col gap-1">
+                      <div class="px-2 py-0.5 flex items-center gap-1 min-w-0">
+                        <div class="shrink-0 size-6 flex items-center justify-center">
+                          <Icon name="branch" size="small" class="text-icon-base" />
+                        </div>
+                        <span class="truncate text-14-medium text-text-base">{label(directory)}</span>
+                      </div>
+                      <For each={sessions(directory)}>
+                        {(session) => (
+                          <SessionItem session={session} slug={base64Encode(directory)} dense mobile={props.mobile} />
+                        )}
+                      </For>
+                    </div>
+                  )}
+                </For>
+              </Show>
+            </div>
+            <Show when={!selected()}>
+              <div class="px-2 py-2 border-t border-border-weak-base">
+                <Button
+                  variant="ghost"
+                  class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
+                  onClick={() => {
+                    layout.sidebar.open()
+                    navigateToProject(props.project.worktree)
+                  }}
+                >
+                  View all sessions
+                </Button>
+              </div>
+            </Show>
+          </div>
+        </HoverCard>
+      </div>
+    )
+  }
+
   const LocalWorkspace = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
     const [workspaceStore, setWorkspaceStore] = globalSync.child(props.project.worktree)
     const slug = createMemo(() => base64Encode(props.project.worktree))
@@ -1306,6 +1500,7 @@ export default function Layout(props: ParentProps) {
       if (!current) return ""
       return current.name || getFilename(current.worktree)
     })
+    const projectId = createMemo(() => project()?.id ?? "")
     const workspaces = createMemo(() => workspaceIds(project()))
 
     const errorMessage = (err: unknown) => {
@@ -1406,13 +1601,22 @@ export default function Layout(props: ParentProps) {
                   <div class="shrink-0 px-2 py-1">
                     <div class="group/project flex items-start justify-between gap-2 p-2 pr-1">
                       <div class="flex flex-col min-w-0">
-                        <span class="text-16-medium text-text-strong truncate">{projectName()}</span>
+                        <InlineEditor
+                          id={`project:${projectId()}`}
+                          value={projectName}
+                          onSave={(next) => project() && renameProject(project()!, next)}
+                          class="text-16-medium text-text-strong truncate"
+                          displayClass="text-16-medium text-text-strong truncate"
+                          stopPropagation
+                        />
+
                         <Tooltip placement="right" value={project()?.worktree} class="shrink-0">
                           <span class="text-12-regular text-text-base truncate">
                             {project()?.worktree.replace(homedir(), "~")}
                           </span>
                         </Tooltip>
                       </div>
+
                       <DropdownMenu>
                         <DropdownMenu.Trigger
                           as={IconButton}
@@ -1469,7 +1673,7 @@ export default function Layout(props: ParentProps) {
                           New workspace
                         </Button>
                       </div>
-                      <div class="flex-1 min-h-0">
+                      <div class="relative flex-1 min-h-0">
                         <DragDropProvider
                           onDragStart={handleWorkspaceDragStart}
                           onDragEnd={handleWorkspaceDragEnd}

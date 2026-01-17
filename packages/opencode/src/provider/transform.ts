@@ -26,9 +26,7 @@ export namespace ProviderTransform {
       msgs = msgs.map((msg) => {
         if (msg.providerOptions) {
           for (const options of Object.values(msg.providerOptions)) {
-            if (options && typeof options === "object") {
-              delete options["itemId"]
-            }
+            delete options["itemId"]
           }
         }
         if (!Array.isArray(msg.content)) {
@@ -37,9 +35,7 @@ export namespace ProviderTransform {
         const content = msg.content.map((part) => {
           if (part.providerOptions) {
             for (const options of Object.values(part.providerOptions)) {
-              if (options && typeof options === "object") {
-                delete options["itemId"]
-              }
+              delete options["itemId"]
             }
           }
           return part
