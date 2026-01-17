@@ -141,6 +141,11 @@ jobs:
           TMP_JSON=$(mktemp)
           trap 'rm -f "$BUILD_LOG" "$TMP_JSON"' EXIT
 
+          if [ ! -f "$HASH_FILE" ]; then
+            mkdir -p "$(dirname "$HASH_FILE")"
+            echo '{"nodeModules":{}}' > "$HASH_FILE"
+          fi
+
           # Set dummy hash to force nix to rebuild and reveal correct hash
           jq --arg system "$SYSTEM" --arg value "$DUMMY" \
             '.nodeModules = (.nodeModules // {}) | .nodeModules[$system] = $value' "$HASH_FILE" > "$TMP_JSON"
@@ -242,6 +247,11 @@ jobs:
           HASH_FILE="nix/hashes.json"
           TMP_JSON=$(mktemp)
           trap 'rm -f "$TMP_JSON"' EXIT
+
+          if [ ! -f "$HASH_FILE" ]; then
+            mkdir -p "$(dirname "$HASH_FILE")"
+            echo '{"nodeModules":{}}' > "$HASH_FILE"
+          fi
 
           echo "Merging hashes into ${HASH_FILE}..."
 
