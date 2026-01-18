@@ -944,6 +944,7 @@ export namespace Config {
 
   export const Voice = z
     .object({
+      type: z.enum(["whisper", "alm"]).optional().describe("Transcription provider type"),
       whisper: z
         .object({
           url: z.string().optional().describe("Whisper API URL"),
@@ -953,6 +954,16 @@ export namespace Config {
         })
         .optional()
         .describe("Whisper transcription settings"),
+      alm: z
+        .object({
+          url: z.string().optional().describe("Audio LM API URL"),
+          apiKey: z.string().optional().describe("Audio LM API key"),
+          model: z.string().optional().describe("Audio LM model name"),
+          prompt: z.string().optional().describe("Audio LM base prompt"),
+          system: z.string().optional().describe("Audio LM system prompt"),
+        })
+        .optional()
+        .describe("Audio language model transcription settings"),
     })
     .describe("Voice transcription settings")
 

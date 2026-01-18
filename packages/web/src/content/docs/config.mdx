@@ -181,12 +181,13 @@ Available options:
 
 ### Voice
 
-Configure voice transcription for the Whisper API with the `voice` option.
+Configure voice transcription for Whisper or ALM with the `voice` option.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "voice": {
+    "type": "whisper",
     "whisper": {
       "url": "http://127.0.0.1:5000/v1/audio/transcriptions",
       "apiKey": "{env:OPENCODE_WHISPER_API_KEY}",
@@ -197,12 +198,34 @@ Configure voice transcription for the Whisper API with the `voice` option.
 }
 ```
 
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "voice": {
+    "type": "alm",
+    "alm": {
+      "url": "https://api.openai.com/v1/chat/completions",
+      "apiKey": "{env:OPENCODE_ALM_API_KEY}",
+      "model": "gpt-4o-mini-transcribe",
+      "system": "You are a professional speech-to-text transcriber. Your task is to transcribe the audio into text.",
+      "prompt": "Keep technical terms unchanged."
+    }
+  }
+}
+```
+
 Available options:
 
+- `type` - Transcription provider (`whisper` or `alm`).
 - `whisper.url` - Whisper transcription endpoint URL.
 - `whisper.apiKey` - API key for the Whisper service.
 - `whisper.model` - Whisper model name (default: `whisper-1`).
 - `whisper.language` - Optional language hint (e.g. `en`).
+- `alm.url` - Audio LM transcription endpoint URL.
+- `alm.apiKey` - API key for the ALM service.
+- `alm.model` - Audio LM model name.
+- `alm.prompt` - Optional base prompt for transcription.
+- `alm.system` - Optional system prompt for transcription.
 
 ---
 

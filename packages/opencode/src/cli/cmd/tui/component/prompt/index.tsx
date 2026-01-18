@@ -734,7 +734,7 @@ export function Prompt(props: PromptProps) {
       }
       if (!result.text.trim()) {
         toast.show({
-          message: "No speech detected (Whisper returned empty text)",
+          message: "No speech detected (transcription returned empty text)",
           variant: "warning",
         })
         return
@@ -750,7 +750,7 @@ export function Prompt(props: PromptProps) {
     const enabled = voice.isEnabled()
     if (!enabled) {
       toast.show({
-        message: "Voice input unavailable (disabled or missing OPENCODE_WHISPER_API_KEY)",
+        message: "Voice input unavailable (missing transcription API key)",
         variant: "warning",
       })
       return

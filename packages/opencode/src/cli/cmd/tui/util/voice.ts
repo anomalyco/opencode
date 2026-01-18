@@ -1,6 +1,7 @@
 import { tmpdir } from "os"
 import path from "path"
 import { Config } from "@/config/config"
+import { Alm } from "@/voice/alm"
 import { Whisper } from "@/voice/whisper"
 
 export type VoiceConfig = {
@@ -17,6 +18,15 @@ const defaultCommands = [
 ]
 
 const defaultMime = "audio/mpeg"
+
+const resolveType = (voice?: Config.Info["voice"]) => {
+  if (voice?.type) return voice.type
+  if (voice?.whisper?.apiKey && !voice?.alm?.apiKey) return "whisper"
+  if (voice?.alm?.apiKey && !voice?.whisper?.apiKey) return "alm"
+  if (voice?.whisper?.apiKey) return "whisper"
+  if (voice?.alm?.apiKey) return "alm"
+  return "whisper"
+}
 
 const pickCommand = (config?: VoiceConfig) => {
   if (config?.command?.length) return config.command
@@ -48,8 +58,10 @@ export namespace Voice {
     }
 
     const isEnabled = () => {
-      if (!input.transcription?.()?.whisper?.apiKey) return false
-      return true
+      const voice = input.transcription?.()
+      const type = resolveType(voice)
+      if (type === "alm") return !!voice?.alm?.apiKey
+      return !!voice?.whisper?.apiKey
     }
 
     const start = async () => {
@@ -88,25 +100,47 @@ export namespace Voice {
 
       const blob = new Blob([buffer], { type: mime })
       const apiFile = new File([blob], "audio.mp3", { type: mime })
-      console.log("whisper transcribe start", {
-        bytes: buffer.byteLength,
-        url: input.transcription?.()?.whisper?.url,
-        model: input.transcription?.()?.whisper?.model,
-        language: input.transcription?.()?.whisper?.language,
-      })
+      const voice = input.transcription?.()
+      const type = resolveType(voice)
+      if (type === "alm") {
+        console.log("voice transcribe start", {
+          provider: "alm",
+          bytes: buffer.byteLength,
+          url: voice?.alm?.url,
+          model: voice?.alm?.model,
+        })
+      }
+      if (type === "whisper") {
+        console.log("voice transcribe start", {
+          provider: "whisper",
+          bytes: buffer.byteLength,
+          url: voice?.whisper?.url,
+          model: voice?.whisper?.model,
+          language: voice?.whisper?.language,
+        })
+      }
       state.cancelled = false
       state.controller = new AbortController()
-      const result = await Whisper.transcribe({
-        file: apiFile,
-        mime,
-        sessionID: input.sessionID?.(),
-        prompt: input.prompt?.(),
-        signal: state.controller.signal,
-        voice: input.transcription?.(),
-      })
+      const result = await (type === "alm"
+        ? Alm.transcribe({
+            file: apiFile,
+            mime,
+            sessionID: input.sessionID?.(),
+            prompt: input.prompt?.(),
+            signal: state.controller.signal,
+            voice,
+          })
+        : Whisper.transcribe({
+            file: apiFile,
+            mime,
+            sessionID: input.sessionID?.(),
+            prompt: input.prompt?.(),
+            signal: state.controller.signal,
+            voice,
+          }))
         .then((response) => ({ text: response.text, cancelled: false }))
         .catch((error) => {
-          console.log("whisper transcribe failed", { error: String(error) })
+          console.log("voice transcribe failed", { error: String(error), provider: type })
           if (error?.name === "AbortError" || state.cancelled) return { text: "", cancelled: true }
           throw error
         })
