@@ -323,6 +323,27 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             save()
           })
         },
+        removeRecent(model: { providerID: string; modelID: string }) {
+          const current = currentModel()
+          const index = modelStore.recent.findIndex(
+            (x) => x.providerID === model.providerID && x.modelID === model.modelID,
+          )
+          const next = modelStore.recent.filter(
+            (x) => x.providerID !== model.providerID || x.modelID !== model.modelID,
+          )
+          setModelStore("recent", next)
+
+          // If removed current model, switch to next valid recent model
+          const isCurrent = current?.providerID === model.providerID && current?.modelID === model.modelID
+          if (isCurrent && next.length > 0) {
+            const start = index >= 0 ? Math.min(index, next.length - 1) : 0
+            const ordered = [...next.slice(start), ...next.slice(0, start)]
+            const candidate = ordered.find((item) => isModelValid(item))
+            if (candidate) setModelStore("model", agent.current().name, { ...candidate })
+          }
+
+          save()
+        },
         variant: {
           current() {
             const m = currentModel()
