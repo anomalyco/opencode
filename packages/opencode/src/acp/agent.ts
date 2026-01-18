@@ -518,7 +518,7 @@ export namespace ACP {
         const lastUser = messages?.findLast((m) => m.info.role === "user")?.info
         if (lastUser?.role === "user") {
           result.models.currentModelId = `${lastUser.model.providerID}/${lastUser.model.modelID}`
-          if (result.modes.availableModes.some((m) => m.id === lastUser.agent)) {
+          if (result.modes?.availableModes.some((m) => m.id === lastUser.agent)) {
             result.modes.currentModeId = lastUser.agent
           }
         }
