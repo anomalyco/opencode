@@ -1,7 +1,9 @@
 import { Log } from "../util/log"
 import path from "path"
 import { pathToFileURL } from "url"
+import { createRequire } from "module"
 import os from "os"
+
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import { ModelsDev } from "../provider/models"
@@ -211,10 +213,11 @@ export namespace Config {
   }
 
   function rel(item: string, patterns: string[]) {
+    const normalized = item.replace(/\\/g, "/")
     for (const pattern of patterns) {
-      const index = item.indexOf(pattern)
+      const index = normalized.indexOf(pattern)
       if (index === -1) continue
-      return item.slice(index + pattern.length)
+      return normalized.slice(index + pattern.length)
     }
   }
 
@@ -868,7 +871,28 @@ export namespace Config {
     })
   export type Provider = z.infer<typeof Provider>
 
+  export const DiscordPresence = z
+    .object({
+      enabled: z.boolean().optional().describe("Enable Discord rich presence"),
+      clientId: z.string().optional().describe("Discord application client ID"),
+      useDefaultClientId: z
+        .boolean()
+        .optional()
+        .describe("Use opencode default Discord application client ID"),
+      showSessionDuration: z.boolean().optional().describe("Show session duration"),
+      showModel: z.boolean().optional().describe("Show model"),
+      showTool: z.boolean().optional().describe("Show running tool"),
+      buttons: z
+        .object({
+          session: z.boolean().optional().describe("Include shared session button"),
+        })
+        .optional(),
+    })
+    .optional()
+    .describe("Discord rich presence configuration")
+
   export const Info = z
+
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
@@ -887,7 +911,9 @@ export namespace Config {
         .optional(),
       plugin: z.string().array().optional(),
       snapshot: z.boolean().optional(),
+      discord: DiscordPresence.optional(),
       share: z
+
         .enum(["manual", "auto", "disabled"])
         .optional()
         .describe(
@@ -1200,7 +1226,12 @@ export namespace Config {
         for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
           try {
-            data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
+            if (configFilepath.startsWith("http")) {
+              data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
+              continue
+            }
+            const require = createRequire(configFilepath)
+            data.plugin[i] = pathToFileURL(require.resolve(plugin)).href
           } catch (err) {}
         }
       }

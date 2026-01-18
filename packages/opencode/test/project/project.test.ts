@@ -55,7 +55,7 @@ describe("Project.fromDirectory with worktrees", () => {
   test("should set worktree to root when called from a worktree", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    const worktreePath = path.join(tmp.path, "..", "worktree-test")
+    const worktreePath = path.join(tmp.path, "..", `worktree-test-${path.basename(tmp.path)}`)
     await $`git worktree add ${worktreePath} -b test-branch`.cwd(tmp.path).quiet()
 
     const { project, sandbox } = await Project.fromDirectory(worktreePath)
@@ -71,8 +71,8 @@ describe("Project.fromDirectory with worktrees", () => {
   test("should accumulate multiple worktrees in sandboxes", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    const worktree1 = path.join(tmp.path, "..", "worktree-1")
-    const worktree2 = path.join(tmp.path, "..", "worktree-2")
+    const worktree1 = path.join(tmp.path, "..", `worktree-1-${path.basename(tmp.path)}`)
+    const worktree2 = path.join(tmp.path, "..", `worktree-2-${path.basename(tmp.path)}`)
     await $`git worktree add ${worktree1} -b branch-1`.cwd(tmp.path).quiet()
     await $`git worktree add ${worktree2} -b branch-2`.cwd(tmp.path).quiet()
 
