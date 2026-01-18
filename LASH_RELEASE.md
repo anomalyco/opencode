@@ -10,6 +10,8 @@ The release process is driven by **Lash-specific scripts** that exist in paralle
 **The Entry Point.**
 Run this script to start a release.
 ```bash
+bun run release
+# or
 bun run script/release-lash.ts
 ```
 It handles:
