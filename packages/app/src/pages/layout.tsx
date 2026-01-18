@@ -1669,7 +1669,7 @@ export default function Layout(props: ParentProps) {
                           <Button
                             size="large"
                             icon="plus-small"
-                            class="w-full max-w-[256px]"
+                            class="w-full"
                             onClick={() => {
                               navigate(`/${base64Encode(p.worktree)}/session`)
                               layout.mobileSidebar.hide()
@@ -1686,7 +1686,7 @@ export default function Layout(props: ParentProps) {
                   >
                     <>
                       <div class="py-4 px-3">
-                        <Button size="large" icon="plus-small" class="w-full max-w-[256px]" onClick={createWorkspace}>
+                        <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
                           New workspace
                         </Button>
                       </div>
