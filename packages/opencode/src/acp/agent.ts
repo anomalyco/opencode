@@ -488,7 +488,7 @@ export namespace ACP {
 
         log.info("load_session", { sessionId, mcpServers: params.mcpServers.length })
 
-        const mode = await this.loadSessionMode({
+        const result = await this.loadSessionMode({
           cwd: directory,
           mcpServers: params.mcpServers,
           sessionId,
@@ -509,12 +509,20 @@ export namespace ACP {
             return undefined
           })
 
+        const lastUser = messages?.findLast((m) => m.info.role === "user")?.info
+        if (lastUser?.role === "user") {
+          result.models.currentModelId = `${lastUser.model.providerID}/${lastUser.model.modelID}`
+          if (result.modes.availableModes.some((m) => m.id === lastUser.agent)) {
+            result.modes.currentModeId = lastUser.agent
+          }
+        }
+
         for (const msg of messages ?? []) {
           log.debug("replay message", msg)
           await this.processMessage(msg)
         }
 
-        return mode
+        return result
       } catch (e) {
         const error = MessageV2.fromError(e, {
           providerID: this.config.defaultModel?.providerID ?? "unknown",
