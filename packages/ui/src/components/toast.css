@@ -1,14 +1,24 @@
 [data-component="toast-region"] {
   position: fixed;
   bottom: 48px;
-  right: 32px;
   z-index: 1000;
   display: flex;
   flex-direction: column;
   gap: 8px;
   max-width: 400px;
-  width: 100%;
+  width: calc(100% - 32px);
   pointer-events: none;
+
+  /* Center on mobile, right-aligned on desktop */
+  left: 50%;
+  transform: translateX(-50%);
+
+  @media (min-width: 768px) {
+    left: auto;
+    right: 32px;
+    transform: none;
+    width: 100%;
+  }
 
   [data-slot="toast-list"] {
     display: flex;

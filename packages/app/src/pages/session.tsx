@@ -1234,6 +1234,20 @@ export default function Page() {
             </Switch>
           </div>
 
+          {/* Scroll to bottom button */}
+          <Show when={autoScroll.notAtBottom() && params.id}>
+            <div class="absolute inset-x-0 bottom-[calc(var(--prompt-height,8rem)+16px)] md:bottom-[calc(var(--prompt-height,10rem)+32px)] flex justify-center z-50 pointer-events-none">
+              <button
+                type="button"
+                onClick={() => autoScroll.forceScrollToBottom()}
+                class="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-float-base border border-border-weak-base shadow-md text-text-base text-12-medium hover:bg-surface-float-strong transition-colors"
+              >
+                <Icon name="chevron-down" class="size-3.5" />
+                <span>Scroll to bottom</span>
+              </button>
+            </div>
+          </Show>
+
           {/* Prompt input */}
           <div
             ref={(el) => (promptDock = el)}

@@ -17,6 +17,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   const [store, setStore] = createStore({
     contentRef: undefined as HTMLElement | undefined,
     userScrolled: false,
+    notAtBottom: false,
   })
 
   const active = () => options.working() || settling
@@ -83,10 +84,18 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const handleScroll = () => {
-    if (!active()) return
     if (!scroll) return
 
-    if (distanceFromBottom() < 10) {
+    // Always track if we're at the bottom for the scroll button
+    const distance = distanceFromBottom()
+    const atBottom = distance < 50
+    if (store.notAtBottom !== !atBottom) {
+      setStore("notAtBottom", !atBottom)
+    }
+
+    if (!active()) return
+
+    if (distance < 10) {
       if (store.userScrolled) setStore("userScrolled", false)
       return
     }
@@ -113,7 +122,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
       if (settleTimer) clearTimeout(settleTimer)
       settleTimer = undefined
 
-      setStore("userScrolled", false)
+      // Only reset userScrolled if we're actually at the bottom
+      // This preserves the scroll button when returning to a scrolled conversation
+      if (distanceFromBottom() < 50) {
+        setStore("userScrolled", false)
+      }
 
       if (working) {
         scrollToBottom(true)
@@ -149,6 +162,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
       el.addEventListener("pointerdown", handlePointerDown)
       el.addEventListener("touchstart", handleTouchStart, { passive: true })
 
+      // Check initial scroll position after layout is complete
+      requestAnimationFrame(() => {
+        handleScroll()
+      })
+
       cleanup = () => {
         el.removeEventListener("wheel", handleWheel)
         el.removeEventListener("pointerdown", handlePointerDown)
@@ -163,5 +181,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
     scrollToBottom: () => scrollToBottom(false),
     forceScrollToBottom: () => scrollToBottom(true),
     userScrolled: () => store.userScrolled,
+    notAtBottom: () => store.notAtBottom,
   }
 }

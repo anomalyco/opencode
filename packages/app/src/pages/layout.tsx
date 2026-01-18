@@ -1131,7 +1131,7 @@ export default function Layout(props: ParentProps) {
                 stopPropagation
               />
             </Tooltip>
-            <Show when={props.session.summary}>
+            <Show when={!props.mobile && props.session.summary}>
               {(summary) => (
                 <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
                   <DiffChanges changes={summary()} />
@@ -1141,7 +1141,12 @@ export default function Layout(props: ParentProps) {
           </div>
         </A>
         <div
-          class={`hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"}`}
+          classList={{
+            "text-text-base gap-1 items-center absolute": true,
+            [props.dense ? "top-0.5 right-0.5" : "top-1 right-1"]: true,
+            flex: props.mobile,
+            "hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex": !props.mobile,
+          }}
         >
           <TooltipKeybind
             placement={props.mobile ? "bottom" : "right"}
