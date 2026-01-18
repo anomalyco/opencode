@@ -710,6 +710,20 @@ export type EventCommandExecuted = {
   }
 }
 
+export type EventCommandUpdated = {
+  type: "command.updated"
+  properties: Array<{
+    name: string
+    description?: string
+    agent?: string
+    model?: string
+    mcp?: boolean
+    template: string
+    subtask?: boolean
+    hints: Array<string>
+  }>
+}
+
 export type PermissionAction = "allow" | "deny" | "ask"
 
 export type PermissionRule = {
@@ -885,6 +899,7 @@ export type Event =
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
+  | EventCommandUpdated
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
