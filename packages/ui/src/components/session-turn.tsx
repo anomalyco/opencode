@@ -3,9 +3,9 @@ import {
   Message as MessageType,
   Part as PartType,
   type PermissionRequest,
+  type QuestionRequest,
   TextPart,
   ToolPart,
-  UserMessage,
 } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
@@ -22,8 +22,6 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
-import { ProviderIcon } from "./provider-icon"
-import type { IconName } from "./provider-icons/types"
 import { IconButton } from "./icon-button"
 import { Tooltip } from "./tooltip"
 import { Card } from "./card"
@@ -255,6 +253,31 @@ export function SessionTurn(
     return emptyPermissionParts
   })
 
+  const emptyQuestions: QuestionRequest[] = []
+  const emptyQuestionParts: { part: ToolPart; message: AssistantMessage }[] = []
+  const questions = createMemo(() => data.store.question?.[props.sessionID] ?? emptyQuestions)
+  const questionCount = createMemo(() => questions().length)
+  const nextQuestion = createMemo(() => questions()[0])
+
+  const questionParts = createMemo(() => {
+    if (props.stepsExpanded) return emptyQuestionParts
+
+    const next = nextQuestion()
+    if (!next || !next.tool) return emptyQuestionParts
+
+    const message = assistantMessages().findLast((m) => m.id === next.tool!.messageID)
+    if (!message) return emptyQuestionParts
+
+    const parts = data.store.part[message.id] ?? emptyParts
+    for (const part of parts) {
+      if (part?.type !== "tool") continue
+      const tool = part as ToolPart
+      if (tool.callID === next.tool?.callID) return [{ part: tool, message }]
+    }
+
+    return emptyQuestionParts
+  })
+
   const shellModePart = createMemo(() => {
     const p = parts()
     if (!p.every((part) => part?.type === "text" && part?.synthetic)) return
@@ -337,7 +360,20 @@ export function SessionTurn(
   const handleCopyResponse = async () => {
     const content = response()
     if (!content) return
-    await navigator.clipboard.writeText(content)
+    try {
+      await navigator.clipboard.writeText(content)
+    } catch {
+      // Fallback for iOS Safari
+      const textarea = document.createElement("textarea")
+      textarea.value = content
+      textarea.style.position = "fixed"
+      textarea.style.opacity = "0"
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      document.execCommand("copy")
+      document.body.removeChild(textarea)
+    }
     setResponseCopied(true)
     setTimeout(() => setResponseCopied(false), 2000)
   }
@@ -435,6 +471,14 @@ export function SessionTurn(
     }),
   )
 
+  createEffect(
+    on(questionCount, (count, prev) => {
+      if (!count) return
+      if (prev !== undefined && count <= prev) return
+      autoScroll.forceScrollToBottom()
+    }),
+  )
+
   let lastStatusChange = Date.now()
   let statusTimeout: number | undefined
   createEffect(() => {
@@ -494,21 +538,6 @@ export function SessionTurn(
                               <h1>{msg().summary?.title}</h1>
                             </Match>
                           </Switch>
-                        </div>
-                        <div data-slot="session-turn-user-badges">
-                          <Show when={(msg() as UserMessage).agent}>
-                            <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
-                          </Show>
-                          <Show when={(msg() as UserMessage).model?.modelID}>
-                            <span data-slot="session-turn-badge" class="inline-flex items-center gap-1">
-                              <ProviderIcon
-                                id={(msg() as UserMessage).model!.providerID as IconName}
-                                class="size-3.5 shrink-0"
-                              />
-                              {(msg() as UserMessage).model?.modelID}
-                            </span>
-                          </Show>
-                          <span data-slot="session-turn-badge">{(msg() as UserMessage).variant || "default"}</span>
                         </div>
                       </div>
                     </div>
@@ -578,6 +607,13 @@ export function SessionTurn(
                     <Show when={!props.stepsExpanded && permissionParts().length > 0}>
                       <div data-slot="session-turn-permission-parts">
                         <For each={permissionParts()}>
+                          {({ part, message }) => <Part part={part} message={message} />}
+                        </For>
+                      </div>
+                    </Show>
+                    <Show when={!props.stepsExpanded && questionParts().length > 0}>
+                      <div data-slot="session-turn-question-parts">
+                        <For each={questionParts()}>
                           {({ part, message }) => <Part part={part} message={message} />}
                         </For>
                       </div>

@@ -33,7 +33,7 @@ const Loading = () => <div class="size-full" />
 
 declare global {
   interface Window {
-    __OPENCODE__?: { updaterEnabled?: boolean; serverPassword?: string }
+    __OPENCODE__?: { updaterEnabled?: boolean; serverPassword?: string; serverUrl?: string; port?: number }
   }
 }
 
@@ -69,6 +69,20 @@ export function AppInterface(props: { defaultUrl?: string }) {
   const defaultServerUrl = () => {
     if (props.defaultUrl) return props.defaultUrl
     if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
+    if (window.__OPENCODE__?.serverUrl) return window.__OPENCODE__.serverUrl
+    if (window.__OPENCODE__?.port) return `http://127.0.0.1:${window.__OPENCODE__.port}`
+
+    // For remote access (e.g., mobile via Tailscale) in dev mode, use same origin
+    // (Vite proxy handles forwarding to the actual server, avoiding CORS)
+    if (import.meta.env.DEV && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+      return window.location.origin
+    }
+
+    // For remote access in production, use same hostname on port 4096
+    if (location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+      return `${location.protocol}//${location.hostname}:4096`
+    }
+
     if (import.meta.env.DEV)
       return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
 

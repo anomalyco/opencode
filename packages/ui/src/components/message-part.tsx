@@ -449,6 +449,8 @@ export interface ToolProps {
   defaultOpen?: boolean
   forceOpen?: boolean
   locked?: boolean
+  sessionID?: string
+  callID?: string
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -580,6 +582,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             forceOpen={forceOpen()}
             locked={showPermission() || showQuestion()}
             defaultOpen={props.defaultOpen}
+            sessionID={props.message.sessionID}
+            callID={part.callID}
           />
         </Match>
       </Switch>
@@ -1143,7 +1147,7 @@ function QuestionPrompt(props: { request: QuestionRequest }) {
 
   function submit() {
     const answers = questions().map((_, i) => store.answers[i] ?? [])
-    data.replyToQuestion?.({
+    data.respondToQuestion?.({
       requestID: props.request.id,
       answers,
     })
@@ -1165,7 +1169,7 @@ function QuestionPrompt(props: { request: QuestionRequest }) {
       setStore("custom", inputs)
     }
     if (single()) {
-      data.replyToQuestion?.({
+      data.respondToQuestion?.({
         requestID: props.request.id,
         answers: [[answer]],
       })

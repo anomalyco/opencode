@@ -16,14 +16,22 @@ export function useProviders() {
     }
     return globalSync.data.provider
   })
-  const connected = createMemo(() => providers().all.filter((p) => providers().connected.includes(p.id)))
+  const connected = createMemo(() => {
+    const p = providers()
+    if (!p?.all || !p?.connected) return []
+    return p.all.filter((provider) => p.connected.includes(provider.id))
+  })
   const paid = createMemo(() =>
     connected().filter((p) => p.id !== "opencode" || Object.values(p.models).find((m) => m.cost?.input)),
   )
-  const popular = createMemo(() => providers().all.filter((p) => popularProviders.includes(p.id)))
+  const popular = createMemo(() => {
+    const p = providers()
+    if (!p?.all) return []
+    return p.all.filter((provider) => popularProviders.includes(provider.id))
+  })
   return {
-    all: createMemo(() => providers().all),
-    default: createMemo(() => providers().default),
+    all: createMemo(() => providers()?.all ?? []),
+    default: createMemo(() => providers()?.default ?? {}),
     popular,
     connected,
     paid,

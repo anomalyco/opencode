@@ -63,21 +63,25 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const agent = (() => {
-      const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
+      const list = createMemo(() => {
+        const agents = sync.data.agent
+        if (!agents || typeof agents.filter !== "function") return []
+        return agents.filter((x) => x.mode !== "subagent" && !x.hidden)
+      })
       const [store, setStore] = createStore<{
         current?: string
       }>({
-        current: list()[0]?.name,
+        current: undefined,
       })
       return {
         list,
         current() {
-          const available = list()
+          const available = list() ?? []
           if (available.length === 0) return undefined
           return available.find((x) => x.name === store.current) ?? available[0]
         },
         set(name: string | undefined) {
-          const available = list()
+          const available = list() ?? []
           if (available.length === 0) {
             setStore("current", undefined)
             return
@@ -89,7 +93,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setStore("current", available[0].name)
         },
         move(direction: 1 | -1) {
-          const available = list()
+          const available = list() ?? []
           if (available.length === 0) {
             setStore("current", undefined)
             return
@@ -129,14 +133,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         model: {},
       })
 
-      const available = createMemo(() =>
-        providers.connected().flatMap((p) =>
-          Object.values(p.models).map((m) => ({
+      const available = createMemo(() => {
+        const conn = providers.connected()
+        if (!Array.isArray(conn)) return []
+        return conn.flatMap((p) =>
+          Object.values(p.models ?? {}).map((m) => ({
             ...m,
             provider: p,
           })),
-        ),
-      )
+        )
+      })
 
       const latest = createMemo(() =>
         pipe(
@@ -206,7 +212,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        throw new Error("No default model found")
+        // Return undefined instead of throwing during initial load
+        return undefined
       })
 
       const current = createMemo(() => {
@@ -264,7 +271,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         set(model: ModelKey | undefined, options?: { recent?: boolean }) {
           batch(() => {
             const currentAgent = agent.current()
-            if (currentAgent) setEphemeral("model", currentAgent.name, model ?? fallbackModel())
+            const fallback = fallbackModel()
+            if (currentAgent && (model || fallback)) setEphemeral("model", currentAgent.name, model ?? fallback!)
             if (model) updateVisibility(model, "show")
             if (options?.recent && model) {
               const uniq = uniqueBy([model, ...store.recent], (x) => x.providerID + x.modelID)

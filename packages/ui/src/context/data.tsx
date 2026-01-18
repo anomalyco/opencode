@@ -42,7 +42,7 @@ export type PermissionRespondFn = (input: {
   response: "once" | "always" | "reject"
 }) => void
 
-export type QuestionReplyFn = (input: { requestID: string; answers: QuestionAnswer[] }) => void
+export type QuestionRespondFn = (input: { requestID: string; answers: QuestionAnswer[] }) => void
 
 export type QuestionRejectFn = (input: { requestID: string }) => void
 
@@ -54,7 +54,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     data: Data
     directory: string
     onPermissionRespond?: PermissionRespondFn
-    onQuestionReply?: QuestionReplyFn
+    onQuestionRespond?: QuestionRespondFn
     onQuestionReject?: QuestionRejectFn
     onNavigateToSession?: NavigateToSessionFn
   }) => {
@@ -66,7 +66,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         return props.directory
       },
       respondToPermission: props.onPermissionRespond,
-      replyToQuestion: props.onQuestionReply,
+      respondToQuestion: props.onQuestionRespond,
       rejectQuestion: props.onQuestionReject,
       navigateToSession: props.onNavigateToSession,
     }

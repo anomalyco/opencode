@@ -4,8 +4,18 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createMemo } from "solid-js"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
+import { usePlatform } from "@/context/platform"
+import {
+  joinPath,
+  displayPath,
+  normalizeQuery,
+  projectsToRelative,
+  filterProjects,
+  combineResults,
+} from "@/utils/directory-search"
 
 interface DialogSelectDirectoryProps {
   title?: string
@@ -15,67 +25,51 @@ interface DialogSelectDirectoryProps {
 
 export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const sync = useGlobalSync()
-  const sdk = useGlobalSDK()
+  const globalSdk = useGlobalSDK()
+  const platform = usePlatform()
   const dialog = useDialog()
 
   const home = createMemo(() => sync.data.path.home)
   const root = createMemo(() => sync.data.path.home || sync.data.path.directory)
 
-  function join(base: string | undefined, rel: string) {
-    const b = (base ?? "").replace(/[\\/]+$/, "")
-    const r = rel.replace(/^[\\/]+/, "").replace(/[\\/]+$/, "")
-    if (!b) return r
-    if (!r) return b
-    return b + "/" + r
-  }
+  // Create SDK client with home directory for file search
+  const sdk = createMemo(() =>
+    createOpencodeClient({
+      baseUrl: globalSdk.url,
+      fetch: platform.fetch,
+      directory: root(),
+      throwOnError: true,
+    }),
+  )
 
   function display(rel: string) {
-    const full = join(root(), rel)
-    const h = home()
-    if (!h) return full
-    if (full === h) return "~"
-    if (full.startsWith(h + "/") || full.startsWith(h + "\\")) {
-      return "~" + full.slice(h.length)
-    }
-    return full
+    return displayPath(joinPath(root(), rel), home())
   }
 
-  function normalizeQuery(query: string) {
-    const h = home()
-
-    if (!query) return query
-    if (query.startsWith("~/")) return query.slice(2)
-
-    if (h) {
-      const lc = query.toLowerCase()
-      const hc = h.toLowerCase()
-      if (lc === hc || lc.startsWith(hc + "/") || lc.startsWith(hc + "\\")) {
-        return query.slice(h.length).replace(/^[\\/]+/, "")
-      }
-    }
-
-    return query
-  }
+  // Get known projects from the server
+  const knownProjects = createMemo(() => projectsToRelative(sync.data.project, home()))
 
   async function fetchDirs(query: string) {
     const directory = root()
     if (!directory) return [] as string[]
 
-    const results = await sdk.client.find
-      .files({ directory, query, type: "directory", limit: 50 })
-      .then((x) => x.data ?? [])
+    const results = await sdk()
+      .find.files({ directory, query, type: "directory", limit: 50 })
+      .then((x) => (Array.isArray(x.data) ? x.data : []))
       .catch(() => [])
 
-    return results.map((x) => x.replace(/[\\/]+$/, ""))
+    return results.map((x: string) => x.replace(/[\\/]+$/, ""))
   }
 
   const directories = async (filter: string) => {
-    const query = normalizeQuery(filter.trim())
-    return fetchDirs(query)
+    const query = normalizeQuery(filter.trim(), home()).toLowerCase()
+    const matchingProjects = filterProjects(knownProjects(), query)
+    const searchResults = await fetchDirs(query)
+    return combineResults(matchingProjects, searchResults, 50)
   }
 
   function resolve(rel: string) {
-    const absolute = join(root(), rel)
+    const absolute = joinPath(root(), rel)
     props.onSelect(props.multiple ? [absolute] : absolute)
     dialog.close()
   }

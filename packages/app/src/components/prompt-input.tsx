@@ -372,11 +372,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   type AtOption = { type: "agent"; name: string; display: string } | { type: "file"; path: string; display: string }
 
-  const agentList = createMemo(() =>
-    sync.data.agent
+  const agentList = createMemo(() => {
+    const agents = sync.data.agent
+    if (!Array.isArray(agents)) return []
+    return agents
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
-      .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
-  )
+      .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name }))
+  })
 
   const handleAtSelect = (option: AtOption | undefined) => {
     if (!option) return
@@ -1547,8 +1549,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </Show>
         </div>
-        <div class="relative p-3 flex items-center justify-between">
-          <div class="flex items-center justify-start gap-0.5">
+        <div class="relative p-2 md:p-3 flex items-center justify-between gap-1.5 md:gap-2">
+          <div class="flex items-center justify-start gap-0 min-w-0 overflow-hidden">
             <Switch>
               <Match when={store.mode === "shell"}>
                 <div class="flex items-center gap-2 px-2 h-6">
