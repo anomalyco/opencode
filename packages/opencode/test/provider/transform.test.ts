@@ -159,6 +159,26 @@ describe("ProviderTransform.options - previousResponseId", () => {
     })
     expect(result.previousResponseId).toBe("resp_xyz789")
   })
+
+  test("should set store=true when previousResponseId is provided", () => {
+    const codexModel = {
+      ...mockModel,
+      providerID: "codex",
+      api: {
+        id: "gpt-5-codex",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: codexModel,
+      sessionID,
+      providerOptions: { previousResponseId: "resp_abc123" },
+    })
+    // store should be true to enable previous_response_id functionality
+    expect(result.store).toBe(true)
+    expect(result.previousResponseId).toBe("resp_abc123")
+  })
 })
 
 describe("ProviderTransform.maxOutputTokens", () => {

@@ -555,7 +555,7 @@ export namespace ProviderTransform {
 
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
       if (input.model.providerID.includes("codex")) {
-        result["store"] = false
+        result["store"] = true
       }
 
       if (!input.model.api.id.includes("codex") && !input.model.api.id.includes("gpt-5-pro")) {
