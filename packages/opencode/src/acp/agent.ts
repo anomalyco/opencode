@@ -354,7 +354,7 @@ export namespace ACP {
 
           if (part.type === "text") {
             const delta = props.delta
-            if (delta && part.synthetic !== true) {
+            if (delta && part.ignored !== true) {
               await this.connection
                 .sessionUpdate({
                   sessionId,
@@ -687,7 +687,7 @@ export namespace ACP {
               break
           }
         } else if (part.type === "text") {
-          if (part.text && !part.synthetic) {
+          if (part.text && !part.ignored) {
             await this.connection
               .sessionUpdate({
                 sessionId,
