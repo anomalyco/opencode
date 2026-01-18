@@ -53,6 +53,7 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     REVIEW: "review",
+    RALPH_LOOP: "ralph-loop",
   } as const
 
   const state = Instance.state(async () => {
@@ -75,6 +76,12 @@ export namespace Command {
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      },
+      [Default.RALPH_LOOP]: {
+        name: Default.RALPH_LOOP,
+        description: "Start Ralph-Loop [-m MAX_ITERATIONS|20] [-p PROMISE_TEXT|unset] PROMPT",
+        template: "", // Handled specially by loop logic
+        hints: ["$ARGUMENTS"],
       },
     }
 

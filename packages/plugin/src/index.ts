@@ -10,6 +10,7 @@ import type {
   Part,
   Auth,
   Config,
+  AssistantMessage,
 } from "@opencode-ai/sdk"
 
 import type { BunShell } from "./shell"
@@ -218,5 +219,21 @@ export interface Hooks {
   "experimental.text.complete"?: (
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
+  ) => Promise<void>
+  /**
+   * Called when assistant finishes and is waiting for user input.
+   * Allows plugins to inject continuation text and keep loop active.
+   */
+  "chat.waiting"?: (
+    input: {
+      sessionID: string
+      assistant: AssistantMessage
+      assistantText: string
+      iterationCount: number
+      lastUserID: string
+    },
+    output: {
+      injectedTexts: string[]
+    },
   ) => Promise<void>
 }

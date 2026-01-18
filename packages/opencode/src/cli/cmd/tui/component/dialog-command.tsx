@@ -27,7 +27,10 @@ export type CommandOption = DialogSelectOption<string> & {
   slash?: Slash
   hidden?: boolean
   enabled?: boolean
+  acceptsArgs?: boolean
 }
+
+export type CommandTrigger = undefined | "prompt" | { prompt: { args: string[] } }
 
 function init() {
   const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
@@ -72,11 +75,17 @@ function init() {
   })
 
   const result = {
-    trigger(name: string) {
+    trigger(name: string, source?: CommandTrigger) {
       for (const option of entries()) {
         if (option.value === name) {
           if (!isEnabled(option)) return
           option.onSelect?.(dialog)
+          return
+        }
+        if (option.acceptsArgs && name.startsWith(String(option.value) + " ")) {
+          const argsStr = name.slice(String(option.value).length + 1).trim()
+          const args = argsStr.split(" ").filter((x) => x)
+          option.onSelect?.(dialog, { prompt: { args } })
           return
         }
       }

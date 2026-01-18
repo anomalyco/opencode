@@ -26,6 +26,7 @@ import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
+import { DialogPrompt } from "./ui/dialog-prompt"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
@@ -36,6 +37,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { Identifier } from "@/id/id"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -314,6 +316,151 @@ function App() {
           type: "home",
           initialPrompt: currentPrompt,
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Start Ralph loop",
+      value: "ralph-loop",
+      acceptsArgs: true,
+      category: "Session",
+      onSelect: async (dialog, source) => {
+        if (route.data.type !== "session") {
+          toast.show({ variant: "error", message: "Not in a session" })
+          dialog.clear()
+          return
+        }
+
+        const sessionID = route.data.sessionID
+
+        if (source && typeof source === "object" && "prompt" in source) {
+          const selectedModel = local.model.current()
+          if (!selectedModel) {
+            toast.show({ variant: "error", message: "No model selected" })
+            dialog.clear()
+            return
+          }
+          const argsText = source.prompt.args.join(" ")
+          const isCancel = source.prompt.args.includes("--cancel") || source.prompt.args.includes("-c")
+          try {
+            await sdk.client.session.command({
+              sessionID,
+              command: "ralph-loop",
+              arguments: argsText,
+              messageID: Identifier.ascending("message"),
+              agent: local.agent.current().name,
+              model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+              variant: local.model.variant.current(),
+            })
+            toast.show({ variant: "success", message: isCancel ? "Ralph loop cancelled" : "Ralph loop started" })
+          } catch (err) {
+            toast.show({ variant: "error", message: err instanceof Error ? err.message : "Failed to start loop" })
+          }
+          dialog.clear()
+          return
+        }
+
+        const promptResult = await DialogPrompt.show(dialog, "Ralph Loop", {
+          placeholder: 'e.g., "Continue with your task..."',
+        })
+
+        if (!promptResult) {
+          dialog.clear()
+          return
+        }
+
+        if (promptResult.length < 3) {
+          toast.show({ variant: "warning", message: "Prompt too short" })
+          dialog.clear()
+          return
+        }
+
+        const completionPromise = await DialogPrompt.show(dialog, "Completion Promise", {
+          placeholder: 'e.g., "I_DIDNT_FIND_ANYTHING_TO_CHANGE_OR_IMPROVE"',
+          value: "I_DIDNT_FIND_ANYTHING_TO_CHANGE_OR_IMPROVE",
+        })
+
+        const iterationsResult = await DialogPrompt.show(dialog, "Max Iterations", {
+          placeholder: "e.g., 20",
+          value: "20",
+        })
+
+        const maxIterations = iterationsResult ? parseInt(iterationsResult, 10) : 20
+        if (iterationsResult && Number.isNaN(maxIterations)) {
+          toast.show({ variant: "warning", message: "Invalid max iterations; using default" })
+        }
+
+        const selectedModel = local.model.current()
+        if (selectedModel) {
+          const quoteArg = (value: string) => {
+            if (!value || !/\s/.test(value)) return value
+            if (!value.includes('"')) return `"${value}"`
+            if (!value.includes("'")) return `'${value}'`
+            return value
+          }
+          const args: string[] = []
+          if (!Number.isNaN(maxIterations)) {
+            args.push("--max-iterations", String(maxIterations))
+          }
+          if (completionPromise) {
+            args.push("--completion-promise", quoteArg(completionPromise))
+          }
+          args.push("--", quoteArg(promptResult))
+          try {
+            await sdk.client.session.command({
+              sessionID,
+              command: "ralph-loop",
+              arguments: args.join(" "),
+              messageID: Identifier.ascending("message"),
+              agent: local.agent.current().name,
+              model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+              variant: local.model.variant.current(),
+            })
+            toast.show({ variant: "success", message: `Ralph loop started (${maxIterations} iterations)` })
+          } catch (err) {
+            toast.show({ variant: "error", message: err instanceof Error ? err.message : "Failed to start loop" })
+          }
+        } else {
+          toast.show({ variant: "error", message: "No model selected" })
+        }
+        dialog.clear()
+      },
+    },
+    {
+      title: "Cancel Ralph loop",
+      value: "ralph-loop.cancel",
+      category: "Session",
+      slash: {
+        name: "ralph-loop:cancel",
+      },
+      onSelect: async (dialog) => {
+        if (route.data.type !== "session") {
+          toast.show({ variant: "error", message: "Not in a session" })
+          dialog.clear()
+          return
+        }
+
+        const sessionID = route.data.sessionID
+        const selectedModel = local.model.current()
+        if (!selectedModel) {
+          toast.show({ variant: "error", message: "No model selected" })
+          dialog.clear()
+          return
+        }
+        try {
+          await sdk.client.session.command({
+            sessionID,
+            command: "ralph-cancel",
+            arguments: "",
+            messageID: Identifier.ascending("message"),
+            agent: local.agent.current().name,
+            model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+            variant: local.model.variant.current(),
+          })
+          toast.show({ variant: "success", message: "Ralph loop cancelled" })
+        } catch (err) {
+          toast.show({ variant: "warning", message: err instanceof Error ? err.message : "No active loop to cancel" })
+        }
         dialog.clear()
       },
     },

@@ -10,7 +10,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./tool": "./src/tool.ts"
+    "./tool": "./src/tool.ts",
+    "./ralph-loop": "./src/ralph-loop.ts"
   },
   "files": [
     "dist"

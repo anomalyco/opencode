@@ -45,6 +45,8 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 
+const RALPH_LOOP_COMMAND = "ralph-loop"
+
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
 
@@ -296,6 +298,48 @@ export namespace SessionPrompt {
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
         lastUser.id < lastAssistant.id
       ) {
+        const assistantParts = await MessageV2.parts(lastAssistant.id)
+        const assistantText = assistantParts
+          .filter((p) => p.type === "text")
+          .map((p) => (p as MessageV2.TextPart).text)
+          .join("\n")
+
+        const hookResult = await Plugin.trigger(
+          "chat.waiting",
+          {
+            sessionID,
+            assistant: lastAssistant,
+            assistantText,
+            iterationCount: step,
+            lastUserID: lastUser.id,
+          },
+          {
+            injectedTexts: [],
+          },
+        )
+
+        if (hookResult.injectedTexts.length > 0) {
+          const injectedMessage: MessageV2.User = {
+            id: Identifier.ascending("message"),
+            sessionID,
+            role: "user",
+            agent: lastUser.agent,
+            model: lastUser.model,
+            time: { created: Date.now() },
+          }
+          await Session.updateMessage(injectedMessage)
+          for (const text of hookResult.injectedTexts) {
+            await Session.updatePart({
+              id: Identifier.ascending("part"),
+              messageID: injectedMessage.id,
+              sessionID,
+              type: "text",
+              text,
+            })
+          }
+          continue
+        }
+
         log.info("exiting loop", { sessionID })
         break
       }
@@ -1596,11 +1640,89 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
   export async function command(input: CommandInput) {
     log.info("command", input)
-    const command = await Command.get(input.command)
+    const isRalphCancel = input.command === "ralph-cancel"
+    const commandName = isRalphCancel ? RALPH_LOOP_COMMAND : input.command
+    const command = await Command.get(commandName)
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
     const raw = input.arguments.match(argsRegex) ?? []
     const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
+    if (isRalphCancel) args.unshift("--cancel")
+
+    if (commandName === RALPH_LOOP_COMMAND) {
+      const { registerLoop, parseRalphLoopArgs } = await import("@opencode-ai/plugin/ralph-loop")
+      const parsed = parseRalphLoopArgs(args)
+
+      if (parsed.cancel) {
+        const { cancelLoop } = await import("@opencode-ai/plugin/ralph-loop")
+        const cancelled = cancelLoop(input.sessionID)
+        if (cancelled) {
+          const msgs = []
+          for await (const m of MessageV2.stream(input.sessionID)) {
+            msgs.push(m)
+          }
+          const lastUserMsg = msgs.reverse().find((m) => m.info.role === "user")
+          const lastUser = lastUserMsg?.info as MessageV2.User
+          const msg: MessageV2.User = {
+            id: Identifier.ascending("message"),
+            sessionID: input.sessionID,
+            role: "user",
+            agent: lastUser?.agent ?? agentName,
+            model: lastUser?.model ?? (await lastModel(input.sessionID)),
+            time: { created: Date.now() },
+          }
+          await Session.updateMessage(msg)
+          await Session.updatePart({
+            id: Identifier.ascending("part"),
+            messageID: msg.id,
+            sessionID: input.sessionID,
+            type: "text",
+            text: "Ralph loop cancelled.",
+          })
+          const parts = await MessageV2.parts(msg.id)
+          return { info: msg, parts }
+        }
+        throw new Error("No active ralph-loop to cancel")
+      }
+
+      if (!parsed.prompt) {
+        throw new Error("ralph-loop requires a prompt argument")
+      }
+
+      registerLoop(input.sessionID, parsed)
+
+      const { getLoopState, formatRalphLoopPrompt } = await import("@opencode-ai/plugin/ralph-loop")
+      const state = getLoopState(input.sessionID)
+      if (state) {
+        state.iterationCount = state.iterationCount + 1
+        const completionPrompt = formatRalphLoopPrompt(state)
+        const msgs = []
+        for await (const m of MessageV2.stream(input.sessionID)) {
+          msgs.push(m)
+        }
+        const lastUserMsg = msgs.reverse().find((m) => m.info.role === "user")
+        const lastUser = lastUserMsg?.info as MessageV2.User
+        const model = input.model
+          ? Provider.parseModel(input.model)
+          : lastUser?.model ?? (await lastModel(input.sessionID))
+        const agent = lastUser?.agent ?? agentName
+        const result = (await prompt({
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+          model,
+          agent,
+          parts: [
+            {
+              type: "text",
+              text: completionPrompt,
+            },
+            ...(input.parts ?? []),
+          ],
+          variant: input.variant,
+        })) as MessageV2.WithParts
+        return result
+      }
+    }
 
     const templateCommand = await command.template
 

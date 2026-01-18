@@ -547,14 +547,44 @@ export function Prompt(props: PromptProps) {
       inputText.startsWith("/") &&
       iife(() => {
         const command = inputText.split(" ")[0].slice(1)
-        console.log(command)
-        return sync.data.command.some((x) => x.name === command)
+        const isCommand = sync.data.command.some((x) => x.name === command)
+        const isRalphLoop = command === "ralph-loop"
+        const isRalphCancel = command === "ralph-cancel" || command === "ralph-loop:cancel"
+        return isCommand || isRalphLoop || isRalphCancel
       })
     ) {
       let [command, ...args] = inputText.split(" ")
+      const commandName = command.slice(1)
+      const normalizedCommand = commandName === "ralph-loop:cancel" ? "ralph-cancel" : commandName
+
+      // Route ralph-loop and ralph-cancel through server-side command handler
+      // Server registers loop state in its own context where chat.waiting hook runs
+      if (normalizedCommand === "ralph-cancel" || normalizedCommand === "ralph-loop") {
+        sdk.client.session.command({
+          sessionID,
+          command: normalizedCommand,
+          arguments: args.join(" "),
+          agent: local.agent.current().name,
+          model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+          messageID,
+          variant,
+          parts: nonTextParts
+            .filter((x) => x.type === "file")
+            .map((x) => ({
+              id: Identifier.ascending("part"),
+              ...x,
+            })),
+        })
+        input.extmarks.clear()
+        setStore("prompt", { input: "", parts: [] })
+        setStore("extmarkToPartIndex", new Map())
+        input.clear()
+        return
+      }
+
       sdk.client.session.command({
         sessionID,
-        command: command.slice(1),
+        command: commandName,
         arguments: args.join(" "),
         agent: local.agent.current().name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
@@ -567,6 +597,11 @@ export function Prompt(props: PromptProps) {
             ...x,
           })),
       })
+      input.extmarks.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      input.clear()
+      return
     } else {
       sdk.client.session
         .prompt({
@@ -603,13 +638,14 @@ export function Prompt(props: PromptProps) {
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
-    if (!props.sessionID)
+    if (!props.sessionID) {
       setTimeout(() => {
         route.navigate({
           type: "session",
           sessionID,
         })
       }, 50)
+    }
     input.clear()
   }
   const exit = useExit()
