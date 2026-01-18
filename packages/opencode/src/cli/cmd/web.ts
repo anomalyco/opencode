@@ -60,7 +60,11 @@ export const WebCommand = cmd({
       }
 
       if (opts.mdns) {
-        UI.println(UI.Style.TEXT_INFO_BOLD + "  mDNS:              ", UI.Style.TEXT_NORMAL, "opencode.local")
+        UI.println(
+          UI.Style.TEXT_INFO_BOLD + "  mDNS:              ",
+          UI.Style.TEXT_NORMAL,
+          `opencode.local:${server.port}`,
+        )
       }
 
       // Open localhost in browser
