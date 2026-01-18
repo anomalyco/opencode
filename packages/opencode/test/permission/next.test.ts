@@ -417,6 +417,81 @@ test("disabled - specific allow overrides wildcard deny", () => {
   expect(result.has("read")).toBe(true)
 })
 
+// bash command name matching tests (Issue #7063)
+
+test("evaluate - bash denies command with args when command name matches deny rule", () => {
+  const result = PermissionNext.evaluate("bash", "yarn test", [{ permission: "bash", pattern: "yarn", action: "deny" }])
+  expect(result.action).toBe("deny")
+})
+
+test("evaluate - bash denies npm install when npm is denied", () => {
+  const result = PermissionNext.evaluate("bash", "npm install", [
+    { permission: "bash", pattern: "npm", action: "deny" },
+  ])
+  expect(result.action).toBe("deny")
+})
+
+test("evaluate - bash denies pnpm run build when pnpm is denied", () => {
+  const result = PermissionNext.evaluate("bash", "pnpm run build", [
+    { permission: "bash", pattern: "pnpm", action: "deny" },
+  ])
+  expect(result.action).toBe("deny")
+})
+
+test("evaluate - bash denies npx create-react-app when npx is denied", () => {
+  const result = PermissionNext.evaluate("bash", "npx create-react-app myapp", [
+    { permission: "bash", pattern: "npx", action: "deny" },
+  ])
+  expect(result.action).toBe("deny")
+})
+
+test("evaluate - bash command name match does not affect non-bash permissions", () => {
+  const result = PermissionNext.evaluate("edit", "yarn test", [
+    { permission: "edit", pattern: "yarn", action: "deny" },
+  ])
+  expect(result.action).toBe("ask")
+})
+
+test("evaluate - bash allows command when no deny rule exists", () => {
+  const result = PermissionNext.evaluate("bash", "yarn test", [
+    { permission: "bash", pattern: "*", action: "allow" },
+  ])
+  expect(result.action).toBe("allow")
+})
+
+test("evaluate - bash exact pattern still works", () => {
+  const result = PermissionNext.evaluate("bash", "yarn", [{ permission: "bash", pattern: "yarn", action: "deny" }])
+  expect(result.action).toBe("deny")
+})
+
+test("evaluate - bash wildcard pattern takes precedence over command name match", () => {
+  const result = PermissionNext.evaluate("bash", "yarn test", [
+    { permission: "bash", pattern: "yarn", action: "deny" },
+    { permission: "bash", pattern: "*", action: "allow" },
+  ])
+  expect(result.action).toBe("allow")
+})
+
+test("evaluate - bash command name deny after wildcard allow", () => {
+  const result = PermissionNext.evaluate("bash", "yarn test", [
+    { permission: "bash", pattern: "*", action: "allow" },
+    { permission: "bash", pattern: "yarn", action: "deny" },
+  ])
+  expect(result.action).toBe("deny")
+})
+
+test("evaluate - bash with multiple denied commands", () => {
+  const rules: PermissionNext.Ruleset = [
+    { permission: "bash", pattern: "yarn", action: "deny" },
+    { permission: "bash", pattern: "npm", action: "deny" },
+    { permission: "bash", pattern: "pnpm", action: "deny" },
+  ]
+  expect(PermissionNext.evaluate("bash", "yarn install", rules).action).toBe("deny")
+  expect(PermissionNext.evaluate("bash", "npm run test", rules).action).toBe("deny")
+  expect(PermissionNext.evaluate("bash", "pnpm add lodash", rules).action).toBe("deny")
+  expect(PermissionNext.evaluate("bash", "ls -la", rules).action).toBe("ask")
+})
+
 // ask tests
 
 test("ask - resolves immediately when action is allow", async () => {

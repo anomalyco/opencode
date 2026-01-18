@@ -220,9 +220,15 @@ export namespace PermissionNext {
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
     const merged = merge(...rulesets)
     log.info("evaluate", { permission, pattern, ruleset: merged })
-    const match = merged.findLast(
-      (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
-    )
+    const match = merged.findLast((rule) => {
+      if (!Wildcard.match(permission, rule.permission)) return false
+      if (Wildcard.match(pattern, rule.pattern)) return true
+      if (permission === "bash") {
+        const cmd = pattern.split(/\s+/)[0]
+        if (cmd && Wildcard.match(cmd, rule.pattern)) return true
+      }
+      return false
+    })
     return match ?? { action: "ask", permission, pattern: "*" }
   }
 
