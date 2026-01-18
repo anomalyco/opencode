@@ -707,7 +707,7 @@ export namespace ACP {
           // Replay file attachments as appropriate ACP content blocks.
           // OpenCode stores files internally as { type: "file", url, filename, mime }.
           // We convert these back to ACP blocks based on the URL scheme and MIME type:
-          // - file:// URLs → resource_link 
+          // - file:// URLs → resource_link
           // - data: URLs with image/* → image block
           // - data: URLs with text/* or application/json → resource with text
           // - data: URLs with other types → resource with blob
@@ -759,7 +759,11 @@ export namespace ACP {
               // Non-image: text types get decoded, binary types stay as blob
               const isText = effectiveMime.startsWith("text/") || effectiveMime === "application/json"
               const resource = isText
-                ? { uri: `file://${filename}`, mimeType: effectiveMime, text: Buffer.from(base64Data, "base64").toString("utf-8") }
+                ? {
+                    uri: `file://${filename}`,
+                    mimeType: effectiveMime,
+                    text: Buffer.from(base64Data, "base64").toString("utf-8"),
+                  }
                 : { uri: `file://${filename}`, mimeType: effectiveMime, blob: base64Data }
 
               await this.connection
