@@ -75,7 +75,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       installShellCompletion --cmd opencode \
         --bash <(echo "$completion_bash")
     fi
-
     if [ -n "$completion_zsh" ]; then
       installShellCompletion --cmd opencode \
         --zsh <(echo "$completion_zsh")
