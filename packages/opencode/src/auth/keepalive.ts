@@ -2,7 +2,8 @@ import { Log } from "../util/log"
 
 const log = Log.create({ service: "auth.keepalive" })
 
-const KEEPALIVE_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
+const KEEPALIVE_INTERVAL_MS = 30 * 60 * 1000 // 30 minutes (more frequent to catch expiring tokens)
+const TOKEN_REFRESH_BUFFER_MS = 10 * 60 * 1000 // Refresh 10 minutes before expiry
 
 let interval: ReturnType<typeof setInterval> | undefined
 
@@ -32,7 +33,84 @@ async function loadAnthropicRecords(): Promise<OAuthRecord[]> {
   const provider = data.providers?.["anthropic"]
   if (!provider || provider.type !== "oauth") return []
 
-  return provider.records.filter((r: OAuthRecord) => r.access && r.namespace === "default")
+  return provider.records.filter((r: OAuthRecord) => r.access && r.refresh && r.namespace === "default")
+}
+
+async function refreshAnthropicToken(record: OAuthRecord): Promise<{ access: string; expires: number } | null> {
+  try {
+    log.info("refreshing anthropic token", { recordId: record.id, label: record.label })
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30000)
+
+    const response = await fetch("https://console.anthropic.com/v1/oauth/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        grant_type: "refresh_token",
+        refresh_token: record.refresh,
+        client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+      }),
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeout)
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "")
+      log.error("token refresh failed", {
+        recordId: record.id,
+        status: response.status,
+        body: text.slice(0, 200),
+      })
+      return null
+    }
+
+    const data = (await response.json()) as {
+      access_token: string
+      expires_in?: number
+      refresh_token?: string
+    }
+
+    log.info("token refresh successful", { recordId: record.id })
+
+    return {
+      access: data.access_token,
+      expires: Date.now() + (data.expires_in ?? 3600) * 1000,
+    }
+  } catch (err) {
+    log.error("token refresh error", {
+      recordId: record.id,
+      error: String(err),
+    })
+    return null
+  }
+}
+
+async function updateStoredToken(recordId: string, access: string, expires: number): Promise<void> {
+  const path = await import("path")
+  const { Global } = await import("../global")
+  const fs = await import("fs/promises")
+
+  const filepath = path.join(Global.Path.data, "auth.json")
+  const raw = await fs.readFile(filepath, "utf-8").catch(() => null)
+  if (!raw) return
+
+  const data = JSON.parse(raw)
+  const provider = data.providers?.["anthropic"]
+  if (!provider || provider.type !== "oauth") return
+
+  const record = provider.records.find((r: OAuthRecord) => r.id === recordId)
+  if (!record) return
+
+  record.access = access
+  record.expires = expires
+  record.updatedAt = Date.now()
+
+  await fs.writeFile(filepath, JSON.stringify(data, null, 2))
+  log.info("updated stored token", { recordId })
 }
 
 async function pingWithMessagesAPI(record: OAuthRecord): Promise<boolean> {
@@ -59,7 +137,6 @@ async function pingWithMessagesAPI(record: OAuthRecord): Promise<boolean> {
     clearTimeout(timeout)
 
     if (response.ok) {
-      // Consume response body to complete the request
       await response.json().catch(() => {})
       return true
     }
@@ -80,6 +157,38 @@ async function pingWithMessagesAPI(record: OAuthRecord): Promise<boolean> {
   }
 }
 
+async function keepAliveAccount(record: OAuthRecord): Promise<void> {
+  const now = Date.now()
+  const expiresIn = record.expires - now
+
+  // If token is expired or about to expire, refresh it first
+  if (expiresIn < TOKEN_REFRESH_BUFFER_MS) {
+    log.info("token expired or expiring soon, refreshing", {
+      recordId: record.id,
+      expiresIn: Math.round(expiresIn / 1000),
+    })
+
+    const newToken = await refreshAnthropicToken(record)
+    if (newToken) {
+      await updateStoredToken(record.id, newToken.access, newToken.expires)
+      record.access = newToken.access
+      record.expires = newToken.expires
+    } else {
+      log.error("failed to refresh token, skipping ping", { recordId: record.id })
+      return
+    }
+  }
+
+  // Now ping with the (potentially refreshed) token
+  const success = await pingWithMessagesAPI(record)
+  if (success) {
+    log.info("keepalive ping successful", {
+      recordId: record.id,
+      label: record.label,
+    })
+  }
+}
+
 async function pingAllAnthropicAccounts(): Promise<void> {
   const records = await loadAnthropicRecords()
   if (records.length === 0) {
@@ -87,16 +196,10 @@ async function pingAllAnthropicAccounts(): Promise<void> {
     return
   }
 
-  log.info("pinging anthropic oauth accounts", { count: records.length })
+  log.info("processing anthropic oauth accounts", { count: records.length })
 
   for (const record of records) {
-    const success = await pingWithMessagesAPI(record)
-    if (success) {
-      log.info("keepalive ping successful", {
-        recordId: record.id,
-        label: record.label,
-      })
-    }
+    await keepAliveAccount(record)
   }
 }
 
@@ -105,17 +208,17 @@ export function init(): void {
 
   log.info("starting oauth keepalive", { intervalMs: KEEPALIVE_INTERVAL_MS })
 
-  // Initial ping after 1 minute (to let everything settle)
+  // Initial check after 30 seconds
   setTimeout(() => {
     pingAllAnthropicAccounts().catch((err) => {
-      log.error("keepalive ping error", { error: String(err) })
+      log.error("keepalive error", { error: String(err) })
     })
-  }, 60 * 1000)
+  }, 30 * 1000)
 
-  // Then every hour
+  // Then every 30 minutes
   interval = setInterval(() => {
     pingAllAnthropicAccounts().catch((err) => {
-      log.error("keepalive ping error", { error: String(err) })
+      log.error("keepalive error", { error: String(err) })
     })
   }, KEEPALIVE_INTERVAL_MS)
 
