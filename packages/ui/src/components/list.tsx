@@ -21,6 +21,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
   activeIcon?: IconProps["name"]
   filter?: string
   search?: ListSearchProps | boolean
+  groupLabel?: (category: string) => string
 }
 
 export interface ListRef {
@@ -166,9 +167,11 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
       onCleanup(() => scroll.removeEventListener("scroll", handler))
     })
 
+    const label = () => (props.groupLabel ? props.groupLabel(groupProps.category) : groupProps.category)
+
     return (
       <div data-slot="list-header" data-stuck={stuck()} ref={setHeader}>
-        {groupProps.category}
+        {label()}
       </div>
     )
   }

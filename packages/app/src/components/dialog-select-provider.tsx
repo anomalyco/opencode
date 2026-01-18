@@ -13,6 +13,8 @@ export const DialogSelectProvider: Component = () => {
   const dialog = useDialog()
   const providers = useProviders()
   const language = useLanguage()
+  const popularCategory = "popular"
+  const otherCategory = "other"
 
   return (
     <Dialog title={language.t("provider.connect")}>
@@ -22,15 +24,18 @@ export const DialogSelectProvider: Component = () => {
         key={(x) => x?.id}
         items={providers.all}
         filterKeys={["id", "name"]}
-        groupBy={(x) => (popularProviders.includes(x.id) ? language.t("provider.popular") : language.t("provider.other"))}
+        groupBy={(x) => (popularProviders.includes(x.id) ? popularCategory : otherCategory)}
+        groupLabel={(category) =>
+          category === popularCategory ? language.t("provider.popular") : language.t("provider.other")
+        }
         sortBy={(a, b) => {
           if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
             return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
           return a.name.localeCompare(b.name)
         }}
         sortGroupsBy={(a, b) => {
-          if (a.category === language.t("provider.popular") && b.category !== language.t("provider.popular")) return -1
-          if (b.category === language.t("provider.popular") && a.category !== language.t("provider.popular")) return 1
+          if (a.category === popularCategory && b.category !== popularCategory) return -1
+          if (b.category === popularCategory && a.category !== popularCategory) return 1
           return 0
         }}
         onSelect={(x) => {
