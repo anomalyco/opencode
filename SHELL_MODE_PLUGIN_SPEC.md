@@ -2,16 +2,16 @@
 
 ## Overview
 
-This spec describes how to implement the Shell/Agent execution mode feature as a **plugin** that hooks into the upstream codebase without modifying upstream files. This allows for easy upstream merges since no upstream files are edited directly.
+This spec describes how the Shell/Agent execution mode feature is implemented using a **plugin architecture** that minimizes upstream file modifications while keeping feature logic isolated.
 
 ---
 
 ## Architecture Principles
 
-1. **Zero upstream file edits** - All feature code lives in separate plugin directories
-2. **Hook-based integration** - Use existing extension points or minimal shim files
-3. **Override pattern** - Plugin exports replace or wrap upstream exports
-4. **Build-time integration** - Plugin code is bundled alongside upstream code
+1. **Feature logic in plugin directory** - All shell mode logic lives in `plugin/`
+2. **tsconfig path aliases** - Clean imports via `@shell-mode` and `@tui-integration`
+3. **Minimal upstream modifications** - Only modify upstream files when shimming would require code duplication
+4. **No shims** - Shims were considered but rejected because they would duplicate upstream code
 
 ---
 
@@ -19,509 +19,159 @@ This spec describes how to implement the Shell/Agent execution mode feature as a
 
 ```
 packages/opencode/
-├── src/                          # Upstream code (DO NOT EDIT)
-│   ├── session/
-│   ├── cli/
+├── src/                          # Upstream code (modify sparingly)
+│   ├── cli/cmd/tui/
+│   │   ├── app.tsx               # MODIFIED: provider wrapping
+│   │   └── component/prompt/
+│   │       ├── index.tsx         # MODIFIED: mode integration
+│   │       └── history.tsx       # MODIFIED: type extension
 │   └── ...
 │
-├── plugin/                       # Plugin code (EDIT THIS)
+├── plugin/                       # Plugin code (all feature logic)
 │   ├── shell-mode/
-│   │   ├── index.ts              # Plugin entry point
+│   │   ├── index.ts              # Plugin exports
 │   │   ├── mode.ts               # ExecutionMode enum and ModeController
-│   │   ├── shell.ts              # Shell namespace
-│   │   ├── session-shell.ts      # Per-session shell process
-│   │   └── persistent.ts         # PersistentShell class
+│   │   ├── command-check.ts      # Command existence checking
+│   │   ├── completion.ts         # Shell tab completion
+│   │   ├── cwd.ts                # Working directory state
+│   │   └── session-shell.ts      # Per-session shell process
 │   │
-│   ├── tui-overrides/
-│   │   ├── index.ts              # TUI override entry point
-│   │   ├── prompt.tsx            # Extended Prompt component
-│   │   ├── app.tsx               # Extended App component
-│   │   └── hooks.ts              # Keyboard and submission hooks
-│   │
-│   └── index.ts                  # Main plugin registration
+│   └── tui-integration/
+│       ├── index.ts              # TUI integration exports
+│       ├── execution-mode-provider.tsx  # SolidJS context
+│       ├── working-dir-provider.tsx     # SolidJS context
+│       └── hooks.ts              # Keyboard and routing hooks
 │
-├── shims/                        # Minimal shim files (EDIT SPARINGLY)
-│   ├── session-prompt.ts         # Shim that imports plugin hooks
-│   └── tui-entry.ts              # Shim that wraps TUI with plugin providers
-│
-└── lash.config.ts                # Plugin configuration
+└── tsconfig.json                 # Path aliases for plugin imports
 ```
 
 ---
 
-## Integration Strategy
+## Integration Strategy: tsconfig Path Aliases
 
-### Option A: Build-Time Path Aliasing (Recommended)
+Use TypeScript path aliases to import plugin code cleanly:
 
-Use TypeScript/bundler path aliases to redirect imports to plugin versions.
-
-**`tsconfig.json` additions:**
+**`tsconfig.json`:**
 ```json
 {
   "compilerOptions": {
     "paths": {
+      "@/*": ["./src/*"],
+      "@tui/*": ["./src/cli/cmd/tui/*"],
+      "@plugin/*": ["./plugin/*"],
       "@shell-mode": ["./plugin/shell-mode/index.ts"],
       "@shell-mode/*": ["./plugin/shell-mode/*"],
-      "@tui-overrides": ["./plugin/tui-overrides/index.ts"],
-      "@tui-overrides/*": ["./plugin/tui-overrides/*"]
+      "@tui-integration": ["./plugin/tui-integration/index.ts"],
+      "@tui-integration/*": ["./plugin/tui-integration/*"]
     }
   }
 }
 ```
 
-**`bunfig.toml` or build script:**
-```toml
-[install]
-# Plugin aliases
-"@shell-mode" = "./plugin/shell-mode/index.ts"
-```
-
-### Option B: Wrapper/Shim Pattern
-
-Create thin shim files that import from both upstream and plugin, then re-export the combined functionality.
-
-**Example shim (`shims/session-prompt.ts`):**
+This allows clean imports in upstream files:
 ```typescript
-// Re-export everything from upstream
-export * from "../src/session/prompt"
-
-// Import plugin hooks
-import { shellModeHooks } from "@shell-mode"
-
-// Register hooks on module load
-shellModeHooks.register()
+import { ExecutionMode } from "@shell-mode"
+import { useExecutionMode, handleModeToggleKey } from "@tui-integration"
 ```
 
-### Option C: Runtime Plugin Registration
+---
 
-Use a plugin registry that upstream code checks at runtime.
+## Why Not Shims?
 
-**Plugin registration (`plugin/index.ts`):**
+We initially considered using shims to avoid upstream modifications. The idea was:
+
+1. Create shim files in `plugin/shims/`
+2. Use Bun build plugins or tsconfig to redirect imports to shims
+3. Shims would import from original, wrap/extend, and re-export
+
+**Why this doesn't work for our use case:**
+
+| File | Change Type | Why Shimming Fails |
+|------|-------------|-------------------|
+| `app.tsx` | Wrap `<App />` with providers | Would need to duplicate entire provider tree JSX |
+| `prompt/index.tsx` | Integrated mode logic, keyboard handlers, completion | Logic is woven throughout component, not wrappable |
+| `prompt/history.tsx` | Type extension | Type changes embedded in file |
+
+**Shimming only works for:**
+- Wrapping function exports
+- Extending classes
+- Adding middleware to pipelines
+
+**Shimming fails for:**
+- JSX structure changes (provider wrapping)
+- Logic integrated throughout a component
+- Type definitions in the same file as code
+
+---
+
+## Modified Upstream Files
+
+These files MUST be modified directly. Keep changes minimal and well-documented.
+
+### 1. `src/cli/cmd/tui/app.tsx`
+
+**Changes:**
+- Import providers from `@tui-integration`
+- Wrap `<App />` with `<ExecutionModeProvider>` and `<WorkingDirProvider>`
+
 ```typescript
-import { PluginRegistry } from "../src/plugin/registry"
-import { ShellModePlugin } from "./shell-mode"
-import { TuiOverridesPlugin } from "./tui-overrides"
+// Added import
+import { ExecutionModeProvider, WorkingDirProvider } from "@tui-integration"
 
-PluginRegistry.register("shell-mode", ShellModePlugin)
-PluginRegistry.register("tui-overrides", TuiOverridesPlugin)
+// In render tree, wrap App:
+<ExecutionModeProvider>
+  <WorkingDirProvider>
+    <App />
+  </WorkingDirProvider>
+</ExecutionModeProvider>
 ```
+
+### 2. `src/cli/cmd/tui/component/prompt/index.tsx`
+
+**Changes:**
+- Import hooks from `@tui-integration`
+- Import `ExecutionMode` from `@shell-mode`
+- Use `useExecutionMode()` hook
+- Call `handleModeToggleKey()` in keydown handler
+- Call `determineRouting()` in submit handler
+- Call `handleShellTabCompletion()` for tab completion
+- Display mode indicator with icon and color
+
+### 3. `src/cli/cmd/tui/component/prompt/history.tsx`
+
+**Changes:**
+- Add `mode?: "normal" | "shell"` to `PromptInfo` type
 
 ---
 
 ## Plugin Components
 
-### 1. Shell Mode Core (`plugin/shell-mode/`)
+### Shell Mode Core (`plugin/shell-mode/`)
 
-This is identical to the original spec but lives in the plugin directory.
-
-**`plugin/shell-mode/index.ts`:**
+**`index.ts` exports:**
 ```typescript
 export { ExecutionMode, ModeController, getModeController } from "./mode"
-export { Shell } from "./shell"
-export { execute as SessionShellExecute, dispose } from "./session-shell"
-export { PersistentShell, getPersistentShell } from "./persistent"
+export { shouldRouteToShell } from "./command-check"
+export { getCompletions, applyCompletion, findCommonPrefix } from "./completion"
+export { getCwd, setCwd } from "./cwd"
+export { execute as SessionShellExecute } from "./session-shell"
 ```
 
-**`plugin/shell-mode/mode.ts`:**
+### TUI Integration (`plugin/tui-integration/`)
+
+**`index.ts` exports:**
 ```typescript
-import { Log } from "../../src/util/log"
-
-export enum ExecutionMode {
-  Shell = "Shell",
-  Agent = "Agent",
-  Auto = "Auto"
-}
-
-export class ModeController {
-  private currentMode: ExecutionMode = ExecutionMode.Auto
-
-  getMode(): ExecutionMode {
-    return this.currentMode
-  }
-
-  setMode(mode: ExecutionMode): void {
-    this.currentMode = mode
-  }
-
-  toggleMode(): ExecutionMode {
-    const modes = [ExecutionMode.Shell, ExecutionMode.Agent, ExecutionMode.Auto]
-    const currentIndex = modes.indexOf(this.currentMode)
-    this.currentMode = modes[(currentIndex + 1) % modes.length]
-    return this.currentMode
-  }
-
-  async shouldRouteToShell(input: string): Promise<boolean> {
-    if (this.currentMode === ExecutionMode.Shell) return true
-    if (this.currentMode === ExecutionMode.Agent) return false
-
-    const firstToken = this.extractFirstToken(input.trim())
-    if (!firstToken) return false
-
-    return this.commandExists(firstToken)
-  }
-
-  private extractFirstToken(input: string): string | null {
-    if (!input) return null
-    const spaceIndex = input.search(/\s/)
-    if (spaceIndex === -1) return input
-    return input.slice(0, spaceIndex)
-  }
-
-  private async commandExists(cmd: string): Promise<boolean> {
-    try {
-      const escaped = `'${cmd.replace(/'/g, "'\\''")}'`
-      const { exited } = Bun.spawn(["sh", "-c", `command -v ${escaped}`], {
-        stdout: "ignore",
-        stderr: "ignore",
-      })
-      return (await exited) === 0
-    } catch {
-      return false
-    }
-  }
-}
-
-let instance: ModeController | null = null
-export function getModeController(): ModeController {
-  if (!instance) instance = new ModeController()
-  return instance
-}
+export { ExecutionModeProvider, useExecutionMode } from "./execution-mode-provider"
+export { WorkingDirProvider, useWorkingDir } from "./working-dir-provider"
+export {
+  handleModeToggleKey,
+  determineRouting,
+  handleShellTabCompletion,
+  shouldUseShellCompletion,
+  applyCompletionAtIndex,
+  type CompletionCycleState,
+} from "./hooks"
 ```
-
-#### Visual Indicators
-
-The `getModeDisplay()` method returns icon, name, and color for each mode:
-
-| Mode | Icon | Color | Theme Color |
-|------|------|-------|-------------|
-| Shell | `>` | `primary` | cyan |
-| Agent | `◆` | `secondary` | magenta |
-| Auto | `☯` | `success` | green |
-
-```typescript
-type ModeDisplay = {
-  name: string
-  icon: string
-  color: "primary" | "secondary" | "success" | "border"
-}
-
-getModeDisplay(): ModeDisplay {
-  switch (this.currentMode) {
-    case ExecutionMode.Shell:
-      return { name: "Shell", icon: ">", color: "primary" }
-    case ExecutionMode.Agent:
-      return { name: "Agent", icon: "◆", color: "secondary" }
-    case ExecutionMode.Auto:
-      return { name: "Auto", icon: "☯", color: "success" }
-  }
-}
-```
-
-The input prefix shows the mode icon with the corresponding color, and the status bar displays `[Mode]` with matching color.
-
-### 2. TUI Overrides (`plugin/tui-overrides/`)
-
-**`plugin/tui-overrides/hooks.ts`:**
-```typescript
-import { getModeController, ExecutionMode } from "@shell-mode"
-import { Shell } from "@shell-mode"
-
-export type SubmitHook = {
-  shouldIntercept: (input: string) => Promise<boolean>
-  handle: (input: string, context: SubmitContext) => Promise<void>
-}
-
-export type KeyboardHook = {
-  matches: (event: KeyEvent) => boolean
-  handle: (event: KeyEvent, context: KeyboardContext) => void
-}
-
-export type SubmitContext = {
-  sessionID: string
-  sdk: SDK
-  agent: string
-}
-
-export type KeyboardContext = {
-  setExecutionMode: (mode: ExecutionMode) => void
-}
-
-/**
- * Hook: Intercept submission and route to shell if needed
- */
-export const shellModeSubmitHook: SubmitHook = {
-  async shouldIntercept(input: string) {
-    const mode = getModeController().getMode()
-    if (mode === ExecutionMode.Agent) return false
-    if (mode === ExecutionMode.Shell) return true
-    return getModeController().shouldRouteToShell(input)
-  },
-
-  async handle(input: string, ctx: SubmitContext) {
-    await ctx.sdk.client.session.shell({
-      path: { id: ctx.sessionID },
-      body: { agent: ctx.agent, command: input },
-    })
-  }
-}
-
-/**
- * Hook: Ctrl+Space to toggle mode
- */
-export const modeToggleKeyboardHook: KeyboardHook = {
-  matches(event) {
-    return (
-      event.ctrl &&
-      !event.meta &&
-      !event.shift &&
-      (event.name === " " || event.name === "space" || event.sequence === "\x00")
-    )
-  },
-
-  handle(event, ctx) {
-    const newMode = getModeController().toggleMode()
-    ctx.setExecutionMode(newMode)
-  }
-}
-
-/**
- * Registry for all hooks
- */
-export const hooks = {
-  submit: [shellModeSubmitHook],
-  keyboard: [modeToggleKeyboardHook],
-}
-```
-
-**`plugin/tui-overrides/providers.tsx`:**
-```typescript
-import { createContext, useContext, createSignal, type ParentProps } from "solid-js"
-import { getModeController, ExecutionMode, Shell } from "@shell-mode"
-
-// Execution Mode Context
-type ExecutionModeContextValue = {
-  mode: () => ExecutionMode
-  setMode: (mode: ExecutionMode) => void
-  toggleMode: () => ExecutionMode
-}
-
-const ExecutionModeContext = createContext<ExecutionModeContextValue>()
-
-export function ExecutionModeProvider(props: ParentProps) {
-  const controller = getModeController()
-  const [mode, setModeSignal] = createSignal(controller.getMode())
-
-  const setMode = (m: ExecutionMode) => {
-    controller.setMode(m)
-    setModeSignal(m)
-  }
-
-  const toggleMode = () => {
-    const newMode = controller.toggleMode()
-    setModeSignal(newMode)
-    return newMode
-  }
-
-  return (
-    <ExecutionModeContext.Provider value={{ mode, setMode, toggleMode }}>
-      {props.children}
-    </ExecutionModeContext.Provider>
-  )
-}
-
-export function useExecutionMode() {
-  const ctx = useContext(ExecutionModeContext)
-  if (!ctx) throw new Error("useExecutionMode must be used within ExecutionModeProvider")
-  return ctx
-}
-
-// Working Directory Context
-type WorkingDirContextValue = {
-  workingDir: () => string
-  setWorkingDir: (dir: string) => void
-}
-
-const WorkingDirContext = createContext<WorkingDirContextValue>()
-
-export function WorkingDirProvider(props: ParentProps) {
-  const [workingDir, setWorkingDir] = createSignal(Shell.getCwd())
-
-  return (
-    <WorkingDirContext.Provider value={{ workingDir, setWorkingDir }}>
-      {props.children}
-    </WorkingDirContext.Provider>
-  )
-}
-
-export function useWorkingDir() {
-  const ctx = useContext(WorkingDirContext)
-  if (!ctx) throw new Error("useWorkingDir must be used within WorkingDirProvider")
-  return ctx
-}
-```
-
-**`plugin/tui-overrides/index.ts`:**
-```typescript
-export * from "./hooks"
-export * from "./providers"
-```
-
----
-
-## Shim Files (Minimal Upstream Touch Points)
-
-These are the **only** files that need to exist to bridge upstream and plugin code. They should be as thin as possible.
-
-### Shim 1: TUI Entry Wrapper
-
-**`shims/tui-entry.tsx`:**
-```typescript
-/**
- * This shim wraps the upstream TUI app with plugin providers.
- * It's the entry point for the TUI instead of the upstream app.tsx.
- */
-import { render } from "@opentui/solid"
-import { ExecutionModeProvider, WorkingDirProvider } from "@tui-overrides"
-
-// Import the original App but don't render it directly
-import { AppProviders, AppContent } from "../src/cli/cmd/tui/app"
-
-export function tui(input: TuiInput) {
-  return new Promise<void>(async (resolve) => {
-    render(() => (
-      <AppProviders input={input} onExit={() => resolve()}>
-        {/* Plugin providers wrap the content */}
-        <ExecutionModeProvider>
-          <WorkingDirProvider>
-            <AppContent />
-          </WorkingDirProvider>
-        </ExecutionModeProvider>
-      </AppProviders>
-    ))
-  })
-}
-```
-
-### Shim 2: Prompt Hook Integration
-
-**`shims/prompt-hooks.ts`:**
-```typescript
-/**
- * This shim exports hook integration functions that the Prompt component
- * can optionally call if they exist.
- */
-import { hooks } from "@tui-overrides"
-
-export async function runSubmitHooks(input: string, context: any): Promise<boolean> {
-  for (const hook of hooks.submit) {
-    if (await hook.shouldIntercept(input)) {
-      await hook.handle(input, context)
-      return true // Intercepted
-    }
-  }
-  return false // Not intercepted, continue with default
-}
-
-export function runKeyboardHooks(event: any, context: any): boolean {
-  for (const hook of hooks.keyboard) {
-    if (hook.matches(event)) {
-      hook.handle(event, context)
-      return true // Handled
-    }
-  }
-  return false // Not handled
-}
-```
-
-### Shim 3: Session Shell Integration
-
-**`shims/session-shell-hook.ts`:**
-```typescript
-/**
- * Hook for session/prompt.ts to use plugin shell execution
- */
-import { SessionShellExecute, Shell } from "@shell-mode"
-
-export { SessionShellExecute, Shell }
-
-// Re-export a function that matches the expected interface
-export async function executeShellCommand(options: {
-  sessionID: string
-  command: string
-  signal: AbortSignal
-  onData?: (chunk: string) => void
-}) {
-  return SessionShellExecute(options)
-}
-
-export function getWorkingDirectory(): string {
-  return Shell.getCwd()
-}
-
-export function setWorkingDirectory(dir: string): void {
-  Shell.setCwd(dir)
-}
-```
-
----
-
-## Build Configuration
-
-### Option 1: Bun Build with Plugins
-
-**`build.ts` modifications:**
-```typescript
-import { build } from "bun"
-
-await build({
-  entrypoints: ["./src/cli/index.ts"],
-  outdir: "./dist",
-  // Plugin aliases
-  alias: {
-    "@shell-mode": "./plugin/shell-mode/index.ts",
-    "@tui-overrides": "./plugin/tui-overrides/index.ts",
-  },
-  // External plugins loaded at build time
-  plugins: [
-    {
-      name: "lash-plugins",
-      setup(build) {
-        // Redirect TUI entry to shim
-        build.onResolve({ filter: /cli\/cmd\/tui\/app$/ }, () => ({
-          path: "./shims/tui-entry.tsx",
-        }))
-      }
-    }
-  ]
-})
-```
-
-### Option 2: Package.json Exports Map
-
-**`package.json`:**
-```json
-{
-  "imports": {
-    "#shell-mode": "./plugin/shell-mode/index.ts",
-    "#shell-mode/*": "./plugin/shell-mode/*.ts",
-    "#tui-overrides": "./plugin/tui-overrides/index.ts",
-    "#tui-overrides/*": "./plugin/tui-overrides/*.ts"
-  }
-}
-```
-
----
-
-## Integration Points Summary
-
-| Feature | Integration Method | Files Touched |
-|---------|-------------------|---------------|
-| Shell Mode Core | Plugin directory, no upstream changes | `plugin/shell-mode/*` |
-| Mode Toggle (Ctrl+Space) | Keyboard hook | `plugin/tui-overrides/hooks.ts` |
-| Submit Routing | Submit hook | `plugin/tui-overrides/hooks.ts` |
-| Working Directory | Context provider | `plugin/tui-overrides/providers.tsx` |
-| TUI Providers | Entry shim | `shims/tui-entry.tsx` |
-| Shell Execution | Session hook | `shims/session-shell-hook.ts` |
 
 ---
 
@@ -535,105 +185,30 @@ await build({
    git merge upstream/dev
    ```
 
-2. **Conflicts should be minimal** since plugin code is separate
+2. **Resolve conflicts** in the modified files:
+   - `app.tsx` - Re-add provider wrapping
+   - `prompt/index.tsx` - Re-add hook imports and calls
+   - `prompt/history.tsx` - Re-add type extension
 
-3. **Check shim compatibility:**
-   - If upstream changed `app.tsx` exports, update `shims/tui-entry.tsx`
-   - If upstream changed `session/prompt.ts` interface, update `shims/session-shell-hook.ts`
+3. **Plugin code is unaffected** - Lives in separate directory
 
-4. **Run tests to verify integration**
+### Minimizing Merge Conflicts
 
-### Shim Maintenance
-
-Shims are the only potential conflict points. Keep them:
-- **Thin** - Just imports and re-exports
-- **Stable** - Based on stable upstream interfaces
-- **Documented** - Clear comments on what they bridge
+- Keep upstream changes **minimal and localized**
+- Use **imports from plugin** rather than inline logic
+- Document changes with comments like `// LASH: shell mode integration`
 
 ---
 
-## Alternative: Monkey Patching (Not Recommended)
+## Summary
 
-If build-time integration isn't possible, runtime monkey patching can work but is fragile:
+| Component | Location | Approach |
+|-----------|----------|----------|
+| Feature logic | `plugin/shell-mode/` | Isolated, no upstream changes |
+| TUI providers & hooks | `plugin/tui-integration/` | Isolated, no upstream changes |
+| Provider wrapping | `src/cli/cmd/tui/app.tsx` | Direct modification (unavoidable) |
+| Prompt integration | `src/.../prompt/index.tsx` | Direct modification (unavoidable) |
+| Type extension | `src/.../prompt/history.tsx` | Direct modification (unavoidable) |
+| Import aliases | `tsconfig.json` | Clean plugin imports |
 
-```typescript
-// plugin/monkey-patch.ts
-import { SessionPrompt } from "../src/session/prompt"
-import { Shell, SessionShellExecute } from "@shell-mode"
-
-// Save original
-const originalBashSync = SessionPrompt.bashSync
-
-// Patch with plugin version
-SessionPrompt.bashSync = async function(input) {
-  // Use plugin shell execution
-  const result = await SessionShellExecute({
-    sessionID: input.sessionID,
-    command: input.command,
-    signal: input.abort.signal,
-  })
-
-  if (result.cwd) {
-    Shell.setCwd(result.cwd)
-  }
-
-  return result
-}
-```
-
-**Why not recommended:**
-- Fragile to upstream changes
-- Hard to debug
-- Type safety issues
-- Order-dependent initialization
-
----
-
-## Recommended Approach
-
-**Use Option A (Build-Time Path Aliasing) + Minimal Shims**
-
-1. All feature code in `plugin/` directory
-2. Use TypeScript path aliases for clean imports
-3. Single entry shim (`shims/tui-entry.tsx`) to inject providers
-4. Build plugin rewrites the TUI entry point
-5. Upstream files remain untouched
-
-This gives:
-- Clean separation of concerns
-- Easy upstream merges
-- Full type safety
-- Testable plugin code
-- Minimal integration surface
-
----
-
-## Implementation Checklist
-
-### Phase 1: Plugin Infrastructure
-- [ ] Create `plugin/` directory structure
-- [ ] Set up path aliases in `tsconfig.json`
-- [ ] Configure build to include plugin code
-
-### Phase 2: Shell Mode Core
-- [ ] Implement `plugin/shell-mode/mode.ts`
-- [ ] Implement `plugin/shell-mode/shell.ts`
-- [ ] Implement `plugin/shell-mode/session-shell.ts`
-- [ ] Implement `plugin/shell-mode/persistent.ts`
-- [ ] Create `plugin/shell-mode/index.ts` exports
-
-### Phase 3: TUI Integration
-- [ ] Create `plugin/tui-overrides/hooks.ts`
-- [ ] Create `plugin/tui-overrides/providers.tsx`
-- [ ] Create `shims/tui-entry.tsx`
-- [ ] Update build to use TUI shim entry
-
-### Phase 4: Session Integration
-- [ ] Create `shims/session-shell-hook.ts`
-- [ ] Verify shell execution works through hook
-
-### Phase 5: Testing
-- [ ] Test mode switching
-- [ ] Test auto-routing with `command -v`
-- [ ] Test working directory persistence
-- [ ] Test upstream merge simulation
+**Key insight:** Shims are useful when you can wrap/extend exports. For structural JSX changes and integrated component logic, direct modification is cleaner than duplicating code.
