@@ -508,7 +508,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
           incomplete_details: z.object({ reason: z.string() }).nullish(),
           usage: usageSchema,
         }),
-      ),
+      ) as any,
       abortSignal: options.abortSignal,
     })) as any
     this.maybeCaptureCodexTurnState(responseHeaders, url, options.abortSignal)
@@ -709,7 +709,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
             result: {
               queries: part.queries,
               results:
-                part.results?.map((result) => ({
+                part.results?.map((result: any) => ({
                   attributes: result.attributes,
                   fileId: result.file_id,
                   filename: result.filename,
@@ -1487,7 +1487,8 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
     const fetchFn = this.config.fetch ?? fetch
 
     const json = JSON.stringify(input.body)
-    const compressed = Bun.zstdCompressSync(new TextEncoder().encode(json))
+    // Bun types this as a Node.js Buffer in some environments; cast to Uint8Array for fetch().
+    const compressed = Bun.zstdCompressSync(new TextEncoder().encode(json)) as unknown as Uint8Array
 
     const headers: Record<string, string> = {}
     for (const [key, value] of Object.entries(input.headers)) {
@@ -1501,7 +1502,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
     const response = await fetchFn(input.url, {
       method: "POST",
       headers,
-      body: compressed,
+      body: compressed as any,
       signal: input.abortSignal,
     })
     if (!response.ok) {
@@ -1518,8 +1519,10 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
   private async maybeAttachCodexOAuthHeaders(headers: Record<string, string | undefined>, wsUrl: string) {
     if (!this.shouldUseCodexOAuth(wsUrl)) return headers
 
+    type CodexOAuth = z.infer<typeof Auth.Oauth>
+
     const authKeyCandidates = ["openai", "codex"]
-    const currentEntry = await (async () => {
+    const currentEntry = await (async (): Promise<{ key: string; value: CodexOAuth } | undefined> => {
       for (const key of authKeyCandidates) {
         const value = await Auth.get(key)
         if (value?.type === "oauth") return { key, value }
@@ -1527,7 +1530,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
       return undefined
     })()
     const current = currentEntry?.value
-    if (!current || current.type !== "oauth") return headers
+    if (!current) return headers
 
     const next: Record<string, string | undefined> = { ...headers }
     delete next["authorization"]
@@ -1551,7 +1554,10 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
     return next
   }
 
-  private async refreshCodexAccessToken(refreshToken: string, accountId?: string): Promise<Auth.Info> {
+  private async refreshCodexAccessToken(
+    refreshToken: string,
+    accountId?: string,
+  ): Promise<z.infer<typeof Auth.Oauth>> {
     const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
     const ISSUER = "https://auth.openai.com"
 

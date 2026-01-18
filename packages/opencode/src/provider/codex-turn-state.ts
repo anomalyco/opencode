@@ -7,7 +7,7 @@ type TurnStateStore = {
 const storage = new AsyncLocalStorage<TurnStateStore>()
 
 export const CodexTurnState = {
-  run<T>(fn: () => Promise<T>): Promise<T> {
+  run<T>(fn: () => T): T {
     return storage.run({}, fn)
   },
   get(): TurnStateStore | undefined {
@@ -19,4 +19,3 @@ export const CodexTurnState = {
     store.codexTurnState = value
   },
 }
-

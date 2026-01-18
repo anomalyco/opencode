@@ -46,7 +46,7 @@ export namespace LLM {
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
 
-  export async function stream(input: StreamInput) {
+  export async function stream(input: StreamInput): Promise<StreamOutput> {
     const l = log
       .clone()
       .tag("providerID", input.model.providerID)
