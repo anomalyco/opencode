@@ -142,23 +142,26 @@ export namespace File {
         const shouldIgnore = (name: string) => name.startsWith(".") || ignore.has(name)
         const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
 
-        const top = await fs.promises
-          .readdir(Instance.directory, { withFileTypes: true })
-          .catch(() => [] as fs.Dirent[])
+        const walkDirectory = async (root: string, dir: string, level = 0) => {
+          if (level > 5 || dirs.size > 10_000) return
 
-        for (const entry of top) {
-          if (!entry.isDirectory()) continue
-          if (shouldIgnore(entry.name)) continue
-          dirs.add(entry.name + "/")
+          try {
+            const children = await fs.promises.readdir(dir)
+            for (const shortName of children) {
+              if (level === 0 && shouldIgnore(shortName)) continue
+              if (level !== 0 && shouldIgnoreNested(shortName)) continue
 
-          const base = path.join(Instance.directory, entry.name)
-          const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
-          for (const child of children) {
-            if (!child.isDirectory()) continue
-            if (shouldIgnoreNested(child.name)) continue
-            dirs.add(entry.name + "/" + child.name + "/")
-          }
+              const fullName = path.join(dir, shortName)
+              const isDir = (await fs.promises.stat(fullName)).isDirectory()
+
+              if (isDir) {
+                dirs.add(path.relative(root, fullName))
+                await walkDirectory(root, fullName, level + 1)
+              }
+            }
+          } catch (_) {}
         }
+        await walkDirectory(Instance.directory, Instance.directory)
 
         result.dirs = Array.from(dirs).toSorted()
         cache = result
