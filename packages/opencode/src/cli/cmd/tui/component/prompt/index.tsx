@@ -1200,19 +1200,14 @@ export function Prompt(props: PromptProps) {
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
-                  <text fg={modePrefixColor()}>
-                    [{executionMode.getModeDisplay().name}]
+                  <text fg={theme.text}>
+                    ctrl+space <span style={{ fg: modePrefixColor() }}>{executionMode.getModeDisplay().name}</span>
                   </text>
                   <text fg={theme.text}>
-                    ctrl+space <span style={{ fg: theme.textMuted }}>mode</span>
+                    shift+tab <span style={{ fg: theme.textMuted }}>agents</span>
                   </text>
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
-                  </text>
-                </Match>
-                <Match when={store.mode === "shell"}>
-                  <text fg={theme.text}>
-                    esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
                   </text>
                 </Match>
               </Switch>
