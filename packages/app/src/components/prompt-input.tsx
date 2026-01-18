@@ -14,6 +14,7 @@ import {
 } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
+import { createMediaQuery } from "@solid-primitives/media"
 import { useLocal } from "@/context/local"
 import { useFile, type FileSelection } from "@/context/file"
 import {
@@ -118,6 +119,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const providers = useProviders()
   const command = useCommand()
   const permission = usePermission()
+  const isTouchDevice = createMediaQuery("(pointer: coarse)")
   let editorRef!: HTMLDivElement
   let fileInputRef!: HTMLInputElement
   let scrollRef!: HTMLDivElement
@@ -960,6 +962,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     // Note: Shift+Enter is handled earlier, before IME check
     if (event.key === "Enter" && !event.shiftKey) {
+      if (isTouchDevice()) {
+        addPart({ type: "text", content: "\n", start: 0, end: 0 })
+        event.preventDefault()
+        return
+      }
       handleSubmit(event)
     }
     if (event.key === "Escape") {
