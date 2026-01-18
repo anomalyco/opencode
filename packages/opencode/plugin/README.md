@@ -1,98 +1,80 @@
 # Lash Plugin System
 
-This directory contains plugins that extend opencode functionality without modifying upstream source files.
+This directory contains plugins that extend opencode functionality while keeping feature logic isolated from upstream source files.
 
 ## Architecture
 
-The plugin system uses Bun's build-time plugin API to inject code transformations:
-
 ```
 plugin/
-├── bun-shim-plugin.ts     # Build plugin that handles module substitution
 ├── shell-mode/            # Shell execution mode feature
-├── tui-integration/       # TUI providers and hooks
-└── shims/                 # (Optional) Complete module replacements
+│   ├── index.ts           # Exports
+│   ├── mode.ts            # ExecutionMode enum, ModeController
+│   ├── command-check.ts   # Command existence checking (command -v)
+│   ├── completion.ts      # Shell tab completion
+│   ├── cwd.ts             # Working directory state
+│   └── session-shell.ts   # Per-session shell process
+│
+└── tui-integration/       # TUI providers and hooks
+    ├── index.ts           # Exports
+    ├── execution-mode-provider.tsx  # SolidJS context
+    ├── working-dir-provider.tsx     # SolidJS context
+    └── hooks.ts           # Keyboard and routing hooks
 ```
 
 ## How It Works
 
-### Strategy 1: Source Transformation (Recommended)
+### tsconfig Path Aliases
 
-The `bun-shim-plugin.ts` uses Bun's `onLoad` hook to transform source files at build time:
+Plugin code is imported via path aliases defined in `tsconfig.json`:
 
-```typescript
-const SOURCE_TRANSFORMS: SourceTransform[] = [
-  {
-    file: "cli/cmd/tui/app.tsx",
-    addImports: [
-      'import { ExecutionModeProvider } from "@tui-integration"',
-    ],
-    replacements: [
-      ["<App />", "<ExecutionModeProvider><App /></ExecutionModeProvider>"],
-    ],
-  },
-]
-```
-
-This injects the import and wraps the component **without modifying the original file**.
-
-### Strategy 2: Module Replacement
-
-For complete module replacements, use `SHIM_MAP`:
-
-```typescript
-const SHIM_MAP: Record<string, string> = {
-  "@/session/prompt": "./shims/session/prompt.ts",
+```json
+{
+  "paths": {
+    "@shell-mode": ["./plugin/shell-mode/index.ts"],
+    "@shell-mode/*": ["./plugin/shell-mode/*"],
+    "@tui-integration": ["./plugin/tui-integration/index.ts"],
+    "@tui-integration/*": ["./plugin/tui-integration/*"]
+  }
 }
 ```
 
-Shims can import the original module using the `original:` prefix:
+This allows clean imports in upstream files:
 
 ```typescript
-// In plugin/shims/session/prompt.ts
-export * from "original:@/session/prompt"
-
-// Override specific exports
-export function myOverride() { ... }
+import { ExecutionMode } from "@shell-mode"
+import { useExecutionMode, handleModeToggleKey } from "@tui-integration"
 ```
 
-## Build Integration
+### Upstream Modifications
 
-Add the plugin to `script/build.ts`:
+Some upstream files require direct modification because shimming would require code duplication:
 
-```typescript
-import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
-import { createShimPlugin } from "../plugin/bun-shim-plugin"
+| File | Changes |
+|------|---------|
+| `src/cli/cmd/tui/app.tsx` | Import providers, wrap `<App />` |
+| `src/cli/cmd/tui/component/prompt/index.tsx` | Import hooks, mode integration |
+| `src/cli/cmd/tui/component/prompt/history.tsx` | Type extension |
 
-// ...
+### Why Not Shims?
 
-await Bun.build({
-  // ...
-  plugins: [solidPlugin, createShimPlugin()],
-  // ...
-})
-```
+We considered using build-time shims but rejected them because:
+
+- **JSX structure changes** (provider wrapping) would require duplicating the entire component
+- **Integrated logic** (mode toggle, completion) is woven throughout components
+- **Type changes** are embedded in the same files as code
+
+Shims work for wrapping function exports or extending classes, but not for structural JSX changes.
+
+## Upstream Merge Workflow
+
+1. Pull upstream changes: `git merge upstream/dev`
+2. Resolve conflicts in modified files (re-add plugin imports and hooks)
+3. Plugin code is unaffected (lives in separate directory)
 
 ## Benefits
 
-1. **Zero upstream file changes** - All modifications happen at build time
-2. **Easy upstream merges** - No conflicts with upstream changes
-3. **Clear separation** - Plugin code is isolated in `plugin/` directory
-4. **Type safety** - Full TypeScript support
-5. **Testable** - Plugin code can be tested independently
-
-## Reverting to Upstream
-
-If you've previously modified upstream files, you can revert them:
-
-```bash
-# See which upstream files were modified
-git diff dev --name-only -- packages/opencode/src
-
-# Revert all upstream changes
-git checkout dev -- packages/opencode/src
-
-# Keep only the plugin directory and build.ts changes
-```
-
-Then ensure all your customizations are in SOURCE_TRANSFORMS or shim files.
+1. **Feature logic isolated** - All shell mode logic in `plugin/`
+2. **Minimal upstream changes** - Only structural changes that can't be shimmed
+3. **Clean imports** - tsconfig path aliases
+4. **Easy to understand** - No magic build transforms
+5. **Type safety** - Full TypeScript support
