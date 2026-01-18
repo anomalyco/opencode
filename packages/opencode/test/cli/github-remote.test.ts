@@ -1,9 +1,10 @@
 import { test, expect, describe, beforeEach, afterEach } from "bun:test"
 import { parseGitHubRemote } from "../../src/cli/cmd/github"
-import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import os from "os"
-import { mkdir } from "fs/promises"
+import { mkdir, mkdtemp, rm } from "fs/promises"
+
+const parse = (url: string, homeDir?: string) => parseGitHubRemote(url, homeDir ? { homeDir } : undefined)
 
 describe("parseGitHubRemote", () => {
   test("parses https URL with .git suffix", async () => {
@@ -88,27 +89,23 @@ describe("parseGitHubRemote", () => {
   })
 
   describe("SSH alias resolution", () => {
-    let _origHomedir: any
+    let tmpDir: string
 
     beforeEach(async () => {
-      await using tmp = await tmpdir({ git: true })
-      const sshDir = path.join(tmp.path, ".ssh")
+      tmpDir = await mkdtemp(path.join(os.tmpdir(), "opencode-test-"))
+      const sshDir = path.join(tmpDir, ".ssh")
       await mkdir(sshDir, { recursive: true })
-      _origHomedir = os.homedir
-      os.homedir = () => tmp.path
     })
 
-    afterEach(() => {
-      os.homedir = _origHomedir
+    afterEach(async () => {
+      await rm(tmpDir, { recursive: true, force: true })
     })
 
     test("resolves SSH alias to github.com", async () => {
-      const home = os.homedir()
-      const sshDir = path.join(home, ".ssh")
-      const sshConfig = path.join(sshDir, "config")
+      const sshConfig = path.join(tmpDir, ".ssh", "config")
       await Bun.write(
         sshConfig,
-        `Host github-manu
+        `Host myalias
     HostName github.com
     User git
 
@@ -117,12 +114,34 @@ describe("parseGitHubRemote", () => {
     User git
   `,
       )
-      expect(await parseGitHubRemote("git@myalias:owner/repo")).toEqual({ owner: "owner", repo: "repo" })
-      expect(await parseGitHubRemote("git@gh:owner/repo")).toEqual({ owner: "owner", repo: "repo" })
+      expect(await parse("git@myalias:owner/repo", tmpDir)).toEqual({ owner: "owner", repo: "repo" })
+      expect(await parse("git@gh:owner/repo", tmpDir)).toEqual({ owner: "owner", repo: "repo" })
     })
 
     test("returns null for unknown SSH aliases", async () => {
-      expect(await parseGitHubRemote("git@unknown-alias:owner/repo")).toBeNull()
+      expect(await parse("git@unknown-alias:owner/repo", tmpDir)).toBeNull()
+    })
+
+    test("rejects SSH aliases resolving to hostnames containing but not equal to github.com", async () => {
+      const sshConfig = path.join(tmpDir, ".ssh", "config")
+      await Bun.write(
+        sshConfig,
+        `Host fakegithub
+    HostName my-github.com
+    User git
+
+  Host fakegithub2
+    HostName github.company.com
+    User git
+
+  Host fakegithub3
+    HostName not-github.com-server
+    User git
+  `,
+      )
+      expect(await parse("git@fakegithub:owner/repo", tmpDir)).toBeNull()
+      expect(await parse("git@fakegithub2:owner/repo", tmpDir)).toBeNull()
+      expect(await parse("git@fakegithub3:owner/repo", tmpDir)).toBeNull()
     })
   })
 })

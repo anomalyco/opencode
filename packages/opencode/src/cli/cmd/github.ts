@@ -154,15 +154,18 @@ type RepoEvent = (typeof REPO_EVENTS)[number]
 // - ssh://git@github.com/owner/repo.git
 // - ssh://git@github.com/owner/repo
 // - git@alias:owner/repo (SSH alias support)
-export async function parseGitHubRemote(url: string): Promise<{ owner: string; repo: string } | null> {
+export async function parseGitHubRemote(
+  url: string,
+  options?: { homeDir?: string },
+): Promise<{ owner: string; repo: string } | null> {
   const parsed = parseRemote(url)
   if (!parsed) return null
   const { hostname, owner, repo } = parsed
 
   if (hostname === "github.com") return { owner, repo }
 
-  const sshResolved = await resolveSshHost(hostname)
-  if (sshResolved?.includes("github.com")) return { owner, repo }
+  const sshResolved = await resolveSshHost(hostname, options?.homeDir)
+  if (sshResolved === "github.com") return { owner, repo }
 
   return null
 }
@@ -173,8 +176,8 @@ function parseRemote(url: string): { hostname: string; owner: string; repo: stri
   return { hostname: match[1], owner: match[2], repo: match[3] }
 }
 
-async function resolveSshHost(hostname: string): Promise<string | null> {
-  const home = os.homedir()
+async function resolveSshHost(hostname: string, homeDir?: string): Promise<string | null> {
+  const home = homeDir ?? os.homedir()
   if (!home) return null
   const sshConfig = `${home}/.ssh/config`
   const result = await $`ssh -F ${sshConfig} -G ${hostname}`.nothrow().text()
