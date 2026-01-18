@@ -22,6 +22,7 @@ import { Snapshot } from "@/snapshot"
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
+import { OpenAIConversationState } from "./openai-conversation"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -171,12 +172,13 @@ export namespace Session {
         })
 
         for (const part of msg.parts) {
-          await updatePart({
+          const nextPart = OpenAIConversationState.stripResponseIdFromPart({
             ...part,
             id: Identifier.ascending("part"),
             messageID: cloned.id,
             sessionID: session.id,
           })
+          await updatePart(nextPart)
         }
       }
       return session

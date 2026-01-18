@@ -14,6 +14,8 @@ import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
+import { OpenAIConversationState } from "./openai-conversation"
+import { OpenAICompact } from "../provider/openai-compact"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -101,6 +103,12 @@ export namespace SessionCompaction {
     const model = agent.model
       ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
       : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+
+    const previousResponseId =
+      OpenAIConversationState.isGPTModel(model) && model.api.npm === "@ai-sdk/openai"
+        ? OpenAIConversationState.latestResponseId(input.messages)
+        : undefined
+
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
@@ -126,6 +134,63 @@ export namespace SessionCompaction {
         created: Date.now(),
       },
     })) as MessageV2.Assistant
+
+    if (previousResponseId) {
+      const compactedResponseId = await OpenAICompact.compact({
+        model,
+        responseId: previousResponseId,
+        abort: input.abort,
+      })
+
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: msg.id,
+        sessionID: msg.sessionID,
+        type: "text",
+        synthetic: true,
+        text: "Conversation compacted remotely.",
+        time: {
+          start: Date.now(),
+          end: Date.now(),
+        },
+        metadata: {
+          openai: { responseId: compactedResponseId },
+        },
+      } satisfies MessageV2.TextPart)
+
+      msg.finish = "stop"
+      msg.time.completed = Date.now()
+      await Session.updateMessage(msg)
+
+      if (input.auto) {
+        const continueMsg = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: input.sessionID,
+          time: {
+            created: Date.now(),
+          },
+          agent: userMessage.agent,
+          model: userMessage.model,
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: continueMsg.id,
+          sessionID: input.sessionID,
+          type: "text",
+          synthetic: true,
+          text: "Continue if you have next steps",
+          time: {
+            start: Date.now(),
+            end: Date.now(),
+          },
+        })
+      }
+
+      Bus.publish(Event.Compacted, { sessionID: input.sessionID })
+      return "continue"
+    }
+
     const processor = SessionProcessor.create({
       assistantMessage: msg,
       sessionID: input.sessionID,
