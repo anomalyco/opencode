@@ -44,28 +44,21 @@ Unknown frontmatter fields are ignored.
 
 ---
 
-## Validate names
+## Naming conventions
 
-`name` must:
+For consistency and compatibility with Claude Code's `.claude/skills/` format, we recommend:
 
-- Be 1–64 characters
-- Be lowercase alphanumeric with single hyphen separators
-- Not start or end with `-`
-- Not contain consecutive `--`
-- Match the directory name that contains `SKILL.md`
+- Lowercase alphanumeric names with hyphens (e.g., `git-release`, `code-review`)
+- Matching the directory name to the skill name
+- Keeping names concise and descriptive
 
-Equivalent regex:
-
-```text
-^[a-z0-9]+(-[a-z0-9]+)*$
-```
+These are conventions, not enforced requirements. The `name` field accepts any non-empty string.
 
 ---
 
-## Follow length rules
+## Description length
 
-`description` must be 1-1024 characters.
-Keep it specific enough for the agent to choose correctly.
+Keep descriptions specific enough for the agent to choose correctly—aim for 1-2 sentences that clearly explain when to use the skill.
 
 ---
 
