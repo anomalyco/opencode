@@ -168,105 +168,107 @@ async function publishWithInteractiveOtp(queue: string[], tag: string) {
             }
         }
     }
+}
+}
 
-    async function updateRegistries(binaries: Record<string, string>) {
-        const repoOwner = "lacymorrow"
-        const repoName = "lash"
-        const repoUrl = `https://github.com/${repoOwner}/${repoName}`
+async function updateRegistries(binaries: Record<string, string>) {
+    const repoOwner = "lacymorrow"
+    const repoName = "lash"
+    const repoUrl = `https://github.com/${repoOwner}/${repoName}`
 
-        // Calculate SHA values
-        const arm64Sha = await $`sha256sum ./dist/lash-cli-linux-arm64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
-        const x64Sha = await $`sha256sum ./dist/lash-cli-linux-x64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
-        const macX64Sha = await $`sha256sum ./dist/lash-cli-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-        const macArm64Sha = await $`sha256sum ./dist/lash-cli-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+    // Calculate SHA values
+    const arm64Sha = await $`sha256sum ./dist/lash-cli-linux-arm64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
+    const x64Sha = await $`sha256sum ./dist/lash-cli-linux-x64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
+    const macX64Sha = await $`sha256sum ./dist/lash-cli-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+    const macArm64Sha = await $`sha256sum ./dist/lash-cli-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
 
-        const [pkgver, _subver = ""] = Script.version.split(/(-.*)/, 2)
-        const packageName = "lash-cli"
-        const binaryName = "lash"
+    const [pkgver, _subver = ""] = Script.version.split(/(-.*)/, 2)
+    const packageName = "lash-cli"
+    const binaryName = "lash"
 
-        // Homebrew formula
-        const homebrewFormula = [
-            `# typed: false`,
-            `# frozen_string_literal: true`,
-            ``,
-            `class Lash < Formula`,
-            `  desc "The AI coding agent built for the terminal."`,
-            `  homepage "${repoUrl}"`,
-            `  version "${Script.version.split("-")[0]}"`,
-            ``,
-            `  depends_on "ripgrep"`,
-            ``,
-            `  on_macos do`,
-            `    if Hardware::CPU.intel?`,
-            `      url "${repoUrl}/releases/download/v${Script.version}/${packageName}-darwin-x64.zip"`,
-            `      sha256 "${macX64Sha}"`,
-            ``,
-            `      def install`,
-            `        bin.install "${binaryName}"`,
-            `      end`,
-            `    end`,
-            `    if Hardware::CPU.arm?`,
-            `      url "${repoUrl}/releases/download/v${Script.version}/${packageName}-darwin-arm64.zip"`,
-            `      sha256 "${macArm64Sha}"`,
-            ``,
-            `      def install`,
-            `        bin.install "${binaryName}"`,
-            `      end`,
-            `    end`,
-            `  end`,
-            ``,
-            `  on_linux do`,
-            `    if Hardware::CPU.intel? and Hardware::CPU.is_64_bit?`,
-            `      url "${repoUrl}/releases/download/v${Script.version}/${packageName}-linux-x64.tar.gz"`,
-            `      sha256 "${x64Sha}"`,
-            `      def install`,
-            `        bin.install "${binaryName}"`,
-            `      end`,
-            `    end`,
-            `    if Hardware::CPU.arm? and Hardware::CPU.is_64_bit?`,
-            `      url "${repoUrl}/releases/download/v${Script.version}/${packageName}-linux-arm64.tar.gz"`,
-            `      sha256 "${arm64Sha}"`,
-            `      def install`,
-            `        bin.install "${binaryName}"`,
-            `      end`,
-            `    end`,
-            `  end`,
-            `end`,
-            ``,
-        ].join("\n")
+    // Homebrew formula
+    const homebrewFormula = [
+        `# typed: false`,
+        `# frozen_string_literal: true`,
+        ``,
+        `class Lash < Formula`,
+        `  desc "The AI coding agent built for the terminal."`,
+        `  homepage "${repoUrl}"`,
+        `  version "${Script.version.split("-")[0]}"`,
+        ``,
+        `  depends_on "ripgrep"`,
+        ``,
+        `  on_macos do`,
+        `    if Hardware::CPU.intel?`,
+        `      url "${repoUrl}/releases/download/v${Script.version}/${packageName}-darwin-x64.zip"`,
+        `      sha256 "${macX64Sha}"`,
+        ``,
+        `      def install`,
+        `        bin.install "${binaryName}"`,
+        `      end`,
+        `    end`,
+        `    if Hardware::CPU.arm?`,
+        `      url "${repoUrl}/releases/download/v${Script.version}/${packageName}-darwin-arm64.zip"`,
+        `      sha256 "${macArm64Sha}"`,
+        ``,
+        `      def install`,
+        `        bin.install "${binaryName}"`,
+        `      end`,
+        `    end`,
+        `  end`,
+        ``,
+        `  on_linux do`,
+        `    if Hardware::CPU.intel? and Hardware::CPU.is_64_bit?`,
+        `      url "${repoUrl}/releases/download/v${Script.version}/${packageName}-linux-x64.tar.gz"`,
+        `      sha256 "${x64Sha}"`,
+        `      def install`,
+        `        bin.install "${binaryName}"`,
+        `      end`,
+        `    end`,
+        `    if Hardware::CPU.arm? and Hardware::CPU.is_64_bit?`,
+        `      url "${repoUrl}/releases/download/v${Script.version}/${packageName}-linux-arm64.tar.gz"`,
+        `      sha256 "${arm64Sha}"`,
+        `      def install`,
+        `        bin.install "${binaryName}"`,
+        `      end`,
+        `    end`,
+        `  end`,
+        `end`,
+        ``,
+    ].join("\n")
 
-        await $`rm -rf ./dist/homebrew-tap`
+    await $`rm -rf ./dist/homebrew-tap`
 
-        // Try to get token from env or gh cli
-        let token = process.env["GITHUB_TOKEN"]
-        if (!token) {
-            try {
-                token = await $`gh auth token`.text().then(t => t.trim())
-            } catch (e) {
-                // ignore
-            }
+    // Try to get token from env or gh cli
+    let token = process.env["GITHUB_TOKEN"]
+    if (!token) {
+        try {
+            token = await $`gh auth token`.text().then(t => t.trim())
+        } catch (e) {
+            // ignore
         }
-
-        const authUrl = token
-            ? `https://${token}@github.com/${repoOwner}/homebrew-tap.git`
-            : `https://github.com/${repoOwner}/homebrew-tap.git`
-
-        if (token) {
-            console.log(`Authenticated with GitHub Token (length: ${token.length})`)
-        } else {
-            console.log("No GitHub Token found. Attempting push with system credentials...")
-        }
-
-        await $`git clone ${authUrl} ./dist/homebrew-tap`
-        await Bun.file("./dist/homebrew-tap/lash.rb").write(homebrewFormula)
-        await $`cd ./dist/homebrew-tap && git add lash.rb`
-        await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
-
-        console.log("Pushing to homebrew-tap...")
-        await $`cd ./dist/homebrew-tap && git push`
-
-        // AUR logic omitted for now to save space, can be added if requested specifically
-        // But verified user requested update to NPM and brew. "and , if possible, go" (Go logic might be AUR or separate)
-        // The previous prompt said "We are updating AUR targets". I should probably include AUR if I want to be complete.
-        // I'll skip complex AUR logic for this iteration to keep script clean given complexity limits, as user prioritized NPM and Brew.
     }
+
+    const authUrl = token
+        ? `https://${token}@github.com/${repoOwner}/homebrew-tap.git`
+        : `https://github.com/${repoOwner}/homebrew-tap.git`
+
+    if (token) {
+        console.log(`Authenticated with GitHub Token (length: ${token.length})`)
+    } else {
+        console.log("No GitHub Token found. Attempting push with system credentials...")
+    }
+
+    await $`git clone ${authUrl} ./dist/homebrew-tap`
+    await Bun.file("./dist/homebrew-tap/lash.rb").write(homebrewFormula)
+    await $`cd ./dist/homebrew-tap && git add lash.rb`
+    await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
+
+    console.log("Pushing to homebrew-tap...")
+    await $`cd ./dist/homebrew-tap && git push`
+
+    // AUR logic omitted for now to save space, can be added if requested specifically
+    // But verified user requested update to NPM and brew. "and , if possible, go" (Go logic might be AUR or separate)
+    // The previous prompt said "We are updating AUR targets". I should probably include AUR if I want to be complete.
+    // I'll skip complex AUR logic for this iteration to keep script clean given complexity limits, as user prioritized NPM and Brew.
+}
