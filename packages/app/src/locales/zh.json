@@ -19,11 +19,6 @@
     "done": "完成",
     "add": "添加",
     "submit": "提交",
-    "restart": "重启",
-    "checking": "检查中...",
-    "checkForUpdates": "检查更新",
-    "updateToVersion": "更新到 {version}",
-    "versionLabel": "版本：{version}",
     "requestFailed": "请求失败",
     "help": "帮助",
     "loadMore": "加载更多",
@@ -229,13 +224,6 @@
     "empty": "未找到结果",
     "commands": "命令",
     "files": "文件"
-  },
-  "error": {
-    "title": "出了点问题",
-    "description": "加载应用时发生错误。",
-    "details": "错误详情",
-    "reportPrompt": "请将此错误反馈给 OpenCode 团队",
-    "reportLink": "在 Discord 上"
   },
   "home": {
     "recentProjects": "最近项目",

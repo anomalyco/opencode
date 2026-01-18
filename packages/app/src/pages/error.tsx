@@ -5,7 +5,6 @@ import { Component, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { Icon } from "@opencode-ai/ui/icon"
-import { useLanguage } from "@/context/language"
 
 export type InitError = {
   name: string
@@ -183,7 +182,6 @@ interface ErrorPageProps {
 
 export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const platform = usePlatform()
-  const language = useLanguage()
   const [store, setStore] = createStore({
     checking: false,
     version: undefined as string | undefined,
@@ -208,8 +206,8 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       <div class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">
         <Logo class="w-58.5 opacity-12 shrink-0" />
         <div class="flex flex-col items-center gap-2 text-center">
-          <h1 class="text-lg font-medium text-text-strong">{language.t("error.title")}</h1>
-          <p class="text-sm text-text-weak">{language.t("error.description")}</p>
+          <h1 class="text-lg font-medium text-text-strong">Something went wrong</h1>
+          <p class="text-sm text-text-weak">An error occurred while loading the application.</p>
         </div>
         <TextField
           value={formatError(props.error)}
@@ -217,44 +215,42 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           copyable
           multiline
           class="max-h-96 w-full font-mono text-xs no-scrollbar"
-          label={language.t("error.details")}
+          label="Error Details"
           hideLabel
         />
         <div class="flex items-center gap-3">
           <Button size="large" onClick={platform.restart}>
-            {language.t("common.restart")}
+            Restart
           </Button>
           <Show when={platform.checkUpdate}>
             <Show
               when={store.version}
               fallback={
                 <Button size="large" variant="ghost" onClick={checkForUpdates} disabled={store.checking}>
-                  {store.checking ? language.t("common.checking") : language.t("common.checkForUpdates")}
+                  {store.checking ? "Checking..." : "Check for updates"}
                 </Button>
               }
             >
               <Button size="large" onClick={installUpdate}>
-                {language.t("common.updateToVersion", { version: store.version ?? "" })}
+                Update to {store.version}
               </Button>
             </Show>
           </Show>
         </div>
         <div class="flex flex-col items-center gap-2">
           <div class="flex items-center justify-center gap-1">
-            {language.t("error.reportPrompt")}
+            Please report this error to the OpenCode team
             <button
               type="button"
               class="flex items-center text-text-interactive-base gap-1"
               onClick={() => platform.openLink("https://opencode.ai/desktop-feedback")}
             >
-              <div>{language.t("error.reportLink")}</div>
+              <div>on Discord</div>
               <Icon name="discord" class="text-text-interactive-base" />
             </button>
           </div>
           <Show when={platform.version}>
-            <p class="text-xs text-text-weak">
-              {language.t("common.versionLabel", { version: platform.version ?? "" })}
-            </p>
+            <p class="text-xs text-text-weak">Version: {platform.version}</p>
           </Show>
         </div>
       </div>

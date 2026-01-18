@@ -19,11 +19,6 @@
     "done": "Done",
     "add": "Add",
     "submit": "Submit",
-    "restart": "Restart",
-    "checking": "Checking...",
-    "checkForUpdates": "Check for updates",
-    "updateToVersion": "Update to {version}",
-    "versionLabel": "Version: {version}",
     "requestFailed": "Request failed",
     "help": "Help",
     "loadMore": "Load more",
@@ -229,13 +224,6 @@
     "empty": "No results found",
     "commands": "Commands",
     "files": "Files"
-  },
-  "error": {
-    "title": "Something went wrong",
-    "description": "An error occurred while loading the application.",
-    "details": "Error Details",
-    "reportPrompt": "Please report this error to the OpenCode team",
-    "reportLink": "on Discord"
   },
   "home": {
     "recentProjects": "Recent projects",
