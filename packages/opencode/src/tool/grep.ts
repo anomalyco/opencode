@@ -33,8 +33,9 @@ export const GrepTool = Tool.define("grep", {
       },
     })
 
-    let searchPath = params.path ?? Instance.directory
-    searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
+    const cwd = getCwd()
+    let searchPath = params.path ?? cwd
+    searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(cwd, searchPath)
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     const rgPath = await Ripgrep.filepath()
