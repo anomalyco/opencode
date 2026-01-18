@@ -192,7 +192,8 @@ export async function KiroAuthPlugin(_input: PluginInput): Promise<Hooks> {
         const token = await getKiroToken()
         if (!token) return {}
 
-        const region = token.region || "us-east-1"
+        // Kiro API endpoint is currently only available in us-east-1
+        const region = "us-east-1"
         const baseURL = `https://codewhisperer.${region}.amazonaws.com`
 
         // Set cost to 0 for subscription models
