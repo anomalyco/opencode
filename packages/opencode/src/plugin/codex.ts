@@ -377,12 +377,13 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
           baseURL: CODEX_API_BASE,
           // Ensure the OpenAI provider uses OpenCode's Codex-compatible implementation.
           codexCompat: true,
-          // Default to WebSocket transport; allow opting into SSE via OPENCODE_CODEX_SSE=1.
-          // Backwards-compatible override: OPENCODE_CODEX_WEBSOCKET=0/1.
+          // Match Codex CLI default transport: SSE.
+          // Opt into WebSocket via OPENCODE_CODEX_WEBSOCKET=1.
+          // Backwards-compatible override: OPENCODE_CODEX_SSE=1 (forces SSE).
           responsesWebsocket:
             process.env["OPENCODE_CODEX_WEBSOCKET"] != null
               ? process.env["OPENCODE_CODEX_WEBSOCKET"] === "1"
-              : process.env["OPENCODE_CODEX_SSE"] !== "1",
+              : false,
           async fetch(requestInput: RequestInfo | URL, init?: RequestInit) {
             // Remove dummy API key authorization header
             if (init?.headers) {

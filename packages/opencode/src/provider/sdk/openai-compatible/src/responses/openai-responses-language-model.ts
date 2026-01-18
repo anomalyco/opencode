@@ -1452,13 +1452,11 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
   private shouldUseCodexRequestCompression(url: string): boolean {
     if (!this.shouldUseCodexOAuth(url)) return false
 
-    // Default to ON for Codex OAuth sessions; allow opting out.
+    // Match Codex CLI: request compression is opt-in.
     const flag = process.env["OPENCODE_CODEX_REQUEST_COMPRESSION"]
-    if (flag == null) return true
-    if (flag === "0" || flag.toLowerCase() === "false") return false
+    if (flag == null) return false
     if (flag === "1" || flag.toLowerCase() === "true") return true
-    // Any other value: treat as enabled (safer default).
-    return true
+    return false
   }
 
   private async postJsonToApiMaybeCompressed(input: {
