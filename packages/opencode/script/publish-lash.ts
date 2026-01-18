@@ -124,6 +124,9 @@ if (shouldPublish) {
     await publishWithInteractiveOtp(publishQueue, tags[0])
 }
 
+console.log("Release script finished successfully.")
+process.exit(0)
+
 async function publishWithInteractiveOtp(queue: string[], tag: string) {
     console.log(`\n=== Interactive NPM Publish ===`)
     console.log(`Pending packages to publish: ${queue.length}`)
