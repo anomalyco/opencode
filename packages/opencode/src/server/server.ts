@@ -114,6 +114,11 @@ export namespace Server {
               if (input.startsWith("http://127.0.0.1:")) return input
               if (input === "tauri://localhost" || input === "http://tauri.localhost") return input
 
+              // Allow private network IPs (10.x.x.x, 192.168.x.x, 172.16-31.x.x)
+              if (/^https?:\/\/(10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(input)) {
+                return input
+              }
+
               // *.opencode.ai (https only, adjust if needed)
               if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
                 return input
@@ -502,7 +507,27 @@ export namespace Server {
             })
           },
         )
-        .all("/*", async (c) => {
+        .get("/*", async (c) => {
+          if (Flag.OPENCODE_UI_PATH) {
+            const uiPath = Flag.OPENCODE_UI_PATH.replace(/\/$/, "") // remove trailing slash
+            const reqPath = c.req.path === "/" ? "/index.html" : c.req.path
+            const filePath = `${uiPath}${reqPath}`
+            const file = Bun.file(filePath)
+            if (await file.exists()) {
+              return new Response(file, {
+                headers: { "Content-Type": file.type },
+              })
+            }
+            // SPA fallback: serve index.html for non-asset routes
+            const indexPath = `${uiPath}/index.html`
+            const indexFile = Bun.file(indexPath)
+            if (await indexFile.exists()) {
+              return new Response(indexFile, {
+                headers: { "Content-Type": "text/html" },
+              })
+            }
+            return c.notFound()
+          }
           const path = c.req.path
           const response = await proxy(`https://app.opencode.ai${path}`, {
             ...c.req,

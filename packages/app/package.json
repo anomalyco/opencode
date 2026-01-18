@@ -23,6 +23,7 @@
     "@types/luxon": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "@xterm/addon-serialize": "0.14.0",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-icons-spritesheet": "3.0.1",
@@ -47,7 +48,6 @@
     "@thisbeyond/solid-dnd": "0.7.5",
     "diff": "catalog:",
     "fuzzysort": "catalog:",
-    "ghostty-web": "0.3.0",
     "luxon": "catalog:",
     "marked": "catalog:",
     "marked-shiki": "catalog:",
@@ -57,6 +57,8 @@
     "solid-list": "catalog:",
     "tailwindcss": "catalog:",
     "virtua": "catalog:",
+    "xterm": "5.3.0",
+    "xterm-addon-fit": "0.8.0",
     "zod": "catalog:"
   }
 }

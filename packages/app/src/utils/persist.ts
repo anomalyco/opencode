@@ -234,8 +234,12 @@ export function persisted<T>(
   const [ready] = createResource(
     () => init,
     async (initValue) => {
-      if (initValue instanceof Promise) await initValue
-      return true
+      try {
+        if (initValue instanceof Promise) await initValue
+        return true
+      } catch {
+        return true
+      }
     },
     { initialValue: !isAsync },
   )

@@ -1,7 +1,8 @@
-import type { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
+import type { Terminal as XTerminal } from "xterm"
+import type { FitAddon as XFitAddon } from "xterm-addon-fit"
+import type { SerializeAddon as XSerializeAddon } from "@xterm/addon-serialize"
 import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
 import { useSDK } from "@/context/sdk"
-import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
 import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
 
@@ -40,15 +41,12 @@ export const Terminal = (props: TerminalProps) => {
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnectError"])
   let ws: WebSocket | undefined
-  let term: Term | undefined
-  let ghostty: Ghostty
-  let serializeAddon: SerializeAddon
-  let fitAddon: FitAddon
-  let handleResize: () => void
+  let term: XTerminal | undefined
+  let fitAddon: XFitAddon
+  let serializeAddon: XSerializeAddon
+  let resizeObserver: ResizeObserver | undefined
   let handleTextareaFocus: () => void
   let handleTextareaBlur: () => void
-  let reconnect: number | undefined
-  let disposed = false
 
   const getTerminalColors = (): TerminalColors => {
     const mode = theme.mode()
@@ -77,9 +75,7 @@ export const Terminal = (props: TerminalProps) => {
     const colors = getTerminalColors()
     setTerminalColors(colors)
     if (!term) return
-    const setOption = (term as unknown as { setOption?: (key: string, value: TerminalColors) => void }).setOption
-    if (!setOption) return
-    setOption("theme", colors)
+    term.options.theme = colors
   })
 
   const focusTerminal = () => {
@@ -88,6 +84,7 @@ export const Terminal = (props: TerminalProps) => {
     t.focus()
     setTimeout(() => t.textarea?.focus(), 0)
   }
+
   const handlePointerDown = () => {
     const activeElement = document.activeElement
     if (activeElement instanceof HTMLElement && activeElement !== container) {
@@ -97,10 +94,15 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   onMount(async () => {
-    const mod = await import("ghostty-web")
-    ghostty = await mod.Ghostty.load()
+    const [_, { Terminal }, { FitAddon }, { SerializeAddon }] = await Promise.all([
+      import("xterm/css/xterm.css"),
+      import("xterm"),
+      import("xterm-addon-fit"),
+      import("@xterm/addon-serialize"),
+    ])
 
     const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
     if (window.__OPENCODE__?.serverPassword) {
       url.username = "opencode"
       url.password = window.__OPENCODE__?.serverPassword
@@ -108,15 +110,13 @@ export const Terminal = (props: TerminalProps) => {
     const socket = new WebSocket(url)
     ws = socket
 
-    const t = new mod.Terminal({
+    const t = new Terminal({
       cursorBlink: true,
-      cursorStyle: "bar",
       fontSize: 14,
       fontFamily: "IBM Plex Mono, monospace",
       allowTransparency: true,
       theme: terminalColors(),
       scrollback: 10_000,
-      ghostty,
     })
     term = t
 
@@ -150,29 +150,33 @@ export const Terminal = (props: TerminalProps) => {
     t.attachCustomKeyEventHandler((event) => {
       const key = event.key.toLowerCase()
 
+      // Ctrl+Shift+C: copy selection
       if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
         copy()
-        return true
+        return false // we handled it, don't let xterm process
       }
 
+      // Cmd+C (Mac): copy selection
       if (event.metaKey && !event.ctrlKey && !event.altKey && key === "c") {
-        if (!t.hasSelection()) return true
-        copy()
-        return true
+        if (t.hasSelection()) {
+          copy()
+          return false // we handled it
+        }
+        return true // no selection, let xterm handle (sends SIGINT)
       }
 
-      // allow for ctrl-` to toggle terminal in parent
+      // Ctrl+`: let parent handle (toggle terminal)
       if (event.ctrlKey && key === "`") {
-        return true
+        return false // don't let xterm process
       }
 
-      return false
+      return true // let xterm process all other keys
     })
 
-    fitAddon = new mod.FitAddon()
+    fitAddon = new FitAddon()
     serializeAddon = new SerializeAddon()
-    t.loadAddon(serializeAddon)
     t.loadAddon(fitAddon)
+    t.loadAddon(serializeAddon)
 
     t.open(container)
     container.addEventListener("pointerdown", handlePointerDown)
@@ -201,9 +205,13 @@ export const Terminal = (props: TerminalProps) => {
       })
     }
 
-    fitAddon.observeResize()
-    handleResize = () => fitAddon.fit()
-    window.addEventListener("resize", handleResize)
+    fitAddon.fit()
+
+    // Use ResizeObserver to handle container/pane resizing
+    resizeObserver = new ResizeObserver(() => {
+      fitAddon.fit()
+    })
+    resizeObserver.observe(container)
     t.onResize(async (size) => {
       if (socket.readyState === WebSocket.OPEN) {
         await sdk.client.pty
@@ -223,15 +231,11 @@ export const Terminal = (props: TerminalProps) => {
       }
     })
     t.onKey((key) => {
-      if (key.key == "Enter") {
+      if (key.key === "Enter") {
         props.onSubmit?.()
       }
     })
-    // t.onScroll((ydisp) => {
-    // console.log("Scroll position:", ydisp)
-    // })
     socket.addEventListener("open", () => {
-      console.log("WebSocket connected")
       sdk.client.pty
         .update({
           ptyID: local.pty.id,
@@ -249,28 +253,23 @@ export const Terminal = (props: TerminalProps) => {
       console.error("WebSocket error:", error)
       props.onConnectError?.(error)
     })
-    socket.addEventListener("close", () => {
-      console.log("WebSocket disconnected")
-    })
+    socket.addEventListener("close", () => {})
   })
 
   onCleanup(() => {
-    if (handleResize) {
-      window.removeEventListener("resize", handleResize)
-    }
+    resizeObserver?.disconnect()
     container.removeEventListener("pointerdown", handlePointerDown)
     term?.textarea?.removeEventListener("focus", handleTextareaFocus)
     term?.textarea?.removeEventListener("blur", handleTextareaBlur)
 
     const t = term
-    if (serializeAddon && props.onCleanup && t) {
-      const buffer = serializeAddon.serialize()
+    if (props.onCleanup && t && serializeAddon) {
       props.onCleanup({
         ...local.pty,
-        buffer,
+        buffer: serializeAddon.serialize(),
         rows: t.rows,
         cols: t.cols,
-        scrollY: t.getViewportY(),
+        scrollY: t.buffer.active.viewportY,
       })
     }
 
