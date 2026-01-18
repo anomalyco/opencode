@@ -182,7 +182,7 @@
     "english": "英语",
     "chinese": "中文",
     "use": "使用语言：{language}",
-    "cycle": "切换语言",
+    "cycle": "切换语言 Cycle language",
     "switched": "语言已切换"
   },
   "command": {
