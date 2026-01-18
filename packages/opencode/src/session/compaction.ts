@@ -15,6 +15,7 @@ import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { Auth } from "@/auth"
+import { SystemPrompt } from "./system"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -105,6 +106,7 @@ export namespace SessionCompaction {
 
     const body = {
       model: input.model.api.id,
+      instructions: SystemPrompt.instructions(),
       input: buildCodexCompactInput(input.messages),
     }
 
