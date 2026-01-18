@@ -95,6 +95,8 @@ export namespace ModelsDev {
   export type Provider = z.infer<typeof Provider>
 
   export async function get() {
+    // If models.dev is completely disabled, return empty object
+    if (Flag.OPENCODE_DISABLE_MODELS_DEV) return {}
     refresh()
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
