@@ -41,7 +41,7 @@ export namespace Flag {
   export const OPENCODE_EXPERIMENTAL_LSP_TOOL = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_LSP_TOOL")
   export const OPENCODE_EXPERIMENTAL_PLAN_MODE = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_PLAN_MODE")
 
-  function truthy(key: string) {
+  export function truthy(key: string) {
     const value = process.env[key]?.toLowerCase()
     return value === "true" || value === "1"
   }
@@ -59,8 +59,7 @@ export namespace Flag {
 // because external tooling may set this env var at runtime
 Object.defineProperty(Flag, "OPENCODE_DISABLE_PROJECT_CONFIG", {
   get() {
-    const value = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]?.toLowerCase()
-    return value === "true" || value === "1"
+    return Flag.truthy("OPENCODE_DISABLE_PROJECT_CONFIG")
   },
   enumerable: true,
   configurable: false,
