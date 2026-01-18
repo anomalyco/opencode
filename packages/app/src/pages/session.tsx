@@ -18,6 +18,7 @@ import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
+import { Mark } from "@opencode-ai/ui/logo"
 
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
@@ -787,17 +788,14 @@ export default function Page() {
       .filter((tab) => tab !== "context"),
   )
 
-  const reviewTab = createMemo(() => hasReview() || tabs().active() === "review")
-  const mobileReview = createMemo(() => !isDesktop() && hasReview() && store.mobileTab === "review")
+  const mobileReview = createMemo(() => !isDesktop() && view().reviewPanel.opened() && store.mobileTab === "review")
 
-  const showTabs = createMemo(
-    () => view().reviewPanel.opened() && (hasReview() || tabs().all().length > 0 || contextOpen()),
-  )
+  const showTabs = createMemo(() => view().reviewPanel.opened())
 
   const activeTab = createMemo(() => {
     const active = tabs().active()
     if (active) return active
-    if (reviewTab()) return "review"
+    if (hasReview()) return "review"
 
     const first = openedTabs()[0]
     if (first) return first
@@ -1095,8 +1093,8 @@ export default function Page() {
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
-        {/* Mobile tab bar - only shown on mobile when there are diffs */}
-        <Show when={!isDesktop() && hasReview()}>
+        {/* Mobile tab bar - only shown on mobile when user opened review */}
+        <Show when={!isDesktop() && view().reviewPanel.opened()}>
           <Tabs class="h-auto">
             <Tabs.List>
               <Tabs.Trigger
@@ -1113,7 +1111,10 @@ export default function Page() {
                 classes={{ button: "w-full" }}
                 onClick={() => setStore("mobileTab", "review")}
               >
-                {reviewCount()} Files Changed
+                <Switch>
+                  <Match when={hasReview()}>{reviewCount()} Files Changed</Match>
+                  <Match when={true}>Review</Match>
+                </Switch>
               </Tabs.Trigger>
             </Tabs.List>
           </Tabs>
@@ -1138,26 +1139,36 @@ export default function Page() {
                     when={!mobileReview()}
                     fallback={
                       <div class="relative h-full overflow-hidden">
-                        <Show
-                          when={diffsReady()}
-                          fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
-                        >
-                          <SessionReviewTab
-                            diffs={diffs}
-                            view={view}
-                            diffStyle="unified"
-                            onViewFile={(path) => {
-                              const value = file.tab(path)
-                              tabs().open(value)
-                              file.load(path)
-                            }}
-                            classes={{
-                              root: "pb-[calc(var(--prompt-height,8rem)+24px)]",
-                              header: "px-4",
-                              container: "px-4",
-                            }}
-                          />
-                        </Show>
+                        <Switch>
+                          <Match when={hasReview()}>
+                            <Show
+                              when={diffsReady()}
+                              fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
+                            >
+                              <SessionReviewTab
+                                diffs={diffs}
+                                view={view}
+                                diffStyle="unified"
+                                onViewFile={(path) => {
+                                  const value = file.tab(path)
+                                  tabs().open(value)
+                                  file.load(path)
+                                }}
+                                classes={{
+                                  root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
+                                  header: "px-4",
+                                  container: "px-4",
+                                }}
+                              />
+                            </Show>
+                          </Match>
+                          <Match when={true}>
+                            <div class="px-4 pt-18 pb-6 flex flex-col items-center justify-center text-center gap-3">
+                              <Mark class="w-6 opacity-40" />
+                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet.</div>
+                            </div>
+                          </Match>
+                        </Switch>
                       </div>
                     }
                   >
@@ -1170,11 +1181,29 @@ export default function Page() {
                         }}
                         onClick={autoScroll.handleInteraction}
                         class="relative min-w-0 w-full h-full overflow-y-auto no-scrollbar"
+                        style={{ "--session-title-height": info()?.title ? "40px" : "0px" }}
                       >
+                        <Show when={info()?.title}>
+                          <div
+                            classList={{
+                              "sticky top-0 z-30 bg-background-stronger": true,
+                              "w-full": true,
+                              "px-4 md:px-6": true,
+                              "md:max-w-200 md:mx-auto": !showTabs(),
+                            }}
+                          >
+                            <div class="h-10 flex items-center">
+                              <h1 class="text-16-medium text-text-strong truncate">{info()?.title}</h1>
+                            </div>
+                          </div>
+                        </Show>
+
                         <div
                           ref={autoScroll.contentRef}
                           class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
+                            "w-full": true,
+                            "md:max-w-200 md:mx-auto": !showTabs(),
                             "mt-0.5": !showTabs(),
                             "mt-0": showTabs(),
                           }}
@@ -1225,6 +1254,7 @@ export default function Page() {
                                   data-message-id={message.id}
                                   classList={{
                                     "min-w-0 w-full max-w-full": true,
+                                    "md:max-w-200": !showTabs(),
                                     "last:min-h-[calc(100vh-5.5rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-4.5rem-var(--prompt-height,10rem)-64px)]":
                                       platform.platform !== "desktop",
                                     "last:min-h-[calc(100vh-7rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-6rem-var(--prompt-height,10rem)-64px)]":
@@ -1233,7 +1263,6 @@ export default function Page() {
                                 >
                                   <SessionTurn
                                     sessionID={params.id!}
-                                    sessionTitle={info()?.title}
                                     messageID={message.id}
                                     lastUserMessageID={lastUserMessage()?.id}
                                     stepsExpanded={store.expanded[message.id] ?? false}
@@ -1333,7 +1362,7 @@ export default function Page() {
               <Tabs value={activeTab()} onChange={openTab}>
                 <div class="sticky top-0 shrink-0 flex">
                   <Tabs.List>
-                    <Show when={reviewTab()}>
+                    <Show when={true}>
                       <Tabs.Trigger value="review">
                         <div class="flex items-center gap-3">
                           <Show when={diffs()}>
@@ -1386,26 +1415,36 @@ export default function Page() {
                     </div>
                   </Tabs.List>
                 </div>
-                <Show when={reviewTab()}>
+                <Show when={true}>
                   <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                     <Show when={activeTab() === "review"}>
                       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                        <Show
-                          when={diffsReady()}
-                          fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
-                        >
-                          <SessionReviewTab
-                            diffs={diffs}
-                            view={view}
-                            diffStyle={layout.review.diffStyle()}
-                            onDiffStyleChange={layout.review.setDiffStyle}
-                            onViewFile={(path) => {
-                              const value = file.tab(path)
-                              tabs().open(value)
-                              file.load(path)
-                            }}
-                          />
-                        </Show>
+                        <Switch>
+                          <Match when={hasReview()}>
+                            <Show
+                              when={diffsReady()}
+                              fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
+                            >
+                              <SessionReviewTab
+                                diffs={diffs}
+                                view={view}
+                                diffStyle={layout.review.diffStyle()}
+                                onDiffStyleChange={layout.review.setDiffStyle}
+                                onViewFile={(path) => {
+                                  const value = file.tab(path)
+                                  tabs().open(value)
+                                  file.load(path)
+                                }}
+                              />
+                            </Show>
+                          </Match>
+                          <Match when={true}>
+                            <div class="px-6 pt-18 pb-6 flex flex-col items-center justify-center text-center gap-3">
+                              <Mark class="w-6 opacity-40" />
+                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet.</div>
+                            </div>
+                          </Match>
+                        </Switch>
                       </div>
                     </Show>
                   </Tabs.Content>
