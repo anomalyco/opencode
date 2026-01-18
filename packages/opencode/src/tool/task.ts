@@ -159,8 +159,26 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const isInteractiveOrchestrator = agent.mode === "orchestrator"
 
       if (isInteractiveOrchestrator) {
-        // Start orchestrator session but don't await completion
-        // User can interact with it by switching to that session
+        // Create a promise that resolves when finish_task is called
+        const finishTaskPromise = new Promise<{ summary: string; status: string; learnings?: string[] }>((resolve) => {
+          const finishUnsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+            if (evt.properties.part.sessionID !== session.id) return
+            if (evt.properties.part.type !== "tool") return
+            if (evt.properties.part.tool !== "finish_task") return
+            if (evt.properties.part.state.status !== "completed") return
+
+            // finish_task was called and completed
+            finishUnsub()
+            const metadata = evt.properties.part.state.metadata as any
+            resolve({
+              summary: metadata?.summary ?? "",
+              status: metadata?.status ?? "completed",
+              learnings: metadata?.learnings,
+            })
+          })
+        })
+
+        // Start the first prompt (don't await - loop will handle subsequent prompts)
         SessionPrompt.prompt({
           messageID,
           sessionID: session.id,
@@ -177,21 +195,21 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           },
           parts: promptParts,
         }).catch((error) => {
-          // Log error but don't block parent
           console.error("orchestrator session error", error)
         })
 
-        // Unsubscribe from monitoring - orchestrator runs independently
+        // Wait for finish_task to be called (PM blocks here, user interacts with orchestrator via TUI)
+        const finishResult = await finishTaskPromise
         unsub()
 
-        // Return immediately with session info
         return {
-          title: `Started orchestrator: ${agent.name}`,
+          title: params.description,
           metadata: {
             sessionId: session.id,
-            interactive: true,
+            status: finishResult.status,
+            learnings: finishResult.learnings,
           },
-          output: `Orchestrator session started.\n\n<task_metadata>\nsession_id: ${session.id}\ninteractive: true\n</task_metadata>`,
+          output: finishResult.summary + "\n\n" + ["<task_metadata>", `session_id: ${session.id}`, "</task_metadata>"].join("\n"),
         }
       }
 
