@@ -354,7 +354,7 @@ export namespace ACP {
 
           if (part.type === "text") {
             const delta = props.delta
-            if (delta && part.synthetic !== true) {
+            if (delta && part.ignored !== true) {
               await this.connection
                 .sessionUpdate({
                   sessionId,
@@ -687,7 +687,7 @@ export namespace ACP {
               break
           }
         } else if (part.type === "text") {
-          if (part.text) {
+          if (part.text && !part.ignored) {
             await this.connection
               .sessionUpdate({
                 sessionId,
@@ -703,6 +703,79 @@ export namespace ACP {
                 log.error("failed to send text to ACP", { error: err })
               })
           }
+        } else if (part.type === "file") {
+          // Replay file attachments as appropriate ACP content blocks.
+          // OpenCode stores files internally as { type: "file", url, filename, mime }.
+          // We convert these back to ACP blocks based on the URL scheme and MIME type:
+          // - file:// URLs → resource_link 
+          // - data: URLs with image/* → image block
+          // - data: URLs with text/* or application/json → resource with text
+          // - data: URLs with other types → resource with blob
+          const url = part.url
+          const filename = part.filename ?? "file"
+          const mime = part.mime || "application/octet-stream"
+          const messageChunk = message.info.role === "user" ? "user_message_chunk" : "agent_message_chunk"
+
+          if (url.startsWith("file://")) {
+            // Local file reference - send as resource_link
+            await this.connection
+              .sessionUpdate({
+                sessionId,
+                update: {
+                  sessionUpdate: messageChunk,
+                  content: { type: "resource_link", uri: url, name: filename, mimeType: mime },
+                },
+              })
+              .catch((err) => {
+                log.error("failed to send resource_link to ACP", { error: err })
+              })
+          } else if (url.startsWith("data:")) {
+            // Embedded content - parse data URL and send as appropriate block type
+            const base64Match = url.match(/^data:([^;]+);base64,(.*)$/)
+            const dataMime = base64Match?.[1]
+            const base64Data = base64Match?.[2] ?? ""
+
+            const effectiveMime = dataMime || mime
+
+            if (effectiveMime.startsWith("image/")) {
+              // Image - send as image block
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: messageChunk,
+                    content: {
+                      type: "image",
+                      mimeType: effectiveMime,
+                      data: base64Data,
+                      uri: `file://${filename}`,
+                    },
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send image to ACP", { error: err })
+                })
+            } else {
+              // Non-image: text types get decoded, binary types stay as blob
+              const isText = effectiveMime.startsWith("text/") || effectiveMime === "application/json"
+              const resource = isText
+                ? { uri: `file://${filename}`, mimeType: effectiveMime, text: Buffer.from(base64Data, "base64").toString("utf-8") }
+                : { uri: `file://${filename}`, mimeType: effectiveMime, blob: base64Data }
+
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: messageChunk,
+                    content: { type: "resource", resource },
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send resource to ACP", { error: err })
+                })
+            }
+          }
+          // URLs that don't match file:// or data: are skipped (unsupported)
         } else if (part.type === "reasoning") {
           if (part.text) {
             await this.connection
@@ -901,39 +974,57 @@ export namespace ACP {
               text: part.text,
             })
             break
-          case "image":
+          case "image": {
+            const parsed = parseUri(part.uri ?? "")
+            const filename = parsed.type === "file" ? parsed.filename : "image"
             if (part.data) {
               parts.push({
                 type: "file",
                 url: `data:${part.mimeType};base64,${part.data}`,
-                filename: "image",
+                filename,
                 mime: part.mimeType,
               })
             } else if (part.uri && part.uri.startsWith("http:")) {
               parts.push({
                 type: "file",
                 url: part.uri,
-                filename: "image",
+                filename,
                 mime: part.mimeType,
               })
             }
             break
+          }
 
           case "resource_link":
             const parsed = parseUri(part.uri)
+            // Use the name from resource_link if available
+            if (part.name && parsed.type === "file") {
+              parsed.filename = part.name
+            }
             parts.push(parsed)
 
             break
 
-          case "resource":
+          case "resource": {
             const resource = part.resource
-            if ("text" in resource) {
+            if ("text" in resource && resource.text) {
               parts.push({
                 type: "text",
                 text: resource.text,
               })
+            } else if ("blob" in resource && resource.blob && resource.mimeType) {
+              // Binary resource (PDFs, etc.): store as file part with data URL
+              const parsed = parseUri(resource.uri ?? "")
+              const filename = parsed.type === "file" ? parsed.filename : "file"
+              parts.push({
+                type: "file",
+                url: `data:${resource.mimeType};base64,${resource.blob}`,
+                filename,
+                mime: resource.mimeType,
+              })
             }
             break
+          }
 
           default:
             break
