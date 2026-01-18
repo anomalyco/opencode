@@ -7163,7 +7163,8 @@
         "properties": {
           "label": {
             "description": "Display text (1-5 words, concise)",
-            "type": "string"
+            "type": "string",
+            "maxLength": 30
           },
           "description": {
             "description": "Explanation of choice",
@@ -7180,9 +7181,9 @@
             "type": "string"
           },
           "header": {
-            "description": "Very short label (max 12 chars)",
+            "description": "Very short label (max 30 chars)",
             "type": "string",
-            "maxLength": 12
+            "maxLength": 30
           },
           "options": {
             "description": "Available choices",
