@@ -1089,33 +1089,39 @@ export default function Layout(props: ParentProps) {
         class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3
                hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
       >
-        <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={16} openDelay={1000}>
-          <A
-            href={`${props.slug}/session/${props.session.id}`}
-            class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
-            onMouseEnter={() => prefetchSession(props.session, "high")}
-            onFocus={() => prefetchSession(props.session, "high")}
-          >
-            <div class="flex items-center gap-1 w-full">
-              <div
-                class="shrink-0 size-6 flex items-center justify-center"
-                style={{ color: tint() ?? "var(--icon-interactive-base)" }}
-              >
-                <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
-                  <Match when={isWorking()}>
-                    <Spinner class="size-[15px]" />
-                  </Match>
-                  <Match when={hasPermissions()}>
-                    <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-                  </Match>
-                  <Match when={hasError()}>
-                    <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-                  </Match>
-                  <Match when={notifications().length > 0}>
-                    <div class="size-1.5 rounded-full bg-text-interactive-base" />
-                  </Match>
-                </Switch>
-              </div>
+        <A
+          href={`${props.slug}/session/${props.session.id}`}
+          class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
+          onMouseEnter={() => prefetchSession(props.session, "high")}
+          onFocus={() => prefetchSession(props.session, "high")}
+        >
+          <div class="flex items-center gap-1 w-full">
+            <div
+              class="shrink-0 size-6 flex items-center justify-center"
+              style={{ color: tint() ?? "var(--icon-interactive-base)" }}
+            >
+              <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
+                <Match when={isWorking()}>
+                  <Spinner class="size-[15px]" />
+                </Match>
+                <Match when={hasPermissions()}>
+                  <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+                </Match>
+                <Match when={hasError()}>
+                  <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+                </Match>
+                <Match when={notifications().length > 0}>
+                  <div class="size-1.5 rounded-full bg-text-interactive-base" />
+                </Match>
+              </Switch>
+            </div>
+            <Tooltip
+              placement="top-start"
+              value={props.session.title}
+              gutter={0}
+              openDelay={2000}
+              class="grow-1 min-w-0"
+            >
               <InlineEditor
                 id={`session:${props.session.id}`}
                 value={() => props.session.title}
@@ -1124,16 +1130,16 @@ export default function Layout(props: ParentProps) {
                 displayClass="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
                 stopPropagation
               />
-              <Show when={props.session.summary}>
-                {(summary) => (
-                  <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
-                    <DiffChanges changes={summary()} />
-                  </div>
-                )}
-              </Show>
-            </div>
-          </A>
-        </Tooltip>
+            </Tooltip>
+            <Show when={props.session.summary}>
+              {(summary) => (
+                <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
+                  <DiffChanges changes={summary()} />
+                </div>
+              )}
+            </Show>
+          </div>
+        </A>
         <div
           class={`hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"}`}
         >
