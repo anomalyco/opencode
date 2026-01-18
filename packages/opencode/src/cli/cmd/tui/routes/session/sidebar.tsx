@@ -239,7 +239,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     {(item) => {
                       return (
                         <box flexDirection="row" gap={1} justifyContent="space-between">
-                          <text fg={theme.textMuted} truncate={true} wrapMode="none">
+                          <text fg={theme.textMuted} wrapMode="none">
                             {item.file}
                           </text>
                           <box flexDirection="row" gap={1} flexShrink={0}>
