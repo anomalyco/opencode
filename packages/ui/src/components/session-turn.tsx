@@ -2,16 +2,17 @@ import {
   AssistantMessage,
   Message as MessageType,
   Part as PartType,
-  type Permission,
+  type PermissionRequest,
   TextPart,
   ToolPart,
+  UserMessage,
 } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { checksum } from "@opencode-ai/util/encode"
+
 import { Binary } from "@opencode-ai/util/binary"
-import { createEffect, createMemo, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -21,6 +22,10 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
+import { ProviderIcon } from "./provider-icon"
+import type { IconName } from "./provider-icons/types"
+import { IconButton } from "./icon-button"
+import { Tooltip } from "./tooltip"
 import { Card } from "./card"
 import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
@@ -78,6 +83,7 @@ function AssistantMessageItem(props: {
   message: AssistantMessage
   responsePartId: string | undefined
   hideResponsePart: boolean
+  hideReasoning: boolean
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -92,7 +98,12 @@ function AssistantMessageItem(props: {
   })
 
   const filteredParts = createMemo(() => {
-    const parts = msgParts()
+    let parts = msgParts()
+
+    if (props.hideReasoning) {
+      parts = parts.filter((part) => part?.type !== "reasoning")
+    }
+
     if (!props.hideResponsePart) return parts
 
     const responsePartId = props.responsePartId
@@ -126,7 +137,7 @@ export function SessionTurn(
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
   const emptyAssistant: AssistantMessage[] = []
-  const emptyPermissions: Permission[] = []
+  const emptyPermissions: PermissionRequest[] = []
   const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
   const idle = { type: "idle" as const }
 
@@ -229,16 +240,18 @@ export function SessionTurn(
     if (props.stepsExpanded) return emptyPermissionParts
 
     const next = nextPermission()
-    if (!next) return emptyPermissionParts
+    if (!next || !next.tool) return emptyPermissionParts
 
-    for (const message of assistantMessages()) {
-      const parts = data.store.part[message.id] ?? emptyParts
-      for (const part of parts) {
-        if (part?.type !== "tool") continue
-        const tool = part as ToolPart
-        if (tool.callID === next.callID) return [{ part: tool, message }]
-      }
+    const message = assistantMessages().findLast((m) => m.id === next.tool!.messageID)
+    if (!message) return emptyPermissionParts
+
+    const parts = data.store.part[message.id] ?? emptyParts
+    for (const part of parts) {
+      if (part?.type !== "tool") continue
+      const tool = part as ToolPart
+      if (tool.callID === next.tool?.callID) return [{ part: tool, message }]
     }
+
     return emptyPermissionParts
   })
 
@@ -315,11 +328,19 @@ export function SessionTurn(
     return s
   })
 
-  const summary = createMemo(() => message()?.summary?.body)
   const response = createMemo(() => lastTextPart()?.text)
   const responsePartId = createMemo(() => lastTextPart()?.id)
   const hasDiffs = createMemo(() => message()?.summary?.diffs?.length)
-  const hideResponsePart = createMemo(() => !working() && !summary() && !!responsePartId())
+  const hideResponsePart = createMemo(() => !working() && !!responsePartId())
+
+  const [responseCopied, setResponseCopied] = createSignal(false)
+  const handleCopyResponse = async () => {
+    const content = response()
+    if (!content) return
+    await navigator.clipboard.writeText(content)
+    setResponseCopied(true)
+    setTimeout(() => setResponseCopied(false), 2000)
+  }
 
   function duration() {
     const msg = message()
@@ -343,15 +364,30 @@ export function SessionTurn(
     onUserInteracted: props.onUserInteracted,
   })
 
+  const diffInit = 20
+  const diffBatch = 20
+
   const [store, setStore] = createStore({
     stickyTitleRef: undefined as HTMLDivElement | undefined,
     stickyTriggerRef: undefined as HTMLDivElement | undefined,
     stickyHeaderHeight: 0,
     retrySeconds: 0,
+    diffsOpen: [] as string[],
+    diffLimit: diffInit,
     status: rawStatus(),
     duration: duration(),
-    summaryWaitTimedOut: false,
   })
+
+  createEffect(
+    on(
+      () => message()?.id,
+      () => {
+        setStore("diffsOpen", [])
+        setStore("diffLimit", diffInit)
+      },
+      { defer: true },
+    ),
+  )
 
   createEffect(() => {
     const r = retry()
@@ -391,12 +427,6 @@ export function SessionTurn(
     onCleanup(() => clearInterval(timer))
   })
 
-  createEffect(() => {
-    if (working()) {
-      setStore("summaryWaitTimedOut", false)
-    }
-  })
-
   createEffect(
     on(permissionCount, (count, prev) => {
       if (!count) return
@@ -404,42 +434,6 @@ export function SessionTurn(
       autoScroll.forceScrollToBottom()
     }),
   )
-
-  createEffect(() => {
-    if (working() || !isLastUserMessage()) return
-
-    const diffs = message()?.summary?.diffs
-    if (!diffs?.length) return
-    if (summary()) return
-    if (store.summaryWaitTimedOut) return
-
-    const completed = lastAssistantMessage()?.time.completed
-    if (completed && Date.now() - completed > 2000) {
-      setStore("summaryWaitTimedOut", true)
-      return
-    }
-
-    const timer = setTimeout(() => {
-      setStore("summaryWaitTimedOut", true)
-    }, 6000)
-    onCleanup(() => clearTimeout(timer))
-  })
-
-  const waitingForSummary = createMemo(() => {
-    if (!isLastUserMessage()) return false
-    if (working()) return false
-
-    const diffs = message()?.summary?.diffs
-    if (!diffs?.length) return false
-    if (summary()) return false
-
-    return !store.summaryWaitTimedOut
-  })
-
-  const showSummarySection = createMemo(() => {
-    if (working()) return false
-    return !waitingForSummary()
-  })
 
   let lastStatusChange = Date.now()
   let statusTimeout: number | undefined
@@ -501,6 +495,21 @@ export function SessionTurn(
                             </Match>
                           </Switch>
                         </div>
+                        <div data-slot="session-turn-user-badges">
+                          <Show when={(msg() as UserMessage).agent}>
+                            <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
+                          </Show>
+                          <Show when={(msg() as UserMessage).model?.modelID}>
+                            <span data-slot="session-turn-badge" class="inline-flex items-center gap-1">
+                              <ProviderIcon
+                                id={(msg() as UserMessage).model!.providerID as IconName}
+                                class="size-3.5 shrink-0"
+                              />
+                              {(msg() as UserMessage).model?.modelID}
+                            </span>
+                          </Show>
+                          <span data-slot="session-turn-badge">{(msg() as UserMessage).variant || "default"}</span>
+                        </div>
                       </div>
                     </div>
                     {/* User Message */}
@@ -517,7 +526,7 @@ export function SessionTurn(
                           size="small"
                           onClick={props.onStepsExpandedToggle ?? (() => {})}
                         >
-                          <Show when={working() || waitingForSummary()}>
+                          <Show when={working()}>
                             <Spinner />
                           </Show>
                           <Switch>
@@ -534,7 +543,6 @@ export function SessionTurn(
                               </span>
                               <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                             </Match>
-                            <Match when={waitingForSummary()}>Generating summary</Match>
                             <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
                             <Match when={props.stepsExpanded}>Hide steps</Match>
                             <Match when={!props.stepsExpanded}>Show steps</Match>
@@ -556,6 +564,7 @@ export function SessionTurn(
                               message={assistantMessage}
                               responsePartId={responsePartId()}
                               hideResponsePart={hideResponsePart()}
+                              hideReasoning={!working()}
                             />
                           )}
                         </For>
@@ -573,39 +582,37 @@ export function SessionTurn(
                         </For>
                       </div>
                     </Show>
-                    {/* Summary */}
-                    <Show when={showSummarySection()}>
+                    {/* Response */}
+                    <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
-                        <div data-slot="session-turn-summary-header">
-                          <Switch>
-                            <Match when={summary()}>
-                              {(summary) => (
-                                <>
-                                  <h2 data-slot="session-turn-summary-title">Summary</h2>
-                                  <Markdown
-                                    data-slot="session-turn-markdown"
-                                    data-diffs={hasDiffs()}
-                                    text={summary()}
-                                  />
-                                </>
-                              )}
-                            </Match>
-                            <Match when={response()}>
-                              {(response) => (
-                                <>
-                                  <h2 data-slot="session-turn-summary-title">Response</h2>
-                                  <Markdown
-                                    data-slot="session-turn-markdown"
-                                    data-diffs={hasDiffs()}
-                                    text={response()}
-                                  />
-                                </>
-                              )}
-                            </Match>
-                          </Switch>
+                        <div data-slot="session-turn-summary-copy">
+                          <Tooltip value={responseCopied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
+                            <IconButton
+                              icon={responseCopied() ? "check" : "copy"}
+                              variant="secondary"
+                              onClick={handleCopyResponse}
+                            />
+                          </Tooltip>
                         </div>
-                        <Accordion data-slot="session-turn-accordion" multiple>
-                          <For each={msg().summary?.diffs ?? []}>
+                        <div data-slot="session-turn-summary-header">
+                          <h2 data-slot="session-turn-summary-title">Response</h2>
+                          <Markdown
+                            data-slot="session-turn-markdown"
+                            data-diffs={hasDiffs()}
+                            text={response() ?? ""}
+                            cacheKey={responsePartId()}
+                          />
+                        </div>
+                        <Accordion
+                          data-slot="session-turn-accordion"
+                          multiple
+                          value={store.diffsOpen}
+                          onChange={(value) => {
+                            if (!Array.isArray(value)) return
+                            setStore("diffsOpen", value)
+                          }}
+                        >
+                          <For each={(msg().summary?.diffs ?? []).slice(0, store.diffLimit)}>
                             {(diff) => (
                               <Accordion.Item value={diff.file}>
                                 <StickyAccordionHeader>
@@ -633,24 +640,41 @@ export function SessionTurn(
                                   </Accordion.Trigger>
                                 </StickyAccordionHeader>
                                 <Accordion.Content data-slot="session-turn-accordion-content">
-                                  <Dynamic
-                                    component={diffComponent}
-                                    before={{
-                                      name: diff.file!,
-                                      contents: diff.before!,
-                                      cacheKey: checksum(diff.before!),
-                                    }}
-                                    after={{
-                                      name: diff.file!,
-                                      contents: diff.after!,
-                                      cacheKey: checksum(diff.after!),
-                                    }}
-                                  />
+                                  <Show when={store.diffsOpen.includes(diff.file!)}>
+                                    <Dynamic
+                                      component={diffComponent}
+                                      before={{
+                                        name: diff.file!,
+                                        contents: diff.before!,
+                                      }}
+                                      after={{
+                                        name: diff.file!,
+                                        contents: diff.after!,
+                                      }}
+                                    />
+                                  </Show>
                                 </Accordion.Content>
                               </Accordion.Item>
                             )}
                           </For>
                         </Accordion>
+                        <Show when={(msg().summary?.diffs?.length ?? 0) > store.diffLimit}>
+                          <Button
+                            data-slot="session-turn-accordion-more"
+                            variant="ghost"
+                            size="small"
+                            onClick={() => {
+                              const total = msg().summary?.diffs?.length ?? 0
+                              setStore("diffLimit", (limit) => {
+                                const next = limit + diffBatch
+                                if (next > total) return total
+                                return next
+                              })
+                            }}
+                          >
+                            Show more changes ({(msg().summary?.diffs?.length ?? 0) - store.diffLimit})
+                          </Button>
+                        </Show>
                       </div>
                     </Show>
                     <Show when={error() && !props.stepsExpanded}>

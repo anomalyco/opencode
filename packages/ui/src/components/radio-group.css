@@ -7,7 +7,7 @@
     all: unset;
     background-color: var(--surface-base);
     border-radius: var(--radius-md);
-    box-shadow: inset 0 0 0 1px var(--border-weak-base);
+    box-shadow: var(--shadow-xs-border);
     margin: 0;
     padding: 0;
     position: relative;
@@ -23,10 +23,7 @@
   [data-slot="radio-group-indicator"] {
     background: var(--button-secondary-base);
     border-radius: var(--radius-md);
-    box-shadow:
-      var(--shadow-xs),
-      inset 0 0 0 var(--indicator-focus-width, 0px) var(--border-selected),
-      inset 0 0 0 1px var(--border-base);
+    box-shadow: var(--shadow-xs-border);
     content: "";
     opacity: var(--indicator-opacity, 1);
     position: absolute;
@@ -115,7 +112,7 @@
   /* Focus state */
   [data-slot="radio-group-wrapper"]:has([data-slot="radio-group-item-input"]:focus-visible)
     [data-slot="radio-group-indicator"] {
-    --indicator-focus-width: 2px;
+    box-shadow: var(--shadow-xs-border-focus);
   }
 
   /* Hide indicator when nothing is checked */

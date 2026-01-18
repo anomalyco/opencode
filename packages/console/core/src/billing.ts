@@ -25,21 +25,7 @@ export namespace Billing {
   export const get = async () => {
     return Database.use(async (tx) =>
       tx
-        .select({
-          customerID: BillingTable.customerID,
-          paymentMethodID: BillingTable.paymentMethodID,
-          paymentMethodType: BillingTable.paymentMethodType,
-          paymentMethodLast4: BillingTable.paymentMethodLast4,
-          balance: BillingTable.balance,
-          reload: BillingTable.reload,
-          reloadAmount: BillingTable.reloadAmount,
-          reloadTrigger: BillingTable.reloadTrigger,
-          monthlyLimit: BillingTable.monthlyLimit,
-          monthlyUsage: BillingTable.monthlyUsage,
-          timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
-          reloadError: BillingTable.reloadError,
-          timeReloadError: BillingTable.timeReloadError,
-        })
+        .select()
         .from(BillingTable)
         .where(eq(BillingTable.workspaceID, Actor.workspace()))
         .then((r) => r[0]),
@@ -155,6 +141,27 @@ export namespace Billing {
         customerID,
       })
     })
+  }
+
+  export const grantCredit = async (workspaceID: string, dollarAmount: number) => {
+    const amountInMicroCents = centsToMicroCents(dollarAmount * 100)
+    await Database.transaction(async (tx) => {
+      await tx
+        .update(BillingTable)
+        .set({
+          balance: sql`${BillingTable.balance} + ${amountInMicroCents}`,
+        })
+        .where(eq(BillingTable.workspaceID, workspaceID))
+      await tx.insert(PaymentTable).values({
+        workspaceID,
+        id: Identifier.create("payment"),
+        amount: amountInMicroCents,
+        enrichment: {
+          type: "credit",
+        },
+      })
+    })
+    return amountInMicroCents
   }
 
   export const setMonthlyLimit = fn(z.number(), async (input) => {

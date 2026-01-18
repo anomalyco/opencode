@@ -8,6 +8,8 @@ import { TextField } from "./text-field"
 export interface ListSearchProps {
   placeholder?: string
   autofocus?: boolean
+  hideIcon?: boolean
+  class?: string
 }
 
 export interface ListProps<T> extends FilteredListProps<T> {
@@ -67,7 +69,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     if (!props.current) return
     const key = props.key(props.current)
     requestAnimationFrame(() => {
-      const element = scrollRef()!.querySelector(`[data-key="${key}"]`)
+      const element = scrollRef()?.querySelector(`[data-key="${CSS.escape(key)}"]`)
       element?.scrollIntoView({ block: "center" })
     })
   })
@@ -79,8 +81,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
       scrollRef()?.scrollTo(0, 0)
       return
     }
-    const element = scrollRef()?.querySelector(`[data-key="${active()}"]`)
-    element?.scrollIntoView({ block: "center", behavior: "smooth" })
+    const element = scrollRef()?.querySelector(`[data-key="${CSS.escape(active()!)}"]`)
+    element?.scrollIntoView({ block: "center" })
   })
 
   createEffect(() => {
@@ -116,7 +118,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     setScrollRef,
   })
 
-  function GroupHeader(props: { category: string }): JSX.Element {
+  function GroupHeader(groupProps: { category: string }): JSX.Element {
     const [stuck, setStuck] = createSignal(false)
     const [header, setHeader] = createSignal<HTMLDivElement | undefined>(undefined)
 
@@ -138,7 +140,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
     return (
       <div data-slot="list-header" data-stuck={stuck()} ref={setHeader}>
-        {props.category}
+        {groupProps.category}
       </div>
     )
   }
@@ -146,9 +148,11 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   return (
     <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
       <Show when={!!props.search}>
-        <div data-slot="list-search">
+        <div data-slot="list-search" classList={{ [searchProps().class ?? ""]: !!searchProps().class }}>
           <div data-slot="list-search-container">
-            <Icon name="magnifying-glass" />
+            <Show when={!searchProps().hideIcon}>
+              <Icon name="magnifying-glass" />
+            </Show>
             <TextField
               autofocus={searchProps().autofocus}
               variant="ghost"
@@ -175,12 +179,13 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
           fallback={
             <div data-slot="list-empty-state">
               <div data-slot="list-message">
-                {props.emptyMessage ?? "No results"} for <span data-slot="list-filter">&quot;{filter()}&quot;</span>
+                {props.emptyMessage ?? (grouped.loading ? "Loading" : "No results")} for{" "}
+                <span data-slot="list-filter">&quot;{filter()}&quot;</span>
               </div>
             </div>
           }
         >
-          <For each={grouped()}>
+          <For each={grouped.latest}>
             {(group) => (
               <div data-slot="list-group">
                 <Show when={group.category}>
@@ -206,10 +211,16 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                       >
                         {props.children(item)}
                         <Show when={item === props.current}>
-                          <Icon data-slot="list-item-selected-icon" name="check-small" />
+                          <span data-slot="list-item-selected-icon">
+                            <Icon name="check-small" />
+                          </span>
                         </Show>
                         <Show when={props.activeIcon}>
-                          {(icon) => <Icon data-slot="list-item-active-icon" name={icon()} />}
+                          {(icon) => (
+                            <span data-slot="list-item-active-icon">
+                              <Icon name={icon()} />
+                            </span>
+                          )}
                         </Show>
                       </button>
                     )}

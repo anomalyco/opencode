@@ -33,7 +33,7 @@ const ClientOnlyCode = clientOnly(() => import("@opencode-ai/ui/code").then((m) 
 const ClientOnlyWorkerPoolProvider = clientOnly(() =>
   import("@opencode-ai/ui/pierre/worker").then((m) => ({
     default: (props: { children: any }) => (
-      <WorkerPoolProvider pool={m.workerPool}>{props.children}</WorkerPoolProvider>
+      <WorkerPoolProvider pools={m.getWorkerPools()}>{props.children}</WorkerPoolProvider>
     ),
   })),
 )
@@ -162,11 +162,20 @@ export default function () {
 
   return (
     <ErrorBoundary
-      fallback={(e) => {
+      fallback={(error) => {
+        if (SessionDataMissingError.isInstance(error)) {
+          return <NotFound />
+        }
+        console.error(error)
+        const details = error instanceof Error ? (error.stack ?? error.message) : String(error)
         return (
-          <Show when={e.message === "SessionDataMissingError"}>
-            <NotFound />
-          </Show>
+          <div class="min-h-screen w-full bg-background-base text-text-base flex flex-col items-center justify-center gap-4 p-6 text-center">
+            <p class="text-16-medium">Unable to render this share.</p>
+            <p class="text-14-regular text-text-weaker">Check the console for more details.</p>
+            <pre class="text-12-mono text-left whitespace-pre-wrap break-words w-full max-w-200 bg-background-stronger rounded-md p-4">
+              {details}
+            </pre>
+          </div>
         )
       }}
     >
@@ -319,7 +328,7 @@ export default function () {
                               <div class="flex gap-3 items-center">
                                 <IconButton
                                   as={"a"}
-                                  href="https://github.com/sst/opencode"
+                                  href="https://github.com/anomalyco/opencode"
                                   target="_blank"
                                   icon="github"
                                   variant="ghost"

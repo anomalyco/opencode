@@ -47,6 +47,7 @@ export namespace ModelsDev {
       .optional(),
     limit: z.object({
       context: z.number(),
+      input: z.number().optional(),
       output: z.number(),
     }),
     modalities: z
@@ -60,6 +61,7 @@ export namespace ModelsDev {
     options: z.record(z.string(), z.any()),
     headers: z.record(z.string(), z.string()).optional(),
     provider: z.object({ npm: z.string() }).optional(),
+    variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
   })
   export type Model = z.infer<typeof Model>
 
@@ -79,7 +81,11 @@ export namespace ModelsDev {
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
     if (result) return result as Record<string, Provider>
-    const json = await data()
+    if (typeof data === "function") {
+      const json = await data()
+      return JSON.parse(json) as Record<string, Provider>
+    }
+    const json = await fetch("https://models.dev/api.json").then((x) => x.text())
     return JSON.parse(json) as Record<string, Provider>
   }
 

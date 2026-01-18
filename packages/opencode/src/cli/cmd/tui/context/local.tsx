@@ -38,7 +38,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
-        current: agents().find((x) => x.default)?.name ?? agents()[0].name,
+        current: agents()[0].name,
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
@@ -75,9 +75,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         color(name: string) {
-          const agent = agents().find((x) => x.name === name)
+          const all = sync.data.agent
+          const agent = all.find((x) => x.name === name)
           if (agent?.color) return RGBA.fromHex(agent.color)
-          const index = agents().findIndex((x) => x.name === name)
+          const index = all.findIndex((x) => x.name === name)
           if (index === -1) return colors()[0]
           return colors()[index % colors().length]
         },
@@ -112,8 +113,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const file = Bun.file(path.join(Global.Path.state, "model.json"))
+      const state = {
+        pending: false,
+      }
 
       function save() {
+        if (!modelStore.ready) {
+          state.pending = true
+          return
+        }
+        state.pending = false
         Bun.write(
           file,
           JSON.stringify({
@@ -134,6 +143,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         .catch(() => {})
         .finally(() => {
           setModelStore("ready", true)
+          if (state.pending) save()
         })
 
       const args = useArgs()
@@ -253,7 +263,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const next = favorites[index]
           if (!next) return
           setModelStore("model", agent.current().name, { ...next })
-          const uniq = uniqueBy([next, ...modelStore.recent], (x) => x.providerID + x.modelID)
+          const uniq = uniqueBy([next, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
           if (uniq.length > 10) uniq.pop()
           setModelStore(
             "recent",
@@ -273,7 +283,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
             setModelStore("model", agent.current().name, model)
             if (options?.recent) {
-              const uniq = uniqueBy([model, ...modelStore.recent], (x) => x.providerID + x.modelID)
+              const uniq = uniqueBy([model, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
               if (uniq.length > 10) uniq.pop()
               setModelStore(
                 "recent",
@@ -319,9 +329,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const provider = sync.data.provider.find((x) => x.id === m.providerID)
             const info = provider?.models[m.modelID]
             if (!info?.variants) return []
-            return Object.entries(info.variants)
-              .filter(([_, v]) => !v.disabled)
-              .map(([name]) => name)
+            return Object.keys(info.variants)
           },
           set(value: string | undefined) {
             const m = currentModel()

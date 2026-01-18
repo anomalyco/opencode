@@ -169,7 +169,9 @@ export function UsageSection() {
                           </Show>
                         </div>
                       </td>
-                      <td data-slot="usage-cost">${((usage.cost ?? 0) / 100000000).toFixed(4)}</td>
+                      <td data-slot="usage-cost">
+                        ${usage.enrichment?.plan === "sub" ? "0.0000" : ((usage.cost ?? 0) / 100000000).toFixed(4)}
+                      </td>
                     </tr>
                   )
                 }}

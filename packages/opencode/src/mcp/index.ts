@@ -4,7 +4,11 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
-import { type Tool as MCPToolDef, ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
+import {
+  CallToolResultSchema,
+  type Tool as MCPToolDef,
+  ToolListChangedNotificationSchema,
+} from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
@@ -22,11 +26,31 @@ import open from "open"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
+  const DEFAULT_TIMEOUT = 30_000
+
+  export const Resource = z
+    .object({
+      name: z.string(),
+      uri: z.string(),
+      description: z.string().optional(),
+      mimeType: z.string().optional(),
+      client: z.string(),
+    })
+    .meta({ ref: "McpResource" })
+  export type Resource = z.infer<typeof Resource>
 
   export const ToolsChanged = BusEvent.define(
     "mcp.tools.changed",
     z.object({
       server: z.string(),
+    }),
+  )
+
+  export const BrowserOpenFailed = BusEvent.define(
+    "mcp.browser.open.failed",
+    z.object({
+      mcpName: z.string(),
+      url: z.string(),
     }),
   )
 
@@ -93,7 +117,7 @@ export namespace MCP {
   }
 
   // Convert MCP tool definition to AI SDK Tool type
-  function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient): Tool {
+  async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Promise<Tool> {
     const inputSchema = mcpTool.inputSchema
 
     // Spread first, then override type to ensure it's always "object"
@@ -108,10 +132,17 @@ export namespace MCP {
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
-        return client.callTool({
-          name: mcpTool.name,
-          arguments: args as Record<string, unknown>,
-        })
+        return client.callTool(
+          {
+            name: mcpTool.name,
+            arguments: args as Record<string, unknown>,
+          },
+          CallToolResultSchema,
+          {
+            resetTimeoutOnProgress: true,
+            timeout,
+          },
+        )
       },
     })
   }
@@ -119,6 +150,15 @@ export namespace MCP {
   // Store transports for OAuth servers to allow finishing auth
   type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
   const pendingOAuthTransports = new Map<string, TransportWithAuth>()
+
+  // Prompt cache types
+  type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
+
+  type ResourceInfo = Awaited<ReturnType<MCPClient["listResources"]>>["resources"][number]
+  type McpEntry = NonNullable<Config.Info["mcp"]>[string]
+  function isMcpConfigured(entry: McpEntry): entry is Config.Mcp {
+    return typeof entry === "object" && entry !== null && "type" in entry
+  }
 
   const state = Instance.state(
     async () => {
@@ -129,6 +169,11 @@ export namespace MCP {
 
       await Promise.all(
         Object.entries(config).map(async ([key, mcp]) => {
+          if (!isMcpConfigured(mcp)) {
+            log.error("Ignoring MCP config entry without type", { key })
+            return
+          }
+
           // If disabled by config, mark as disabled without trying to connect
           if (mcp.enabled === false) {
             status[key] = { status: "disabled" }
@@ -164,6 +209,51 @@ export namespace MCP {
     },
   )
 
+  // Helper function to fetch prompts for a specific client
+  async function fetchPromptsForClient(clientName: string, client: Client) {
+    const prompts = await client.listPrompts().catch((e) => {
+      log.error("failed to get prompts", { clientName, error: e.message })
+      return undefined
+    })
+
+    if (!prompts) {
+      return
+    }
+
+    const commands: Record<string, PromptInfo & { client: string }> = {}
+
+    for (const prompt of prompts.prompts) {
+      const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
+      const sanitizedPromptName = prompt.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+      const key = sanitizedClientName + ":" + sanitizedPromptName
+
+      commands[key] = { ...prompt, client: clientName }
+    }
+    return commands
+  }
+
+  async function fetchResourcesForClient(clientName: string, client: Client) {
+    const resources = await client.listResources().catch((e) => {
+      log.error("failed to get prompts", { clientName, error: e.message })
+      return undefined
+    })
+
+    if (!resources) {
+      return
+    }
+
+    const commands: Record<string, ResourceInfo & { client: string }> = {}
+
+    for (const resource of resources.resources) {
+      const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
+      const sanitizedResourceName = resource.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+      const key = sanitizedClientName + ":" + sanitizedResourceName
+
+      commands[key] = { ...resource, client: clientName }
+    }
+    return commands
+  }
+
   export async function add(name: string, mcp: Config.Mcp) {
     const s = await state()
     const result = await create(name, mcp)
@@ -183,6 +273,13 @@ export namespace MCP {
         status: s.status,
       }
     }
+    // Close existing client if present to prevent memory leaks
+    const existingClient = s.clients[name]
+    if (existingClient) {
+      await existingClient.close().catch((error) => {
+        log.error("Failed to close existing MCP client", { name, error })
+      })
+    }
     s.clients[name] = result.mcpClient
     s.status[name] = result.status
 
@@ -199,6 +296,7 @@ export namespace MCP {
         status: { status: "disabled" as const },
       }
     }
+
     log.info("found", { key, type: mcp.type })
     let mcpClient: MCPClient | undefined
     let status: Status | undefined = undefined
@@ -245,13 +343,14 @@ export namespace MCP {
       ]
 
       let lastError: Error | undefined
+      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       for (const { name, transport } of transports) {
         try {
           const client = new Client({
             name: "opencode",
             version: Installation.VERSION,
           })
-          await client.connect(transport)
+          await withTimeout(client.connect(transport), connectTimeout)
           registerNotificationHandlers(client, key)
           mcpClient = client
           log.info("connected", { key, transport: name })
@@ -321,12 +420,13 @@ export namespace MCP {
         },
       })
 
+      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       try {
         const client = new Client({
           name: "opencode",
           version: Installation.VERSION,
         })
-        await client.connect(transport)
+        await withTimeout(client.connect(transport), connectTimeout)
         registerNotificationHandlers(client, key)
         mcpClient = client
         status = {
@@ -360,7 +460,7 @@ export namespace MCP {
       }
     }
 
-    const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? 5000).catch((err) => {
+    const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? DEFAULT_TIMEOUT).catch((err) => {
       log.error("failed to get tools from client", { key, error: err })
       return undefined
     })
@@ -396,8 +496,9 @@ export namespace MCP {
     const config = cfg.mcp ?? {}
     const result: Record<string, Status> = {}
 
-    // Include all MCPs from config, not just connected ones
-    for (const key of Object.keys(config)) {
+    // Include all configured MCPs from config, not just connected ones
+    for (const [key, mcp] of Object.entries(config)) {
+      if (!isMcpConfigured(mcp)) continue
       result[key] = s.status[key] ?? { status: "disabled" }
     }
 
@@ -417,6 +518,11 @@ export namespace MCP {
       return
     }
 
+    if (!isMcpConfigured(mcp)) {
+      log.error("Ignoring MCP connect request for config without type", { name })
+      return
+    }
+
     const result = await create(name, { ...mcp, enabled: true })
 
     if (!result) {
@@ -431,6 +537,13 @@ export namespace MCP {
     const s = await state()
     s.status[name] = result.status
     if (result.mcpClient) {
+      // Close existing client if present to prevent memory leaks
+      const existingClient = s.clients[name]
+      if (existingClient) {
+        await existingClient.close().catch((error) => {
+          log.error("Failed to close existing MCP client", { name, error })
+        })
+      }
       s.clients[name] = result.mcpClient
     }
   }
@@ -450,7 +563,10 @@ export namespace MCP {
   export async function tools() {
     const result: Record<string, Tool> = {}
     const s = await state()
+    const cfg = await Config.get()
+    const config = cfg.mcp ?? {}
     const clientsSnapshot = await clients()
+    const defaultTimeout = cfg.experimental?.mcp_timeout
 
     for (const [clientName, client] of Object.entries(clientsSnapshot)) {
       // Only include tools from connected MCPs (skip disabled ones)
@@ -471,12 +587,112 @@ export namespace MCP {
       if (!toolsResult) {
         continue
       }
+      const mcpConfig = config[clientName]
+      const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
+      const timeout = entry?.timeout ?? defaultTimeout
       for (const mcpTool of toolsResult.tools) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = convertMcpTool(mcpTool, client)
+        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, timeout)
       }
     }
+    return result
+  }
+
+  export async function prompts() {
+    const s = await state()
+    const clientsSnapshot = await clients()
+
+    const prompts = Object.fromEntries<PromptInfo & { client: string }>(
+      (
+        await Promise.all(
+          Object.entries(clientsSnapshot).map(async ([clientName, client]) => {
+            if (s.status[clientName]?.status !== "connected") {
+              return []
+            }
+
+            return Object.entries((await fetchPromptsForClient(clientName, client)) ?? {})
+          }),
+        )
+      ).flat(),
+    )
+
+    return prompts
+  }
+
+  export async function resources() {
+    const s = await state()
+    const clientsSnapshot = await clients()
+
+    const result = Object.fromEntries<ResourceInfo & { client: string }>(
+      (
+        await Promise.all(
+          Object.entries(clientsSnapshot).map(async ([clientName, client]) => {
+            if (s.status[clientName]?.status !== "connected") {
+              return []
+            }
+
+            return Object.entries((await fetchResourcesForClient(clientName, client)) ?? {})
+          }),
+        )
+      ).flat(),
+    )
+
+    return result
+  }
+
+  export async function getPrompt(clientName: string, name: string, args?: Record<string, string>) {
+    const clientsSnapshot = await clients()
+    const client = clientsSnapshot[clientName]
+
+    if (!client) {
+      log.warn("client not found for prompt", {
+        clientName,
+      })
+      return undefined
+    }
+
+    const result = await client
+      .getPrompt({
+        name: name,
+        arguments: args,
+      })
+      .catch((e) => {
+        log.error("failed to get prompt from MCP server", {
+          clientName,
+          promptName: name,
+          error: e.message,
+        })
+        return undefined
+      })
+
+    return result
+  }
+
+  export async function readResource(clientName: string, resourceUri: string) {
+    const clientsSnapshot = await clients()
+    const client = clientsSnapshot[clientName]
+
+    if (!client) {
+      log.warn("client not found for prompt", {
+        clientName: clientName,
+      })
+      return undefined
+    }
+
+    const result = await client
+      .readResource({
+        uri: resourceUri,
+      })
+      .catch((e) => {
+        log.error("failed to get prompt from MCP server", {
+          clientName: clientName,
+          resourceUri: resourceUri,
+          error: e.message,
+        })
+        return undefined
+      })
+
     return result
   }
 
@@ -490,6 +706,10 @@ export namespace MCP {
 
     if (!mcpConfig) {
       throw new Error(`MCP server not found: ${mcpName}`)
+    }
+
+    if (!isMcpConfigured(mcpConfig)) {
+      throw new Error(`MCP server ${mcpName} is disabled or missing configuration`)
     }
 
     if (mcpConfig.type !== "remote") {
@@ -575,7 +795,32 @@ export namespace MCP {
     // The SDK has already added the state parameter to the authorization URL
     // We just need to open the browser
     log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
-    await open(authorizationUrl)
+    try {
+      const subprocess = await open(authorizationUrl)
+      // The open package spawns a detached process and returns immediately.
+      // We need to listen for errors which fire asynchronously:
+      // - "error" event: command not found (ENOENT)
+      // - "exit" with non-zero code: command exists but failed (e.g., no display)
+      await new Promise<void>((resolve, reject) => {
+        // Give the process a moment to fail if it's going to
+        const timeout = setTimeout(() => resolve(), 500)
+        subprocess.on("error", (error) => {
+          clearTimeout(timeout)
+          reject(error)
+        })
+        subprocess.on("exit", (code) => {
+          if (code !== null && code !== 0) {
+            clearTimeout(timeout)
+            reject(new Error(`Browser open failed with exit code ${code}`))
+          }
+        })
+      })
+    } catch (error) {
+      // Browser opening failed (e.g., in remote/headless sessions like SSH, devcontainers)
+      // Emit event so CLI can display the URL for manual opening
+      log.warn("failed to open browser, user must open URL manually", { mcpName, error })
+      Bus.publish(BrowserOpenFailed, { mcpName, url: authorizationUrl })
+    }
 
     // Wait for callback using the OAuth state parameter
     const code = await McpOAuthCallback.waitForCallback(oauthState)
@@ -618,6 +863,10 @@ export namespace MCP {
         throw new Error(`MCP server not found: ${mcpName}`)
       }
 
+      if (!isMcpConfigured(mcpConfig)) {
+        throw new Error(`MCP server ${mcpName} is disabled or missing configuration`)
+      }
+
       // Re-add the MCP server to establish connection
       pendingOAuthTransports.delete(mcpName)
       const result = await add(mcpName, mcpConfig)
@@ -650,7 +899,9 @@ export namespace MCP {
   export async function supportsOAuth(mcpName: string): Promise<boolean> {
     const cfg = await Config.get()
     const mcpConfig = cfg.mcp?.[mcpName]
-    return mcpConfig?.type === "remote" && mcpConfig.oauth !== false
+    if (!mcpConfig) return false
+    if (!isMcpConfigured(mcpConfig)) return false
+    return mcpConfig.type === "remote" && mcpConfig.oauth !== false
   }
 
   /**

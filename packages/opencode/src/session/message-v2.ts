@@ -117,7 +117,15 @@ export namespace MessageV2 {
     ref: "SymbolSource",
   })
 
-  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource]).meta({
+  export const ResourceSource = FilePartSourceBase.extend({
+    type: z.literal("resource"),
+    clientName: z.string(),
+    uri: z.string(),
+  }).meta({
+    ref: "ResourceSource",
+  })
+
+  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource, ResourceSource]).meta({
     ref: "FilePartSource",
   })
 
@@ -160,6 +168,12 @@ export namespace MessageV2 {
     prompt: z.string(),
     description: z.string(),
     agent: z.string(),
+    model: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+      })
+      .optional(),
     command: z.string().optional(),
   })
   export type SubtaskPart = z.infer<typeof SubtaskPart>
@@ -476,7 +490,6 @@ export namespace MessageV2 {
           role: "assistant",
           parts: [],
         }
-        result.push(assistantMessage)
         for (const part of msg.parts) {
           if (part.type === "text")
             assistantMessage.parts.push({
@@ -497,7 +510,7 @@ export namespace MessageV2 {
                   parts: [
                     {
                       type: "text",
-                      text: `Tool ${part.tool} returned an attachment:`,
+                      text: `The tool ${part.tool} returned the following attachments:`,
                     },
                     ...part.state.attachments.map((attachment) => ({
                       type: "file" as const,
@@ -526,6 +539,17 @@ export namespace MessageV2 {
                 errorText: part.state.error,
                 callProviderMetadata: part.metadata,
               })
+            // Handle pending/running tool calls to prevent dangling tool_use blocks
+            // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
+            if (part.state.status === "pending" || part.state.status === "running")
+              assistantMessage.parts.push({
+                type: ("tool-" + part.tool) as `tool-${string}`,
+                state: "output-error",
+                toolCallId: part.callID,
+                input: part.state.input,
+                errorText: "[Tool execution was interrupted]",
+                callProviderMetadata: part.metadata,
+              })
           }
           if (part.type === "reasoning") {
             assistantMessage.parts.push({
@@ -534,6 +558,9 @@ export namespace MessageV2 {
               providerMetadata: part.metadata,
             })
           }
+        }
+        if (assistantMessage.parts.length > 0) {
+          result.push(assistantMessage)
         }
       }
     }
@@ -654,6 +681,7 @@ export namespace MessageV2 {
           return `${msg}: ${e.responseBody}`
         }).trim()
 
+        const metadata = e.url ? { url: e.url } : undefined
         return new MessageV2.APIError(
           {
             message,
@@ -661,6 +689,7 @@ export namespace MessageV2 {
             isRetryable: e.isRetryable,
             responseHeaders: e.responseHeaders,
             responseBody: e.responseBody,
+            metadata,
           },
           { cause: e },
         ).toObject()

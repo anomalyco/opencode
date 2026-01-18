@@ -13,6 +13,7 @@ export interface TabsTriggerProps extends ComponentProps<typeof Kobalte.Trigger>
   }
   hideCloseButton?: boolean
   closeButton?: JSX.Element
+  onMiddleClick?: () => void
 }
 export interface TabsContentProps extends ComponentProps<typeof Kobalte.Content> {}
 
@@ -55,6 +56,7 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
     "children",
     "closeButton",
     "hideCloseButton",
+    "onMiddleClick",
   ])
   return (
     <div
@@ -62,6 +64,12 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
       classList={{
         ...(split.classList ?? {}),
         [split.class ?? ""]: !!split.class,
+      }}
+      onAuxClick={(e) => {
+        if (e.button === 1 && split.onMiddleClick) {
+          e.preventDefault()
+          split.onMiddleClick()
+        }
       }}
     >
       <Kobalte.Trigger
