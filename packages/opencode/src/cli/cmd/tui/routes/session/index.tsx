@@ -112,10 +112,20 @@ export function Session() {
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
-  const children = createMemo(() => {
-    const parentID = session()?.parentID ?? session()?.id
+  // Siblings: sessions with the same parentID as current session (NOT including parent)
+  const siblings = createMemo(() => {
+    const currentParentID = session()?.parentID
+    if (!currentParentID) return [] // Root session has no siblings
     return sync.data.session
-      .filter((x) => x.parentID === parentID || x.id === parentID)
+      .filter((x) => x.parentID === currentParentID)
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  })
+  // Children: sessions that have current session as their parent
+  const children = createMemo(() => {
+    const currentID = session()?.id
+    if (!currentID) return []
+    return sync.data.session
+      .filter((x) => x.parentID === currentID)
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
@@ -279,15 +289,16 @@ export function Session() {
 
   const local = useLocal()
 
-  function moveChild(direction: number) {
-    if (children().length === 1) return
-    let next = children().findIndex((x) => x.id === session()?.id) + direction
-    if (next >= children().length) next = 0
-    if (next < 0) next = children().length - 1
-    if (children()[next]) {
+  // Navigate between siblings (same depth, same parent)
+  function moveSibling(direction: number) {
+    if (siblings().length <= 1) return // No siblings to navigate to
+    let next = siblings().findIndex((x) => x.id === session()?.id) + direction
+    if (next >= siblings().length) next = 0
+    if (next < 0) next = siblings().length - 1
+    if (siblings()[next]) {
       navigate({
         type: "session",
-        sessionID: children()[next].id,
+        sessionID: siblings()[next].id,
       })
     }
   }
@@ -854,7 +865,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        moveChild(1)
+        moveSibling(1)
         dialog.clear()
       },
     },
@@ -865,7 +876,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        moveChild(-1)
+        moveSibling(-1)
         dialog.clear()
       },
     },
@@ -893,7 +904,8 @@ export function Session() {
       category: "Session",
       hidden: true,
       onSelect: (dialog) => {
-        const firstChild = children().find((x) => x.id !== session()?.id)
+        // children() now correctly returns only actual children (not siblings)
+        const firstChild = children()[0]
         if (firstChild) {
           navigate({
             type: "session",
