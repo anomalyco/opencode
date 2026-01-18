@@ -67,9 +67,9 @@ describe("convertToKiroPayload", () => {
 
     // System prompt should be embedded in history as first user/assistant exchange
     const firstHistoryItem = result.conversationState.history[0]
-    expect(firstHistoryItem?.userInputMessage?.content).toContain("--- CONTEXT ENTRY BEGIN ---")
+    expect(firstHistoryItem?.userInputMessage?.content).toContain("--- SYSTEM INSTRUCTIONS BEGIN ---")
     expect(firstHistoryItem?.userInputMessage?.content).toContain("You are a helpful assistant")
-    expect(firstHistoryItem?.userInputMessage?.content).toContain("--- CONTEXT ENTRY END ---")
+    expect(firstHistoryItem?.userInputMessage?.content).toContain("--- SYSTEM INSTRUCTIONS END ---")
   })
 
   test("converts tools to Kiro format", () => {
@@ -184,7 +184,6 @@ describe("convertToKiroPayload", () => {
           },
         ],
       },
-      { role: "user" as const, content: [{ type: "text" as const, text: "Thanks" }] },
     ]
 
     const result = convertToKiroPayload(prompt as any, modelId)
