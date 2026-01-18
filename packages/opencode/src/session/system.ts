@@ -21,6 +21,17 @@ import { Flag } from "@/flag/flag"
 
 const log = Log.create({ service: "system-prompt" })
 
+async function resolveRelativeInstruction(instruction: string): Promise<string[]> {
+  if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+    return Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
+  }
+  if (!Flag.OPENCODE_CONFIG_DIR) {
+    log.warn(`Skipping relative instruction "${instruction}" - no OPENCODE_CONFIG_DIR set while project config is disabled`)
+    return []
+  }
+  return Filesystem.globUp(instruction, Flag.OPENCODE_CONFIG_DIR, Flag.OPENCODE_CONFIG_DIR).catch(() => [])
+}
+
 export namespace SystemPrompt {
   export function header(providerID: string) {
     if (providerID.includes("anthropic")) return [PROMPT_ANTHROPIC_SPOOF.trim()]
@@ -84,7 +95,7 @@ export namespace SystemPrompt {
     const paths = new Set<string>()
 
     // Only scan local rule files when project discovery is enabled
-    if (!Flag.OPENCODE_DISABLE_PROJECT_DISCOVERY) {
+    if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
       for (const localRuleFile of LOCAL_RULE_FILES) {
         const matches = await Filesystem.findUp(localRuleFile, Instance.directory, Instance.worktree)
         if (matches.length > 0) {
@@ -121,24 +132,7 @@ export namespace SystemPrompt {
             }),
           ).catch(() => [])
         } else {
-          // Relative path handling
-          if (Flag.OPENCODE_DISABLE_PROJECT_DISCOVERY) {
-            if (Flag.OPENCODE_CONFIG_DIR) {
-              // Resolve against trusted config dir (don't traverse up)
-              matches = await Filesystem.globUp(
-                instruction,
-                Flag.OPENCODE_CONFIG_DIR,
-                Flag.OPENCODE_CONFIG_DIR
-              ).catch(() => [])
-            } else {
-              // No trusted base for relative path - skip with warning
-              log.warn(`Skipping relative instruction "${instruction}" - no OPENCODE_CONFIG_DIR set while project discovery is disabled`)
-              continue
-            }
-          } else {
-            // Normal behavior - resolve from project
-            matches = await Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
-          }
+          matches = await resolveRelativeInstruction(instruction)
         }
         matches.forEach((path) => paths.add(path))
       }

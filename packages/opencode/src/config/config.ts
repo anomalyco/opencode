@@ -72,7 +72,7 @@ export namespace Config {
     }
 
     // Project config has highest precedence (overrides global and remote)
-    if (!Flag.OPENCODE_DISABLE_PROJECT_DISCOVERY) {
+    if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
       for (const file of ["opencode.jsonc", "opencode.json"]) {
         const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
         for (const resolved of found.toReversed()) {
@@ -94,7 +94,7 @@ export namespace Config {
     const directories = [
       Global.Path.config,
       // Only scan project .opencode/ directories when project discovery is enabled
-      ...(!Flag.OPENCODE_DISABLE_PROJECT_DISCOVERY
+      ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
               targets: [".opencode"],

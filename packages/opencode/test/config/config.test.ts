@@ -1375,10 +1375,10 @@ describe("deduplicatePlugins", () => {
   })
 })
 
-describe("OPENCODE_DISABLE_PROJECT_DISCOVERY", () => {
+describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   test("skips project config files when flag is set", async () => {
-    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"]
-    process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"] = "true"
+    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
     
     try {
       await using tmp = await tmpdir({
@@ -1405,16 +1405,16 @@ describe("OPENCODE_DISABLE_PROJECT_DISCOVERY", () => {
       })
     } finally {
       if (originalEnv === undefined) {
-        delete process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"]
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
       } else {
-        process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"] = originalEnv
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalEnv
       }
     }
   })
 
   test("skips project .opencode/ directories when flag is set", async () => {
-    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"]
-    process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"] = "true"
+    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
     
     try {
       await using tmp = await tmpdir({
@@ -1439,16 +1439,16 @@ describe("OPENCODE_DISABLE_PROJECT_DISCOVERY", () => {
       })
     } finally {
       if (originalEnv === undefined) {
-        delete process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"]
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
       } else {
-        process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"] = originalEnv
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalEnv
       }
     }
   })
 
   test("still loads global config when flag is set", async () => {
-    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"]
-    process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"] = "true"
+    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
     
     try {
       await using tmp = await tmpdir()
@@ -1463,21 +1463,21 @@ describe("OPENCODE_DISABLE_PROJECT_DISCOVERY", () => {
       })
     } finally {
       if (originalEnv === undefined) {
-        delete process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"]
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
       } else {
-        process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"] = originalEnv
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalEnv
       }
     }
   })
 
   test("skips relative instructions with warning when flag is set but no config dir", async () => {
-    const originalDisable = process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"]
+    const originalDisable = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
     const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
     
     try {
       // Ensure no config dir is set
       delete process.env["OPENCODE_CONFIG_DIR"]
-      process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"] = "true"
+      process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
       
       await using tmp = await tmpdir({
         init: async (dir) => {
@@ -1508,9 +1508,9 @@ describe("OPENCODE_DISABLE_PROJECT_DISCOVERY", () => {
       })
     } finally {
       if (originalDisable === undefined) {
-        delete process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"]
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
       } else {
-        process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"] = originalDisable
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalDisable
       }
       if (originalConfigDir === undefined) {
         delete process.env["OPENCODE_CONFIG_DIR"]
@@ -1521,7 +1521,7 @@ describe("OPENCODE_DISABLE_PROJECT_DISCOVERY", () => {
   })
 
   test("OPENCODE_CONFIG_DIR still works when flag is set", async () => {
-    const originalDisable = process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"]
+    const originalDisable = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
     const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
     
     try {
@@ -1551,7 +1551,7 @@ describe("OPENCODE_DISABLE_PROJECT_DISCOVERY", () => {
         },
       })
       
-      process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"] = "true"
+      process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
       process.env["OPENCODE_CONFIG_DIR"] = configDirTmp.path
       
       await Instance.provide({
@@ -1564,9 +1564,9 @@ describe("OPENCODE_DISABLE_PROJECT_DISCOVERY", () => {
       })
     } finally {
       if (originalDisable === undefined) {
-        delete process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"]
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
       } else {
-        process.env["OPENCODE_DISABLE_PROJECT_DISCOVERY"] = originalDisable
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalDisable
       }
       if (originalConfigDir === undefined) {
         delete process.env["OPENCODE_CONFIG_DIR"]
