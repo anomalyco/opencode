@@ -141,17 +141,25 @@ export function Prompt(props: PromptProps) {
 
       syncedSessionID = sessionID
 
-      // Sync agent from session - allow primary agents and orchestrators
-      // This ensures orchestrator sessions use the correct agent for tool access
+      // Check if this is a child session (has parentID)
+      const session = sync.data.session.find((s) => s.id === sessionID)
+      const isChildSession = !!session?.parentID
+
+      // Sync agent from session
       if (msg.agent) {
-        const allAgents = sync.data.agent
-        const sessionAgent = allAgents.find((x) => x.name === msg.agent)
-        const isAllowedAgent = sessionAgent?.mode === "primary" || sessionAgent?.mode === "orchestrator"
-        if (isAllowedAgent) {
+        if (isChildSession) {
+          // Child session: lock agent (Tab won't change it)
+          local.agent.set(msg.agent, true)
+        } else {
+          // Primary session: unlock and set agent
+          local.agent.unlock()
           local.agent.set(msg.agent)
-          if (msg.model) local.model.set(msg.model)
-          if (msg.variant) local.model.variant.set(msg.variant)
         }
+        if (msg.model) local.model.set(msg.model)
+        if (msg.variant) local.model.variant.set(msg.variant)
+      } else if (!isChildSession) {
+        // Returning to primary with no agent message - unlock
+        local.agent.unlock()
       }
     }
   })

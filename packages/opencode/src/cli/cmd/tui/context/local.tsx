@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
@@ -52,29 +52,58 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.primary,
         theme.error,
       ])
+      // Track if we're in a child session (agent is locked)
+      const [lockedAgent, setLockedAgent] = createSignal<string | null>(null)
+
       return {
         list() {
           return primaryAgents()
         },
         current() {
-          // Check interactive agents (includes orchestrator) for current
+          // If agent is locked (child session), return that agent
+          const locked = lockedAgent()
+          if (locked) {
+            const agent = sync.data.agent.find((x) => x.name === locked)
+            if (agent) return agent
+          }
+          // Otherwise use the store (primary session)
           return interactiveAgents().find((x) => x.name === agentStore.current) ?? primaryAgents()[0]
         },
-        set(name: string) {
-          // Allow setting any interactive agent (primary or orchestrator)
-          if (!interactiveAgents().some((x) => x.name === name))
+        set(name: string, lock = false) {
+          // Find agent in all agents (not just interactive)
+          const agent = sync.data.agent.find((x) => x.name === name)
+          if (!agent)
             return toast.show({
               variant: "warning",
               message: `Agent not found: ${name}`,
               duration: 3000,
             })
-          setAgentStore("current", name)
+          
+          if (lock) {
+            // Lock agent for child session (Tab won't change it)
+            setLockedAgent(name)
+          } else {
+            // Unlock and set for primary session
+            setLockedAgent(null)
+            if (interactiveAgents().some((x) => x.name === name)) {
+              setAgentStore("current", name)
+            }
+          }
+        },
+        unlock() {
+          // Unlock agent when returning to primary session
+          setLockedAgent(null)
+        },
+        isLocked() {
+          return lockedAgent() !== null
         },
         move(direction: 1 | -1) {
+          // Tab switching disabled when agent is locked (child session)
+          if (lockedAgent()) return
+          
           // Tab switching only cycles through primary agents (build/plan)
           batch(() => {
             let currentIndex = primaryAgents().findIndex((x) => x.name === agentStore.current)
-            // If current agent is orchestrator (not in primary list), start from 0
             if (currentIndex === -1) currentIndex = 0
             let next = currentIndex + direction
             if (next < 0) next = primaryAgents().length - 1
