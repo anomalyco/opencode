@@ -16,6 +16,7 @@ import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
+import { Session } from "@/session"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -154,12 +155,20 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
+      const session = await (async () => {
+        try {
+          return await Session.get(ctx.sessionID)
+        } catch {
+          return undefined
+        }
+      })()
       const proc = spawn(params.command, {
         shell,
         cwd,
         env: {
           ...process.env,
           OPENCODE_SESSION_ID: ctx.sessionID,
+          ...(session?.title && { OPENCODE_SESSION_TITLE: session.title }),
         },
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
