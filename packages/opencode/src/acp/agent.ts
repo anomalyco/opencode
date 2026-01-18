@@ -637,7 +637,7 @@ export namespace ACP {
           // - data: URLs with other types → resource with blob
           const url = part.url
           const filename = part.filename ?? "file"
-          let mime = part.mime || "application/octet-stream"
+          const mime = part.mime || "application/octet-stream"
           const messageChunk = message.info.role === "user" ? "user_message_chunk" : "agent_message_chunk"
 
           if (url.startsWith("file://")) {
@@ -659,10 +659,9 @@ export namespace ACP {
             const dataMime = base64Match?.[1]
             const base64Data = base64Match?.[2] ?? ""
 
-            // Prefer MIME type from data URL (more accurate than stored part.mime)
-            if (dataMime) mime = dataMime
+            const effectiveMime = dataMime || mime
 
-            if (mime.startsWith("image/")) {
+            if (effectiveMime.startsWith("image/")) {
               // Image - send as image block
               await this.connection
                 .sessionUpdate({
@@ -671,7 +670,7 @@ export namespace ACP {
                     sessionUpdate: messageChunk,
                     content: {
                       type: "image",
-                      mimeType: mime,
+                      mimeType: effectiveMime,
                       data: base64Data,
                       uri: `file://${filename}`,
                     },
@@ -682,10 +681,10 @@ export namespace ACP {
                 })
             } else {
               // Non-image: text types get decoded, binary types stay as blob
-              const isText = mime.startsWith("text/") || mime === "application/json"
+              const isText = effectiveMime.startsWith("text/") || effectiveMime === "application/json"
               const resource = isText
-                ? { uri: `file://${filename}`, mimeType: mime, text: Buffer.from(base64Data, "base64").toString("utf-8") }
-                : { uri: `file://${filename}`, mimeType: mime, blob: base64Data }
+                ? { uri: `file://${filename}`, mimeType: effectiveMime, text: Buffer.from(base64Data, "base64").toString("utf-8") }
+                : { uri: `file://${filename}`, mimeType: effectiveMime, blob: base64Data }
 
               await this.connection
                 .sessionUpdate({
