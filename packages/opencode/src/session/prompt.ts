@@ -44,6 +44,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { OpenAIConversationState } from "./openai-conversation"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -590,14 +591,24 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
+      const previousResponseId = OpenAIConversationState.isGPTModel(model)
+        ? OpenAIConversationState.latestResponseId(sessionMessages)
+        : undefined
+      const useConversationState = !!previousResponseId && OpenAIConversationState.isGPTModel(model) && !!lastFinished
+      const messagesForModel = useConversationState
+        ? sessionMessages.filter((m) => m.info.id > lastFinished!.id)
+        : sessionMessages
+      const messagesFallbackForModel = useConversationState ? sessionMessages : undefined
+
       const result = await processor.process({
         user: lastUser,
         agent,
         abort,
         sessionID,
         system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
+        previousResponseId,
         messages: [
-          ...MessageV2.toModelMessage(sessionMessages),
+          ...MessageV2.toModelMessage(messagesForModel),
           ...(isLastStep
             ? [
                 {
@@ -607,6 +618,19 @@ export namespace SessionPrompt {
               ]
             : []),
         ],
+        messagesFallback: messagesFallbackForModel
+          ? [
+              ...MessageV2.toModelMessage(messagesFallbackForModel),
+              ...(isLastStep
+                ? [
+                    {
+                      role: "assistant" as const,
+                      content: MAX_STEPS,
+                    },
+                  ]
+                : []),
+            ]
+          : undefined,
         tools,
         model,
       })

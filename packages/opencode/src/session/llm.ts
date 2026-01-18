@@ -3,6 +3,7 @@ import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
 import {
+  APICallError,
   streamText,
   wrapLanguageModel,
   type ModelMessage,
@@ -24,6 +25,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
+import { OpenAIConversationState } from "./openai-conversation"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -38,9 +40,11 @@ export namespace LLM {
     system: string[]
     abort: AbortSignal
     messages: ModelMessage[]
+    messagesFallback?: ModelMessage[]
     small?: boolean
     tools: Record<string, Tool>
     retries?: number
+    previousResponseId?: string
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
@@ -112,6 +116,16 @@ export namespace LLM {
       options.instructions = SystemPrompt.instructions()
     }
 
+    const useOpenAIConversationState =
+      !isCodex && OpenAIConversationState.isGPTModel(input.model) && input.model.api.npm === "@ai-sdk/openai"
+    if (useOpenAIConversationState) {
+      options.store = true
+      if (input.previousResponseId) {
+        options.previousResponseId = input.previousResponseId
+      }
+      options.instructions = system.join("\n\n")
+    }
+
     const params = await Plugin.trigger(
       "chat.params",
       {
@@ -162,97 +176,183 @@ export namespace LLM {
       })
     }
 
-    return streamText({
-      onError(error) {
-        l.error("stream error", {
-          error,
-        })
-      },
-      async experimental_repairToolCall(failed) {
-        const lower = failed.toolCall.toolName.toLowerCase()
-        if (lower !== failed.toolCall.toolName && tools[lower]) {
-          l.info("repairing tool call", {
-            tool: failed.toolCall.toolName,
-            repaired: lower,
+    function isInvalidPreviousResponseIdError(err: unknown): boolean {
+      if (!APICallError.isInstance(err)) return false
+      const status = err.statusCode
+      if (status !== 400 && status !== 404) return false
+      const haystack = [err.message, err.responseBody].filter(Boolean).join("\n").toLowerCase()
+      return haystack.includes("previous_response_id") || haystack.includes("previousresponseid")
+    }
+
+    const activeTools = Object.keys(tools).filter((x) => x !== "invalid" && x !== "_noop")
+
+    async function createStream(args: { messages: ModelMessage[]; providerOptionsBase: Record<string, any> }) {
+      const providerOptions = ProviderTransform.providerOptions(input.model, args.providerOptionsBase)
+      return streamText({
+        onError(error) {
+          l.error("stream error", {
+            error,
           })
+        },
+        async experimental_repairToolCall(failed) {
+          const lower = failed.toolCall.toolName.toLowerCase()
+          if (lower !== failed.toolCall.toolName && tools[lower]) {
+            l.info("repairing tool call", {
+              tool: failed.toolCall.toolName,
+              repaired: lower,
+            })
+            return {
+              ...failed.toolCall,
+              toolName: lower,
+            }
+          }
           return {
             ...failed.toolCall,
-            toolName: lower,
+            input: JSON.stringify({
+              tool: failed.toolCall.toolName,
+              error: failed.error.message,
+            }),
+            toolName: "invalid",
           }
-        }
-        return {
-          ...failed.toolCall,
-          input: JSON.stringify({
-            tool: failed.toolCall.toolName,
-            error: failed.error.message,
-          }),
-          toolName: "invalid",
-        }
-      },
-      temperature: params.temperature,
-      topP: params.topP,
-      topK: params.topK,
-      providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid" && x !== "_noop"),
-      tools,
-      maxOutputTokens,
-      abortSignal: input.abort,
-      headers: {
-        ...(isCodex
-          ? {
-              originator: "opencode",
-              "User-Agent": `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
-              session_id: input.sessionID,
-            }
-          : undefined),
-        ...(input.model.providerID.startsWith("opencode")
-          ? {
-              "x-opencode-project": Instance.project.id,
-              "x-opencode-session": input.sessionID,
-              "x-opencode-request": input.user.id,
-              "x-opencode-client": Flag.OPENCODE_CLIENT,
-            }
-          : input.model.providerID !== "anthropic"
+        },
+        temperature: params.temperature,
+        topP: params.topP,
+        topK: params.topK,
+        providerOptions,
+        activeTools,
+        tools,
+        maxOutputTokens,
+        abortSignal: input.abort,
+        headers: {
+          ...(isCodex
             ? {
-                "User-Agent": `opencode/${Installation.VERSION}`,
+                originator: "opencode",
+                "User-Agent": `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
+                session_id: input.sessionID,
               }
             : undefined),
-        ...input.model.headers,
-      },
-      maxRetries: input.retries ?? 0,
-      messages: [
-        ...(isCodex
-          ? [
-              {
-                role: "user",
-                content: system.join("\n\n"),
-              } as ModelMessage,
-            ]
-          : system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            )),
-        ...input.messages,
-      ],
-      model: wrapLanguageModel({
-        model: language,
-        middleware: [
-          {
-            async transformParams(args) {
-              if (args.type === "stream") {
-                // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
+          ...(input.model.providerID.startsWith("opencode")
+            ? {
+                "x-opencode-project": Instance.project.id,
+                "x-opencode-session": input.sessionID,
+                "x-opencode-request": input.user.id,
+                "x-opencode-client": Flag.OPENCODE_CLIENT,
               }
-              return args.params
-            },
-          },
-          extractReasoningMiddleware({ tagName: "think", startWithReasoning: false }),
+            : input.model.providerID !== "anthropic"
+              ? {
+                  "User-Agent": `opencode/${Installation.VERSION}`,
+                }
+              : undefined),
+          ...input.model.headers,
+        },
+        maxRetries: input.retries ?? 0,
+        messages: [
+          ...(isCodex
+            ? [
+                {
+                  role: "user",
+                  content: system.join("\n\n"),
+                } as ModelMessage,
+              ]
+            : useOpenAIConversationState
+              ? []
+              : system.map(
+                  (x): ModelMessage => ({
+                    role: "system",
+                    content: x,
+                  }),
+                )),
+          ...args.messages,
         ],
-      }),
-      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+        model: wrapLanguageModel({
+          model: language,
+          middleware: [
+            {
+              async transformParams(inner) {
+                if (inner.type === "stream") {
+                  // @ts-expect-error
+                  inner.params.prompt = ProviderTransform.message(inner.params.prompt, input.model, options)
+                }
+                return inner.params
+              },
+            },
+            extractReasoningMiddleware({ tagName: "think", startWithReasoning: false }),
+          ],
+        }),
+        experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+      })
+    }
+
+    const initial = await createStream({
+      messages: input.messages,
+      providerOptionsBase: params.options,
     })
+
+    const shouldEnableFallbackRetry = useOpenAIConversationState && !!input.previousResponseId && !!input.messagesFallback
+    if (!shouldEnableFallbackRetry) return initial
+
+    async function* fullStreamWithFallback() {
+      const buffer: any[] = []
+      let committed = false
+      for await (const value of initial.fullStream) {
+        const shouldCommit =
+          value.type === "text-start" ||
+          value.type === "reasoning-start" ||
+          value.type === "tool-input-start" ||
+          value.type === "tool-call"
+
+        if (!committed) {
+          if (value.type === "error") {
+            if (isInvalidPreviousResponseIdError(value.error)) {
+              l.info("retrying without previousResponseId", {
+                sessionID: input.sessionID,
+                modelID: input.model.id,
+              })
+
+              const fallbackProviderOptions = { ...(params.options ?? {}) }
+              delete fallbackProviderOptions.previousResponseId
+              fallbackProviderOptions.store = true
+
+              const fallback = await createStream({
+                messages: input.messagesFallback!,
+                providerOptionsBase: fallbackProviderOptions,
+              })
+              for await (const next of fallback.fullStream) {
+                yield next
+              }
+              return
+            }
+
+            // Commit buffered events before surfacing the error.
+            for (const item of buffer) yield item
+            yield value
+            return
+          }
+
+          buffer.push(value)
+          if (shouldCommit) {
+            committed = true
+            for (const item of buffer) yield item
+            buffer.length = 0
+          }
+          continue
+        }
+
+        if (value.type === "error") {
+          yield value
+          continue
+        }
+
+        yield value
+      }
+
+      for (const item of buffer) yield item
+    }
+
+    return {
+      ...initial,
+      fullStream: fullStreamWithFallback(),
+    }
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
