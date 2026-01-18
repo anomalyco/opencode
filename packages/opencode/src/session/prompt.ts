@@ -1702,14 +1702,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         : await lastModel(input.sessionID)
       : taskModel
 
-    await Plugin.trigger(
+    const hookOutput = await Plugin.trigger(
       "command.execute.before",
       {
         command: input.command,
         sessionID: input.sessionID,
         arguments: input.arguments,
       },
-      { parts },
+      { parts, noReply: false },
     )
 
     const result = (await prompt({
@@ -1718,6 +1718,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       model: userModel,
       agent: userAgent,
       parts,
+      noReply: hookOutput.noReply,
       variant: input.variant,
     })) as MessageV2.WithParts
 
