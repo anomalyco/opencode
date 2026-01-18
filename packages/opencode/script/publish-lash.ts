@@ -44,7 +44,7 @@ if (process.argv.includes("--skip-build")) {
     lashBinaries = module.binaries
 }
 
-const tags = [Script.channel]
+const tags = ["latest"]
 // If on lash branch, allow publish even if preview (unless explictly disabled?)
 // Actually Script.preview is likely true because we haven't tagged yet in release-lash.ts
 // But we want to run the interactive publish.
@@ -134,11 +134,19 @@ async function publishWithInteractiveOtp(queue: string[], tag: string) {
     while (queue.length > 0) {
         process.stdout.write(`\nEnter NPM OTP code (or empty to skip remaining): `)
         const otp = await new Promise<string>((resolve) => {
-            const listener = (data: Buffer) => {
-                process.stdin.off('data', listener)
-                resolve(data.toString().trim())
-            }
-            process.stdin.on('data', listener)
+            // Use readline for more robust input handling
+            import("readline").then(({ createInterface }) => {
+                const rl = createInterface({
+                    input: process.stdin,
+                    output: process.stdout,
+                })
+                // Listener already printed the prompt, but readline.question prints it again.
+                // We'll just listen for line.
+                rl.on('line', (line) => {
+                    rl.close()
+                    resolve(line.trim())
+                })
+            })
         })
 
         if (!otp) {
@@ -154,6 +162,51 @@ async function publishWithInteractiveOtp(queue: string[], tag: string) {
                 // Determine if it's a tarball or directory. 
                 // We packed earlier, so there's a .tgz file. Find it.
                 const tgz = await new Bun.Glob("*.tgz").scan({ cwd: pkgPath, absolute: false }).next().then(v => v.value)
+
+                // Check if version already exists to be idempotent
+                try {
+                    // Inspect the tarball source of truth using tar (avoid npm view network/parsing issues)
+                    // npm pack always puts content in 'package/'
+                    const tarOutput = await $`tar -xOf ${tgz} package/package.json`.cwd(pkgPath).quiet().text()
+                    const { name, version } = JSON.parse(tarOutput)
+
+                    console.log(`[Idempotency] Local artifact: ${name}@${version}`)
+
+                    const remoteVersionStr = await $`npm view ${name}@${version} version`.quiet().text().catch((e) => {
+                        // console.warn(`[Idempotency] npm view failed (code ${e.exitCode}): ${e.message}`)
+                        return ""
+                    })
+                    const remoteVersion = remoteVersionStr.trim()
+
+                    if (remoteVersion === version) {
+                        console.log(`  Artifact ${name}@${version} exists. Checking tags...`)
+
+                        // Check if 'latest' tag points to this version, if not promote it
+                        if (tag === "latest") {
+                            try {
+                                const distTagsJson = await $`npm view ${name} dist-tags --json`.quiet().text()
+                                const distTags = JSON.parse(distTagsJson)
+                                if (distTags.latest !== version) {
+                                    console.log(`  Promoting to 'latest' (currently ${distTags.latest})...`)
+                                    await $`npm dist-tag add ${name}@${version} latest --otp=${otp}`.quiet()
+                                    console.log("  ✅ Promoted")
+                                } else {
+                                    console.log(`  Already tagged as 'latest'.`)
+                                }
+                            } catch (err: any) {
+                                console.warn(`  Failed to check/update tags: ${err.message}`)
+                            }
+                        }
+
+                        queue.shift()
+                        continue
+                    } else {
+                        console.log(`[Idempotency] Not found on registry. Proceeding to publish.`)
+                    }
+                } catch (e: any) {
+                    console.error("[Idempotency] Check crashed:", e.message)
+                    // ignore, assume not published or error check will fail later
+                }
 
                 await $`npm publish ${tgz} --access public --tag ${tag} --otp=${otp}`.cwd(pkgPath).quiet()
                 console.log("✅")

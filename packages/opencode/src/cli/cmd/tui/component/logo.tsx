@@ -74,7 +74,7 @@ export function Logo() {
   }
 
   return (
-    <box>
+    <box flexDirection="column">
       <For each={LOGO_LEFT}>
         {(line, index) => (
           <box flexDirection="row" gap={1}>
@@ -83,6 +83,11 @@ export function Logo() {
           </box>
         )}
       </For>
+      <box flexDirection="row" justifyContent="flex-end">
+        <text fg={theme.primary} attributes={TextAttributes.BOLD}>
+          {">"} SHELL
+        </text>
+      </box>
     </box>
   )
 }
