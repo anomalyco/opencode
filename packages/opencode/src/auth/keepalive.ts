@@ -46,13 +46,13 @@ async function refreshAnthropicToken(record: OAuthRecord): Promise<{ access: str
     const response = await fetch("https://console.anthropic.com/v1/oauth/token", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: JSON.stringify({
+      body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: record.refresh,
         client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
-      }),
+      }).toString(),
       signal: controller.signal,
     })
 
