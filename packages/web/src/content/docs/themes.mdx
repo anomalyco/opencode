@@ -59,6 +59,23 @@ The system theme is for users who:
 
 ---
 
+## Theme hot-reloading
+
+OpenCode supports hot-reloading themes without restarting the application. This is useful for testing custom theme changes in real-time or integrating with dynamic theming tools.
+
+To trigger a theme reload, send the `SIGUSR2` signal to the OpenCode process:
+
+```bash no-frame
+pkill -USR2 -x opencode
+```
+
+This will:
+1. Clear the cached terminal color palette
+2. Reload all custom themes from disk
+3. Re-apply the current theme with updated colors
+
+---
+
 ## Using a theme
 
 You can select a theme by bringing up the theme select with the `/theme` command. Or you can specify it in your [config](/docs/config).
