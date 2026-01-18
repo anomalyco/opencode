@@ -657,9 +657,9 @@ export default function Page() {
       ? [
           {
             id: "session.share",
-            title: "Share session",
-            description: "Share this session and copy the URL to clipboard",
-            category: "Session",
+            title: language.t("session.shareCommandTitle"),
+            description: language.t("session.shareCommandDescription"),
+            category: language.t("command.category.session"),
             slash: "share",
             disabled: !params.id || !!info()?.share?.url,
             onSelect: async () => {
@@ -669,22 +669,22 @@ export default function Page() {
                 .then((res) => {
                   navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
                     showToast({
-                      title: "Failed to copy URL to clipboard",
+                      title: language.t("session.shareCopyFailedTitle"),
                       variant: "error",
                     }),
                   )
                 })
                 .then(() =>
                   showToast({
-                    title: "Session shared",
-                    description: "Share URL copied to clipboard!",
+                    title: language.t("session.shareSuccessTitle"),
+                    description: language.t("session.shareSuccessDescription"),
                     variant: "success",
                   }),
                 )
                 .catch(() =>
                   showToast({
-                    title: "Failed to share session",
-                    description: "An error occurred while sharing the session",
+                    title: language.t("session.shareFailedTitle"),
+                    description: language.t("session.shareFailedDescription"),
                     variant: "error",
                   }),
                 )
@@ -692,9 +692,9 @@ export default function Page() {
           },
           {
             id: "session.unshare",
-            title: "Unshare session",
-            description: "Stop sharing this session",
-            category: "Session",
+            title: language.t("session.unshareCommandTitle"),
+            description: language.t("session.unshareCommandDescription"),
+            category: language.t("command.category.session"),
             slash: "unshare",
             disabled: !params.id || !info()?.share?.url,
             onSelect: async () => {
@@ -703,15 +703,15 @@ export default function Page() {
                 .unshare({ sessionID: params.id })
                 .then(() =>
                   showToast({
-                    title: "Session unshared",
-                    description: "Session unshared successfully!",
+                    title: language.t("session.unshareSuccessTitle"),
+                    description: language.t("session.unshareSuccessDescription"),
                     variant: "success",
                   }),
                 )
                 .catch(() =>
                   showToast({
-                    title: "Failed to unshare session",
-                    description: "An error occurred while unsharing the session",
+                    title: language.t("session.unshareFailedTitle"),
+                    description: language.t("session.unshareFailedDescription"),
                     variant: "error",
                   }),
                 )

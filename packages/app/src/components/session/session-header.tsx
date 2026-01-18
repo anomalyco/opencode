@@ -238,11 +238,11 @@ export function SessionHeader() {
               <Show when={shareEnabled() && currentSession()}>
                 <div class="flex items-center">
                   <Popover
-                    title="Publish on web"
+                    title={language.t("session.shareDialogTitle")}
                     description={
                       shareUrl()
-                        ? "This session is public on the web. It is accessible to anyone with the link."
-                        : "Share session publicly on the web. It will be accessible to anyone with the link."
+                        ? language.t("session.shareDialogDescriptionPublic")
+                        : language.t("session.shareDialogDescriptionPrivate")
                     }
                     trigger={
                       <Tooltip class="shrink-0" value={language.t("session.share")}>
@@ -268,7 +268,7 @@ export function SessionHeader() {
                               onClick={shareSession}
                               disabled={state.share}
                             >
-                              {state.share ? "Publishing..." : "Publish"}
+                              {state.share ? language.t("session.publishingAction") : language.t("session.publishAction")}
                             </Button>
                           </div>
                         }
@@ -283,7 +283,7 @@ export function SessionHeader() {
                               onClick={unshareSession}
                               disabled={state.unshare}
                             >
-                              {state.unshare ? "Unpublishing..." : "Unpublish"}
+                              {state.unshare ? language.t("session.unpublishingAction") : language.t("session.unpublishAction")}
                             </Button>
                             <Button
                               size="large"
@@ -292,7 +292,7 @@ export function SessionHeader() {
                               onClick={viewShare}
                               disabled={state.unshare}
                             >
-                              View
+                              {language.t("session.viewAction")}
                             </Button>
                           </div>
                         </div>
@@ -300,7 +300,7 @@ export function SessionHeader() {
                     </div>
                   </Popover>
                   <Show when={shareUrl()} fallback={<div class="size-6" aria-hidden="true" />}>
-                    <Tooltip value={state.copied ? "Copied" : "Copy link"} placement="top" gutter={8}>
+                    <Tooltip value={state.copied ? language.t("session.copied") : language.t("session.copyLink")} placement="top" gutter={8}>
                       <IconButton
                         icon={state.copied ? "check" : "copy"}
                         variant="secondary"
