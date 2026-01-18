@@ -24,7 +24,11 @@ export function Titlebar() {
 
     const tauri = (
       window as unknown as {
-        __TAURI__?: { window?: { getCurrentWindow?: () => { startDragging?: () => Promise<void> } } }
+        __TAURI__?: {
+          window?: {
+            getCurrentWindow?: () => { startDragging?: () => Promise<void>; toggleMaximize?: () => Promise<void> }
+          }
+        }
       }
     ).__TAURI__
     if (!tauri?.window?.getCurrentWindow) return
@@ -67,6 +71,15 @@ export function Titlebar() {
     if (!win?.startDragging) return
 
     e.preventDefault()
+
+    // Toggle maximizing window on double click (macOS)
+    if (mac() && e.detail === 2) {
+      if (win.toggleMaximize) {
+        void win.toggleMaximize().catch(() => undefined)
+      }
+      return
+    }
+
     void win.startDragging().catch(() => undefined)
   }
 
