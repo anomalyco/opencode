@@ -12,7 +12,7 @@ export const DebugRoutes = lazy(() =>
     describeRoute({
       summary: "Ingest debug logs",
       description:
-        "Ingest Cursor-style debug logs (NDJSON or JSON) and append them to .opencode/debug.log in the worktree root.",
+        "Ingest debug logs (NDJSON or JSON) and append them to .opencode/debug.log in the worktree root.",
       operationId: "debug.ingest",
       responses: {
         200: {
