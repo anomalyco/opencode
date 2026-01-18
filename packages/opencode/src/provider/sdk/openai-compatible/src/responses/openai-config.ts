@@ -6,6 +6,7 @@ export type OpenAIConfig = {
   headers: () => Record<string, string | undefined>
   fetch?: FetchFunction
   generateId?: () => string
+  transport?: "sse" | "websocket"
   /**
    * File ID prefixes used to identify file IDs in Responses API.
    * When undefined, all file data is treated as base64 content.

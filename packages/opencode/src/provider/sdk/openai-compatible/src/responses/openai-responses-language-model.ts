@@ -30,6 +30,9 @@ import type { OpenAIResponsesIncludeOptions, OpenAIResponsesIncludeValue } from 
 import { prepareResponsesTools } from "./openai-responses-prepare-tools"
 import type { OpenAIResponsesModelId } from "./openai-responses-settings"
 import { localShellInputSchema } from "./tool/local-shell"
+import { Auth } from "@/auth"
+import { CodexTurnState } from "@/provider/codex-turn-state"
+import WsWebSocket from "ws"
 
 const webSearchCallItem = z.object({
   type: z.literal("web_search_call"),
@@ -134,6 +137,15 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
   readonly modelId: OpenAIResponsesModelId
 
   private readonly config: OpenAIConfig
+  private readonly codexTurnStateByAbortSignal = new WeakMap<AbortSignal, string>()
+  private readonly wsBySessionId = new Map<
+    string,
+    {
+      ws: any | null
+      lastItems: unknown[]
+      closing: boolean
+    }
+  >()
 
   constructor(modelId: OpenAIResponsesModelId, config: OpenAIConfig) {
     this.modelId = modelId
@@ -203,7 +215,8 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
       prompt,
       systemMessageMode: modelConfig.systemMessageMode,
       fileIdPrefixes: this.config.fileIdPrefixes,
-      store: openaiOptions?.store ?? true,
+      // Codex CLI defaults to `store: false` and does not use server-owned conversation state.
+      store: openaiOptions?.store ?? false,
       hasLocalShellTool: hasOpenAITool("openai.local_shell"),
     })
 
@@ -400,15 +413,20 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
       modelId: this.modelId,
     })
 
+    const headers = this.maybeAttachCodexTurnStateHeader(
+      combineHeaders(this.config.headers(), options.headers),
+      url,
+      options.abortSignal,
+    )
+
     const {
       responseHeaders,
       value: response,
       rawValue: rawResponse,
-    } = await postJsonToApi({
+    } = (await this.postJsonToApiMaybeCompressed({
       url,
-      headers: combineHeaders(this.config.headers(), options.headers),
+      headers,
       body,
-      failedResponseHandler: openaiFailedResponseHandler,
       successfulResponseHandler: createJsonResponseHandler(
         z.object({
           id: z.string(),
@@ -493,8 +511,8 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
         }),
       ),
       abortSignal: options.abortSignal,
-      fetch: this.config.fetch,
-    })
+    })) as any
+    this.maybeCaptureCodexTurnState(responseHeaders, url, options.abortSignal)
 
     if (response.error) {
       throw new APICallError({
@@ -774,21 +792,61 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
   ): Promise<Awaited<ReturnType<LanguageModelV2["doStream"]>>> {
     const { args: body, warnings, webSearchToolName } = await this.getArgs(options)
 
-    const { responseHeaders, value: response } = await postJsonToApi({
-      url: this.config.url({
+    const baseHeaders = combineHeaders(this.config.headers(), options.headers)
+
+    const { responseHeaders, value: response } = (await (async () => {
+      const transport = this.config.transport ?? "sse"
+      const url = this.config.url({
         path: "/responses",
         modelId: this.modelId,
-      }),
-      headers: combineHeaders(this.config.headers(), options.headers),
-      body: {
-        ...body,
-        stream: true,
-      },
-      failedResponseHandler: openaiFailedResponseHandler,
-      successfulResponseHandler: createEventSourceResponseHandler(openaiResponsesChunkSchema),
-      abortSignal: options.abortSignal,
-      fetch: this.config.fetch,
-    })
+      })
+      if (transport !== "websocket") {
+        const headers = this.maybeAttachCodexTurnStateHeader(baseHeaders, url, options.abortSignal)
+        const result = await this.postJsonToApiMaybeCompressed({
+          url,
+          headers,
+          body: { ...body, stream: true },
+          abortSignal: options.abortSignal,
+          successfulResponseHandler: createEventSourceResponseHandler(openaiResponsesChunkSchema) as any,
+        })
+        this.maybeCaptureCodexTurnState(result.responseHeaders, url, options.abortSignal)
+        return result as any
+      }
+
+      const requestHeaders = this.maybeAttachCodexTurnStateHeader(baseHeaders, url, options.abortSignal)
+
+      // WebSocket transport requires a stable session id to avoid cross-thread state sharing.
+      const sessionId =
+        requestHeaders["session_id"] ??
+        requestHeaders["Session-Id"] ??
+        requestHeaders["session-id"] ??
+        requestHeaders["Session-ID"]
+      if (!sessionId) {
+        // Fall back to SSE if no session_id is provided.
+        const result = await this.postJsonToApiMaybeCompressed({
+          url,
+          headers: requestHeaders,
+          body: { ...body, stream: true },
+          abortSignal: options.abortSignal,
+          successfulResponseHandler: createEventSourceResponseHandler(openaiResponsesChunkSchema) as any,
+        })
+        this.maybeCaptureCodexTurnState(result.responseHeaders, url, options.abortSignal)
+        return result as any
+      }
+
+      const result = await this.websocketStream({
+        wsUrl: url,
+        sessionId,
+        headers: requestHeaders,
+        body: {
+          ...body,
+          stream: true,
+        },
+        abortSignal: options.abortSignal,
+      })
+      this.maybeCaptureCodexTurnState(result.responseHeaders, url, options.abortSignal)
+      return result
+    })()) as any
 
     const self = this
 
@@ -1294,6 +1352,412 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
       request: { body },
       response: { headers: responseHeaders },
     }
+  }
+
+  private shouldUseCodexOAuth(url: string): boolean {
+    try {
+      const parsed = new URL(url)
+      return (
+        (parsed.hostname === "chatgpt.com" || parsed.hostname === "chat.openai.com") &&
+        parsed.pathname.includes("/backend-api/codex/")
+      )
+    } catch {
+      return false
+    }
+  }
+
+  private getHeaderCaseInsensitive(headers: Record<string, string>, name: string): string | undefined {
+    const target = name.toLowerCase()
+    for (const [key, value] of Object.entries(headers)) {
+      if (key.toLowerCase() === target) return value
+    }
+    return undefined
+  }
+
+  private getCodexTurnState(abortSignal?: AbortSignal): string | undefined {
+    if (abortSignal) {
+      const scoped = this.codexTurnStateByAbortSignal.get(abortSignal)
+      if (scoped) return scoped
+    }
+    return CodexTurnState.get()?.codexTurnState
+  }
+
+  private setCodexTurnState(value: string, abortSignal?: AbortSignal) {
+    if (abortSignal) {
+      this.codexTurnStateByAbortSignal.set(abortSignal, value)
+      return
+    }
+    CodexTurnState.set(value)
+  }
+
+  private maybeAttachCodexTurnStateHeader(headers: Record<string, string | undefined>, url: string, abortSignal?: AbortSignal) {
+    if (!this.shouldUseCodexOAuth(url)) return headers
+    const turnState = this.getCodexTurnState(abortSignal)
+    if (!turnState) return headers
+
+    for (const key of Object.keys(headers)) {
+      if (key.toLowerCase() === "x-codex-turn-state") return headers
+    }
+
+    return { ...headers, "x-codex-turn-state": turnState }
+  }
+
+  private maybeCaptureCodexTurnState(responseHeaders: Record<string, string>, url: string, abortSignal?: AbortSignal) {
+    if (!this.shouldUseCodexOAuth(url)) return
+    const value = this.getHeaderCaseInsensitive(responseHeaders, "x-codex-turn-state")
+    if (!value) return
+    this.setCodexTurnState(value, abortSignal)
+  }
+
+  private shouldUseCodexRequestCompression(url: string): boolean {
+    if (!this.shouldUseCodexOAuth(url)) return false
+
+    // Default to ON for Codex OAuth sessions; allow opting out.
+    const flag = process.env["OPENCODE_CODEX_REQUEST_COMPRESSION"]
+    if (flag == null) return true
+    if (flag === "0" || flag.toLowerCase() === "false") return false
+    if (flag === "1" || flag.toLowerCase() === "true") return true
+    // Any other value: treat as enabled (safer default).
+    return true
+  }
+
+  private async postJsonToApiMaybeCompressed(input: {
+    url: string
+    headers: Record<string, string | undefined>
+    body: Record<string, unknown>
+    abortSignal?: AbortSignal
+    successfulResponseHandler: (args: {
+      response: Response
+    }) => Promise<{
+      responseHeaders: Record<string, string>
+      value: unknown
+      rawValue?: unknown
+    }>
+  }): Promise<{ responseHeaders: Record<string, string>; value: unknown; rawValue?: unknown }> {
+    if (!this.shouldUseCodexRequestCompression(input.url)) {
+      return (await postJsonToApi({
+        url: input.url,
+        headers: input.headers,
+        body: input.body,
+        failedResponseHandler: openaiFailedResponseHandler,
+        successfulResponseHandler: input.successfulResponseHandler as any,
+        abortSignal: input.abortSignal,
+        fetch: this.config.fetch,
+      })) as any
+    }
+
+    const fetchFn = this.config.fetch ?? fetch
+
+    const json = JSON.stringify(input.body)
+    const compressed = Bun.zstdCompressSync(new TextEncoder().encode(json))
+
+    const headers: Record<string, string> = {}
+    for (const [key, value] of Object.entries(input.headers)) {
+      if (typeof value === "string" && value.length > 0) headers[key] = value
+    }
+    if (!Object.keys(headers).some((k) => k.toLowerCase() === "content-type")) {
+      headers["content-type"] = "application/json"
+    }
+    headers["content-encoding"] = "zstd"
+
+    const response = await fetchFn(input.url, {
+      method: "POST",
+      headers,
+      body: compressed,
+      signal: input.abortSignal,
+    })
+    if (!response.ok) {
+      throw await openaiFailedResponseHandler({
+        response,
+        url: input.url,
+        requestBodyValues: input.body,
+      } as any)
+    }
+
+    return (await input.successfulResponseHandler({ response })) as any
+  }
+
+  private async maybeAttachCodexOAuthHeaders(headers: Record<string, string | undefined>, wsUrl: string) {
+    if (!this.shouldUseCodexOAuth(wsUrl)) return headers
+
+    const authKeyCandidates = ["openai", "codex"]
+    const currentEntry = await (async () => {
+      for (const key of authKeyCandidates) {
+        const value = await Auth.get(key)
+        if (value?.type === "oauth") return { key, value }
+      }
+      return undefined
+    })()
+    const current = currentEntry?.value
+    if (!current || current.type !== "oauth") return headers
+
+    const next: Record<string, string | undefined> = { ...headers }
+    delete next["authorization"]
+    delete next["Authorization"]
+
+    // Refresh if expired (best-effort). Mirrors plugin logic.
+    if (!current.access || current.expires < Date.now()) {
+      const refreshed = await this.refreshCodexAccessToken(current.refresh, current.accountId).catch(() => undefined)
+      if (refreshed?.access) {
+        if (currentEntry) await Auth.set(currentEntry.key, refreshed)
+        next["authorization"] = `Bearer ${refreshed.access}`
+        next["Authorization"] = `Bearer ${refreshed.access}`
+        if (refreshed.accountId) next["ChatGPT-Account-Id"] = refreshed.accountId
+        return next
+      }
+    }
+
+    next["authorization"] = `Bearer ${current.access}`
+    next["Authorization"] = `Bearer ${current.access}`
+    if (current.accountId) next["ChatGPT-Account-Id"] = current.accountId
+    return next
+  }
+
+  private async refreshCodexAccessToken(refreshToken: string, accountId?: string): Promise<Auth.Info> {
+    const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
+    const ISSUER = "https://auth.openai.com"
+
+    const response = await fetch(`${ISSUER}/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: CLIENT_ID,
+      }).toString(),
+    })
+    if (!response.ok) {
+      throw new Error(`Token refresh failed: ${response.status}`)
+    }
+    const tokens = (await response.json()) as { access_token: string; refresh_token: string; expires_in?: number }
+    return {
+      type: "oauth",
+      refresh: tokens.refresh_token,
+      access: tokens.access_token,
+      expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+      ...(accountId ? { accountId } : {}),
+    }
+  }
+
+  private getIncrementalItems(previousItems: unknown[], nextItems: unknown[]): unknown[] | null {
+    if (!Array.isArray(previousItems) || previousItems.length === 0) return null
+    if (!Array.isArray(nextItems) || nextItems.length <= previousItems.length) return null
+
+    const normalize = (item: unknown) => {
+      if (!item || typeof item !== "object") return item
+      if (Array.isArray(item)) return item
+      const record = item as Record<string, unknown>
+      if (!("id" in record)) return record
+      const cloned = { ...record }
+      delete (cloned as any).id
+      return cloned
+    }
+
+    for (let i = 0; i < previousItems.length; i++) {
+      const a = JSON.stringify(normalize(previousItems[i]))
+      const b = JSON.stringify(normalize(nextItems[i]))
+      if (a !== b) return null
+    }
+    return nextItems.slice(previousItems.length)
+  }
+
+  private async websocketStream(input: {
+    wsUrl: string
+    sessionId: string
+    headers: Record<string, string | undefined>
+    body: Record<string, unknown>
+    abortSignal?: AbortSignal
+  }): Promise<{ responseHeaders: Record<string, string>; value: ReadableStream<ParseResult<z.infer<typeof openaiResponsesChunkSchema>>> }> {
+    const state = this.wsBySessionId.get(input.sessionId) ?? { ws: null, lastItems: [], closing: false }
+    this.wsBySessionId.set(input.sessionId, state)
+
+    if (state.closing) {
+      state.ws = null
+      state.closing = false
+      state.lastItems = []
+    }
+
+    const wsHeaders = await this.maybeAttachCodexOAuthHeaders(input.headers, input.wsUrl)
+    let handshakeHeaders: Record<string, string> = {}
+
+    const connect = async () => {
+      if (state.ws && state.ws.readyState === WsWebSocket.OPEN) return state.ws
+
+      const url = (() => {
+        const parsed = new URL(input.wsUrl)
+        if (parsed.protocol === "https:") parsed.protocol = "wss:"
+        if (parsed.protocol === "http:") parsed.protocol = "ws:"
+        return parsed.toString()
+      })()
+
+      const headers = Object.fromEntries(
+        Object.entries(wsHeaders).filter(([, v]) => typeof v === "string" && v.length > 0) as Array<[string, string]>,
+      )
+
+      const ws: any = new WsWebSocket(url, { headers })
+      state.ws = ws
+
+      await new Promise<void>((resolve, reject) => {
+        const onUpgrade = (res: any) => {
+          const entries = Object.entries(res?.headers ?? {}) as Array<[string, string | string[] | undefined]>
+          handshakeHeaders = Object.fromEntries(
+            entries
+              .filter(([, v]) => v != null)
+              .map(([k, v]) => [k, Array.isArray(v) ? v.join(",") : String(v)]),
+          )
+        }
+
+        const onOpen = () => {
+          cleanup()
+          resolve()
+        }
+        const onError = (ev: any) => {
+          cleanup()
+          reject(ev instanceof Error ? ev : new Error("websocket connection failed"))
+        }
+        const onClose = () => {
+          cleanup()
+          reject(new Error("websocket closed during connect"))
+        }
+        const cleanup = () => {
+          ws.off?.("upgrade", onUpgrade)
+          ws.off?.("open", onOpen)
+          ws.off?.("error", onError)
+          ws.off?.("close", onClose)
+        }
+
+        ws.on?.("upgrade", onUpgrade)
+        ws.on?.("open", onOpen)
+        ws.on?.("error", onError)
+        ws.on?.("close", onClose)
+      })
+
+      return ws
+    }
+
+    const ws = await connect()
+
+    const keepIds = (input.body as any)?.store === true
+    const stripId = (item: unknown) => {
+      if (!item || typeof item !== "object") return item
+      if (Array.isArray(item)) return item
+      const record = item as Record<string, unknown>
+      if (!("id" in record)) return record
+      const cloned = { ...record }
+      delete (cloned as any).id
+      return cloned
+    }
+
+    const rawItems = Array.isArray((input.body as any).input) ? ((input.body as any).input as unknown[]) : []
+    const nextItems = keepIds ? rawItems : rawItems.map(stripId)
+    if (!keepIds) {
+      ;(input.body as any).input = nextItems
+    }
+    const appendItems = this.getIncrementalItems(state.lastItems, nextItems)
+    state.lastItems = nextItems
+
+    const request = appendItems
+      ? { type: "response.append", input: appendItems }
+      : { type: "response.create", ...input.body }
+
+    if (input.abortSignal?.aborted) {
+      throw new Error("aborted")
+    }
+
+    const value = new ReadableStream<ParseResult<z.infer<typeof openaiResponsesChunkSchema>>>({
+      start: (controller) => {
+        const onMessage = (data: any) => {
+          const rawText =
+            typeof data === "string"
+              ? data
+              : Buffer.isBuffer(data)
+                ? data.toString("utf8")
+                : data instanceof ArrayBuffer
+                  ? Buffer.from(data).toString("utf8")
+                  : Array.isArray(data)
+                    ? Buffer.concat(data).toString("utf8")
+                    : data?.toString?.()
+
+          if (rawText == null || rawText === "[object Object]") return
+
+          let rawValue: unknown
+          try {
+            rawValue = JSON.parse(rawText)
+          } catch {
+            controller.enqueue({
+              success: false,
+              rawValue: rawText,
+              error: new Error("failed to parse websocket message as json"),
+            } as any)
+            return
+          }
+
+          const parsed = openaiResponsesChunkSchema.safeParse(rawValue)
+          if (!parsed.success) {
+            controller.enqueue({
+              success: false,
+              rawValue,
+              error: parsed.error,
+            } as any)
+            return
+          }
+
+          const chunk = parsed.data
+          controller.enqueue({
+            success: true,
+            rawValue,
+            value: chunk,
+          } as any)
+
+          if (isResponseFinishedChunk(chunk) || chunk.type === "error") {
+            cleanup()
+            controller.close()
+          }
+        }
+
+        const onClose = () => {
+          state.ws = null
+          cleanup()
+          controller.close()
+        }
+
+        const onError = (err: any) => {
+          state.ws = null
+          cleanup()
+          controller.error(err instanceof Error ? err : new Error("websocket error"))
+        }
+
+        const onAbort = () => {
+          try {
+            state.closing = true
+            ws.close()
+          } catch {}
+          cleanup()
+          controller.close()
+        }
+
+        const cleanup = () => {
+          ws.off?.("message", onMessage)
+          ws.off?.("close", onClose)
+          ws.off?.("error", onError)
+          input.abortSignal?.removeEventListener("abort", onAbort)
+        }
+
+        ws.on?.("message", onMessage)
+        ws.on?.("close", onClose)
+        ws.on?.("error", onError)
+        input.abortSignal?.addEventListener("abort", onAbort)
+
+        try {
+          ws.send(JSON.stringify(request))
+        } catch (err) {
+          cleanup()
+          controller.error(err instanceof Error ? err : new Error("failed to send websocket request"))
+        }
+      },
+    })
+
+    return { responseHeaders: handshakeHeaders, value }
   }
 }
 
