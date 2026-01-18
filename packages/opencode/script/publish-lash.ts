@@ -169,7 +169,6 @@ async function publishWithInteractiveOtp(queue: string[], tag: string) {
         }
     }
 }
-}
 
 async function updateRegistries(binaries: Record<string, string>) {
     const repoOwner = "lacymorrow"
