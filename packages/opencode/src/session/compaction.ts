@@ -72,15 +72,20 @@ export namespace SessionCompaction {
   }
 
   function buildCodexCompactInput(messages: MessageV2.WithParts[]) {
-    const input: Array<{ type: "message"; role: string; content: Array<{ type: "input_text"; text: string }> }> = []
+    const input: Array<{
+      type: "message"
+      role: string
+      content: Array<{ type: "input_text" | "output_text"; text: string }>
+    }> = []
     for (const msg of messages) {
       if (msg.info.role !== "user" && msg.info.role !== "assistant") continue
       const text = toCompactText(msg)
       if (!text) continue
+      const contentType = msg.info.role === "assistant" ? "output_text" : "input_text"
       input.push({
         type: "message",
         role: msg.info.role,
-        content: [{ type: "input_text", text }],
+        content: [{ type: contentType, text }],
       })
     }
     return input
