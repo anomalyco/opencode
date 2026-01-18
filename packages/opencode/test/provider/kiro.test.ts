@@ -53,11 +53,11 @@ describe("convertToKiroPayload", () => {
     expect(result.conversationState.conversationId).toBeDefined()
     expect(result.conversationState.currentMessage.userInputMessage.content).toBe("Hello")
     expect(result.conversationState.currentMessage.userInputMessage.modelId).toBe(modelId)
-    expect(result.conversationState.currentMessage.userInputMessage.origin).toBe("AI_EDITOR")
+    expect(result.conversationState.currentMessage.userInputMessage.origin).toBe("KIRO_CLI")
     expect(result.conversationState.history).toHaveLength(0)
   })
 
-  test("extracts system prompt", () => {
+  test("extracts system prompt into history", () => {
     const prompt = [
       { role: "system" as const, content: "You are a helpful assistant" },
       { role: "user" as const, content: [{ type: "text" as const, text: "Hello" }] },
@@ -65,9 +65,11 @@ describe("convertToKiroPayload", () => {
 
     const result = convertToKiroPayload(prompt, modelId)
 
-    expect(result.conversationState.currentMessage.userInputMessage.userInputMessageContext?.systemPrompt).toBe(
-      "You are a helpful assistant",
-    )
+    // System prompt should be embedded in history as first user/assistant exchange
+    const firstHistoryItem = result.conversationState.history[0]
+    expect(firstHistoryItem?.userInputMessage?.content).toContain("--- CONTEXT ENTRY BEGIN ---")
+    expect(firstHistoryItem?.userInputMessage?.content).toContain("You are a helpful assistant")
+    expect(firstHistoryItem?.userInputMessage?.content).toContain("--- CONTEXT ENTRY END ---")
   })
 
   test("converts tools to Kiro format", () => {
@@ -285,11 +287,12 @@ describe("convertToKiroPayload", () => {
 
       const result = convertToKiroPayload(prompt, modelId, undefined, providerOptions)
 
-      const systemPrompt =
-        result.conversationState.currentMessage.userInputMessage.userInputMessageContext?.systemPrompt
-      expect(systemPrompt).toContain("You are helpful")
-      expect(systemPrompt).toContain("Extended Thinking Mode")
-      expect(systemPrompt).toContain("<thinking>...</thinking>")
+      // System prompt with thinking addition should be in history
+      const firstHistoryItem = result.conversationState.history[0]
+      const contextContent = firstHistoryItem?.userInputMessage?.content
+      expect(contextContent).toContain("You are helpful")
+      expect(contextContent).toContain("Extended Thinking Mode")
+      expect(contextContent).toContain("<thinking>...</thinking>")
     })
 
     test("does not inject thinking tags when disabled", () => {

@@ -19,6 +19,11 @@ export interface KiroToolResult {
   toolUseId: string
 }
 
+export interface KiroEnvState {
+  operatingSystem: string
+  currentWorkingDirectory: string
+}
+
 export interface KiroHistoryItem {
   userInputMessage?: {
     content: string
@@ -27,6 +32,7 @@ export interface KiroHistoryItem {
     userInputMessageContext?: {
       tools?: KiroTool[]
       toolResults?: KiroToolResult[]
+      envState?: KiroEnvState
     }
   }
   assistantResponseMessage?: {
@@ -56,7 +62,7 @@ export interface KiroPayload {
         userInputMessageContext?: {
           tools?: KiroTool[]
           toolResults?: KiroToolResult[]
-          systemPrompt?: string
+          envState?: KiroEnvState
         }
       }
     }
@@ -255,6 +261,13 @@ function getThinkingSystemPromptAddition(): string {
   )
 }
 
+function getEnvState(): KiroEnvState {
+  return {
+    operatingSystem: process.platform === "darwin" ? "macos" : process.platform,
+    currentWorkingDirectory: process.cwd(),
+  }
+}
+
 export function convertToKiroPayload(
   prompt: LanguageModelV2Prompt,
   modelId: string,
@@ -270,7 +283,37 @@ export function convertToKiroPayload(
   // Filter out system messages for history processing
   const messages = prompt.filter((m) => m.role !== "system")
 
+  // Check if thinking mode is enabled
+  const thinkingEnabled = providerOptions?.thinking?.type === "enabled"
+  const thinkingBudgetTokens = providerOptions?.thinking?.budgetTokens || 16000
+
   const history: KiroHistoryItem[] = []
+
+  // Embed system prompt in history as first user/assistant exchange (kiro-cli format)
+  if (systemPrompt) {
+    let contextContent = systemPrompt
+    if (thinkingEnabled) {
+      contextContent = systemPrompt + getThinkingSystemPromptAddition()
+    }
+
+    history.push({
+      userInputMessage: {
+        content: `--- CONTEXT ENTRY BEGIN ---\n${contextContent}\n--- CONTEXT ENTRY END ---`,
+        modelId,
+        origin: "KIRO_CLI",
+        userInputMessageContext: {
+          envState: getEnvState(),
+        },
+      },
+    })
+    history.push({
+      assistantResponseMessage: {
+        content:
+          "I will fully incorporate this information when generating my responses, and explicitly acknowledge relevant parts of the summary when answering questions.",
+      },
+    })
+  }
+
   let currentUserContent = ""
   let currentToolResults: KiroToolResult[] = []
   let hasAnyToolResults = false // Track if any tool results exist in the conversation
@@ -330,13 +373,12 @@ export function convertToKiroPayload(
             userInputMessage: {
               content: currentUserContent,
               modelId,
-              origin: "AI_EDITOR",
-              userInputMessageContext:
-                currentToolResults.length > 0
-                  ? { toolResults: currentToolResults, tools: convertTools(tools) }
-                  : tools
-                    ? { tools: convertTools(tools) }
-                    : undefined,
+              origin: "KIRO_CLI",
+              userInputMessageContext: {
+                ...(currentToolResults.length > 0 && { toolResults: currentToolResults }),
+                ...(tools && { tools: convertTools(tools) }),
+                envState: getEnvState(),
+              },
             },
           }
           history.push(historyItem)
@@ -471,26 +513,10 @@ export function convertToKiroPayload(
 
   // Build userInputMessageContext - only include if has content
   const userInputMessageContext: {
-    systemPrompt?: string
     tools?: KiroTool[]
     toolResults?: KiroToolResult[]
+    envState?: KiroEnvState
   } = {}
-
-  // Check if thinking mode is enabled
-  const thinkingEnabled = providerOptions?.thinking?.type === "enabled"
-  const thinkingBudgetTokens = providerOptions?.thinking?.budgetTokens || 16000
-
-  // Add system prompt with thinking mode addition if enabled
-  if (systemPrompt) {
-    let finalSystemPrompt = systemPrompt
-    if (thinkingEnabled) {
-      finalSystemPrompt = systemPrompt + getThinkingSystemPromptAddition()
-    }
-    userInputMessageContext.systemPrompt = finalSystemPrompt
-  } else if (thinkingEnabled) {
-    // If no system prompt but thinking is enabled, add the thinking system prompt
-    userInputMessageContext.systemPrompt = getThinkingSystemPromptAddition().trim()
-  }
 
   const kiroTools = convertTools(tools)
   if (kiroTools) {
@@ -500,6 +526,8 @@ export function convertToKiroPayload(
   if (lastToolResults.length > 0) {
     userInputMessageContext.toolResults = lastToolResults
   }
+
+  userInputMessageContext.envState = getEnvState()
 
   // Inject thinking tags into user content if thinking mode is enabled
   let finalUserContent = lastUserContent || "."
@@ -516,7 +544,7 @@ export function convertToKiroPayload(
   } = {
     content: finalUserContent, // Use minimal content to avoid triggering AI to "continue"
     modelId,
-    origin: "AI_EDITOR",
+    origin: "KIRO_CLI",
   }
 
   // Only add userInputMessageContext if it has content
