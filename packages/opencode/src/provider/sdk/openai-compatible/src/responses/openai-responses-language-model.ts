@@ -30,6 +30,7 @@ import type { OpenAIResponsesIncludeOptions, OpenAIResponsesIncludeValue } from 
 import { prepareResponsesTools } from "./openai-responses-prepare-tools"
 import type { OpenAIResponsesModelId } from "./openai-responses-settings"
 import { localShellInputSchema } from "./tool/local-shell"
+import { Auth } from "@/auth"
 
 const webSearchCallItem = z.object({
   type: z.literal("web_search_call"),
@@ -134,6 +135,14 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
   readonly modelId: OpenAIResponsesModelId
 
   private readonly config: OpenAIConfig
+  private readonly wsBySessionId = new Map<
+    string,
+    {
+      ws: WebSocket | null
+      lastItems: unknown[]
+      closing: boolean
+    }
+  >()
 
   constructor(modelId: OpenAIResponsesModelId, config: OpenAIConfig) {
     this.modelId = modelId
@@ -203,7 +212,8 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
       prompt,
       systemMessageMode: modelConfig.systemMessageMode,
       fileIdPrefixes: this.config.fileIdPrefixes,
-      store: openaiOptions?.store ?? true,
+      // Codex CLI defaults to `store: false` and does not use server-owned conversation state.
+      store: openaiOptions?.store ?? false,
       hasLocalShellTool: hasOpenAITool("openai.local_shell"),
     })
 
@@ -774,21 +784,69 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
   ): Promise<Awaited<ReturnType<LanguageModelV2["doStream"]>>> {
     const { args: body, warnings, webSearchToolName } = await this.getArgs(options)
 
-    const { responseHeaders, value: response } = await postJsonToApi({
-      url: this.config.url({
+    const requestHeaders = combineHeaders(this.config.headers(), options.headers)
+
+    const { responseHeaders, value: response } = await (async () => {
+      const transport = this.config.transport ?? "sse"
+      if (transport !== "websocket") {
+        return postJsonToApi({
+          url: this.config.url({
+            path: "/responses",
+            modelId: this.modelId,
+          }),
+          headers: requestHeaders,
+          body: {
+            ...body,
+            stream: true,
+          },
+          failedResponseHandler: openaiFailedResponseHandler,
+          successfulResponseHandler: createEventSourceResponseHandler(openaiResponsesChunkSchema),
+          abortSignal: options.abortSignal,
+          fetch: this.config.fetch,
+        })
+      }
+
+      // WebSocket transport requires a stable session id to avoid cross-thread state sharing.
+      const sessionId =
+        requestHeaders["session_id"] ??
+        requestHeaders["Session-Id"] ??
+        requestHeaders["session-id"] ??
+        requestHeaders["Session-ID"]
+      if (!sessionId) {
+        // Fall back to SSE if no session_id is provided.
+        return postJsonToApi({
+          url: this.config.url({
+            path: "/responses",
+            modelId: this.modelId,
+          }),
+          headers: requestHeaders,
+          body: {
+            ...body,
+            stream: true,
+          },
+          failedResponseHandler: openaiFailedResponseHandler,
+          successfulResponseHandler: createEventSourceResponseHandler(openaiResponsesChunkSchema),
+          abortSignal: options.abortSignal,
+          fetch: this.config.fetch,
+        })
+      }
+
+      const wsUrl = this.config.url({
         path: "/responses",
         modelId: this.modelId,
-      }),
-      headers: combineHeaders(this.config.headers(), options.headers),
-      body: {
-        ...body,
-        stream: true,
-      },
-      failedResponseHandler: openaiFailedResponseHandler,
-      successfulResponseHandler: createEventSourceResponseHandler(openaiResponsesChunkSchema),
-      abortSignal: options.abortSignal,
-      fetch: this.config.fetch,
-    })
+      })
+
+      return this.websocketStream({
+        wsUrl,
+        sessionId,
+        headers: requestHeaders,
+        body: {
+          ...body,
+          stream: true,
+        },
+        abortSignal: options.abortSignal,
+      })
+    })()
 
     const self = this
 
@@ -1294,6 +1352,270 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
       request: { body },
       response: { headers: responseHeaders },
     }
+  }
+
+  private shouldUseCodexOAuth(url: string): boolean {
+    try {
+      const parsed = new URL(url)
+      return parsed.hostname === "chatgpt.com" && parsed.pathname.includes("/backend-api/codex/")
+    } catch {
+      return false
+    }
+  }
+
+  private async maybeAttachCodexOAuthHeaders(headers: Record<string, string | undefined>, wsUrl: string) {
+    if (!this.shouldUseCodexOAuth(wsUrl)) return headers
+
+    const current = await Auth.get("openai")
+    if (!current || current.type !== "oauth") return headers
+
+    const next: Record<string, string | undefined> = { ...headers }
+    delete next["authorization"]
+    delete next["Authorization"]
+
+    // Refresh if expired (best-effort). Mirrors plugin logic.
+    if (!current.access || current.expires < Date.now()) {
+      const refreshed = await this.refreshCodexAccessToken(current.refresh, current.accountId).catch(() => undefined)
+      if (refreshed?.access) {
+        await Auth.set("openai", refreshed)
+        next["authorization"] = `Bearer ${refreshed.access}`
+        next["Authorization"] = `Bearer ${refreshed.access}`
+        if (refreshed.accountId) next["ChatGPT-Account-Id"] = refreshed.accountId
+        return next
+      }
+    }
+
+    next["authorization"] = `Bearer ${current.access}`
+    next["Authorization"] = `Bearer ${current.access}`
+    if (current.accountId) next["ChatGPT-Account-Id"] = current.accountId
+    return next
+  }
+
+  private async refreshCodexAccessToken(refreshToken: string, accountId?: string): Promise<Auth.Info> {
+    const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
+    const ISSUER = "https://auth.openai.com"
+
+    const response = await fetch(`${ISSUER}/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: CLIENT_ID,
+      }).toString(),
+    })
+    if (!response.ok) {
+      throw new Error(`Token refresh failed: ${response.status}`)
+    }
+    const tokens = (await response.json()) as { access_token: string; refresh_token: string; expires_in?: number }
+    return {
+      type: "oauth",
+      refresh: tokens.refresh_token,
+      access: tokens.access_token,
+      expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+      ...(accountId ? { accountId } : {}),
+    }
+  }
+
+  private getIncrementalItems(previousItems: unknown[], nextItems: unknown[]): unknown[] | null {
+    if (!Array.isArray(previousItems) || previousItems.length === 0) return null
+    if (!Array.isArray(nextItems) || nextItems.length <= previousItems.length) return null
+
+    const normalize = (item: unknown) => {
+      if (!item || typeof item !== "object") return item
+      if (Array.isArray(item)) return item
+      const record = item as Record<string, unknown>
+      if (!("id" in record)) return record
+      const cloned = { ...record }
+      delete (cloned as any).id
+      return cloned
+    }
+
+    for (let i = 0; i < previousItems.length; i++) {
+      const a = JSON.stringify(normalize(previousItems[i]))
+      const b = JSON.stringify(normalize(nextItems[i]))
+      if (a !== b) return null
+    }
+    return nextItems.slice(previousItems.length)
+  }
+
+  private async websocketStream(input: {
+    wsUrl: string
+    sessionId: string
+    headers: Record<string, string | undefined>
+    body: Record<string, unknown>
+    abortSignal?: AbortSignal
+  }): Promise<{ responseHeaders: Record<string, string>; value: ReadableStream<ParseResult<z.infer<typeof openaiResponsesChunkSchema>>> }> {
+    const state = this.wsBySessionId.get(input.sessionId) ?? { ws: null, lastItems: [], closing: false }
+    this.wsBySessionId.set(input.sessionId, state)
+
+    if (state.closing) {
+      state.ws = null
+      state.closing = false
+      state.lastItems = []
+    }
+
+    const wsHeaders = await this.maybeAttachCodexOAuthHeaders(input.headers, input.wsUrl)
+
+    const connect = async () => {
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) return state.ws
+
+      const url = (() => {
+        const parsed = new URL(input.wsUrl)
+        if (parsed.protocol === "https:") parsed.protocol = "wss:"
+        if (parsed.protocol === "http:") parsed.protocol = "ws:"
+        return parsed.toString()
+      })()
+
+      const ws = new WebSocket(url, {
+        headers: Object.fromEntries(
+          Object.entries(wsHeaders).filter(([, v]) => typeof v === "string" && v.length > 0) as Array<[string, string]>,
+        ),
+      } as any)
+      state.ws = ws
+
+      await new Promise<void>((resolve, reject) => {
+        const onOpen = () => {
+          cleanup()
+          resolve()
+        }
+        const onError = (ev: any) => {
+          cleanup()
+          reject(ev instanceof Error ? ev : new Error("websocket connection failed"))
+        }
+        const onClose = () => {
+          cleanup()
+          reject(new Error("websocket closed during connect"))
+        }
+        const cleanup = () => {
+          ws.removeEventListener("open", onOpen)
+          ws.removeEventListener("error", onError)
+          ws.removeEventListener("close", onClose)
+        }
+        ws.addEventListener("open", onOpen)
+        ws.addEventListener("error", onError)
+        ws.addEventListener("close", onClose)
+      })
+
+      return ws
+    }
+
+    const ws = await connect()
+
+    const keepIds = (input.body as any)?.store === true
+    const stripId = (item: unknown) => {
+      if (!item || typeof item !== "object") return item
+      if (Array.isArray(item)) return item
+      const record = item as Record<string, unknown>
+      if (!("id" in record)) return record
+      const cloned = { ...record }
+      delete (cloned as any).id
+      return cloned
+    }
+
+    const rawItems = Array.isArray((input.body as any).input) ? ((input.body as any).input as unknown[]) : []
+    const nextItems = keepIds ? rawItems : rawItems.map(stripId)
+    if (!keepIds) {
+      ;(input.body as any).input = nextItems
+    }
+    const appendItems = this.getIncrementalItems(state.lastItems, nextItems)
+    state.lastItems = nextItems
+
+    const request = appendItems
+      ? { type: "response.append", input: appendItems }
+      : { type: "response.create", ...input.body }
+
+    if (input.abortSignal?.aborted) {
+      throw new Error("aborted")
+    }
+
+    ws.send(JSON.stringify(request))
+
+    const value = new ReadableStream<ParseResult<z.infer<typeof openaiResponsesChunkSchema>>>({
+      start: (controller) => {
+        const onMessage = (event: MessageEvent) => {
+          const rawText =
+            typeof event.data === "string"
+              ? event.data
+              : event.data instanceof ArrayBuffer
+                ? Buffer.from(event.data).toString("utf8")
+                : typeof (event.data as any)?.text === "function"
+                  ? undefined
+                  : String(event.data)
+
+          if (rawText == null) return
+
+          let rawValue: unknown
+          try {
+            rawValue = JSON.parse(rawText)
+          } catch {
+            controller.enqueue({
+              success: false,
+              rawValue: rawText,
+              error: new Error("failed to parse websocket message as json"),
+            } as any)
+            return
+          }
+
+          const parsed = openaiResponsesChunkSchema.safeParse(rawValue)
+          if (!parsed.success) {
+            controller.enqueue({
+              success: false,
+              rawValue,
+              error: parsed.error,
+            } as any)
+            return
+          }
+
+          const chunk = parsed.data
+          controller.enqueue({
+            success: true,
+            rawValue,
+            value: chunk,
+          } as any)
+
+          if (isResponseFinishedChunk(chunk) || chunk.type === "error") {
+            cleanup()
+            controller.close()
+          }
+        }
+
+        const onClose = () => {
+          state.ws = null
+          cleanup()
+          controller.close()
+        }
+
+        const onError = () => {
+          state.ws = null
+          cleanup()
+          controller.error(new Error("websocket error"))
+        }
+
+        const onAbort = () => {
+          try {
+            state.closing = true
+            ws.close()
+          } catch {}
+          cleanup()
+          controller.close()
+        }
+
+        const cleanup = () => {
+          ws.removeEventListener("message", onMessage)
+          ws.removeEventListener("close", onClose)
+          ws.removeEventListener("error", onError)
+          input.abortSignal?.removeEventListener("abort", onAbort)
+        }
+
+        ws.addEventListener("message", onMessage)
+        ws.addEventListener("close", onClose)
+        ws.addEventListener("error", onError)
+        input.abortSignal?.addEventListener("abort", onAbort)
+      },
+    })
+
+    return { responseHeaders: {}, value }
   }
 }
 

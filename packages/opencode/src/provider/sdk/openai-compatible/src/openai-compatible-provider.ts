@@ -33,6 +33,14 @@ export interface OpenaiCompatibleProviderSettings {
    * Custom fetch implementation.
    */
   fetch?: FetchFunction
+
+  /**
+   * Transport for Responses streaming.
+   *
+   * - "sse": POST /responses with event-stream (default)
+   * - "websocket": WebSocket to /responses using response.create/response.append
+   */
+  transport?: "sse" | "websocket"
 }
 
 export interface OpenaiCompatibleProvider {
@@ -80,6 +88,7 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
       headers: getHeaders,
       url: ({ path }) => `${baseURL}${path}`,
       fetch: options.fetch,
+      transport: options.transport,
     })
   }
 

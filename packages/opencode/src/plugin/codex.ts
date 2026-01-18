@@ -372,6 +372,8 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
 
         return {
           apiKey: OAUTH_DUMMY_KEY,
+          baseURL: CODEX_API_BASE,
+          responsesWebsocket: true,
           async fetch(requestInput: RequestInfo | URL, init?: RequestInit) {
             // Remove dummy API key authorization header
             if (init?.headers) {

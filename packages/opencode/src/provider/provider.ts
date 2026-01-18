@@ -24,7 +24,10 @@ import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
-import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
+import {
+  createOpenaiCompatible as createOpenaiCompatibleInternal,
+  createOpenaiCompatible as createGitHubCopilotOpenAICompatible,
+} from "./sdk/openai-compatible/src"
 import { createXai } from "@ai-sdk/xai"
 import { createMistral } from "@ai-sdk/mistral"
 import { createGroq } from "@ai-sdk/groq"
@@ -128,6 +131,18 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          if (_options?.["responsesWebsocket"] === true) {
+            const provider = createOpenaiCompatibleInternal({
+              name: "openai",
+              apiKey: _options?.["apiKey"],
+              baseURL: _options?.["baseURL"],
+              headers: _options?.["headers"],
+              fetch: _options?.["fetch"],
+              transport: "websocket",
+            })
+            return provider.responses(modelID)
+          }
+
           return sdk.responses(modelID)
         },
         options: {},
