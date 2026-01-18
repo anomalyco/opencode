@@ -210,12 +210,6 @@ export function Session() {
     } else if (part.tool === "plan_enter") {
       local.agent.set("plan")
       lastSwitch = part.id
-    } else if (part.tool === "chat_enter") {
-      local.agent.set("chat")
-      lastSwitch = part.id
-    } else if (part.tool === "chat_exit") {
-      local.agent.set("build")
-      lastSwitch = part.id
     }
   })
 
@@ -703,11 +697,6 @@ export function Session() {
           return
         }
 
-        const base64 = Buffer.from(text).toString("base64")
-        const osc52 = `\x1b]52;c;${base64}\x07`
-        const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-        /* @ts-expect-error */
-        renderer.writeOut(finalOsc52)
         Clipboard.copy(text)
           .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
           .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))

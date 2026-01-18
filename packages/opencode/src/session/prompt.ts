@@ -597,7 +597,7 @@ export namespace SessionPrompt {
         sessionID,
         system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
         messages: [
-          ...MessageV2.toModelMessage(sessionMessages, { tools }),
+          ...MessageV2.toModelMessage(sessionMessages),
           ...(isLastStep
             ? [
                 {
@@ -716,18 +716,10 @@ export namespace SessionPrompt {
           )
           return result
         },
-        toModelOutput(result: { output: string; attachments?: MessageV2.FilePart[] }) {
-          if (!result.attachments?.length) return { type: "text", value: result.output }
+        toModelOutput(result) {
           return {
-            type: "content",
-            value: [
-              { type: "text", text: result.output },
-              ...result.attachments.map((a) => ({
-                type: "media" as const,
-                data: a.url.slice(a.url.indexOf(",") + 1),
-                mediaType: a.mime,
-              })),
-            ],
+            type: "text",
+            value: result.output,
           }
         },
       })
@@ -814,18 +806,10 @@ export namespace SessionPrompt {
           content: result.content, // directly return content to preserve ordering when outputting to model
         }
       }
-      item.toModelOutput = (result: { output: string; attachments?: MessageV2.FilePart[] }) => {
-        if (!result.attachments?.length) return { type: "text", value: result.output }
+      item.toModelOutput = (result) => {
         return {
-          type: "content",
-          value: [
-            { type: "text", text: result.output },
-            ...result.attachments.map((a) => ({
-              type: "media" as const,
-              data: a.url.slice(a.url.indexOf(",") + 1),
-              mediaType: a.mime,
-            })),
-          ],
+          type: "text",
+          value: result.output,
         }
       }
       tools[key] = item
@@ -1340,31 +1324,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       userMessage.parts.push(part)
       return input.messages
     }
-
-    // Entering chat mode
-    if (input.agent.name === "chat" && assistantMessage?.info.agent !== "chat") {
-      const chatDir = Session.chat(input.session)
-      await fs.mkdir(chatDir, { recursive: true })
-      const part = await Session.updatePart({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: `<system-reminder>
-Chat mode is active. You are now operating in a isolated temporary directory at: ${chatDir}
-
-## Core Rules:
-1. **Context-Only Operations**: Do not follow or read old files from the main codebase unless they are explicitly provided in the current context.
-2. **Temporary Workspace**: All files you create or modify MUST be within ${chatDir}.
-3. **Maintain File List**: Keep track of the files currently in your context.
-4. **No Legacy Following**: Do not attempt to explore or build upon the historical codebase unless instructed otherwise by being given those files.
-</system-reminder>`,
-        synthetic: true,
-      })
-      userMessage.parts.push(part)
-      return input.messages
-    }
-
     return input.messages
   }
 

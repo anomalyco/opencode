@@ -239,10 +239,6 @@ export namespace Session {
     return path.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 
-  export function chat(input: { slug: string; time: { created: number } }) {
-    return path.join(Global.Path.state, "chat", [input.time.created, input.slug].join("-"))
-  }
-
   export const get = fn(Identifier.schema("session"), async (id) => {
     const read = await Storage.read<Info>(["session", Instance.project.id, id])
     return read as Info

@@ -20,15 +20,9 @@ opencode.json
 a.out
 target
 .scripts
+.direnv/
 
 # Local dev files
 opencode-dev
 logs/
 *.bun-build
-bun.lock
-bun.lock
-
-# Local development files
-.local-share-opencode/
-agent/
-packages/opencode/.profile/
