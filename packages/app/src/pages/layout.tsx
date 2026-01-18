@@ -952,15 +952,15 @@ export default function Layout(props: ParentProps) {
       .then((x) => x.data ?? [])
       .catch(() => [])
 
-    const pending = sessions.filter((session) => session.time.archived === undefined)
-    if (pending.length > 0) {
+    if (sessions.length > 0) {
+      const archivedAt = Date.now()
       await Promise.all(
-        pending.map((session) =>
+        sessions.map((session) =>
           globalSDK.client.session
             .update({
               sessionID: session.id,
               directory: session.directory,
-              time: { archived: Date.now() },
+              time: { archived: archivedAt },
             })
             .catch(() => undefined),
         ),
