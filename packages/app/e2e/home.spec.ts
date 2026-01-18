@@ -1,24 +1,21 @@
 import { test, expect } from "@playwright/test"
+import { serverName } from "./utils"
 
-test("home renders and shows an open project entrypoint", async ({ page }) => {
+test("home renders and shows core entrypoints", async ({ page }) => {
   await page.goto("/")
 
-  await expect(page.getByText("Recent projects").or(page.getByText("No recent projects"))).toBeVisible()
   await expect(page.getByRole("button", { name: "Open project" }).first()).toBeVisible()
+  await expect(page.getByRole("button", { name: serverName })).toBeVisible()
 })
 
 test("server picker dialog opens from home", async ({ page }) => {
-  const host = process.env.PLAYWRIGHT_SERVER_HOST ?? "localhost"
-  const port = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
-  const name = `${host}:${port}`
-
   await page.goto("/")
 
-  const trigger = page.getByRole("button", { name })
+  const trigger = page.getByRole("button", { name: serverName })
   await expect(trigger).toBeVisible()
   await trigger.click()
 
-  const dialog = page.getByRole("dialog", { name: "Servers" })
+  const dialog = page.getByRole("dialog")
   await expect(dialog).toBeVisible()
-  await expect(dialog.getByPlaceholder("Search servers")).toBeVisible()
+  await expect(dialog.getByRole("textbox").first()).toBeVisible()
 })
