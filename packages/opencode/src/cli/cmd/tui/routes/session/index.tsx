@@ -123,6 +123,22 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+
+  const messagesDisplay = createMemo(() => {
+    const msgs = messages()
+    if (msgs.length >= 100) {
+      const synthetic = {
+        id: "__load_more__",
+        sessionID: route.sessionID,
+        role: "system" as const,
+        time: { created: 0, updated: 0, completed: null },
+        _synthetic: true,
+      } as any
+      return [synthetic, ...msgs]
+    }
+    return msgs
+  })
+
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
@@ -979,9 +995,78 @@ export function Session() {
               flexGrow={1}
               scrollAcceleration={scrollAcceleration()}
             >
-              <For each={messages()}>
+              <For each={messagesDisplay()}>
                 {(message, index) => (
                   <Switch>
+                    <Match when={message.id === "__load_more__"}>
+                      {(function () {
+                        const [hoveredButton, setHoveredButton] = createSignal<"conversation" | "full" | null>(null)
+                        const [loading, setLoading] = createSignal(false)
+
+                        const handleLoadConversation = async () => {
+                          if (loading()) return
+                          setLoading(true)
+                          try {
+                            const count = await sync.session.loadConversationHistory(route.sessionID)
+                            if (count === 0) {
+                              toast.show({ message: "No more messages loaded", variant: "info" })
+                            } else {
+                              toast.show({ message: `History loaded (${count} messages)`, variant: "success" })
+                            }
+                          } finally {
+                            setLoading(false)
+                          }
+                        }
+
+                        const handleLoadFull = async () => {
+                          if (loading()) return
+                          setLoading(true)
+                          try {
+                            const count = await sync.session.loadFullSessionHistory(route.sessionID)
+                            if (count === 0) {
+                              toast.show({ message: "No more messages loaded", variant: "info" })
+                            } else {
+                              toast.show({ message: `History loaded (${count} messages)`, variant: "success" })
+                            }
+                          } finally {
+                            setLoading(false)
+                          }
+                        }
+
+                        return (
+                          <box
+                            paddingLeft={2}
+                            paddingRight={2}
+                            paddingTop={1}
+                            paddingBottom={1}
+                            marginBottom={1}
+                            flexDirection="row"
+                            backgroundColor={theme.backgroundPanel}
+                          >
+                            <text fg={theme.textMuted}>Load more messages: </text>
+                            <box
+                              onMouseOver={() => setHoveredButton("conversation")}
+                              onMouseOut={() => setHoveredButton(null)}
+                              onMouseUp={handleLoadConversation}
+                            >
+                              <text fg={hoveredButton() === "conversation" ? theme.accent : theme.text}>
+                                load conversation history
+                              </text>
+                            </box>
+                            <text fg={theme.textMuted}> or </text>
+                            <box
+                              onMouseOver={() => setHoveredButton("full")}
+                              onMouseOut={() => setHoveredButton(null)}
+                              onMouseUp={handleLoadFull}
+                            >
+                              <text fg={hoveredButton() === "full" ? theme.accent : theme.text}>
+                                load full session history
+                              </text>
+                            </box>
+                          </box>
+                        )
+                      })()}
+                    </Match>
                     <Match when={message.id === revert()?.messageID}>
                       {(function () {
                         const command = useCommandDialog()

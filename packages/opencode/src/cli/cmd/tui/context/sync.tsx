@@ -462,6 +462,57 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           )
           fullSyncedSessions.add(sessionID)
         },
+        async loadConversationHistory(sessionID: string) {
+          const messages = store.message[sessionID]
+          if (!messages || messages.length === 0) return
+
+          const earliest = messages[0]
+          const result = await sdk.client.session.messages({
+            sessionID,
+            ts_before: earliest.time.created,
+            breakpoint: true,
+          })
+
+          if (!result.data || result.data.length === 0) {
+            return 0
+          }
+
+          setStore(
+            produce((draft) => {
+              const existing = draft.message[sessionID] ?? []
+              draft.message[sessionID] = [...result.data!.map((x) => x.info), ...existing]
+              for (const message of result.data!) {
+                draft.part[message.info.id] = message.parts
+              }
+            }),
+          )
+          return result.data.length
+        },
+        async loadFullSessionHistory(sessionID: string) {
+          const messages = store.message[sessionID]
+          if (!messages || messages.length === 0) return
+
+          const earliest = messages[0]
+          const result = await sdk.client.session.messages({
+            sessionID,
+            ts_before: earliest.time.created,
+          })
+
+          if (!result.data || result.data.length === 0) {
+            return 0
+          }
+
+          setStore(
+            produce((draft) => {
+              const existing = draft.message[sessionID] ?? []
+              draft.message[sessionID] = [...result.data!.map((x) => x.info), ...existing]
+              for (const message of result.data!) {
+                draft.part[message.info.id] = message.parts
+              }
+            }),
+          )
+          return result.data.length
+        },
       },
       bootstrap,
     }
