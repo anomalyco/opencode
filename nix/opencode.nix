@@ -68,10 +68,18 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
+    completion_bash=$($out/bin/opencode completion || true)
     # trick yargs into also generating zsh completions
-    installShellCompletion --cmd opencode \
-      --bash <($out/bin/opencode completion) \
-      --zsh <(SHELL=/bin/zsh $out/bin/opencode completion)
+    completion_zsh=$(SHELL=/bin/zsh $out/bin/opencode completion || true)
+    if [ -n "$completion_bash" ]; then
+      installShellCompletion --cmd opencode \
+        --bash <(echo "$completion_bash")
+    fi
+
+    if [ -n "$completion_zsh" ]; then
+      installShellCompletion --cmd opencode \
+        --zsh <(echo "$completion_zsh")
+    fi
   '';
 
   nativeInstallCheckInputs = [
