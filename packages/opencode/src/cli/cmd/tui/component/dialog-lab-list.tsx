@@ -119,13 +119,7 @@ export function DialogLabList() {
         footer: existingSession 
           ? (isBusy ? "working..." : isRetrying ? "retrying..." : "ready")
           : "new",
-        gutter: isActive ? (
-          <text fg={theme[lab.color]}>{"\u25cf"}</text>
-        ) : switching() === lab.id ? (
-          <text fg={theme.primary}>{"\u25cb"}</text>
-        ) : existingSession ? (
-          <text fg={theme.textMuted}>{"\u25cb"}</text>
-        ) : undefined,
+        // gutter removed - was causing TextNodeRenderable errors
         _session: existingSession,
         _lab: lab,
       } as DialogSelectOption<string> & { _session?: any; _lab: Lab }
