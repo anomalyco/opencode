@@ -34,7 +34,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const agent = iife(() => {
-      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && x.mode !== "orchestrator" && !x.hidden))
+      // Primary agents for Tab switching (build/plan)
+      const primaryAgents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && x.mode !== "orchestrator" && !x.hidden))
+      // All interactive agents (includes orchestrator for child session navigation)
+      const interactiveAgents = createMemo(() => sync.data.agent.filter((x) => (x.mode === "primary" || x.mode === "orchestrator") && !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
@@ -51,13 +54,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       ])
       return {
         list() {
-          return agents()
+          return primaryAgents()
         },
         current() {
-          return agents().find((x) => x.name === agentStore.current)!
+          // Check interactive agents (includes orchestrator) for current
+          return interactiveAgents().find((x) => x.name === agentStore.current) ?? primaryAgents()[0]
         },
         set(name: string) {
-          if (!agents().some((x) => x.name === name))
+          // Allow setting any interactive agent (primary or orchestrator)
+          if (!interactiveAgents().some((x) => x.name === name))
             return toast.show({
               variant: "warning",
               message: `Agent not found: ${name}`,
@@ -66,11 +71,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setAgentStore("current", name)
         },
         move(direction: 1 | -1) {
+          // Tab switching only cycles through primary agents (build/plan)
           batch(() => {
-            let next = agents().findIndex((x) => x.name === agentStore.current) + direction
-            if (next < 0) next = agents().length - 1
-            if (next >= agents().length) next = 0
-            const value = agents()[next]
+            let currentIndex = primaryAgents().findIndex((x) => x.name === agentStore.current)
+            // If current agent is orchestrator (not in primary list), start from 0
+            if (currentIndex === -1) currentIndex = 0
+            let next = currentIndex + direction
+            if (next < 0) next = primaryAgents().length - 1
+            if (next >= primaryAgents().length) next = 0
+            const value = primaryAgents()[next]
             setAgentStore("current", value.name)
           })
         },
