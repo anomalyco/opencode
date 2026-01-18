@@ -48,9 +48,9 @@ const FilesCommand = cmd({
       for await (const file of Ripgrep.files({
         cwd: Instance.directory,
         glob: args.glob ? [args.glob] : undefined,
+        limit: args.limit,
       })) {
         files.push(file)
-        if (args.limit && files.length >= args.limit) break
       }
       process.stdout.write(files.join(EOL) + EOL)
     })

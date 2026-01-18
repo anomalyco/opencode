@@ -211,6 +211,7 @@ export namespace Ripgrep {
     hidden?: boolean
     follow?: boolean
     maxDepth?: number
+    limit?: number
   }) {
     const args = [await filepath(), "--files", "--glob=!.git/*"]
     if (input.follow !== false) args.push("--follow")
@@ -221,6 +222,7 @@ export namespace Ripgrep {
         args.push(`--glob=${g}`)
       }
     }
+    const cap = input.limit ?? Number.POSITIVE_INFINITY
 
     // Bun.spawn should throw this, but it incorrectly reports that the executable does not exist.
     // See https://github.com/oven-sh/bun/issues/24012
@@ -241,28 +243,41 @@ export namespace Ripgrep {
 
     const reader = proc.stdout.getReader()
     const decoder = new TextDecoder()
-    let buffer = ""
+    const state = { buffer: "", count: 0 }
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+    while (true) {
+      const res = await reader.read()
+      if (res.done) break
 
-        buffer += decoder.decode(value, { stream: true })
-        // Handle both Unix (\n) and Windows (\r\n) line endings
-        const lines = buffer.split(/\r?\n/)
-        buffer = lines.pop() || ""
+      state.buffer += decoder.decode(res.value, { stream: true })
+      // Handle both Unix (\n) and Windows (\r\n) line endings
+      const lines = state.buffer.split(/\r?\n/)
+      state.buffer = lines.pop() || ""
 
-        for (const line of lines) {
-          if (line) yield line
-        }
+      for (const line of lines) {
+        if (!line) continue
+        yield line
+        state.count += 1
+        if (state.count < cap) continue
+        proc.kill()
+        reader.releaseLock()
+        await proc.exited
+        return
       }
-
-      if (buffer) yield buffer
-    } finally {
-      reader.releaseLock()
-      await proc.exited
     }
+
+    if (state.buffer) {
+      yield state.buffer
+      state.count += 1
+      if (state.count >= cap) {
+        reader.releaseLock()
+        await proc.exited
+        return
+      }
+    }
+
+    reader.releaseLock()
+    await proc.exited
   }
 
   export async function tree(input: { cwd: string; limit?: number }) {
