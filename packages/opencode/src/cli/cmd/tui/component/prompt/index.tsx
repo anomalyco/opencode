@@ -1202,24 +1202,20 @@ export function Prompt(props: PromptProps) {
           </Show>
           <Show when={status().type !== "retry"}>
             <box gap={2} flexDirection="row">
-              <Switch>
-                <Match when={store.mode === "normal"}>
-                  <text fg={theme.text}>
-                    ctrl+space <span style={{ fg: modePrefixColor() }}>{executionMode.getModeDisplay().name}</span>
-                  </text>
-                  <Show when={local.model.variant.list().length > 0}>
-                    <text fg={theme.text}>
-                      {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
-                    </text>
-                  </Show>
-                  <text fg={theme.text}>
-                    shift+tab <span style={{ fg: theme.textMuted }}>agents</span>
-                  </text>
-                  <text fg={theme.text}>
-                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
-                  </text>
-                </Match>
-              </Switch>
+              <text fg={theme.text}>
+                ctrl+space <span style={{ fg: modePrefixColor() }}>{executionMode.getModeDisplay().name}</span>
+              </text>
+              <Show when={local.model.variant.list().length > 0}>
+                <text fg={theme.text}>
+                  {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
+                </text>
+              </Show>
+              <text fg={theme.text}>
+                shift+tab <span style={{ fg: theme.textMuted }}>agents</span>
+              </text>
+              <text fg={theme.text}>
+                {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+              </text>
             </box>
           </Show>
         </box>
