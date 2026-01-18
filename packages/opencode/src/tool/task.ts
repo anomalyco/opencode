@@ -12,6 +12,52 @@ import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
 
+// Check if caller has Plan mode restrictions (edit="deny" globally)
+function hasPlanRestrictions(permissions: PermissionNext.Ruleset): boolean {
+  const rule = permissions.findLast((r) => r.permission === "edit" && r.pattern === "*")
+  return rule?.action === "deny"
+}
+
+// Read-only bash commands allowed in Plan mode
+const PLAN_BASH_WHITELIST = [
+  "cat *",
+  "head *",
+  "tail *",
+  "grep *",
+  "ls *",
+  "find *",
+  "wc *",
+  "diff *",
+  "git status*",
+  "git log*",
+  "git diff*",
+  "git show*",
+  "git branch*",
+  "git remote*",
+  "git rev-parse*",
+  "echo *",
+  "pwd",
+  "which *",
+  "env",
+  "printenv*",
+]
+
+// Build permission rules for Plan mode inheritance
+function planPermissions(): PermissionNext.Ruleset {
+  return [
+    { permission: "edit", pattern: "*", action: "deny" as const },
+    { permission: "write", pattern: "*", action: "deny" as const },
+    { permission: "patch", pattern: "*", action: "deny" as const },
+    { permission: "multiedit", pattern: "*", action: "deny" as const },
+    { permission: "bash", pattern: "*", action: "deny" as const },
+    ...PLAN_BASH_WHITELIST.map((pattern) => ({
+      permission: "bash" as const,
+      pattern,
+      action: "allow" as const,
+    })),
+  ]
+}
+
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
@@ -23,15 +69,17 @@ const parameters = z.object({
 export const TaskTool = Tool.define("task", async (ctx) => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
 
-  // Filter agents by permissions if agent provided
   const caller = ctx?.agent
-  const accessibleAgents = caller
+  const accessible = caller
     ? agents.filter((a) => PermissionNext.evaluate("task", a.name, caller.permission).action !== "deny")
     : agents
 
+  // Security: sub-agents must inherit Plan mode restrictions
+  const restricted = caller ? hasPlanRestrictions(caller.permission) : false
+
   const description = DESCRIPTION.replace(
     "{agents}",
-    accessibleAgents
+    accessible
       .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
       .join("\n"),
   )
@@ -41,7 +89,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
 
-      // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
         await ctx.ask({
           permission: "task",
@@ -54,10 +101,21 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         })
       }
 
-      const agent = await Agent.get(params.subagent_type)
-      if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+      // Force plan agent when parent has Plan mode restrictions
+      let name = params.subagent_type
+      if (restricted) {
+        const plan = await Agent.get("plan")
+        if (!plan) {
+          throw new Error("Cannot spawn sub-agent from Plan mode parent - 'plan' agent is not available")
+        }
+        name = "plan"
+      }
 
-      const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
+      const agent = await Agent.get(name)
+      if (!agent) throw new Error(`Unknown agent type: ${name} is not a valid agent type`)
+
+      const hasTask = agent.permission.some((rule) => rule.permission === "task")
+      const inherited = restricted ? planPermissions() : []
 
       const session = await iife(async () => {
         if (params.session_id) {
@@ -67,32 +125,17 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
         return await Session.create({
           parentID: ctx.sessionID,
-          title: params.description + ` (@${agent.name} subagent)`,
+          title: params.description + ` (@${agent.name} subagent${restricted ? ", Plan mode" : ""})`,
           permission: [
-            {
-              permission: "todowrite",
-              pattern: "*",
-              action: "deny",
-            },
-            {
-              permission: "todoread",
-              pattern: "*",
-              action: "deny",
-            },
-            ...(hasTaskPermission
-              ? []
-              : [
-                  {
-                    permission: "task" as const,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
+            { permission: "todowrite", pattern: "*", action: "deny" },
+            { permission: "todoread", pattern: "*", action: "deny" },
+            ...(hasTask ? [] : [{ permission: "task" as const, pattern: "*" as const, action: "deny" as const }]),
             ...(config.experimental?.primary_tools?.map((t) => ({
               pattern: "*",
               action: "allow" as const,
               permission: t,
             })) ?? []),
+            ...inherited,
           ],
         })
       })
@@ -142,6 +185,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
+      const disabled: Record<string, boolean> = restricted
+        ? { edit: false, write: false, patch: false, multiedit: false }
+        : {}
+
       const result = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
@@ -153,8 +200,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         tools: {
           todowrite: false,
           todoread: false,
-          ...(hasTaskPermission ? {} : { task: false }),
+          ...(hasTask ? {} : { task: false }),
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
+          ...disabled,
         },
         parts: promptParts,
       })
