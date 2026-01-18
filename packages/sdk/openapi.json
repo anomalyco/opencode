@@ -7411,6 +7411,8 @@
                       "session.compact",
                       "session.page.up",
                       "session.page.down",
+                      "session.line.up",
+                      "session.line.down",
                       "session.half.page.up",
                       "session.half.page.down",
                       "session.first",
@@ -8282,12 +8284,22 @@
           },
           "messages_page_up": {
             "description": "Scroll messages up by one page",
-            "default": "pageup",
+            "default": "pageup,ctrl+alt+b",
             "type": "string"
           },
           "messages_page_down": {
             "description": "Scroll messages down by one page",
-            "default": "pagedown",
+            "default": "pagedown,ctrl+alt+f",
+            "type": "string"
+          },
+          "messages_line_up": {
+            "description": "Scroll messages up by one line",
+            "default": "ctrl+alt+y",
+            "type": "string"
+          },
+          "messages_line_down": {
+            "description": "Scroll messages down by one line",
+            "default": "ctrl+alt+e",
             "type": "string"
           },
           "messages_half_page_up": {
