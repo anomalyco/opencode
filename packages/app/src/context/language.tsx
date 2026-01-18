@@ -1,4 +1,4 @@
-import { createContext, createSignal, useContext, type Accessor } from "solid-js"
+import { createContext, createSignal, useContext, type Accessor, type ParentProps } from "solid-js"
 import enTranslations from "@/locales/en.json"
 import zhTranslations from "@/locales/zh.json"
 
@@ -20,19 +20,17 @@ export function useLanguage(): LanguageContextType {
   return context
 }
 
-export function LanguageProvider(props: { children: any }) {
-  const [language, setLanguage] = createSignal<Language>(
-    (localStorage.getItem("opencode-language") as Language) ?? "en",
-  )
+export function LanguageProvider(props: ParentProps) {
+  const [language, setLanguage] = createSignal<Language>(getStoredLanguage() ?? "en")
 
   function setLanguageWithStorage(lang: Language) {
     setLanguage(lang)
-    localStorage.setItem("opencode-language", lang)
-  }
-
-  async function loadTranslations(lang: Language) {
-    const translations = await import(`../locales/${lang}.json`)
-    return translations.default
+    try {
+      if (typeof localStorage === "undefined") return
+      localStorage.setItem("opencode-language", lang)
+    } catch {
+      // Ignore storage failures (e.g. SSR or restricted environments).
+    }
   }
 
   function t(key: string, params?: Record<string, string | number>): string {
@@ -77,4 +75,14 @@ export function LanguageProvider(props: { children: any }) {
   }
 
   return <LanguageContext.Provider value={value}>{props.children}</LanguageContext.Provider>
+}
+
+function getStoredLanguage(): Language | null {
+  try {
+    if (typeof localStorage === "undefined") return null
+    const stored = localStorage.getItem("opencode-language")
+    return stored === "en" || stored === "zh" ? stored : null
+  } catch {
+    return null
+  }
 }

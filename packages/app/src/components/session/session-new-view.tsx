@@ -77,7 +77,7 @@ export function NewSessionView(props: NewSessionViewProps) {
         {(project) => (
           <div class="flex justify-center items-center gap-3">
             <Icon name="pencil-line" size="small" />
-          <div class="text-12-medium text-text-weak">
+            <div class="text-12-medium text-text-weak">
               {language.t("session.lastModified")}&nbsp;
               <span class="text-text-strong">
                 {DateTime.fromMillis(project().time.updated ?? project().time.created).toRelative()}

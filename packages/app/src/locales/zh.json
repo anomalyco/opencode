@@ -51,7 +51,6 @@
     "next": "下一个会话",
     "archive": "归档会话",
     "noFiles": "无文件更改",
-    "filesChanged": "{count} 个文件已更改",
     "filesChangedLabel": "已更改 {count} 个文件",
     "loadingChanges": "正在加载更改...",
     "loadingEarlierMessages": "正在加载更早的消息...",

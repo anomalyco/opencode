@@ -51,7 +51,6 @@
     "next": "Next session",
     "archive": "Archive session",
     "noFiles": "No files changed",
-    "filesChanged": "{count} file{plural, s} changed",
     "filesChangedLabel": "{count} Files Changed",
     "loadingChanges": "Loading changes...",
     "loadingEarlierMessages": "Loading earlier messages...",
