@@ -19,7 +19,7 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Install Playwright browsers
-        run: bun --cwd packages/app x playwright install --with-deps
+        run: bunx --cwd packages/app playwright install --with-deps
 
       - name: Seed opencode data
         run: bun --cwd packages/opencode script/seed-e2e.ts
