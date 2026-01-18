@@ -24,6 +24,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
+import { CodexTurnState } from "@/provider/codex-turn-state"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -165,8 +166,15 @@ export namespace LLM {
     const activeTools = Object.keys(tools).filter((x) => x !== "invalid" && x !== "_noop")
 
     async function createStream(args: { messages: ModelMessage[]; providerOptionsBase: Record<string, any> }) {
-      const providerOptions = ProviderTransform.providerOptions(input.model, args.providerOptionsBase)
-      return streamText({
+      const providerOptionsBase = { ...args.providerOptionsBase }
+      if (isCodex) {
+        // Match Codex CLI: send system prompt via Responses API `instructions`.
+        providerOptionsBase.instructions = system.join("\n\n")
+      }
+      const providerOptions = ProviderTransform.providerOptions(input.model, providerOptionsBase)
+
+      const run = () =>
+        streamText({
         onError(error) {
           l.error("stream error", {
             error,
@@ -207,6 +215,10 @@ export namespace LLM {
                 originator: "opencode",
                 "User-Agent": `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
                 session_id: input.sessionID,
+                "x-oai-web-search-eligible": "true",
+                ...(process.env["OPENCODE_CODEX_BETA_FEATURES"]
+                  ? { "x-codex-beta-features": process.env["OPENCODE_CODEX_BETA_FEATURES"] }
+                  : undefined),
               }
             : undefined),
           ...(input.model.providerID.startsWith("opencode")
@@ -226,12 +238,7 @@ export namespace LLM {
         maxRetries: input.retries ?? 0,
         messages: [
           ...(isCodex
-            ? [
-                {
-                  role: "user",
-                  content: system.join("\n\n"),
-                } as ModelMessage,
-              ]
+            ? []
             : system.map(
                 (x): ModelMessage => ({
                   role: "system",
@@ -257,6 +264,8 @@ export namespace LLM {
         }),
         experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
       })
+
+      return isCodex ? CodexTurnState.run(run) : run()
     }
 
     const initial = await createStream({

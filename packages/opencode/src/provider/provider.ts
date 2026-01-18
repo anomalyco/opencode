@@ -131,6 +131,18 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          if (_options?.["codexCompat"] === true) {
+            const provider = createOpenaiCompatibleInternal({
+              name: "openai",
+              apiKey: _options?.["apiKey"],
+              baseURL: _options?.["baseURL"],
+              headers: _options?.["headers"],
+              fetch: _options?.["fetch"],
+              transport: _options?.["responsesWebsocket"] === true ? "websocket" : "sse",
+            })
+            return provider.responses(modelID)
+          }
+
           if (_options?.["responsesWebsocket"] === true) {
             const provider = createOpenaiCompatibleInternal({
               name: "openai",

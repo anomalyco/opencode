@@ -7,7 +7,9 @@ const log = Log.create({ service: "plugin.codex" })
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
-const CODEX_API_BASE = "https://chatgpt.com/backend-api/codex/v1"
+// Codex CLI default for ChatGPT auth:
+// https://chatgpt.com/backend-api/codex
+const CODEX_API_BASE = "https://chatgpt.com/backend-api/codex"
 const OAUTH_PORT = 1455
 
 interface PkceCodes {
@@ -373,7 +375,14 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
         return {
           apiKey: OAUTH_DUMMY_KEY,
           baseURL: CODEX_API_BASE,
-          responsesWebsocket: true,
+          // Ensure the OpenAI provider uses OpenCode's Codex-compatible implementation.
+          codexCompat: true,
+          // Default to WebSocket transport; allow opting into SSE via OPENCODE_CODEX_SSE=1.
+          // Backwards-compatible override: OPENCODE_CODEX_WEBSOCKET=0/1.
+          responsesWebsocket:
+            process.env["OPENCODE_CODEX_WEBSOCKET"] != null
+              ? process.env["OPENCODE_CODEX_WEBSOCKET"] === "1"
+              : process.env["OPENCODE_CODEX_SSE"] !== "1",
           async fetch(requestInput: RequestInfo | URL, init?: RequestInit) {
             // Remove dummy API key authorization header
             if (init?.headers) {
