@@ -954,6 +954,26 @@ export type KeybindsConfig = {
    */
   username_toggle?: string
   /**
+   * Toggle console
+   */
+  console_toggle?: string
+  /**
+   * Toggle MCP dialog
+   */
+  mcp_toggle?: string
+  /**
+   * Toggle timestamps visibility
+   */
+  timestamps_toggle?: string
+  /**
+   * Toggle thinking visibility
+   */
+  thinking_toggle?: string
+  /**
+   * Toggle diff wrapping
+   */
+  diffwrap_toggle?: string
+  /**
    * View status
    */
   status_view?: string
@@ -1061,6 +1081,10 @@ export type KeybindsConfig = {
    * Copy message
    */
   messages_copy?: string
+  /**
+   * Copy session transcript
+   */
+  session_copy?: string
   /**
    * Undo message
    */

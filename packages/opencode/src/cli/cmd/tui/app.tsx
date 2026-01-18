@@ -389,6 +389,7 @@ function App() {
       slash: {
         name: "mcps",
       },
+      keybind: "mcp_toggle",
       onSelect: () => {
         dialog.replace(() => <DialogMcp />)
       },
@@ -520,6 +521,7 @@ function App() {
       title: "Toggle console",
       category: "System",
       value: "app.console",
+      keybind: "console_toggle",
       onSelect: (dialog) => {
         renderer.console.toggle()
         dialog.clear()
