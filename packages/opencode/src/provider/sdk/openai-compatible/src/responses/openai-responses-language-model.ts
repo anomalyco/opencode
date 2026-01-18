@@ -32,7 +32,6 @@ import type { OpenAIResponsesModelId } from "./openai-responses-settings"
 import { localShellInputSchema } from "./tool/local-shell"
 import { Auth } from "@/auth"
 import { CodexTurnState } from "@/provider/codex-turn-state"
-import WsWebSocket from "ws"
 
 const webSearchCallItem = z.object({
   type: z.literal("web_search_call"),
@@ -834,6 +833,47 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
         return result as any
       }
 
+      // Bun's WebSocket client does not expose handshake response headers. Codex turn state is
+      // delivered via response headers at turn start, so we bootstrap via SSE once per turn to
+      // capture it, then continue via WebSocket for the rest of the turn.
+      if (this.shouldUseCodexOAuth(url) && !this.getCodexTurnState(options.abortSignal)) {
+        const state = this.wsBySessionId.get(sessionId) ?? { ws: null, lastItems: [], closing: false }
+        this.wsBySessionId.set(sessionId, state)
+        if (state.closing) {
+          state.ws = null
+          state.closing = false
+          state.lastItems = []
+        }
+
+        const preparedBody = { ...body, stream: true } as any
+        const keepIds = preparedBody?.store === true
+        const stripId = (item: unknown) => {
+          if (!item || typeof item !== "object") return item
+          if (Array.isArray(item)) return item
+          const record = item as Record<string, unknown>
+          if (!("id" in record)) return record
+          const cloned = { ...record }
+          delete (cloned as any).id
+          return cloned
+        }
+        const rawItems = Array.isArray(preparedBody.input) ? (preparedBody.input as unknown[]) : []
+        const nextItems = keepIds ? rawItems : rawItems.map(stripId)
+        if (!keepIds) {
+          preparedBody.input = nextItems
+        }
+        state.lastItems = nextItems
+
+        const result = await this.postJsonToApiMaybeCompressed({
+          url,
+          headers: requestHeaders,
+          body: preparedBody,
+          abortSignal: options.abortSignal,
+          successfulResponseHandler: createEventSourceResponseHandler(openaiResponsesChunkSchema) as any,
+        })
+        this.maybeCaptureCodexTurnState(result.responseHeaders, url, options.abortSignal)
+        return result as any
+      }
+
       const result = await this.websocketStream({
         wsUrl: url,
         sessionId,
@@ -1578,10 +1618,9 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
     }
 
     const wsHeaders = await this.maybeAttachCodexOAuthHeaders(input.headers, input.wsUrl)
-    let handshakeHeaders: Record<string, string> = {}
 
     const connect = async () => {
-      if (state.ws && state.ws.readyState === WsWebSocket.OPEN) return state.ws
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) return state.ws
 
       const url = (() => {
         const parsed = new URL(input.wsUrl)
@@ -1594,19 +1633,10 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
         Object.entries(wsHeaders).filter(([, v]) => typeof v === "string" && v.length > 0) as Array<[string, string]>,
       )
 
-      const ws: any = new WsWebSocket(url, { headers })
+      const ws: any = new WebSocket(url, { headers } as any)
       state.ws = ws
 
       await new Promise<void>((resolve, reject) => {
-        const onUpgrade = (res: any) => {
-          const entries = Object.entries(res?.headers ?? {}) as Array<[string, string | string[] | undefined]>
-          handshakeHeaders = Object.fromEntries(
-            entries
-              .filter(([, v]) => v != null)
-              .map(([k, v]) => [k, Array.isArray(v) ? v.join(",") : String(v)]),
-          )
-        }
-
         const onOpen = () => {
           cleanup()
           resolve()
@@ -1620,16 +1650,14 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
           reject(new Error("websocket closed during connect"))
         }
         const cleanup = () => {
-          ws.off?.("upgrade", onUpgrade)
-          ws.off?.("open", onOpen)
-          ws.off?.("error", onError)
-          ws.off?.("close", onClose)
+          ws.removeEventListener?.("open", onOpen)
+          ws.removeEventListener?.("error", onError)
+          ws.removeEventListener?.("close", onClose)
         }
 
-        ws.on?.("upgrade", onUpgrade)
-        ws.on?.("open", onOpen)
-        ws.on?.("error", onError)
-        ws.on?.("close", onClose)
+        ws.addEventListener?.("open", onOpen)
+        ws.addEventListener?.("error", onError)
+        ws.addEventListener?.("close", onClose)
       })
 
       return ws
@@ -1666,17 +1694,16 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
 
     const value = new ReadableStream<ParseResult<z.infer<typeof openaiResponsesChunkSchema>>>({
       start: (controller) => {
-        const onMessage = (data: any) => {
+        const onMessage = (event: any) => {
+          const data = event?.data ?? event
           const rawText =
             typeof data === "string"
               ? data
-              : Buffer.isBuffer(data)
-                ? data.toString("utf8")
-                : data instanceof ArrayBuffer
-                  ? Buffer.from(data).toString("utf8")
-                  : Array.isArray(data)
-                    ? Buffer.concat(data).toString("utf8")
-                    : data?.toString?.()
+              : data instanceof ArrayBuffer
+                ? Buffer.from(data).toString("utf8")
+                : typeof data?.text === "function"
+                  ? undefined
+                  : String(data)
 
           if (rawText == null || rawText === "[object Object]") return
 
@@ -1737,15 +1764,15 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
         }
 
         const cleanup = () => {
-          ws.off?.("message", onMessage)
-          ws.off?.("close", onClose)
-          ws.off?.("error", onError)
+          ws.removeEventListener?.("message", onMessage)
+          ws.removeEventListener?.("close", onClose)
+          ws.removeEventListener?.("error", onError)
           input.abortSignal?.removeEventListener("abort", onAbort)
         }
 
-        ws.on?.("message", onMessage)
-        ws.on?.("close", onClose)
-        ws.on?.("error", onError)
+        ws.addEventListener?.("message", onMessage)
+        ws.addEventListener?.("close", onClose)
+        ws.addEventListener?.("error", onError)
         input.abortSignal?.addEventListener("abort", onAbort)
 
         try {
@@ -1757,7 +1784,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
       },
     })
 
-    return { responseHeaders: handshakeHeaders, value }
+    return { responseHeaders: {}, value }
   }
 }
 
