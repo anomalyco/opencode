@@ -119,21 +119,11 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
-  // Check if current session is an orchestrator (interactive child session)
-  const isOrchestrator = createMemo(() => {
-    const agentName = messages()[0]?.agent
-    if (!agentName) return false
-    const agent = sync.data.agent.find((a) => a.name === agentName)
-    return agent?.mode === "orchestrator"
-  })
+  // All sessions are interactive - user can chat with any session
   const permissions = createMemo(() => {
-    // Show permissions for primary sessions AND orchestrator sessions
-    if (session()?.parentID && !isOrchestrator()) return []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
   })
   const questions = createMemo(() => {
-    // Show questions for primary sessions AND orchestrator sessions
-    if (session()?.parentID && !isOrchestrator()) return []
     return children().flatMap((x) => sync.data.question[x.id] ?? [])
   })
 
@@ -159,8 +149,7 @@ export function Session() {
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
-    // Show sidebar for primary sessions AND orchestrator sessions
-    if (session()?.parentID && !isOrchestrator()) return false
+    // Show sidebar for all sessions
     if (sidebarOpen()) return true
     if (sidebar() === "auto" && wide()) return true
     return false
@@ -1112,7 +1101,7 @@ export function Session() {
                 <QuestionPrompt request={questions()[0]} />
               </Show>
               <Prompt
-                visible={(!session()?.parentID || isOrchestrator()) && permissions().length === 0 && questions().length === 0}
+                visible={permissions().length === 0 && questions().length === 0}
                 ref={(r) => {
                   prompt = r
                   promptRef.set(r)

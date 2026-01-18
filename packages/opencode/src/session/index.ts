@@ -194,6 +194,7 @@ export namespace Session {
     id?: string
     title?: string
     parentID?: string
+    depth?: number
     directory: string
     permission?: PermissionNext.Ruleset
   }) {
@@ -204,6 +205,7 @@ export namespace Session {
       projectID: Instance.project.id,
       directory: input.directory,
       parentID: input.parentID,
+      depth: input.depth ?? (input.parentID ? 1 : 0),
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
       time: {

@@ -79,8 +79,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           if (found) return found
         }
 
+        // Orchestrator is always depth=1, all other subagents are depth=2
+        const sessionDepth = agent.mode === "orchestrator" ? 1 : 2
         return await Session.create({
           parentID: ctx.sessionID,
+          depth: sessionDepth,
           title: params.description + ` (@${agent.name} subagent)`,
           permission: [
             {

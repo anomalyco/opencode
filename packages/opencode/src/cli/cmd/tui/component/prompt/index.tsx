@@ -141,12 +141,17 @@ export function Prompt(props: PromptProps) {
 
       syncedSessionID = sessionID
 
-      // Only set agent if it's a primary agent (not a subagent)
-      const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
-      if (msg.agent && isPrimaryAgent) {
-        local.agent.set(msg.agent)
-        if (msg.model) local.model.set(msg.model)
-        if (msg.variant) local.model.variant.set(msg.variant)
+      // Sync agent from session - allow primary agents and orchestrators
+      // This ensures orchestrator sessions use the correct agent for tool access
+      if (msg.agent) {
+        const allAgents = sync.data.agent
+        const sessionAgent = allAgents.find((x) => x.name === msg.agent)
+        const isAllowedAgent = sessionAgent?.mode === "primary" || sessionAgent?.mode === "orchestrator"
+        if (isAllowedAgent) {
+          local.agent.set(msg.agent)
+          if (msg.model) local.model.set(msg.model)
+          if (msg.variant) local.model.variant.set(msg.variant)
+        }
       }
     }
   })
