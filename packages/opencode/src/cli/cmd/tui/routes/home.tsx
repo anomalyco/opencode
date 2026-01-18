@@ -103,6 +103,7 @@ export function Home() {
               promptRef.set(r)
             }}
             hint={Hint}
+            showWorkingDirectory={false}
           />
         </box>
         <box height={3} width="100%" maxWidth={75} alignItems="center" paddingTop={2}>

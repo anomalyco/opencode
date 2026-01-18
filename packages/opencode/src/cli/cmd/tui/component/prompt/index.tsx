@@ -42,6 +42,7 @@ export type PromptProps = {
   ref?: (ref: PromptRef) => void
   hint?: JSX.Element
   showPlaceholder?: boolean
+  showWorkingDirectory?: boolean
 }
 
 export type PromptRef = {
@@ -513,9 +514,9 @@ export function Prompt(props: PromptProps) {
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
-          const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
-          return sessionID
-        })()
+        const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
+        return sessionID
+      })()
     const messageID = Identifier.ascending("message")
     let inputText = store.prompt.input
 
@@ -609,7 +610,7 @@ export function Prompt(props: PromptProps) {
             })),
           ],
         })
-        .catch(() => {})
+        .catch(() => { })
     }
     history.append({
       ...store.prompt,
@@ -818,252 +819,252 @@ export function Prompt(props: PromptProps) {
               <text fg={modePrefixColor()}>{executionMode.getModeDisplay().icon} </text>
               <box flexGrow={1}>
                 <textarea
-              placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
-              textColor={keybind.leader ? theme.textMuted : theme.text}
-              focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
-              minHeight={1}
-              maxHeight={6}
-              onContentChange={() => {
-                const value = input.plainText
-                setStore("prompt", "input", value)
-                autocomplete.onInput(value)
-                syncExtmarksWithPromptParts()
-              }}
-              keyBindings={textareaKeybindings()}
-              onKeyDown={async (e) => {
-                if (props.disabled) {
-                  e.preventDefault()
-                  return
-                }
-                // Handle clipboard paste (Ctrl+V) - check for images first on Windows
-                // This is needed because Windows terminal doesn't properly send image data
-                // through bracketed paste, so we need to intercept the keypress and
-                // directly read from clipboard before the terminal handles it
-                if (keybind.match("input_paste", e)) {
-                  const content = await Clipboard.read()
-                  if (content?.mime.startsWith("image/")) {
-                    e.preventDefault()
-                    await pasteImage({
-                      filename: "clipboard",
-                      mime: content.mime,
-                      content: content.data,
-                    })
-                    return
-                  }
-                  // If no image, let the default paste behavior continue
-                }
-                // Handle Ctrl+Space to toggle execution mode
-                if (handleModeToggleKey(e, { setMode: executionMode.setMode })) {
-                  e.preventDefault()
-                  return
-                }
-                // Handle tab for shell completion in shell/auto mode
-                if (e.name === "tab" && shouldUseShellCompletion(store.mode, executionMode.mode())) {
-                  e.preventDefault()
-
-                  // Check if we're already cycling through completions
-                  if (store.completionCycle) {
-                    // Cycle to next completion
-                    const cycle = store.completionCycle
-                    const nextIndex = (cycle.currentIndex + 1) % cycle.completions.length
-                    const { newInput, newCursorPosition } = applyCompletionAtIndex(cycle, nextIndex)
-
-                    input.setText(newInput)
-                    input.cursorOffset = newCursorPosition
-                    setStore("prompt", "input", newInput)
-                    setStore("completionCycle", "currentIndex", nextIndex)
-
-                    // Show current position in toast
-                    toast.show({
-                      variant: "info",
-                      message: `(${nextIndex + 1}/${cycle.completions.length}) ${cycle.completions[nextIndex]}`,
-                      duration: 1500,
-                    })
-                    return
-                  }
-
-                  // Start new completion
-                  const result = await handleShellTabCompletion({
-                    input: store.prompt.input,
-                    cursorPosition: input.cursorOffset,
-                    cwd: sync.data.path.cwd || sync.data.path.directory,
-                  })
-
-                  if (result.applied) {
-                    input.setText(result.newInput)
-                    input.cursorOffset = result.newCursorPosition
-                    setStore("prompt", "input", result.newInput)
-                    // Clear any previous cycle state since we applied a completion
-                    setStore("completionCycle", null)
-                  } else if (result.completions.length > 1) {
-                    // Multiple completions with no common prefix - start cycling
-                    // Apply the first completion immediately
-                    const cycleState: CompletionCycleState = {
-                      originalInput: store.prompt.input,
-                      originalCursor: input.cursorOffset,
-                      completions: result.completions,
-                      currentIndex: 0,
-                      replaceFrom: result.replaceFrom,
-                      replaceTo: result.replaceTo,
-                    }
-
-                    const { newInput, newCursorPosition } = applyCompletionAtIndex(cycleState, 0)
-                    input.setText(newInput)
-                    input.cursorOffset = newCursorPosition
-                    setStore("prompt", "input", newInput)
-                    setStore("completionCycle", cycleState)
-
-                    // Show current position in toast
-                    toast.show({
-                      variant: "info",
-                      message: `(1/${result.completions.length}) ${result.completions[0]}`,
-                      duration: 1500,
-                    })
-                  }
-                  return
-                }
-
-                // Reset completion cycle on any other key press
-                if (store.completionCycle && e.name !== "tab") {
-                  setStore("completionCycle", null)
-                }
-                if (keybind.match("input_clear", e) && store.prompt.input !== "") {
-                  input.clear()
-                  input.extmarks.clear()
-                  setStore("prompt", {
-                    input: "",
-                    parts: [],
-                  })
-                  setStore("extmarkToPartIndex", new Map())
-                  return
-                }
-                if (keybind.match("app_exit", e)) {
-                  if (store.prompt.input === "") {
-                    await exit()
-                    // Don't preventDefault - let textarea potentially handle the event
-                    e.preventDefault()
-                    return
-                  }
-                }
-                if (e.name === "!" && input.visualCursor.offset === 0) {
-                  setStore("mode", "shell")
-                  e.preventDefault()
-                  return
-                }
-                if (store.mode === "shell") {
-                  if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
-                    setStore("mode", "normal")
-                    e.preventDefault()
-                    return
-                  }
-                }
-                if (store.mode === "normal") autocomplete.onKeyDown(e)
-                if (!autocomplete.visible) {
-                  if (
-                    (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
-                    (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
-                  ) {
-                    const direction = keybind.match("history_previous", e) ? -1 : 1
-                    const item = history.move(direction, input.plainText)
-
-                    if (item) {
-                      input.setText(item.input)
-                      setStore("prompt", item)
-                      setStore("mode", item.mode ?? "normal")
-                      restoreExtmarksFromParts(item.parts)
+                  placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
+                  textColor={keybind.leader ? theme.textMuted : theme.text}
+                  focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
+                  minHeight={1}
+                  maxHeight={6}
+                  onContentChange={() => {
+                    const value = input.plainText
+                    setStore("prompt", "input", value)
+                    autocomplete.onInput(value)
+                    syncExtmarksWithPromptParts()
+                  }}
+                  keyBindings={textareaKeybindings()}
+                  onKeyDown={async (e) => {
+                    if (props.disabled) {
                       e.preventDefault()
-                      if (direction === -1) input.cursorOffset = 0
-                      if (direction === 1) input.cursorOffset = input.plainText.length
+                      return
                     }
-                    return
-                  }
-
-                  if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0) input.cursorOffset = 0
-                  if (keybind.match("history_next", e) && input.visualCursor.visualRow === input.height - 1)
-                    input.cursorOffset = input.plainText.length
-                }
-              }}
-              onSubmit={submit}
-              onPaste={async (event: PasteEvent) => {
-                if (props.disabled) {
-                  event.preventDefault()
-                  return
-                }
-
-                // Normalize line endings at the boundary
-                // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
-                // Replace CRLF first, then any remaining CR
-                const normalizedText = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-                const pastedContent = normalizedText.trim()
-                if (!pastedContent) {
-                  command.trigger("prompt.paste")
-                  return
-                }
-
-                // trim ' from the beginning and end of the pasted content. just
-                // ' and nothing else
-                const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
-                const isUrl = /^(https?):\/\//.test(filepath)
-                if (!isUrl) {
-                  try {
-                    const file = Bun.file(filepath)
-                    // Handle SVG as raw text content, not as base64 image
-                    if (file.type === "image/svg+xml") {
-                      event.preventDefault()
-                      const content = await file.text().catch(() => {})
-                      if (content) {
-                        pasteText(content, `[SVG: ${file.name ?? "image"}]`)
-                        return
-                      }
-                    }
-                    if (file.type.startsWith("image/")) {
-                      event.preventDefault()
-                      const content = await file
-                        .arrayBuffer()
-                        .then((buffer) => Buffer.from(buffer).toString("base64"))
-                        .catch(() => {})
-                      if (content) {
+                    // Handle clipboard paste (Ctrl+V) - check for images first on Windows
+                    // This is needed because Windows terminal doesn't properly send image data
+                    // through bracketed paste, so we need to intercept the keypress and
+                    // directly read from clipboard before the terminal handles it
+                    if (keybind.match("input_paste", e)) {
+                      const content = await Clipboard.read()
+                      if (content?.mime.startsWith("image/")) {
+                        e.preventDefault()
                         await pasteImage({
-                          filename: file.name,
-                          mime: file.type,
-                          content,
+                          filename: "clipboard",
+                          mime: content.mime,
+                          content: content.data,
                         })
                         return
                       }
+                      // If no image, let the default paste behavior continue
                     }
-                  } catch {}
-                }
+                    // Handle Ctrl+Space to toggle execution mode
+                    if (handleModeToggleKey(e, { setMode: executionMode.setMode })) {
+                      e.preventDefault()
+                      return
+                    }
+                    // Handle tab for shell completion in shell/auto mode
+                    if (e.name === "tab" && shouldUseShellCompletion(store.mode, executionMode.mode())) {
+                      e.preventDefault()
 
-                const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
-                if (
-                  (lineCount >= 3 || pastedContent.length > 150) &&
-                  !sync.data.config.experimental?.disable_paste_summary
-                ) {
-                  event.preventDefault()
-                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
-                  return
-                }
+                      // Check if we're already cycling through completions
+                      if (store.completionCycle) {
+                        // Cycle to next completion
+                        const cycle = store.completionCycle
+                        const nextIndex = (cycle.currentIndex + 1) % cycle.completions.length
+                        const { newInput, newCursorPosition } = applyCompletionAtIndex(cycle, nextIndex)
 
-                // Force layout update and render for the pasted content
-                setTimeout(() => {
-                  input.getLayoutNode().markDirty()
-                  renderer.requestRender()
-                }, 0)
-              }}
-              ref={(r: TextareaRenderable) => {
-                input = r
-                if (promptPartTypeId === 0) {
-                  promptPartTypeId = input.extmarks.registerType("prompt-part")
-                }
-                props.ref?.(ref)
-                setTimeout(() => {
-                  input.cursorColor = theme.text
-                }, 0)
-              }}
-              onMouseDown={(r: MouseEvent) => r.target?.focus()}
-              focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={theme.text}
-              syntaxStyle={syntax()}
+                        input.setText(newInput)
+                        input.cursorOffset = newCursorPosition
+                        setStore("prompt", "input", newInput)
+                        setStore("completionCycle", "currentIndex", nextIndex)
+
+                        // Show current position in toast
+                        toast.show({
+                          variant: "info",
+                          message: `(${nextIndex + 1}/${cycle.completions.length}) ${cycle.completions[nextIndex]}`,
+                          duration: 1500,
+                        })
+                        return
+                      }
+
+                      // Start new completion
+                      const result = await handleShellTabCompletion({
+                        input: store.prompt.input,
+                        cursorPosition: input.cursorOffset,
+                        cwd: sync.data.path.cwd || sync.data.path.directory,
+                      })
+
+                      if (result.applied) {
+                        input.setText(result.newInput)
+                        input.cursorOffset = result.newCursorPosition
+                        setStore("prompt", "input", result.newInput)
+                        // Clear any previous cycle state since we applied a completion
+                        setStore("completionCycle", null)
+                      } else if (result.completions.length > 1) {
+                        // Multiple completions with no common prefix - start cycling
+                        // Apply the first completion immediately
+                        const cycleState: CompletionCycleState = {
+                          originalInput: store.prompt.input,
+                          originalCursor: input.cursorOffset,
+                          completions: result.completions,
+                          currentIndex: 0,
+                          replaceFrom: result.replaceFrom,
+                          replaceTo: result.replaceTo,
+                        }
+
+                        const { newInput, newCursorPosition } = applyCompletionAtIndex(cycleState, 0)
+                        input.setText(newInput)
+                        input.cursorOffset = newCursorPosition
+                        setStore("prompt", "input", newInput)
+                        setStore("completionCycle", cycleState)
+
+                        // Show current position in toast
+                        toast.show({
+                          variant: "info",
+                          message: `(1/${result.completions.length}) ${result.completions[0]}`,
+                          duration: 1500,
+                        })
+                      }
+                      return
+                    }
+
+                    // Reset completion cycle on any other key press
+                    if (store.completionCycle && e.name !== "tab") {
+                      setStore("completionCycle", null)
+                    }
+                    if (keybind.match("input_clear", e) && store.prompt.input !== "") {
+                      input.clear()
+                      input.extmarks.clear()
+                      setStore("prompt", {
+                        input: "",
+                        parts: [],
+                      })
+                      setStore("extmarkToPartIndex", new Map())
+                      return
+                    }
+                    if (keybind.match("app_exit", e)) {
+                      if (store.prompt.input === "") {
+                        await exit()
+                        // Don't preventDefault - let textarea potentially handle the event
+                        e.preventDefault()
+                        return
+                      }
+                    }
+                    if (e.name === "!" && input.visualCursor.offset === 0) {
+                      setStore("mode", "shell")
+                      e.preventDefault()
+                      return
+                    }
+                    if (store.mode === "shell") {
+                      if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
+                        setStore("mode", "normal")
+                        e.preventDefault()
+                        return
+                      }
+                    }
+                    if (store.mode === "normal") autocomplete.onKeyDown(e)
+                    if (!autocomplete.visible) {
+                      if (
+                        (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
+                        (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
+                      ) {
+                        const direction = keybind.match("history_previous", e) ? -1 : 1
+                        const item = history.move(direction, input.plainText)
+
+                        if (item) {
+                          input.setText(item.input)
+                          setStore("prompt", item)
+                          setStore("mode", item.mode ?? "normal")
+                          restoreExtmarksFromParts(item.parts)
+                          e.preventDefault()
+                          if (direction === -1) input.cursorOffset = 0
+                          if (direction === 1) input.cursorOffset = input.plainText.length
+                        }
+                        return
+                      }
+
+                      if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0) input.cursorOffset = 0
+                      if (keybind.match("history_next", e) && input.visualCursor.visualRow === input.height - 1)
+                        input.cursorOffset = input.plainText.length
+                    }
+                  }}
+                  onSubmit={submit}
+                  onPaste={async (event: PasteEvent) => {
+                    if (props.disabled) {
+                      event.preventDefault()
+                      return
+                    }
+
+                    // Normalize line endings at the boundary
+                    // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
+                    // Replace CRLF first, then any remaining CR
+                    const normalizedText = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+                    const pastedContent = normalizedText.trim()
+                    if (!pastedContent) {
+                      command.trigger("prompt.paste")
+                      return
+                    }
+
+                    // trim ' from the beginning and end of the pasted content. just
+                    // ' and nothing else
+                    const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+                    const isUrl = /^(https?):\/\//.test(filepath)
+                    if (!isUrl) {
+                      try {
+                        const file = Bun.file(filepath)
+                        // Handle SVG as raw text content, not as base64 image
+                        if (file.type === "image/svg+xml") {
+                          event.preventDefault()
+                          const content = await file.text().catch(() => { })
+                          if (content) {
+                            pasteText(content, `[SVG: ${file.name ?? "image"}]`)
+                            return
+                          }
+                        }
+                        if (file.type.startsWith("image/")) {
+                          event.preventDefault()
+                          const content = await file
+                            .arrayBuffer()
+                            .then((buffer) => Buffer.from(buffer).toString("base64"))
+                            .catch(() => { })
+                          if (content) {
+                            await pasteImage({
+                              filename: file.name,
+                              mime: file.type,
+                              content,
+                            })
+                            return
+                          }
+                        }
+                      } catch { }
+                    }
+
+                    const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
+                    if (
+                      (lineCount >= 3 || pastedContent.length > 150) &&
+                      !sync.data.config.experimental?.disable_paste_summary
+                    ) {
+                      event.preventDefault()
+                      pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
+                      return
+                    }
+
+                    // Force layout update and render for the pasted content
+                    setTimeout(() => {
+                      input.getLayoutNode().markDirty()
+                      renderer.requestRender()
+                    }, 0)
+                  }}
+                  ref={(r: TextareaRenderable) => {
+                    input = r
+                    if (promptPartTypeId === 0) {
+                      promptPartTypeId = input.extmarks.registerType("prompt-part")
+                    }
+                    props.ref?.(ref)
+                    setTimeout(() => {
+                      input.cursorColor = theme.text
+                    }, 0)
+                  }}
+                  onMouseDown={(r: MouseEvent) => r.target?.focus()}
+                  focusedBackgroundColor={theme.backgroundElement}
+                  cursorColor={theme.text}
+                  syntaxStyle={syntax()}
                 />
               </box>
             </box>
@@ -1104,18 +1105,18 @@ export function Prompt(props: PromptProps) {
             customBorderChars={
               theme.backgroundElement.a !== 0
                 ? {
-                    ...EmptyBorder,
-                    horizontal: "▀",
-                  }
+                  ...EmptyBorder,
+                  horizontal: "▀",
+                }
                 : {
-                    ...EmptyBorder,
-                    horizontal: " ",
-                  }
+                  ...EmptyBorder,
+                  horizontal: " ",
+                }
             }
           />
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={<text fg={theme.textMuted} marginLeft={1}>{shortenedWorkingDir()}</text>}>
+          <Show when={status().type !== "idle"} fallback={props.showWorkingDirectory !== false && <text fg={theme.textMuted} marginLeft={1}>{shortenedWorkingDir()}</text>}>
             <box
               flexDirection="row"
               gap={1}
