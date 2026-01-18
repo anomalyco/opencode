@@ -51,7 +51,7 @@ function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
 
   // Read package.json to determine naming
-  const pkg = require("../package.json")
+  const pkg = require("./package.json")
   const baseName = pkg.name
   const binaryKeys = Object.keys(pkg.bin || {})
   const binName = binaryKeys[0] || (platform === "windows" ? `${baseName}.exe` : baseName)
