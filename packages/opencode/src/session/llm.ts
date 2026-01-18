@@ -3,7 +3,6 @@ import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
 import {
-  APICallError,
   streamText,
   wrapLanguageModel,
   type ModelMessage,
@@ -25,7 +24,6 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
-import { OpenAIConversationState } from "./openai-conversation"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -40,11 +38,9 @@ export namespace LLM {
     system: string[]
     abort: AbortSignal
     messages: ModelMessage[]
-    messagesFallback?: ModelMessage[]
     small?: boolean
     tools: Record<string, Tool>
     retries?: number
-    previousResponseId?: string
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
@@ -116,16 +112,6 @@ export namespace LLM {
       options.instructions = SystemPrompt.instructions()
     }
 
-    const useOpenAIConversationState =
-      !isCodex && OpenAIConversationState.isGPTModel(input.model) && input.model.api.npm === "@ai-sdk/openai"
-    if (useOpenAIConversationState) {
-      options.store = true
-      if (input.previousResponseId) {
-        options.previousResponseId = input.previousResponseId
-      }
-      options.instructions = system.join("\n\n")
-    }
-
     const params = await Plugin.trigger(
       "chat.params",
       {
@@ -174,14 +160,6 @@ export namespace LLM {
         inputSchema: jsonSchema({ type: "object", properties: {} }),
         execute: async () => ({ output: "", title: "", metadata: {} }),
       })
-    }
-
-    function isInvalidPreviousResponseIdError(err: unknown): boolean {
-      if (!APICallError.isInstance(err)) return false
-      const status = err.statusCode
-      if (status !== 400 && status !== 404) return false
-      const haystack = [err.message, err.responseBody].filter(Boolean).join("\n").toLowerCase()
-      return haystack.includes("previous_response_id") || haystack.includes("previousresponseid")
     }
 
     const activeTools = Object.keys(tools).filter((x) => x !== "invalid" && x !== "_noop")
@@ -254,14 +232,12 @@ export namespace LLM {
                   content: system.join("\n\n"),
                 } as ModelMessage,
               ]
-            : useOpenAIConversationState
-              ? []
-              : system.map(
-                  (x): ModelMessage => ({
-                    role: "system",
-                    content: x,
-                  }),
-                )),
+            : system.map(
+                (x): ModelMessage => ({
+                  role: "system",
+                  content: x,
+                }),
+              )),
           ...args.messages,
         ],
         model: wrapLanguageModel({
@@ -287,72 +263,7 @@ export namespace LLM {
       messages: input.messages,
       providerOptionsBase: params.options,
     })
-
-    const shouldEnableFallbackRetry = useOpenAIConversationState && !!input.previousResponseId && !!input.messagesFallback
-    if (!shouldEnableFallbackRetry) return initial
-
-    async function* fullStreamWithFallback() {
-      const buffer: any[] = []
-      let committed = false
-      for await (const value of initial.fullStream) {
-        const shouldCommit =
-          value.type === "text-start" ||
-          value.type === "reasoning-start" ||
-          value.type === "tool-input-start" ||
-          value.type === "tool-call"
-
-        if (!committed) {
-          if (value.type === "error") {
-            if (isInvalidPreviousResponseIdError(value.error)) {
-              l.info("retrying without previousResponseId", {
-                sessionID: input.sessionID,
-                modelID: input.model.id,
-              })
-
-              const fallbackProviderOptions = { ...(params.options ?? {}) }
-              delete fallbackProviderOptions.previousResponseId
-              fallbackProviderOptions.store = true
-
-              const fallback = await createStream({
-                messages: input.messagesFallback!,
-                providerOptionsBase: fallbackProviderOptions,
-              })
-              for await (const next of fallback.fullStream) {
-                yield next
-              }
-              return
-            }
-
-            // Commit buffered events before surfacing the error.
-            for (const item of buffer) yield item
-            yield value
-            return
-          }
-
-          buffer.push(value)
-          if (shouldCommit) {
-            committed = true
-            for (const item of buffer) yield item
-            buffer.length = 0
-          }
-          continue
-        }
-
-        if (value.type === "error") {
-          yield value
-          continue
-        }
-
-        yield value
-      }
-
-      for (const item of buffer) yield item
-    }
-
-    return {
-      ...initial,
-      fullStream: fullStreamWithFallback(),
-    }
+    return initial
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
