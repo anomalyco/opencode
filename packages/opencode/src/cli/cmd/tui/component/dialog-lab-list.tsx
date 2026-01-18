@@ -2,12 +2,12 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
-import { createMemo, createSignal, onMount, Show } from "solid-js"
+import { createMemo, createSignal, onMount } from "solid-js"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
-import { useKV } from "../context/kv"
+
 import { useToast } from "../ui/toast"
-import "opentui-spinner/solid"
+
 
 /**
  * Lab configuration - the four canonical labs in Conatus
@@ -75,11 +75,8 @@ export function DialogLabList() {
   const sync = useSync()
   const { theme } = useTheme()
   const sdk = useSDK()
-  const kv = useKV()
   const toast = useToast()
 
-  // Animation frames for working indicator
-  const workingFrames = ["\u25d0", "\u25d3", "\u25d1", "\u25d2"]
   const [switching, setSwitching] = createSignal<string | null>(null)
 
   // Get current session to mark as active
@@ -119,32 +116,15 @@ export function DialogLabList() {
         value: lab.id,
         description: lab.description,
         category: existingSession ? "Active Labs" : "Available Labs",
-        footer: existingSession ? (
-          <Show when={isBusy || isRetrying} fallback={<text fg={theme.textMuted}>ready</text>}>
-            <Show 
-              when={kv.get("animations_enabled", true)} 
-              fallback={<text fg={isRetrying ? theme.warning : theme.success}>[...]</text>}
-            >
-              <spinner 
-                frames={workingFrames} 
-                interval={150} 
-                color={isRetrying ? theme.warning : theme[lab.color]} 
-              />
-            </Show>
-          </Show>
-        ) : (
-          <text fg={theme.textMuted}>new</text>
-        ),
+        footer: existingSession 
+          ? (isBusy ? "working..." : isRetrying ? "retrying..." : "ready")
+          : "new",
         gutter: isActive ? (
-          <text fg={theme[lab.color]}>\u25cf</text>
+          <text fg={theme[lab.color]}>{"\u25cf"}</text>
         ) : switching() === lab.id ? (
-          <spinner 
-            frames={["\u280b", "\u2819", "\u2839", "\u2838", "\u283c", "\u2834", "\u2826", "\u2827", "\u2807", "\u280f"]} 
-            interval={80} 
-            color={theme.primary} 
-          />
+          <text fg={theme.primary}>{"\u25cb"}</text>
         ) : existingSession ? (
-          <text fg={theme.textMuted}>\u25cb</text>
+          <text fg={theme.textMuted}>{"\u25cb"}</text>
         ) : undefined,
         _session: existingSession,
         _lab: lab,
