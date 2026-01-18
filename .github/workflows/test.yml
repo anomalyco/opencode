@@ -18,6 +18,52 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Install Playwright browsers
+        run: bun --cwd packages/app x playwright install --with-deps
+
+      - name: Seed opencode data
+        run: bun --cwd packages/opencode script/seed-e2e.ts
+        env:
+          MODELS_DEV_API_JSON: ${{ github.workspace }}/packages/opencode/test/tool/fixtures/models-api.json
+          OPENCODE_DISABLE_MODELS_FETCH: "true"
+          OPENCODE_DISABLE_SHARE: "true"
+          OPENCODE_DISABLE_LSP_DOWNLOAD: "true"
+          OPENCODE_DISABLE_DEFAULT_PLUGINS: "true"
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+          OPENCODE_TEST_HOME: ${{ runner.temp }}/opencode-e2e/home
+          XDG_DATA_HOME: ${{ runner.temp }}/opencode-e2e/share
+          XDG_CACHE_HOME: ${{ runner.temp }}/opencode-e2e/cache
+          XDG_CONFIG_HOME: ${{ runner.temp }}/opencode-e2e/config
+          XDG_STATE_HOME: ${{ runner.temp }}/opencode-e2e/state
+          OPENCODE_E2E_PROJECT_DIR: ${{ github.workspace }}
+          OPENCODE_E2E_SESSION_TITLE: "E2E Session"
+          OPENCODE_E2E_MESSAGE: "Seeded for UI e2e"
+          OPENCODE_E2E_MODEL: "opencode/gpt-5-nano"
+
+      - name: Run opencode server
+        run: bun --cwd packages/opencode run dev -- --print-logs --log-level WARN serve --port 4096 --hostname 0.0.0.0 &
+        env:
+          MODELS_DEV_API_JSON: ${{ github.workspace }}/packages/opencode/test/tool/fixtures/models-api.json
+          OPENCODE_DISABLE_MODELS_FETCH: "true"
+          OPENCODE_DISABLE_SHARE: "true"
+          OPENCODE_DISABLE_LSP_DOWNLOAD: "true"
+          OPENCODE_DISABLE_DEFAULT_PLUGINS: "true"
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+          OPENCODE_TEST_HOME: ${{ runner.temp }}/opencode-e2e/home
+          XDG_DATA_HOME: ${{ runner.temp }}/opencode-e2e/share
+          XDG_CACHE_HOME: ${{ runner.temp }}/opencode-e2e/cache
+          XDG_CONFIG_HOME: ${{ runner.temp }}/opencode-e2e/config
+          XDG_STATE_HOME: ${{ runner.temp }}/opencode-e2e/state
+          OPENCODE_CLIENT: "app"
+
+      - name: Wait for opencode server
+        run: |
+          for i in {1..60}; do
+            curl -fsS "http://localhost:4096/global/health" > /dev/null && exit 0
+            sleep 1
+          done
+          exit 1
+
       - name: run
         run: |
           git config --global user.email "bot@opencode.ai"
@@ -26,3 +72,20 @@ jobs:
           bun turbo test
         env:
           CI: true
+          MODELS_DEV_API_JSON: ${{ github.workspace }}/packages/opencode/test/tool/fixtures/models-api.json
+          OPENCODE_DISABLE_MODELS_FETCH: "true"
+          OPENCODE_DISABLE_SHARE: "true"
+          OPENCODE_DISABLE_LSP_DOWNLOAD: "true"
+          OPENCODE_DISABLE_DEFAULT_PLUGINS: "true"
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+          OPENCODE_TEST_HOME: ${{ runner.temp }}/opencode-e2e/home
+          XDG_DATA_HOME: ${{ runner.temp }}/opencode-e2e/share
+          XDG_CACHE_HOME: ${{ runner.temp }}/opencode-e2e/cache
+          XDG_CONFIG_HOME: ${{ runner.temp }}/opencode-e2e/config
+          XDG_STATE_HOME: ${{ runner.temp }}/opencode-e2e/state
+          PLAYWRIGHT_SERVER_HOST: "localhost"
+          PLAYWRIGHT_SERVER_PORT: "4096"
+          VITE_OPENCODE_SERVER_HOST: "localhost"
+          VITE_OPENCODE_SERVER_PORT: "4096"
+          OPENCODE_CLIENT: "app"
+        timeout-minutes: 30
