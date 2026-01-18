@@ -651,6 +651,8 @@ export type EventTuiCommandExecute = {
       | "session.compact"
       | "session.page.up"
       | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
       | "session.half.page.up"
       | "session.half.page.down"
       | "session.first"
@@ -1019,6 +1021,14 @@ export type KeybindsConfig = {
    * Scroll messages down by one page
    */
   messages_page_down?: string
+  /**
+   * Scroll messages up by one line
+   */
+  messages_line_up?: string
+  /**
+   * Scroll messages down by one line
+   */
+  messages_line_down?: string
   /**
    * Scroll messages up by half page
    */
