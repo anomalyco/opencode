@@ -333,6 +333,7 @@ export const AuthLoginCommand = cmd({
                 hint: {
                   opencode: "recommended",
                   openai: "ChatGPT Plus/Pro or API key",
+                  kiro: "Use existing Kiro CLI login",
                 }[x.id],
               })),
             ),

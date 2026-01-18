@@ -674,6 +674,24 @@ export namespace ProviderTransform {
           }
         }
         return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+
+      case "@ai-sdk/kiro":
+        // Kiro uses "Fake Reasoning" - injecting thinking tags into prompts
+        // The model responds with <thinking>...</thinking> blocks that are parsed as reasoning
+        return {
+          high: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: 16000,
+            },
+          },
+          max: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: 31999,
+            },
+          },
+        }
     }
     return {}
   }
