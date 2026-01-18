@@ -88,6 +88,7 @@ export namespace Config {
     result.agent = result.agent || {}
     result.mode = result.mode || {}
     result.plugin = result.plugin || []
+    result.plugin_config = result.plugin_config || {}
 
     const directories = [
       Global.Path.config,
@@ -880,6 +881,10 @@ export namespace Config {
         })
         .optional(),
       plugin: z.string().array().optional(),
+      plugin_config: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe("Plugin configuration keyed by plugin package name or canonical plugin name"),
       snapshot: z.boolean().optional(),
       share: z
         .enum(["manual", "auto", "disabled"])

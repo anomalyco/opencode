@@ -1216,6 +1216,9 @@ export type Config = {
     ignore?: Array<string>
   }
   plugin?: Array<string>
+  plugin_config?: {
+    [key: string]: unknown
+  }
   snapshot?: boolean
   /**
    * Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing

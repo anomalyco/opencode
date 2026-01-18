@@ -9271,6 +9271,14 @@
               "type": "string"
             }
           },
+          "plugin_config": {
+            "description": "Plugin configuration keyed by plugin package name or canonical plugin name",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
           "snapshot": {
             "type": "boolean"
           },

@@ -598,6 +598,54 @@ test("merges plugin arrays from global and local configs", async () => {
   })
 })
 
+test("merges plugin_config from global and local configs", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const projectDir = path.join(dir, "project")
+      const opencodeDir = path.join(projectDir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["my-plugin"],
+          plugin_config: {
+            "my-plugin": { a: 1, nested: { x: 1 } },
+            "global-only": { enabled: true },
+          },
+        }),
+      )
+
+      await Bun.write(
+        path.join(opencodeDir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin_config: {
+            "my-plugin": { a: 9, b: 2, nested: { y: 2 } },
+            "local-only": { mode: "fast" },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: path.join(tmp.path, "project"),
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.plugin_config).toBeDefined()
+      expect(config.plugin_config?.["global-only"]).toEqual({ enabled: true })
+      expect(config.plugin_config?.["local-only"]).toEqual({ mode: "fast" })
+      expect(config.plugin_config?.["my-plugin"]).toEqual({
+        a: 9,
+        b: 2,
+        nested: { x: 1, y: 2 },
+      })
+    },
+  })
+})
+
 test("does not error when only custom agent is a subagent", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
