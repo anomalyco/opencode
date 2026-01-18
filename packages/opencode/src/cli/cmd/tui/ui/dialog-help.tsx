@@ -1,38 +1,84 @@
-import { TextAttributes } from "@opentui/core"
-import { useTheme } from "@tui/context/theme"
-import { useDialog } from "./dialog"
-import { useKeyboard } from "@opentui/solid"
-import { useKeybind } from "@tui/context/keybind"
+import { ScrollBoxRenderable, TextAttributes } from "@opentui/core"
+import { useTheme } from "../context/theme"
+import { For, createMemo } from "solid-js"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 
 export function DialogHelp() {
-  const dialog = useDialog()
   const { theme } = useTheme()
-  const keybind = useKeybind()
+  const dimensions = useTerminalDimensions()
+
+  const commands = [
+    { key: "j/down", description: "Move down" },
+    { key: "k/up", description: "Move up" },
+    { key: "enter", description: "Select/Confirm" },
+    { key: "esc/q", description: "Back/Close" },
+    { key: "ctrl+p", description: "Command palette" },
+    { key: "/", description: "Search" },
+    { key: "tab", description: "Switch focus" },
+    { key: "ctrl+l", description: "Clear logs" },
+    { key: "ctrl+c", description: "Exit" },
+  ]
+
+  let scroll: ScrollBoxRenderable | undefined
 
   useKeyboard((evt) => {
-    if (evt.name === "return" || evt.name === "escape") {
-      dialog.clear()
+    if (!scroll) return
+    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) {
+      scroll.scrollBy(-1)
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) {
+      scroll.scrollBy(1)
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+    if (evt.name === "pageup") {
+      scroll.scrollBy(-Math.floor(scroll.height / 2))
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+    if (evt.name === "pagedown") {
+      scroll.scrollBy(Math.floor(scroll.height / 2))
+      evt.preventDefault()
+      evt.stopPropagation()
     }
   })
 
+  const maxHeight = createMemo(() => Math.floor(dimensions().height * 0.6))
+
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1}>
+    <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          Help
+        <text fg={theme.text} attributes={TextAttributes.BOLD}>
+          Keyboard Shortcuts
         </text>
-        <text fg={theme.textMuted}>esc/enter</text>
+        <text fg={theme.textMuted}>esc</text>
       </box>
-      <box paddingBottom={1}>
-        <text fg={theme.textMuted}>
-          Press {keybind.print("command_list")} to see all available actions and commands in any context.
-        </text>
-      </box>
-      <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
-        <box paddingLeft={3} paddingRight={3} backgroundColor={theme.primary} onMouseUp={() => dialog.clear()}>
-          <text fg={theme.selectedListItemText}>ok</text>
-        </box>
-      </box>
+      <scrollbox
+        ref={(r: ScrollBoxRenderable) => {
+          scroll = r
+        }}
+        maxHeight={maxHeight()}
+        scrollbarOptions={{
+          visible: true,
+          trackOptions: {
+            backgroundColor: theme.backgroundPanel,
+            foregroundColor: theme.border,
+          },
+        }}
+      >
+        <For each={commands}>
+          {(cmd) => (
+            <box flexDirection="row" gap={2}>
+              <text fg={theme.primary} flexShrink={0} style={{ width: 12 }}>
+                {cmd.key}
+              </text>
+              <text fg={theme.text}>{cmd.description}</text>
+            </box>
+          )}
+        </For>
+      </scrollbox>
     </box>
   )
 }
