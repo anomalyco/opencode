@@ -1,4 +1,11 @@
 #!/bin/sh
+
+# Skip pre-push hook in CI environment
+if [ -n "$CI" ] || [ -n "$GITHUB_ACTIONS" ]; then
+  echo "CI environment detected, skipping pre-push hook."
+  exit 0
+fi
+
 # Check if bun version matches package.json
 EXPECTED_VERSION=$(grep '"packageManager"' package.json | sed 's/.*"bun@\([^"]*\)".*/\1/')
 CURRENT_VERSION=$(bun --version)
