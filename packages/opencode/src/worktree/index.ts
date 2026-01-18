@@ -380,41 +380,45 @@ export namespace Worktree {
       }
     }
 
-    const checkout = await $`git checkout ${target}`.quiet().nothrow().cwd(entry.path)
-    if (checkout.exitCode !== 0) {
-      throw new ResetFailedError({ message: errorText(checkout) || `Failed to checkout ${target}` })
+    if (!entry.path) {
+      throw new ResetFailedError({ message: "Worktree path not found" })
     }
 
-    const clean = await $`git clean -fd`.quiet().nothrow().cwd(entry.path)
+    const worktreePath = entry.path
+
+    const resetToTarget = await $`git reset --hard ${target}`.quiet().nothrow().cwd(worktreePath)
+    if (resetToTarget.exitCode !== 0) {
+      throw new ResetFailedError({ message: errorText(resetToTarget) || "Failed to reset worktree to target" })
+    }
+
+    const clean = await $`git clean -fdx`.quiet().nothrow().cwd(worktreePath)
     if (clean.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(clean) || "Failed to clean worktree" })
     }
 
-    const worktreeBranch = entry.branch?.replace(/^refs\/heads\//, "")
-    if (!worktreeBranch) {
-      throw new ResetFailedError({ message: "Worktree branch not found" })
+    const update = await $`git submodule update --init --recursive --force`.quiet().nothrow().cwd(worktreePath)
+    if (update.exitCode !== 0) {
+      throw new ResetFailedError({ message: errorText(update) || "Failed to update submodules" })
     }
 
-    const reset = await $`git reset --hard ${target}`.quiet().nothrow().cwd(entry.path)
-    if (reset.exitCode !== 0) {
-      throw new ResetFailedError({ message: errorText(reset) || "Failed to reset worktree" })
+    const subReset = await $`git submodule foreach --recursive git reset --hard`.quiet().nothrow().cwd(worktreePath)
+    if (subReset.exitCode !== 0) {
+      throw new ResetFailedError({ message: errorText(subReset) || "Failed to reset submodules" })
     }
 
-    const cleanAfter = await $`git clean -fd`.quiet().nothrow().cwd(entry.path)
-    if (cleanAfter.exitCode !== 0) {
-      throw new ResetFailedError({ message: errorText(cleanAfter) || "Failed to clean worktree" })
+    const subClean = await $`git submodule foreach --recursive git clean -fdx`.quiet().nothrow().cwd(worktreePath)
+    if (subClean.exitCode !== 0) {
+      throw new ResetFailedError({ message: errorText(subClean) || "Failed to clean submodules" })
     }
 
-    const branchReset = await $`git branch -f ${worktreeBranch} ${target}`.quiet().nothrow().cwd(entry.path)
-    if (branchReset.exitCode !== 0) {
-      throw new ResetFailedError({ message: errorText(branchReset) || "Failed to update worktree branch" })
+    const status = await $`git status --porcelain=v1`.quiet().nothrow().cwd(worktreePath)
+    if (status.exitCode !== 0) {
+      throw new ResetFailedError({ message: errorText(status) || "Failed to read git status" })
     }
 
-    const checkoutBranch = await $`git checkout ${worktreeBranch}`.quiet().nothrow().cwd(entry.path)
-    if (checkoutBranch.exitCode !== 0) {
-      throw new ResetFailedError({ message: errorText(checkoutBranch) || "Failed to checkout worktree branch" })
-    }
+    const dirty = outputText(status.stdout)
+    if (!dirty) return true
 
-    return true
+    throw new ResetFailedError({ message: `Worktree reset left local changes:\n${dirty}` })
   })
 }
