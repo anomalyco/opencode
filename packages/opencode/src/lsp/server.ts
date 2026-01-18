@@ -2043,4 +2043,69 @@ export namespace LSPServer {
       }
     },
   }
+
+  export const GraphQL: Info = {
+    id: "graphql",
+    extensions: [".graphql", ".gql", ".ts", ".tsx", ".js", ".jsx", ".vue", ".svelte", ".astro"],
+    root: NearestRoot([
+      ".graphqlrc",
+      ".graphqlrc.json",
+      ".graphqlrc.yaml",
+      ".graphqlrc.yml",
+      ".graphqlrc.js",
+      ".graphqlrc.cjs",
+      ".graphqlrc.mjs",
+      "graphql.config.json",
+      "graphql.config.yaml",
+      "graphql.config.yml",
+      "graphql.config.js",
+      "graphql.config.cjs",
+      "graphql.config.mjs",
+    ]),
+    async spawn(root) {
+      let bin = Bun.which("graphql-lsp", {
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+      })
+
+      if (!bin) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("installing graphql-language-service-cli")
+
+        const proc = Bun.spawn([BunProc.which(), "install", "graphql-language-service-cli"], {
+          cwd: Global.Path.bin,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+          stdin: "pipe",
+        })
+
+        const exit = await proc.exited
+        if (exit !== 0) {
+          log.error("Failed to install graphql-language-service-cli")
+          return
+        }
+
+        bin = path.join(
+          Global.Path.bin,
+          "node_modules",
+          ".bin",
+          "graphql-lsp" + (process.platform === "win32" ? ".cmd" : ""),
+        )
+        log.info(`installed graphql-language-service-cli`, { bin })
+      }
+
+      return {
+        process: spawn(bin, ["server", "-m", "stream"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        }),
+      }
+    },
+  }
 }
