@@ -8,6 +8,9 @@
   </a>
 </p>
 <p align="center">The open source AI coding agent.</p>
+<p align="center"><strong>PM Architecture Fork</strong></p>
+
+> **Note:** This is a fork of [OpenCode](https://github.com/anomalyco/opencode) with PM (Project Manager) Architecture enhancements.
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
@@ -18,7 +21,38 @@
 
 ---
 
-### Installation
+### PM Architecture
+
+This fork implements a 3-tier agent hierarchy:
+
+| Tier | Agent | Depth | Role |
+| ---- | ----- | ----- | ---- |
+| 1 | **PM** | 0 | Primary agent (build/plan modes). Entry point for all sessions. |
+| 2 | **Orchestrator** | 1 | Coordinates complex multi-step tasks. |
+| 3 | **Subagents** | 2 | Specialized workers (coder, researcher, etc.). |
+
+**Key Features:**
+- PM as primary agent with build/plan mode switching
+- Orchestrator agent for multi-step task coordination
+- `finish_task` tool for orchestrator → PM handoff
+- `pm_state` tool for persistent project state across sessions
+- All sessions are interactive (no headless mode)
+- Depth-based navigation: `Ctrl+X + ↑/↓` to navigate agent hierarchy
+
+---
+
+### Quick Start (This Fork)
+
+```bash
+bun install
+cd packages/opencode && bun run build
+# Binary at dist/opencode-win32-x64.exe (Windows)
+# or dist/opencode-linux-x64, dist/opencode-darwin-x64
+```
+
+---
+
+### Installation (Upstream)
 
 ```bash
 # YOLO
@@ -71,18 +105,23 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Agents
 
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
+This fork restructures the agent hierarchy with PM at the top:
 
-- **build** - Default, full access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
+**PM Agent (Primary)**
+- Modes: **build** (full access) and **plan** (read-only analysis)
+- Switch modes with `Tab` key
+- Manages project state via `pm_state` tool
 
-Also, included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
+**Orchestrator Agent**
+- Invoked by PM for complex multi-step tasks
+- Coordinates subagents and manages task flow
+- Returns results to PM via `finish_task` tool
 
-Learn more about [agents](https://opencode.ai/docs/agents).
+**Subagents**
+- Specialized workers invoked by Orchestrator
+- Examples: coder, researcher, reviewer
+
+Learn more about agents in the [upstream docs](https://opencode.ai/docs/agents).
 
 ### Documentation
 
@@ -110,4 +149,4 @@ It's very similar to Claude Code in terms of capability. Here are the key differ
 
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Upstream:** [anomalyco/opencode](https://github.com/anomalyco/opencode) | **Community:** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
