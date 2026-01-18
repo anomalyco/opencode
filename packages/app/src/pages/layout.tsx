@@ -1119,7 +1119,8 @@ export default function Layout(props: ParentProps) {
               placement="top-start"
               value={props.session.title}
               gutter={0}
-              openDelay={2000}
+              openDelay={3000}
+              contentStyle={{ maxWidth: "640px" }}
               class="grow-1 min-w-0"
             >
               <InlineEditor
