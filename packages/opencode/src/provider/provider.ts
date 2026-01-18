@@ -800,6 +800,16 @@ export namespace Provider {
       database[providerID] = parsed
     }
 
+    // Initialize config providers directly into providers object
+    // This ensures custom providers (like vllm) work even without auth/env setup
+    for (const [providerID, provider] of configProviders) {
+      const dbProvider = database[providerID]
+      if (dbProvider && Object.keys(dbProvider.models).length > 0) {
+        providers[providerID] = dbProvider
+        log.info("loaded config provider", { providerID })
+      }
+    }
+
     // load env
     const env = Env.all()
     for (const [providerID, provider] of Object.entries(database)) {
