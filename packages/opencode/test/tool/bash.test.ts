@@ -36,6 +36,29 @@ describe("tool.bash", () => {
       },
     })
   })
+
+  test("exposes OPENCODE_SESSION_ID environment variable", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const sessionID = "session_abc123"
+        const testCtx = {
+          ...ctx,
+          sessionID,
+        }
+        const result = await bash.execute(
+          {
+            command: process.platform === "win32" ? "echo %OPENCODE_SESSION_ID%" : "echo $OPENCODE_SESSION_ID",
+            description: "Print session ID env var",
+          },
+          testCtx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.output.trim()).toBe(sessionID)
+      },
+    })
+  })
 })
 
 describe("tool.bash permissions", () => {
