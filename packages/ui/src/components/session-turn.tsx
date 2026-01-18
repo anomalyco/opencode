@@ -13,17 +13,13 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 import { Binary } from "@opencode-ai/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
-import { Typewriter } from "./typewriter"
 import { Message, Part } from "./message-part"
 import { Markdown } from "./markdown"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
-import { ProviderIcon } from "./provider-icon"
-import type { IconName } from "./provider-icons/types"
 import { IconButton } from "./icon-button"
 import { Tooltip } from "./tooltip"
 import { Card } from "./card"
@@ -331,8 +327,6 @@ export function SessionTurn(
 
   const response = createMemo(() => lastTextPart()?.text)
   const responsePartId = createMemo(() => lastTextPart()?.id)
-  const sessionInfo = createMemo(() => data.store.session.find((item) => item.id === props.sessionID))
-  const sessionTitle = createMemo(() => props.sessionTitle ?? sessionInfo()?.title)
   const hasDiffs = createMemo(() => (data.store.session_diff?.[props.sessionID]?.length ?? 0) > 0)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
@@ -371,15 +365,11 @@ export function SessionTurn(
   const diffBatch = 20
 
   const [store, setStore] = createStore({
-    stickyTitleRef: undefined as HTMLDivElement | undefined,
-    stickyTriggerRef: undefined as HTMLDivElement | undefined,
-    stickyHeaderHeight: 0,
     retrySeconds: 0,
     diffsOpen: [] as string[],
     diffLimit: diffInit,
     status: rawStatus(),
     duration: duration(),
-    titleShown: false,
   })
 
   createEffect(
@@ -392,18 +382,6 @@ export function SessionTurn(
       { defer: true },
     ),
   )
-
-  createEffect(() => {
-    if (!sessionTitle()) {
-      setStore("titleShown", false)
-      return
-    }
-    if (store.titleShown) return
-    const first = allMessages().find((item) => item?.role === "user")
-    if (!first) return
-    if (first.id !== props.messageID) return
-    setStore("titleShown", true)
-  })
 
   createEffect(() => {
     const r = retry()
@@ -419,22 +397,6 @@ export function SessionTurn(
     const timer = setInterval(updateSeconds, 1000)
     onCleanup(() => clearInterval(timer))
   })
-
-  createResizeObserver(
-    () => store.stickyTitleRef,
-    ({ height }) => {
-      const triggerHeight = store.stickyTriggerRef?.offsetHeight ?? 0
-      setStore("stickyHeaderHeight", height + triggerHeight + 8)
-    },
-  )
-
-  createResizeObserver(
-    () => store.stickyTriggerRef,
-    ({ height }) => {
-      const titleHeight = store.stickyTitleRef?.offsetHeight ?? 0
-      setStore("stickyHeaderHeight", titleHeight + height + 8)
-    },
-  )
 
   createEffect(() => {
     const timer = setInterval(() => {
@@ -491,99 +453,58 @@ export function SessionTurn(
                 data-message={msg().id}
                 data-slot="session-turn-message-container"
                 class={props.classes?.container}
-                style={{ "--sticky-header-height": `${store.stickyHeaderHeight}px` }}
               >
                 <Switch>
                   <Match when={isShellMode()}>
                     <Part part={shellModePart()!} message={msg()} defaultOpen />
                   </Match>
                   <Match when={true}>
-                    <Show when={sessionTitle() && store.titleShown}>
-                      <div ref={(el) => setStore("stickyTitleRef", el)} data-slot="session-turn-sticky-title">
-                        <div data-slot="session-turn-message-header">
-                          <div data-slot="session-turn-message-title">
+                    <div data-slot="session-turn-sticky">
+                      {/* User Message */}
+                      <div data-slot="session-turn-message-content">
+                        <Message message={msg()} parts={parts()} />
+                      </div>
+
+                      {/* Trigger (sticky) */}
+                      <Show when={working() || hasSteps()}>
+                        <div data-slot="session-turn-response-trigger">
+                          <Button
+                            data-expandable={assistantMessages().length > 0}
+                            data-slot="session-turn-collapsible-trigger-content"
+                            variant="ghost"
+                            size="small"
+                            onClick={props.onStepsExpandedToggle ?? (() => {})}
+                          >
+                            <Show when={working()}>
+                              <Spinner />
+                            </Show>
                             <Switch>
-                              <Match when={working()}>
-                                <Typewriter as="h1" text={sessionTitle()} data-slot="session-turn-typewriter" />
+                              <Match when={retry()}>
+                                <span data-slot="session-turn-retry-message">
+                                  {(() => {
+                                    const r = retry()
+                                    if (!r) return ""
+                                    return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
+                                  })()}
+                                </span>
+                                <span data-slot="session-turn-retry-seconds">
+                                  · retrying {store.retrySeconds > 0 ? `in ${store.retrySeconds}s ` : ""}
+                                </span>
+                                <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                               </Match>
-                              <Match when={true}>
-                                <h1>{sessionTitle()}</h1>
-                              </Match>
+                              <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
+                              <Match when={props.stepsExpanded}>Hide steps</Match>
+                              <Match when={!props.stepsExpanded}>Show steps</Match>
                             </Switch>
-                          </div>
+                            <span>·</span>
+                            <span>{store.duration}</span>
+                            <Show when={assistantMessages().length > 0}>
+                              <Icon name="chevron-grabber-vertical" size="small" />
+                            </Show>
+                          </Button>
                         </div>
-                      </div>
-                    </Show>
-
-                    <Show
-                      when={
-                        (msg() as UserMessage).agent ||
-                        (msg() as UserMessage).model?.modelID ||
-                        (msg() as UserMessage).variant
-                      }
-                    >
-                      <div data-slot="session-turn-user-badges">
-                        <Show when={(msg() as UserMessage).agent}>
-                          <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
-                        </Show>
-                        <Show when={(msg() as UserMessage).model?.modelID}>
-                          <span data-slot="session-turn-badge" class="inline-flex items-center gap-1">
-                            <ProviderIcon
-                              id={(msg() as UserMessage).model!.providerID as IconName}
-                              class="size-3.5 shrink-0"
-                            />
-                            {(msg() as UserMessage).model?.modelID}
-                          </span>
-                        </Show>
-                        <Show when={(msg() as UserMessage).variant}>
-                          <span data-slot="session-turn-badge">{(msg() as UserMessage).variant}</span>
-                        </Show>
-                      </div>
-                    </Show>
-                    {/* User Message */}
-                    <div data-slot="session-turn-message-content">
-                      <Message message={msg()} parts={parts()} />
+                      </Show>
                     </div>
-
-                    {/* Trigger (sticky) */}
-                    <Show when={working() || hasSteps()}>
-                      <div ref={(el) => setStore("stickyTriggerRef", el)} data-slot="session-turn-response-trigger">
-                        <Button
-                          data-expandable={assistantMessages().length > 0}
-                          data-slot="session-turn-collapsible-trigger-content"
-                          variant="ghost"
-                          size="small"
-                          onClick={props.onStepsExpandedToggle ?? (() => {})}
-                        >
-                          <Show when={working()}>
-                            <Spinner />
-                          </Show>
-                          <Switch>
-                            <Match when={retry()}>
-                              <span data-slot="session-turn-retry-message">
-                                {(() => {
-                                  const r = retry()
-                                  if (!r) return ""
-                                  return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
-                                })()}
-                              </span>
-                              <span data-slot="session-turn-retry-seconds">
-                                · retrying {store.retrySeconds > 0 ? `in ${store.retrySeconds}s ` : ""}
-                              </span>
-                              <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
-                            </Match>
-                            <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
-                            <Match when={props.stepsExpanded}>Hide steps</Match>
-                            <Match when={!props.stepsExpanded}>Show steps</Match>
-                          </Switch>
-                          <span>·</span>
-                          <span>{store.duration}</span>
-                          <Show when={assistantMessages().length > 0}>
-                            <Icon name="chevron-grabber-vertical" size="small" />
-                          </Show>
-                        </Button>
-                      </div>
-                    </Show>
                     {/* Response */}
                     <Show when={props.stepsExpanded && assistantMessages().length > 0}>
                       <div data-slot="session-turn-collapsible-content-inner">
