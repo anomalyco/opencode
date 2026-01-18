@@ -794,6 +794,11 @@ export namespace Config {
       .enum(["full", "minimal"])
       .optional()
       .describe("Control diff display mode: 'full' shows complete diff, 'minimal' shows collapsed by default with line statistics"),
+    kitty_keyboard: z
+      .enum(["auto", "enabled", "disabled"])
+      .optional()
+      .default("auto")
+      .describe("Kitty keyboard protocol mode: 'auto' for best effort, 'enabled' for modern terminals (Kitty, iTerm2, WezTerm), 'disabled' for older terminals"),
   })
 
   export const Server = z

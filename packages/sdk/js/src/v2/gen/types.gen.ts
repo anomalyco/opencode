@@ -1598,6 +1598,14 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Control diff display mode: 'full' shows complete diff, 'minimal' shows collapsed by default with line statistics
+     */
+    diff_display?: "full" | "minimal"
+    /**
+     * Kitty keyboard protocol mode: 'auto' for best effort, 'enabled' for modern terminals (Kitty, iTerm2, WezTerm), 'disabled' for older terminals
+     */
+    kitty_keyboard?: "auto" | "enabled" | "disabled"
   }
   server?: ServerConfig
   /**

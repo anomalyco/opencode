@@ -33,6 +33,7 @@ import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
@@ -115,6 +116,25 @@ export function tui(input: {
       resolve()
     }
 
+    // Fetch config to determine kitty keyboard mode
+    let useKittyKeyboard: boolean | Record<string, boolean> = {}
+    try {
+      const sdk = createOpencodeClient({
+        baseUrl: input.url,
+        directory: input.directory,
+        fetch: input.fetch,
+      })
+      const config = await sdk.config.get()
+      const kittyMode = config.data?.tui?.kitty_keyboard ?? "auto"
+      console.log("[Kitty Keyboard Config] Raw mode from server:", kittyMode)
+      useKittyKeyboard =
+        kittyMode === "disabled" ? false : kittyMode === "enabled" ? true : {}
+      console.log("[Kitty Keyboard Config] Mapped to useKittyKeyboard:", useKittyKeyboard)
+    } catch (error) {
+      // If config fetch fails, use default (auto)
+      console.warn("[Kitty Keyboard Config] Failed to fetch config, using default 'auto'", error)
+    }
+
     render(
       () => {
         return (
@@ -166,7 +186,7 @@ export function tui(input: {
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
-        useKittyKeyboard: {},
+        useKittyKeyboard: useKittyKeyboard as any,
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
           onCopySelection: (text) => {
