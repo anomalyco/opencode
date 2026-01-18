@@ -21,7 +21,19 @@ const parameters = z.object({
 })
 
 export const TaskTool = Tool.define("task", async (ctx) => {
-  const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
+  const callerMode = ctx?.agent?.mode
+  const agents = await Agent.list().then((x) =>
+    x.filter((a) => {
+      // Subagents cannot spawn anything
+      if (callerMode === "subagent") return false
+      // Orchestrators can only spawn subagents
+      if (callerMode === "orchestrator") return a.mode === "subagent"
+      // Primary/supervisor can only spawn orchestrators
+      if (callerMode === "primary" || callerMode === "supervisor") return a.mode === "orchestrator"
+      // Default (no caller): allow orchestrator and subagent (backward compat for direct invocation)
+      return a.mode === "orchestrator" || a.mode === "subagent"
+    }),
+  )
 
   // Filter agents by permissions if agent provided
   const caller = ctx?.agent
@@ -57,7 +69,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
-      const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
+      // Orchestrators can spawn subagents but subagents cannot spawn further
+      // Only primary agents spawning orchestrators allow further spawning
+      const canSpawnAgain = callerMode === "primary" || callerMode === "supervisor"
 
       const session = await iife(async () => {
         if (params.session_id) {
@@ -79,7 +93,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               pattern: "*",
               action: "deny",
             },
-            ...(hasTaskPermission
+            ...(canSpawnAgain
               ? []
               : [
                   {
@@ -142,6 +156,46 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
+      const isInteractiveOrchestrator = agent.mode === "orchestrator"
+
+      if (isInteractiveOrchestrator) {
+        // Start orchestrator session but don't await completion
+        // User can interact with it by switching to that session
+        SessionPrompt.prompt({
+          messageID,
+          sessionID: session.id,
+          model: {
+            modelID: model.modelID,
+            providerID: model.providerID,
+          },
+          agent: agent.name,
+          tools: {
+            todowrite: false,
+            todoread: false,
+            ...(canSpawnAgain ? {} : { task: false }),
+            ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
+          },
+          parts: promptParts,
+        }).catch((error) => {
+          // Log error but don't block parent
+          console.error("orchestrator session error", error)
+        })
+
+        // Unsubscribe from monitoring - orchestrator runs independently
+        unsub()
+
+        // Return immediately with session info
+        return {
+          title: `Started orchestrator: ${agent.name}`,
+          metadata: {
+            sessionId: session.id,
+            interactive: true,
+          },
+          output: `Orchestrator session started.\n\n<task_metadata>\nsession_id: ${session.id}\ninteractive: true\n</task_metadata>`,
+        }
+      }
+
+      // Subagent mode: await completion (one-shot behavior)
       const result = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
@@ -153,7 +207,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         tools: {
           todowrite: false,
           todoread: false,
-          ...(hasTaskPermission ? {} : { task: false }),
+          ...(canSpawnAgain ? {} : { task: false }),
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
         parts: promptParts,

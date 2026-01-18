@@ -887,6 +887,23 @@ export function Session() {
         dialog.clear()
       },
     },
+    {
+      title: "Enter child session",
+      value: "session.child.enter",
+      keybind: "session_child_enter",
+      category: "Session",
+      hidden: true,
+      onSelect: (dialog) => {
+        const firstChild = children().find((x) => x.id !== session()?.id)
+        if (firstChild) {
+          navigate({
+            type: "session",
+            sessionID: firstChild.id,
+          })
+        }
+        dialog.clear()
+      },
+    },
   ])
 
   const revertInfo = createMemo(() => session()?.revert)

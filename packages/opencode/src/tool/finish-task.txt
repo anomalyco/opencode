@@ -1,0 +1,15 @@
+Signal task completion and return a structured summary to the parent session.
+
+Use this tool when:
+- You have completed the assigned task from the parent (PM or orchestrator)
+- You want to explicitly return control to the parent session
+- You have a summary to hand off with status and learnings
+
+This tool is ONLY available to orchestrator-mode agents. Subagents complete automatically.
+
+When called, this tool will:
+1. Record the task completion summary
+2. Signal the session to finish and return to parent
+3. Pass structured data back to the parent for their context
+
+The parent session will receive your summary and can continue their work with the context you provided.

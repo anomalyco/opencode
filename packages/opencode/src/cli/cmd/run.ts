@@ -240,7 +240,7 @@ export const RunCommand = cmd({
           )
           return undefined
         }
-        if (agent.mode === "subagent") {
+        if (agent.mode === "subagent" || agent.mode === "orchestrator") {
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",
             UI.Style.TEXT_NORMAL,

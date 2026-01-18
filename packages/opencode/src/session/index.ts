@@ -46,6 +46,7 @@ export namespace Session {
       projectID: z.string(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
+      depth: z.number().int().nonnegative().optional(),
       summary: z
         .object({
           additions: z.number(),

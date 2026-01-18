@@ -34,7 +34,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const agent = iife(() => {
-      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
+      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && x.mode !== "orchestrator" && !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({

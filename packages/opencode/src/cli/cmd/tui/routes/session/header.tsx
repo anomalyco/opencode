@@ -62,7 +62,7 @@ export function Header() {
   const { theme } = useTheme()
   const keybind = useKeybind()
   const command = useCommandDialog()
-  const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
+  const [hover, setHover] = createSignal<"parent" | "prev" | "next" | "down" | null>(null)
 
   return (
     <box flexShrink={0}>
@@ -122,7 +122,19 @@ export function Header() {
           </Match>
           <Match when={true}>
             <box flexDirection="row" justifyContent="space-between" gap={1}>
-              <Title session={session} />
+              <box flexDirection="row" gap={2}>
+                <Title session={session} />
+                <box
+                  onMouseOver={() => setHover("down")}
+                  onMouseOut={() => setHover(null)}
+                  onMouseUp={() => command.trigger("session.child.enter")}
+                  backgroundColor={hover() === "down" ? theme.backgroundElement : theme.backgroundPanel}
+                >
+                  <text fg={theme.text}>
+                    Child <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_enter")}</span>
+                  </text>
+                </box>
+              </box>
               <box flexDirection="row" gap={1} flexShrink={0}>
                 <ContextInfo context={context} cost={cost} />
                 <text fg={theme.textMuted}>v{Installation.VERSION}</text>
