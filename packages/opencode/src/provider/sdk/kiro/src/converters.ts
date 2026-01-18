@@ -298,7 +298,7 @@ export function convertToKiroPayload(
 
     history.push({
       userInputMessage: {
-        content: `--- CONTEXT ENTRY BEGIN ---\n${contextContent}\n--- CONTEXT ENTRY END ---`,
+        content: `--- SYSTEM INSTRUCTIONS BEGIN ---\n${contextContent}\n--- SYSTEM INSTRUCTIONS END ---`,
         modelId,
         origin: "KIRO_CLI",
         userInputMessageContext: {
@@ -309,7 +309,7 @@ export function convertToKiroPayload(
     history.push({
       assistantResponseMessage: {
         content:
-          "I will fully incorporate this information when generating my responses, and explicitly acknowledge relevant parts of the summary when answering questions.",
+          "I will follow these instructions carefully. When a user's request matches an available skill's description, I will use the skill tool to load and follow the skill's instructions.",
       },
     })
   }
@@ -552,14 +552,15 @@ export function convertToKiroPayload(
     userInputMessage.userInputMessageContext = userInputMessageContext
   }
 
-  // Validate and fix history: if last assistant has toolUses but no tool results exist anywhere,
-  // remove the toolUses to avoid "Improperly formed request" error from Kiro API.
+  // Validate and fix history: if last assistant has toolUses but the current message
+  // doesn't have corresponding tool results, remove the toolUses to avoid
+  // "Improperly formed request" error from Kiro API.
   // This can happen when user cancels a tool call.
   const lastHistoryItem = history[history.length - 1]
   if (
     lastHistoryItem?.assistantResponseMessage?.toolUses &&
     lastHistoryItem.assistantResponseMessage.toolUses.length > 0 &&
-    !hasAnyToolResults
+    lastToolResults.length === 0
   ) {
     delete lastHistoryItem.assistantResponseMessage.toolUses
   }
