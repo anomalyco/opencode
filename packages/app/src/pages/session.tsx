@@ -533,10 +533,6 @@ export default function Page() {
       keybind: "shift+mod+t",
       onSelect: () => {
         local.model.variant.cycle()
-        showToast({
-          title: "Thinking effort changed",
-          description: "The thinking effort has been changed to " + (local.model.variant.current() ?? "Default"),
-        })
       },
     },
     {
