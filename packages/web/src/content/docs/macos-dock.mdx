@@ -1,0 +1,187 @@
+---
+title: macOS Dock Shortcut
+description: Create a macOS Dock shortcut to launch OpenCode with one click.
+---
+
+You can create a native macOS application that launches OpenCode directly from your Dock. This is useful for quick access without opening a terminal first.
+
+---
+
+## Create the App Bundle
+
+### 1. Create the directory structure
+
+```bash
+mkdir -p ~/Applications/OpenCode.app/Contents/MacOS
+mkdir -p ~/Applications/OpenCode.app/Contents/Resources
+```
+
+### 2. Create the launcher script
+
+Create the executable script at `~/Applications/OpenCode.app/Contents/MacOS/OpenCode`:
+
+```bash
+#!/bin/zsh
+/Applications/WezTerm.app/Contents/MacOS/wezterm start -- /opt/homebrew/bin/opencode
+```
+
+Make it executable:
+
+```bash
+chmod +x ~/Applications/OpenCode.app/Contents/MacOS/OpenCode
+```
+
+:::note
+Adjust the paths if your terminal emulator or OpenCode binary is installed elsewhere:
+- **WezTerm**: `/Applications/WezTerm.app/Contents/MacOS/wezterm`
+- **iTerm2**: `/Applications/iTerm.app/Contents/MacOS/iTerm2`
+- **OpenCode**: Run `which opencode` to find the path
+:::
+
+### 3. Create Info.plist
+
+Create `~/Applications/OpenCode.app/Contents/Info.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>OpenCode</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.opencode.launcher</string>
+    <key>CFBundleName</key>
+    <string>OpenCode</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.13</string>
+    <key>LSUIElement</key>
+    <false/>
+</dict>
+</plist>
+```
+
+---
+
+## Add a Custom Icon
+
+### Option 1: Using fileicon (recommended)
+
+```bash
+brew install fileicon
+
+# Download the OpenCode icon
+curl -L -o /tmp/opencode-icon.png \
+  "https://raw.githubusercontent.com/anomalyco/opencode/dev/packages/identity/mark-512x512.png"
+
+# Set the icon
+fileicon set ~/Applications/OpenCode.app /tmp/opencode-icon.png
+```
+
+### Option 2: Manual ICNS creation
+
+```bash
+# Download the icon
+curl -L -o /tmp/opencode-icon.png \
+  "https://raw.githubusercontent.com/anomalyco/opencode/dev/packages/identity/mark-512x512.png"
+
+# Create iconset with multiple sizes
+mkdir -p /tmp/opencode.iconset
+sips -z 512 512 /tmp/opencode-icon.png --out /tmp/opencode.iconset/icon_512x512.png
+sips -z 256 256 /tmp/opencode-icon.png --out /tmp/opencode.iconset/icon_256x256.png
+sips -z 128 128 /tmp/opencode-icon.png --out /tmp/opencode.iconset/icon_128x128.png
+sips -z 32 32 /tmp/opencode-icon.png --out /tmp/opencode.iconset/icon_32x32.png
+sips -z 16 16 /tmp/opencode-icon.png --out /tmp/opencode.iconset/icon_16x16.png
+
+# Convert to ICNS
+iconutil -c icns /tmp/opencode.iconset -o ~/Applications/OpenCode.app/Contents/Resources/AppIcon.icns
+```
+
+---
+
+## Add to Dock
+
+1. Open Finder and navigate to `~/Applications/`
+2. Drag `OpenCode.app` to your Dock
+
+If the icon doesn't update immediately:
+
+```bash
+killall Finder
+killall Dock
+```
+
+Or remove the app from Dock and add it again.
+
+---
+
+## Using Other Terminal Emulators
+
+### iTerm2
+
+```bash
+#!/bin/zsh
+/Applications/iTerm.app/Contents/MacOS/iTerm2 --command /opt/homebrew/bin/opencode
+```
+
+### Alacritty
+
+```bash
+#!/bin/zsh
+/Applications/Alacritty.app/Contents/MacOS/alacritty -e /opt/homebrew/bin/opencode
+```
+
+### Kitty
+
+```bash
+#!/bin/zsh
+/Applications/kitty.app/Contents/MacOS/kitty /opt/homebrew/bin/opencode
+```
+
+### Terminal.app
+
+```bash
+#!/bin/zsh
+osascript -e 'tell application "Terminal" to do script "/opt/homebrew/bin/opencode"'
+```
+
+---
+
+## Troubleshooting
+
+### "opencode not found" error
+
+The app runs with a minimal PATH. Use the full path to the opencode binary:
+
+```bash
+# Find where opencode is installed
+which opencode
+
+# Use the full path in your launcher script
+/opt/homebrew/bin/opencode  # Homebrew on Apple Silicon
+/usr/local/bin/opencode     # Homebrew on Intel
+~/.local/bin/opencode       # pip/pipx install
+```
+
+### Icon not showing
+
+1. Restart Finder and Dock:
+   ```bash
+   killall Finder && killall Dock
+   ```
+
+2. Remove from Dock and re-add the app
+
+3. Use `fileicon` to set the icon directly:
+   ```bash
+   brew install fileicon
+   fileicon set ~/Applications/OpenCode.app /path/to/icon.png
+   ```
