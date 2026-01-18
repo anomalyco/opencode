@@ -14,11 +14,134 @@ import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
-import { OpenAIConversationState } from "./openai-conversation"
-import { OpenAICompact } from "../provider/openai-compact"
+import { Auth } from "@/auth"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
+
+  function withoutTrailingSlash(url: string) {
+    return url.endsWith("/") ? url.slice(0, -1) : url
+  }
+
+  type CodexCompactContentItem = {
+    type: "input_text" | "output_text"
+    text: string
+  }
+
+  type CodexCompactOutputItem =
+    | {
+        type: "message"
+        role: string
+        content: CodexCompactContentItem[]
+      }
+    | {
+        type: "compaction"
+        encrypted_content: string
+      }
+
+  function toCompactText(msg: MessageV2.WithParts): string {
+    const chunks: string[] = []
+    for (const part of msg.parts) {
+      if (part.type === "text") {
+        if (msg.info.role === "user" && part.ignored) continue
+        if (part.text.trim()) chunks.push(part.text)
+        continue
+      }
+
+      if (part.type === "reasoning") {
+        if (part.text.trim()) chunks.push(part.text)
+        continue
+      }
+
+      if (part.type === "tool") {
+        if (part.state.status === "completed") {
+          const output = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
+          if (output?.trim()) {
+            chunks.push([`[tool:${part.tool}]`, output].join("\n"))
+          }
+        } else if (part.state.status === "error") {
+          if (part.state.error?.trim()) {
+            chunks.push([`[tool:${part.tool} error]`, part.state.error].join("\n"))
+          }
+        }
+        continue
+      }
+    }
+    return chunks.join("\n\n").trim()
+  }
+
+  function buildCodexCompactInput(messages: MessageV2.WithParts[]) {
+    const input: Array<{ type: "message"; role: string; content: Array<{ type: "input_text"; text: string }> }> = []
+    for (const msg of messages) {
+      if (msg.info.role !== "user" && msg.info.role !== "assistant") continue
+      const text = toCompactText(msg)
+      if (!text) continue
+      input.push({
+        type: "message",
+        role: msg.info.role,
+        content: [{ type: "input_text", text }],
+      })
+    }
+    return input
+  }
+
+  async function codexRemoteCompact(input: {
+    model: Provider.Model
+    messages: MessageV2.WithParts[]
+    sessionID: string
+    abort: AbortSignal
+  }): Promise<{ summaryText: string; encryptedContent?: string }> {
+    const provider = await Provider.getProvider(input.model.providerID)
+    const fetchFn: typeof fetch = provider.options?.fetch ?? fetch
+    const baseURL = withoutTrailingSlash(provider.options?.baseURL ?? input.model.api.url ?? "https://api.openai.com/v1")
+
+    const headers = new Headers(provider.options?.headers ?? {})
+    if (!headers.has("content-type")) headers.set("content-type", "application/json")
+    if (!headers.has("session_id")) headers.set("session_id", input.sessionID)
+    if (!headers.has("authorization")) {
+      const apiKey = provider.options?.apiKey ?? provider.key
+      if (apiKey) headers.set("authorization", `Bearer ${apiKey}`)
+    }
+
+    const body = {
+      model: input.model.api.id,
+      input: buildCodexCompactInput(input.messages),
+    }
+
+    const res = await fetchFn(`${baseURL}/responses/compact`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: input.abort,
+    })
+    const text = await res.text().catch(() => "")
+    if (!res.ok) {
+      throw new Error(`remote compact failed (${res.status}): ${text.slice(0, 500)}`)
+    }
+
+    const parsed = JSON.parse(text) as { output?: CodexCompactOutputItem[] }
+    const output = Array.isArray(parsed.output) ? parsed.output : []
+
+    const summaryChunks: string[] = []
+    let encryptedContent: string | undefined
+    for (const item of output) {
+      if (!item || typeof item !== "object" || !("type" in item)) continue
+      if (item.type === "message") {
+        for (const c of item.content ?? []) {
+          if (c?.text && typeof c.text === "string") summaryChunks.push(c.text)
+        }
+      } else if (item.type === "compaction") {
+        if (typeof item.encrypted_content === "string" && item.encrypted_content) {
+          encryptedContent = item.encrypted_content
+        }
+      }
+    }
+
+    return {
+      summaryText: summaryChunks.join("\n").trim(),
+      encryptedContent,
+    }
+  }
 
   export const Event = {
     Compacted: BusEvent.define(
@@ -104,11 +227,6 @@ export namespace SessionCompaction {
       ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
       : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
 
-    const previousResponseId =
-      OpenAIConversationState.isGPTModel(model) && model.api.npm === "@ai-sdk/openai"
-        ? OpenAIConversationState.latestResponseId(input.messages)
-        : undefined
-
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
@@ -135,12 +253,26 @@ export namespace SessionCompaction {
       },
     })) as MessageV2.Assistant
 
-    if (previousResponseId) {
-      const compactedResponseId = await OpenAICompact.compact({
+    const provider = await Provider.getProvider(model.providerID)
+    const auth = await Auth.get(model.providerID)
+    const isCodex = provider.id === "openai" && auth?.type === "oauth"
+    if (isCodex) {
+      const { summaryText, encryptedContent } = await codexRemoteCompact({
         model,
-        responseId: previousResponseId,
+        messages: input.messages,
+        sessionID: input.sessionID,
         abort: input.abort,
       })
+
+      const rendered = [
+        summaryText || "Conversation compacted.",
+        encryptedContent
+          ? ["", "<compaction_encrypted_content>", encryptedContent, "</compaction_encrypted_content>"].join("\n")
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+        .trim()
 
       await Session.updatePart({
         id: Identifier.ascending("part"),
@@ -148,13 +280,10 @@ export namespace SessionCompaction {
         sessionID: msg.sessionID,
         type: "text",
         synthetic: true,
-        text: "Conversation compacted remotely.",
+        text: rendered,
         time: {
           start: Date.now(),
           end: Date.now(),
-        },
-        metadata: {
-          openai: { responseId: compactedResponseId },
         },
       } satisfies MessageV2.TextPart)
 
