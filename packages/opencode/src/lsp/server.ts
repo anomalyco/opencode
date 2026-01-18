@@ -2043,4 +2043,68 @@ export namespace LSPServer {
       }
     },
   }
+
+  export const Tailwind: Info = {
+    id: "tailwindcss",
+    extensions: [".css", ".html", ".jsx", ".tsx", ".vue", ".astro", ".svelte", ".scss", ".less"],
+    root: NearestRoot([
+      "tailwind.config.js",
+      "tailwind.config.cjs",
+      "tailwind.config.mjs",
+      "tailwind.config.ts",
+      "tailwind.config.cts",
+      "tailwind.config.mts",
+      "postcss.config.js",
+      "postcss.config.cjs",
+      "postcss.config.mjs",
+      "postcss.config.ts",
+      "postcss.config.cts",
+      "postcss.config.mts",
+    ]),
+    async spawn(root) {
+      let bin = Bun.which("tailwindcss-language-server", {
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+      })
+
+      if (!bin) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("installing @tailwindcss/language-server")
+
+        const proc = Bun.spawn([BunProc.which(), "install", "@tailwindcss/language-server"], {
+          cwd: Global.Path.bin,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+          stdin: "pipe",
+        })
+
+        const exit = await proc.exited
+        if (exit !== 0) {
+          log.error("Failed to install @tailwindcss/language-server")
+          return
+        }
+
+        bin = path.join(
+          Global.Path.bin,
+          "node_modules",
+          ".bin",
+          "tailwindcss-language-server" + (process.platform === "win32" ? ".cmd" : ""),
+        )
+        log.info(`installed @tailwindcss/language-server`, { bin })
+      }
+
+      return {
+        process: spawn(bin, ["--stdio"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        }),
+      }
+    },
+  }
 }
