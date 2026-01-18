@@ -545,7 +545,7 @@ export type QuestionInfo = {
    */
   question: string
   /**
-   * Very short label (max 12 chars)
+   * Very short label (max 30 chars)
    */
   header: string
   /**
@@ -630,6 +630,14 @@ export type EventTodoUpdated = {
   properties: {
     sessionID: string
     todos: Array<Todo>
+  }
+}
+
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
   }
 }
 
@@ -791,14 +799,6 @@ export type EventSessionError = {
   }
 }
 
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
 export type EventVcsBranchUpdated = {
   type: "vcs.branch.updated"
   properties: {
@@ -880,6 +880,7 @@ export type Event =
   | EventQuestionRejected
   | EventSessionCompacted
   | EventTodoUpdated
+  | EventFileWatcherUpdated
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
@@ -892,7 +893,6 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
-  | EventFileWatcherUpdated
   | EventVcsBranchUpdated
   | EventPtyCreated
   | EventPtyUpdated

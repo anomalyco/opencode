@@ -533,10 +533,6 @@ export default function Page() {
       keybind: "shift+mod+t",
       onSelect: () => {
         local.model.variant.cycle()
-        showToast({
-          title: "Thinking effort changed",
-          description: "The thinking effort has been changed to " + (local.model.variant.current() ?? "Default"),
-        })
       },
     },
     {
@@ -654,6 +650,72 @@ export default function Page() {
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: () => dialog.show(() => <DialogFork />),
     },
+    ...(sync.data.config.share !== "disabled"
+      ? [
+          {
+            id: "session.share",
+            title: "Share session",
+            description: "Share this session and copy the URL to clipboard",
+            category: "Session",
+            slash: "share",
+            disabled: !params.id || !!info()?.share?.url,
+            onSelect: async () => {
+              if (!params.id) return
+              await sdk.client.session
+                .share({ sessionID: params.id })
+                .then((res) => {
+                  navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
+                    showToast({
+                      title: "Failed to copy URL to clipboard",
+                      variant: "error",
+                    }),
+                  )
+                })
+                .then(() =>
+                  showToast({
+                    title: "Session shared",
+                    description: "Share URL copied to clipboard!",
+                    variant: "success",
+                  }),
+                )
+                .catch(() =>
+                  showToast({
+                    title: "Failed to share session",
+                    description: "An error occurred while sharing the session",
+                    variant: "error",
+                  }),
+                )
+            },
+          },
+          {
+            id: "session.unshare",
+            title: "Unshare session",
+            description: "Stop sharing this session",
+            category: "Session",
+            slash: "unshare",
+            disabled: !params.id || !info()?.share?.url,
+            onSelect: async () => {
+              if (!params.id) return
+              await sdk.client.session
+                .unshare({ sessionID: params.id })
+                .then(() =>
+                  showToast({
+                    title: "Session unshared",
+                    description: "Session unshared successfully!",
+                    variant: "success",
+                  }),
+                )
+                .catch(() =>
+                  showToast({
+                    title: "Failed to unshare session",
+                    description: "An error occurred while unsharing the session",
+                    variant: "error",
+                  }),
+                )
+            },
+          },
+        ]
+      : []),
   ])
 
   const handleKeyDown = (event: KeyboardEvent) => {
