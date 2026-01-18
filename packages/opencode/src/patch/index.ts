@@ -1,6 +1,7 @@
 import z from "zod"
 import * as path from "path"
 import * as fs from "fs/promises"
+import { readFileSync } from "fs"
 import { Log } from "../util/log"
 
 export namespace Patch {
@@ -311,7 +312,7 @@ export namespace Patch {
     // Read original file content
     let originalContent: string
     try {
-      originalContent = require("fs").readFileSync(filePath, "utf-8")
+      originalContent = readFileSync(filePath, "utf-8")
     } catch (error) {
       throw new Error(`Failed to read file ${filePath}: ${error}`)
     }
