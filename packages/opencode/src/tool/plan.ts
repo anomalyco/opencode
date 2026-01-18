@@ -7,6 +7,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Provider } from "../provider/provider"
 import { Instance } from "../project/instance"
+import { Agent } from "../agent/agent"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 import ENTER_DESCRIPTION from "./plan-enter.txt"
 
@@ -15,6 +16,11 @@ async function getLastModel(sessionID: string) {
     if (item.info.role === "user" && item.info.model) return item.info.model
   }
   return Provider.defaultModel()
+}
+
+async function getAgentModel(agentName: string) {
+  const agent = await Agent.get(agentName)
+  return agent.model
 }
 
 export const PlanExitTool = Tool.define("plan_exit", {
@@ -42,7 +48,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
     const answer = answers[0]?.[0]
     if (answer === "No") throw new Question.RejectedError()
 
-    const model = await getLastModel(ctx.sessionID)
+    const model = (await getAgentModel("build")) || (await getLastModel(ctx.sessionID))
 
     const userMsg: MessageV2.User = {
       id: Identifier.ascending("message"),
@@ -99,7 +105,7 @@ export const PlanEnterTool = Tool.define("plan_enter", {
 
     if (answer === "No") throw new Question.RejectedError()
 
-    const model = await getLastModel(ctx.sessionID)
+    const model = (await getAgentModel("plan")) || (await getLastModel(ctx.sessionID))
 
     const userMsg: MessageV2.User = {
       id: Identifier.ascending("message"),
