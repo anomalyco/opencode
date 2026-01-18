@@ -262,8 +262,11 @@ async function updateRegistries(binaries: Record<string, string>) {
     }
 
     await $`git clone ${authUrl} ./dist/homebrew-tap`
-    await Bun.file("./dist/homebrew-tap/lash.rb").write(homebrewFormula)
-    await $`cd ./dist/homebrew-tap && git add lash.rb`
+    await $`mkdir -p ./dist/homebrew-tap/Formula`
+    await Bun.file("./dist/homebrew-tap/Formula/lash.rb").write(homebrewFormula)
+    // Clean up root file if exists to avoid confusion
+    await $`rm -f ./dist/homebrew-tap/lash.rb`
+    await $`cd ./dist/homebrew-tap && git add .`
     await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
 
     console.log("Pushing to homebrew-tap...")
