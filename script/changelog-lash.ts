@@ -221,27 +221,27 @@ export async function buildNotes(from: string, to: string) {
 
   console.log("generating changelog since " + from)
 
-  const opencode = await createOpencode({ port: 5044 })
+  let opencode
   const notes: string[] = []
 
   try {
+    opencode = await createOpencode({ port: 5044 })
     const lines = await generateChangelog(commits, opencode)
     notes.push(...lines)
     console.log("---- Generated Changelog ----")
     console.log(notes.join("\n"))
     console.log("-----------------------------")
   } catch (error) {
-    if (error instanceof Error && error.name === "TimeoutError") {
-      console.log("Changelog generation timed out, using raw commits")
+    if (error) {
+      console.log("Changelog generation failed or timed out, using raw commits")
+      // console.warn(error)
       for (const commit of commits) {
         const attribution = commit.author && !team.includes(commit.author) ? ` (@${commit.author})` : ""
         notes.push(`- ${commit.message}${attribution}`)
       }
-    } else {
-      throw error
     }
   } finally {
-    opencode.server.close()
+    if (opencode?.server) opencode.server.close()
   }
 
   const contributors = await getContributors(from, to)
