@@ -28,8 +28,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       if (callerMode === "subagent") return false
       // Orchestrators can only spawn subagents
       if (callerMode === "orchestrator") return a.mode === "subagent"
-      // Primary/supervisor can only spawn orchestrators
-      if (callerMode === "primary" || callerMode === "supervisor") return a.mode === "orchestrator"
+      // Primary/supervisor can spawn orchestrators AND subagents (for trivial tasks)
+      if (callerMode === "primary" || callerMode === "supervisor") return a.mode === "orchestrator" || a.mode === "subagent"
       // Default (no caller): allow orchestrator and subagent (backward compat for direct invocation)
       return a.mode === "orchestrator" || a.mode === "subagent"
     }),

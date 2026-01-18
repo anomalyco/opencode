@@ -27,6 +27,7 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
 import { FinishTaskTool } from "./finish-task"
+import { PMStateTool } from "./pm-state"
 import { ApplyPatchTool } from "./apply_patch"
 
 export namespace ToolRegistry {
@@ -115,6 +116,7 @@ export namespace ToolRegistry {
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool, PlanEnterTool] : []),
       FinishTaskTool,
+      PMStateTool,
       ...custom,
     ]
   }
@@ -135,6 +137,7 @@ export namespace ToolRegistry {
       tools
         .filter((t) => {
           if (t.id === "finish_task" && agent?.mode !== "orchestrator") return false
+          if (t.id === "pm_state" && agent?.mode !== "primary") return false
 
           // Enable websearch/codesearch for zen users OR via enable flag
           if (t.id === "codesearch" || t.id === "websearch") {
