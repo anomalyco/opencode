@@ -55,19 +55,27 @@ export namespace Command {
   } as const
 
   const mcpCommands = new Map<string, Info>()
+  const mcpTemplateCache = new Map<string, Promise<string>>()
   let mcpInitPromise: Promise<void> | undefined
 
   export async function initMCPCommands() {
     if (mcpInitPromise) return mcpInitPromise
     mcpInitPromise = MCP.prompts()
       .then((prompts) => {
+        mcpCommands.clear()
+        mcpTemplateCache.clear()
+
         for (const [name, prompt] of Object.entries(prompts)) {
           mcpCommands.set(name, {
             name,
             mcp: true,
             description: prompt.description,
             get template() {
-              return (async () => {
+              if (mcpTemplateCache.has(name)) {
+                return mcpTemplateCache.get(name)!
+              }
+
+              const templatePromise = (async () => {
                 const template = await MCP.getPrompt(
                   prompt.client,
                   prompt.name,
@@ -81,6 +89,9 @@ export namespace Command {
                     .join("\n") || ""
                 )
               })()
+
+              mcpTemplateCache.set(name, templatePromise)
+              return templatePromise
             },
             hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
           })
