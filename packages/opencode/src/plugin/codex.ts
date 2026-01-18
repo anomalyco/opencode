@@ -7,7 +7,7 @@ const log = Log.create({ service: "plugin.codex" })
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
-const CODEX_API_BASE = "https://chatgpt.com/backend-api/codex"
+const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
 
 interface PkceCodes {
@@ -440,13 +440,10 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               requestInput instanceof URL
                 ? requestInput
                 : new URL(typeof requestInput === "string" ? requestInput : requestInput.url)
-            let url = parsed
-            if (parsed.pathname.startsWith("/v1/")) {
-              const suffix = parsed.pathname.slice("/v1".length) // keep leading "/"
-              if (suffix.startsWith("/responses") || suffix.startsWith("/chat/completions")) {
-                url = new URL(`${CODEX_API_BASE}${suffix}${parsed.search}`)
-              }
-            }
+            const url =
+              parsed.pathname.includes("/v1/responses") || parsed.pathname.includes("/chat/completions")
+                ? new URL(CODEX_API_ENDPOINT)
+                : parsed
 
             return fetch(url, {
               ...init,
