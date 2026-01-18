@@ -11,6 +11,7 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
+import { FormatError } from "../error"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -251,21 +252,47 @@ export const RunCommand = cmd({
         return args.agent
       })()
 
+      const {validatedModelString, validatedModelObject} = await (async () => {
+        if (args.model === undefined || args.model === null) {
+          return { validatedModelString: undefined, validatedModelObject: undefined }
+        }
+
+        const trimmed = args.model.trim()
+        if (!trimmed) {
+          UI.println(UI.Style.TEXT_DANGER_BOLD + "✕", UI.Style.TEXT_NORMAL, `model argument cannot be empty`)
+          process.exit(1)
+        }
+
+        const parsed = Provider.parseModel(trimmed)
+        return Provider.getModel(parsed.providerID, parsed.modelID)
+          .then(() => ({
+            validatedModelString: trimmed,
+            validatedModelObject: { providerID: parsed.providerID, modelID: parsed.modelID },
+          }))
+          .catch((e) => {
+            if (Provider.ModelNotFoundError.isInstance(e)) {
+              const formatted = FormatError(e)
+              if (formatted) UI.println(formatted)
+              process.exit(1)
+            }
+            throw e
+          })
+      })()
+
       if (args.command) {
         await sdk.session.command({
           sessionID,
           agent: resolvedAgent,
-          model: args.model,
+          model: validatedModelString,
           command: args.command,
           arguments: message,
           variant: args.variant,
         })
       } else {
-        const modelParam = args.model ? Provider.parseModel(args.model) : undefined
         await sdk.session.prompt({
           sessionID,
           agent: resolvedAgent,
-          model: modelParam,
+          model: validatedModelObject,
           variant: args.variant,
           parts: [...fileParts, { type: "text", text: message }],
         })
