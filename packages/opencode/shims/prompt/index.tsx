@@ -1,3 +1,12 @@
+/**
+ * Lash Shell Mode Prompt Shim
+ *
+ * This is a fork of the upstream prompt/index.tsx with shell mode features.
+ * It includes execution mode switching, tab completion, and visual mode indicators.
+ *
+ * This file is used as a build-time replacement for the upstream prompt/index.tsx.
+ */
+
 import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
@@ -10,26 +19,30 @@ import { useSync } from "@tui/context/sync"
 import { Identifier } from "@/id/id"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
-import { usePromptHistory, type PromptInfo } from "./history"
-import { usePromptStash } from "./stash"
-import { DialogStash } from "../dialog-stash"
-import { type AutocompleteRef, Autocomplete } from "./autocomplete"
-import { useCommandDialog } from "../dialog-command"
+import { usePromptHistory, type PromptInfo } from "@tui/component/prompt/history"
+import { usePromptStash } from "@tui/component/prompt/stash"
+import { DialogStash } from "@tui/component/dialog-stash"
+import { type AutocompleteRef, Autocomplete } from "@tui/component/prompt/autocomplete"
+import { useCommandDialog } from "@tui/component/dialog-command"
 import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
-import { useExit } from "../../context/exit"
-import { Clipboard } from "../../util/clipboard"
+import { useExit } from "@tui/context/exit"
+import { Clipboard } from "@tui/util/clipboard"
 import type { FilePart } from "@opencode-ai/sdk/v2"
-import { TuiEvent } from "../../event"
+import { TuiEvent } from "@tui/event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
-import { createColors, createFrames } from "../../ui/spinner.ts"
+import { formatDuration } from "@/util/format"
+import { createColors, createFrames } from "@tui/ui/spinner"
 import { useDialog } from "@tui/ui/dialog"
-import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
-import { DialogAlert } from "../../ui/dialog-alert"
-import { useToast } from "../../ui/toast"
-import { useKV } from "../../context/kv"
-import { useTextareaKeybindings } from "../textarea-keybindings"
+import { DialogProvider as DialogProviderConnect } from "@tui/component/dialog-provider"
+import { DialogAlert } from "@tui/ui/dialog-alert"
+import { useToast } from "@tui/ui/toast"
+import { useKV } from "@tui/context/kv"
+import { useTextareaKeybindings } from "@tui/component/textarea-keybindings"
+// Shell mode integration (Lash-specific)
+import { useExecutionMode, handleModeToggleKey, determineRouting, handleShellTabCompletion, shouldUseShellCompletion, applyCompletionAtIndex, type CompletionCycleState } from "@tui-integration"
+import { ExecutionMode } from "@shell-mode"
 
 export type PromptProps = {
   sessionID?: string
@@ -72,6 +85,8 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  // Shell mode hook (Lash-specific)
+  const executionMode = useExecutionMode()
 
   function promptModelWarning() {
     toast.show({
@@ -118,6 +133,8 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    // Shell mode completion cycling state (Lash-specific)
+    completionCycle: CompletionCycleState | null
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     prompt: {
@@ -127,6 +144,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    completionCycle: null,
   })
 
   // Initialize agent/model/variant from last user message when session changes
@@ -144,9 +162,9 @@ export function Prompt(props: PromptProps) {
       const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
       if (msg.agent && isPrimaryAgent) {
         local.agent.set(msg.agent)
+        if (msg.model) local.model.set(msg.model)
+        if (msg.variant) local.model.variant.set(msg.variant)
       }
-      if (msg.model) local.model.set(msg.model)
-      if (msg.variant) local.model.variant.set(msg.variant)
     }
   })
 
@@ -426,7 +444,17 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  // Shell mode command registration (Lash-specific)
   command.register(() => [
+    {
+      title: `Toggle execution mode (${executionMode.getModeDisplay().name})`,
+      value: "mode.toggle",
+      category: "Session",
+      onSelect: (dialog) => {
+        executionMode.toggleMode()
+        dialog.clear()
+      },
+    },
     {
       title: "Stash prompt",
       value: "prompt.stash",
@@ -527,7 +555,16 @@ export function Prompt(props: PromptProps) {
     const currentMode = store.mode
     const variant = local.model.variant.current()
 
-    if (store.mode === "shell") {
+    // Determine routing based on execution mode (Lash-specific)
+    // The old `!` prefix shell mode (store.mode === "shell") takes precedence
+    // Then check the execution mode for Auto/Shell/Agent routing
+    let shouldRouteToShell = store.mode === "shell"
+    if (!shouldRouteToShell && store.mode === "normal") {
+      const routing = await determineRouting(inputText)
+      shouldRouteToShell = routing === "shell"
+    }
+
+    if (shouldRouteToShell) {
       sdk.client.session.shell({
         sessionID,
         agent: local.agent.current().name,
@@ -537,7 +574,9 @@ export function Prompt(props: PromptProps) {
         },
         command: inputText,
       })
-      setStore("mode", "normal")
+      if (store.mode === "shell") {
+        setStore("mode", "normal")
+      }
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
@@ -686,9 +725,13 @@ export function Prompt(props: PromptProps) {
     return
   }
 
+  // Border highlight color based on mode (Lash-specific)
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
     if (store.mode === "shell") return theme.primary
+    // Use execution mode color when in Shell mode
+    const mode = executionMode.mode()
+    if (mode === ExecutionMode.Shell) return theme.secondary
     return local.agent.color(local.agent.current().name)
   })
 
@@ -697,6 +740,21 @@ export function Prompt(props: PromptProps) {
     if (variants.length === 0) return false
     const current = local.model.variant.current()
     return !!current
+  })
+
+  // Mode prefix color for the input (Lash-specific)
+  const modePrefixColor = createMemo(() => {
+    const modeDisplay = executionMode.getModeDisplay()
+    switch (modeDisplay.color) {
+      case "primary":
+        return theme.primary
+      case "secondary":
+        return theme.secondary
+      case "success":
+        return theme.success
+      case "border":
+        return theme.border
+    }
   })
 
   const spinnerDef = createMemo(() => {
@@ -717,6 +775,17 @@ export function Prompt(props: PromptProps) {
         minAlpha: 0.3,
       }),
     }
+  })
+
+  // Shorten working directory path for display
+  const shortenedWorkingDir = createMemo(() => {
+    const dir = sync.data.path.cwd || sync.data.path.directory
+    if (!dir) return ""
+    const home = sync.data.path.home || process.env.HOME || process.env.USERPROFILE || ""
+    if (home && dir.startsWith(home)) {
+      return "~" + dir.slice(home.length)
+    }
+    return dir
   })
 
   return (
@@ -759,7 +828,11 @@ export function Prompt(props: PromptProps) {
             backgroundColor={theme.backgroundElement}
             flexGrow={1}
           >
-            <textarea
+            <box flexDirection="row" alignItems="flex-start">
+              {/* Mode icon prefix (Lash-specific) */}
+              <text fg={modePrefixColor()}>{executionMode.getModeDisplay().icon} </text>
+              <box flexGrow={1}>
+                <textarea
               placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
               textColor={keybind.leader ? theme.textMuted : theme.text}
               focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
@@ -793,6 +866,81 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                   // If no image, let the default paste behavior continue
+                }
+                // Handle Ctrl+Space to toggle execution mode (Lash-specific)
+                if (handleModeToggleKey(e, { setMode: executionMode.setMode })) {
+                  e.preventDefault()
+                  return
+                }
+                // Handle tab for shell completion in shell/auto mode (Lash-specific)
+                if (e.name === "tab" && shouldUseShellCompletion(store.mode, executionMode.mode())) {
+                  e.preventDefault()
+
+                  // Check if we're already cycling through completions
+                  if (store.completionCycle) {
+                    // Cycle to next completion
+                    const cycle = store.completionCycle
+                    const nextIndex = (cycle.currentIndex + 1) % cycle.completions.length
+                    const { newInput, newCursorPosition } = applyCompletionAtIndex(cycle, nextIndex)
+
+                    input.setText(newInput)
+                    input.cursorOffset = newCursorPosition
+                    setStore("prompt", "input", newInput)
+                    setStore("completionCycle", "currentIndex", nextIndex)
+
+                    // Show current position in toast
+                    toast.show({
+                      variant: "info",
+                      message: `(${nextIndex + 1}/${cycle.completions.length}) ${cycle.completions[nextIndex]}`,
+                      duration: 1500,
+                    })
+                    return
+                  }
+
+                  // Start new completion
+                  const result = await handleShellTabCompletion({
+                    input: store.prompt.input,
+                    cursorPosition: input.cursorOffset,
+                    cwd: sync.data.path.cwd || sync.data.path.directory,
+                  })
+
+                  if (result.applied) {
+                    input.setText(result.newInput)
+                    input.cursorOffset = result.newCursorPosition
+                    setStore("prompt", "input", result.newInput)
+                    // Clear any previous cycle state since we applied a completion
+                    setStore("completionCycle", null)
+                  } else if (result.completions.length > 1) {
+                    // Multiple completions with no common prefix - start cycling
+                    // Apply the first completion immediately
+                    const cycleState: CompletionCycleState = {
+                      originalInput: store.prompt.input,
+                      originalCursor: input.cursorOffset,
+                      completions: result.completions,
+                      currentIndex: 0,
+                      replaceFrom: result.replaceFrom,
+                      replaceTo: result.replaceTo,
+                    }
+
+                    const { newInput, newCursorPosition } = applyCompletionAtIndex(cycleState, 0)
+                    input.setText(newInput)
+                    input.cursorOffset = newCursorPosition
+                    setStore("prompt", "input", newInput)
+                    setStore("completionCycle", cycleState)
+
+                    // Show current position in toast
+                    toast.show({
+                      variant: "info",
+                      message: `(1/${result.completions.length}) ${result.completions[0]}`,
+                      duration: 1500,
+                    })
+                  }
+                  return
+                }
+
+                // Reset completion cycle on any other key press (Lash-specific)
+                if (store.completionCycle && e.name !== "tab") {
+                  setStore("completionCycle", null)
                 }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()
@@ -931,7 +1079,9 @@ export function Prompt(props: PromptProps) {
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={theme.text}
               syntaxStyle={syntax()}
-            />
+                />
+              </box>
+            </box>
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
               <text fg={highlight()}>
                 {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
@@ -980,7 +1130,8 @@ export function Prompt(props: PromptProps) {
           />
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={<text />}>
+          {/* Working directory display (Lash-specific) */}
+          <Show when={status().type !== "idle"} fallback={<text fg={theme.textMuted} marginLeft={1}>{shortenedWorkingDir()}</text>}>
             <box
               flexDirection="row"
               gap={1}
@@ -1037,7 +1188,8 @@ export function Prompt(props: PromptProps) {
                       if (!r) return ""
                       const baseMessage = message()
                       const truncatedHint = isTruncated() ? " (click to expand)" : ""
-                      const retryInfo = ` [retrying ${seconds() > 0 ? `in ${seconds()}s ` : ""}attempt #${r.attempt}]`
+                      const duration = formatDuration(seconds())
+                      const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
                       return baseMessage + truncatedHint + retryInfo
                     }
 
@@ -1063,11 +1215,12 @@ export function Prompt(props: PromptProps) {
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
-                  <text fg={theme.text}>
-                    {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
+                  {/* Mode indicator and keyboard hint (Lash-specific) */}
+                  <text fg={modePrefixColor()}>
+                    [{executionMode.getModeDisplay().name}]
                   </text>
                   <text fg={theme.text}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
+                    ctrl+space <span style={{ fg: theme.textMuted }}>mode</span>
                   </text>
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>

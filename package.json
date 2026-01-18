@@ -12,7 +12,8 @@
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
     "test": "echo 'do not run tests from root' && exit 1",
-    "release": "bun run script/release-lash.ts"
+    "build": "bun run --cwd packages/opencode script/build-lash.ts",
+    "publish": "bun run --cwd packages/opencode script/publish-lash.ts"
   },
   "workspaces": {
     "packages": [

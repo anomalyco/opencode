@@ -8,26 +8,35 @@ The release process is driven by **Lash-specific scripts** that exist in paralle
 
 ### 1. `script/release-lash.ts`
 **The Entry Point.**
-Run this script to start a release.
-```bash
-bun run release
-# or
-bun run script/release-lash.ts
-```
-It handles:
-- Version bumping (syncs `package.json` versions).
-- Changelog generation (from `lacymorrow/lash` history).
-- Triggering the build/publish process.
-- Creating the GitHub Release.
+1.  **Run the Release Script**:
+1.  **Publish (with Build)**:
+    ```bash
+    bun run publish
+    ```
+    This will build the artifacts and then **interactively prompt** for your NPM OTP to publish them.
+
+    **Skip Build:** If you have already built artifacts (e.g. via `bun run build`) and just want to publish:
+    ```bash
+    bun run publish --skip-build
+    ```
+
+2.  **NPM Publishing (Interactive)**:
+    - The script will pause and ask for your NPM 2FA/OTP code.
+    - Enter the code. The script will attempt to publish all packages.
+    - If the OTP expires, the script will pause and ask for a new code.
+    - You can Ctrl+C to skip remaining packages if needed.
 
 ### 2. `packages/opencode/script/publish-lash.ts`
 **The Build & Asset Transformer.**
 This script is invoked by `release-lash.ts`. It:
-1.  Imports `build.ts` to build standard `opencode` binaries.
-2.  **Renames** artifacts from `opencode` to `lash` (e.g., `opencode-darwin-arm64` -> `lash-cli-darwin-arm64`).
-3.  **Patches** the wrapper script (`bin/opencode` -> `bin/lash`) to use Lash branding and paths.
-4.  **Publishes** `lash-cli` packages to NPM.
-5.  **Updates** `lacymorrow/homebrew-tap` with a new `lash.rb` formula.
+1.  Imports `build-lash.ts` to build `lash` binaries directly.
+2.  **Patches** the wrapper script (`bin/opencode` -> `bin/lash`) to use Lash branding and paths.
+3.  **Packages** `lash-cli` for NPM.
+4.  **Updates** `lacymorrow/homebrew-tap` with a new `lash.rb` formula.
+
+### 3. `packages/opencode/script/build-lash.ts`
+**Lash-Specific Builder.**
+A dedicated build script that outputs `lash` binaries directly, removing the need for renaming artifacts post-build.
 
 ### 3. Helper Scripts
 - **`script/changelog-lash.ts`**: Fetches commits/releases from `lacymorrow/lash` instead of upstream.

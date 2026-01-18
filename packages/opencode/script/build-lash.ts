@@ -101,13 +101,12 @@ if (!skipInstall) {
     await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
     await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 }
-
-const LASH_NAME = "lash-cli"
-
 for (const item of targets) {
+    const binaryName = "lash"
+    const packageName = "lash-cli"
+    // Construct Lash-specific package name directly
     const name = [
-        LASH_NAME,
-        // changing to win32 flags npm for some reason
+        packageName,
         item.os === "win32" ? "windows" : item.os,
         item.arch,
         item.avx2 === false ? "baseline" : undefined,
@@ -136,9 +135,9 @@ for (const item of targets) {
             //@ts-ignore (bun types aren't up to date)
             autoloadTsconfig: true,
             autoloadPackageJson: true,
-            target: name.replace(LASH_NAME, "bun") as any,
-            outfile: `dist/${name}/bin/lash`,
-            execArgv: [`--user-agent=lash/${Script.version}`, "--use-system-ca", "--"],
+            target: name.replace(packageName, "bun") as any,
+            outfile: `dist/${name}/bin/${binaryName}`,
+            execArgv: [`--user-agent=${packageName}/${Script.version}`, "--use-system-ca", "--"],
             windows: {},
         },
         entrypoints: ["./src/index.ts", parserWorker, workerPath],
@@ -159,6 +158,9 @@ for (const item of targets) {
                 version: Script.version,
                 os: [item.os],
                 cpu: [item.arch],
+                bin: {
+                    [binaryName]: `./bin/${binaryName}`,
+                }
             },
             null,
             2,

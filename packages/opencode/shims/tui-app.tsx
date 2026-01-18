@@ -1,3 +1,12 @@
+/**
+ * Lash Shell Mode TUI App Shim
+ *
+ * This is a fork of the upstream app.tsx with shell mode provider integration.
+ * It wraps the App component with ExecutionModeProvider and WorkingDirProvider.
+ *
+ * This file is used as a build-time replacement for the upstream app.tsx.
+ */
+
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
@@ -14,7 +23,7 @@ import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
-import { DialogHelp } from "./ui/dialog-help"
+import { DialogHelp } from "@tui/ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
@@ -22,20 +31,22 @@ import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
-import { PromptHistoryProvider } from "./component/prompt/history"
-import { FrecencyProvider } from "./component/prompt/frecency"
-import { PromptStashProvider } from "./component/prompt/stash"
-import { DialogAlert } from "./ui/dialog-alert"
-import { ToastProvider, useToast } from "./ui/toast"
-import { ExitProvider, useExit } from "./context/exit"
+import { PromptHistoryProvider } from "@tui/component/prompt/history"
+import { FrecencyProvider } from "@tui/component/prompt/frecency"
+import { PromptStashProvider } from "@tui/component/prompt/stash"
+import { DialogAlert } from "@tui/ui/dialog-alert"
+import { ToastProvider, useToast } from "@tui/ui/toast"
+import { ExitProvider, useExit } from "@tui/context/exit"
 import { Session as SessionApi } from "@/session"
-import { TuiEvent } from "./event"
-import { KVProvider, useKV } from "./context/kv"
+import { TuiEvent } from "@tui/event"
+import { KVProvider, useKV } from "@tui/context/kv"
 import { Provider } from "@/provider/provider"
-import { ArgsProvider, useArgs, type Args } from "./context/args"
+import { ArgsProvider, useArgs, type Args } from "@tui/context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
-import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { PromptRefProvider, usePromptRef } from "@tui/context/prompt"
+// Shell mode providers (Lash-specific)
+import { ExecutionModeProvider, WorkingDirProvider } from "@tui-integration"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -97,7 +108,7 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   })
 }
 
-import type { EventSource } from "./context/sdk"
+import type { EventSource } from "@tui/context/sdk"
 
 export function tui(input: {
   url: string
@@ -142,7 +153,12 @@ export function tui(input: {
                                       <FrecencyProvider>
                                         <PromptHistoryProvider>
                                           <PromptRefProvider>
-                                            <App />
+                                            {/* Shell mode providers (Lash-specific) */}
+                                            <ExecutionModeProvider>
+                                              <WorkingDirProvider>
+                                                <App />
+                                              </WorkingDirProvider>
+                                            </ExecutionModeProvider>
                                           </PromptRefProvider>
                                         </PromptHistoryProvider>
                                       </FrecencyProvider>
@@ -200,11 +216,6 @@ function App() {
   renderer.console.onCopySelection = async (text: string) => {
     if (!text || text.length === 0) return
 
-    const base64 = Buffer.from(text).toString("base64")
-    const osc52 = `\x1b]52;c;${base64}\x07`
-    const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-    // @ts-expect-error writeOut is not in type definitions
-    renderer.writeOut(finalOsc52)
     await Clipboard.copy(text)
       .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
       .catch(toast.error)
@@ -398,17 +409,7 @@ function App() {
         local.model.variant.cycle()
       },
     },
-    {
-      title: "Agent cycle reverse",
-      value: "agent.cycle.reverse",
-      keybind: "agent_cycle_reverse",
-      category: "Agent",
-      disabled: true,
-      onSelect: () => {
-        local.agent.move(-1)
-      },
-    },
-    {
+        {
       title: "Connect provider",
       value: "provider.connect",
       suggested: !connected(),
@@ -627,11 +628,6 @@ function App() {
         }
         const text = renderer.getSelection()?.getSelectedText()
         if (text && text.length > 0) {
-          const base64 = Buffer.from(text).toString("base64")
-          const osc52 = `\x1b]52;c;${base64}\x07`
-          const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-          /* @ts-expect-error */
-          renderer.writeOut(finalOsc52)
           await Clipboard.copy(text)
             .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
             .catch(toast.error)
