@@ -84,8 +84,8 @@ export function Logo() {
         )}
       </For>
       <box flexDirection="row" justifyContent="flex-end">
-        <text fg={theme.primary} attributes={TextAttributes.BOLD}>
-          {">"} SHELL
+        <text fg={theme.primary}>
+          ›ꜱʜᴇʟʟ
         </text>
       </box>
     </box>
