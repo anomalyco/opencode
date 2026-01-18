@@ -86,13 +86,25 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 ## Precedence
 
-When opencode starts, it looks for rule files in this order:
+When OpenCode starts, rules are loaded from two sources and concatenated:
 
-1. **Local files** by traversing up from the current directory (`AGENTS.md`, `CLAUDE.md`, or `CONTEXT.md`)
-2. **Global file** at `~/.config/opencode/AGENTS.md`
-3. **Claude Code file** at `~/.claude/CLAUDE.md` (unless disabled)
+1. **Project** — `AGENTS.md` in your project root
+2. **Global** — `~/.config/opencode/AGENTS.md`
 
-The first matching file wins in each category. For example, if you have both `AGENTS.md` and `CLAUDE.md`, only `AGENTS.md` is used. Similarly, `~/.config/opencode/AGENTS.md` takes precedence over `~/.claude/CLAUDE.md`.
+Both files are included in the prompt, with project rules appearing first. This lets you keep personal preferences in your global file while sharing project-specific rules with your team.
+
+### Filename fallbacks
+
+If no `AGENTS.md` exists, OpenCode looks for `CLAUDE.md`, then `CONTEXT.md`.
+
+| Source  | Search order                                           |
+| ------- | ------------------------------------------------------ |
+| Project | `AGENTS.md` → `CLAUDE.md` → `CONTEXT.md`               |
+| Global  | `~/.config/opencode/AGENTS.md` → `~/.claude/CLAUDE.md` |
+
+:::note
+If you run OpenCode from a subdirectory, all `AGENTS.md` files from that directory up to the project root are included.
+:::
 
 ---
 
