@@ -1,25 +1,23 @@
 import { Log } from "../util/log"
 import path from "path"
-import fs from "fs/promises"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { lazy } from "../util/lazy"
-import { Lock } from "../util/lock"
 import { $ } from "bun"
-import { NamedError } from "@opencode-ai/util/error"
-import z from "zod"
+import { StorageProvider } from "./provider"
+import { JsonStorageProvider } from "./json-provider"
+import { SqliteStorageProvider, SqliteConfigSchema } from "./sqlite-provider"
 
 export namespace Storage {
   const log = Log.create({ service: "storage" })
 
   type Migration = (dir: string) => Promise<void>
 
-  export const NotFoundError = NamedError.create(
-    "NotFoundError",
-    z.object({
-      message: z.string(),
-    }),
-  )
+  // Re-export NotFoundError from provider
+  export const NotFoundError = StorageProvider.NotFoundError
+
+  // Provider instance
+  let provider: StorageProvider.Interface | null = null
 
   const MIGRATIONS: Migration[] = [
     async (dir) => {
@@ -158,70 +156,154 @@ export namespace Storage {
     }
   })
 
+  /**
+   * Initialize storage provider based on config
+   */
+  export async function init() {
+    // Load config directly from file to avoid circular dependency with Config.state()
+    // which depends on Instance which depends on Storage
+    const { Global } = await import("../global")
+    const configPath = path.join(Global.Path.config, "opencode.json")
+
+    let config: any = {}
+    if (await Bun.file(configPath).exists()) {
+      config = await Bun.file(configPath).json()
+    }
+
+    const backend = config.storage?.backend || "json"
+
+    if (backend === "sqlite") {
+      log.info("Initializing SQLite storage backend")
+
+      // Load sqlite config
+      const sqliteConfigPath = config.storage?.sqlite?.config || path.join(Global.Path.config, "sqlite-storage.json")
+
+      let sqliteConfig: any
+      if (await Bun.file(sqliteConfigPath).exists()) {
+        const json = await Bun.file(sqliteConfigPath).json()
+        sqliteConfig = SqliteConfigSchema.parse(json)
+      } else {
+        // Use default database path from config or default with minimal schema
+        sqliteConfig = {
+          database: config.storage?.sqlite?.database || path.join(Global.Path.data, "storage.db"),
+          tables: {
+            message: {
+              columns: {
+                id: "TEXT PRIMARY KEY",
+                sessionID: "TEXT",
+                role: "TEXT",
+                "time.created": "INTEGER",
+                data: "TEXT",
+              },
+              extract: ["sessionID", "role", "time.created"],
+              indices: ["sessionID", "time.created"],
+            },
+            part: {
+              columns: { id: "TEXT PRIMARY KEY", messageID: "TEXT", type: "TEXT", data: "TEXT" },
+              extract: ["messageID", "type"],
+              indices: ["messageID"],
+            },
+            session: {
+              columns: {
+                id: "TEXT PRIMARY KEY",
+                projectID: "TEXT",
+                title: "TEXT",
+                "time.created": "INTEGER",
+                "time.updated": "INTEGER",
+                data: "TEXT",
+              },
+              extract: ["projectID", "title", "time.updated"],
+              indices: ["projectID", "time.updated"],
+            },
+            project: {
+              columns: {
+                id: "TEXT PRIMARY KEY",
+                worktree: "TEXT",
+                vcs: "TEXT",
+                "time.created": "INTEGER",
+                "time.updated": "INTEGER",
+                data: "TEXT",
+              },
+              extract: ["worktree", "vcs", "time.created", "time.updated"],
+              indices: ["worktree", "time.created", "time.updated"],
+            },
+            todo: {
+              columns: { id: "TEXT PRIMARY KEY", sessionID: "TEXT", data: "TEXT" },
+              extract: ["sessionID"],
+              indices: ["sessionID"],
+            },
+            session_diff: {
+              columns: { id: "TEXT PRIMARY KEY", data: "TEXT" },
+              extract: [],
+              indices: [],
+            },
+            session_share: {
+              columns: { id: "TEXT PRIMARY KEY", secret: "TEXT", url: "TEXT", data: "TEXT" },
+              extract: ["secret", "url"],
+              indices: [],
+            },
+          },
+        }
+        log.warn("No SQLite config found, using minimal schema", {
+          path: sqliteConfigPath,
+          database: sqliteConfig.database,
+        })
+      }
+
+      const dbPath = sqliteConfig.database.replace(/^~/, Global.Path.home)
+      const resolvedDbPath = path.resolve(dbPath)
+
+      provider = new SqliteStorageProvider(resolvedDbPath, sqliteConfig)
+      log.info("SQLite storage provider initialized", { dbPath: resolvedDbPath })
+    } else {
+      log.info("Using default JSON storage backend")
+      // Initialize JSON provider immediately
+      const { dir } = await state()
+      provider = new JsonStorageProvider(dir)
+      log.info("JSON storage provider initialized", { dir })
+    }
+  }
+
+  /**
+   * Set the storage provider (JsonStorageProvider or SqliteStorageProvider)
+   */
+  export function setProvider(p: StorageProvider.Interface) {
+    provider = p
+    log.info("Storage provider set", { provider: p.constructor.name })
+  }
+
+  /**
+   * Get the current storage provider, initializing with JsonStorageProvider if needed
+   */
+  async function getProvider(): Promise<StorageProvider.Interface> {
+    if (!provider) {
+      throw new Error("Storage provider not initialized. Call Storage.init() first.")
+    }
+    return provider
+  }
+
   export async function remove(key: string[]) {
-    const dir = await state().then((x) => x.dir)
-    const target = path.join(dir, ...key) + ".json"
-    return withErrorHandling(async () => {
-      await fs.unlink(target).catch(() => {})
-    })
+    const p = await getProvider()
+    return p.remove(key)
   }
 
   export async function read<T>(key: string[]) {
-    const dir = await state().then((x) => x.dir)
-    const target = path.join(dir, ...key) + ".json"
-    return withErrorHandling(async () => {
-      using _ = await Lock.read(target)
-      const result = await Bun.file(target).json()
-      return result as T
-    })
+    const p = await getProvider()
+    return p.read<T>(key)
   }
 
   export async function update<T>(key: string[], fn: (draft: T) => void) {
-    const dir = await state().then((x) => x.dir)
-    const target = path.join(dir, ...key) + ".json"
-    return withErrorHandling(async () => {
-      using _ = await Lock.write(target)
-      const content = await Bun.file(target).json()
-      fn(content)
-      await Bun.write(target, JSON.stringify(content, null, 2))
-      return content as T
-    })
+    const p = await getProvider()
+    return p.update<T>(key, fn)
   }
 
   export async function write<T>(key: string[], content: T) {
-    const dir = await state().then((x) => x.dir)
-    const target = path.join(dir, ...key) + ".json"
-    return withErrorHandling(async () => {
-      using _ = await Lock.write(target)
-      await Bun.write(target, JSON.stringify(content, null, 2))
-    })
+    const p = await getProvider()
+    return p.write<T>(key, content)
   }
 
-  async function withErrorHandling<T>(body: () => Promise<T>) {
-    return body().catch((e) => {
-      if (!(e instanceof Error)) throw e
-      const errnoException = e as NodeJS.ErrnoException
-      if (errnoException.code === "ENOENT") {
-        throw new NotFoundError({ message: `Resource not found: ${errnoException.path}` })
-      }
-      throw e
-    })
-  }
-
-  const glob = new Bun.Glob("**/*")
-  export async function list(prefix: string[]) {
-    const dir = await state().then((x) => x.dir)
-    try {
-      const result = await Array.fromAsync(
-        glob.scan({
-          cwd: path.join(dir, ...prefix),
-          onlyFiles: true,
-        }),
-      ).then((results) => results.map((x) => [...prefix, ...x.slice(0, -5).split(path.sep)]))
-      result.sort()
-      return result
-    } catch {
-      return []
-    }
+  export async function list(prefix: string[], options?: StorageProvider.ListOptions) {
+    const p = await getProvider()
+    return p.list(prefix, options)
   }
 }

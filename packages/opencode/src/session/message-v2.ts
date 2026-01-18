@@ -580,11 +580,10 @@ export namespace MessageV2 {
 
   export const parts = fn(Identifier.schema("message"), async (messageID) => {
     const result = [] as MessageV2.Part[]
-    for (const item of await Storage.list(["part", messageID])) {
+    for (const item of await Storage.list(["part", messageID], { orderBy: "id" })) {
       const read = await Storage.read<MessageV2.Part>(item)
       result.push(read)
     }
-    result.sort((a, b) => (a.id > b.id ? 1 : -1))
     return result
   })
 

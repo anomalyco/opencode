@@ -5,17 +5,24 @@ import { State } from "./state"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { Filesystem } from "@/util/filesystem"
+import { Storage } from "../storage/storage"
 
-interface Context {
+interface InstanceContext {
   directory: string
   worktree: string
   project: Project.Info
 }
-const context = Context.create<Context>("instance")
-const cache = new Map<string, Promise<Context>>()
+const context = Context.create<InstanceContext>("instance")
+const cache = new Map<string, Promise<InstanceContext>>()
+let storageInitialized = false
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
+    if (!storageInitialized) {
+      await Storage.init()
+      storageInitialized = true
+    }
+
     let existing = cache.get(input.directory)
     if (!existing) {
       Log.Default.info("creating instance", { directory: input.directory })

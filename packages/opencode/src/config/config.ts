@@ -1030,6 +1030,19 @@ export namespace Config {
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
         })
         .optional(),
+      storage: z
+        .object({
+          backend: z.enum(["json", "sqlite"]).optional().describe("Storage backend to use (default: json)"),
+          sqlite: z
+            .object({
+              database: z.string().optional().describe("Path to SQLite database file"),
+              config: z.string().optional().describe("Path to sqlite-storage.json config file"),
+            })
+            .optional()
+            .describe("SQLite storage configuration"),
+        })
+        .optional()
+        .describe("Storage backend configuration"),
       experimental: z
         .object({
           hook: z

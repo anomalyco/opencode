@@ -1,0 +1,77 @@
+{
+  "database": "~/.local/share/opencode/storage.db",
+  "tables": {
+    "message": {
+      "columns": {
+        "id": "TEXT PRIMARY KEY",
+        "sessionID": "TEXT",
+        "role": "TEXT",
+        "time.created": "INTEGER",
+        "data": "TEXT"
+      },
+      "extract": ["sessionID", "role", "time.created"],
+      "indices": ["sessionID", "time.created"]
+    },
+    "part": {
+      "columns": {
+        "id": "TEXT PRIMARY KEY",
+        "messageID": "TEXT",
+        "type": "TEXT",
+        "data": "TEXT"
+      },
+      "extract": ["messageID", "type"],
+      "indices": ["messageID"]
+    },
+    "session": {
+      "columns": {
+        "id": "TEXT PRIMARY KEY",
+        "projectID": "TEXT",
+        "title": "TEXT",
+        "time.created": "INTEGER",
+        "time.updated": "INTEGER",
+        "data": "TEXT"
+      },
+      "extract": ["projectID", "title", "time.updated"],
+      "indices": ["projectID", "time.updated"]
+    },
+    "project": {
+      "columns": {
+        "id": "TEXT PRIMARY KEY",
+        "worktree": "TEXT",
+        "vcs": "TEXT",
+        "time.created": "INTEGER",
+        "time.updated": "INTEGER",
+        "data": "TEXT"
+      },
+      "extract": ["worktree", "vcs", "time.created", "time.updated"],
+      "indices": ["worktree", "time.created", "time.updated"]
+    },
+    "todo": {
+      "columns": {
+        "id": "TEXT PRIMARY KEY",
+        "sessionID": "TEXT",
+        "data": "TEXT"
+      },
+      "extract": ["sessionID"],
+      "indices": ["sessionID"]
+    },
+    "session_diff": {
+      "columns": {
+        "id": "TEXT PRIMARY KEY",
+        "data": "TEXT"
+      },
+      "extract": [],
+      "indices": []
+    },
+    "session_share": {
+      "columns": {
+        "id": "TEXT PRIMARY KEY",
+        "secret": "TEXT",
+        "url": "TEXT",
+        "data": "TEXT"
+      },
+      "extract": ["secret", "url"],
+      "indices": []
+    }
+  }
+}
