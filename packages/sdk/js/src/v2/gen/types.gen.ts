@@ -2985,6 +2985,39 @@ export type SessionAbortResponses = {
 
 export type SessionAbortResponse = SessionAbortResponses[keyof SessionAbortResponses]
 
+export type SessionForceData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/force"
+}
+
+export type SessionForceErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionForceError = SessionForceErrors[keyof SessionForceErrors]
+
+export type SessionForceResponses = {
+  /**
+   * Force result
+   */
+  200: boolean
+}
+
+export type SessionForceResponse = SessionForceResponses[keyof SessionForceResponses]
+
 export type SessionUnshareData = {
   body?: never
   path: {

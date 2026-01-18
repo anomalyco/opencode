@@ -254,6 +254,23 @@ export namespace SessionPrompt {
     return
   }
 
+  export function force(sessionID: string) {
+    const s = state()
+    const match = s[sessionID]
+    if (!match) return false
+    if (match.callbacks.length === 0) return false
+    log.info("force", { sessionID })
+    for (const item of match.callbacks) {
+      item.reject()
+    }
+    match.callbacks = []
+    // delete state before aborting so old loop's defer() finds nothing
+    delete s[sessionID]
+    match.abort.abort()
+    loop(sessionID)
+    return true
+  }
+
   export const loop = fn(Identifier.schema("session"), async (sessionID) => {
     const abort = start(sessionID)
     if (!abort) {

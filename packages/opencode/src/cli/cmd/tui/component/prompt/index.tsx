@@ -113,6 +113,16 @@ export function Prompt(props: PromptProps) {
     return messages.findLast((m) => m.role === "user")
   })
 
+  const hasQueuedMessage = createMemo(() => {
+    if (!props.sessionID) return false
+    if (status().type === "idle") return false
+    const messages = sync.data.message[props.sessionID]
+    if (!messages) return false
+    const pending = messages.findLast((m) => m.role === "assistant" && !m.time.completed)?.id
+    if (!pending) return false
+    return messages.some((m) => m.role === "user" && m.id > pending)
+  })
+
   const [store, setStore] = createStore<{
     prompt: PromptInfo
     mode: "normal" | "shell"
@@ -489,7 +499,12 @@ export function Prompt(props: PromptProps) {
   async function submit() {
     if (props.disabled) return
     if (autocomplete?.visible) return
-    if (!store.prompt.input) return
+    if (!store.prompt.input) {
+      if (hasQueuedMessage() && props.sessionID) {
+        sdk.client.session.force({ sessionID: props.sessionID }).catch(() => {})
+      }
+      return
+    }
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       exit()
@@ -1063,6 +1078,11 @@ export function Prompt(props: PromptProps) {
                   {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
                 </span>
               </text>
+              <Show when={hasQueuedMessage()}>
+                <text fg={theme.text}>
+                  enter <span style={{ fg: theme.textMuted }}>force</span>
+                </text>
+              </Show>
             </box>
           </Show>
           <Show when={status().type !== "retry"}>

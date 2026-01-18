@@ -102,6 +102,8 @@ import type {
   SessionDeleteErrors,
   SessionDeleteResponses,
   SessionDiffResponses,
+  SessionForceErrors,
+  SessionForceResponses,
   SessionForkResponses,
   SessionGetErrors,
   SessionGetResponses,
@@ -1096,6 +1098,36 @@ export class Session extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<SessionAbortResponses, SessionAbortErrors, ThrowOnError>({
       url: "/session/{sessionID}/abort",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Force next queued message
+   *
+   * Abort current session and immediately process the next queued message. Returns false if no queued message exists.
+   */
+  public force<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionForceResponses, SessionForceErrors, ThrowOnError>({
+      url: "/session/{sessionID}/force",
       ...options,
       ...params,
     })

@@ -380,6 +380,36 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .post(
+      "/:sessionID/force",
+      describeRoute({
+        summary: "Force next queued message",
+        description:
+          "Abort current session and immediately process the next queued message. Returns false if no queued message exists.",
+        operationId: "session.force",
+        responses: {
+          200: {
+            description: "Force result",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string(),
+        }),
+      ),
+      async (c) => {
+        const result = SessionPrompt.force(c.req.valid("param").sessionID)
+        return c.json(result)
+      },
+    )
+    .post(
       "/:sessionID/share",
       describeRoute({
         summary: "Share session",
