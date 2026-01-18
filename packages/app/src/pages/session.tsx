@@ -38,6 +38,7 @@ import { UserMessage } from "@opencode-ai/sdk/v2"
 import type { FileDiff } from "@opencode-ai/sdk/v2/client"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
+import { useLanguage } from "@/context/language"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
@@ -162,6 +163,7 @@ export default function Page() {
   const codeComponent = useCodeComponent()
   const command = useCommand()
   const platform = usePlatform()
+  const language = useLanguage()
   const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
@@ -419,51 +421,51 @@ export default function Page() {
   command.register(() => [
     {
       id: "session.new",
-      title: "New session",
-      category: "Session",
+      title: language.t("session.new"),
+      category: language.t("command.category.session"),
       keybind: "mod+shift+s",
       slash: "new",
       onSelect: () => navigate(`/${params.dir}/session`),
     },
     {
       id: "file.open",
-      title: "Open file",
-      description: "Search files and commands",
-      category: "File",
+      title: language.t("command.title.openFile"),
+      description: language.t("command.description.openFile"),
+      category: language.t("command.category.file"),
       keybind: "mod+p",
       slash: "open",
       onSelect: () => dialog.show(() => <DialogSelectFile />),
     },
     {
       id: "terminal.toggle",
-      title: "Toggle terminal",
+      title: language.t("terminal.toggle"),
       description: "",
-      category: "View",
+      category: language.t("command.category.view"),
       keybind: "ctrl+`",
       slash: "terminal",
       onSelect: () => view().terminal.toggle(),
     },
     {
       id: "review.toggle",
-      title: "Toggle review",
+      title: language.t("review.toggle"),
       description: "",
-      category: "View",
+      category: language.t("command.category.view"),
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     },
     {
       id: "terminal.new",
-      title: "New terminal",
-      description: "Create a new terminal tab",
-      category: "Terminal",
+      title: language.t("terminal.new"),
+      description: language.t("command.description.newTerminal"),
+      category: language.t("command.category.terminal"),
       keybind: "ctrl+shift+`",
       onSelect: () => terminal.new(),
     },
     {
       id: "steps.toggle",
-      title: "Toggle steps",
-      description: "Show or hide steps for the current message",
-      category: "View",
+      title: language.t("command.title.toggleSteps"),
+      description: language.t("command.description.toggleSteps"),
+      category: language.t("command.category.view"),
       keybind: "mod+e",
       slash: "steps",
       disabled: !params.id,
@@ -475,62 +477,62 @@ export default function Page() {
     },
     {
       id: "message.previous",
-      title: "Previous message",
-      description: "Go to the previous user message",
-      category: "Session",
+      title: language.t("command.title.previousMessage"),
+      description: language.t("command.description.previousMessage"),
+      category: language.t("command.category.session"),
       keybind: "mod+arrowup",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(-1),
     },
     {
       id: "message.next",
-      title: "Next message",
-      description: "Go to the next user message",
-      category: "Session",
+      title: language.t("command.title.nextMessage"),
+      description: language.t("command.description.nextMessage"),
+      category: language.t("command.category.session"),
       keybind: "mod+arrowdown",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(1),
     },
     {
       id: "model.choose",
-      title: "Choose model",
-      description: "Select a different model",
-      category: "Model",
+      title: language.t("command.title.chooseModel"),
+      description: language.t("command.description.chooseModel"),
+      category: language.t("command.category.model"),
       keybind: "mod+'",
       slash: "model",
       onSelect: () => dialog.show(() => <DialogSelectModel />),
     },
     {
       id: "mcp.toggle",
-      title: "Toggle MCPs",
-      description: "Toggle MCPs",
-      category: "MCP",
+      title: language.t("command.title.toggleMcp"),
+      description: language.t("command.description.toggleMcp"),
+      category: language.t("command.category.mcp"),
       keybind: "mod+;",
       slash: "mcp",
       onSelect: () => dialog.show(() => <DialogSelectMcp />),
     },
     {
       id: "agent.cycle",
-      title: "Cycle agent",
-      description: "Switch to the next agent",
-      category: "Agent",
+      title: language.t("command.title.cycleAgent"),
+      description: language.t("command.description.cycleAgent"),
+      category: language.t("command.category.agent"),
       keybind: "mod+.",
       slash: "agent",
       onSelect: () => local.agent.move(1),
     },
     {
       id: "agent.cycle.reverse",
-      title: "Cycle agent backwards",
-      description: "Switch to the previous agent",
-      category: "Agent",
+      title: language.t("command.title.cycleAgentBack"),
+      description: language.t("command.description.cycleAgentBack"),
+      category: language.t("command.category.agent"),
       keybind: "shift+mod+.",
       onSelect: () => local.agent.move(-1),
     },
     {
       id: "model.variant.cycle",
-      title: "Cycle thinking effort",
-      description: "Switch to the next effort level",
-      category: "Model",
+      title: language.t("command.title.cycleThinking"),
+      description: language.t("command.description.cycleThinking"),
+      category: language.t("command.category.model"),
       keybind: "shift+mod+d",
       onSelect: () => {
         local.model.variant.cycle()
@@ -540,9 +542,9 @@ export default function Page() {
       id: "permissions.autoaccept",
       title:
         params.id && permission.isAutoAccepting(params.id, sdk.directory)
-          ? "Stop auto-accepting edits"
-          : "Auto-accept edits",
-      category: "Permissions",
+          ? language.t("command.title.stopAutoAcceptEdits")
+          : language.t("command.title.autoAcceptEdits"),
+      category: language.t("command.category.permissions"),
       keybind: "mod+shift+a",
       disabled: !params.id || !permission.permissionsEnabled(),
       onSelect: () => {
@@ -551,19 +553,19 @@ export default function Page() {
         permission.toggleAutoAccept(sessionID, sdk.directory)
         showToast({
           title: permission.isAutoAccepting(sessionID, sdk.directory)
-            ? "Auto-accepting edits"
-            : "Stopped auto-accepting edits",
+            ? language.t("command.toast.autoAcceptOnTitle")
+            : language.t("command.toast.autoAcceptOffTitle"),
           description: permission.isAutoAccepting(sessionID, sdk.directory)
-            ? "Edit and write permissions will be automatically approved"
-            : "Edit and write permissions will require approval",
+            ? language.t("command.toast.autoAcceptOnDescription")
+            : language.t("command.toast.autoAcceptOffDescription"),
         })
       },
     },
     {
       id: "session.undo",
-      title: "Undo",
-      description: "Undo the last message",
-      category: "Session",
+      title: language.t("command.title.undo"),
+      description: language.t("command.description.undo"),
+      category: language.t("command.category.session"),
       slash: "undo",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -590,9 +592,9 @@ export default function Page() {
     },
     {
       id: "session.redo",
-      title: "Redo",
-      description: "Redo the last undone message",
-      category: "Session",
+      title: language.t("command.title.redo"),
+      description: language.t("command.description.redo"),
+      category: language.t("command.category.session"),
       slash: "redo",
       disabled: !params.id || !info()?.revert?.messageID,
       onSelect: async () => {
@@ -619,9 +621,9 @@ export default function Page() {
     },
     {
       id: "session.compact",
-      title: "Compact session",
-      description: "Summarize the session to reduce context size",
-      category: "Session",
+      title: language.t("command.title.compactSession"),
+      description: language.t("command.description.compactSession"),
+      category: language.t("command.category.session"),
       slash: "compact",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -630,8 +632,8 @@ export default function Page() {
         const model = local.model.current()
         if (!model) {
           showToast({
-            title: "No model selected",
-            description: "Connect a provider to summarize this session",
+            title: language.t("command.toast.noModelTitle"),
+            description: language.t("command.toast.noModelDescription"),
           })
           return
         }
@@ -644,9 +646,9 @@ export default function Page() {
     },
     {
       id: "session.fork",
-      title: "Fork from message",
-      description: "Create a new session from a previous message",
-      category: "Session",
+      title: language.t("command.title.forkFromMessage"),
+      description: language.t("command.description.forkFromMessage"),
+      category: language.t("command.category.session"),
       slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: () => dialog.show(() => <DialogFork />),
@@ -1200,7 +1202,7 @@ export default function Page() {
                 classes={{ button: "w-full" }}
                 onClick={() => setStore("mobileTab", "session")}
               >
-                Session
+                {language.t("session.tab")}
               </Tabs.Trigger>
               <Tabs.Trigger
                 value="review"
@@ -1209,7 +1211,7 @@ export default function Page() {
                 onClick={() => setStore("mobileTab", "review")}
               >
                 <Switch>
-                  <Match when={hasReview()}>{reviewCount()} Files Changed</Match>
+                  <Match when={hasReview()}>{language.t("session.filesChangedLabel", { count: reviewCount() })}</Match>
                   <Match when={true}>Review</Match>
                 </Switch>
               </Tabs.Trigger>
@@ -1240,7 +1242,7 @@ export default function Page() {
                           <Match when={hasReview()}>
                             <Show
                               when={diffsReady()}
-                              fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
+                              fallback={<div class="px-4 py-4 text-text-weak">{language.t("session.loadingChanges")}</div>}
                             >
                               <SessionReviewTab
                                 diffs={diffs}
@@ -1331,7 +1333,9 @@ export default function Page() {
                                   sync.session.history.loadMore(id)
                                 }}
                               >
-                                {historyLoading() ? "Loading earlier messages..." : "Load earlier messages"}
+                                {historyLoading()
+                                  ? language.t("session.loadingEarlierMessages")
+                                  : language.t("session.loadEarlierMessages")}
                               </Button>
                             </div>
                           </Show>
@@ -1415,7 +1419,7 @@ export default function Page() {
                 when={prompt.ready()}
                 fallback={
                   <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                    {handoff.prompt || "Loading prompt..."}
+                    {handoff.prompt || language.t("session.loadingPrompt")}
                   </div>
                 }
               >
@@ -1462,7 +1466,7 @@ export default function Page() {
                             <DiffChanges changes={diffs()} variant="bars" />
                           </Show>
                           <div class="flex items-center gap-1.5">
-                            <div>Review</div>
+                            <div>{language.t("session.reviewTab")}</div>
                             <Show when={info()?.summary?.files}>
                               <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
                                 {info()?.summary?.files ?? 0}
@@ -1476,7 +1480,7 @@ export default function Page() {
                       <Tabs.Trigger
                         value="context"
                         closeButton={
-                          <Tooltip value="Close tab" placement="bottom">
+                          <Tooltip value={language.t("tabs.close")} placement="bottom">
                             <IconButton icon="close" variant="ghost" onClick={() => tabs().close("context")} />
                           </Tooltip>
                         }
@@ -1485,7 +1489,7 @@ export default function Page() {
                       >
                         <div class="flex items-center gap-2">
                           <SessionContextUsage variant="indicator" />
-                          <div>Context</div>
+                          <div>{language.t("context.tab")}</div>
                         </div>
                       </Tabs.Trigger>
                     </Show>
@@ -1494,7 +1498,7 @@ export default function Page() {
                     </SortableProvider>
                     <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
                       <TooltipKeybind
-                        title="Open file"
+                      title={language.t("command.title.openFile")}
                         keybind={command.keybind("file.open")}
                         class="flex items-center"
                       >
@@ -1516,7 +1520,7 @@ export default function Page() {
                           <Match when={hasReview()}>
                             <Show
                               when={diffsReady()}
-                              fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
+                              fallback={<div class="px-6 py-4 text-text-weak">{language.t("session.loadingChanges")}</div>}
                             >
                               <SessionReviewTab
                                 diffs={diffs}
@@ -1714,7 +1718,7 @@ export default function Page() {
                                   }}
                                 >
                                   <Icon name="plus-small" size="small" />
-                                  <span>Add {selectionLabel()} to context</span>
+                                  <span>{language.t("context.addToContext", { selection: selectionLabel() ?? "" })}</span>
                                 </button>
                               </div>
                             )}
@@ -1771,7 +1775,7 @@ export default function Page() {
                               />
                             </Match>
                             <Match when={state()?.loading}>
-                              <div class="px-6 py-4 text-text-weak">Loading...</div>
+                              <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}</div>
                             </Match>
                             <Match when={state()?.error}>
                               {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
@@ -1827,9 +1831,11 @@ export default function Page() {
                     )}
                   </For>
                   <div class="flex-1" />
-                  <div class="text-text-weak pr-2">Loading...</div>
+                  <div class="text-text-weak pr-2">{language.t("common.loading")}</div>
                 </div>
-                <div class="flex-1 flex items-center justify-center text-text-weak">Loading terminal...</div>
+                <div class="flex-1 flex items-center justify-center text-text-weak">
+                  {language.t("terminal.loading")}
+                </div>
               </div>
             }
           >
@@ -1848,7 +1854,7 @@ export default function Page() {
                   </SortableProvider>
                   <div class="h-full flex items-center justify-center">
                     <TooltipKeybind
-                      title="New terminal"
+                      title={language.t("terminal.new")}
                       keybind={command.keybind("terminal.new")}
                       class="flex items-center"
                     >

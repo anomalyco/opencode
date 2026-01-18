@@ -106,20 +106,22 @@ export default function Layout(props: ParentProps) {
   const dialog = useDialog()
   const command = useCommand()
   const theme = useTheme()
-  const language = useLanguage()  
+  const language = useLanguage()
   const initialDir = params.dir
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
-  const colorSchemeLabel: Record<ColorScheme, string> = {
-    system: "System",
-    light: "Light",
-    dark: "Dark",
-  }
+  const colorSchemeLabel = (scheme: ColorScheme) =>
+    ({
+      system: language.t("theme.scheme.system"),
+      light: language.t("theme.scheme.light"),
+      dark: language.t("theme.scheme.dark"),
+    })[scheme]
   const languages: Language[] = ["en", "zh"]
-  const languageLabel: Record<Language, string> = {
-    en: "English",
-    zh: "中文",
-  }
+  const languageLabel = (lang: Language) =>
+    ({
+      en: language.t("language.english"),
+      zh: language.t("language.chinese"),
+    })[lang]
 
   const [editor, setEditor] = createStore({
     active: "" as string,
@@ -256,7 +258,7 @@ export default function Layout(props: ParentProps) {
     theme.setColorScheme(next)
     showToast({
       title: language.t("theme.colorScheme"),
-      description: colorSchemeLabel[next],
+      description: colorSchemeLabel(next),
     })
   }
 
@@ -301,12 +303,13 @@ export default function Layout(props: ParentProps) {
         title: language.t("notification.permissionRequired"),
         icon: "checklist" as const,
         description: (sessionTitle: string, projectName: string) =>
-          `${sessionTitle} in ${projectName} needs permission`,
+          language.t("notification.permissionNeeded", { session: sessionTitle, project: projectName }),
       },
       "question.asked": {
-        title: "Question",
+        title: language.t("notification.question"),
         icon: "bubble-5" as const,
-        description: (sessionTitle: string, projectName: string) => `${sessionTitle} in ${projectName} has a question`,
+        description: (sessionTitle: string, projectName: string) =>
+          language.t("notification.questionAsked", { session: sessionTitle, project: projectName }),
       },
     }
 
@@ -325,7 +328,7 @@ export default function Layout(props: ParentProps) {
       const session = store.session.find((s) => s.id === props.sessionID)
       const sessionKey = `${directory}:${props.sessionID}`
 
-      const sessionTitle = session?.title ?? "New session"
+      const sessionTitle = session?.title ?? language.t("session.new")
       const projectName = getFilename(directory)
       const description = config.description(sessionTitle, projectName)
       const href = `/${base64Encode(directory)}/session/${props.sessionID}`
@@ -785,47 +788,47 @@ export default function Layout(props: ParentProps) {
       {
         id: "sidebar.toggle",
         title: language.t("sidebar.toggle"),
-        category: "View",
+        category: language.t("command.category.view"),
         keybind: "mod+b",
         onSelect: () => layout.sidebar.toggle(),
       },
       {
         id: "project.open",
         title: language.t("project.open"),
-        category: "Project",
+        category: language.t("command.category.project"),
         keybind: "mod+o",
         onSelect: () => chooseProject(),
       },
       {
         id: "provider.connect",
         title: language.t("provider.connect"),
-        category: "Provider",
+        category: language.t("command.category.provider"),
         onSelect: () => connectProvider(),
       },
       {
         id: "server.switch",
-        title: "Switch server",
-        category: "Server",
+        title: language.t("server.switch"),
+        category: language.t("command.category.server"),
         onSelect: () => openServer(),
       },
       {
         id: "session.previous",
         title: language.t("session.previous"),
-        category: "Session",
+        category: language.t("command.category.session"),
         keybind: "alt+arrowup",
         onSelect: () => navigateSessionByOffset(-1),
       },
       {
         id: "session.next",
-        title: "Next session",
-        category: "Session",
+        title: language.t("session.next"),
+        category: language.t("command.category.session"),
         keybind: "alt+arrowdown",
         onSelect: () => navigateSessionByOffset(1),
       },
       {
         id: "session.archive",
         title: language.t("session.archive"),
-        category: "Session",
+        category: language.t("command.category.session"),
         keybind: "mod+shift+backspace",
         disabled: !params.dir || !params.id,
         onSelect: () => {
@@ -836,7 +839,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "theme.cycle",
         title: language.t("theme.cycle"),
-        category: "Theme",
+        category: language.t("command.category.theme"),
         keybind: "mod+shift+t",
         onSelect: () => cycleTheme(1),
       },
@@ -845,8 +848,8 @@ export default function Layout(props: ParentProps) {
     for (const [id, definition] of availableThemeEntries()) {
       commands.push({
         id: `theme.set.${id}`,
-        title: `Use theme: ${definition.name ?? id}`,
-        category: "Theme",
+        title: language.t("theme.useTheme", { theme: definition.name ?? id }),
+        category: language.t("command.category.theme"),
         onSelect: () => theme.commitPreview(),
         onHighlight: () => {
           theme.previewTheme(id)
@@ -857,8 +860,8 @@ export default function Layout(props: ParentProps) {
 
     commands.push({
       id: "theme.scheme.cycle",
-      title: "Cycle color scheme",
-      category: "Theme",
+      title: language.t("theme.cycleColorScheme"),
+      category: language.t("command.category.theme"),
       keybind: "mod+shift+s",
       onSelect: () => cycleColorScheme(1),
     })
@@ -866,8 +869,8 @@ export default function Layout(props: ParentProps) {
     for (const scheme of colorSchemeOrder) {
       commands.push({
         id: `theme.scheme.${scheme}`,
-        title: `Use color scheme: ${colorSchemeLabel[scheme]}`,
-        category: "Theme",
+        title: language.t("theme.useColorScheme", { scheme: colorSchemeLabel(scheme) }),
+        category: language.t("command.category.theme"),
         onSelect: () => theme.commitPreview(),
         onHighlight: () => {
           theme.previewColorScheme(scheme)
@@ -879,8 +882,8 @@ export default function Layout(props: ParentProps) {
     // Add language switching commands
     commands.push({
       id: "language.cycle",
-      title: "Cycle language",
-      category: "Language",
+      title: language.t("language.cycle"),
+      category: language.t("command.category.language"),
       keybind: "mod+shift+l",
       onSelect: () => {
         const currentIndex = languages.indexOf(language.language())
@@ -888,8 +891,8 @@ export default function Layout(props: ParentProps) {
         const nextLang = languages[nextIndex]
         language.setLanguage(nextLang)
         showToast({
-          title: "Language switched",
-          description: languageLabel[nextLang],
+          title: language.t("language.switched"),
+          description: languageLabel(nextLang),
         })
       },
     })
@@ -897,8 +900,8 @@ export default function Layout(props: ParentProps) {
     for (const lang of languages) {
       commands.push({
         id: `language.set.${lang}`,
-        title: `Use language: ${languageLabel[lang]}`,
-        category: "Language",
+        title: language.t("language.use", { language: languageLabel(lang) }),
+        category: language.t("command.category.language"),
         onSelect: () => language.setLanguage(lang),
       })
     }
@@ -980,7 +983,7 @@ export default function Layout(props: ParentProps) {
 
     if (platform.openDirectoryPickerDialog && server.isLocal()) {
       const result = await platform.openDirectoryPickerDialog?.({
-        title: "Open project",
+        title: language.t("project.open"),
         multiple: true,
       })
       resolve(result)
@@ -1514,7 +1517,7 @@ export default function Layout(props: ParentProps) {
         >
           <TooltipKeybind
             placement={props.mobile ? "bottom" : "right"}
-            title="Archive session"
+            title={language.t("session.archive")}
             keybind={command.keybind("session.archive")}
             gutter={8}
           >
@@ -1557,7 +1560,7 @@ export default function Layout(props: ParentProps) {
       if (!directory) return
 
       const [workspaceStore] = globalSync.child(directory)
-      const kind = directory === project.worktree ? "local" : "sandbox"
+      const kind = directory === project.worktree ? language.t("workspace.local") : language.t("workspace.sandbox")
       const name = workspaceLabel(directory, workspaceStore.vcs?.branch, project.id)
       return `${kind} : ${name}`
     })
@@ -1733,7 +1736,7 @@ export default function Layout(props: ParentProps) {
                 icon="edit"
                 class="hidden _flex w-full text-left justify-start text-text-base rounded-md px-3"
               >
-                New session
+                {language.t("session.new")}
               </Button>
               <Show when={loading()}>
                 <SessionSkeleton />
@@ -1752,7 +1755,7 @@ export default function Layout(props: ParentProps) {
                       ;(e.currentTarget as HTMLButtonElement).blur()
                     }}
                   >
-                    Load more
+                    {language.t("common.loadMore")}
                   </Button>
                 </div>
               </Show>
@@ -1776,7 +1779,7 @@ export default function Layout(props: ParentProps) {
 
     const label = (directory: string) => {
       const [data] = globalSync.child(directory)
-      const kind = directory === props.project.worktree ? "local" : "sandbox"
+      const kind = directory === props.project.worktree ? language.t("workspace.local") : language.t("workspace.sandbox")
       const name = workspaceLabel(directory, data.vcs?.branch, props.project.id)
       return `${kind} : ${name}`
     }
@@ -1828,7 +1831,7 @@ export default function Layout(props: ParentProps) {
         >
           <div class="-m-3 p-2 flex flex-col w-72">
             <div class="px-4 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
-            <div class="px-4 pb-2 text-12-medium text-text-weak">Recent sessions</div>
+            <div class="px-4 pb-2 text-12-medium text-text-weak">{language.t("sidebar.recentSessions")}</div>
             <div class="px-2 pb-2 flex flex-col gap-2">
               <Show
                 when={workspaceEnabled()}
@@ -1933,7 +1936,7 @@ export default function Layout(props: ParentProps) {
                   ;(e.currentTarget as HTMLButtonElement).blur()
                 }}
               >
-                Load more
+                {language.t("common.loadMore")}
               </Button>
             </div>
           </Show>
@@ -1964,7 +1967,7 @@ export default function Layout(props: ParentProps) {
         .then((x) => x.data)
         .catch((err) => {
           showToast({
-            title: "Failed to create workspace",
+            title: language.t("workspace.createFailed"),
             description: errorMessage(err),
           })
           return undefined
@@ -2000,7 +2003,7 @@ export default function Layout(props: ParentProps) {
                   placement={sidebarProps.mobile ? "bottom" : "right"}
                   value={
                     <div class="flex items-center gap-2">
-                      <span>Open project</span>
+                      <span>{language.t("project.open")}</span>
                       <Show when={!sidebarProps.mobile}>
                         <span class="text-icon-base text-12-medium">{command.keybind("project.open")}</span>
                       </Show>
@@ -2016,10 +2019,10 @@ export default function Layout(props: ParentProps) {
             </DragDropProvider>
           </div>
           <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
-            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Settings" class="hidden">
+            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value={language.t("common.settings")} class="hidden">
               <IconButton disabled icon="settings-gear" variant="ghost" size="large" />
             </Tooltip>
-            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Help">
+            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value={language.t("common.help")}>
               <IconButton
                 icon="help"
                 variant="ghost"
@@ -2079,16 +2082,18 @@ export default function Layout(props: ParentProps) {
                         <DropdownMenu.Portal>
                           <DropdownMenu.Content class="mt-1">
                             <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
-                              <DropdownMenu.ItemLabel>Edit</DropdownMenu.ItemLabel>
+                              <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
                             <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces(p.worktree)}>
                               <DropdownMenu.ItemLabel>
-                                {layout.sidebar.workspaces(p.worktree)() ? "Disable workspaces" : "Enable workspaces"}
+                                {layout.sidebar.workspaces(p.worktree)()
+                                  ? language.t("workspace.disable")
+                                  : language.t("workspace.enable")}
                               </DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
                             <DropdownMenu.Separator />
                             <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
-                              <DropdownMenu.ItemLabel>Close</DropdownMenu.ItemLabel>
+                              <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
                           </DropdownMenu.Content>
                         </DropdownMenu.Portal>
@@ -2122,7 +2127,7 @@ export default function Layout(props: ParentProps) {
                     <>
                       <div class="py-4 px-3">
                         <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
-                          New workspace
+                          {language.t("workspace.new")}
                         </Button>
                       </div>
                       <div class="relative flex-1 min-h-0">
@@ -2163,9 +2168,9 @@ export default function Layout(props: ParentProps) {
               <div class="shrink-0 px-2 py-3 border-t border-border-weak-base">
                 <div class="rounded-md bg-background-base shadow-xs-border-base">
                   <div class="p-3 flex flex-col gap-2">
-                    <div class="text-12-medium text-text-strong">Getting started</div>
-                    <div class="text-text-base">OpenCode includes free models so you can start immediately.</div>
-                    <div class="text-text-base">Connect any provider to use models, inc. Claude, GPT, Gemini etc.</div>
+                    <div class="text-12-medium text-text-strong">{language.t("sidebar.gettingStarted")}</div>
+                    <div class="text-text-base">{language.t("sidebar.gettingStartedDesc1")}</div>
+                    <div class="text-text-base">{language.t("sidebar.gettingStartedDesc2")}</div>
                   </div>
                   <Button
                     class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-md rounded-t-none shadow-none border-t border-border-weak-base px-3"
@@ -2173,7 +2178,7 @@ export default function Layout(props: ParentProps) {
                     icon="plus"
                     onClick={connectProvider}
                   >
-                    Connect provider
+                    {language.t("provider.connect")}
                   </Button>
                 </div>
               </div>

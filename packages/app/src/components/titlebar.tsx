@@ -6,12 +6,14 @@ import { useTheme } from "@opencode-ai/ui/theme"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
+import { useLanguage } from "@/context/language"
 
 export function Titlebar() {
   const layout = useLayout()
   const platform = usePlatform()
   const command = useCommand()
   const theme = useTheme()
+  const language = useLanguage()
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const reserve = createMemo(
@@ -93,7 +95,7 @@ export function Titlebar() {
         <TooltipKeybind
           class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0"}
           placement="bottom"
-          title="Toggle sidebar"
+          title={language.t("sidebar.toggle")}
           keybind={command.keybind("sidebar.toggle")}
         >
           <IconButton

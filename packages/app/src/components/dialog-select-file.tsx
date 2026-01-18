@@ -9,6 +9,7 @@ import { createMemo, createSignal, onCleanup, Show } from "solid-js"
 import { formatKeybind, useCommand, type CommandOption } from "@/context/command"
 import { useLayout } from "@/context/layout"
 import { useFile } from "@/context/file"
+import { useLanguage } from "@/context/language"
 
 type EntryType = "command" | "file"
 
@@ -18,7 +19,7 @@ type Entry = {
   title: string
   description?: string
   keybind?: string
-  category: "Commands" | "Files"
+  category: string
   option?: CommandOption
   path?: string
 }
@@ -29,6 +30,7 @@ export function DialogSelectFile() {
   const file = useFile()
   const dialog = useDialog()
   const params = useParams()
+  const language = useLanguage()
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
@@ -49,7 +51,7 @@ export function DialogSelectFile() {
     title: option.title,
     description: option.description,
     keybind: option.keybind,
-    category: "Commands",
+    category: language.t("commandPalette.commands"),
     option,
   })
 
@@ -57,7 +59,7 @@ export function DialogSelectFile() {
     id: "file:" + path,
     type: "file",
     title: path,
-    category: "Files",
+    category: language.t("commandPalette.files"),
     path,
   })
 
@@ -136,8 +138,13 @@ export function DialogSelectFile() {
   return (
     <Dialog class="pt-3 pb-0 !max-h-[480px]">
       <List
-        search={{ placeholder: "Search files and commands", autofocus: true, hideIcon: true, class: "pl-3 pr-2 !mb-0" }}
-        emptyMessage="No results found"
+        search={{
+          placeholder: language.t("commandPalette.search"),
+          autofocus: true,
+          hideIcon: true,
+          class: "pl-3 pr-2 !mb-0",
+        }}
+        emptyMessage={language.t("commandPalette.empty")}
         items={items}
         key={(item) => item.id}
         filterKeys={["title", "description", "category"]}

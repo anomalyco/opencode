@@ -9,12 +9,14 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { type LocalProject, getAvatarColors } from "@/context/layout"
 import { getFilename } from "@opencode-ai/util/path"
 import { Avatar } from "@opencode-ai/ui/avatar"
+import { useLanguage } from "@/context/language"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 
 export function DialogEditProject(props: { project: LocalProject }) {
   const dialog = useDialog()
   const globalSDK = useGlobalSDK()
+  const language = useLanguage()
 
   const folderName = createMemo(() => getFilename(props.project.worktree))
   const defaultName = createMemo(() => props.project.name || folderName())
@@ -81,20 +83,20 @@ export function DialogEditProject(props: { project: LocalProject }) {
   }
 
   return (
-    <Dialog title="Edit project" class="w-full max-w-[480px] mx-auto">
+    <Dialog title={language.t("dialog.editProject")} class="w-full max-w-[480px] mx-auto">
       <form onSubmit={handleSubmit} class="flex flex-col gap-6 p-6 pt-0">
         <div class="flex flex-col gap-4">
           <TextField
             autofocus
             type="text"
-            label="Name"
+            label={language.t("project.name")}
             placeholder={folderName()}
             value={store.name}
             onChange={(v) => setStore("name", v)}
           />
 
           <div class="flex flex-col gap-2">
-            <label class="text-12-medium text-text-weak">Icon</label>
+            <label class="text-12-medium text-text-weak">{language.t("project.icon")}</label>
             <div class="flex gap-3 items-start">
               <div class="relative" onMouseEnter={() => setIconHover(true)} onMouseLeave={() => setIconHover(false)}>
                 <div
@@ -127,7 +129,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                       </div>
                     }
                   >
-                    <img src={store.iconUrl} alt="Project icon" class="size-full object-cover" />
+                    <img src={store.iconUrl} alt={language.t("project.iconAlt")} class="size-full object-cover" />
                   </Show>
                 </div>
                 <div
@@ -178,7 +180,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
 
           <Show when={!store.iconUrl}>
             <div class="flex flex-col gap-2">
-              <label class="text-12-medium text-text-weak">Color</label>
+              <label class="text-12-medium text-text-weak">{language.t("project.color")}</label>
               <div class="flex gap-1.5">
                 <For each={AVATAR_COLOR_KEYS}>
                   {(color) => (
@@ -208,10 +210,10 @@ export function DialogEditProject(props: { project: LocalProject }) {
 
         <div class="flex justify-end gap-2">
           <Button type="button" variant="ghost" size="large" onClick={() => dialog.close()}>
-            Cancel
+            {language.t("common.cancel")}
           </Button>
           <Button type="submit" variant="primary" size="large" disabled={store.saving}>
-            {store.saving ? "Saving..." : "Save"}
+            {store.saving ? language.t("common.saving") : language.t("common.save")}
           </Button>
         </div>
       </form>

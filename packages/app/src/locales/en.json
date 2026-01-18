@@ -16,7 +16,20 @@
     "back": "Back",
     "next": "Next",
     "previous": "Previous",
-    "done": "Done"
+    "done": "Done",
+    "add": "Add",
+    "submit": "Submit",
+    "restart": "Restart",
+    "checking": "Checking...",
+    "checkForUpdates": "Check for updates",
+    "updateToVersion": "Update to {version}",
+    "versionLabel": "Version: {version}",
+    "requestFailed": "Request failed",
+    "help": "Help",
+    "loadMore": "Load more",
+    "send": "Send",
+    "stop": "Stop",
+    "saving": "Saving..."
   },
   "sidebar": {
     "toggle": "Toggle sidebar",
@@ -29,7 +42,8 @@
     "closeProject": "Close project",
     "gettingStarted": "Getting started",
     "gettingStartedDesc1": "OpenCode includes free models so you can start immediately.",
-    "gettingStartedDesc2": "Connect any provider to use models, inc. Claude, GPT, Gemini etc."
+    "gettingStartedDesc2": "Connect any provider to use models, inc. Claude, GPT, Gemini etc.",
+    "recentSessions": "Recent sessions"
   },
   "session": {
     "new": "New session",
@@ -37,13 +51,36 @@
     "next": "Next session",
     "archive": "Archive session",
     "noFiles": "No files changed",
-    "filesChanged": "{count} file{plural, s} changed"
+    "filesChanged": "{count} file{plural, s} changed",
+    "filesChangedLabel": "{count} Files Changed",
+    "loadingChanges": "Loading changes...",
+    "loadingEarlierMessages": "Loading earlier messages...",
+    "loadEarlierMessages": "Load earlier messages",
+    "loadingPrompt": "Loading prompt...",
+    "searchProject": "Search {project}",
+    "tab": "Session",
+    "reviewTab": "Review",
+    "share": "Share session",
+    "mainBranch": "Main branch",
+    "mainBranchWithName": "Main branch ({branch})",
+    "createWorktree": "Create new worktree",
+    "lastModified": "Last modified",
+    "forkTitle": "Fork from message",
+    "noForkMessages": "No messages to fork from",
+    "loadFailed": "Failed to load sessions for {project}"
   },
   "theme": {
     "switched": "Theme switched",
     "colorScheme": "Color scheme",
     "cycle": "Cycle theme",
-    "cycleColorScheme": "Cycle color scheme"
+    "cycleColorScheme": "Cycle color scheme",
+    "scheme": {
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "useTheme": "Use theme: {theme}",
+    "useColorScheme": "Use color scheme: {scheme}"
   },
   "dialog": {
     "selectDirectory": "Select directory",
@@ -51,7 +88,9 @@
     "editProject": "Edit project",
     "connectProvider": "Connect provider",
     "selectServer": "Select server",
-    "selectModel": "Select model"
+    "selectModel": "Select model",
+    "searchFolders": "Search folders",
+    "noFolders": "No folders found"
   },
   "notification": {
     "permissionRequired": "Permission required",
@@ -60,15 +99,247 @@
     "installAndRestart": "Install and restart",
     "notYet": "Not yet",
     "goToSession": "Go to session",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "question": "Question",
+    "permissionNeeded": "{session} in {project} needs permission",
+    "questionAsked": "{session} in {project} has a question"
   },
   "server": {
-    "switch": "Switch server"
+    "switch": "Switch server",
+    "title": "Servers",
+    "description": "Switch which OpenCode server this app connects to.",
+    "search": "Search servers",
+    "empty": "No servers yet",
+    "add": "Add a server",
+    "urlLabel": "Server URL",
+    "default": "Default server",
+    "defaultDescription": "Connect to this server on app launch instead of starting a local server. Requires restart.",
+    "noneSelected": "No server selected",
+    "setDefault": "Set current server as default",
+    "connectFailed": "Could not connect to server"
   },
   "provider": {
-    "connect": "Connect provider"
+    "connect": "Connect provider",
+    "apiKey": "API key",
+    "apiKeyLabel": "{provider} API key",
+    "apiKeyRequired": "API key is required",
+    "authCode": "Authorization code",
+    "authCodeLabel": "{method} authorization code",
+    "authCodeRequired": "Authorization code is required",
+    "authCodeInvalid": "Invalid authorization code",
+    "authFailed": "Authorization failed: {error}",
+    "authInProgress": "Authorization in progress...",
+    "confirmationCode": "Confirmation code",
+    "connectedTitle": "{provider} connected",
+    "connectedDescription": "{provider} models are now available to use.",
+    "connectTo": "Connect {provider}",
+    "enterApiKey": "Enter your {provider} API key to connect your account and use {provider} models in OpenCode.",
+    "visitLinkToAuthorize": "Visit",
+    "thisLink": "this link",
+    "collectAuthCode": "to collect your authorization code to connect your account and use {provider} models in OpenCode.",
+    "enterCodeBelow": "and enter the code below to connect your account and use {provider} models in OpenCode.",
+    "waitingForAuth": "Waiting for authorization...",
+    "loginClaude": "Login with Claude Pro/Max",
+    "selectMethod": "Select login method for {provider}.",
+    "opencodeZenIntro": "OpenCode Zen gives you access to a curated set of reliable optimized models for coding agents.",
+    "opencodeZenModels": "With a single API key you'll get access to models such as Claude, GPT, Gemini, GLM and more.",
+    "opencodeZenVisit": "Visit",
+    "opencodeZenCollect": "to collect your API key.",
+    "search": "Search providers",
+    "popular": "Popular",
+    "other": "Other",
+    "viewAll": "View all providers",
+    "connectClaude": "Connect with Claude Pro/Max or API key"
   },
   "project": {
-    "open": "Open project"
+    "open": "Open project",
+    "name": "Name",
+    "icon": "Icon",
+    "iconAlt": "Project icon",
+    "color": "Color"
+  },
+  "language": {
+    "english": "English",
+    "chinese": "Chinese",
+    "use": "Use language: {language}",
+    "cycle": "Cycle language",
+    "switched": "Language switched"
+  },
+  "command": {
+    "category": {
+      "view": "View",
+      "project": "Project",
+      "provider": "Provider",
+      "server": "Server",
+      "session": "Session",
+      "theme": "Theme",
+      "language": "Language",
+      "file": "File",
+      "terminal": "Terminal",
+      "model": "Model",
+      "agent": "Agent",
+      "permissions": "Permissions",
+      "mcp": "MCP"
+    },
+    "title": {
+      "autoAcceptEdits": "Auto-accept edits",
+      "stopAutoAcceptEdits": "Stop auto-accepting edits",
+      "chooseModel": "Choose model",
+      "compactSession": "Compact session",
+      "cycleAgent": "Cycle agent",
+      "cycleAgentBack": "Cycle agent backwards",
+      "cycleThinking": "Cycle thinking effort",
+      "forkFromMessage": "Fork from message",
+      "nextMessage": "Next message",
+      "openFile": "Open file",
+      "previousMessage": "Previous message",
+      "redo": "Redo",
+      "toggleMcp": "Toggle MCPs",
+      "toggleSteps": "Toggle steps",
+      "undo": "Undo"
+    },
+    "description": {
+      "chooseModel": "Select a different model",
+      "compactSession": "Summarize the session to reduce context size",
+      "cycleAgent": "Switch to the next agent",
+      "cycleAgentBack": "Switch to the previous agent",
+      "cycleThinking": "Switch to the next effort level",
+      "forkFromMessage": "Create a new session from a previous message",
+      "newTerminal": "Create a new terminal tab",
+      "nextMessage": "Go to the next user message",
+      "openFile": "Search files and commands",
+      "previousMessage": "Go to the previous user message",
+      "redo": "Redo the last undone message",
+      "toggleMcp": "Toggle MCPs",
+      "toggleSteps": "Show or hide steps for the current message",
+      "undo": "Undo the last message"
+    },
+    "toast": {
+      "thinkingEffortChanged": "Thinking effort changed",
+      "thinkingEffortDescription": "The thinking effort has been changed to {effort}",
+      "noModelTitle": "No model selected",
+      "noModelDescription": "Connect a provider to summarize this session",
+      "autoAcceptOnTitle": "Auto-accepting edits",
+      "autoAcceptOffTitle": "Stopped auto-accepting edits",
+      "autoAcceptOnDescription": "Edit and write permissions will be automatically approved",
+      "autoAcceptOffDescription": "Edit and write permissions will require approval"
+    }
+  },
+  "commandPalette": {
+    "search": "Search files and commands",
+    "empty": "No results found",
+    "commands": "Commands",
+    "files": "Files"
+  },
+  "error": {
+    "title": "Something went wrong",
+    "description": "An error occurred while loading the application.",
+    "details": "Error Details",
+    "reportPrompt": "Please report this error to the OpenCode team",
+    "reportLink": "on Discord"
+  },
+  "home": {
+    "recentProjects": "Recent projects",
+    "noRecentProjects": "No recent projects",
+    "getStarted": "Get started by opening a local project"
+  },
+  "context": {
+    "addToContext": "Add {selection} to context",
+    "assistant": "Assistant",
+    "assistantMessages": "Assistant Messages",
+    "breakdown": "Context Breakdown",
+    "breakdownNote": "Approximate breakdown of input tokens. \"Other\" includes tool definitions and overhead.",
+    "cacheTokens": "Cache Tokens (read/write)",
+    "clickToView": "Click to view context",
+    "contextLimit": "Context Limit",
+    "cost": "Cost",
+    "inputTokens": "Input Tokens",
+    "lastActivity": "Last Activity",
+    "messages": "Messages",
+    "model": "Model",
+    "other": "Other",
+    "outputTokens": "Output Tokens",
+    "provider": "Provider",
+    "rawMessages": "Raw messages",
+    "reasoningTokens": "Reasoning Tokens",
+    "session": "Session",
+    "sessionCreated": "Session Created",
+    "system": "System",
+    "systemPrompt": "System Prompt",
+    "tab": "Context",
+    "tokens": "Tokens",
+    "toolCalls": "Tool Calls",
+    "totalCost": "Total Cost",
+    "totalTokens": "Total Tokens",
+    "usage": "Usage",
+    "user": "User",
+    "userMessages": "User Messages"
+  },
+  "model": {
+    "addMore": "Add more models from popular providers",
+    "defaultVariant": "Default",
+    "empty": "No model results",
+    "freeProvided": "Free models provided by OpenCode",
+    "manageTitle": "Manage models",
+    "manageDescription": "Customize which models appear in the model selector.",
+    "search": "Search models"
+  },
+  "mcp": {
+    "title": "MCPs",
+    "enabledCount": "{enabled} of {total} enabled",
+    "empty": "No MCPs configured",
+    "count": "{count} MCP"
+  },
+  "prompt": {
+    "active": "active",
+    "askAnything": "Ask anything... \"{example}\"",
+    "attachFile": "Attach file",
+    "customCommand": "custom",
+    "dropFiles": "Drop images or PDFs here",
+    "failedCreateWorktree": "Failed to create worktree",
+    "failedSendCommand": "Failed to send command",
+    "failedSendPrompt": "Failed to send prompt",
+    "failedSendShell": "Failed to send shell command",
+    "includeActiveFile": "Include active file",
+    "noCommands": "No matching commands",
+    "noMatches": "No matching results",
+    "selectAgentModelTitle": "Select an agent and model",
+    "selectAgentModelDescription": "Choose an agent and model before sending a prompt.",
+    "shellExitHint": "esc to exit",
+    "shellMode": "Shell",
+    "shellPlaceholder": "Enter shell command..."
+  },
+  "file": {
+    "loadFailed": "Failed to load file"
+  },
+  "review": {
+    "toggle": "Toggle review"
+  },
+  "status": {
+    "connected": "connected",
+    "failed": "failed",
+    "needsAuth": "needs auth",
+    "disabled": "disabled"
+  },
+  "tabs": {
+    "close": "Close tab"
+  },
+  "tag": {
+    "free": "Free",
+    "latest": "Latest",
+    "recommended": "Recommended"
+  },
+  "terminal": {
+    "loading": "Loading terminal...",
+    "new": "New terminal",
+    "toggle": "Toggle terminal"
+  },
+  "workspace": {
+    "createFailed": "Failed to create workspace",
+    "disable": "Disable workspaces",
+    "enable": "Enable workspaces",
+    "local": "local",
+    "new": "New workspace",
+    "sandbox": "sandbox"
   }
 }

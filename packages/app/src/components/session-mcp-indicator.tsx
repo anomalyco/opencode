@@ -3,10 +3,12 @@ import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useSync } from "@/context/sync"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
+import { useLanguage } from "@/context/language"
 
 export function SessionMcpIndicator() {
   const sync = useSync()
   const dialog = useDialog()
+  const language = useLanguage()
 
   const mcpStats = createMemo(() => {
     const mcp = sync.data.mcp ?? {}
@@ -27,7 +29,9 @@ export function SessionMcpIndicator() {
             "bg-icon-success-base": !mcpStats().failed && mcpStats().enabled > 0,
           }}
         />
-        <span class="text-12-regular text-text-weak">{mcpStats().enabled} MCP</span>
+        <span class="text-12-regular text-text-weak">
+          {language.t("mcp.count", { count: mcpStats().enabled })}
+        </span>
       </Button>
     </Show>
   )

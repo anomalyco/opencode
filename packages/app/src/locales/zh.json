@@ -16,7 +16,20 @@
     "back": "返回",
     "next": "下一个",
     "previous": "上一个",
-    "done": "完成"
+    "done": "完成",
+    "add": "添加",
+    "submit": "提交",
+    "restart": "重启",
+    "checking": "检查中...",
+    "checkForUpdates": "检查更新",
+    "updateToVersion": "更新到 {version}",
+    "versionLabel": "版本：{version}",
+    "requestFailed": "请求失败",
+    "help": "帮助",
+    "loadMore": "加载更多",
+    "send": "发送",
+    "stop": "停止",
+    "saving": "保存中..."
   },
   "sidebar": {
     "toggle": "切换侧边栏",
@@ -29,7 +42,8 @@
     "closeProject": "关闭项目",
     "gettingStarted": "开始使用",
     "gettingStartedDesc1": "OpenCode 包含免费模型，您可以立即开始使用。",
-    "gettingStartedDesc2": "连接任何提供商以使用模型，包括 Claude、GPT、Gemini 等。"
+    "gettingStartedDesc2": "连接任何提供商以使用模型，包括 Claude、GPT、Gemini 等。",
+    "recentSessions": "最近会话"
   },
   "session": {
     "new": "新会话",
@@ -37,13 +51,36 @@
     "next": "下一个会话",
     "archive": "归档会话",
     "noFiles": "无文件更改",
-    "filesChanged": "{count} 个文件已更改"
+    "filesChanged": "{count} 个文件已更改",
+    "filesChangedLabel": "已更改 {count} 个文件",
+    "loadingChanges": "正在加载更改...",
+    "loadingEarlierMessages": "正在加载更早的消息...",
+    "loadEarlierMessages": "加载更早的消息",
+    "loadingPrompt": "正在加载提示...",
+    "searchProject": "搜索 {project}",
+    "tab": "会话",
+    "reviewTab": "审阅",
+    "share": "分享会话",
+    "mainBranch": "主分支",
+    "mainBranchWithName": "主分支（{branch}）",
+    "createWorktree": "创建新工作树",
+    "lastModified": "上次修改",
+    "forkTitle": "从消息分叉",
+    "noForkMessages": "没有可分叉的消息",
+    "loadFailed": "加载 {project} 的会话失败"
   },
   "theme": {
     "switched": "主题已切换",
     "colorScheme": "配色方案",
     "cycle": "循环切换主题",
-    "cycleColorScheme": "循环切换配色方案"
+    "cycleColorScheme": "循环切换配色方案",
+    "scheme": {
+      "system": "系统",
+      "light": "浅色",
+      "dark": "深色"
+    },
+    "useTheme": "使用主题：{theme}",
+    "useColorScheme": "使用配色：{scheme}"
   },
   "dialog": {
     "selectDirectory": "选择目录",
@@ -51,7 +88,9 @@
     "editProject": "编辑项目",
     "connectProvider": "连接提供商",
     "selectServer": "选择服务器",
-    "selectModel": "选择模型"
+    "selectModel": "选择模型",
+    "searchFolders": "搜索文件夹",
+    "noFolders": "未找到文件夹"
   },
   "notification": {
     "permissionRequired": "需要权限",
@@ -60,15 +99,247 @@
     "installAndRestart": "安装并重启",
     "notYet": "暂不",
     "goToSession": "前往会话",
-    "dismiss": "忽略"
+    "dismiss": "忽略",
+    "question": "问题",
+    "permissionNeeded": "{project} 中的 {session} 需要权限",
+    "questionAsked": "{project} 中的 {session} 有问题"
   },
   "server": {
-    "switch": "切换服务器"
+    "switch": "切换服务器",
+    "title": "服务器",
+    "description": "切换此应用连接的 OpenCode 服务器。",
+    "search": "搜索服务器",
+    "empty": "暂无服务器",
+    "add": "添加服务器",
+    "urlLabel": "服务器地址",
+    "default": "默认服务器",
+    "defaultDescription": "应用启动时连接此服务器而不是启动本地服务器。需要重启。",
+    "noneSelected": "未选择服务器",
+    "setDefault": "设为默认服务器",
+    "connectFailed": "无法连接服务器"
   },
   "provider": {
-    "connect": "连接提供商"
+    "connect": "连接提供商",
+    "apiKey": "API 密钥",
+    "apiKeyLabel": "{provider} API 密钥",
+    "apiKeyRequired": "需要 API 密钥",
+    "authCode": "授权码",
+    "authCodeLabel": "{method} 授权码",
+    "authCodeRequired": "需要授权码",
+    "authCodeInvalid": "授权码无效",
+    "authFailed": "授权失败：{error}",
+    "authInProgress": "授权进行中...",
+    "confirmationCode": "确认码",
+    "connectedTitle": "{provider} 已连接",
+    "connectedDescription": "{provider} 模型已可用。",
+    "connectTo": "连接 {provider}",
+    "enterApiKey": "输入 {provider} 的 API 密钥以连接账户并在 OpenCode 中使用 {provider} 模型。",
+    "visitLinkToAuthorize": "访问",
+    "thisLink": "此链接",
+    "collectAuthCode": "以获取授权码，用于连接账户并在 OpenCode 中使用 {provider} 模型。",
+    "enterCodeBelow": "并在下方输入代码，以连接账户并在 OpenCode 中使用 {provider} 模型。",
+    "waitingForAuth": "等待授权中...",
+    "loginClaude": "使用 Claude Pro/Max 登录",
+    "selectMethod": "选择 {provider} 的登录方式。",
+    "opencodeZenIntro": "OpenCode Zen 提供一组经过优化的可靠编程模型。",
+    "opencodeZenModels": "通过一个 API 密钥即可访问 Claude、GPT、Gemini、GLM 等模型。",
+    "opencodeZenVisit": "访问",
+    "opencodeZenCollect": "以获取 API 密钥。",
+    "search": "搜索提供商",
+    "popular": "热门",
+    "other": "其他",
+    "viewAll": "查看全部提供商",
+    "connectClaude": "使用 Claude Pro/Max 或 API 密钥连接"
   },
   "project": {
-    "open": "打开项目"
+    "open": "打开项目",
+    "name": "名称",
+    "icon": "图标",
+    "iconAlt": "项目图标",
+    "color": "颜色"
+  },
+  "language": {
+    "english": "英语",
+    "chinese": "中文",
+    "use": "使用语言：{language}",
+    "cycle": "切换语言",
+    "switched": "语言已切换"
+  },
+  "command": {
+    "category": {
+      "view": "视图",
+      "project": "项目",
+      "provider": "提供商",
+      "server": "服务器",
+      "session": "会话",
+      "theme": "主题",
+      "language": "语言",
+      "file": "文件",
+      "terminal": "终端",
+      "model": "模型",
+      "agent": "代理",
+      "permissions": "权限",
+      "mcp": "MCP"
+    },
+    "title": {
+      "autoAcceptEdits": "自动接受编辑",
+      "stopAutoAcceptEdits": "停止自动接受编辑",
+      "chooseModel": "选择模型",
+      "compactSession": "压缩会话",
+      "cycleAgent": "切换代理",
+      "cycleAgentBack": "反向切换代理",
+      "cycleThinking": "切换思考力度",
+      "forkFromMessage": "从消息分叉",
+      "nextMessage": "下一条消息",
+      "openFile": "打开文件",
+      "previousMessage": "上一条消息",
+      "redo": "重做",
+      "toggleMcp": "切换 MCP",
+      "toggleSteps": "切换步骤",
+      "undo": "撤销"
+    },
+    "description": {
+      "chooseModel": "选择不同模型",
+      "compactSession": "总结会话以减少上下文",
+      "cycleAgent": "切换到下一个代理",
+      "cycleAgentBack": "切换到上一个代理",
+      "cycleThinking": "切换到下一档力度",
+      "forkFromMessage": "从先前消息创建新会话",
+      "newTerminal": "创建新的终端标签",
+      "nextMessage": "跳到下一条用户消息",
+      "openFile": "搜索文件和命令",
+      "previousMessage": "跳到上一条用户消息",
+      "redo": "重做上一次撤销",
+      "toggleMcp": "切换 MCP",
+      "toggleSteps": "显示或隐藏当前消息的步骤",
+      "undo": "撤销上一条消息"
+    },
+    "toast": {
+      "thinkingEffortChanged": "思考力度已更改",
+      "thinkingEffortDescription": "思考力度已更改为 {effort}",
+      "noModelTitle": "未选择模型",
+      "noModelDescription": "连接提供商以总结此会话",
+      "autoAcceptOnTitle": "正在自动接受编辑",
+      "autoAcceptOffTitle": "已停止自动接受编辑",
+      "autoAcceptOnDescription": "编辑和写入权限将自动批准",
+      "autoAcceptOffDescription": "编辑和写入权限需要审批"
+    }
+  },
+  "commandPalette": {
+    "search": "搜索文件和命令",
+    "empty": "未找到结果",
+    "commands": "命令",
+    "files": "文件"
+  },
+  "error": {
+    "title": "出了点问题",
+    "description": "加载应用时发生错误。",
+    "details": "错误详情",
+    "reportPrompt": "请将此错误反馈给 OpenCode 团队",
+    "reportLink": "在 Discord 上"
+  },
+  "home": {
+    "recentProjects": "最近项目",
+    "noRecentProjects": "没有最近项目",
+    "getStarted": "通过打开本地项目开始"
+  },
+  "context": {
+    "addToContext": "将 {selection} 添加到上下文",
+    "assistant": "助手",
+    "assistantMessages": "助手消息",
+    "breakdown": "上下文构成",
+    "breakdownNote": "输入 Token 的大致构成。“其他”包含工具定义和额外开销。",
+    "cacheTokens": "缓存 Token（读/写）",
+    "clickToView": "点击查看上下文",
+    "contextLimit": "上下文上限",
+    "cost": "费用",
+    "inputTokens": "输入 Token",
+    "lastActivity": "最后活动",
+    "messages": "消息数",
+    "model": "模型",
+    "other": "其他",
+    "outputTokens": "输出 Token",
+    "provider": "提供商",
+    "rawMessages": "原始消息",
+    "reasoningTokens": "推理 Token",
+    "session": "会话",
+    "sessionCreated": "会话创建时间",
+    "system": "系统",
+    "systemPrompt": "系统提示",
+    "tab": "上下文",
+    "tokens": "Token",
+    "toolCalls": "工具调用",
+    "totalCost": "总费用",
+    "totalTokens": "总 Token",
+    "usage": "使用率",
+    "user": "用户",
+    "userMessages": "用户消息"
+  },
+  "model": {
+    "addMore": "从热门提供商添加更多模型",
+    "defaultVariant": "默认",
+    "empty": "没有模型结果",
+    "freeProvided": "OpenCode 提供的免费模型",
+    "manageTitle": "管理模型",
+    "manageDescription": "自定义模型选择器中显示的模型。",
+    "search": "搜索模型"
+  },
+  "mcp": {
+    "title": "MCP",
+    "enabledCount": "已启用 {enabled}/{total}",
+    "empty": "未配置 MCP",
+    "count": "{count} 个 MCP"
+  },
+  "prompt": {
+    "active": "当前",
+    "askAnything": "随便问点什么... \"{example}\"",
+    "attachFile": "附加文件",
+    "customCommand": "自定义",
+    "dropFiles": "将图片或 PDF 拖到这里",
+    "failedCreateWorktree": "创建工作树失败",
+    "failedSendCommand": "发送命令失败",
+    "failedSendPrompt": "发送提示失败",
+    "failedSendShell": "发送 Shell 命令失败",
+    "includeActiveFile": "包含当前文件",
+    "noCommands": "没有匹配的命令",
+    "noMatches": "没有匹配结果",
+    "selectAgentModelTitle": "选择代理和模型",
+    "selectAgentModelDescription": "在发送提示前请选择代理和模型。",
+    "shellExitHint": "按 Esc 退出",
+    "shellMode": "Shell",
+    "shellPlaceholder": "输入 Shell 命令..."
+  },
+  "file": {
+    "loadFailed": "加载文件失败"
+  },
+  "review": {
+    "toggle": "切换审阅"
+  },
+  "status": {
+    "connected": "已连接",
+    "failed": "失败",
+    "needsAuth": "需要授权",
+    "disabled": "已禁用"
+  },
+  "tabs": {
+    "close": "关闭标签"
+  },
+  "tag": {
+    "free": "免费",
+    "latest": "最新",
+    "recommended": "推荐"
+  },
+  "terminal": {
+    "loading": "正在加载终端...",
+    "new": "新终端",
+    "toggle": "切换终端"
+  },
+  "workspace": {
+    "createFailed": "创建工作区失败",
+    "disable": "禁用工作区",
+    "enable": "启用工作区",
+    "local": "本地",
+    "new": "新工作区",
+    "sandbox": "沙盒"
   }
 }

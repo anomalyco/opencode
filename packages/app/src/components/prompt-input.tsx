@@ -51,6 +51,7 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 import { usePermission } from "@/context/permission"
 import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
+import { useLanguage } from "@/context/language"
 import { createOpencodeClient, type Message, type Part } from "@opencode-ai/sdk/v2/client"
 import { Binary } from "@opencode-ai/util/binary"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -118,6 +119,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const providers = useProviders()
   const command = useCommand()
   const permission = usePermission()
+  const language = useLanguage()
   let editorRef!: HTMLDivElement
   let fileInputRef!: HTMLInputElement
   let scrollRef!: HTMLDivElement
@@ -998,8 +1000,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const currentAgent = local.agent.current()
     if (!currentModel || !currentAgent) {
       showToast({
-        title: "Select an agent and model",
-        description: "Choose an agent and model before sending a prompt.",
+        title: language.t("prompt.selectAgentModelTitle"),
+        description: language.t("prompt.selectAgentModelDescription"),
       })
       return
     }
@@ -1010,7 +1012,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         if (data?.message) return data.message
       }
       if (err instanceof Error) return err.message
-      return "Request failed"
+      return language.t("common.requestFailed")
     }
 
     addToHistory(currentPrompt, mode)
@@ -1031,7 +1033,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           .then((x) => x.data)
           .catch((err) => {
             showToast({
-              title: "Failed to create worktree",
+              title: language.t("prompt.failedCreateWorktree"),
               description: errorMessage(err),
             })
             return undefined
@@ -1039,8 +1041,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
         if (!createdWorktree?.directory) {
           showToast({
-            title: "Failed to create worktree",
-            description: "Request failed",
+            title: language.t("prompt.failedCreateWorktree"),
+            description: language.t("common.requestFailed"),
           })
           return
         }
@@ -1115,7 +1117,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         })
         .catch((err) => {
           showToast({
-            title: "Failed to send shell command",
+            title: language.t("prompt.failedSendShell"),
             description: errorMessage(err),
           })
           restoreInput()
@@ -1147,7 +1149,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           })
           .catch((err) => {
             showToast({
-              title: "Failed to send command",
+              title: language.t("prompt.failedSendCommand"),
               description: errorMessage(err),
             })
             restoreInput()
@@ -1315,7 +1317,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
       .catch((err) => {
         showToast({
-          title: "Failed to send prompt",
+          title: language.t("prompt.failedSendPrompt"),
           description: errorMessage(err),
         })
         removeOptimisticMessage()
@@ -1339,7 +1341,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <Match when={store.popover === "at"}>
               <Show
                 when={atFlat().length > 0}
-                fallback={<div class="text-text-weak px-2 py-1">No matching results</div>}
+                fallback={<div class="text-text-weak px-2 py-1">{language.t("prompt.noMatches")}</div>}
               >
                 <For each={atFlat().slice(0, 10)}>
                   {(item) => (
@@ -1385,7 +1387,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <Match when={store.popover === "slash"}>
               <Show
                 when={slashFlat().length > 0}
-                fallback={<div class="text-text-weak px-2 py-1">No matching commands</div>}
+                fallback={<div class="text-text-weak px-2 py-1">{language.t("prompt.noCommands")}</div>}
               >
                 <For each={slashFlat()}>
                   {(cmd) => (
@@ -1407,7 +1409,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <div class="flex items-center gap-2 shrink-0">
                         <Show when={cmd.type === "custom"}>
                           <span class="text-11-regular text-text-subtle px-1.5 py-0.5 bg-surface-base rounded">
-                            custom
+                            {language.t("prompt.customCommand")}
                           </span>
                         </Show>
                         <Show when={command.keybind(cmd.id)}>
@@ -1436,7 +1438,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <div class="absolute inset-0 z-10 flex items-center justify-center bg-surface-raised-stronger-non-alpha/90 pointer-events-none">
             <div class="flex flex-col items-center gap-2 text-text-weak">
               <Icon name="photo" class="size-8" />
-              <span class="text-14-regular">Drop images or PDFs here</span>
+              <span class="text-14-regular">{language.t("prompt.dropFiles")}</span>
             </div>
           </div>
         </Show>
@@ -1449,7 +1451,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <div class="flex items-center text-12-regular min-w-0">
                     <span class="text-text-weak whitespace-nowrap truncate min-w-0">{getDirectory(path())}</span>
                     <span class="text-text-strong whitespace-nowrap">{getFilename(path())}</span>
-                    <span class="text-text-weak whitespace-nowrap ml-1">active</span>
+                    <span class="text-text-weak whitespace-nowrap ml-1">{language.t("prompt.active")}</span>
                   </div>
                   <IconButton
                     type="button"
@@ -1468,7 +1470,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 onClick={() => prompt.context.addActive()}
               >
                 <Icon name="plus-small" size="small" />
-                <span>Include active file</span>
+                <span>{language.t("prompt.includeActiveFile")}</span>
               </button>
             </Show>
             <For each={prompt.context.items()}>
@@ -1561,8 +1563,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <Show when={!prompt.dirty()}>
             <div class="absolute top-0 inset-x-0 px-5 py-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {store.mode === "shell"
-                ? "Enter shell command..."
-                : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
+                ? language.t("prompt.shellPlaceholder")
+                : language.t("prompt.askAnything", { example: PLACEHOLDERS[store.placeholder] })}
             </div>
           </Show>
         </div>
@@ -1572,12 +1574,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               <Match when={store.mode === "shell"}>
                 <div class="flex items-center gap-2 px-2 h-6">
                   <Icon name="console" size="small" class="text-icon-primary" />
-                  <span class="text-12-regular text-text-primary">Shell</span>
-                  <span class="text-12-regular text-text-weak">esc to exit</span>
+                  <span class="text-12-regular text-text-primary">{language.t("prompt.shellMode")}</span>
+                  <span class="text-12-regular text-text-weak">{language.t("prompt.shellExitHint")}</span>
                 </div>
               </Match>
               <Match when={store.mode === "normal"}>
-                <TooltipKeybind placement="top" title="Cycle agent" keybind={command.keybind("agent.cycle")}>
+                <TooltipKeybind
+                  placement="top"
+                  title={language.t("command.title.cycleAgent")}
+                  keybind={command.keybind("agent.cycle")}
+                >
                   <Select
                     options={local.agent.list().map((agent) => agent.name)}
                     current={local.agent.current()?.name ?? ""}
@@ -1589,24 +1595,32 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <Show
                   when={providers.paid().length > 0}
                   fallback={
-                    <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
+                    <TooltipKeybind
+                      placement="top"
+                      title={language.t("command.title.chooseModel")}
+                      keybind={command.keybind("model.choose")}
+                    >
                       <Button as="div" variant="ghost" onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}>
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                         </Show>
-                        {local.model.current()?.name ?? "Select model"}
+                        {local.model.current()?.name ?? language.t("dialog.selectModel")}
                         <Icon name="chevron-down" size="small" />
                       </Button>
                     </TooltipKeybind>
                   }
                 >
                   <ModelSelectorPopover>
-                    <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
+                    <TooltipKeybind
+                      placement="top"
+                      title={language.t("command.title.chooseModel")}
+                      keybind={command.keybind("model.choose")}
+                    >
                       <Button as="div" variant="ghost">
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                         </Show>
-                        {local.model.current()?.name ?? "Select model"}
+                        {local.model.current()?.name ?? language.t("dialog.selectModel")}
                         <Icon name="chevron-down" size="small" />
                       </Button>
                     </TooltipKeybind>
@@ -1615,7 +1629,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <Show when={local.model.variant.list().length > 0}>
                   <TooltipKeybind
                     placement="top"
-                    title="Thinking effort"
+                    title={language.t("command.title.cycleThinking")}
                     keybind={command.keybind("model.variant.cycle")}
                   >
                     <Button
@@ -1623,14 +1637,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       class="text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-12-regular"
                       onClick={() => local.model.variant.cycle()}
                     >
-                      {local.model.variant.current() ?? "Default"}
+                      {local.model.variant.current() ?? language.t("model.defaultVariant")}
                     </Button>
                   </TooltipKeybind>
                 </Show>
                 <Show when={permission.permissionsEnabled() && params.id}>
                   <TooltipKeybind
                     placement="top"
-                    title="Auto-accept edits"
+                    title={language.t("command.title.autoAcceptEdits")}
                     keybind={command.keybind("permissions.autoaccept")}
                   >
                     <Button
@@ -1668,7 +1682,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <div class="flex items-center gap-2">
               <SessionContextUsage />
               <Show when={store.mode === "normal"}>
-                <Tooltip placement="top" value="Attach file">
+                <Tooltip placement="top" value={language.t("prompt.attachFile")}>
                   <Button type="button" variant="ghost" class="size-6" onClick={() => fileInputRef.click()}>
                     <Icon name="photo" class="size-4.5" />
                   </Button>
@@ -1682,13 +1696,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <Switch>
                   <Match when={working()}>
                     <div class="flex items-center gap-2">
-                      <span>Stop</span>
+                      <span>{language.t("common.stop")}</span>
                       <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
                     </div>
                   </Match>
                   <Match when={true}>
                     <div class="flex items-center gap-2">
-                      <span>Send</span>
+                      <span>{language.t("common.send")}</span>
                       <Icon name="enter" size="small" class="text-icon-base" />
                     </div>
                   </Match>

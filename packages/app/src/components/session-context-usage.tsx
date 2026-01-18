@@ -7,6 +7,7 @@ import { AssistantMessage } from "@opencode-ai/sdk/v2/client"
 
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
+import { useLanguage } from "@/context/language"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
@@ -16,6 +17,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const sync = useSync()
   const params = useParams()
   const layout = useLayout()
+  const language = useLanguage()
 
   const variant = createMemo(() => props.variant ?? "button")
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
@@ -67,21 +69,21 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
           <>
             <div class="flex items-center gap-2">
               <span class="text-text-invert-strong">{ctx().tokens}</span>
-              <span class="text-text-invert-base">Tokens</span>
+              <span class="text-text-invert-base">{language.t("context.tokens")}</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="text-text-invert-strong">{ctx().percentage ?? 0}%</span>
-              <span class="text-text-invert-base">Usage</span>
+              <span class="text-text-invert-base">{language.t("context.usage")}</span>
             </div>
           </>
         )}
       </Show>
       <div class="flex items-center gap-2">
         <span class="text-text-invert-strong">{cost()}</span>
-        <span class="text-text-invert-base">Cost</span>
+        <span class="text-text-invert-base">{language.t("context.cost")}</span>
       </div>
       <Show when={variant() === "button"}>
-        <div class="text-11-regular text-text-invert-base mt-1">Click to view context</div>
+        <div class="text-11-regular text-text-invert-base mt-1">{language.t("context.clickToView")}</div>
       </Show>
     </div>
   )

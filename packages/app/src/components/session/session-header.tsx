@@ -19,6 +19,7 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Popover } from "@opencode-ai/ui/popover"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Keybind } from "@opencode-ai/ui/keybind"
+import { useLanguage } from "@/context/language"
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
@@ -29,6 +30,7 @@ export function SessionHeader() {
   // const dialog = useDialog()
   const sync = useSync()
   const platform = usePlatform()
+  const language = useLanguage()
 
   const projectDirectory = createMemo(() => base64Decode(params.dir ?? ""))
   const project = createMemo(() => {
@@ -136,7 +138,7 @@ export function SessionHeader() {
               <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
                 <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
                 <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate h-4.5 flex items-center">
-                  Search {name()}
+                  {language.t("session.searchProject", { project: name() })}
                 </span>
               </div>
 
@@ -175,7 +177,7 @@ export function SessionHeader() {
                 <Show when={currentSession()?.summary?.files}>
                   <TooltipKeybind
                     class="hidden md:block shrink-0"
-                    title="Toggle review"
+                    title={language.t("review.toggle")}
                     keybind={command.keybind("review.toggle")}
                   >
                     <Button
@@ -205,7 +207,7 @@ export function SessionHeader() {
                 </Show>
                 <TooltipKeybind
                   class="hidden md:block shrink-0"
-                  title="Toggle terminal"
+                  title={language.t("terminal.toggle")}
                   keybind={command.keybind("terminal.toggle")}
                 >
                   <Button
@@ -243,13 +245,13 @@ export function SessionHeader() {
                         : "Share session publicly on the web. It will be accessible to anyone with the link."
                     }
                     trigger={
-                      <Tooltip class="shrink-0" value="Share session">
+                      <Tooltip class="shrink-0" value={language.t("session.share")}>
                         <Button
                           variant="secondary"
                           classList={{ "rounded-r-none": shareUrl() !== undefined }}
                           style={{ scale: 1 }}
                         >
-                          Share
+                          {language.t("session.share")}
                         </Button>
                       </Tooltip>
                     }

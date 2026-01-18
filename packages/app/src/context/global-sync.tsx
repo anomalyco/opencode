@@ -24,6 +24,7 @@ import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { useGlobalSDK } from "./global-sdk"
 import { ErrorPage, type InitError } from "../pages/error"
+import { useLanguage } from "./language"
 import {
   batch,
   createContext,
@@ -91,6 +92,7 @@ type VcsCache = {
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()
+  const language = useLanguage()
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
   const vcsCache = new Map<string, VcsCache>()
@@ -189,7 +191,10 @@ function createGlobalSync() {
       .catch((err) => {
         console.error("Failed to load sessions", err)
         const project = getFilename(directory)
-        showToast({ title: `Failed to load sessions for ${project}`, description: err.message })
+        showToast({
+          title: language.t("session.loadFailed", { project }),
+          description: err.message,
+        })
       })
   }
 
