@@ -9,6 +9,8 @@ import { Truncate } from "../tool/truncation"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_PM from "./prompt/pm.txt"
+import PROMPT_ORCHESTRATOR from "./prompt/orchestrator.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
@@ -79,6 +81,7 @@ export namespace Agent {
           }),
           user,
         ),
+        prompt: PROMPT_PM,
         mode: "primary",
         native: true,
       },
@@ -101,6 +104,7 @@ export namespace Agent {
           }),
           user,
         ),
+        prompt: PROMPT_PM,
         mode: "primary",
         native: true,
       },
@@ -144,6 +148,25 @@ export namespace Agent {
         prompt: PROMPT_EXPLORE,
         options: {},
         mode: "subagent",
+        native: true,
+      },
+      orchestrator: {
+        name: "orchestrator",
+        description:
+          "Task-scoped orchestrator for complex multi-step implementations. Spawned by PM for specific tasks. Uses Contract Protocol with @investigator, @tasker, @auditor workflow. Returns to PM via finish_task tool.",
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+            finish_task: "allow",
+            todoread: "deny",
+            todowrite: "deny",
+          }),
+          user,
+        ),
+        prompt: PROMPT_ORCHESTRATOR,
+        options: {},
+        mode: "orchestrator",
         native: true,
       },
       compaction: {
