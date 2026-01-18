@@ -39,7 +39,8 @@
     "gettingStarted": "开始使用",
     "gettingStartedDesc1": "OpenCode 包含免费模型，您可以立即开始使用。",
     "gettingStartedDesc2": "连接任何提供商以使用模型，包括 Claude、GPT、Gemini 等。",
-    "recentSessions": "最近会话"
+    "recentSessions": "最近会话",
+    "viewAllSessions": "查看全部会话"
   },
   "session": {
     "new": "新会话",

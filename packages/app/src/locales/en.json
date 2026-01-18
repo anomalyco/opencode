@@ -39,7 +39,8 @@
     "gettingStarted": "Getting started",
     "gettingStartedDesc1": "OpenCode includes free models so you can start immediately.",
     "gettingStartedDesc2": "Connect any provider to use models, including Claude, GPT, Gemini, etc.",
-    "recentSessions": "Recent sessions"
+    "recentSessions": "Recent sessions",
+    "viewAllSessions": "View all sessions"
   },
   "session": {
     "new": "New session",
