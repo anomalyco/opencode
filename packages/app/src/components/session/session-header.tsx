@@ -133,14 +133,14 @@ export function SessionHeader() {
               class="hidden md:flex w-[320px] p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
               onClick={() => command.trigger("file.open")}
             >
-              <div class="flex items-center gap-2">
-                <Icon name="magnifying-glass" size="normal" class="icon-base" />
-                <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate h-3.5 flex items-center overflow-visible">
+              <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
+                <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
+                <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate h-4.5 flex items-center">
                   Search {name()}
                 </span>
               </div>
 
-              <Show when={hotkey()}>{(keybind) => <Keybind>{keybind()}</Keybind>}</Show>
+              <Show when={hotkey()}>{(keybind) => <Keybind class="shrink-0">{keybind()}</Keybind>}</Show>
             </button>
           </Portal>
         )}
