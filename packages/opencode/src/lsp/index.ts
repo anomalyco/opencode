@@ -10,7 +10,11 @@ import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
-import { SessionRetry } from "../session/retry"
+
+// Backoff constants (inlined to avoid circular dependency with SessionRetry)
+const RETRY_INITIAL_DELAY = 2000
+const RETRY_BACKOFF_FACTOR = 2
+const RETRY_MAX_DELAY = 30_000
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -189,8 +193,11 @@ export namespace LSP {
     const now = Date.now()
     const elapsed = now - brokenEntry.failTime
 
-    // Calculate exponential backoff delay
-    const retryDelay = SessionRetry.delay(brokenEntry.attemptCount)
+    // Calculate exponential backoff delay (inlined to avoid circular dependency)
+    const retryDelay = Math.min(
+      RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, brokenEntry.attemptCount - 1),
+      RETRY_MAX_DELAY,
+    )
 
     if (elapsed >= retryDelay) {
       // Time to retry - remove from broken set
