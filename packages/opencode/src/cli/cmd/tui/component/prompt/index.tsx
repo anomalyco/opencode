@@ -210,10 +210,7 @@ export function Prompt(props: PromptProps) {
           if (autocomplete.visible) return
           if (!input.focused) return
           // TODO: this should be its own command
-          if (store.mode === "shell") {
-            setStore("mode", "normal")
-            return
-          }
+
           if (!props.sessionID) return
 
           setStore("interrupt", store.interrupt + 1)
@@ -548,13 +545,8 @@ export function Prompt(props: PromptProps) {
     const variant = local.model.variant.current()
 
     // Determine routing based on execution mode
-    // The old `!` prefix shell mode (store.mode === "shell") takes precedence
-    // Then check the execution mode for Auto/Shell/Agent routing
-    let shouldRouteToShell = store.mode === "shell"
-    if (!shouldRouteToShell && store.mode === "normal") {
-      const routing = await determineRouting(inputText)
-      shouldRouteToShell = routing === "shell"
-    }
+    const routing = await determineRouting(inputText)
+    const shouldRouteToShell = routing === "shell"
 
     if (shouldRouteToShell) {
       sdk.client.session.shell({
@@ -566,9 +558,6 @@ export function Prompt(props: PromptProps) {
         },
         command: inputText,
       })
-      if (store.mode === "shell") {
-        setStore("mode", "normal")
-      }
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
@@ -719,7 +708,7 @@ export function Prompt(props: PromptProps) {
 
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
-    if (store.mode === "shell") return theme.primary
+
     // Use execution mode color when in Shell mode
     const mode = executionMode.mode()
     if (mode === ExecutionMode.Shell) return theme.secondary
@@ -950,18 +939,7 @@ export function Prompt(props: PromptProps) {
                         return
                       }
                     }
-                    if (e.name === "!" && input.visualCursor.offset === 0) {
-                      setStore("mode", "shell")
-                      e.preventDefault()
-                      return
-                    }
-                    if (store.mode === "shell") {
-                      if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
-                        setStore("mode", "normal")
-                        e.preventDefault()
-                        return
-                      }
-                    }
+
                     if (store.mode === "normal") autocomplete.onKeyDown(e)
                     if (!autocomplete.visible) {
                       if (
@@ -1074,7 +1052,7 @@ export function Prompt(props: PromptProps) {
             </box>
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
               <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                {Locale.titlecase(local.agent.current().name)}{" "}
               </text>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
