@@ -64,4 +64,4 @@ body:
       description: what terminal are you using?
       placeholder: e.g., iTerm2, Ghostty, Alacritty, Windows Terminal
     validations:
-      required: false
+      required: ort
