@@ -122,7 +122,7 @@ export namespace Whisper {
       form.append("prompt", prompt)
     }
 
-    const url = whisper?.url ?? "http://127.0.0.1:5000/v1/audio/transcriptions"
+    const url = whisper?.url ?? "https://api.openai.com/v1/audio/transcriptions"
     console.log("whisper request", {
       url,
       model: whisper?.model ?? "whisper-1",
