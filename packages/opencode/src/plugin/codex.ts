@@ -7,7 +7,7 @@ const log = Log.create({ service: "plugin.codex" })
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
-const CODEX_API_BASE = "https://chatgpt.com/backend-api/codex"
+const CODEX_API_BASE = "https://chatgpt.com/backend-api/codex/v1"
 const OAUTH_PORT = 1455
 
 interface PkceCodes {
