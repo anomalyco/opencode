@@ -27,11 +27,15 @@ export function DialogEditProject(props: { project: LocalProject }) {
   })
 
   const [dragOver, setDragOver] = createSignal(false)
+  const [iconHover, setIconHover] = createSignal(false)
 
   function handleFileSelect(file: File) {
     if (!file.type.startsWith("image/")) return
     const reader = new FileReader()
-    reader.onload = (e) => setStore("iconUrl", e.target?.result as string)
+    reader.onload = (e) => {
+      setStore("iconUrl", e.target?.result as string)
+      setIconHover(false)
+    }
     reader.readAsDataURL(file)
   }
 
@@ -92,9 +96,9 @@ export function DialogEditProject(props: { project: LocalProject }) {
           <div class="flex flex-col gap-2">
             <label class="text-12-medium text-text-weak">Icon</label>
             <div class="flex gap-3 items-start">
-              <div class="relative">
+              <div class="relative" onMouseEnter={() => setIconHover(true)} onMouseLeave={() => setIconHover(false)}>
                 <div
-                  class="size-16 rounded-md transition-colors cursor-pointer"
+                  class="relative size-16 rounded-md transition-colors cursor-pointer"
                   classList={{
                     "border-text-interactive-base bg-surface-info-base/20": dragOver(),
                     "border-border-base hover:border-border-strong": !dragOver(),
@@ -103,7 +107,13 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
-                  onClick={() => document.getElementById("icon-upload")?.click()}
+                  onClick={() => {
+                    if (store.iconUrl && iconHover()) {
+                      clearIcon()
+                    } else {
+                      document.getElementById("icon-upload")?.click()
+                    }
+                  }}
                 >
                   <Show
                     when={store.iconUrl}
@@ -120,15 +130,44 @@ export function DialogEditProject(props: { project: LocalProject }) {
                     <img src={store.iconUrl} alt="Project icon" class="size-full object-cover" />
                   </Show>
                 </div>
-                <Show when={store.iconUrl}>
-                  <button
-                    type="button"
-                    class="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-surface-raised-base border border-border-base flex items-center justify-center hover:bg-surface-raised-base-hover"
-                    onClick={clearIcon}
-                  >
-                    <Icon name="close" class="size-3 text-icon-base" />
-                  </button>
-                </Show>
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "64px",
+                    height: "64px",
+                    background: "rgba(0,0,0,0.6)",
+                    "border-radius": "6px",
+                    "z-index": 10,
+                    "pointer-events": "none",
+                    opacity: iconHover() && !store.iconUrl ? 1 : 0,
+                    display: "flex",
+                    "align-items": "center",
+                    "justify-content": "center",
+                  }}
+                >
+                  <Icon name="cloud-upload" size="large" class="text-icon-invert-base" />
+                </div>
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "64px",
+                    height: "64px",
+                    background: "rgba(0,0,0,0.6)",
+                    "border-radius": "6px",
+                    "z-index": 10,
+                    "pointer-events": "none",
+                    opacity: iconHover() && store.iconUrl ? 1 : 0,
+                    display: "flex",
+                    "align-items": "center",
+                    "justify-content": "center",
+                  }}
+                >
+                  <Icon name="trash" size="large" class="text-icon-invert-base" />
+                </div>
               </div>
               <input id="icon-upload" type="file" accept="image/*" class="hidden" onChange={handleInputChange} />
               <div class="flex flex-col gap-1.5 text-12-regular text-text-weak self-center">
