@@ -205,6 +205,16 @@ export interface Hooks {
     },
   ) => Promise<void>
   /**
+   * Called before a session is created. Allows plugins to customize
+   * session creation, including setting a custom working directory.
+   *
+   * - `directory`: The working directory for the session (defaults to Instance.directory)
+   */
+  "session.creating"?: (
+    input: { sessionID: string; parentID?: string },
+    output: { directory: string },
+  ) => Promise<void>
+  /**
    * Called before session compaction starts. Allows plugins to customize
    * the compaction prompt.
    *

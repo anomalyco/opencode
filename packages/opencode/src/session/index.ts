@@ -18,6 +18,7 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
+import { Plugin } from "@/plugin"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
@@ -136,9 +137,19 @@ export namespace Session {
       })
       .optional(),
     async (input) => {
+      const sessionID = Identifier.ascending("session")
+      
+      // Allow plugins to customize session creation (e.g., set custom directory)
+      const creating = await Plugin.trigger(
+        "session.creating",
+        { sessionID, parentID: input?.parentID },
+        { directory: Instance.directory },
+      )
+      
       return createNext({
+        id: sessionID,
         parentID: input?.parentID,
-        directory: Instance.directory,
+        directory: creating.directory,
         title: input?.title,
         permission: input?.permission,
       })
