@@ -35,7 +35,7 @@ export namespace ZenData {
     cost200K: ModelCostSchema.optional(),
     allowAnonymous: z.boolean().optional(),
     byokProvider: z.enum(["openai", "anthropic", "google"]).optional(),
-    stickyProvider: z.boolean().optional(),
+    stickyProvider: z.enum(["strict", "prefer"]).optional(),
     trial: TrialSchema.optional(),
     rateLimit: z.number().optional(),
     fallbackProvider: z.string().optional(),

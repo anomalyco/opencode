@@ -419,7 +419,6 @@ export default function Page() {
     {
       id: "session.new",
       title: "New session",
-      description: "Create a new session",
       category: "Session",
       keybind: "mod+shift+s",
       slash: "new",
@@ -437,7 +436,7 @@ export default function Page() {
     {
       id: "terminal.toggle",
       title: "Toggle terminal",
-      description: "Show or hide the terminal",
+      description: "",
       category: "View",
       keybind: "ctrl+`",
       slash: "terminal",
@@ -446,7 +445,7 @@ export default function Page() {
     {
       id: "review.toggle",
       title: "Toggle review",
-      description: "Show or hide the review panel",
+      description: "",
       category: "View",
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
@@ -534,10 +533,6 @@ export default function Page() {
       keybind: "shift+mod+t",
       onSelect: () => {
         local.model.variant.cycle()
-        showToast({
-          title: "Thinking effort changed",
-          description: "The thinking effort has been changed to " + (local.model.variant.current() ?? "Default"),
-        })
       },
     },
     {
@@ -655,6 +650,72 @@ export default function Page() {
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: () => dialog.show(() => <DialogFork />),
     },
+    ...(sync.data.config.share !== "disabled"
+      ? [
+          {
+            id: "session.share",
+            title: "Share session",
+            description: "Share this session and copy the URL to clipboard",
+            category: "Session",
+            slash: "share",
+            disabled: !params.id || !!info()?.share?.url,
+            onSelect: async () => {
+              if (!params.id) return
+              await sdk.client.session
+                .share({ sessionID: params.id })
+                .then((res) => {
+                  navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
+                    showToast({
+                      title: "Failed to copy URL to clipboard",
+                      variant: "error",
+                    }),
+                  )
+                })
+                .then(() =>
+                  showToast({
+                    title: "Session shared",
+                    description: "Share URL copied to clipboard!",
+                    variant: "success",
+                  }),
+                )
+                .catch(() =>
+                  showToast({
+                    title: "Failed to share session",
+                    description: "An error occurred while sharing the session",
+                    variant: "error",
+                  }),
+                )
+            },
+          },
+          {
+            id: "session.unshare",
+            title: "Unshare session",
+            description: "Stop sharing this session",
+            category: "Session",
+            slash: "unshare",
+            disabled: !params.id || !info()?.share?.url,
+            onSelect: async () => {
+              if (!params.id) return
+              await sdk.client.session
+                .unshare({ sessionID: params.id })
+                .then(() =>
+                  showToast({
+                    title: "Session unshared",
+                    description: "Session unshared successfully!",
+                    variant: "success",
+                  }),
+                )
+                .catch(() =>
+                  showToast({
+                    title: "Failed to unshare session",
+                    description: "An error occurred while unsharing the session",
+                    variant: "error",
+                  }),
+                )
+            },
+          },
+        ]
+      : []),
   ])
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -1092,7 +1153,7 @@ export default function Page() {
                               file.load(path)
                             }}
                             classes={{
-                              root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
+                              root: "pb-[calc(var(--prompt-height,8rem)+24px)]",
                               header: "px-4",
                               container: "px-4",
                             }}
@@ -1238,7 +1299,7 @@ export default function Page() {
           {/* Prompt input */}
           <div
             ref={(el) => (promptDock = el)}
-            class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-8 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+            class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-6 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
           >
             <div
               classList={{

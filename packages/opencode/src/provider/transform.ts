@@ -16,30 +16,33 @@ function mimeToModality(mime: string): Modality | undefined {
 }
 
 export namespace ProviderTransform {
+  // Maps npm package to the key the AI SDK expects for providerOptions
+  function sdkKey(npm: string): string | undefined {
+    switch (npm) {
+      case "@ai-sdk/github-copilot":
+      case "@ai-sdk/openai":
+      case "@ai-sdk/azure":
+        return "openai"
+      case "@ai-sdk/amazon-bedrock":
+        return "bedrock"
+      case "@ai-sdk/anthropic":
+        return "anthropic"
+      case "@ai-sdk/google-vertex":
+      case "@ai-sdk/google":
+        return "google"
+      case "@ai-sdk/gateway":
+        return "gateway"
+      case "@openrouter/ai-sdk-provider":
+        return "openrouter"
+    }
+    return undefined
+  }
+
   function normalizeMessages(
     msgs: ModelMessage[],
     model: Provider.Model,
     options: Record<string, unknown>,
   ): ModelMessage[] {
-    // Strip openai itemId metadata following what codex does
-    if (model.api.npm === "@ai-sdk/openai" || options.store === false) {
-      msgs = msgs.map((msg) => {
-        if (msg.providerOptions?.openai) {
-          delete msg.providerOptions.openai["itemId"]
-        }
-        if (!Array.isArray(msg.content)) {
-          return msg
-        }
-        const content = msg.content.map((part) => {
-          if (part.providerOptions?.openai) {
-            delete part.providerOptions.openai["itemId"]
-          }
-          return part
-        })
-        return { ...msg, content } as typeof msg
-      })
-    }
-
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
     if (model.api.npm === "@ai-sdk/anthropic") {
@@ -253,6 +256,28 @@ export namespace ProviderTransform {
       msgs = applyCaching(msgs, model.providerID)
     }
 
+    // Remap providerOptions keys from stored providerID to expected SDK key
+    const key = sdkKey(model.api.npm)
+    if (key && key !== model.providerID && model.api.npm !== "@ai-sdk/azure") {
+      const remap = (opts: Record<string, any> | undefined) => {
+        if (!opts) return opts
+        if (!(model.providerID in opts)) return opts
+        const result = { ...opts }
+        result[key] = result[model.providerID]
+        delete result[model.providerID]
+        return result
+      }
+
+      msgs = msgs.map((msg) => {
+        if (!Array.isArray(msg.content)) return { ...msg, providerOptions: remap(msg.providerOptions) }
+        return {
+          ...msg,
+          providerOptions: remap(msg.providerOptions),
+          content: msg.content.map((part) => ({ ...part, providerOptions: remap(part.providerOptions) })),
+        } as typeof msg
+      })
+    }
+
     return msgs
   }
 
@@ -300,14 +325,41 @@ export namespace ProviderTransform {
     const id = model.id.toLowerCase()
     if (id.includes("deepseek") || id.includes("minimax") || id.includes("glm") || id.includes("mistral")) return {}
 
+    // see: https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
+    if (id.includes("grok") && id.includes("grok-3-mini")) {
+      if (model.api.npm === "@openrouter/ai-sdk-provider") {
+        return {
+          low: { reasoning: { effort: "low" } },
+          high: { reasoning: { effort: "high" } },
+        }
+      }
+      return {
+        low: { reasoningEffort: "low" },
+        high: { reasoningEffort: "high" },
+      }
+    }
+    if (id.includes("grok")) return {}
+
     switch (model.api.npm) {
       case "@openrouter/ai-sdk-provider":
-        if (!model.id.includes("gpt") && !model.id.includes("gemini-3") && !model.id.includes("grok-4")) return {}
+        if (!model.id.includes("gpt") && !model.id.includes("gemini-3")) return {}
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
 
       // TODO: YOU CANNOT SET max_tokens if this is set!!!
       case "@ai-sdk/gateway":
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+
+      case "@ai-sdk/github-copilot":
+        return Object.fromEntries(
+          WIDELY_SUPPORTED_EFFORTS.map((effort) => [
+            effort,
+            {
+              reasoningEffort: effort,
+              reasoningSummary: "auto",
+              include: ["reasoning.encrypted_content"],
+            },
+          ]),
+        )
 
       case "@ai-sdk/cerebras":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cerebras
@@ -484,7 +536,11 @@ export namespace ProviderTransform {
     const result: Record<string, any> = {}
 
     // openai and providers using openai package should set store to false by default.
-    if (input.model.providerID === "openai" || input.model.api.npm === "@ai-sdk/openai") {
+    if (
+      input.model.providerID === "openai" ||
+      input.model.api.npm === "@ai-sdk/openai" ||
+      input.model.api.npm === "@ai-sdk/github-copilot"
+    ) {
       result["store"] = false
     }
 
@@ -570,39 +626,8 @@ export namespace ProviderTransform {
   }
 
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
-    switch (model.api.npm) {
-      case "@ai-sdk/github-copilot":
-      case "@ai-sdk/openai":
-      case "@ai-sdk/azure":
-        return {
-          ["openai" as string]: options,
-        }
-      case "@ai-sdk/amazon-bedrock":
-        return {
-          ["bedrock" as string]: options,
-        }
-      case "@ai-sdk/anthropic":
-        return {
-          ["anthropic" as string]: options,
-        }
-      case "@ai-sdk/google-vertex":
-      case "@ai-sdk/google":
-        return {
-          ["google" as string]: options,
-        }
-      case "@ai-sdk/gateway":
-        return {
-          ["gateway" as string]: options,
-        }
-      case "@openrouter/ai-sdk-provider":
-        return {
-          ["openrouter" as string]: options,
-        }
-      default:
-        return {
-          [model.providerID]: options,
-        }
-    }
+    const key = sdkKey(model.api.npm) ?? model.providerID
+    return { [key]: options }
   }
 
   export function maxOutputTokens(
