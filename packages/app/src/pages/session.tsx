@@ -1,4 +1,4 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on, createSignal } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -167,6 +167,7 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
   const permission = usePermission()
+  const [pendingMessage, setPendingMessage] = createSignal<string | undefined>(undefined)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
@@ -943,17 +944,30 @@ export default function Page() {
     window.history.replaceState(null, "", `#${anchor(id)}`)
   }
 
+  createEffect(() => {
+    const sessionID = params.id
+    if (!sessionID) return
+    const raw = sessionStorage.getItem("opencode.pendingMessage")
+    if (!raw) return
+    const parts = raw.split("|")
+    const pendingSessionID = parts[0]
+    const messageID = parts[1]
+    if (!pendingSessionID || !messageID) return
+    if (pendingSessionID !== sessionID) return
+
+    sessionStorage.removeItem("opencode.pendingMessage")
+    setPendingMessage(messageID)
+  })
+
   const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
     const root = scroller
-    if (!root) {
-      el.scrollIntoView({ behavior, block: "start" })
-      return
-    }
+    if (!root) return false
 
     const a = el.getBoundingClientRect()
     const b = root.getBoundingClientRect()
     const top = a.top - b.top + root.scrollTop
     root.scrollTo({ top, behavior })
+    return true
   }
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
@@ -967,7 +981,15 @@ export default function Page() {
 
       requestAnimationFrame(() => {
         const el = document.getElementById(anchor(message.id))
-        if (el) scrollToElement(el, behavior)
+        if (!el) {
+          requestAnimationFrame(() => {
+            const next = document.getElementById(anchor(message.id))
+            if (!next) return
+            scrollToElement(next, behavior)
+          })
+          return
+        }
+        scrollToElement(el, behavior)
       })
 
       updateHash(message.id)
@@ -975,8 +997,55 @@ export default function Page() {
     }
 
     const el = document.getElementById(anchor(message.id))
-    if (el) scrollToElement(el, behavior)
+    if (!el) {
+      updateHash(message.id)
+      requestAnimationFrame(() => {
+        const next = document.getElementById(anchor(message.id))
+        if (!next) return
+        if (!scrollToElement(next, behavior)) return
+      })
+      return
+    }
+    if (scrollToElement(el, behavior)) {
+      updateHash(message.id)
+      return
+    }
+
+    requestAnimationFrame(() => {
+      const next = document.getElementById(anchor(message.id))
+      if (!next) return
+      if (!scrollToElement(next, behavior)) return
+    })
     updateHash(message.id)
+  }
+
+  const applyHash = (behavior: ScrollBehavior) => {
+    const hash = window.location.hash.slice(1)
+    if (!hash) {
+      autoScroll.forceScrollToBottom()
+      return
+    }
+
+    const match = hash.match(/^message-(.+)$/)
+    if (match) {
+      const msg = visibleUserMessages().find((m) => m.id === match[1])
+      if (msg) {
+        scrollToMessage(msg, behavior)
+        return
+      }
+
+      // If we have a message hash but the message isn't loaded/rendered yet,
+      // don't fall back to "bottom". We'll retry once messages arrive.
+      return
+    }
+
+    const target = document.getElementById(hash)
+    if (target) {
+      scrollToElement(target, behavior)
+      return
+    }
+
+    autoScroll.forceScrollToBottom()
   }
 
   const getActiveMessageId = (container: HTMLDivElement) => {
@@ -1019,29 +1088,43 @@ export default function Page() {
     if (!sessionID || !ready) return
 
     requestAnimationFrame(() => {
-      const hash = window.location.hash.slice(1)
-      if (!hash) {
-        autoScroll.forceScrollToBottom()
-        return
-      }
-
-      const hashTarget = document.getElementById(hash)
-      if (hashTarget) {
-        scrollToElement(hashTarget, "auto")
-        return
-      }
-
-      const match = hash.match(/^message-(.+)$/)
-      if (match) {
-        const msg = visibleUserMessages().find((m) => m.id === match[1])
-        if (msg) {
-          scrollToMessage(msg, "auto")
-          return
-        }
-      }
-
-      autoScroll.forceScrollToBottom()
+      applyHash("auto")
     })
+  })
+
+  // Retry message navigation once the target message is actually loaded.
+  createEffect(() => {
+    const sessionID = params.id
+    const ready = messagesReady()
+    if (!sessionID || !ready) return
+
+    // dependencies
+    visibleUserMessages().length
+    store.turnStart
+
+    const targetId = pendingMessage() ?? (() => {
+      const hash = window.location.hash.slice(1)
+      const match = hash.match(/^message-(.+)$/)
+      if (!match) return undefined
+      return match[1]
+    })()
+    if (!targetId) return
+    if (store.messageId === targetId) return
+
+    const msg = visibleUserMessages().find((m) => m.id === targetId)
+    if (!msg) return
+    if (pendingMessage() === targetId) setPendingMessage(undefined)
+    requestAnimationFrame(() => scrollToMessage(msg, "auto"))
+  })
+
+  createEffect(() => {
+    const sessionID = params.id
+    const ready = messagesReady()
+    if (!sessionID || !ready) return
+
+    const handler = () => requestAnimationFrame(() => applyHash("auto"))
+    window.addEventListener("hashchange", handler)
+    onCleanup(() => window.removeEventListener("hashchange", handler))
   })
 
   createEffect(() => {

@@ -1429,10 +1429,11 @@ export default function Layout(props: ParentProps) {
                 getLabel={messageLabel}
                 onMessageSelect={(message) => {
                   if (!isActive()) {
-                    navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
+                    sessionStorage.setItem("opencode.pendingMessage", `${props.session.id}|${message.id}`)
+                    navigate(`${props.slug}/session/${props.session.id}`)
                     return
                   }
-                  window.location.hash = `message-${message.id}`
+                  window.history.replaceState(null, "", `#message-${message.id}`)
                   window.dispatchEvent(new HashChangeEvent("hashchange"))
                 }}
                 size="normal"
