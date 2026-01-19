@@ -35,6 +35,25 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     mouseActive: false,
   })
 
+  const scrollIntoView = (container: HTMLDivElement, node: HTMLElement, block: "center" | "nearest") => {
+    const containerRect = container.getBoundingClientRect()
+    const nodeRect = node.getBoundingClientRect()
+    const top = nodeRect.top - containerRect.top + container.scrollTop
+    const bottom = top + nodeRect.height
+    const viewTop = container.scrollTop
+    const viewBottom = viewTop + container.clientHeight
+    const target =
+      block === "center"
+        ? top - container.clientHeight / 2 + nodeRect.height / 2
+        : top < viewTop
+          ? top
+          : bottom > viewBottom
+            ? bottom - container.clientHeight
+            : viewTop
+    const max = Math.max(0, container.scrollHeight - container.clientHeight)
+    container.scrollTop = Math.max(0, Math.min(target, max))
+  }
+
   const { filter, grouped, flat, active, setActive, onKeyDown, onInput } = useFilteredList<T>(props)
 
   const searchProps = () => (typeof props.search === "object" ? props.search : {})
@@ -65,24 +84,31 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   )
 
   createEffect(() => {
-    if (!scrollRef()) return
+    const scroll = scrollRef()
+    if (!scroll) return
     if (!props.current) return
     const key = props.key(props.current)
     requestAnimationFrame(() => {
-      const element = scrollRef()?.querySelector(`[data-key="${CSS.escape(key)}"]`)
-      element?.scrollIntoView({ block: "center" })
+      const element = scroll.querySelector(`[data-key="${CSS.escape(key)}"]`)
+      if (!(element instanceof HTMLElement)) return
+      scrollIntoView(scroll, element, "center")
     })
   })
 
   createEffect(() => {
     const all = flat()
     if (store.mouseActive || all.length === 0) return
+    const scroll = scrollRef()
+    if (!scroll) return
     if (active() === props.key(all[0])) {
-      scrollRef()?.scrollTo(0, 0)
+      scroll.scrollTo(0, 0)
       return
     }
-    const element = scrollRef()?.querySelector(`[data-key="${CSS.escape(active()!)}"]`)
-    element?.scrollIntoView({ block: "center" })
+    const key = active()
+    if (!key) return
+    const element = scroll.querySelector(`[data-key="${CSS.escape(key)}"]`)
+    if (!(element instanceof HTMLElement)) return
+    scrollIntoView(scroll, element, "center")
   })
 
   createEffect(() => {
@@ -206,6 +232,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                           setActive(props.key(item))
                         }}
                         onMouseLeave={() => {
+                          if (!store.mouseActive) return
                           setActive(null)
                         }}
                       >
