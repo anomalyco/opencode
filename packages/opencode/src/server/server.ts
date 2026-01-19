@@ -49,9 +49,24 @@ export namespace Server {
 
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
+  let _generatedPassword: string | undefined
 
   export function url(): URL {
     return _url ?? new URL("http://localhost:4096")
+  }
+
+  export function getPassword(): string | undefined {
+    return _generatedPassword
+  }
+
+  function generateSecurePassword(): string {
+    // Generate a 32-character random password using crypto-safe random bytes
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
+    const bytes = new Uint8Array(32)
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes)
+      .map(byte => chars[byte % chars.length])
+      .join('')
   }
 
   export const Event = {
@@ -83,8 +98,26 @@ export namespace Server {
           })
         })
         .use((c, next) => {
-          const password = Flag.OPENCODE_SERVER_PASSWORD
-          if (!password) return next()
+          // Security Fix for CVE-2026-22812: Authentication is now mandatory
+          let password = Flag.OPENCODE_SERVER_PASSWORD
+          
+          // Generate a secure password if none is provided
+          if (!password) {
+            if (!_generatedPassword) {
+              _generatedPassword = generateSecurePassword()
+              log.info("⚠️  SECURITY: No OPENCODE_SERVER_PASSWORD set - generated random password")
+              log.info("═══════════════════════════════════════════════════════════")
+              log.info(`🔐 Server Password: ${_generatedPassword}`)
+              log.info(`👤 Server Username: opencode`)
+              log.info("═══════════════════════════════════════════════════════════")
+              log.info("💡 Set OPENCODE_SERVER_PASSWORD env var to use a custom password")
+            }
+            password = _generatedPassword
+          } else {
+            // Clear generated password if custom password is set
+            _generatedPassword = undefined
+          }
+          
           const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
           return basicAuth({ username, password })(c, next)
         })
