@@ -61,7 +61,13 @@ export function DialogHelp() {
           scroll = r
         }}
         height={height()}
-        scrollbarOptions={{ visible: false }}
+        scrollbarOptions={{
+          visible: true,
+          trackOptions: {
+            backgroundColor: theme.backgroundPanel,
+            foregroundColor: theme.border,
+          },
+        }}
       >
         <For each={commands}>
           {(cmd) => (

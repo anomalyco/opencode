@@ -112,7 +112,13 @@ export function DialogStatus() {
           scroll = r
         }}
         height={height()}
-        scrollbarOptions={{ visible: false }}
+        scrollbarOptions={{
+          visible: true,
+          trackOptions: {
+            backgroundColor: theme.backgroundPanel,
+            foregroundColor: theme.border,
+          },
+        }}
       >
         <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
           <box>
