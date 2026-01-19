@@ -3813,6 +3813,42 @@ export type TuiPublishResponses = {
 
 export type TuiPublishResponse = TuiPublishResponses[keyof TuiPublishResponses]
 
+export type TuiSelectSessionData = {
+  body?: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/tui/select-session"
+}
+
+export type TuiSelectSessionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TuiSelectSessionError = TuiSelectSessionErrors[keyof TuiSelectSessionErrors]
+
+export type TuiSelectSessionResponses = {
+  /**
+   * Session selected successfully
+   */
+  200: boolean
+}
+
+export type TuiSelectSessionResponse = TuiSelectSessionResponses[keyof TuiSelectSessionResponses]
+
 export type TuiControlNextData = {
   body?: never
   path?: never

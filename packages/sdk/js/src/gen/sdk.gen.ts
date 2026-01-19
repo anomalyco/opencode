@@ -191,6 +191,9 @@ import type {
   TuiPublishData,
   TuiPublishResponses,
   TuiPublishErrors,
+  TuiSelectSessionData,
+  TuiSelectSessionResponses,
+  TuiSelectSessionErrors,
   TuiControlNextData,
   TuiControlNextResponses,
   TuiControlResponseData,
@@ -1132,6 +1135,22 @@ class Tui extends _HeyApiClient {
   public publish<ThrowOnError extends boolean = false>(options?: Options<TuiPublishData, ThrowOnError>) {
     return (options?.client ?? this._client).post<TuiPublishResponses, TuiPublishErrors, ThrowOnError>({
       url: "/tui/publish",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    })
+  }
+
+  /**
+   * Select session
+   *
+   * Navigate the TUI to display the specified session.
+   */
+  public selectSession<ThrowOnError extends boolean = false>(options?: Options<TuiSelectSessionData, ThrowOnError>) {
+    return (options?.client ?? this._client).post<TuiSelectSessionResponses, TuiSelectSessionErrors, ThrowOnError>({
+      url: "/tui/select-session",
       ...options,
       headers: {
         "Content-Type": "application/json",
