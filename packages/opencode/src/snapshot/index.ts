@@ -62,12 +62,12 @@ export namespace Snapshot {
         })
         .quiet()
         .nothrow()
-      // Configure git to not convert line endings on Windows
       await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
+      await $`git --git-dir ${git} config core.quotepath false`.quiet().nothrow()
       log.info("initialized")
     }
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
-    const hash = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
+    await $`git -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    const hash = await $`git -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
       .quiet()
       .cwd(Instance.directory)
       .nothrow()
@@ -86,7 +86,7 @@ export namespace Snapshot {
     const git = gitdir()
     await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
     const result =
-      await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- .`
+      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- .`
         .quiet()
         .cwd(Instance.directory)
         .nothrow()
@@ -142,33 +142,31 @@ export namespace Snapshot {
         }
         const gitPath = process.platform === "win32" ? relativePath.replaceAll("\\", "/") : relativePath
         log.info("reverting", { file, gitPath, hash: item.hash })
-        const result =
-          await $`git --git-dir ${git} --work-tree ${Instance.worktree} checkout ${item.hash} -- ${gitPath}`
-            .quiet()
-            .cwd(Instance.worktree)
-            .nothrow()
+        const result = await runGitCommand(
+          ["checkout", item.hash, "--", gitPath],
+          { gitDir: git, workTree: Instance.worktree, cwd: Instance.worktree },
+        )
         if (result.exitCode !== 0) {
-          const checkTree =
-            await $`git --git-dir ${git} --work-tree ${Instance.worktree} ls-tree ${item.hash} -- ${gitPath}`
-              .quiet()
-              .cwd(Instance.worktree)
-              .nothrow()
-          if (checkTree.exitCode === 0 && checkTree.text().trim()) {
+          const checkTree = await runGitCommand(
+            ["ls-tree", item.hash, "--", gitPath],
+            { gitDir: git, workTree: Instance.worktree, cwd: Instance.worktree },
+          )
+          if (checkTree.exitCode === 0 && checkTree.stdout.trim()) {
             log.info("checkout failed, trying git show fallback", { file, gitPath })
-            const content = await $`git --git-dir ${git} show ${item.hash}:${gitPath}`
-              .quiet()
-              .cwd(Instance.worktree)
-              .nothrow()
+            const content = await runGitCommand(
+              ["show", `${item.hash}:${gitPath}`],
+              { gitDir: git, cwd: Instance.worktree },
+            )
             if (content.exitCode === 0) {
               const dir = path.dirname(file)
               await fs.mkdir(dir, { recursive: true })
-              await fs.writeFile(file, content.stdout)
+              await fs.writeFile(file, content.stdoutBuffer)
               log.info("restored file via git show", { file })
             } else {
               log.warn("failed to restore file, keeping current version", {
                 file,
-                checkoutError: result.stderr.toString(),
-                showError: content.stderr.toString(),
+                checkoutError: result.stderr,
+                showError: content.stderr,
               })
             }
           } else {
@@ -178,6 +176,47 @@ export namespace Snapshot {
         }
         files.add(file)
       }
+    }
+  }
+
+  interface GitCommandOptions {
+    gitDir?: string
+    workTree?: string
+    cwd?: string
+  }
+
+  interface GitCommandResult {
+    exitCode: number
+    stdout: string
+    stderr: string
+    stdoutBuffer: Buffer
+  }
+
+  async function runGitCommand(args: string[], options: GitCommandOptions): Promise<GitCommandResult> {
+    const gitArgs = ["-c", "core.quotepath=false"]
+    if (options.gitDir) {
+      gitArgs.push("--git-dir", options.gitDir)
+    }
+    if (options.workTree) {
+      gitArgs.push("--work-tree", options.workTree)
+    }
+    gitArgs.push(...args)
+
+    const proc = Bun.spawn(["git", ...gitArgs], {
+      cwd: options.cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+
+    const exitCode = await proc.exited
+    const stdoutBuffer = Buffer.from(await new Response(proc.stdout).arrayBuffer())
+    const stderr = await new Response(proc.stderr).text()
+
+    return {
+      exitCode,
+      stdout: stdoutBuffer.toString("utf-8"),
+      stderr,
+      stdoutBuffer,
     }
   }
 

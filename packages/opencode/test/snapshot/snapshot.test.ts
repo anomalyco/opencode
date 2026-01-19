@@ -1260,7 +1260,7 @@ test("revert creates parent directory when using fallback", async () => {
   })
 })
 
-test.skip("revert handles files with unicode and chinese characters in names", async () => {
+test("revert handles files with unicode and chinese characters in names", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,
@@ -1286,7 +1286,7 @@ test.skip("revert handles files with unicode and chinese characters in names", a
   })
 })
 
-test.skip("revert handles files with emoji in names", async () => {
+test("revert handles files with emoji in names", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,
