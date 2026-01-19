@@ -379,6 +379,7 @@ function Prompt<const T extends Record<string, string>>(props: {
     expanded: false,
   })
   const diffKey = Keybind.parse("ctrl+f")[0]
+  const numberMap = createMemo(() => keys.map((_, index) => index))
 
   useKeyboard((evt) => {
     if (evt.name === "left" || evt.name == "h") {
@@ -393,6 +394,15 @@ function Prompt<const T extends Record<string, string>>(props: {
       const idx = keys.indexOf(store.selected)
       const next = keys[(idx + 1) % keys.length]
       setStore("selected", next)
+    }
+
+    const hit = numberMap().find((index) => evt.name === String(index + 1))
+    if (hit !== undefined) {
+      evt.preventDefault()
+      const selected = keys[hit]
+      setStore("selected", selected)
+      props.onSelect(selected)
+      return
     }
 
     if (evt.name === "return") {
@@ -452,7 +462,7 @@ function Prompt<const T extends Record<string, string>>(props: {
       >
         <box flexDirection="row" gap={1}>
           <For each={keys}>
-            {(option) => (
+            {(option, index) => (
               <box
                 paddingLeft={1}
                 paddingRight={1}
@@ -464,7 +474,7 @@ function Prompt<const T extends Record<string, string>>(props: {
                 }}
               >
                 <text fg={option === store.selected ? selectedForeground(theme, theme.warning) : theme.textMuted}>
-                  {props.options[option]}
+                  {index() + 1}. {props.options[option]}
                 </text>
               </box>
             )}
