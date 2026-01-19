@@ -300,4 +300,33 @@ describe("tool.read truncation", () => {
       },
     })
   })
+
+  test(".fbs files (FlatBuffers schema) are read as text, not images", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // FlatBuffers schema content
+        const fbsContent = `namespace MyGame;
+
+table Monster {
+  pos:Vec3;
+  name:string;
+  inventory:[ubyte];
+}
+
+root_type Monster;`
+        await Bun.write(path.join(dir, "schema.fbs"), fbsContent)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "schema.fbs") }, ctx)
+        // Should be read as text, not as image
+        expect(result.attachments).toBeUndefined()
+        expect(result.output).toContain("namespace MyGame")
+        expect(result.output).toContain("table Monster")
+      },
+    })
+  })
 })
