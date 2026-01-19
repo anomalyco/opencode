@@ -1257,4 +1257,7 @@ export namespace Config {
   export async function directories() {
     return state().then((x) => x.directories)
   }
+
+  // Re-export loadCommand for use when cache_command_markdown_files is false
+  export const reloadCommands = loadCommand
 }
