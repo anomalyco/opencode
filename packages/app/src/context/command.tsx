@@ -1,5 +1,6 @@
 import { createMemo, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
@@ -104,7 +105,15 @@ export function formatKeybind(config: string): string {
   if (kb.meta) parts.push(IS_MAC ? "⌘" : "Meta")
 
   if (kb.key) {
-    const displayKey = kb.key.length === 1 ? kb.key.toUpperCase() : kb.key.charAt(0).toUpperCase() + kb.key.slice(1)
+    const arrows: Record<string, string> = {
+      arrowup: "↑",
+      arrowdown: "↓",
+      arrowleft: "←",
+      arrowright: "→",
+    }
+    const displayKey =
+      arrows[kb.key.toLowerCase()] ??
+      (kb.key.length === 1 ? kb.key.toUpperCase() : kb.key.charAt(0).toUpperCase() + kb.key.slice(1))
     parts.push(displayKey)
   }
 
@@ -114,6 +123,7 @@ export function formatKeybind(config: string): string {
 export const { use: useCommand, provider: CommandProvider } = createSimpleContext({
   name: "Command",
   init: () => {
+    const dialog = useDialog()
     const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
     const [suspendCount, setSuspendCount] = createSignal(0)
 
@@ -157,7 +167,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (suspended()) return
+      if (suspended() || dialog.active) return
 
       const paletteKeybinds = parseKeybind("mod+shift+p")
       if (matchKeybind(paletteKeybinds, event)) {
