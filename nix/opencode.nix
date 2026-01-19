@@ -69,15 +69,20 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
     completion_bash=$($out/bin/opencode completion || true)
-    # trick yargs into also generating zsh completions
-    completion_zsh=$(SHELL=/bin/zsh $out/bin/opencode completion || true)
     if [ -n "$completion_bash" ]; then
       installShellCompletion --cmd opencode \
         --bash <(echo "$completion_bash")
+    else
+      echo >&2 "[1;31mwarning: bash completion generation failed or produced no output[0m"
     fi
+
+    # trick yargs into also generating zsh completions
+    completion_zsh=$(SHELL=/bin/zsh $out/bin/opencode completion || true)
     if [ -n "$completion_zsh" ]; then
       installShellCompletion --cmd opencode \
         --zsh <(echo "$completion_zsh")
+    else
+      echo >&2 "[1;31mwarning: zsh completion generation failed or produced no output[0m"
     fi
   '';
 
