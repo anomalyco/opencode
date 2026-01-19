@@ -103,7 +103,7 @@ function createGlobalSync() {
     provider_auth: ProviderAuthResponse
   }>({
     ready: false,
-    path: { state: "", config: "", worktree: "", directory: "", home: "" },
+    path: { state: "", config: "", worktree: "", directory: "", home: "", cwd: "" },
     project: [],
     provider: { all: [], connected: [], default: {} },
     provider_auth: {},
@@ -128,7 +128,7 @@ function createGlobalSync() {
           project: "",
           provider: { all: [], connected: [], default: {} },
           config: {},
-          path: { state: "", config: "", worktree: "", directory: "", home: "" },
+          path: { state: "", config: "", worktree: "", directory: "", home: "", cwd: "" },
           status: "loading" as const,
           agent: [],
           command: [],

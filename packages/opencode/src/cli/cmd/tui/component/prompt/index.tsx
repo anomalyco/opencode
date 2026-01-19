@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, RGBA } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
@@ -721,7 +721,7 @@ export function Prompt(props: PromptProps) {
   // Mode prefix color for the input
   const modePrefixColor = createMemo(() => {
     const modeDisplay = executionMode.getModeDisplay()
-    return theme[modeDisplay.color]
+    return theme[modeDisplay.color as keyof typeof theme] as RGBA
   })
 
   const spinnerDef = createMemo(() => {
