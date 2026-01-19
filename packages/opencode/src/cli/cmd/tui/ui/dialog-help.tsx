@@ -61,7 +61,7 @@ export function DialogHelp() {
           scroll = r
         }}
         height={height()}
-        scrollbarOptions={{
+        verticalScrollbarOptions={{
           visible: true,
           trackOptions: {
             backgroundColor: theme.backgroundPanel,
