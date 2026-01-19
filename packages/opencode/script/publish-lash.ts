@@ -116,16 +116,26 @@ if (shouldPublish) {
         }
     }
 
-    // Handle Registries (Homebrew/AUR)
-    // Inline logic here to keep it contained
-    await updateRegistries(lashBinaries)
+    if (!process.env.DEFER_PUBLISH_TASKS) {
+        // Handle Registries (Homebrew/AUR)
+        // Inline logic here to keep it contained
+        await updateRegistries(lashBinaries)
 
-    // Interactive NPM Publish
-    await publishWithInteractiveOtp(publishQueue, tags[0])
+        // Interactive NPM Publish
+        await publishWithInteractiveOtp(publishQueue, tags[0])
+    }
 }
 
 console.log("Release script finished successfully.")
-process.exit(0)
+
+// --- Exports ---
+export { lashBinaries, publishQueue, updateRegistries, publishWithInteractiveOtp }
+
+if (import.meta.main) {
+    process.exit(0)
+}
+
+// -------------------------------------------------------------------------
 
 async function publishWithInteractiveOtp(queue: string[], tag: string) {
     console.log(`\n=== Interactive NPM Publish ===`)
