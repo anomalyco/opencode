@@ -965,10 +965,23 @@ export default function Layout(props: ParentProps) {
     if (!current) return
     if (directory === current.worktree) return
 
-    const reset = globalSDK.client.worktree
+    const progress = showToast({
+      persistent: true,
+      title: "Resetting workspace",
+      description: "This may take a minute.",
+    })
+    const dismiss = () => toaster.dismiss(progress)
+
+    const sessions = await globalSDK.client.session
+      .list({ directory })
+      .then((x) => x.data ?? [])
+      .catch(() => [])
+
+    const result = await globalSDK.client.worktree
       .reset({ directory: current.worktree, worktreeResetInput: { directory } })
       .then((x) => x.data)
       .catch((err) => {
+        dismiss()
         showToast({
           title: "Failed to reset workspace",
           description: errorMessage(err),
@@ -976,21 +989,16 @@ export default function Layout(props: ParentProps) {
         return false
       })
 
-    const href = `/${base64Encode(directory)}/session`
-    navigate(href)
-    layout.mobileSidebar.hide()
+    if (!result) {
+      dismiss()
+      return
+    }
 
-    void (async () => {
-      const sessions = await globalSDK.client.session
-        .list({ directory })
-        .then((x) => x.data ?? [])
-        .catch(() => [])
-
-      if (sessions.length === 0) return
-
-      const archivedAt = Date.now()
-      await Promise.all(
-        sessions.map((session) =>
+    const archivedAt = Date.now()
+    await Promise.all(
+      sessions
+        .filter((session) => session.time.archived === undefined)
+        .map((session) =>
           globalSDK.client.session
             .update({
               sessionID: session.id,
@@ -999,11 +1007,14 @@ export default function Layout(props: ParentProps) {
             })
             .catch(() => undefined),
         ),
-      )
-    })()
+    )
 
-    const result = await reset
-    if (!result) return
+    await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
+    dismiss()
+
+    const href = `/${base64Encode(directory)}/session`
+    navigate(href)
+    layout.mobileSidebar.hide()
 
     showToast({
       title: "Workspace reset",
