@@ -93,13 +93,6 @@ export function DialogStatus() {
           scroll = r
         }}
         maxHeight={maxHeight()}
-        scrollbarOptions={{
-          visible: true,
-          trackOptions: {
-            backgroundColor: theme.backgroundPanel,
-            foregroundColor: theme.border,
-          },
-        }}
       >
         <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
           <box>
@@ -228,7 +221,6 @@ export function DialogStatus() {
             </For>
           </box>
         </Show>
-        <box height={1} />
       </scrollbox>
     </box>
   )
