@@ -1056,7 +1056,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     let session = info()
     if (!session && isNewSession) {
-      session = await client.session.create().then((x) => x.data ?? undefined)
+      session = await client.session
+        .create()
+        .then((x) => x.data ?? undefined)
+        .catch((err) => {
+          showToast({
+            title: "Failed to create session",
+            description: errorMessage(err),
+          })
+          return undefined
+        })
       if (session) navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
     }
     if (!session) return
