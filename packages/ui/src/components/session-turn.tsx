@@ -6,7 +6,6 @@ import {
   type PermissionRequest,
   TextPart,
   ToolPart,
-  UserMessage,
 } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
@@ -21,8 +20,6 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
-import { IconButton } from "./icon-button"
-import { Tooltip } from "./tooltip"
 import { Card } from "./card"
 import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
@@ -352,7 +349,6 @@ export function SessionTurn(
   const hasDiffs = createMemo(() => (data.store.session_diff?.[props.sessionID]?.length ?? 0) > 0)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
-  const [responseCopied, setResponseCopied] = createSignal(false)
   const [rootRef, setRootRef] = createSignal<HTMLDivElement | undefined>()
   const [stickyRef, setStickyRef] = createSignal<HTMLDivElement | undefined>()
 
@@ -361,13 +357,6 @@ export function SessionTurn(
     if (!root) return
     const next = Math.ceil(height)
     root.style.setProperty("--session-turn-sticky-height", `${next}px`)
-  }
-  const handleCopyResponse = async () => {
-    const content = response()
-    if (!content) return
-    await navigator.clipboard.writeText(content)
-    setResponseCopied(true)
-    setTimeout(() => setResponseCopied(false), 2000)
   }
 
   function duration() {
@@ -589,15 +578,6 @@ export function SessionTurn(
                     {/* Response */}
                     <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
-                        <div data-slot="session-turn-summary-copy">
-                          <Tooltip value={responseCopied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
-                            <IconButton
-                              icon={responseCopied() ? "check" : "copy"}
-                              variant="secondary"
-                              onClick={handleCopyResponse}
-                            />
-                          </Tooltip>
-                        </div>
                         <div data-slot="session-turn-summary-header">
                           <h2 data-slot="session-turn-summary-title">Response</h2>
                           <Markdown
