@@ -75,29 +75,10 @@ export function DialogStatus() {
     }
   })
 
-  const contentHeight = createMemo(() => {
-    let h = 0
-    const mcpCount = Object.keys(sync.data.mcp).length
-    if (mcpCount > 0) h += mcpCount + 1
-    else h += 1 // "No MCP Servers"
-
-    const lspCount = sync.data.lsp.length
-    if (lspCount > 0) h += lspCount + 2 // header + items + marginTop
-
-    const formatterCount = enabledFormatters().length
-    h += formatterCount > 0 ? formatterCount + 2 : 2
-
-    const pluginCount = plugins().length
-    h += pluginCount > 0 ? pluginCount + 2 : 2
-
-    return h
-  })
-
   const maxHeight = createMemo(() => Math.floor(dimensions().height * 0.6))
-  const height = createMemo(() => Math.min(contentHeight(), maxHeight()))
 
   return (
-    <box paddingLeft={2} paddingRight={2} backgroundColor={theme.backgroundPanel} paddingBottom={1}>
+    <box paddingLeft={2} paddingRight={2}>
       <box flexDirection="row" justifyContent="space-between" marginBottom={1}>
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           Status
@@ -111,7 +92,7 @@ export function DialogStatus() {
         ref={(r: ScrollBoxRenderable) => {
           scroll = r
         }}
-        height={height()}
+        maxHeight={maxHeight()}
         scrollbarOptions={{ visible: false }}
       >
         <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
