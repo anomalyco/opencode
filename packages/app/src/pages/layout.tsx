@@ -400,7 +400,24 @@ export default function Layout(props: ParentProps) {
   const currentProject = createMemo(() => {
     const directory = params.dir ? base64Decode(params.dir) : undefined
     if (!directory) return
-    return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
+
+    const projects = layout.projects.list()
+
+    const sandbox = projects.find((p) => p.sandboxes?.includes(directory))
+    if (sandbox) return sandbox
+
+    const direct = projects.find((p) => p.worktree === directory)
+    if (direct) return direct
+
+    const [child] = globalSync.child(directory)
+    const id = child.project
+    if (!id) return
+
+    const meta = globalSync.data.project.find((p) => p.id === id)
+    const root = meta?.worktree
+    if (!root) return
+
+    return projects.find((p) => p.worktree === root)
   })
 
   createEffect(
@@ -1193,11 +1210,15 @@ export default function Layout(props: ParentProps) {
   function workspaceIds(project: LocalProject | undefined) {
     if (!project) return []
     const dirs = [project.worktree, ...(project.sandboxes ?? [])]
-    const existing = store.workspaceOrder[project.worktree]
-    if (!existing) return dirs
+    const active = currentProject()
+    const directory = active?.worktree === project.worktree && params.dir ? base64Decode(params.dir) : undefined
+    const next = directory && directory !== project.worktree && !dirs.includes(directory) ? [...dirs, directory] : dirs
 
-    const keep = existing.filter((d) => dirs.includes(d))
-    const missing = dirs.filter((d) => !existing.includes(d))
+    const existing = store.workspaceOrder[project.worktree]
+    if (!existing) return next
+
+    const keep = existing.filter((d) => next.includes(d))
+    const missing = next.filter((d) => !existing.includes(d))
     return [...keep, ...missing]
   }
 
