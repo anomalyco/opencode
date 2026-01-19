@@ -124,6 +124,8 @@ Don't see a provider here? Submit a PR.
 
 ### Apertis
 
+Apertis provides access to 12+ state-of-the-art models including Claude Opus 4.5, GPT-5.2, Gemini 3 Pro, and specialized thinking models for enhanced reasoning capabilities.
+
 1. Head over to [Apertis](https://apertis.ai/), create an account, and generate an API key.
 
 2. Run the `/connect` command and search for **Apertis**.
@@ -146,6 +148,77 @@ Don't see a provider here? Submit a PR.
    ```txt
    /models
    ```
+
+   Available models include:
+   - **Claude Opus 4.5** & **Claude Sonnet 4.5** - Latest Anthropic models with extended thinking variants
+   - **GPT-5.2** series - Including Pro, standard, and Codex variants for code generation
+   - **Gemini 3 Pro Preview** - Google's next-generation multimodal model
+   - **GLM-4.7** - Advanced multilingual model with thinking mode
+   - **Grok Code Fast 1** - Speed-optimized code generation
+   - **Minimax M2.1** - High-performance general-purpose model
+
+#### Advanced Configuration
+
+You can customize Apertis models through your opencode config:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "apertis": {
+      "models": {
+        "claude-opus-4-5-20251101-thinking": {
+          "options": {
+            "maxTokens": 8192,
+            "temperature": 0.7
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+#### Using Thinking Models
+
+Apertis offers specialized thinking models (indicated by `-thinking` suffix) that provide enhanced reasoning capabilities:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "apertis": {
+      "models": {
+        "claude-sonnet-4.5-20250929-thinking": {},
+        "glm-4.7-thinking": {}
+      }
+    }
+  }
+}
+```
+
+These models excel at:
+- Complex problem-solving and multi-step reasoning
+- Mathematical and logical analysis
+- Code architecture and design decisions
+- Detailed technical explanations
+
+#### Troubleshooting
+
+**Connection Issues:**
+- Verify your API key is valid at [Apertis Dashboard](https://apertis.ai/)
+- Check that the API key has not expired or been revoked
+- Ensure your account has sufficient credits
+
+**Model Not Available:**
+- Some models may require specific account tiers or permissions
+- Visit the Apertis dashboard to check model availability for your account
+- Try selecting a different model from the `/models` command
+
+**Rate Limiting:**
+- Apertis implements rate limits to ensure fair usage
+- If you encounter rate limit errors, wait a few moments before retrying
+- Consider upgrading your account tier for higher rate limits
 
 ---
 
