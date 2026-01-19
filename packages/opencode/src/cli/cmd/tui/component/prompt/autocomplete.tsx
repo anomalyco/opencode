@@ -310,6 +310,16 @@ export function Autocomplete(props: {
     return options
   })
 
+  const [skills] = createResource(
+    () => store.visible === "/",
+    async (active) => {
+      if (!active) return []
+      const result = await sdk.client.app.skills()
+      return result.data ?? []
+    },
+    { initialValue: [] },
+  )
+
   const agents = createMemo(() => {
     const agents = sync.data.agent
     return agents
@@ -345,6 +355,20 @@ export function Autocomplete(props: {
           props.input().deleteRange(0, 0, cursor.row, cursor.col)
           props.input().insertText(newText)
           props.input().cursorOffset = Bun.stringWidth(newText)
+        },
+      })
+    }
+
+    for (const skill of skills() ?? []) {
+      results.push({
+        display: "/" + skill.name,
+        description: skill.description,
+        onSelect: () => {
+          const cursor = props.input().logicalCursor
+          props.input().deleteRange(0, 0, cursor.row, cursor.col)
+          const text = `Use the skill tool to load the "${skill.name}" skill`
+          props.input().insertText(text)
+          props.input().cursorOffset = Bun.stringWidth(text)
         },
       })
     }

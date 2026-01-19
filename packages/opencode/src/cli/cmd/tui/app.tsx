@@ -18,6 +18,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
+import { DialogSkillList } from "@tui/component/dialog-skill-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -391,6 +392,17 @@ function App() {
       },
       onSelect: () => {
         dialog.replace(() => <DialogMcp />)
+      },
+    },
+    {
+      title: "List skills",
+      value: "skill.list",
+      category: "Agent",
+      slash: {
+        name: "skills",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogSkillList />)
       },
     },
     {
