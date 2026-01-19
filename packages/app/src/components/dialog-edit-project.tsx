@@ -140,7 +140,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
           <Show when={!store.iconUrl}>
             <div class="flex flex-col gap-2">
               <label class="text-12-medium text-text-weak">Color</label>
-              <div class="flex gap-2">
+              <div class="flex gap-1.5">
                 <For each={AVATAR_COLOR_KEYS}>
                   {(color) => (
                     <button
