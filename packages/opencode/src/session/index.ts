@@ -22,9 +22,62 @@ import { Snapshot } from "@/snapshot"
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
+import fs from "fs/promises"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
+
+  // LRU-like cache for session→projectID mapping (avoids repeated directory scans)
+  const PROJECT_ID_CACHE_MAX_SIZE = 1000
+  const projectIDCache = new Map<string, string>()
+
+  function cacheProjectID(sessionID: string, projectID: string): void {
+    if (projectIDCache.size >= PROJECT_ID_CACHE_MAX_SIZE) {
+      const firstKey = projectIDCache.keys().next().value
+      if (firstKey) projectIDCache.delete(firstKey)
+    }
+    projectIDCache.set(sessionID, projectID)
+  }
+
+  async function resolveProjectID(sessionID: string): Promise<string> {
+    // Check cache first
+    const cached = projectIDCache.get(sessionID)
+    if (cached) {
+      const exists = await Storage.read<Info>(["session", cached, sessionID]).catch(() => null)
+      if (exists) return cached
+      projectIDCache.delete(sessionID)
+    }
+
+    // Try current project
+    const currentProjectID = Instance.project.id
+    const existsInCurrent = await Storage.read<Info>(["session", currentProjectID, sessionID]).catch(() => null)
+    if (existsInCurrent) {
+      cacheProjectID(sessionID, currentProjectID)
+      return currentProjectID
+    }
+
+    // Fallback: search all project directories
+    const storageDir = path.join(Global.Path.data, "storage", "session")
+    let projectDirs: string[] = []
+    try {
+      projectDirs = await fs.readdir(storageDir)
+    } catch {
+      throw new Storage.NotFoundError({ message: `Session not found: ${sessionID}` })
+    }
+
+    for (const projectID of projectDirs) {
+      if (projectID === currentProjectID) continue
+      if (projectID.startsWith(".")) continue
+      const exists = await Storage.read<Info>(["session", projectID, sessionID]).catch(() => null)
+      if (exists) {
+        cacheProjectID(sessionID, projectID)
+        log.info("resolved session to different project", { sessionID, projectID, currentProjectID })
+        return projectID
+      }
+    }
+
+    throw new Storage.NotFoundError({ message: `Session not found: ${sessionID}` })
+  }
 
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
@@ -240,7 +293,8 @@ export namespace Session {
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
-    const read = await Storage.read<Info>(["session", Instance.project.id, id])
+    const projectID = await resolveProjectID(id)
+    const read = await Storage.read<Info>(["session", projectID, id])
     return read as Info
   })
 
@@ -273,8 +327,8 @@ export namespace Session {
   })
 
   export async function update(id: string, editor: (session: Info) => void) {
-    const project = Instance.project
-    const result = await Storage.update<Info>(["session", project.id, id], (draft) => {
+    const projectID = await resolveProjectID(id)
+    const result = await Storage.update<Info>(["session", projectID, id], (draft) => {
       editor(draft)
       draft.time.updated = Date.now()
     })
@@ -324,9 +378,9 @@ export namespace Session {
   })
 
   export const remove = fn(Identifier.schema("session"), async (sessionID) => {
-    const project = Instance.project
     try {
       const session = await get(sessionID)
+      const projectID = await resolveProjectID(sessionID)
       for (const child of await children(sessionID)) {
         await remove(child.id)
       }
@@ -337,7 +391,8 @@ export namespace Session {
         }
         await Storage.remove(msg)
       }
-      await Storage.remove(["session", project.id, sessionID])
+      await Storage.remove(["session", projectID, sessionID])
+      projectIDCache.delete(sessionID)
       Bus.publish(Event.Deleted, {
         info: session,
       })
