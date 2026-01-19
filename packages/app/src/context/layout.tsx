@@ -33,8 +33,6 @@ type SessionTabs = {
 type SessionView = {
   scroll: Record<string, SessionScroll>
   reviewOpen?: string[]
-  terminalOpened?: boolean
-  reviewPanelOpened?: boolean
 }
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
@@ -78,9 +76,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         terminal: {
           height: 280,
+          opened: false,
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
+          panelOpened: true,
         },
         session: {
           width: 600,
@@ -172,7 +172,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const current = store.sessionView[sessionKey]
         const keep = meta.active ?? sessionKey
         if (!current) {
-          setStore("sessionView", sessionKey, { scroll: next, terminalOpened: false, reviewPanelOpened: true })
+          setStore("sessionView", sessionKey, { scroll: next })
           prune(keep)
           return
         }
@@ -379,31 +379,31 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         touch(sessionKey)
         scroll.seed(sessionKey)
         const s = createMemo(() => store.sessionView[sessionKey] ?? { scroll: {} })
-        const terminalOpened = createMemo(() => s().terminalOpened ?? false)
-        const reviewPanelOpened = createMemo(() => s().reviewPanelOpened ?? true)
+        const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
+        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
 
         function setTerminalOpened(next: boolean) {
-          const current = store.sessionView[sessionKey]
+          const current = store.terminal
           if (!current) {
-            setStore("sessionView", sessionKey, { scroll: {}, terminalOpened: next, reviewPanelOpened: true })
+            setStore("terminal", { height: 280, opened: next })
             return
           }
 
-          const value = current.terminalOpened ?? false
+          const value = current.opened ?? false
           if (value === next) return
-          setStore("sessionView", sessionKey, "terminalOpened", next)
+          setStore("terminal", "opened", next)
         }
 
         function setReviewPanelOpened(next: boolean) {
-          const current = store.sessionView[sessionKey]
+          const current = store.review
           if (!current) {
-            setStore("sessionView", sessionKey, { scroll: {}, terminalOpened: false, reviewPanelOpened: next })
+            setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
             return
           }
 
-          const value = current.reviewPanelOpened ?? true
+          const value = current.panelOpened ?? true
           if (value === next) return
-          setStore("sessionView", sessionKey, "reviewPanelOpened", next)
+          setStore("review", "panelOpened", next)
         }
 
         return {
@@ -444,8 +444,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               if (!current) {
                 setStore("sessionView", sessionKey, {
                   scroll: {},
-                  terminalOpened: false,
-                  reviewPanelOpened: true,
                   reviewOpen: open,
                 })
                 return
