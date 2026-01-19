@@ -349,6 +349,18 @@ export namespace ProviderTransform {
       case "@ai-sdk/gateway":
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
+      case "@ai-sdk/github-copilot":
+        return Object.fromEntries(
+          WIDELY_SUPPORTED_EFFORTS.map((effort) => [
+            effort,
+            {
+              reasoningEffort: effort,
+              reasoningSummary: "auto",
+              include: ["reasoning.encrypted_content"],
+            },
+          ]),
+        )
+
       case "@ai-sdk/cerebras":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cerebras
       case "@ai-sdk/togetherai":
@@ -524,7 +536,11 @@ export namespace ProviderTransform {
     const result: Record<string, any> = {}
 
     // openai and providers using openai package should set store to false by default.
-    if (input.model.providerID === "openai" || input.model.api.npm === "@ai-sdk/openai") {
+    if (
+      input.model.providerID === "openai" ||
+      input.model.api.npm === "@ai-sdk/openai" ||
+      input.model.api.npm === "@ai-sdk/github-copilot"
+    ) {
       result["store"] = false
     }
 
