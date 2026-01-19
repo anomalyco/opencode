@@ -304,6 +304,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
 createMenu()
 
+// Global platformInstance reference initialized to null
+// This is assigned later in the render() function once the platform is created
+// Keeping it null initially allows event handlers to be registered early while
+// remaining safe from accessing uninitialized platform methods
 let platformInstance: Platform | null = null
 
 // Stops mousewheel events from reaching Tauri's pinch-to-zoom handler
@@ -312,9 +316,15 @@ root?.addEventListener("mousewheel", (e) => {
 })
 
 // Handle external links - open in system browser instead of webview
+// Note: This event listener is registered globally before the render() function executes.
+// To avoid a race condition where clicks could occur before platformInstance is initialized,
+// we check if platformInstance exists before calling methods on it. If it hasn't been
+// initialized yet, we log a warning and early return instead of crashing.
+// The platformInstance is assigned in the render() function once the platform is created.
 document.addEventListener("click", (e) => {
   const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
   if (link?.href) {
+    // Guard clause: ensure platformInstance is initialized before using it
     if (!platformInstance) {
       console.warn("Platform instance not yet initialized")
       return
@@ -324,10 +334,14 @@ document.addEventListener("click", (e) => {
   }
 })
 
+// Initialize the application root component
+// platformInstance is assigned here once the platform is created
+// This assignment happens after the global event listeners are registered,
+// so platformInstance could be null during the initial moments before this render completes
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
   const platform = createPlatform(() => serverPassword())
-  platformInstance = platform
+  platformInstance = platform  // Now safe to use platformInstance in event listeners
 
   return (
     <PlatformProvider value={platform}>

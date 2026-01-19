@@ -79,7 +79,7 @@ await Bun.build({
 
 await $`rm -rf ./dist/${targetName}/bin/tui`
 
-// 写入 binary 包的 package.json
+// Write binary package.json
 await Bun.file(`dist/${targetName}/package.json`).write(
   JSON.stringify(
     {
