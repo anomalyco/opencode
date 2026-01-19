@@ -26,6 +26,7 @@ export interface TextFieldProps
   error?: string
   variant?: "normal" | "ghost"
   copyable?: boolean
+  multiline?: boolean
 }
 
 export function TextField(props: TextFieldProps) {
@@ -46,6 +47,7 @@ export function TextField(props: TextFieldProps) {
     "error",
     "variant",
     "copyable",
+    "multiline",
   ])
   const [copied, setCopied] = createSignal(false)
 
@@ -54,6 +56,10 @@ export function TextField(props: TextFieldProps) {
     await navigator.clipboard.writeText(value)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  function handleClick() {
+    if (local.copyable) handleCopy()
   }
 
   return (
@@ -65,6 +71,7 @@ export function TextField(props: TextFieldProps) {
       value={local.value}
       onChange={local.onChange}
       onKeyDown={local.onKeyDown}
+      onClick={handleClick}
       required={local.required}
       disabled={local.disabled}
       readOnly={local.readOnly}
@@ -76,7 +83,12 @@ export function TextField(props: TextFieldProps) {
         </Kobalte.Label>
       </Show>
       <div data-slot="input-wrapper">
-        <Kobalte.Input {...others} data-slot="input-input" class={local.class} />
+        <Show
+          when={local.multiline}
+          fallback={<Kobalte.Input {...others} data-slot="input-input" class={local.class} />}
+        >
+          <Kobalte.TextArea {...others} autoResize data-slot="input-input" class={local.class} />
+        </Show>
         <Show when={local.copyable}>
           <Tooltip value={copied() ? "Copied" : "Copy to clipboard"} placement="top" gutter={8}>
             <IconButton
@@ -96,8 +108,3 @@ export function TextField(props: TextFieldProps) {
     </Kobalte>
   )
 }
-
-/** @deprecated Use TextField instead */
-export const Input = TextField
-/** @deprecated Use TextFieldProps instead */
-export type InputProps = TextFieldProps

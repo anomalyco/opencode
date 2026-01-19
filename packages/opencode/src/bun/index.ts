@@ -2,6 +2,7 @@ import z from "zod"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
+import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
 import { createRequire } from "module"
@@ -71,10 +72,29 @@ export namespace BunProc {
       await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
       return result
     })
-    if (parsed.dependencies[pkg] === version) return mod
+    const dependencies = parsed.dependencies ?? {}
+    if (!parsed.dependencies) parsed.dependencies = dependencies
+    const modExists = await Filesystem.exists(mod)
+    if (dependencies[pkg] === version && modExists) return mod
+
+    const proxied = !!(
+      process.env.HTTP_PROXY ||
+      process.env.HTTPS_PROXY ||
+      process.env.http_proxy ||
+      process.env.https_proxy
+    )
 
     // Build command arguments
-    const args = ["add", "--force", "--exact", "--cwd", Global.Path.cache, pkg + "@" + version]
+    const args = [
+      "add",
+      "--force",
+      "--exact",
+      // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
+      ...(proxied ? ["--no-cache"] : []),
+      "--cwd",
+      Global.Path.cache,
+      pkg + "@" + version,
+    ]
 
     // Let Bun handle registry resolution:
     // - If .npmrc files exist, Bun will use them automatically
@@ -85,47 +105,16 @@ export namespace BunProc {
       version,
     })
 
-    const total = 3
-    const wait = 500
-
-    const runInstall = async (count: number = 1): Promise<void> => {
-      log.info("bun install attempt", {
-        pkg,
-        version,
-        attempt: count,
-        total,
-      })
-      await BunProc.run(args, {
-        cwd: Global.Path.cache,
-      }).catch(async (error) => {
-        log.warn("bun install failed", {
-          pkg,
-          version,
-          attempt: count,
-          total,
-          error,
-        })
-        if (count >= total) {
-          throw new InstallFailedError(
-            { pkg, version },
-            {
-              cause: error,
-            },
-          )
-        }
-        const delay = wait * count
-        log.info("bun install retrying", {
-          pkg,
-          version,
-          next: count + 1,
-          delay,
-        })
-        await Bun.sleep(delay)
-        return runInstall(count + 1)
-      })
-    }
-
-    await runInstall()
+    await BunProc.run(args, {
+      cwd: Global.Path.cache,
+    }).catch((e) => {
+      throw new InstallFailedError(
+        { pkg, version },
+        {
+          cause: e,
+        },
+      )
+    })
 
     // Resolve actual version from installed package when using "latest"
     // This ensures subsequent starts use the cached version until explicitly updated
@@ -141,23 +130,5 @@ export namespace BunProc {
     parsed.dependencies[pkg] = resolvedVersion
     await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
     return mod
-  }
-
-  export async function resolve(pkg: string) {
-    const local = workspace(pkg)
-    if (local) return local
-    const dir = path.join(Global.Path.cache, "node_modules", pkg)
-    const pkgjson = Bun.file(path.join(dir, "package.json"))
-    const exists = await pkgjson.exists()
-    if (exists) return dir
-  }
-
-  function workspace(pkg: string) {
-    try {
-      const target = req.resolve(`${pkg}/package.json`)
-      return path.dirname(target)
-    } catch {
-      return
-    }
   }
 }

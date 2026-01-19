@@ -42,7 +42,7 @@
 
     [data-slot="input-wrapper"] {
       display: flex;
-      align-items: center;
+      align-items: start;
       justify-content: space-between;
       width: 100%;
       padding-right: 4px;
@@ -101,8 +101,16 @@
       }
     }
 
+    textarea[data-slot="input-input"] {
+      height: auto;
+      min-height: 32px;
+      padding: 6px 12px;
+      resize: none;
+    }
+
     [data-slot="input-copy-button"] {
       flex-shrink: 0;
+      margin-top: 4px;
       color: var(--icon-base);
 
       &:hover {

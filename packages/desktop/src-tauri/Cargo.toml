@@ -1,0 +1,55 @@
+[package]
+name = "opencode-desktop"
+version = "0.0.0"
+description = "The open source AI coding agent"
+authors = ["Anomaly Innovations"]
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "opencode_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api", "devtools"] }
+tauri-plugin-opener = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+tauri-plugin-store = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-http = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-single-instance = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = "1.48.0"
+listeners = "0.3"
+tauri-plugin-os = "2"
+futures = "0.3.31"
+semver = "1.0.27"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+uuid = { version = "1.19.0", features = ["v4"] }
+
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18.2"
+webkit2gtk = "=2.0.1"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+    "Win32_Security"
+] }

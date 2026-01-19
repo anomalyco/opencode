@@ -26,9 +26,9 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: Run opencode
-        uses: sst/opencode/github@latest
+        uses: anomalyco/opencode/github@latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENCODE_PERMISSION: '{"bash": "deny"}'
         with:
-          model: opencode/claude-haiku-4-5
+          model: opencode/claude-opus-4-5

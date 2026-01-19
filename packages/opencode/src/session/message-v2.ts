@@ -1,8 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
-import { Message } from "./message"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
@@ -12,6 +10,7 @@ import { Storage } from "@/storage/storage"
 import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
+import { type SystemError } from "bun"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -31,6 +30,7 @@ export namespace MessageV2 {
       isRetryable: z.boolean(),
       responseHeaders: z.record(z.string(), z.string()).optional(),
       responseBody: z.string().optional(),
+      metadata: z.record(z.string(), z.string()).optional(),
     }),
   )
   export type APIError = z.infer<typeof APIError.Schema>
@@ -117,7 +117,15 @@ export namespace MessageV2 {
     ref: "SymbolSource",
   })
 
-  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource]).meta({
+  export const ResourceSource = FilePartSourceBase.extend({
+    type: z.literal("resource"),
+    clientName: z.string(),
+    uri: z.string(),
+  }).meta({
+    ref: "ResourceSource",
+  })
+
+  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource, ResourceSource]).meta({
     ref: "FilePartSource",
   })
 
@@ -160,6 +168,13 @@ export namespace MessageV2 {
     prompt: z.string(),
     description: z.string(),
     agent: z.string(),
+    model: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+      })
+      .optional(),
+    command: z.string().optional(),
   })
   export type SubtaskPart = z.infer<typeof SubtaskPart>
 
@@ -305,6 +320,7 @@ export namespace MessageV2 {
     }),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
+    variant: z.string().optional(),
   }).meta({
     ref: "UserMessage",
   })
@@ -348,7 +364,11 @@ export namespace MessageV2 {
     parentID: z.string(),
     modelID: z.string(),
     providerID: z.string(),
+    /**
+     * @deprecated
+     */
     mode: z.string(),
+    agent: z.string(),
     path: z.object({
       cwd: z.string(),
       root: z.string(),
@@ -412,12 +432,7 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function toModelMessage(
-    input: {
-      info: Info
-      parts: Part[]
-    }[],
-  ): ModelMessage[] {
+  export function toModelMessage(input: WithParts[]): ModelMessage[] {
     const result: UIMessage[] = []
 
     for (const msg of input) {
@@ -461,12 +476,20 @@ export namespace MessageV2 {
       }
 
       if (msg.info.role === "assistant") {
+        if (
+          msg.info.error &&
+          !(
+            MessageV2.AbortedError.isInstance(msg.info.error) &&
+            msg.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+          )
+        ) {
+          continue
+        }
         const assistantMessage: UIMessage = {
           id: msg.info.id,
           role: "assistant",
           parts: [],
         }
-        result.push(assistantMessage)
         for (const part of msg.parts) {
           if (part.type === "text")
             assistantMessage.parts.push({
@@ -487,7 +510,7 @@ export namespace MessageV2 {
                   parts: [
                     {
                       type: "text",
-                      text: `Tool ${part.tool} returned an attachment:`,
+                      text: `The tool ${part.tool} returned the following attachments:`,
                     },
                     ...part.state.attachments.map((attachment) => ({
                       type: "file" as const,
@@ -516,6 +539,17 @@ export namespace MessageV2 {
                 errorText: part.state.error,
                 callProviderMetadata: part.metadata,
               })
+            // Handle pending/running tool calls to prevent dangling tool_use blocks
+            // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
+            if (part.state.status === "pending" || part.state.status === "running")
+              assistantMessage.parts.push({
+                type: ("tool-" + part.tool) as `tool-${string}`,
+                state: "output-error",
+                toolCallId: part.callID,
+                input: part.state.input,
+                errorText: "[Tool execution was interrupted]",
+                callProviderMetadata: part.metadata,
+              })
           }
           if (part.type === "reasoning") {
             assistantMessage.parts.push({
@@ -525,10 +559,13 @@ export namespace MessageV2 {
             })
           }
         }
+        if (assistantMessage.parts.length > 0) {
+          result.push(assistantMessage)
+        }
       }
     }
 
-    return convertToModelMessages(result.filter((msg) => msg.parts.length > 0))
+    return convertToModelMessages(result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")))
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
@@ -600,9 +637,30 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
+      case (e as SystemError)?.code === "ECONNRESET":
+        return new MessageV2.APIError(
+          {
+            message: "Connection reset by server",
+            isRetryable: true,
+            metadata: {
+              code: (e as SystemError).code ?? "",
+              syscall: (e as SystemError).syscall ?? "",
+              message: (e as SystemError).message ?? "",
+            },
+          },
+          { cause: e },
+        ).toObject()
       case APICallError.isInstance(e):
         const message = iife(() => {
           let msg = e.message
+          if (msg === "") {
+            if (e.responseBody) return e.responseBody
+            if (e.statusCode) {
+              const err = STATUS_CODES[e.statusCode]
+              if (err) return err
+            }
+            return "Unknown error"
+          }
           const transformed = ProviderTransform.error(ctx.providerID, e)
           if (transformed !== msg) {
             return transformed
@@ -621,8 +679,9 @@ export namespace MessageV2 {
           } catch {}
 
           return `${msg}: ${e.responseBody}`
-        })
+        }).trim()
 
+        const metadata = e.url ? { url: e.url } : undefined
         return new MessageV2.APIError(
           {
             message,
@@ -630,6 +689,7 @@ export namespace MessageV2 {
             isRetryable: e.isRetryable,
             responseHeaders: e.responseHeaders,
             responseBody: e.responseBody,
+            metadata,
           },
           { cause: e },
         ).toObject()

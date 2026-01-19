@@ -9,6 +9,7 @@ import {
   IconAlibaba,
   IconAnthropic,
   IconGemini,
+  IconMiniMax,
   IconMoonshotAI,
   IconOpenAI,
   IconStealth,
@@ -23,6 +24,7 @@ const getModelLab = (modelId: string) => {
   if (modelId.startsWith("kimi")) return "Moonshot AI"
   if (modelId.startsWith("glm")) return "Z.ai"
   if (modelId.startsWith("qwen")) return "Alibaba"
+  if (modelId.startsWith("minimax")) return "MiniMax"
   if (modelId.startsWith("grok")) return "xAI"
   return "Stealth"
 }
@@ -35,7 +37,7 @@ const getModelsInfo = query(async (workspaceID: string) => {
         .filter(([id, _model]) => !["claude-3-5-haiku"].includes(id))
         .filter(([id, _model]) => !id.startsWith("alpha-"))
         .sort(([idA, modelA], [idB, modelB]) => {
-          const priority = ["big-pickle", "grok", "claude", "gpt", "gemini"]
+          const priority = ["big-pickle", "minimax", "grok", "claude", "gpt", "gemini"]
           const getPriority = (id: string) => {
             const index = priority.findIndex((p) => id.startsWith(p))
             return index === -1 ? Infinity : index
@@ -129,6 +131,8 @@ export function ModelSection() {
                                   return <IconAlibaba width={16} height={16} />
                                 case "xAI":
                                   return <IconXai width={16} height={16} />
+                                case "MiniMax":
+                                  return <IconMiniMax width={16} height={16} />
                                 default:
                                   return <IconStealth width={16} height={16} />
                               }

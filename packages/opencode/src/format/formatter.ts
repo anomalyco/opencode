@@ -2,6 +2,7 @@ import { readableStreamToText } from "bun"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
+import { Flag } from "@/flag/flag"
 
 export interface Info {
   name: string
@@ -74,9 +75,28 @@ export const prettier: Info = {
   },
 }
 
+export const oxfmt: Info = {
+  name: "oxfmt",
+  command: [BunProc.which(), "x", "oxfmt", "$FILE"],
+  environment: {
+    BUN_BE_BUN: "1",
+  },
+  extensions: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"],
+  async enabled() {
+    if (!Flag.OPENCODE_EXPERIMENTAL_OXFMT) return false
+    const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
+    for (const item of items) {
+      const json = await Bun.file(item).json()
+      if (json.dependencies?.oxfmt) return true
+      if (json.devDependencies?.oxfmt) return true
+    }
+    return false
+  },
+}
+
 export const biome: Info = {
   name: "biome",
-  command: [BunProc.which(), "x", "@biomejs/biome", "format", "--write", "$FILE"],
+  command: [BunProc.which(), "x", "@biomejs/biome", "check", "--write", "$FILE"],
   environment: {
     BUN_BE_BUN: "1",
   },
@@ -273,5 +293,67 @@ export const terraform: Info = {
   extensions: [".tf", ".tfvars"],
   async enabled() {
     return Bun.which("terraform") !== null
+  },
+}
+
+export const latexindent: Info = {
+  name: "latexindent",
+  command: ["latexindent", "-w", "-s", "$FILE"],
+  extensions: [".tex"],
+  async enabled() {
+    return Bun.which("latexindent") !== null
+  },
+}
+
+export const gleam: Info = {
+  name: "gleam",
+  command: ["gleam", "format", "$FILE"],
+  extensions: [".gleam"],
+  async enabled() {
+    return Bun.which("gleam") !== null
+  },
+}
+
+export const shfmt: Info = {
+  name: "shfmt",
+  command: ["shfmt", "-w", "$FILE"],
+  extensions: [".sh", ".bash"],
+  async enabled() {
+    return Bun.which("shfmt") !== null
+  },
+}
+
+export const nixfmt: Info = {
+  name: "nixfmt",
+  command: ["nixfmt", "$FILE"],
+  extensions: [".nix"],
+  async enabled() {
+    return Bun.which("nixfmt") !== null
+  },
+}
+
+export const rustfmt: Info = {
+  name: "rustfmt",
+  command: ["rustfmt", "$FILE"],
+  extensions: [".rs"],
+  async enabled() {
+    if (!Bun.which("rustfmt")) return false
+    const configs = ["rustfmt.toml", ".rustfmt.toml"]
+    for (const config of configs) {
+      const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
+      if (found.length > 0) return true
+    }
+    return false
+  },
+}
+
+export const cargofmt: Info = {
+  name: "cargofmt",
+  command: ["cargo", "fmt", "--", "$FILE"],
+  extensions: [".rs"],
+  async enabled() {
+    if (!Bun.which("cargo")) return false
+    const found = await Filesystem.findUp("Cargo.toml", Instance.directory, Instance.worktree)
+    return found.length > 0
   },
 }

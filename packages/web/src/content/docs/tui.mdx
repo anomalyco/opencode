@@ -235,10 +235,24 @@ Share current session. [Learn more](/docs/share).
 List available themes.
 
 ```bash frame="none"
-/themes
+/theme
 ```
 
 **Keybind:** `ctrl+x t`
+
+---
+
+### thinking
+
+Toggle the visibility of thinking/reasoning blocks in the conversation. When enabled, you can see the model's reasoning process for models that support extended thinking.
+
+:::note
+This command only controls whether thinking blocks are **displayed** - it does not enable or disable the model's reasoning capabilities. To toggle actual reasoning capabilities, use `ctrl+t` to cycle through model variants.
+:::
+
+```bash frame="none"
+/thinking
+```
 
 ---
 
@@ -325,6 +339,7 @@ Popular editor options include:
 - `code` - Visual Studio Code
 - `cursor` - Cursor
 - `windsurf` - Windsurf
+- `nvim` - Neovim editor
 - `vim` - Vim editor
 - `nano` - Nano editor
 - `notepad` - Windows Notepad
@@ -357,15 +372,17 @@ You can customize TUI behavior through your OpenCode config file.
 ### Options
 
 - `scroll_acceleration` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
-- `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `1`). Defaults to `1` on Unix and `3` on Windows. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
+- `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `1`). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 
 ---
 
-## View customization
+## Customization
 
 You can customize various aspects of the TUI view using the command palette (`ctrl+x h` or `/help`). These settings persist across restarts.
 
-### Username display
+---
+
+#### Username display
 
 Toggle whether your username appears in chat messages. Access this through:
 

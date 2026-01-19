@@ -5,58 +5,52 @@ import z from "zod"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
-import { Flag } from "../flag/flag"
 import { SessionRevert } from "./revert"
 import { Session } from "."
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
-import {
-  generateText,
-  type ModelMessage,
-  type Tool as AITool,
-  tool,
-  wrapLanguageModel,
-  stepCountIs,
-  jsonSchema,
-} from "ai"
+import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions } from "ai"
 import { SessionCompaction } from "./compaction"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
 import { Plugin } from "../plugin"
-
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
-import { clone, mergeDeep, pipe } from "remeda"
+import { clone } from "remeda"
 import { ToolRegistry } from "../tool/registry"
-import { Wildcard } from "../util/wildcard"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { ListTool } from "../tool/ls"
 import { FileTime } from "../file/time"
+import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
-import { Config } from "../config/config"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
+import { Tool } from "@/tool/tool"
+import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
+import { LLM } from "./llm"
+import { iife } from "@/util/iife"
+import { Shell } from "@/shell/shell"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
-  export const OUTPUT_TOKEN_MAX = 32_000
+  export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
   const state = Instance.state(
     () => {
@@ -75,6 +69,9 @@ export namespace SessionPrompt {
     async (current) => {
       for (const item of Object.values(current)) {
         item.abort.abort()
+        for (const callback of item.callbacks) {
+          callback.reject()
+        }
       }
     },
   )
@@ -95,8 +92,14 @@ export namespace SessionPrompt {
       .optional(),
     agent: z.string().optional(),
     noReply: z.boolean().optional(),
+    tools: z
+      .record(z.string(), z.boolean())
+      .optional()
+      .describe(
+        "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
+      ),
     system: z.string().optional(),
-    tools: z.record(z.string(), z.boolean()).optional(),
+    variant: z.string().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -143,6 +146,37 @@ export namespace SessionPrompt {
     ),
   })
   export type PromptInput = z.infer<typeof PromptInput>
+
+  export const prompt = fn(PromptInput, async (input) => {
+    const session = await Session.get(input.sessionID)
+    await SessionRevert.cleanup(session)
+
+    const message = await createUserMessage(input)
+    await Session.touch(input.sessionID)
+
+    // this is backwards compatibility for allowing `tools` to be specified when
+    // prompting
+    const permissions: PermissionNext.Ruleset = []
+    for (const [tool, enabled] of Object.entries(input.tools ?? {})) {
+      permissions.push({
+        permission: tool,
+        action: enabled ? "allow" : "deny",
+        pattern: "*",
+      })
+    }
+    if (permissions.length > 0) {
+      session.permission = permissions
+      await Session.update(session.id, (draft) => {
+        draft.permission = permissions
+      })
+    }
+
+    if (input.noReply === true) {
+      return message
+    }
+
+    return loop(input.sessionID)
+  })
 
   export async function resolvePromptParts(template: string): Promise<PromptInput["parts"]> {
     const parts: PromptInput["parts"] = [
@@ -195,20 +229,6 @@ export namespace SessionPrompt {
     return parts
   }
 
-  export const prompt = fn(PromptInput, async (input) => {
-    const session = await Session.get(input.sessionID)
-    await SessionRevert.cleanup(session)
-
-    const message = await createUserMessage(input)
-    await Session.touch(input.sessionID)
-
-    if (input.noReply === true) {
-      return message
-    }
-
-    return loop(input.sessionID)
-  })
-
   function start(sessionID: string) {
     const s = state()
     if (s[sessionID]) return
@@ -246,6 +266,7 @@ export namespace SessionPrompt {
     using _ = defer(() => cancel(sessionID))
 
     let step = 0
+    const session = await Session.get(sessionID)
     while (true) {
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
@@ -282,27 +303,27 @@ export namespace SessionPrompt {
       step++
       if (step === 1)
         ensureTitle({
-          session: await Session.get(sessionID),
+          session,
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
-          message: msgs.find((m) => m.info.role === "user")!,
           history: msgs,
         })
 
       const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
-      const language = await Provider.getLanguage(model)
       const task = tasks.pop()
 
       // pending subtask
       // TODO: centralize "invoke tool" logic
       if (task?.type === "subtask") {
         const taskTool = await TaskTool.init()
+        const taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
         const assistantMessage = (await Session.updateMessage({
           id: Identifier.ascending("message"),
           role: "assistant",
           parentID: lastUser.id,
           sessionID,
           mode: task.agent,
+          agent: task.agent,
           path: {
             cwd: Instance.directory,
             root: Instance.worktree,
@@ -314,8 +335,8 @@ export namespace SessionPrompt {
             reasoning: 0,
             cache: { read: 0, write: 0 },
           },
-          modelID: model.id,
-          providerID: model.providerID,
+          modelID: taskModel.id,
+          providerID: taskModel.providerID,
           time: {
             created: Date.now(),
           },
@@ -333,42 +354,69 @@ export namespace SessionPrompt {
               prompt: task.prompt,
               description: task.description,
               subagent_type: task.agent,
+              command: task.command,
             },
             time: {
               start: Date.now(),
             },
           },
         })) as MessageV2.ToolPart
+        const taskArgs = {
+          prompt: task.prompt,
+          description: task.description,
+          subagent_type: task.agent,
+          command: task.command,
+        }
+        await Plugin.trigger(
+          "tool.execute.before",
+          {
+            tool: "task",
+            sessionID,
+            callID: part.id,
+          },
+          { args: taskArgs },
+        )
         let executionError: Error | undefined
-        const result = await taskTool
-          .execute(
-            {
-              prompt: task.prompt,
-              description: task.description,
-              subagent_type: task.agent,
-            },
-            {
-              agent: task.agent,
-              messageID: assistantMessage.id,
-              sessionID: sessionID,
-              abort,
-              async metadata(input) {
-                await Session.updatePart({
-                  ...part,
-                  type: "tool",
-                  state: {
-                    ...part.state,
-                    ...input,
-                  },
-                } satisfies MessageV2.ToolPart)
+        const taskAgent = await Agent.get(task.agent)
+        const taskCtx: Tool.Context = {
+          agent: task.agent,
+          messageID: assistantMessage.id,
+          sessionID: sessionID,
+          abort,
+          callID: part.callID,
+          extra: { bypassAgentCheck: true },
+          async metadata(input) {
+            await Session.updatePart({
+              ...part,
+              type: "tool",
+              state: {
+                ...part.state,
+                ...input,
               },
-            },
-          )
-          .catch((error) => {
-            executionError = error
-            log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
-            return undefined
-          })
+            } satisfies MessageV2.ToolPart)
+          },
+          async ask(req) {
+            await PermissionNext.ask({
+              ...req,
+              sessionID: sessionID,
+              ruleset: PermissionNext.merge(taskAgent.permission, session.permission ?? []),
+            })
+          },
+        }
+        const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
+          executionError = error
+          log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+          return undefined
+        })
+        await Plugin.trigger(
+          "tool.execute.after",
+          {
+            tool: "task",
+            sessionID,
+            callID: part.id,
+          },
+          result,
+        )
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -404,6 +452,30 @@ export namespace SessionPrompt {
             },
           } satisfies MessageV2.ToolPart)
         }
+
+        // Add synthetic user message to prevent certain reasoning models from erroring
+        // If we create assistant messages w/ out user ones following mid loop thinking signatures
+        // will be missing and it can cause errors for models like gemini for example
+        const summaryUserMsg: MessageV2.User = {
+          id: Identifier.ascending("message"),
+          sessionID,
+          role: "user",
+          time: {
+            created: Date.now(),
+          },
+          agent: lastUser.agent,
+          model: lastUser.model,
+        }
+        await Session.updateMessage(summaryUserMsg)
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: summaryUserMsg.id,
+          sessionID,
+          type: "text",
+          text: "Summarize the task tool output above and continue with your task.",
+          synthetic: true,
+        } satisfies MessageV2.TextPart)
+
         continue
       }
 
@@ -413,11 +485,6 @@ export namespace SessionPrompt {
           messages: msgs,
           parentID: lastUser.id,
           abort,
-          agent: lastUser.agent,
-          model: {
-            providerID: model.providerID,
-            modelID: model.id,
-          },
           sessionID,
           auto: task.auto,
         })
@@ -429,7 +496,7 @@ export namespace SessionPrompt {
       if (
         lastFinished &&
         lastFinished.summary !== true &&
-        SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model })
+        (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
       ) {
         await SessionCompaction.create({
           sessionID,
@@ -441,20 +508,22 @@ export namespace SessionPrompt {
       }
 
       // normal processing
-      const cfg = await Config.get()
       const agent = await Agent.get(lastUser.agent)
-      const maxSteps = agent.maxSteps ?? Infinity
+      const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
-      msgs = insertReminders({
+      msgs = await insertReminders({
         messages: msgs,
         agent,
+        session,
       })
+
       const processor = SessionProcessor.create({
         assistantMessage: (await Session.updateMessage({
           id: Identifier.ascending("message"),
           parentID: lastUser.id,
           role: "assistant",
           mode: agent.name,
+          agent: agent.name,
           path: {
             cwd: Instance.directory,
             root: Instance.worktree,
@@ -477,42 +546,19 @@ export namespace SessionPrompt {
         model,
         abort,
       })
-      const system = await resolveSystemPrompt({
-        model,
-        agent,
-        system: lastUser.system,
-        isLastStep,
-      })
+
+      // Check if user explicitly invoked an agent via @ in this turn
+      const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+      const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+
       const tools = await resolveTools({
         agent,
-        sessionID,
+        session,
         model,
         tools: lastUser.tools,
         processor,
+        bypassAgentCheck,
       })
-      const provider = await Provider.getProvider(model.providerID)
-      const params = await Plugin.trigger(
-        "chat.params",
-        {
-          sessionID: sessionID,
-          agent: lastUser.agent,
-          model: model,
-          provider,
-          message: lastUser,
-        },
-        {
-          temperature: model.capabilities.temperature
-            ? (agent.temperature ?? ProviderTransform.temperature(model))
-            : undefined,
-          topP: agent.topP ?? ProviderTransform.topP(model),
-          options: pipe(
-            {},
-            mergeDeep(ProviderTransform.options(model, sessionID, provider?.options)),
-            mergeDeep(model.options),
-            mergeDeep(agent.options),
-          ),
-        },
-      )
 
       if (step === 1) {
         SessionSummary.summarize({
@@ -521,136 +567,58 @@ export namespace SessionPrompt {
         })
       }
 
-      // Deep copy message history so that modifications made by plugins do not
-      // affect the original messages
-      const sessionMessages = clone(
-        msgs.filter((m) => {
-          if (m.info.role !== "assistant" || m.info.error === undefined) {
-            return true
+      const sessionMessages = clone(msgs)
+
+      // Ephemerally wrap queued user messages with a reminder to stay on track
+      if (step > 1 && lastFinished) {
+        for (const msg of sessionMessages) {
+          if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
+          for (const part of msg.parts) {
+            if (part.type !== "text" || part.ignored || part.synthetic) continue
+            if (!part.text.trim()) continue
+            part.text = [
+              "<system-reminder>",
+              "The user sent the following message:",
+              part.text,
+              "",
+              "Please address this message and continue with your tasks.",
+              "</system-reminder>",
+            ].join("\n")
           }
-          if (
-            MessageV2.AbortedError.isInstance(m.info.error) &&
-            m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-          ) {
-            return true
-          }
-          return false
-        }),
-      )
+        }
+      }
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
-      const messages: ModelMessage[] = [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
-        ...MessageV2.toModelMessage(sessionMessages),
-        ...(isLastStep
-          ? [
-              {
-                role: "assistant" as const,
-                content: MAX_STEPS,
-              },
-            ]
-          : []),
-      ]
-
       const result = await processor.process({
-        onError(error) {
-          log.error("stream error", {
-            error,
-          })
-        },
-        async experimental_repairToolCall(input) {
-          const lower = input.toolCall.toolName.toLowerCase()
-          if (lower !== input.toolCall.toolName && tools[lower]) {
-            log.info("repairing tool call", {
-              tool: input.toolCall.toolName,
-              repaired: lower,
-            })
-            return {
-              ...input.toolCall,
-              toolName: lower,
-            }
-          }
-          return {
-            ...input.toolCall,
-            input: JSON.stringify({
-              tool: input.toolCall.toolName,
-              error: input.error.message,
-            }),
-            toolName: "invalid",
-          }
-        },
-        headers: {
-          ...(model.providerID.startsWith("opencode")
-            ? {
-                "x-opencode-project": Instance.project.id,
-                "x-opencode-session": sessionID,
-                "x-opencode-request": lastUser.id,
-                "x-opencode-client": Flag.OPENCODE_CLIENT,
-              }
-            : undefined),
-          ...model.headers,
-        },
-        // set to 0, we handle loop
-        maxRetries: 0,
-        activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-        maxOutputTokens: ProviderTransform.maxOutputTokens(
-          model.api.npm,
-          params.options,
-          model.limit.output,
-          OUTPUT_TOKEN_MAX,
-        ),
-        abortSignal: abort,
-        providerOptions: ProviderTransform.providerOptions(model, params.options),
-        stopWhen: stepCountIs(1),
-        temperature: params.temperature,
-        topP: params.topP,
-        toolChoice: isLastStep ? "none" : undefined,
-        messages,
-        tools: model.capabilities.toolcall === false ? undefined : tools,
-        model: wrapLanguageModel({
-          model: language,
-          middleware: [
-            {
-              async transformParams(args) {
-                if (args.type === "stream") {
-                  // @ts-expect-error - prompt types are compatible at runtime
-                  args.params.prompt = ProviderTransform.message(args.params.prompt, model)
-                }
-                // Transform tool schemas for provider compatibility
-                if (args.params.tools && Array.isArray(args.params.tools)) {
-                  args.params.tools = args.params.tools.map((tool: any) => {
-                    // Tools at middleware level have inputSchema, not parameters
-                    if (tool.inputSchema && typeof tool.inputSchema === "object") {
-                      // Transform the inputSchema for provider compatibility
-                      return {
-                        ...tool,
-                        inputSchema: ProviderTransform.schema(model, tool.inputSchema),
-                      }
-                    }
-                    // If no inputSchema, return tool unchanged
-                    return tool
-                  })
-                }
-                return args.params
-              },
-            },
-          ],
-        }),
-        experimental_telemetry: {
-          isEnabled: cfg.experimental?.openTelemetry,
-          metadata: {
-            userId: cfg.username ?? "unknown",
-            sessionId: sessionID,
-          },
-        },
+        user: lastUser,
+        agent,
+        abort,
+        sessionID,
+        system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
+        messages: [
+          ...MessageV2.toModelMessage(sessionMessages),
+          ...(isLastStep
+            ? [
+                {
+                  role: "assistant" as const,
+                  content: MAX_STEPS,
+                },
+              ]
+            : []),
+        ],
+        tools,
+        model,
       })
       if (result === "stop") break
+      if (result === "compact") {
+        await SessionCompaction.create({
+          sessionID,
+          agent: lastUser.agent,
+          model: lastUser.model,
+          auto: true,
+        })
+      }
       continue
     }
     SessionCompaction.prune({ sessionID })
@@ -672,96 +640,80 @@ export namespace SessionPrompt {
     return Provider.defaultModel()
   }
 
-  async function resolveSystemPrompt(input: {
-    system?: string
-    agent: Agent.Info
-    model: Provider.Model
-    isLastStep?: boolean
-  }) {
-    let system = SystemPrompt.header(input.model.providerID)
-    system.push(
-      ...(() => {
-        if (input.system) return [input.system]
-        if (input.agent.prompt) return [input.agent.prompt]
-        return SystemPrompt.provider(input.model)
-      })(),
-    )
-    system.push(...(await SystemPrompt.environment()))
-    system.push(...(await SystemPrompt.custom()))
-
-    if (input.isLastStep) {
-      system.push(MAX_STEPS)
-    }
-
-    // max 2 system prompt messages for caching purposes
-    const [first, ...rest] = system
-    system = [first, rest.join("\n")]
-    return system
-  }
-
   async function resolveTools(input: {
     agent: Agent.Info
     model: Provider.Model
-    sessionID: string
+    session: Session.Info
     tools?: Record<string, boolean>
     processor: SessionProcessor.Info
+    bypassAgentCheck: boolean
   }) {
+    using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
-    const enabledTools = pipe(
-      input.agent.tools,
-      mergeDeep(await ToolRegistry.enabled(input.agent)),
-      mergeDeep(input.tools ?? {}),
-    )
-    for (const item of await ToolRegistry.tools(input.model.providerID)) {
-      if (Wildcard.all(item.id, enabledTools) === false) continue
+
+    const context = (args: any, options: ToolCallOptions): Tool.Context => ({
+      sessionID: input.session.id,
+      abort: options.abortSignal!,
+      messageID: input.processor.message.id,
+      callID: options.toolCallId,
+      extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
+      agent: input.agent.name,
+      metadata: async (val: { title?: string; metadata?: any }) => {
+        const match = input.processor.partFromToolCall(options.toolCallId)
+        if (match && match.state.status === "running") {
+          await Session.updatePart({
+            ...match,
+            state: {
+              title: val.title,
+              metadata: val.metadata,
+              status: "running",
+              input: args,
+              time: {
+                start: Date.now(),
+              },
+            },
+          })
+        }
+      },
+      async ask(req) {
+        await PermissionNext.ask({
+          ...req,
+          sessionID: input.session.id,
+          tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+          ruleset: PermissionNext.merge(input.agent.permission, input.session.permission ?? []),
+        })
+      },
+    })
+
+    for (const item of await ToolRegistry.tools(
+      { modelID: input.model.api.id, providerID: input.model.providerID },
+      input.agent,
+    )) {
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
+          const ctx = context(args, options)
           await Plugin.trigger(
             "tool.execute.before",
             {
               tool: item.id,
-              sessionID: input.sessionID,
-              callID: options.toolCallId,
+              sessionID: ctx.sessionID,
+              callID: ctx.callID,
             },
             {
               args,
             },
           )
-          const result = await item.execute(args, {
-            sessionID: input.sessionID,
-            abort: options.abortSignal!,
-            messageID: input.processor.message.id,
-            callID: options.toolCallId,
-            extra: { model: input.model },
-            agent: input.agent.name,
-            metadata: async (val) => {
-              const match = input.processor.partFromToolCall(options.toolCallId)
-              if (match && match.state.status === "running") {
-                await Session.updatePart({
-                  ...match,
-                  state: {
-                    title: val.title,
-                    metadata: val.metadata,
-                    status: "running",
-                    input: args,
-                    time: {
-                      start: Date.now(),
-                    },
-                  },
-                })
-              }
-            },
-          })
+          const result = await item.execute(args, ctx)
           await Plugin.trigger(
             "tool.execute.after",
             {
               tool: item.id,
-              sessionID: input.sessionID,
-              callID: options.toolCallId,
+              sessionID: ctx.sessionID,
+              callID: ctx.callID,
             },
             result,
           )
@@ -777,30 +729,39 @@ export namespace SessionPrompt {
     }
 
     for (const [key, item] of Object.entries(await MCP.tools())) {
-      if (Wildcard.all(key, enabledTools) === false) continue
       const execute = item.execute
       if (!execute) continue
 
       // Wrap execute to add plugin hooks and format output
       item.execute = async (args, opts) => {
+        const ctx = context(args, opts)
+
         await Plugin.trigger(
           "tool.execute.before",
           {
             tool: key,
-            sessionID: input.sessionID,
+            sessionID: ctx.sessionID,
             callID: opts.toolCallId,
           },
           {
             args,
           },
         )
+
+        await ctx.ask({
+          permission: key,
+          metadata: {},
+          patterns: ["*"],
+          always: ["*"],
+        })
+
         const result = await execute(args, opts)
 
         await Plugin.trigger(
           "tool.execute.after",
           {
             tool: key,
-            sessionID: input.sessionID,
+            sessionID: ctx.sessionID,
             callID: opts.toolCallId,
           },
           result,
@@ -815,14 +776,29 @@ export namespace SessionPrompt {
           } else if (contentItem.type === "image") {
             attachments.push({
               id: Identifier.ascending("part"),
-              sessionID: input.sessionID,
+              sessionID: input.session.id,
               messageID: input.processor.message.id,
               type: "file",
               mime: contentItem.mimeType,
               url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
             })
+          } else if (contentItem.type === "resource") {
+            const { resource } = contentItem
+            if (resource.text) {
+              textParts.push(resource.text)
+            }
+            if (resource.blob) {
+              attachments.push({
+                id: Identifier.ascending("part"),
+                sessionID: input.session.id,
+                messageID: input.processor.message.id,
+                type: "file",
+                mime: resource.mimeType ?? "application/octet-stream",
+                url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
+                filename: resource.uri,
+              })
+            }
           }
-          // Add support for other types if needed
         }
 
         return {
@@ -841,11 +817,12 @@ export namespace SessionPrompt {
       }
       tools[key] = item
     }
+
     return tools
   }
 
   async function createUserMessage(input: PromptInput) {
-    const agent = await Agent.get(input.agent ?? "build")
+    const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -854,14 +831,87 @@ export namespace SessionPrompt {
         created: Date.now(),
       },
       tools: input.tools,
-      system: input.system,
       agent: agent.name,
       model: input.model ?? agent.model ?? (await lastModel(input.sessionID)),
+      system: input.system,
+      variant: input.variant,
     }
 
     const parts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.Part[]> => {
         if (part.type === "file") {
+          // before checking the protocol we check if this is an mcp resource because it needs special handling
+          if (part.source?.type === "resource") {
+            const { clientName, uri } = part.source
+            log.info("mcp resource", { clientName, uri, mime: part.mime })
+
+            const pieces: MessageV2.Part[] = [
+              {
+                id: Identifier.ascending("part"),
+                messageID: info.id,
+                sessionID: input.sessionID,
+                type: "text",
+                synthetic: true,
+                text: `Reading MCP resource: ${part.filename} (${uri})`,
+              },
+            ]
+
+            try {
+              const resourceContent = await MCP.readResource(clientName, uri)
+              if (!resourceContent) {
+                throw new Error(`Resource not found: ${clientName}/${uri}`)
+              }
+
+              // Handle different content types
+              const contents = Array.isArray(resourceContent.contents)
+                ? resourceContent.contents
+                : [resourceContent.contents]
+
+              for (const content of contents) {
+                if ("text" in content && content.text) {
+                  pieces.push({
+                    id: Identifier.ascending("part"),
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: content.text as string,
+                  })
+                } else if ("blob" in content && content.blob) {
+                  // Handle binary content if needed
+                  const mimeType = "mimeType" in content ? content.mimeType : part.mime
+                  pieces.push({
+                    id: Identifier.ascending("part"),
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `[Binary content: ${mimeType}]`,
+                  })
+                }
+              }
+
+              pieces.push({
+                ...part,
+                id: part.id ?? Identifier.ascending("part"),
+                messageID: info.id,
+                sessionID: input.sessionID,
+              })
+            } catch (error: unknown) {
+              log.error("failed to read MCP resource", { error, clientName, uri })
+              const message = error instanceof Error ? error.message : String(error)
+              pieces.push({
+                id: Identifier.ascending("part"),
+                messageID: info.id,
+                sessionID: input.sessionID,
+                type: "text",
+                synthetic: true,
+                text: `Failed to read MCP resource ${part.filename}: ${message}`,
+              })
+            }
+
+            return pieces
+          }
           const url = new URL(part.url)
           switch (url.protocol) {
             case "data:":
@@ -954,14 +1004,16 @@ export namespace SessionPrompt {
                 await ReadTool.init()
                   .then(async (t) => {
                     const model = await Provider.getModel(info.model.providerID, info.model.modelID)
-                    const result = await t.execute(args, {
+                    const readCtx: Tool.Context = {
                       sessionID: input.sessionID,
                       abort: new AbortController().signal,
                       agent: input.agent!,
                       messageID: info.id,
                       extra: { bypassCwdCheck: true, model },
                       metadata: async () => {},
-                    })
+                      ask: async () => {},
+                    }
+                    const result = await t.execute(args, readCtx)
                     pieces.push({
                       id: Identifier.ascending("part"),
                       messageID: info.id,
@@ -1013,16 +1065,16 @@ export namespace SessionPrompt {
 
               if (part.mime === "application/x-directory") {
                 const args = { path: filepath }
-                const result = await ListTool.init().then((t) =>
-                  t.execute(args, {
-                    sessionID: input.sessionID,
-                    abort: new AbortController().signal,
-                    agent: input.agent!,
-                    messageID: info.id,
-                    extra: { bypassCwdCheck: true },
-                    metadata: async () => {},
-                  }),
-                )
+                const listCtx: Tool.Context = {
+                  sessionID: input.sessionID,
+                  abort: new AbortController().signal,
+                  agent: input.agent!,
+                  messageID: info.id,
+                  extra: { bypassCwdCheck: true },
+                  metadata: async () => {},
+                  ask: async () => {},
+                }
+                const result = await ListTool.init().then((t) => t.execute(args, listCtx))
                 return [
                   {
                     id: Identifier.ascending("part"),
@@ -1075,6 +1127,9 @@ export namespace SessionPrompt {
         }
 
         if (part.type === "agent") {
+          // Check if this agent would be denied by task permission
+          const perm = PermissionNext.evaluate("task", part.name, agent.permission)
+          const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
           return [
             {
               id: Identifier.ascending("part"),
@@ -1088,9 +1143,12 @@ export namespace SessionPrompt {
               sessionID: input.sessionID,
               type: "text",
               synthetic: true,
+              // An extra space is added here. Otherwise the 'Use' gets appended
+              // to user's last word; making a combined word
               text:
-                "Use the above message and context to generate a prompt and call the task tool with subagent: " +
-                part.name,
+                " Use the above message and context to generate a prompt and call the task tool with subagent: " +
+                part.name +
+                hint,
             },
           ]
         }
@@ -1113,6 +1171,7 @@ export namespace SessionPrompt {
         agent: input.agent,
         model: input.model,
         messageID: input.messageID,
+        variant: input.variant,
       },
       {
         message: info,
@@ -1131,30 +1190,142 @@ export namespace SessionPrompt {
     }
   }
 
-  function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info }) {
+  async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {
     const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
     if (!userMessage) return input.messages
-    if (input.agent.name === "plan") {
-      userMessage.parts.push({
-        id: Identifier.ascending("part"),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        // TODO (for mr dax): update to use the anthropic full fledged one (see plan-reminder-anthropic.txt)
-        text: PROMPT_PLAN,
-        synthetic: true,
-      })
+
+    // Original logic when experimental plan mode is disabled
+    if (!Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE) {
+      if (input.agent.name === "plan") {
+        userMessage.parts.push({
+          id: Identifier.ascending("part"),
+          messageID: userMessage.info.id,
+          sessionID: userMessage.info.sessionID,
+          type: "text",
+          text: PROMPT_PLAN,
+          synthetic: true,
+        })
+      }
+      const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
+      if (wasPlan && input.agent.name === "build") {
+        userMessage.parts.push({
+          id: Identifier.ascending("part"),
+          messageID: userMessage.info.id,
+          sessionID: userMessage.info.sessionID,
+          type: "text",
+          text: BUILD_SWITCH,
+          synthetic: true,
+        })
+      }
+      return input.messages
     }
-    const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.mode === "plan")
-    if (wasPlan && input.agent.name === "build") {
-      userMessage.parts.push({
+
+    // New plan mode logic when flag is enabled
+    const assistantMessage = input.messages.findLast((msg) => msg.info.role === "assistant")
+
+    // Switching from plan mode to build mode
+    if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
+      const plan = Session.plan(input.session)
+      const exists = await Bun.file(plan).exists()
+      if (exists) {
+        const part = await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: userMessage.info.id,
+          sessionID: userMessage.info.sessionID,
+          type: "text",
+          text:
+            BUILD_SWITCH + "\n\n" + `A plan file exists at ${plan}. You should execute on the plan defined within it`,
+          synthetic: true,
+        })
+        userMessage.parts.push(part)
+      }
+      return input.messages
+    }
+
+    // Entering plan mode
+    if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
+      const plan = Session.plan(input.session)
+      const exists = await Bun.file(plan).exists()
+      if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
+      const part = await Session.updatePart({
         id: Identifier.ascending("part"),
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
         type: "text",
-        text: BUILD_SWITCH,
+        text: `<system-reminder>
+Plan mode is active. The user indicated that they do not want you to execute yet -- you MUST NOT make any edits (with the exception of the plan file mentioned below), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supercedes any other instructions you have received.
+
+## Plan File Info:
+${exists ? `A plan file already exists at ${plan}. You can read it and make incremental edits using the edit tool.` : `No plan file exists yet. You should create your plan at ${plan} using the write tool.`}
+You should build your plan incrementally by writing to or editing this file. NOTE that this is the only file you are allowed to edit - other than this you are only allowed to take READ-ONLY actions.
+
+## Plan Workflow
+
+### Phase 1: Initial Understanding
+Goal: Gain a comprehensive understanding of the user's request by reading through code and asking them questions. Critical: In this phase you should only use the explore subagent type.
+
+1. Focus on understanding the user's request and the code associated with their request
+
+2. **Launch up to 3 explore agents IN PARALLEL** (single message, multiple tool calls) to efficiently explore the codebase.
+   - Use 1 agent when the task is isolated to known files, the user provided specific file paths, or you're making a small targeted change.
+   - Use multiple agents when: the scope is uncertain, multiple areas of the codebase are involved, or you need to understand existing patterns before planning.
+   - Quality over quantity - 3 agents maximum, but you should try to use the minimum number of agents necessary (usually just 1)
+   - If using multiple agents: Provide each agent with a specific search focus or area to explore. Example: One agent searches for existing implementations, another explores related components, a third investigates testing patterns
+
+3. After exploring the code, use the question tool to clarify ambiguities in the user request up front.
+
+### Phase 2: Design
+Goal: Design an implementation approach.
+
+Launch general agent(s) to design the implementation based on the user's intent and your exploration results from Phase 1.
+
+You can launch up to 1 agent(s) in parallel.
+
+**Guidelines:**
+- **Default**: Launch at least 1 Plan agent for most tasks - it helps validate your understanding and consider alternatives
+- **Skip agents**: Only for truly trivial tasks (typo fixes, single-line changes, simple renames)
+
+Examples of when to use multiple agents:
+- The task touches multiple parts of the codebase
+- It's a large refactor or architectural change
+- There are many edge cases to consider
+- You'd benefit from exploring different approaches
+
+Example perspectives by task type:
+- New feature: simplicity vs performance vs maintainability
+- Bug fix: root cause vs workaround vs prevention
+- Refactoring: minimal change vs clean architecture
+
+In the agent prompt:
+- Provide comprehensive background context from Phase 1 exploration including filenames and code path traces
+- Describe requirements and constraints
+- Request a detailed implementation plan
+
+### Phase 3: Review
+Goal: Review the plan(s) from Phase 2 and ensure alignment with the user's intentions.
+1. Read the critical files identified by agents to deepen your understanding
+2. Ensure that the plans align with the user's original request
+3. Use question tool to clarify any remaining questions with the user
+
+### Phase 4: Final Plan
+Goal: Write your final plan to the plan file (the only file you can edit).
+- Include only your recommended approach, not all alternatives
+- Ensure that the plan file is concise enough to scan quickly, but detailed enough to execute effectively
+- Include the paths of critical files to be modified
+- Include a verification section describing how to test the changes end-to-end (run the code, use MCP tools, run tests)
+
+### Phase 5: Call plan_exit tool
+At the very end of your turn, once you have asked the user questions and are happy with your final plan file - you should always call plan_exit to indicate to the user that you are done planning.
+This is critical - your turn should only end with either asking the user a question or calling plan_exit. Do not stop unless it's for these 2 reasons.
+
+**Important:** Use question tool to clarify requirements/approach, use plan_exit to request plan approval. Do NOT use question tool to ask "Is this plan okay?" - that's what plan_exit does.
+
+NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
+</system-reminder>`,
         synthetic: true,
       })
+      userMessage.parts.push(part)
+      return input.messages
     }
     return input.messages
   }
@@ -1172,6 +1343,12 @@ export namespace SessionPrompt {
   })
   export type ShellInput = z.infer<typeof ShellInput>
   export async function shell(input: ShellInput) {
+    const abort = start(input.sessionID)
+    if (!abort) {
+      throw new Session.BusyError(input.sessionID)
+    }
+    using _ = defer(() => cancel(input.sessionID))
+
     const session = await Session.get(input.sessionID)
     if (session.revert) {
       SessionRevert.cleanup(session)
@@ -1207,6 +1384,7 @@ export namespace SessionPrompt {
       sessionID: input.sessionID,
       parentID: userMsg.id,
       mode: input.agent,
+      agent: input.agent,
       cost: 0,
       path: {
         cwd: Instance.directory,
@@ -1244,8 +1422,10 @@ export namespace SessionPrompt {
       },
     }
     await Session.updatePart(part)
-    const shell = process.env["SHELL"] ?? (process.platform === "win32" ? process.env["COMSPEC"] || "cmd.exe" : "bash")
-    const shellName = path.basename(shell).toLowerCase()
+    const shell = Shell.preferred()
+    const shellName = (
+      process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
+    ).toLowerCase()
 
     const invocations: Record<string, { args: string[] }> = {
       nu: {
@@ -1261,7 +1441,7 @@ export namespace SessionPrompt {
           `
             [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
             [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-            ${input.command}
+            eval ${JSON.stringify(input.command)}
           `,
         ],
       },
@@ -1270,22 +1450,27 @@ export namespace SessionPrompt {
           "-c",
           "-l",
           `
+            shopt -s expand_aliases
             [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-            ${input.command}
+            eval ${JSON.stringify(input.command)}
           `,
         ],
       },
-      // Windows cmd.exe
-      "cmd.exe": {
+      // Windows cmd
+      cmd: {
         args: ["/c", input.command],
       },
       // Windows PowerShell
-      "powershell.exe": {
+      powershell: {
+        args: ["-NoProfile", "-Command", input.command],
+      },
+      pwsh: {
         args: ["-NoProfile", "-Command", input.command],
       },
       // Fallback: any shell that doesn't match those above
+      //  - No -l, for max compatibility
       "": {
-        args: ["-c", "-l", `${input.command}`],
+        args: ["-c", `${input.command}`],
       },
     }
 
@@ -1326,11 +1511,34 @@ export namespace SessionPrompt {
       }
     })
 
+    let aborted = false
+    let exited = false
+
+    const kill = () => Shell.killTree(proc, { exited: () => exited })
+
+    if (abort.aborted) {
+      aborted = true
+      await kill()
+    }
+
+    const abortHandler = () => {
+      aborted = true
+      void kill()
+    }
+
+    abort.addEventListener("abort", abortHandler, { once: true })
+
     await new Promise<void>((resolve) => {
       proc.on("close", () => {
+        exited = true
+        abort.removeEventListener("abort", abortHandler)
         resolve()
       })
     })
+
+    if (aborted) {
+      output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
+    }
     msg.time.completed = Date.now()
     await Session.updateMessage(msg)
     if (part.state.status === "running") {
@@ -1360,10 +1568,24 @@ export namespace SessionPrompt {
     model: z.string().optional(),
     arguments: z.string(),
     command: z.string(),
+    variant: z.string().optional(),
+    parts: z
+      .array(
+        z.discriminatedUnion("type", [
+          MessageV2.FilePart.omit({
+            messageID: true,
+            sessionID: true,
+          }).partial({
+            id: true,
+          }),
+        ]),
+      )
+      .optional(),
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
-  const argsRegex = /(?:[^\s"']+|"[^"]*"|'[^']*')+/g
+  // Match [Image N] as single token, quoted strings, or non-space sequences
+  const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
   const placeholderRegex = /\$(\d+)/g
   const quoteTrimRegex = /^["']|["']$/g
   /**
@@ -1375,12 +1597,14 @@ export namespace SessionPrompt {
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
-    const agentName = command.agent ?? input.agent ?? "build"
+    const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
     const raw = input.arguments.match(argsRegex) ?? []
     const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
 
-    const placeholders = command.template.match(placeholderRegex) ?? []
+    const templateCommand = await command.template
+
+    const placeholders = templateCommand.match(placeholderRegex) ?? []
     let last = 0
     for (const item of placeholders) {
       const value = Number(item.slice(1))
@@ -1388,7 +1612,7 @@ export namespace SessionPrompt {
     }
 
     // Let the final placeholder swallow any extra arguments so prompts read naturally
-    const withArgs = command.template.replaceAll(placeholderRegex, (_, index) => {
+    const withArgs = templateCommand.replaceAll(placeholderRegex, (_, index) => {
       const position = Number(index)
       const argIndex = position - 1
       if (argIndex >= args.length) return ""
@@ -1402,7 +1626,7 @@ export namespace SessionPrompt {
       const results = await Promise.all(
         shell.map(async ([, cmd]) => {
           try {
-            return await $`${{ raw: cmd }}`.nothrow().text()
+            return await $`${{ raw: cmd }}`.quiet().nothrow().text()
           } catch (error) {
             return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
           }
@@ -1413,40 +1637,88 @@ export namespace SessionPrompt {
     }
     template = template.trim()
 
-    const model = await (async () => {
+    const taskModel = await (async () => {
       if (command.model) {
         return Provider.parseModel(command.model)
       }
       if (command.agent) {
         const cmdAgent = await Agent.get(command.agent)
-        if (cmdAgent.model) {
+        if (cmdAgent?.model) {
           return cmdAgent.model
         }
       }
       if (input.model) return Provider.parseModel(input.model)
       return await lastModel(input.sessionID)
     })()
-    const agent = await Agent.get(agentName)
 
-    const parts =
-      (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
-        ? [
-            {
-              type: "subtask" as const,
-              agent: agent.name,
-              description: command.description ?? "",
-              // TODO: how can we make task tool accept a more complex input?
-              prompt: await resolvePromptParts(template).then((x) => x.find((y) => y.type === "text")?.text ?? ""),
+    try {
+      await Provider.getModel(taskModel.providerID, taskModel.modelID)
+    } catch (e) {
+      if (Provider.ModelNotFoundError.isInstance(e)) {
+        const { providerID, modelID, suggestions } = e.data
+        const hint = suggestions?.length ? ` Did you mean: ${suggestions.join(", ")}?` : ""
+        Bus.publish(Session.Event.Error, {
+          sessionID: input.sessionID,
+          error: new NamedError.Unknown({ message: `Model not found: ${providerID}/${modelID}.${hint}` }).toObject(),
+        })
+      }
+      throw e
+    }
+    const agent = await Agent.get(agentName)
+    if (!agent) {
+      const available = await Agent.list().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
+      const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+      const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
+      Bus.publish(Session.Event.Error, {
+        sessionID: input.sessionID,
+        error: error.toObject(),
+      })
+      throw error
+    }
+
+    const templateParts = await resolvePromptParts(template)
+    const isSubtask = (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
+    const parts = isSubtask
+      ? [
+          {
+            type: "subtask" as const,
+            agent: agent.name,
+            description: command.description ?? "",
+            command: input.command,
+            model: {
+              providerID: taskModel.providerID,
+              modelID: taskModel.modelID,
             },
-          ]
-        : await resolvePromptParts(template)
+            // TODO: how can we make task tool accept a more complex input?
+            prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
+          },
+        ]
+      : [...templateParts, ...(input.parts ?? [])]
+
+    const userAgent = isSubtask ? (input.agent ?? (await Agent.defaultAgent())) : agentName
+    const userModel = isSubtask
+      ? input.model
+        ? Provider.parseModel(input.model)
+        : await lastModel(input.sessionID)
+      : taskModel
+
+    await Plugin.trigger(
+      "command.execute.before",
+      {
+        command: input.command,
+        sessionID: input.sessionID,
+        arguments: input.arguments,
+      },
+      { parts },
+    )
 
     const result = (await prompt({
       sessionID: input.sessionID,
       messageID: input.messageID,
-      model,
-      agent: agentName,
+      model: userModel,
+      agent: userAgent,
       parts,
+      variant: input.variant,
     })) as MessageV2.WithParts
 
     Bus.publish(Command.Event.Executed, {
@@ -1461,88 +1733,73 @@ export namespace SessionPrompt {
 
   async function ensureTitle(input: {
     session: Session.Info
-    message: MessageV2.WithParts
     history: MessageV2.WithParts[]
     providerID: string
     modelID: string
   }) {
     if (input.session.parentID) return
     if (!Session.isDefaultTitle(input.session.title)) return
+
+    // Find first non-synthetic user message
+    const firstRealUserIdx = input.history.findIndex(
+      (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
+    )
+    if (firstRealUserIdx === -1) return
+
     const isFirst =
       input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
         .length === 1
     if (!isFirst) return
-    const cfg = await Config.get()
-    const small =
-      (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
-    const language = await Provider.getLanguage(small)
-    const provider = await Provider.getProvider(small.providerID)
-    const options = pipe(
-      {},
-      mergeDeep(ProviderTransform.options(small, input.session.id, provider?.options)),
-      mergeDeep(ProviderTransform.smallOptions(small)),
-      mergeDeep(small.options),
-    )
-    await generateText({
-      // use higher # for reasoning models since reasoning tokens eat up a lot of the budget
-      maxOutputTokens: small.capabilities.reasoning ? 3000 : 20,
-      providerOptions: ProviderTransform.providerOptions(small, options),
+
+    // Gather all messages up to and including the first real user message for context
+    // This includes any shell/subtask executions that preceded the user's first prompt
+    const contextMessages = input.history.slice(0, firstRealUserIdx + 1)
+    const firstRealUser = contextMessages[firstRealUserIdx]
+
+    // For subtask-only messages (from command invocations), extract the prompt directly
+    // since toModelMessage converts subtask parts to generic "The following tool was executed by the user"
+    const subtaskParts = firstRealUser.parts.filter((p) => p.type === "subtask") as MessageV2.SubtaskPart[]
+    const hasOnlySubtaskParts = subtaskParts.length > 0 && firstRealUser.parts.every((p) => p.type === "subtask")
+
+    const agent = await Agent.get("title")
+    if (!agent) return
+    const result = await LLM.stream({
+      agent,
+      user: firstRealUser.info as MessageV2.User,
+      system: [],
+      small: true,
+      tools: {},
+      model: await iife(async () => {
+        if (agent.model) return await Provider.getModel(agent.model.providerID, agent.model.modelID)
+        return (
+          (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
+        )
+      }),
+      abort: new AbortController().signal,
+      sessionID: input.session.id,
+      retries: 2,
       messages: [
-        ...SystemPrompt.title(small.providerID).map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
         {
           role: "user",
           content: "Generate a title for this conversation:\n",
         },
-        ...MessageV2.toModelMessage([
-          {
-            info: {
-              id: Identifier.ascending("message"),
-              role: "user",
-              sessionID: input.session.id,
-              time: {
-                created: Date.now(),
-              },
-              agent: input.message.info.role === "user" ? input.message.info.agent : "build",
-              model: {
-                providerID: input.providerID,
-                modelID: input.modelID,
-              },
-            },
-            parts: input.message.parts,
-          },
-        ]),
+        ...(hasOnlySubtaskParts
+          ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
+          : MessageV2.toModelMessage(contextMessages)),
       ],
-      headers: small.headers,
-      model: language,
-      experimental_telemetry: {
-        isEnabled: cfg.experimental?.openTelemetry,
-        metadata: {
-          userId: cfg.username ?? "unknown",
-          sessionId: input.session.id,
-        },
-      },
     })
-      .then((result) => {
-        if (result.text)
-          return Session.update(input.session.id, (draft) => {
-            const cleaned = result.text
-              .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
-              .split("\n")
-              .map((line) => line.trim())
-              .find((line) => line.length > 0)
-            if (!cleaned) return
+    const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))
+    if (text)
+      return Session.update(input.session.id, (draft) => {
+        const cleaned = text
+          .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+          .split("\n")
+          .map((line) => line.trim())
+          .find((line) => line.length > 0)
+        if (!cleaned) return
 
-            const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-            draft.title = title
-          })
-      })
-      .catch((error) => {
-        log.error("failed to generate title", { error, model: small.id })
+        const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+        draft.title = title
       })
   }
 }

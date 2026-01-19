@@ -14,12 +14,18 @@ export const AttachCommand = cmd({
       .option("dir", {
         type: "string",
         description: "directory to run in",
+      })
+      .option("session", {
+        alias: ["s"],
+        type: "string",
+        describe: "session id to continue",
       }),
   handler: async (args) => {
     if (args.dir) process.chdir(args.dir)
     await tui({
       url: args.url,
-      args: {},
+      args: { sessionID: args.session },
+      directory: args.dir ? process.cwd() : undefined,
     })
   },
 })

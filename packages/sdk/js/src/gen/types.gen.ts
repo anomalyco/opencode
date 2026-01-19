@@ -843,6 +843,14 @@ export type KeybindsConfig = {
    */
   messages_page_down?: string
   /**
+   * Scroll messages up by one line
+   */
+  messages_line_up?: string
+  /**
+   * Scroll messages down by one line
+   */
+  messages_line_down?: string
+  /**
    * Scroll messages up by half page
    */
   messages_half_page_up?: string
@@ -858,6 +866,14 @@ export type KeybindsConfig = {
    * Navigate to last message
    */
   messages_last?: string
+  /**
+   * Navigate to next message
+   */
+  messages_next?: string
+  /**
+   * Navigate to previous message
+   */
+  messages_previous?: string
   /**
    * Navigate to last user message
    */
@@ -950,6 +966,10 @@ export type KeybindsConfig = {
    * Suspend terminal
    */
   terminal_suspend?: string
+  /**
+   * Toggle terminal title
+   */
+  terminal_title_toggle?: string
 }
 
 export type AgentConfig = {
@@ -1162,6 +1182,10 @@ export type Config = {
    */
   theme?: string
   keybinds?: KeybindsConfig
+  /**
+   * Log level
+   */
+  logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR"
   /**
    * TUI specific settings
    */

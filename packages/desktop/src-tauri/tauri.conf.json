@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OpenCode Dev",
+  "identifier": "ai.opencode.desktop.dev",
+  "mainBinaryName": "OpenCode",
+  "version": "../package.json",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "title": "OpenCode",
+        "url": "/",
+        "decorations": true,
+        "dragDropEnabled": false,
+        "zoomHotkeysEnabled": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 12.0, "y": 18.0 }
+      }
+    ],
+    "withGlobalTauri": true,
+    "security": {
+      "csp": null
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "icon": [
+      "icons/dev/32x32.png",
+      "icons/dev/128x128.png",
+      "icons/dev/128x128@2x.png",
+      "icons/dev/icon.icns",
+      "icons/dev/icon.ico"
+    ],
+    "active": true,
+    "targets": ["deb", "rpm", "dmg", "nsis", "app"],
+    "externalBin": ["sidecars/opencode-cli"],
+    "macOS": {
+      "entitlements": "./entitlements.plist"
+    },
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/dev/icon.ico",
+        "headerImage": "assets/nsis-header.bmp",
+        "sidebarImage": "assets/nsis-sidebar.bmp"
+      }
+    }
+  }
+}

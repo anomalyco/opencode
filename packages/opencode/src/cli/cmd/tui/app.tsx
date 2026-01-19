@@ -4,7 +4,6 @@ import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
-import { Global } from "@/global"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
@@ -24,6 +23,8 @@ import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
+import { FrecencyProvider } from "./component/prompt/frecency"
+import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
@@ -33,6 +34,7 @@ import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
+import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
@@ -95,7 +97,16 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   })
 }
 
-export function tui(input: { url: string; args: Args; onExit?: () => Promise<void> }) {
+import type { EventSource } from "./context/sdk"
+
+export function tui(input: {
+  url: string
+  args: Args
+  directory?: string
+  fetch?: typeof fetch
+  events?: EventSource
+  onExit?: () => Promise<void>
+}) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
@@ -115,20 +126,29 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                 <KVProvider>
                   <ToastProvider>
                     <RouteProvider>
-                      <SDKProvider url={input.url}>
+                      <SDKProvider
+                        url={input.url}
+                        directory={input.directory}
+                        fetch={input.fetch}
+                        events={input.events}
+                      >
                         <SyncProvider>
                           <ThemeProvider mode={mode}>
                             <LocalProvider>
                               <KeybindProvider>
-                                <DialogProvider>
-                                  <CommandProvider>
-                                    <PromptHistoryProvider>
-                                      <PromptRefProvider>
-                                        <App />
-                                      </PromptRefProvider>
-                                    </PromptHistoryProvider>
-                                  </CommandProvider>
-                                </DialogProvider>
+                                <PromptStashProvider>
+                                  <DialogProvider>
+                                    <CommandProvider>
+                                      <FrecencyProvider>
+                                        <PromptHistoryProvider>
+                                          <PromptRefProvider>
+                                            <App />
+                                          </PromptRefProvider>
+                                        </PromptHistoryProvider>
+                                      </FrecencyProvider>
+                                    </CommandProvider>
+                                  </DialogProvider>
+                                </PromptStashProvider>
                               </KeybindProvider>
                             </LocalProvider>
                           </ThemeProvider>
@@ -147,6 +167,14 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: {},
+        consoleOptions: {
+          keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+          onCopySelection: (text) => {
+            Clipboard.copy(text).catch((error) => {
+              console.error(`Failed to copy console selection to clipboard: ${error}`)
+            })
+          },
+        },
       },
     )
   })
@@ -161,12 +189,23 @@ function App() {
   const local = useLocal()
   const kv = useKV()
   const command = useCommandDialog()
-  const { event } = useSDK()
+  const sdk = useSDK()
   const toast = useToast()
   const { theme, mode, setMode } = useTheme()
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+
+  // Wire up console copy-to-clipboard via opentui's onCopySelection callback
+  renderer.console.onCopySelection = async (text: string) => {
+    if (!text || text.length === 0) return
+
+    await Clipboard.copy(text)
+      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .catch(toast.error)
+    renderer.clearSelection()
+  }
+  const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -174,6 +213,8 @@ function App() {
 
   // Update terminal window title based on current route and session
   createEffect(() => {
+    if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+
     if (route.data.type === "home") {
       renderer.setTerminalTitle("OpenCode")
       return
@@ -217,8 +258,11 @@ function App() {
 
   let continued = false
   createEffect(() => {
-    if (continued || sync.status !== "complete" || !args.continue) return
-    const match = sync.data.session.at(0)?.id
+    // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
+    if (continued || sync.status === "loading" || !args.continue) return
+    const match = sync.data.session
+      .toSorted((a, b) => b.time.updated - a.time.updated)
+      .find((x) => x.parentID === undefined)?.id
     if (match) {
       continued = true
       route.navigate({ type: "session", sessionID: match })
@@ -244,6 +288,10 @@ function App() {
       keybind: "session_list",
       category: "Session",
       suggested: sync.data.session.length > 0,
+      slash: {
+        name: "sessions",
+        aliases: ["resume", "continue"],
+      },
       onSelect: () => {
         dialog.replace(() => <DialogSessionList />)
       },
@@ -254,6 +302,10 @@ function App() {
       value: "session.new",
       keybind: "session_new",
       category: "Session",
+      slash: {
+        name: "new",
+        aliases: ["clear"],
+      },
       onSelect: () => {
         const current = promptRef.current
         // Don't require focus - if there's any text, preserve it
@@ -271,28 +323,51 @@ function App() {
       keybind: "model_list",
       suggested: true,
       category: "Agent",
+      slash: {
+        name: "models",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogModel />)
       },
     },
     {
       title: "Model cycle",
-      disabled: true,
       value: "model.cycle_recent",
       keybind: "model_cycle_recent",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycle(1)
       },
     },
     {
       title: "Model cycle reverse",
-      disabled: true,
       value: "model.cycle_recent_reverse",
       keybind: "model_cycle_recent_reverse",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycle(-1)
+      },
+    },
+    {
+      title: "Favorite cycle",
+      value: "model.cycle_favorite",
+      keybind: "model_cycle_favorite",
+      category: "Agent",
+      hidden: true,
+      onSelect: () => {
+        local.model.cycleFavorite(1)
+      },
+    },
+    {
+      title: "Favorite cycle reverse",
+      value: "model.cycle_favorite_reverse",
+      keybind: "model_cycle_favorite_reverse",
+      category: "Agent",
+      hidden: true,
+      onSelect: () => {
+        local.model.cycleFavorite(-1)
       },
     },
     {
@@ -300,6 +375,9 @@ function App() {
       value: "agent.list",
       keybind: "agent_list",
       category: "Agent",
+      slash: {
+        name: "agents",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogAgent />)
       },
@@ -308,6 +386,9 @@ function App() {
       title: "Toggle MCPs",
       value: "mcp.list",
       category: "Agent",
+      slash: {
+        name: "mcps",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogMcp />)
       },
@@ -317,9 +398,19 @@ function App() {
       value: "agent.cycle",
       keybind: "agent_cycle",
       category: "Agent",
-      disabled: true,
+      hidden: true,
       onSelect: () => {
         local.agent.move(1)
+      },
+    },
+    {
+      title: "Variant cycle",
+      value: "variant.cycle",
+      keybind: "variant_cycle",
+      category: "Agent",
+      hidden: true,
+      onSelect: () => {
+        local.model.variant.cycle()
       },
     },
     {
@@ -327,7 +418,7 @@ function App() {
       value: "agent.cycle.reverse",
       keybind: "agent_cycle_reverse",
       category: "Agent",
-      disabled: true,
+      hidden: true,
       onSelect: () => {
         local.agent.move(-1)
       },
@@ -336,6 +427,9 @@ function App() {
       title: "Connect provider",
       value: "provider.connect",
       suggested: !connected(),
+      slash: {
+        name: "connect",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogProviderList />)
       },
@@ -345,6 +439,9 @@ function App() {
       title: "View status",
       keybind: "status_view",
       value: "opencode.status",
+      slash: {
+        name: "status",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogStatus />)
       },
@@ -353,6 +450,10 @@ function App() {
     {
       title: "Switch theme",
       value: "theme.switch",
+      keybind: "theme_list",
+      slash: {
+        name: "themes",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogThemeList />)
       },
@@ -370,6 +471,9 @@ function App() {
     {
       title: "Help",
       value: "help.show",
+      slash: {
+        name: "help",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogHelp />)
       },
@@ -385,8 +489,21 @@ function App() {
       category: "System",
     },
     {
+      title: "Open WebUI",
+      value: "webui.open",
+      onSelect: () => {
+        open(sdk.url).catch(() => {})
+        dialog.clear()
+      },
+      category: "System",
+    },
+    {
       title: "Exit the app",
       value: "app.exit",
+      slash: {
+        name: "exit",
+        aliases: ["quit", "q"],
+      },
       onSelect: () => exit(),
       category: "System",
     },
@@ -402,9 +519,23 @@ function App() {
     {
       title: "Toggle console",
       category: "System",
-      value: "app.fps",
+      value: "app.console",
       onSelect: (dialog) => {
         renderer.console.toggle()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Write heap snapshot",
+      category: "System",
+      value: "app.heap_snapshot",
+      onSelect: (dialog) => {
+        const path = writeHeapSnapshot()
+        toast.show({
+          variant: "info",
+          message: `Heap snapshot written to ${path}`,
+          duration: 5000,
+        })
         dialog.clear()
       },
     },
@@ -413,6 +544,7 @@ function App() {
       value: "terminal.suspend",
       keybind: "terminal_suspend",
       category: "System",
+      hidden: true,
       onSelect: () => {
         process.once("SIGCONT", () => {
           renderer.resume()
@@ -421,6 +553,21 @@ function App() {
         renderer.suspend()
         // pid=0 means send the signal to all processes in the process group
         process.kill(0, "SIGTSTP")
+      },
+    },
+    {
+      title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
+      value: "terminal.title.toggle",
+      keybind: "terminal_title_toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        setTerminalTitleEnabled((prev) => {
+          const next = !prev
+          kv.set("terminal_title_enabled", next)
+          if (!next) renderer.setTerminalTitle("")
+          return next
+        })
+        dialog.clear()
       },
     },
   ])
@@ -439,11 +586,11 @@ function App() {
     }
   })
 
-  event.on(TuiEvent.CommandExecute.type, (evt) => {
+  sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
     command.trigger(evt.properties.command)
   })
 
-  event.on(TuiEvent.ToastShow.type, (evt) => {
+  sdk.event.on(TuiEvent.ToastShow.type, (evt) => {
     toast.show({
       title: evt.properties.title,
       message: evt.properties.message,
@@ -452,9 +599,15 @@ function App() {
     })
   })
 
-  event.on(SessionApi.Event.Deleted.type, (evt) => {
+  sdk.event.on(TuiEvent.SessionSelect.type, (evt) => {
+    route.navigate({
+      type: "session",
+      sessionID: evt.properties.sessionID,
+    })
+  })
+
+  sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
-      dialog.clear()
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
@@ -463,10 +616,11 @@ function App() {
     }
   })
 
-  event.on(SessionApi.Event.Error.type, (evt) => {
+  sdk.event.on(SessionApi.Event.Error.type, (evt) => {
     const error = evt.properties.error
+    if (error && typeof error === "object" && error.name === "MessageAbortedError") return
     const message = (() => {
-      if (!error) return "An error occured"
+      if (!error) return "An error occurred"
 
       if (typeof error === "object") {
         const data = error.data
@@ -484,16 +638,7 @@ function App() {
     })
   })
 
-  event.on(Installation.Event.Updated.type, (evt) => {
-    toast.show({
-      variant: "success",
-      title: "Update Complete",
-      message: `OpenCode updated to v${evt.properties.version}`,
-      duration: 5000,
-    })
-  })
-
-  event.on(Installation.Event.UpdateAvailable.type, (evt) => {
+  sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
     toast.show({
       variant: "info",
       title: "Update Available",
@@ -514,11 +659,6 @@ function App() {
         }
         const text = renderer.getSelection()?.getSelectedText()
         if (text && text.length > 0) {
-          const base64 = Buffer.from(text).toString("base64")
-          const osc52 = `\x1b]52;c;${base64}\x07`
-          const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-          /* @ts-expect-error */
-          renderer.writeOut(finalOsc52)
           await Clipboard.copy(text)
             .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
             .catch(toast.error)
@@ -545,14 +685,22 @@ function ErrorComponent(props: {
   mode?: "dark" | "light"
 }) {
   const term = useTerminalDimensions()
+  const renderer = useRenderer()
+
+  const handleExit = async () => {
+    renderer.setTerminalTitle("")
+    renderer.destroy()
+    props.onExit()
+  }
+
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
-      props.onExit()
+      handleExit()
     }
   })
   const [copied, setCopied] = createSignal(false)
 
-  const issueURL = new URL("https://github.com/sst/opencode/issues/new?template=bug-report.yml")
+  const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
 
   // Choose safe fallback colors per mode since theme context may not be available
   const isLight = props.mode === "light"
@@ -600,7 +748,7 @@ function ErrorComponent(props: {
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Reset TUI</text>
         </box>
-        <box onMouseUp={props.onExit} backgroundColor={colors.primary} padding={1}>
+        <box onMouseUp={handleExit} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Exit</text>
         </box>
       </box>

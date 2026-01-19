@@ -1,10 +1,8 @@
 import { MessageV2 } from "./message-v2"
-import { streamText } from "ai"
 import { Log } from "@/util/log"
 import { Identifier } from "@/id/id"
 import { Session } from "."
 import { Agent } from "@/agent/agent"
-import { Permission } from "@/permission"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
@@ -12,6 +10,11 @@ import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { Plugin } from "@/plugin"
 import type { Provider } from "@/provider/provider"
+import { LLM } from "./llm"
+import { Config } from "@/config/config"
+import { SessionCompaction } from "./compaction"
+import { PermissionNext } from "@/permission/next"
+import { Question } from "@/question"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -19,15 +22,6 @@ export namespace SessionProcessor {
 
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
-
-  export type StreamInput = Parameters<typeof streamText>[0]
-
-  export type TBD = {
-    model: {
-      modelID: string
-      providerID: string
-    }
-  }
 
   export function create(input: {
     assistantMessage: MessageV2.Assistant
@@ -39,6 +33,7 @@ export namespace SessionProcessor {
     let snapshot: string | undefined
     let blocked = false
     let attempt = 0
+    let needsCompaction = false
 
     const result = {
       get message() {
@@ -47,13 +42,15 @@ export namespace SessionProcessor {
       partFromToolCall(toolCallID: string) {
         return toolcalls[toolCallID]
       },
-      async process(streamInput: StreamInput) {
+      async process(streamInput: LLM.StreamInput) {
         log.info("process")
+        needsCompaction = false
+        const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
-            const stream = streamText(streamInput)
+            const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
               input.abort.throwIfAborted()
@@ -156,32 +153,18 @@ export namespace SessionProcessor {
                           JSON.stringify(p.state.input) === JSON.stringify(value.input),
                       )
                     ) {
-                      const permission = await Agent.get(input.assistantMessage.mode).then((x) => x.permission)
-                      if (permission.doom_loop === "ask") {
-                        await Permission.ask({
-                          type: "doom_loop",
-                          pattern: value.toolName,
-                          sessionID: input.assistantMessage.sessionID,
-                          messageID: input.assistantMessage.id,
-                          callID: value.toolCallId,
-                          title: `Possible doom loop: "${value.toolName}" called ${DOOM_LOOP_THRESHOLD} times with identical arguments`,
-                          metadata: {
-                            tool: value.toolName,
-                            input: value.input,
-                          },
-                        })
-                      } else if (permission.doom_loop === "deny") {
-                        throw new Permission.RejectedError(
-                          input.assistantMessage.sessionID,
-                          "doom_loop",
-                          value.toolCallId,
-                          {
-                            tool: value.toolName,
-                            input: value.input,
-                          },
-                          `You seem to be stuck in a doom loop, please stop repeating the same action`,
-                        )
-                      }
+                      const agent = await Agent.get(input.assistantMessage.agent)
+                      await PermissionNext.ask({
+                        permission: "doom_loop",
+                        patterns: [value.toolName],
+                        sessionID: input.assistantMessage.sessionID,
+                        metadata: {
+                          tool: value.toolName,
+                          input: value.input,
+                        },
+                        always: [value.toolName],
+                        ruleset: agent.permission,
+                      })
                     }
                   }
                   break
@@ -219,7 +202,6 @@ export namespace SessionProcessor {
                         status: "error",
                         input: value.input,
                         error: (value.error as any).toString(),
-                        metadata: value.error instanceof Permission.RejectedError ? value.error.metadata : undefined,
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),
@@ -227,8 +209,11 @@ export namespace SessionProcessor {
                       },
                     })
 
-                    if (value.error instanceof Permission.RejectedError) {
-                      blocked = true
+                    if (
+                      value.error instanceof PermissionNext.RejectedError ||
+                      value.error instanceof Question.RejectedError
+                    ) {
+                      blocked = shouldBreak
                     }
                     delete toolcalls[value.toolCallId]
                   }
@@ -286,6 +271,9 @@ export namespace SessionProcessor {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
+                  if (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model })) {
+                    needsCompaction = true
+                  }
                   break
 
                 case "text-start":
@@ -346,6 +334,7 @@ export namespace SessionProcessor {
                   })
                   continue
               }
+              if (needsCompaction) break
             }
           } catch (e: any) {
             log.error("process", {
@@ -372,6 +361,20 @@ export namespace SessionProcessor {
               error: input.assistantMessage.error,
             })
           }
+          if (snapshot) {
+            const patch = await Snapshot.patch(snapshot)
+            if (patch.files.length) {
+              await Session.updatePart({
+                id: Identifier.ascending("part"),
+                messageID: input.assistantMessage.id,
+                sessionID: input.sessionID,
+                type: "patch",
+                hash: patch.hash,
+                files: patch.files,
+              })
+            }
+            snapshot = undefined
+          }
           const p = await MessageV2.parts(input.assistantMessage.id)
           for (const part of p) {
             if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
@@ -391,6 +394,7 @@ export namespace SessionProcessor {
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
+          if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"
           return "continue"

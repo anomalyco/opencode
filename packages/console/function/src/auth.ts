@@ -123,7 +123,11 @@ export default {
             },
           }).then((x) => x.json())) as any
           subject = user.id.toString()
-          email = emails.find((x: any) => x.primary && x.verified)?.email
+
+          const primaryEmail = emails.find((x: any) => x.primary)
+          if (!primaryEmail) throw new Error("No primary email found for GitHub user")
+          if (!primaryEmail.verified) throw new Error("Primary email for GitHub user not verified")
+          email = primaryEmail.email
         } else if (response.provider === "google") {
           if (!response.id.email_verified) throw new Error("Google email not verified")
           subject = response.id.sub as string

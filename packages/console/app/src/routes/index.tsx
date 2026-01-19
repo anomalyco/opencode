@@ -1,6 +1,6 @@
 import "./index.css"
 import { Title, Meta, Link } from "@solidjs/meta"
-// import { HttpHeader } from "@solidjs/start"
+//import { HttpHeader } from "@solidjs/start"
 import video from "../asset/lander/opencode-min.mp4"
 import videoPoster from "../asset/lander/opencode-poster.png"
 import { IconCopy, IconCheck } from "../component/icon"
@@ -52,6 +52,21 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
+            <div data-component="desktop-app-banner">
+              <span data-slot="badge">New</span>
+              <div data-slot="content">
+                <span data-slot="text">
+                  Desktop app available in beta<span data-slot="platforms"> on macOS, Windows, and Linux</span>.
+                </span>
+                <a href="/download" data-slot="link">
+                  Download now
+                </a>
+                <a href="/download" data-slot="link-mobile">
+                  Download the desktop beta now
+                </a>
+              </div>
+            </div>
+
             <div data-slot="hero-copy">
               {/*<a data-slot="releases"*/}
               {/*   href={release()?.url ?? `${config.github.repoUrl}/releases`}*/}
@@ -125,7 +140,7 @@ export default function Home() {
                     <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span>
                         <span data-slot="protocol">brew install </span>
-                        <span data-slot="highlight">opencode</span>
+                        <span data-slot="highlight">anomalyco/tap/opencode</span>
                       </span>
                       <CopyStatus />
                     </button>
@@ -183,6 +198,12 @@ export default function Home() {
               <li>
                 <span>[*]</span>
                 <div>
+                  <strong>ChatGPT Plus/Pro</strong> Log in with OpenAI to use your ChatGPT Plus or Pro account
+                </div>
+              </li>
+              <li>
+                <span>[*]</span>
+                <div>
                   <strong>Any model</strong> 75+ LLM providers through Models.dev, including local models
                 </div>
               </li>
@@ -213,7 +234,7 @@ export default function Home() {
                 <span>[*]</span>
                 <p>
                   With over <strong>{config.github.starsFormatted.full}</strong> GitHub stars,{" "}
-                  <strong>{config.stats.contributors}</strong> contributors, and almost{" "}
+                  <strong>{config.stats.contributors}</strong> contributors, and over{" "}
                   <strong>{config.stats.commits}</strong> commits, OpenCode is used and trusted by over{" "}
                   <strong>{config.stats.monthlyUsers}</strong> developers every month.
                 </p>
@@ -671,7 +692,8 @@ export default function Home() {
               </li>
               <li>
                 <Faq question="Can I only use OpenCode in the terminal?">
-                  Not anymore! OpenCode is now available as an app for your desktop.
+                  Not anymore! OpenCode is now available as an app for your <a href="/download">desktop</a> and{" "}
+                  <a href="/docs/web">web</a>!
                 </Faq>
               </li>
               <li>

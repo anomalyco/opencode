@@ -5,43 +5,24 @@ import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { ACP } from "@/acp/agent"
 import { Server } from "@/server/server"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { withNetworkOptions, resolveNetworkOptions } from "../network"
 
 const log = Log.create({ service: "acp-command" })
-
-process.on("unhandledRejection", (reason, promise) => {
-  log.error("Unhandled rejection", {
-    promise,
-    reason,
-  })
-})
 
 export const AcpCommand = cmd({
   command: "acp",
   describe: "start ACP (Agent Client Protocol) server",
   builder: (yargs) => {
-    return yargs
-      .option("cwd", {
-        describe: "working directory",
-        type: "string",
-        default: process.cwd(),
-      })
-      .option("port", {
-        type: "number",
-        describe: "port to listen on",
-        default: 0,
-      })
-      .option("hostname", {
-        type: "string",
-        describe: "hostname to listen on",
-        default: "127.0.0.1",
-      })
+    return withNetworkOptions(yargs).option("cwd", {
+      describe: "working directory",
+      type: "string",
+      default: process.cwd(),
+    })
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const server = Server.listen({
-        port: args.port,
-        hostname: args.hostname,
-      })
+      const opts = await resolveNetworkOptions(args)
+      const server = Server.listen(opts)
 
       const sdk = createOpencodeClient({
         baseUrl: `http://${server.hostname}:${server.port}`,

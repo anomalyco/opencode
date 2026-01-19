@@ -9,8 +9,10 @@ import { Global } from "@/global"
 import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
+import { useKV } from "../../context/kv"
+import { TodoItem } from "../../component/todo-item"
 
-export function Sidebar(props: { sessionID: string }) {
+export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
@@ -27,6 +29,16 @@ export function Sidebar(props: { sessionID: string }) {
 
   // Sort MCP servers alphabetically for consistent display order
   const mcpEntries = createMemo(() => Object.entries(sync.data.mcp).sort(([a], [b]) => a.localeCompare(b)))
+
+  // Count connected and error MCP servers for collapsed header display
+  const connectedMcpCount = createMemo(() => mcpEntries().filter(([_, item]) => item.status === "connected").length)
+  const errorMcpCount = createMemo(
+    () =>
+      mcpEntries().filter(
+        ([_, item]) =>
+          item.status === "failed" || item.status === "needs_auth" || item.status === "needs_client_registration",
+      ).length,
+  )
 
   const cost = createMemo(() => {
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
@@ -48,12 +60,13 @@ export function Sidebar(props: { sessionID: string }) {
     }
   })
 
-  const keybind = useKeybind()
   const directory = useDirectory()
+  const kv = useKV()
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
   )
+  const gettingStartedDismissed = createMemo(() => kv.get("dismissed_getting_started", false))
 
   return (
     <Show when={session()}>
@@ -64,10 +77,11 @@ export function Sidebar(props: { sessionID: string }) {
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={2}
+        position={props.overlay ? "absolute" : "relative"}
       >
         <scrollbox flexGrow={1}>
           <box flexShrink={0} gap={1} paddingRight={1}>
-            <box>
+            <box paddingRight={1}>
               <text fg={theme.text}>
                 <b>{session().title}</b>
               </text>
@@ -95,6 +109,13 @@ export function Sidebar(props: { sessionID: string }) {
                   </Show>
                   <text fg={theme.text}>
                     <b>MCP</b>
+                    <Show when={!expanded.mcp}>
+                      <span style={{ fg: theme.textMuted }}>
+                        {" "}
+                        ({connectedMcpCount()} active
+                        {errorMcpCount() > 0 ? `, ${errorMcpCount()} error${errorMcpCount() > 1 ? "s" : ""}` : ""})
+                      </span>
+                    </Show>
                   </text>
                 </box>
                 <Show when={mcpEntries().length <= 2 || expanded.mcp}>
@@ -152,7 +173,11 @@ export function Sidebar(props: { sessionID: string }) {
               </box>
               <Show when={sync.data.lsp.length <= 2 || expanded.lsp}>
                 <Show when={sync.data.lsp.length === 0}>
-                  <text fg={theme.textMuted}>LSPs will activate as files are read</text>
+                  <text fg={theme.textMuted}>
+                    {sync.data.config.lsp === false
+                      ? "LSPs have been disabled in settings"
+                      : "LSPs will activate as files are read"}
+                  </text>
                 </Show>
                 <For each={sync.data.lsp}>
                   {(item) => (
@@ -191,13 +216,7 @@ export function Sidebar(props: { sessionID: string }) {
                   </text>
                 </box>
                 <Show when={todo().length <= 2 || expanded.todo}>
-                  <For each={todo()}>
-                    {(todo) => (
-                      <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
-                        [{todo.status === "completed" ? "✓" : " "}] {todo.content}
-                      </text>
-                    )}
-                  </For>
+                  <For each={todo()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
                 </Show>
               </box>
             </Show>
@@ -218,17 +237,10 @@ export function Sidebar(props: { sessionID: string }) {
                 <Show when={diff().length <= 2 || expanded.diff}>
                   <For each={diff() || []}>
                     {(item) => {
-                      const file = createMemo(() => {
-                        const splits = item.file.split(path.sep).filter(Boolean)
-                        const last = splits.at(-1)!
-                        const rest = splits.slice(0, -1).join(path.sep)
-                        if (!rest) return last
-                        return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
-                      })
                       return (
                         <box flexDirection="row" gap={1} justifyContent="space-between">
-                          <text fg={theme.textMuted} wrapMode="char">
-                            {file()}
+                          <text fg={theme.textMuted} wrapMode="none">
+                            {item.file}
                           </text>
                           <box flexDirection="row" gap={1} flexShrink={0}>
                             <Show when={item.additions}>
@@ -249,7 +261,7 @@ export function Sidebar(props: { sessionID: string }) {
         </scrollbox>
 
         <box flexShrink={0} gap={1} paddingTop={1}>
-          <Show when={!hasProviders()}>
+          <Show when={!hasProviders() && !gettingStartedDismissed()}>
             <box
               backgroundColor={theme.backgroundElement}
               paddingTop={1}
@@ -263,9 +275,14 @@ export function Sidebar(props: { sessionID: string }) {
                 ⬖
               </text>
               <box flexGrow={1} gap={1}>
-                <text fg={theme.text}>
-                  <b>Getting started</b>
-                </text>
+                <box flexDirection="row" justifyContent="space-between">
+                  <text fg={theme.text}>
+                    <b>Getting started</b>
+                  </text>
+                  <text fg={theme.textMuted} onMouseDown={() => kv.set("dismissed_getting_started", true)}>
+                    ✕
+                  </text>
+                </box>
                 <text fg={theme.textMuted}>OpenCode includes free models so you can start immediately.</text>
                 <text fg={theme.textMuted}>
                   Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
@@ -277,7 +294,10 @@ export function Sidebar(props: { sessionID: string }) {
               </box>
             </box>
           </Show>
-          <text fg={theme.text}>{directory()}</text>
+          <text>
+            <span style={{ fg: theme.textMuted }}>{directory().split("/").slice(0, -1).join("/")}/</span>
+            <span style={{ fg: theme.text }}>{directory().split("/").at(-1)}</span>
+          </text>
           <text fg={theme.textMuted}>
             <span style={{ fg: theme.success }}>•</span> <b>Open</b>
             <span style={{ fg: theme.text }}>

@@ -1,3 +1,5 @@
+import { Slug } from "@opencode-ai/util/slug"
+import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
@@ -18,6 +20,8 @@ import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
 
 import type { Provider } from "@/provider/provider"
+import { PermissionNext } from "@/permission/next"
+import { Global } from "@/global"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -38,6 +42,7 @@ export namespace Session {
   export const Info = z
     .object({
       id: Identifier.schema("session"),
+      slug: z.string(),
       projectID: z.string(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
@@ -62,6 +67,7 @@ export namespace Session {
         compacting: z.number().optional(),
         archived: z.number().optional(),
       }),
+      permission: PermissionNext.Ruleset.optional(),
       revert: z
         .object({
           messageID: z.string(),
@@ -126,6 +132,7 @@ export namespace Session {
       .object({
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
+        permission: Info.shape.permission,
       })
       .optional(),
     async (input) => {
@@ -133,6 +140,7 @@ export namespace Session {
         parentID: input?.parentID,
         directory: Instance.directory,
         title: input?.title,
+        permission: input?.permission,
       })
     },
   )
@@ -147,12 +155,19 @@ export namespace Session {
         directory: Instance.directory,
       })
       const msgs = await messages({ sessionID: input.sessionID })
+      const idMap = new Map<string, string>()
+
       for (const msg of msgs) {
         if (input.messageID && msg.info.id >= input.messageID) break
+        const newID = Identifier.ascending("message")
+        idMap.set(msg.info.id, newID)
+
+        const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
         const cloned = await updateMessage({
           ...msg.info,
           sessionID: session.id,
-          id: Identifier.ascending("message"),
+          id: newID,
+          ...(parentID && { parentID }),
         })
 
         for (const part of msg.parts) {
@@ -174,14 +189,22 @@ export namespace Session {
     })
   })
 
-  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
+  export async function createNext(input: {
+    id?: string
+    title?: string
+    parentID?: string
+    directory: string
+    permission?: PermissionNext.Ruleset
+  }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
+      slug: Slug.create(),
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory: input.directory,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
+      permission: input.permission,
       time: {
         created: Date.now(),
         updated: Date.now(),
@@ -209,6 +232,13 @@ export namespace Session {
     return result
   }
 
+  export function plan(input: { slug: string; time: { created: number } }) {
+    const base = Instance.project.vcs
+      ? path.join(Instance.worktree, ".opencode", "plans")
+      : path.join(Global.Path.data, "plans")
+    return path.join(base, [input.time.created, input.slug].join("-") + ".md")
+  }
+
   export const get = fn(Identifier.schema("session"), async (id) => {
     const read = await Storage.read<Info>(["session", Instance.project.id, id])
     return read as Info
@@ -234,22 +264,12 @@ export namespace Session {
   })
 
   export const unshare = fn(Identifier.schema("session"), async (id) => {
-    const cfg = await Config.get()
-    if (cfg.enterprise?.url) {
-      const { ShareNext } = await import("@/share/share-next")
-      await ShareNext.remove(id)
-      await update(id, (draft) => {
-        draft.share = undefined
-      })
-    }
-    const share = await getShare(id)
-    if (!share) return
-    await Storage.remove(["share", id])
+    // Use ShareNext to remove the share (same as share function uses ShareNext to create)
+    const { ShareNext } = await import("@/share/share-next")
+    await ShareNext.remove(id)
     await update(id, (draft) => {
       draft.share = undefined
     })
-    const { Share } = await import("../share/share")
-    await Share.remove(id, share.secret)
   })
 
   export async function update(id: string, editor: (session: Info) => void) {
@@ -346,6 +366,23 @@ export namespace Session {
         messageID: input.messageID,
       })
       return input.messageID
+    },
+  )
+
+  export const removePart = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message"),
+      partID: Identifier.schema("part"),
+    }),
+    async (input) => {
+      await Storage.remove(["part", input.messageID, input.partID])
+      Bus.publish(MessageV2.Event.PartRemoved, {
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        partID: input.partID,
+      })
+      return input.partID
     },
   )
 
