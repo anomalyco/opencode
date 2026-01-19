@@ -12,7 +12,7 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
-import { Logo } from "@opencode-ai/ui/logo"
+import { Splash } from "@opencode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
 
 import { UPDATER_ENABLED } from "./updater"
@@ -357,8 +357,7 @@ function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.
       when={serverData.state !== "pending" && serverData()}
       fallback={
         <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-          <Logo class="w-xl opacity-12 animate-pulse" />
-          <div class="mt-8 text-14-regular text-text-weak">Initializing...</div>
+          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
         </div>
       }
     >

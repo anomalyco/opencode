@@ -149,7 +149,7 @@ export function DialogSelectFile() {
           <Show
             when={item.type === "command"}
             fallback={
-              <div class="w-full flex items-center justify-between rounded-md">
+              <div class="w-full flex items-center justify-between rounded-md pl-1">
                 <div class="flex items-center gap-x-3 grow min-w-0">
                   <FileIcon node={{ path: item.path ?? "", type: "file" }} class="shrink-0 size-4" />
                   <div class="flex items-center text-14-regular">
