@@ -3,14 +3,49 @@ import config from '../../config.mjs';
 import astroConfig from 'virtual:starlight/user-config';
 import { Icon } from '@astrojs/starlight/components';
 import { HeaderLinks } from 'toolbeam-docs-theme/components';
-import Default from 'toolbeam-docs-theme/overrides/Header.astro';
 import SocialIcons from 'virtual:starlight/components/SocialIcons';
 import SiteTitle from '@astrojs/starlight/components/SiteTitle.astro';
+import Search from "virtual:starlight/components/Search";
 
 const path = Astro.url.pathname;
 
 const links = astroConfig.social || [];
 const headerLinks = config.headerLinks;
+
+let relativePath = path.replace(/\/$/, "");
+if (relativePath.startsWith("/docs")) relativePath = relativePath.slice(5);
+if (relativePath.startsWith("/")) relativePath = relativePath.slice(1);
+
+const locales = astroConfig.locales || {};
+const localeKeys = Object.keys(locales);
+
+const segments = relativePath.split("/").filter(Boolean);
+const firstLower = (segments[0] || "").toLowerCase();
+
+let locale = "root";
+if (firstLower === "en") {
+	segments.shift();
+} else {
+	const key = localeKeys.find((k) => k.toLowerCase() === firstLower);
+	if (key && key !== "root") {
+		locale = key;
+		segments.shift();
+	}
+}
+
+const slug = segments.join("/");
+const localeLabel = locales[locale]?.label ?? (locale === "root" ? "English" : locale);
+const localeLinks = localeKeys.map((key) => {
+	const isRoot = key === "root";
+	const href = isRoot ? (slug ? `/docs/${slug}` : "/docs") : (slug ? `/docs/${key}/${slug}` : `/docs/${key}`);
+	return { key, href, label: locales[key]?.label ?? key };
+});
+
+const isDocs = path.startsWith("/docs");
+
+const shouldRenderSearch =
+	astroConfig.pagefind ||
+	astroConfig.components.Search !== "@astrojs/starlight/components/Search.astro";
 
 ---
 
@@ -27,6 +62,21 @@ const headerLinks = config.headerLinks;
 		}
 	</div>
 	<div class="sl-hidden md:sl-flex right-group">
+		{isDocs && (
+			<div class="language">
+				<button class="language-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+					<span>{localeLabel}</span>
+					<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+						<path d="M4 6l4 4 4-4" fill="currentColor" />
+					</svg>
+				</button>
+				<div class="language-menu" role="listbox">
+					{localeLinks.map((l) => (
+						<a class={`language-item ${locale === l.key ? "is-active" : ""}`} href={l.href}>{l.label}</a>
+					))}
+				</div>
+			</div>
+		)}
 		{
 			links.length > 0 && (
 				<div class="sl-flex social-icons">
@@ -40,7 +90,42 @@ const headerLinks = config.headerLinks;
 		}
 	</div>
 </div>
-  : <Default {...Astro.props}><slot /></Default>
+  : <div class="header sl-flex">
+	<div class="title-wrapper sl-flex">
+		<SiteTitle {...Astro.props} />
+	</div>
+	<div class="middle-group sl-flex">
+		<HeaderLinks {...Astro.props} />
+	</div>
+	<div class="sl-hidden md:sl-flex right-group">
+		<div class="language">
+			<button class="language-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+				<span>{localeLabel}</span>
+				<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+					<path d="M4 6l4 4 4-4" fill="currentColor" />
+				</svg>
+			</button>
+			<div class="language-menu" role="listbox">
+				{localeLinks.map((l) => (
+					<a class={`language-item ${locale === l.key ? "is-active" : ""}`} href={l.href}>{l.label}</a>
+				))}
+			</div>
+		</div>
+
+		{
+			links.length > 0 && (
+				<div class="sl-flex social-icons">
+					{links.map(({ href, icon }) => (
+						<a {href} rel="me" target="_blank">
+							<Icon name={icon} size="1rem" />
+						</a>
+					))}
+				</div>
+			)
+		}
+		{shouldRenderSearch && <Search {...Astro.props} />}
+	</div>
+</div>
 }
 <style>
 	.header {
@@ -93,6 +178,77 @@ const headerLinks = config.headerLinks;
     color: var(--sl-color-text-secondary);
     line-height: normal;
   }
+	}
+
+	.language {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+	}
+
+	.language-trigger {
+		all: unset;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		cursor: pointer;
+		padding: 6px 10px;
+		border-radius: 4px;
+		border: 1px solid var(--color-border-weak);
+		background: var(--color-background-weak);
+		color: var(--color-text-strong);
+		font-size: 14px;
+		line-height: 1;
+        white-space: nowrap;
+	}
+
+	.language-trigger span {
+		white-space: nowrap;
+	}
+
+	.language-trigger svg {
+		width: 12px;
+		height: 12px;
+		color: var(--color-icon);
+	}
+
+	.language-menu {
+		position: absolute;
+		top: calc(100% + 8px);
+		right: 0;
+		min-width: 140px;
+		background: var(--color-background);
+		border: 1px solid var(--color-border-weak);
+		border-radius: 6px;
+		padding: 6px;
+		display: none;
+		flex-direction: column;
+		gap: 4px;
+		box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+		z-index: 10;
+	}
+
+	.language:hover .language-menu,
+	.language:focus-within .language-menu {
+		display: flex;
+	}
+
+	.language-item {
+		text-decoration: none;
+		color: var(--color-text-strong);
+		padding: 6px 8px;
+		border-radius: 4px;
+		font-size: 14px;
+	}
+
+	.language-item:hover {
+		background: var(--color-background-weak);
+	}
+
+	.language-item.is-active {
+		background: var(--color-background-interactive-weaker);
+		color: var(--color-text-strong);
+		font-weight: 500;
 	}
 
 	@media (min-width: 50rem) {

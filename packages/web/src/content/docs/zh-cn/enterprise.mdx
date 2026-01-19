@@ -1,0 +1,165 @@
+---
+title: Enterprise
+description: 在组织中安全使用 OpenCode。
+---
+
+import config from "../../../../config.mjs"
+export const email = `mailto:${config.email}`
+
+OpenCode Enterprise 面向希望确保代码与数据不离开基础设施的组织。它通过集中式配置与 SSO、内部 AI gateway 集成来实现这一点。
+
+:::note
+OpenCode 不会存储你的代码或上下文数据。
+:::
+
+开始使用 OpenCode Enterprise：
+
+1. 先在团队内部进行试用。
+2. **<a href={email}>联系我们</a>** 讨论定价与实施选项。
+
+---
+
+## <span id="trial">试用</span>
+
+OpenCode 是开源的，且不会存储你的代码或上下文数据，因此你的开发者可以直接 [开始使用](/docs/) 并进行试用。
+
+---
+
+### <span id="data-handling">数据处理</span>
+
+**OpenCode 不会存储你的代码或上下文数据。** 所有处理都在本地完成，或通过直连 API 发送给你的 AI provider。
+
+这意味着只要你使用可信的 provider 或内部 AI gateway，就能安全使用 OpenCode。
+
+唯一需要注意的是可选的 `/share` 功能。
+
+---
+
+#### <span id="sharing-conversations">分享对话</span>
+
+如果用户启用 `/share` 功能，对话及其相关数据会发送到我们用于托管 share 页面（opencode.ai）的服务。
+
+这些数据目前通过我们的 CDN 边缘网络提供，并缓存于靠近用户的边缘节点。
+
+我们建议在试用时禁用该功能。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+[了解更多分享](/docs/share)。
+
+---
+
+### <span id="code-ownership">代码归属</span>
+
+**你拥有 OpenCode 产出的全部代码。** 不存在许可限制或所有权主张。
+
+---
+
+## <span id="pricing">定价</span>
+
+OpenCode Enterprise 采用按席位计费模式。如果你有自建 LLM gateway，我们不会对使用的 token 计费。关于定价与实施选项的进一步细节，**<a href={email}>联系我们</a>**。
+
+---
+
+## <span id="deployment">部署</span>
+
+当你完成试用并准备在组织内使用 OpenCode 时，可以 **<a href={email}>联系我们</a>** 讨论定价与实施选项。
+
+---
+
+### <span id="central-config">中央配置</span>
+
+我们可以为整个组织设置一个统一的集中式配置。
+
+该集中配置可与 SSO provider 集成，确保所有用户仅访问你的内部 AI gateway。
+
+---
+
+### <span id="sso-integration">SSO 集成</span>
+
+通过中央配置，OpenCode 可与组织的 SSO provider 集成以进行认证。
+
+这使 OpenCode 能通过你现有的身份管理系统获取内部 AI gateway 的凭证。
+
+---
+
+### <span id="internal-ai-gateway">内部 AI gateway</span>
+
+通过中央配置，OpenCode 也可被设置为仅使用你的内部 AI gateway。
+
+你还可以禁用其他所有 AI providers，确保所有请求都经过组织认可的基础设施。
+
+---
+
+### <span id="self-hosting">自托管</span>
+
+虽然我们建议禁用 share 页面以确保数据不离开组织，但我们也可以帮助你在自有基础设施上自托管这些页面。
+
+该功能目前在我们的路线图中。如果你感兴趣，**<a href={email}>告诉我们</a>**。
+
+---
+
+## FAQ
+
+<details>
+<summary>OpenCode Enterprise 是什么？</summary>
+
+OpenCode Enterprise 面向希望确保代码与数据不离开基础设施的组织。它通过集中式配置与 SSO、内部 AI gateway 集成来实现这一点。
+
+</details>
+
+<details>
+<summary>如何开始使用 OpenCode Enterprise？</summary>
+
+只需先在团队内部试用即可。OpenCode 默认不存储你的代码或上下文数据，因此很容易开始。
+
+然后 **<a href={email}>联系我们</a>** 讨论定价与实施选项。
+
+</details>
+
+<details>
+<summary>企业定价如何运作？</summary>
+
+我们提供按席位的企业定价。如果你有自建 LLM gateway，我们不会对使用的 token 计费。详情请 **<a href={email}>联系我们</a>** 获取定制报价。
+
+</details>
+
+<details>
+<summary>OpenCode Enterprise 的数据安全吗？</summary>
+
+安全。OpenCode 不会存储你的代码或上下文数据。所有处理都在本地完成，或通过直连 API 发送给你的 AI provider。通过中央配置与 SSO 集成，你的数据始终保留在组织基础设施内。
+
+</details>
+
+<details>
+<summary>我们可以使用私有 NPM registry 吗？</summary>
+
+OpenCode 通过 Bun 的原生 `.npmrc` 支持私有 npm registry。如果你的组织使用私有 registry，例如 JFrog Artifactory、Nexus 等，请确保开发者在运行 OpenCode 前完成认证。
+
+要为私有 registry 设置认证：
+
+```bash
+npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+```
+
+这会创建 `~/.npmrc` 并写入认证信息。OpenCode 会自动读取。
+
+:::caution
+运行 OpenCode 前必须先登录私有 registry。
+:::
+
+你也可以手动配置 `.npmrc` 文件：
+
+```bash title="~/.npmrc"
+registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+//your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
+```
+
+开发者必须在运行 OpenCode 之前登录私有 registry，以确保可从企业 registry 安装 packages。
+
+</details>

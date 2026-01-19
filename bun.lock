@@ -475,6 +475,7 @@
         "shiki": "catalog:",
         "solid-js": "catalog:",
         "toolbeam-docs-theme": "0.4.8",
+        "unist-util-visit": "5.0.0",
       },
       "devDependencies": {
         "@types/node": "catalog:",

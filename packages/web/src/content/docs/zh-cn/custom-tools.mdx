@@ -1,0 +1,165 @@
+---
+title: 自定义 Tools
+description: 创建可被 LLM 在 opencode 中调用的 tools。
+---
+
+自定义 tools 是你创建的函数，LLM 可在对话中调用。它们与 opencode 的 [内置 tools](/docs/tools)（如 `read`、`write`、`bash`）协同工作。
+
+---
+
+## 创建 tool
+
+Tools 使用 **TypeScript** 或 **JavaScript** 文件定义。不过，tool 定义可以调用 **任意语言** 编写的脚本 — TypeScript 或 JavaScript 仅用于 tool 定义本身。
+
+---
+
+### 位置
+
+可通过以下方式定义：
+
+- 本地：放在项目的 `.opencode/tools/` 目录中。
+- 全局：放在 `~/.config/opencode/tools/`。
+
+---
+
+### 结构
+
+创建 tools 最简单的方式是使用 `tool()` 辅助函数，它提供类型安全与校验。
+
+```ts title=".opencode/tools/database.ts" {1}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Query the project database",
+  args: {
+    query: tool.schema.string().describe("SQL query to execute"),
+  },
+  async execute(args) {
+    // Your database logic here
+    return `Executed query: ${args.query}`
+  },
+})
+```
+
+**文件名** 会成为 **tool 名称**。上述示例会创建 `database` tool。
+
+---
+
+#### 单文件多个 tools
+
+你也可以在一个文件中导出多个 tools。每个导出会成为 **独立的 tool**，命名为 **`<filename>_<exportname>`**：
+
+```ts title=".opencode/tools/math.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const add = tool({
+  description: "Add two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a + args.b
+  },
+})
+
+export const multiply = tool({
+  description: "Multiply two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a * args.b
+  },
+})
+```
+
+这会创建两个 tools：`math_add` 与 `math_multiply`。
+
+---
+
+### Arguments
+
+你可以使用 `tool.schema`（基于 [Zod](https://zod.dev)）来定义参数类型。
+
+```ts "tool.schema"
+args: {
+  query: tool.schema.string().describe("SQL query to execute")
+}
+```
+
+你也可以直接引入 [Zod](https://zod.dev) 并返回普通对象：
+
+```ts {6}
+import { z } from "zod"
+
+export default {
+  description: "Tool description",
+  args: {
+    param: z.string().describe("Parameter description"),
+  },
+  async execute(args, context) {
+    // Tool implementation
+    return "result"
+  },
+}
+```
+
+---
+
+### Context
+
+Tools 会接收当前会话的上下文信息：
+
+```ts title=".opencode/tools/project.ts" {8}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Get project information",
+  args: {},
+  async execute(args, context) {
+    // Access context information
+    const { agent, sessionID, messageID } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}`
+  },
+})
+```
+
+---
+
+## 示例
+
+### 使用 Python 编写 tool
+
+你可以用任何语言编写 tools。下面是一个使用 Python 进行两数相加的示例。
+
+首先，创建 Python 脚本：
+
+```python title=".opencode/tools/add.py"
+import sys
+
+a = int(sys.argv[1])
+b = int(sys.argv[2])
+print(a + b)
+```
+
+然后创建调用它的 tool 定义：
+
+```ts title=".opencode/tools/python-add.ts" {10}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Add two numbers using Python",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    const result = await Bun.$`python3 .opencode/tools/add.py ${args.a} ${args.b}`.text()
+    return result.trim()
+  },
+})
+```
+
+这里使用 [`Bun.$`](https://bun.com/docs/runtime/shell) 来运行 Python 脚本。

@@ -1,0 +1,322 @@
+---
+title: Commands
+description: 为重复任务创建自定义命令。
+---
+
+自定义命令允许你在 TUI 中执行该命令时运行指定的 prompt。
+
+```bash frame="none"
+/my-command
+```
+
+自定义命令是对内置命令（如 `/init`、`/undo`、`/redo`、`/share`、`/help`）的补充。[了解更多](/docs/tui#commands)。
+
+---
+
+## 创建命令文件
+
+在 `commands/` 目录中创建 markdown 文件以定义自定义命令。
+
+创建 `.opencode/commands/test.md`：
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+frontmatter 用于定义命令属性，正文内容会作为模板。
+
+输入 `/` 加命令名即可使用该命令。
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## 配置
+
+你可以通过 OpenCode 配置或在 `commands/` 目录中创建 markdown 文件来添加自定义命令。
+
+---
+
+### JSON
+
+在 OpenCode [config](/docs/config) 中使用 `command` 选项：
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // This becomes the name of the command
+    "test": {
+      // This is the prompt that will be sent to the LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // This is shown as the description in the TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+现在你可以在 TUI 中运行这个命令：
+
+```bash frame="none"
+/test
+```
+
+---
+
+### Markdown
+
+你也可以使用 markdown 文件定义命令。将它们放在：
+
+- 全局：`~/.config/opencode/commands/`
+- 项目级：`.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+markdown 文件名即为命令名。例如 `test.md` 允许你运行：
+
+```bash frame="none"
+/test
+```
+
+---
+
+## Prompt 配置
+
+自定义命令的 prompt 支持多种特殊占位符与语法。
+
+---
+
+### Arguments
+
+使用 `$ARGUMENTS` 占位符向命令传入参数。
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+运行带参数的命令：
+
+```bash frame="none"
+/component Button
+```
+
+`$ARGUMENTS` 会被替换为 `Button`。
+
+你也可以使用位置参数访问单个参数：
+
+- `$1` - 第一个参数
+- `$2` - 第二个参数
+- `$3` - 第三个参数
+- 以此类推...
+
+例如：
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+运行命令：
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+替换结果：
+
+- `$1` 替换为 `config.json`
+- `$2` 替换为 `src`
+- `$3` 替换为 `{ "key": "value" }`
+
+---
+
+### Shell output
+
+使用 _!`command`_ 将 [bash command](/docs/tui#bash-commands) 的输出注入到 prompt 中。
+
+例如，创建一个用于分析测试覆盖率的自定义命令：
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+或用于审查最近的变更：
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+命令会在项目根目录运行，输出会成为 prompt 的一部分。
+
+---
+
+### File references
+
+使用 `@` 加文件名在命令中引入文件。
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+文件内容会自动加入 prompt。
+
+---
+
+## 选项
+
+我们来详细看看这些配置选项。
+
+---
+
+### Template
+
+`template` 选项定义命令执行时发送给 LLM 的 prompt。
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+这是一个 **必需** 配置项。
+
+---
+
+### Description
+
+使用 `description` 选项为命令提供简要说明。
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+该说明会在你输入命令时显示在 TUI 中。
+
+---
+
+### Agent
+
+使用 `agent` 配置可选指定执行该命令的 [agent](/docs/agents)。
+如果这是一个 [subagent](/docs/agents/#subagents)，默认会触发 subagent 调用。
+要禁用该行为，将 `subtask` 设为 `false`。
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+这是一个 **可选** 配置项。若未指定，默认使用当前 agent。
+
+---
+
+### Subtask
+
+使用 `subtask` 布尔值强制命令触发 [subagent](/docs/agents/#subagents) 调用。
+当你希望命令不污染 primary 上下文时很有用，并会 **强制** agent 作为 subagent 执行，
+即使 [agent](/docs/agents) 配置中的 `mode` 设为 `primary`。
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+这是一个 **可选** 配置项。
+
+---
+
+### Model
+
+使用 `model` 配置覆盖该命令的默认模型。
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+这是一个 **可选** 配置项。
+
+---
+
+## Built-in
+
+opencode 内置多个命令，例如 `/init`、`/undo`、`/redo`、`/share`、`/help`；[了解更多](/docs/tui#commands)。
+
+:::note
+自定义命令可以覆盖内置命令。
+:::
+
+如果你定义了与内置命令同名的自定义命令，它将覆盖内置命令。

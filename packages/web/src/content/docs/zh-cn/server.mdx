@@ -1,0 +1,283 @@
+---
+title: Server
+description: 通过 HTTP 与 opencode server 交互。
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+`opencode serve` 命令运行一个无界面 HTTP server，并暴露 OpenAPI 端点供 opencode client 使用。
+
+---
+
+### Usage
+
+```bash
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+```
+
+#### Options
+
+| Flag         | Description             | Default     |
+| ------------ | ----------------------- | ----------- |
+| `--port`     | 监听端口                | `4096`      |
+| `--hostname` | 监听 hostname           | `127.0.0.1` |
+| `--mdns`     | 启用 mDNS discovery     | `false`     |
+| `--cors`     | 允许的额外浏览器 origin | `[]`        |
+
+`--cors` 可多次传入：
+
+```bash
+opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
+
+---
+
+### Authentication
+
+设置 `OPENCODE_SERVER_PASSWORD` 以启用 HTTP basic auth。用户名默认 `opencode`，或设置 `OPENCODE_SERVER_USERNAME` 覆盖。该设置同时适用于 `opencode serve` 与 `opencode web`。
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve
+```
+
+---
+
+### 工作方式
+
+运行 `opencode` 时会启动 TUI 与 server，TUI 是与 server 通信的 client。server 暴露 OpenAPI 3.1 spec 端点，该端点也用于生成 [SDK](/docs/sdk)。
+
+:::tip
+使用 opencode server 以编程方式与 opencode 交互。
+:::
+
+这种架构让 opencode 支持多客户端，并支持编程式交互。
+
+你可以运行 `opencode serve` 启动独立 server。如果已有 opencode TUI 运行，`opencode serve` 会启动新的 server。
+
+---
+
+#### 连接到已有 server
+
+TUI 启动时会随机分配端口与 hostname。你也可以传入 `--hostname` 与 `--port` [flags](/docs/cli)。随后可用这些信息连接到 server。
+
+[`/tui`](#tui) 端点可通过 server 驱动 TUI，例如预填或运行 prompt。OpenCode [IDE](/docs/ide) plugins 就使用了该设置。
+
+---
+
+## Spec
+
+server 发布 OpenAPI 3.1 spec，可在以下地址查看：
+
+```
+http://<hostname>:<port>/doc
+```
+
+例如 `http://localhost:4096/doc`。你可以用它生成 client 或查看请求/响应类型，也可在 Swagger 中浏览。
+
+---
+
+## APIs
+
+opencode server 暴露以下 APIs。
+
+---
+
+### Global
+
+| Method | Path             | Description                | Response                             |
+| ------ | ---------------- | -------------------------- | ------------------------------------ |
+| `GET`  | `/global/health` | 获取 server 健康状态与版本 | `{ healthy: true, version: string }` |
+| `GET`  | `/global/event`  | 获取全局事件（SSE stream） | Event stream                         |
+
+---
+
+### Project
+
+| Method | Path               | Description  | Response                                      |
+| ------ | ------------------ | ------------ | --------------------------------------------- |
+| `GET`  | `/project`         | 列出所有项目 | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET`  | `/project/current` | 获取当前项目 | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+### Path & VCS
+
+| Method | Path    | Description             | Response                                    |
+| ------ | ------- | ----------------------- | ------------------------------------------- |
+| `GET`  | `/path` | 获取当前路径            | <a href={typesUrl}><code>Path</code></a>    |
+| `GET`  | `/vcs`  | 获取当前项目的 VCS 信息 | <a href={typesUrl}><code>VcsInfo</code></a> |
+
+---
+
+### Instance
+
+| Method | Path                | Description  | Response  |
+| ------ | ------------------- | ------------ | --------- |
+| `POST` | `/instance/dispose` | 释放当前实例 | `boolean` |
+
+---
+
+### Config
+
+| Method  | Path                | Description                  | Response                                                                                 |
+| ------- | ------------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`   | `/config`           | 获取 config 信息             | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | 更新 config                  | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config/providers` | 列出 providers 与默认 models | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
+
+---
+
+### Provider
+
+| Method | Path                             | Description                     | Response                                                                            |
+| ------ | -------------------------------- | ------------------------------- | ----------------------------------------------------------------------------------- |
+| `GET`  | `/provider`                      | 列出所有 providers              | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
+| `GET`  | `/provider/auth`                 | 获取 provider 认证方式          | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
+| `POST` | `/provider/{id}/oauth/authorize` | 使用 OAuth 为 provider 授权     | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
+| `POST` | `/provider/{id}/oauth/callback`  | 处理 provider 的 OAuth callback | `boolean`                                                                           |
+
+---
+
+### Sessions
+
+| Method   | Path                                     | Description                    | Notes                                                                           |
+| -------- | ---------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------- |
+| `GET`    | `/session`                               | 列出所有 sessions              | 返回 <a href={typesUrl}><code>Session[]</code></a>                              |
+| `POST`   | `/session`                               | 创建新 session                 | body: `{ parentID?, title? }`，返回 <a href={typesUrl}><code>Session</code></a> |
+| `GET`    | `/session/status`                        | 获取所有 sessions 的状态       | 返回 `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`          |
+| `GET`    | `/session/:id`                           | 获取 session 详情              | 返回 <a href={typesUrl}><code>Session</code></a>                                |
+| `DELETE` | `/session/:id`                           | 删除 session 及其所有数据      | 返回 `boolean`                                                                  |
+| `PATCH`  | `/session/:id`                           | 更新 session 属性              | body: `{ title? }`，返回 <a href={typesUrl}><code>Session</code></a>            |
+| `GET`    | `/session/:id/children`                  | 获取 session 的子 sessions     | 返回 <a href={typesUrl}><code>Session[]</code></a>                              |
+| `GET`    | `/session/:id/todo`                      | 获取 session 的 todo 列表      | 返回 <a href={typesUrl}><code>Todo[]</code></a>                                 |
+| `POST`   | `/session/:id/init`                      | 分析应用并创建 `AGENTS.md`     | body: `{ messageID, providerID, modelID }`，返回 `boolean`                      |
+| `POST`   | `/session/:id/fork`                      | 在指定消息处 fork 现有 session | body: `{ messageID? }`，返回 <a href={typesUrl}><code>Session</code></a>        |
+| `POST`   | `/session/:id/abort`                     | 中止运行中的 session           | 返回 `boolean`                                                                  |
+| `POST`   | `/session/:id/share`                     | 分享 session                   | 返回 <a href={typesUrl}><code>Session</code></a>                                |
+| `DELETE` | `/session/:id/share`                     | 取消分享 session               | 返回 <a href={typesUrl}><code>Session</code></a>                                |
+| `GET`    | `/session/:id/diff`                      | 获取该 session 的 diff         | query: `messageID?`，返回 <a href={typesUrl}><code>FileDiff[]</code></a>        |
+| `POST`   | `/session/:id/summarize`                 | 总结 session                   | body: `{ providerID, modelID }`，返回 `boolean`                                 |
+| `POST`   | `/session/:id/revert`                    | 回滚消息                       | body: `{ messageID, partID? }`，返回 `boolean`                                  |
+| `POST`   | `/session/:id/unrevert`                  | 恢复所有已回滚消息             | 返回 `boolean`                                                                  |
+| `POST`   | `/session/:id/permissions/:permissionID` | 响应权限请求                   | body: `{ response, remember? }`，返回 `boolean`                                 |
+
+---
+
+### Messages
+
+| Method | Path                              | Description            | Notes                                                                                                                                                              |
+| ------ | --------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`  | `/session/:id/message`            | 列出 session 中的消息  | query: `limit?`，返回 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                        |
+| `POST` | `/session/:id/message`            | 发送消息并等待响应     | body: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`，返回 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
+| `GET`  | `/session/:id/message/:messageID` | 获取消息详情           | 返回 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                           |
+| `POST` | `/session/:id/prompt_async`       | 异步发送消息（不等待） | body: 同 `/session/:id/message`，返回 `204 No Content`                                                                                                             |
+| `POST` | `/session/:id/command`            | 执行 slash command     | body: `{ messageID?, agent?, model?, command, arguments }`，返回 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
+| `POST` | `/session/:id/shell`              | 执行 shell 命令        | body: `{ agent, model?, command }`，返回 `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
+
+---
+
+### Commands
+
+| Method | Path       | Description       | Response                                      |
+| ------ | ---------- | ----------------- | --------------------------------------------- |
+| `GET`  | `/command` | 列出所有 commands | <a href={typesUrl}><code>Command[]</code></a> |
+
+---
+
+### Files
+
+| Method | Path                     | Description         | Response                                                                           |
+| ------ | ------------------------ | ------------------- | ---------------------------------------------------------------------------------- |
+| `GET`  | `/find?pattern=<pat>`    | 在文件中搜索文本    | 匹配对象数组，包含 `path`、`lines`、`line_number`、`absolute_offset`、`submatches` |
+| `GET`  | `/find/file?query=<q>`   | 按名称查找文件/目录 | `string[]`（路径）                                                                 |
+| `GET`  | `/find/symbol?query=<q>` | 查找工作区 symbols  | <a href={typesUrl}><code>Symbol[]</code></a>                                       |
+| `GET`  | `/file?path=<path>`      | 列出文件与目录      | <a href={typesUrl}><code>FileNode[]</code></a>                                     |
+| `GET`  | `/file/content?path=<p>` | 读取文件            | <a href={typesUrl}><code>FileContent</code></a>                                    |
+| `GET`  | `/file/status`           | 获取跟踪文件状态    | <a href={typesUrl}><code>File[]</code></a>                                         |
+
+#### `/find/file` 查询参数
+
+- `query`（必填）— 搜索字符串（模糊匹配）
+- `type`（可选）— 限制结果为 `"file"` 或 `"directory"`
+- `directory`（可选）— 覆盖项目根目录
+- `limit`（可选）— 最大结果数量（1–200）
+- `dirs`（可选）— 旧标志（`"false"` 仅返回文件）
+
+---
+
+### Tools（Experimental）
+
+| Method | Path                                        | Description                 | Response                                     |
+| ------ | ------------------------------------------- | --------------------------- | -------------------------------------------- |
+| `GET`  | `/experimental/tool/ids`                    | 列出所有 tool IDs           | <a href={typesUrl}><code>ToolIDs</code></a>  |
+| `GET`  | `/experimental/tool?provider=<p>&model=<m>` | 列出带 JSON schema 的 tools | <a href={typesUrl}><code>ToolList</code></a> |
+
+---
+
+### LSP、Formatters 与 MCP
+
+| Method | Path         | Description          | Response                                                 |
+| ------ | ------------ | -------------------- | -------------------------------------------------------- |
+| `GET`  | `/lsp`       | 获取 LSP server 状态 | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
+| `GET`  | `/formatter` | 获取 formatter 状态  | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
+| `GET`  | `/mcp`       | 获取 MCP server 状态 | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
+| `POST` | `/mcp`       | 动态添加 MCP server  | body: `{ name, config }`，返回 MCP status 对象           |
+
+---
+
+### Agents
+
+| Method | Path     | Description         | Response                                    |
+| ------ | -------- | ------------------- | ------------------------------------------- |
+| `GET`  | `/agent` | 列出所有可用 agents | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+### Logging
+
+| Method | Path   | Description                                           | Response  |
+| ------ | ------ | ----------------------------------------------------- | --------- |
+| `POST` | `/log` | 写入日志。Body: `{ service, level, message, extra? }` | `boolean` |
+
+---
+
+### TUI
+
+| Method | Path                    | Description                                  | Response               |
+| ------ | ----------------------- | -------------------------------------------- | ---------------------- |
+| `POST` | `/tui/append-prompt`    | 向 prompt 追加文本                           | `boolean`              |
+| `POST` | `/tui/open-help`        | 打开帮助对话框                               | `boolean`              |
+| `POST` | `/tui/open-sessions`    | 打开会话选择器                               | `boolean`              |
+| `POST` | `/tui/open-themes`      | 打开主题选择器                               | `boolean`              |
+| `POST` | `/tui/open-models`      | 打开 model 选择器                            | `boolean`              |
+| `POST` | `/tui/submit-prompt`    | 提交当前 prompt                              | `boolean`              |
+| `POST` | `/tui/clear-prompt`     | 清空 prompt                                  | `boolean`              |
+| `POST` | `/tui/execute-command`  | 执行命令（`{ command }`）                    | `boolean`              |
+| `POST` | `/tui/show-toast`       | 显示 toast（`{ title?, message, variant }`） | `boolean`              |
+| `GET`  | `/tui/control/next`     | 等待下一次控制请求                           | Control request object |
+| `POST` | `/tui/control/response` | 响应控制请求（`{ body }`）                   | `boolean`              |
+
+---
+
+### Auth
+
+| Method | Path        | Description                                 | Response  |
+| ------ | ----------- | ------------------------------------------- | --------- |
+| `PUT`  | `/auth/:id` | 设置认证凭证。Body 必须匹配 provider schema | `boolean` |
+
+---
+
+### Events
+
+| Method | Path     | Description                                                              | Response                  |
+| ------ | -------- | ------------------------------------------------------------------------ | ------------------------- |
+| `GET`  | `/event` | Server-sent events stream。首个事件为 `server.connected`，然后是总线事件 | Server-sent events stream |
+
+---
+
+### Docs
+
+| Method | Path   | Description               | Response                       |
+| ------ | ------ | ------------------------- | ------------------------------ |
+| `GET`  | `/doc` | OpenAPI 3.1 specification | 包含 OpenAPI spec 的 HTML 页面 |

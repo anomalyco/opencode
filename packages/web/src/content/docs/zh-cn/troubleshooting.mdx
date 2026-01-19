@@ -1,0 +1,163 @@
+---
+title: 故障排查
+description: 常见问题及其解决方式。
+---
+
+要调试 OpenCode 的任何问题，可以查看它本地保存的日志或会话数据。
+
+---
+
+### 日志
+
+日志文件写入到：
+
+- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **Windows**: `%USERPROFILE%\.local\share\opencode\log\`
+
+日志文件使用时间戳命名（例如 `2025-01-09T123456.log`），并仅保留最近 10 个日志文件。
+
+你可以使用命令行选项 `--log-level` 设置日志级别，以获得更详细的调试信息。例如：`opencode --log-level DEBUG`。
+
+---
+
+### 存储
+
+opencode 会将会话数据和其他应用数据存储在磁盘上：
+
+- **macOS/Linux**: `~/.local/share/opencode/`
+- **Windows**: `%USERPROFILE%\.local\share\opencode`
+
+该目录包含：
+
+- `auth.json` - 认证数据，如 API key、OAuth token
+- `log/` - 应用日志
+- `project/` - 项目相关数据，如会话与消息数据
+  - 如果项目位于 Git 仓库中，存储在 `./<project-slug>/storage/`
+  - 如果不是 Git 仓库，存储在 `./global/storage/`
+
+---
+
+## 获取帮助
+
+如果你在使用 OpenCode 时遇到问题：
+
+1. **在 GitHub 上提交问题**
+
+   报告 bug 或请求新特性的最佳方式是通过我们的 GitHub 仓库：
+
+   [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
+
+   创建新 issue 前，请先搜索已有 issue，看看问题是否已被报告。
+
+2. **加入我们的 Discord**
+
+   想要实时帮助或社区讨论，请加入我们的 Discord 服务器：
+
+   [**opencode.ai/discord**](https://opencode.ai/discord)
+
+---
+
+## 常见问题
+
+这里是一些常见问题及其解决方法。
+
+---
+
+### OpenCode 无法启动
+
+1. 查看日志中的错误信息
+2. 尝试使用 `--print-logs` 运行，以便在终端查看输出
+3. 使用 `opencode upgrade` 确保你是最新版本
+
+---
+
+### 认证问题
+
+1. 在 TUI 中使用 `/connect` 命令重新认证
+2. 检查你的 API key 是否有效
+3. 确保你的网络允许连接到 provider 的 API
+
+---
+
+### 模型不可用
+
+1. 检查你是否已完成 provider 认证
+2. 确认配置中的模型名是否正确
+3. 某些模型可能需要特定访问权限或订阅
+
+如果你遇到 `ProviderModelNotFoundError`，通常是因为在某处引用了错误的模型。
+模型应按如下格式引用：`<providerId>/<modelId>`
+
+示例：
+
+- `openai/gpt-4.1`
+- `openrouter/google/gemini-2.5-flash`
+- `opencode/kimi-k2`
+
+要查看你有权限使用的模型，请运行 `opencode models`
+
+---
+
+### ProviderInitError
+
+如果你遇到 ProviderInitError，通常是因为配置无效或已损坏。
+
+解决方法：
+
+1. 先按照 [providers guide](/docs/providers) 验证 provider 是否配置正确
+2. 如果问题仍然存在，尝试清除已保存的配置：
+
+   ```bash
+   rm -rf ~/.local/share/opencode
+   ```
+
+3. 在 TUI 中使用 `/connect` 重新认证你的 provider。
+
+---
+
+### AI_APICallError 与 provider 包问题
+
+如果你遇到 API 调用错误，可能是因为 provider 包版本过旧。opencode 会按需动态安装 provider 包（OpenAI、Anthropic、Google 等）并在本地缓存。
+
+解决 provider 包问题：
+
+1. 清理 provider 包缓存：
+
+   ```bash
+   rm -rf ~/.cache/opencode
+   ```
+
+2. 重启 opencode 以重新安装最新的 provider 包
+
+这会强制 opencode 下载最新版本的 provider 包，通常可以解决与模型参数或 API 变更相关的兼容性问题。
+
+---
+
+### Linux 上复制/粘贴不可用
+
+Linux 用户需要安装以下剪贴板工具之一，才能使用复制/粘贴功能：
+
+**适用于 X11 系统：**
+
+```bash
+apt install -y xclip
+# or
+apt install -y xsel
+```
+
+**适用于 Wayland 系统：**
+
+```bash
+apt install -y wl-clipboard
+```
+
+**适用于无头环境：**
+
+```bash
+apt install -y xvfb
+# and run:
+Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+export DISPLAY=:99.0
+```
+
+opencode 会检测你是否使用 Wayland，并优先使用 `wl-clipboard`；否则会按顺序尝试 `xclip` 和 `xsel`。

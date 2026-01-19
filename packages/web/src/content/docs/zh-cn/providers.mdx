@@ -1,0 +1,1796 @@
+---
+title: Providers
+description: 在 OpenCode 中使用任意 LLM provider。
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+
+OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 与 [Models.dev](https://models.dev) 来支持 **75+ LLM providers**，并支持运行本地 models。
+
+要添加 provider，需要：
+
+1. 使用 `/connect` 命令添加该 provider 的 API keys。
+2. 在 OpenCode 配置中配置该 provider。
+
+---
+
+### Credentials
+
+当你通过 `/connect` 添加 provider 的 API keys 后，它们会存储在 `~/.local/share/opencode/auth.json`。
+
+---
+
+### Config
+
+你可以通过 OpenCode 配置中的 `provider` 部分自定义 providers。
+
+---
+
+#### Base URL
+
+你可以通过设置 `baseURL` 来自定义任意 provider 的基础 URL。这在使用代理服务或自定义端点时很有用。
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "baseURL": "https://api.anthropic.com/v1"
+      }
+    }
+  }
+}
+```
+
+---
+
+## OpenCode Zen
+
+OpenCode Zen 是由 OpenCode 团队测试并验证、与 OpenCode 配合良好的 model 列表。[了解更多](/docs/zen)。
+
+:::tip
+如果你是新手，建议从 OpenCode Zen 开始。
+:::
+
+1. 在 TUI 中运行 `/connect` 命令，选择 opencode，并访问 [opencode.ai/auth](https://opencode.ai/auth)。
+
+   ```txt
+   /connect
+   ```
+
+2. 登录、添加计费信息并复制 API key。
+
+3. 粘贴你的 API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 在 TUI 中运行 `/models` 查看我们推荐的 models 列表。
+
+   ```txt
+   /models
+   ```
+
+它与 OpenCode 中的其他 provider 一样可用，且完全可选。
+
+---
+
+## Directory
+
+下面我们详细介绍一些 providers。如果你希望添加新的 provider，欢迎提交 PR。
+
+:::note
+没有看到你的 provider？提交 PR。
+:::
+
+---
+
+### 302.AI
+
+1. 前往 [302.AI console](https://302.ai/)，创建账号并生成 API key。
+
+2. 运行 `/connect` 并搜索 **302.AI**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入你的 302.AI API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Amazon Bedrock
+
+在 OpenCode 中使用 Amazon Bedrock：
+
+1. 前往 Amazon Bedrock 控制台的 **Model catalog**，申请你要使用的 models 访问权限。
+
+   :::tip
+   你必须拥有想使用的 Amazon Bedrock model 的访问权限。
+   :::
+
+2. **配置认证**，选择以下方法之一：
+
+   #### 环境变量（快速开始）
+
+   在运行 opencode 时设置以下环境变量之一：
+
+   ```bash
+   # 选项 1：使用 AWS access keys
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+
+   # 选项 2：使用命名 AWS profile
+   AWS_PROFILE=my-profile opencode
+
+   # 选项 3：使用 Bedrock bearer token
+   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   ```
+
+   或添加到 bash profile：
+
+   ```bash title="~/.bash_profile"
+   export AWS_PROFILE=my-dev-profile
+   export AWS_REGION=us-east-1
+   ```
+
+   #### 配置文件（推荐）
+
+   如需项目级或持久配置，使用 `opencode.json`：
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "my-aws-profile"
+         }
+       }
+     }
+   }
+   ```
+
+   **可用选项：**
+   - `region` - AWS region（例如 `us-east-1`、`eu-west-1`）
+   - `profile` - `~/.aws/credentials` 中的 AWS profile
+   - `endpoint` - VPC endpoints 的自定义 URL（通用 `baseURL` 选项的别名）
+
+   :::tip
+   配置文件选项优先于环境变量。
+   :::
+
+   #### 高级：VPC Endpoints
+
+   使用 VPC endpoints 时：
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "production",
+           "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+         }
+       }
+     }
+   }
+   ```
+
+   :::note
+   `endpoint` 是通用 `baseURL` 的别名，使用 AWS 术语。如果同时指定 `endpoint` 与 `baseURL`，`endpoint` 优先。
+   :::
+
+   #### 认证方式
+   - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**：在 AWS 控制台创建 IAM 用户并生成 access keys
+   - **`AWS_PROFILE`**：使用 `~/.aws/credentials` 中的命名 profile。先用 `aws configure --profile my-profile` 或 `aws sso login` 配置
+   - **`AWS_BEARER_TOKEN_BEDROCK`**：在 Amazon Bedrock 控制台生成长期 API key
+   - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**：用于 EKS IRSA（Service Account 的 IAM Role）或其他使用 OIDC federation 的 Kubernetes 环境。Kubernetes 在使用 service account annotations 时会自动注入这些环境变量
+
+   #### 认证优先级
+
+   Amazon Bedrock 的认证优先级如下：
+   1. **Bearer Token** - `AWS_BEARER_TOKEN_BEDROCK` 环境变量或 `/connect` 提供的 token
+   2. **AWS Credential Chain** - profile、access keys、共享凭证、IAM roles、Web Identity Tokens（EKS IRSA）、实例元数据
+
+   :::note
+   当设置了 bearer token（通过 `/connect` 或 `AWS_BEARER_TOKEN_BEDROCK`），它会优先于所有 AWS 凭证方式（包括已配置 profile）。
+   :::
+
+3. 运行 `/models` 选择要使用的 model。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Anthropic
+
+我们建议订阅 [Claude Pro](https://www.anthropic.com/news/claude-pro) 或 [Max](https://www.anthropic.com/max)。
+
+1. 订阅后运行 `/connect` 并选择 Anthropic。
+
+   ```txt
+   /connect
+   ```
+
+2. 选择 **Claude Pro/Max**，浏览器会打开并提示认证。
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ Claude Pro/Max
+   │ Create an API Key
+   │ Manually enter API Key
+   └
+   ```
+
+3. 现在你可以在 `/models` 中看到所有 Anthropic models。
+
+   ```txt
+   /models
+   ```
+
+##### 使用 API keys
+
+如果你没有 Pro/Max 订阅，可以选择 **Create an API Key**，浏览器会打开并提示登录 Anthropic，生成一个可粘贴到终端的 code。
+
+如果你已有 API key，可选择 **Manually enter API Key** 并粘贴。
+
+---
+
+### Azure OpenAI
+
+:::note
+如果出现 “I'm sorry, but I cannot assist with that request” 错误，尝试将 Azure 资源的内容过滤从 **DefaultV2** 改为 **Default**。
+:::
+
+1. 前往 [Azure portal](https://portal.azure.com/) 创建 **Azure OpenAI** 资源。你需要：
+   - **Resource name**：作为 API 端点的一部分（`https://RESOURCE_NAME.openai.azure.com/`）
+   - **API key**：资源中的 `KEY 1` 或 `KEY 2`
+
+2. 前往 [Azure AI Foundry](https://ai.azure.com/) 部署 model。
+
+   :::note
+   部署名称必须与 model 名称一致，否则 opencode 无法正常工作。
+   :::
+
+3. 运行 `/connect` 并搜索 **Azure**。
+
+   ```txt
+   /connect
+   ```
+
+4. 输入 API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. 将 resource name 设置为环境变量：
+
+   ```bash
+   AZURE_RESOURCE_NAME=XXX opencode
+   ```
+
+   或添加到 bash profile：
+
+   ```bash title="~/.bash_profile"
+   export AZURE_RESOURCE_NAME=XXX
+   ```
+
+6. 运行 `/models` 选择已部署的 model。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Azure Cognitive Services
+
+1. 前往 [Azure portal](https://portal.azure.com/) 创建 **Azure OpenAI** 资源。你需要：
+   - **Resource name**：作为 API 端点的一部分（`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`）
+   - **API key**：资源中的 `KEY 1` 或 `KEY 2`
+
+2. 前往 [Azure AI Foundry](https://ai.azure.com/) 部署 model。
+
+   :::note
+   部署名称必须与 model 名称一致，否则 opencode 无法正常工作。
+   :::
+
+3. 运行 `/connect` 并搜索 **Azure Cognitive Services**。
+
+   ```txt
+   /connect
+   ```
+
+4. 输入 API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. 将 resource name 设置为环境变量：
+
+   ```bash
+   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
+   ```
+
+   或添加到 bash profile：
+
+   ```bash title="~/.bash_profile"
+   export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
+   ```
+
+6. 运行 `/models` 选择已部署的 model。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Baseten
+
+1. 前往 [Baseten](https://app.baseten.co/) 创建账号并生成 API key。
+
+2. 运行 `/connect` 并搜索 **Baseten**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Baseten API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Cerebras
+
+1. 前往 [Cerebras console](https://inference.cerebras.ai/) 创建账号并生成 API key。
+
+2. 运行 `/connect` 并搜索 **Cerebras**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Cerebras API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model（例如 _Qwen 3 Coder 480B_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Cloudflare AI Gateway
+
+Cloudflare AI Gateway 允许你通过统一端点访问 OpenAI、Anthropic、Workers AI 等 models。借助 [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/)，无需为每个 provider 单独配置 API keys。
+
+1. 前往 [Cloudflare dashboard](https://dash.cloudflare.com/)，进入 **AI** > **AI Gateway** 并创建新的 gateway。
+
+2. 将 Account ID 与 Gateway ID 设置为环境变量：
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
+   export CLOUDFLARE_GATEWAY_ID=your-gateway-id
+   ```
+
+3. 运行 `/connect` 并搜索 **Cloudflare AI Gateway**。
+
+   ```txt
+   /connect
+   ```
+
+4. 输入 Cloudflare API token。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+   或设置环境变量：
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_API_TOKEN=your-api-token
+   ```
+
+5. 运行 `/models` 选择 model。
+
+   ```txt
+   /models
+   ```
+
+   你也可以通过 opencode 配置添加 models。
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "cloudflare-ai-gateway": {
+         "models": {
+           "openai/gpt-4o": {},
+           "anthropic/claude-sonnet-4": {}
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+### Cortecs
+
+1. 前往 [Cortecs console](https://cortecs.ai/) 创建账号并生成 API key。
+
+2. 运行 `/connect` 并搜索 **Cortecs**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Cortecs API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model（例如 _Kimi K2 Instruct_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### DeepSeek
+
+1. 前往 [DeepSeek console](https://platform.deepseek.com/) 创建账号并点击 **Create new API key**。
+
+2. 运行 `/connect` 并搜索 **DeepSeek**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 DeepSeek API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 DeepSeek model（例如 _DeepSeek Reasoner_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Deep Infra
+
+1. 前往 [Deep Infra dashboard](https://deepinfra.com/dash) 创建账号并生成 API key。
+
+2. 运行 `/connect` 并搜索 **Deep Infra**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Deep Infra API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Firmware
+
+1. 前往 [Firmware dashboard](https://app.firmware.ai/signup) 创建账号并生成 API key。
+
+2. 运行 `/connect` 并搜索 **Firmware**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Firmware API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Fireworks AI
+
+1. 前往 [Fireworks AI console](https://app.fireworks.ai/) 创建账号并点击 **Create API Key**。
+
+2. 运行 `/connect` 并搜索 **Fireworks AI**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Fireworks AI API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model（例如 _Kimi K2 Instruct_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### GitLab Duo
+
+GitLab Duo 通过 GitLab 的 Anthropic proxy 提供原生 tool calling 的 AI agentic chat。
+
+1. 运行 `/connect` 并选择 GitLab。
+
+   ```txt
+   /connect
+   ```
+
+2. 选择认证方式：
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ OAuth (Recommended)
+   │ Personal Access Token
+   └
+   ```
+
+   #### 使用 OAuth（推荐）
+
+   选择 **OAuth**，浏览器会打开并进行授权。
+
+   #### 使用 Personal Access Token
+   1. 前往 [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
+   2. 点击 **Add new token**
+   3. Name：`OpenCode`，Scopes：`api`
+   4. 复制 token（以 `glpat-` 开头）
+   5. 在终端中输入
+
+3. 运行 `/models` 查看可用 models。
+
+   ```txt
+   /models
+   ```
+
+   可用的 Claude models：
+   - **duo-chat-haiku-4-5**（默认）- 快速响应
+   - **duo-chat-sonnet-4-5** - 适合大多数工作流的平衡性能
+   - **duo-chat-opus-4-5** - 复杂分析最强
+
+##### 自托管 GitLab
+
+用于自托管 GitLab：
+
+```bash
+GITLAB_INSTANCE_URL=https://gitlab.company.com GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx opencode
+```
+
+或添加到 bash profile：
+
+```bash title="~/.bash_profile"
+export GITLAB_INSTANCE_URL=https://gitlab.company.com
+export GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx
+```
+
+##### 配置
+
+在 `opencode.json` 中配置：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "gitlab": {
+      "options": {
+        "instanceUrl": "https://gitlab.com",
+        "featureFlags": {
+          "duo_agent_platform_agentic_chat": true,
+          "duo_agent_platform": true
+        }
+      }
+    }
+  }
+}
+```
+
+##### GitLab API Tools（可选）
+
+如需访问 GitLab tools（merge requests、issues、pipelines、CI/CD 等）：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@gitlab/opencode-gitlab-plugin"]
+}
+```
+
+该 plugin 提供完整的 GitLab 仓库管理能力，包括 MR 审查、issue 跟踪、pipeline 监控等。
+
+---
+
+### GitHub Copilot
+
+使用你的 GitHub Copilot 订阅：
+
+:::note
+部分 models 可能需要 [Pro+ subscription](https://github.com/features/copilot/plans)。
+
+部分 models 需要在你的 [GitHub Copilot settings](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use) 中手动启用。
+:::
+
+1. 运行 `/connect` 并搜索 GitHub Copilot。
+
+   ```txt
+   /connect
+   ```
+
+2. 访问 [github.com/login/device](https://github.com/login/device) 并输入 code。
+
+   ```txt
+   ┌ Login with GitHub Copilot
+   │
+   │ https://github.com/login/device
+   │
+   │ Enter code: 8F43-6FCF
+   │
+   └ Waiting for authorization...
+   ```
+
+3. 运行 `/models` 选择 model。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Google Vertex AI
+
+在 OpenCode 中使用 Google Vertex AI：
+
+1. 前往 Google Cloud Console 的 **Model Garden**，查看你所在区域可用的 models。
+
+   :::note
+   需要启用 Vertex AI API 的 Google Cloud 项目。
+   :::
+
+2. 设置所需环境变量：
+   - `GOOGLE_CLOUD_PROJECT`：你的 Google Cloud project ID
+   - `VERTEX_LOCATION`（可选）：Vertex AI region（默认为 `global`）
+   - 认证方式（二选一）：
+     - `GOOGLE_APPLICATION_CREDENTIALS`：service account JSON key 文件路径
+     - 使用 gcloud CLI 认证：`gcloud auth application-default login`
+
+   运行 opencode 时设置：
+
+   ```bash
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   ```
+
+   或添加到 bash profile：
+
+   ```bash title="~/.bash_profile"
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   export GOOGLE_CLOUD_PROJECT=your-project-id
+   export VERTEX_LOCATION=global
+   ```
+
+:::tip
+`global` region 可提升可用性并减少错误且无额外成本。如有数据驻留要求，请使用区域端点（如 `us-central1`）。[了解更多](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+:::
+
+3. 运行 `/models` 选择 model。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Groq
+
+1. 前往 [Groq console](https://console.groq.com/) 点击 **Create API Key** 并复制 key。
+
+2. 运行 `/connect` 并搜索 Groq。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Hugging Face
+
+[Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers) 提供 17+ providers 支持的开源 models。
+
+1. 前往 [Hugging Face settings](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) 创建可调用 Inference Providers 的 token。
+
+2. 运行 `/connect` 并搜索 **Hugging Face**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Hugging Face token。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model（如 _Kimi-K2-Instruct_ 或 _GLM-4.6_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Helicone
+
+[Helicone](https://helicone.ai) 是 LLM 可观测平台，提供日志、监控与分析。Helicone AI Gateway 会根据 model 自动将请求路由到对应 provider。
+
+1. 前往 [Helicone](https://helicone.ai) 创建账号，在 dashboard 生成 API key。
+
+2. 运行 `/connect` 并搜索 **Helicone**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Helicone API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model。
+
+   ```txt
+   /models
+   ```
+
+更多 providers 与高级功能（如缓存、限流）请参考 [Helicone documentation](https://docs.helicone.ai)。
+
+#### 可选配置
+
+当 Helicone 中的某些功能或 model 无法通过 opencode 自动配置时，你可以手动配置。
+
+这里有 [Helicone's Model Directory](https://helicone.ai/models)，用于获取 model IDs。
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+      },
+      "models": {
+        "gpt-4o": {
+          // Model ID (from Helicone's model directory page)
+          "name": "GPT-4o", // Your own custom name for the model
+        },
+        "claude-sonnet-4-20250514": {
+          "name": "Claude Sonnet 4",
+        },
+      },
+    },
+  },
+}
+```
+
+#### 自定义 Headers
+
+Helicone 支持自定义 headers，用于缓存、用户跟踪、会话管理等功能。通过 `options.headers` 添加：
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+        "headers": {
+          "Helicone-Cache-Enabled": "true",
+          "Helicone-User-Id": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+##### Session tracking
+
+Helicone 的 [Sessions](https://docs.helicone.ai/features/sessions) 功能可将相关 LLM 请求分组。使用 [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin 可将每次 OpenCode 会话自动记录为 Helicone session。
+
+```bash
+npm install -g opencode-helicone-session
+```
+
+添加到配置：
+
+```json title="opencode.json"
+{
+  "plugin": ["opencode-helicone-session"]
+}
+```
+
+该 plugin 会为请求注入 `Helicone-Session-Id` 与 `Helicone-Session-Name` headers。在 Helicone 的 Sessions 页面中，每个 OpenCode 会话会显示为独立 session。
+
+##### 常见 Helicone headers
+
+| Header                     | Description                                          |
+| -------------------------- | ---------------------------------------------------- |
+| `Helicone-Cache-Enabled`   | 启用响应缓存（`true`/`false`）                       |
+| `Helicone-User-Id`         | 按用户跟踪指标                                       |
+| `Helicone-Property-[Name]` | 添加自定义属性（如 `Helicone-Property-Environment`） |
+| `Helicone-Prompt-Id`       | 关联 prompt 版本                                     |
+
+更多 headers 请参考 [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory)。
+
+---
+
+### llama.cpp
+
+你可以通过 [llama.cpp](https://github.com/ggml-org/llama.cpp) 的 llama-server 工具使用本地 models。
+
+```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "llama.cpp": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "llama-server (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:8080/v1"
+      },
+      "models": {
+        "qwen3-coder:a3b": {
+          "name": "Qwen3-Coder: a3b-30b (local)",
+          "limit": {
+            "context": 128000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+示例说明：
+
+- `llama.cpp` 是自定义 provider ID，可使用任意字符串。
+- `npm` 指定该 provider 使用的包，此处为 `@ai-sdk/openai-compatible`，用于 OpenAI 兼容 API。
+- `name` 为 UI 中的展示名称。
+- `options.baseURL` 为本地 server 端点。
+- `models` 为 model ID 到配置的映射，model name 会显示在 model 选择列表中。
+
+---
+
+### IO.NET
+
+IO.NET 提供 17 个用于不同用例的 models：
+
+1. 前往 [IO.NET console](https://ai.io.net/) 创建账号并生成 API key。
+
+2. 运行 `/connect` 并搜索 **IO.NET**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 IO.NET API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### LM Studio
+
+你可以通过 LM Studio 使用本地 models。
+
+```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "lmstudio": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1234/v1"
+      },
+      "models": {
+        "google/gemma-3n-e4b": {
+          "name": "Gemma 3n-e4b (local)"
+        }
+      }
+    }
+  }
+}
+```
+
+示例说明：
+
+- `lmstudio` 是自定义 provider ID，可使用任意字符串。
+- `npm` 指定该 provider 使用的包，此处为 `@ai-sdk/openai-compatible`，用于 OpenAI 兼容 API。
+- `name` 为 UI 中的展示名称。
+- `options.baseURL` 为本地 server 端点。
+- `models` 为 model ID 到配置的映射，model name 会显示在 model 选择列表中。
+
+---
+
+### Moonshot AI
+
+使用 Moonshot AI 的 Kimi K2：
+
+1. 前往 [Moonshot AI console](https://platform.moonshot.ai/console) 创建账号并点击 **Create API key**。
+
+2. 运行 `/connect` 并搜索 **Moonshot AI**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Moonshot API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 _Kimi K2_。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### MiniMax
+
+1. 前往 [MiniMax API Console](https://platform.minimax.io/login) 创建账号并生成 API key。
+
+2. 运行 `/connect` 并搜索 **MiniMax**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 MiniMax API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model（如 _M2.1_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Nebius Token Factory
+
+1. 前往 [Nebius Token Factory console](https://tokenfactory.nebius.com/) 创建账号并点击 **Add Key**。
+
+2. 运行 `/connect` 并搜索 **Nebius Token Factory**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Nebius Token Factory API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model（如 _Kimi K2 Instruct_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Ollama
+
+你可以通过 Ollama 使用本地 models。
+
+```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (local)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1"
+      },
+      "models": {
+        "llama2": {
+          "name": "Llama 2"
+        }
+      }
+    }
+  }
+}
+```
+
+示例说明：
+
+- `ollama` 是自定义 provider ID，可使用任意字符串。
+- `npm` 指定该 provider 使用的包，此处为 `@ai-sdk/openai-compatible`，用于 OpenAI 兼容 API。
+- `name` 为 UI 中的展示名称。
+- `options.baseURL` 为本地 server 端点。
+- `models` 为 model ID 到配置的映射，model name 会显示在 model 选择列表中。
+
+:::tip
+如果 tool calls 失效，请尝试增大 Ollama 的 `num_ctx`，建议从 16k - 32k 开始。
+:::
+
+---
+
+### Ollama Cloud
+
+使用 Ollama Cloud：
+
+1. 前往 [https://ollama.com/](https://ollama.com/) 登录或注册。
+
+2. 进入 **Settings** > **Keys** 并点击 **Add API Key** 生成新 API key。
+
+3. 复制 API key。
+
+4. 运行 `/connect` 并搜索 **Ollama Cloud**。
+
+   ```txt
+   /connect
+   ```
+
+5. 输入 Ollama Cloud API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+6. **重要**：在 OpenCode 中使用云端 model 前，必须先在本地拉取 model 信息：
+
+   ```bash
+   ollama pull gpt-oss:20b-cloud
+   ```
+
+7. 运行 `/models` 选择 Ollama Cloud model。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OpenAI
+
+我们建议订阅 [ChatGPT Plus or Pro](https://chatgpt.com/pricing)。
+
+1. 订阅后运行 `/connect` 并选择 OpenAI。
+
+   ```txt
+   /connect
+   ```
+
+2. 选择 **ChatGPT Plus/Pro**，浏览器会打开并提示认证。
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ ChatGPT Plus/Pro
+   │ Manually enter API Key
+   └
+   ```
+
+3. 现在你可以在 `/models` 中看到所有 OpenAI models。
+
+   ```txt
+   /models
+   ```
+
+##### 使用 API keys
+
+如果你已有 API key，可选择 **Manually enter API Key** 并粘贴到终端。
+
+---
+
+### OpenCode Zen
+
+OpenCode Zen 是由 OpenCode 团队提供的测试并验证过的 models 列表。[了解更多](/docs/zen)。
+
+1. 登录 **<a href={console}>OpenCode Zen</a>** 并点击 **Create API Key**。
+
+2. 运行 `/connect` 并搜索 **OpenCode Zen**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 OpenCode API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model（如 _Qwen 3 Coder 480B_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OpenRouter
+
+1. 前往 [OpenRouter dashboard](https://openrouter.ai/settings/keys) 点击 **Create API Key** 并复制 key。
+
+2. 运行 `/connect` 并搜索 OpenRouter。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 许多 OpenRouter models 默认已预置，运行 `/models` 选择要使用的 model。
+
+   ```txt
+   /models
+   ```
+
+   你也可以在 opencode 配置中添加额外 models。
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "openrouter": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+5. 你也可以在 opencode 配置中自定义，以下是指定 provider 的示例：
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "openrouter": {
+         "models": {
+           "moonshotai/kimi-k2": {
+             "options": {
+               "provider": {
+                 "order": ["baseten"],
+                 "allow_fallbacks": false
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+### SAP AI Core
+
+SAP AI Core 提供 40+ models，覆盖 OpenAI、Anthropic、Google、Amazon、Meta、Mistral、AI21 等，通过统一平台访问。
+
+1. 前往 [SAP BTP Cockpit](https://account.hana.ondemand.com/)，进入 SAP AI Core 服务实例并创建 service key。
+
+   :::tip
+   service key 是包含 `clientid`、`clientsecret`、`url` 与 `serviceurls.AI_API_URL` 的 JSON 对象。你可以在 BTP Cockpit 的 **Services** > **Instances and Subscriptions** 中找到 AI Core 实例。
+   :::
+
+2. 运行 `/connect` 并搜索 **SAP AI Core**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 service key JSON。
+
+   ```txt
+   ┌ Service key
+   │
+   │
+   └ enter
+   ```
+
+   或设置 `AICORE_SERVICE_KEY` 环境变量：
+
+   ```bash
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   ```
+
+   或添加到 bash profile：
+
+   ```bash title="~/.bash_profile"
+   export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
+   ```
+
+4. 可选：设置 deployment ID 与 resource group：
+
+   ```bash
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   ```
+
+   :::note
+   这些设置是可选的，请根据你的 SAP AI Core 配置调整。
+   :::
+
+5. 运行 `/models` 从 40+ models 中选择。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OVHcloud AI Endpoints
+
+1. 前往 [OVHcloud panel](https://ovh.com/manager)，进入 `Public Cloud`，选择 `AI & Machine Learning` > `AI Endpoints`，在 `API Keys` 选项卡中点击 **Create a new API key**。
+
+2. 运行 `/connect` 并搜索 **OVHcloud AI Endpoints**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 OVHcloud AI Endpoints API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model（如 _gpt-oss-120b_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Scaleway
+
+使用 [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/)：
+
+1. 前往 [Scaleway Console IAM settings](https://console.scaleway.com/iam/api-keys) 生成 API key。
+
+2. 运行 `/connect` 并搜索 **Scaleway**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Scaleway API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model（如 _devstral-2-123b-instruct-2512_ 或 _gpt-oss-120b_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Together AI
+
+1. 前往 [Together AI console](https://api.together.ai) 创建账号并点击 **Add Key**。
+
+2. 运行 `/connect` 并搜索 **Together AI**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Together AI API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model（如 _Kimi K2 Instruct_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Venice AI
+
+1. 前往 [Venice AI console](https://venice.ai) 创建账号并生成 API key。
+
+2. 运行 `/connect` 并搜索 **Venice AI**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Venice AI API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model（如 _Llama 3.3 70B_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Vercel AI Gateway
+
+Vercel AI Gateway 允许你通过统一端点访问 OpenAI、Anthropic、Google、xAI 等 models，价格按目录价，不加价。
+
+1. 前往 [Vercel dashboard](https://vercel.com/) 的 **AI Gateway** 标签页，点击 **API keys** 创建 API key。
+
+2. 运行 `/connect` 并搜索 **Vercel AI Gateway**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 Vercel AI Gateway API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model。
+
+   ```txt
+   /models
+   ```
+
+你也可以在 opencode 配置中自定义 models。以下示例展示 provider 路由顺序。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "vercel": {
+      "models": {
+        "anthropic/claude-sonnet-4": {
+          "options": {
+            "order": ["anthropic", "vertex"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+一些常用路由选项：
+
+| Option              | Description                      |
+| ------------------- | -------------------------------- |
+| `order`             | 尝试的 provider 顺序             |
+| `only`              | 限制为特定 providers             |
+| `zeroDataRetention` | 只使用零数据保留政策的 providers |
+
+---
+
+### xAI
+
+1. 前往 [xAI console](https://console.x.ai/) 创建账号并生成 API key。
+
+2. 运行 `/connect` 并搜索 **xAI**。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 xAI API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model（如 _Grok Beta_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Z.AI
+
+1. 前往 [Z.AI API console](https://z.ai/manage-apikey/apikey-list) 创建账号并点击 **Create a new API key**。
+
+2. 运行 `/connect` 并搜索 **Z.AI**。
+
+   ```txt
+   /connect
+   ```
+
+   如果你订阅了 **GLM Coding Plan**，请选择 **Z.AI Coding Plan**。
+
+3. 输入 Z.AI API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 运行 `/models` 选择 model（如 _GLM-4.7_）。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### ZenMux
+
+1. 前往 [ZenMux dashboard](https://zenmux.ai/settings/keys) 点击 **Create API Key** 并复制 key。
+
+2. 运行 `/connect` 并搜索 ZenMux。
+
+   ```txt
+   /connect
+   ```
+
+3. 输入 API key。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. 许多 ZenMux models 默认已预置，运行 `/models` 选择要使用的 model。
+
+   ```txt
+   /models
+   ```
+
+   你也可以在 opencode 配置中添加额外 models。
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "zenmux": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+## Custom provider
+
+要添加 `/connect` 中未列出的 **OpenAI-compatible** provider：
+
+:::tip
+你可以在 opencode 中使用任意 OpenAI-compatible provider。多数现代 AI providers 都提供 OpenAI-compatible API。
+:::
+
+1. 运行 `/connect` 并向下滚动到 **Other**。
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ...
+   │  ● Other
+   └
+   ```
+
+2. 输入 provider 的唯一 ID。
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ◇  Enter provider id
+   │  myprovider
+   └
+   ```
+
+   :::note
+   请选择容易记忆的 ID，你将在配置文件中使用它。
+   :::
+
+3. 输入 provider 的 API key。
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   │
+   ◇  Enter your API key
+   │  sk-...
+   └
+   ```
+
+4. 在项目目录创建或更新 `opencode.json`：
+
+   ```json title="opencode.json" ""myprovider"" {5-15}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "myprovider": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "My AI ProviderDisplay Name",
+         "options": {
+           "baseURL": "https://api.myprovider.com/v1"
+         },
+         "models": {
+           "my-model-name": {
+             "name": "My Model Display Name"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+   配置选项说明：
+   - **npm**：使用的 AI SDK 包，OpenAI-compatible providers 使用 `@ai-sdk/openai-compatible`
+   - **name**：UI 中的展示名称
+   - **models**：可用 models
+   - **options.baseURL**：API 端点 URL
+   - **options.apiKey**：可选设置 API key（如果未使用 auth）
+   - **options.headers**：可选自定义 headers
+
+   更多高级选项见下方示例。
+
+5. 运行 `/models`，你的自定义 provider 与 models 会出现在选择列表中。
+
+---
+
+##### 示例
+
+以下示例设置了 `apiKey`、`headers` 与 model `limit`：
+
+```json title="opencode.json" {9,11,17-20}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My AI ProviderDisplay Name",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1",
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+        "headers": {
+          "Authorization": "Bearer custom-token"
+        }
+      },
+      "models": {
+        "my-model-name": {
+          "name": "My Model Display Name",
+          "limit": {
+            "context": 200000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+配置细节：
+
+- **apiKey**：使用 `env` 变量语法设置，[了解更多](/docs/config#env-vars)。
+- **headers**：每次请求发送的自定义 headers。
+- **limit.context**：model 接收的最大输入 tokens。
+- **limit.output**：model 可生成的最大 tokens。
+
+`limit` 字段让 OpenCode 了解剩余上下文空间。标准 providers 会从 models.dev 自动获取这些信息。
+
+---
+
+## Troubleshooting
+
+如果 provider 配置遇到问题，请检查：
+
+1. **检查 auth 配置**：运行 `opencode auth list` 查看该 provider 的凭证是否已添加。
+
+   这不适用于像 Amazon Bedrock 这样的 providers，它们通过环境变量认证。
+
+2. 对于自定义 providers，检查 opencode 配置：
+   - 确保 `/connect` 中使用的 provider ID 与 opencode 配置中的 ID 一致。
+   - 确保使用正确的 npm 包。例如 Cerebras 用 `@ai-sdk/cerebras`，其他 OpenAI-compatible providers 用 `@ai-sdk/openai-compatible`。
+   - 确保 `options.baseURL` 中的 API 端点正确。

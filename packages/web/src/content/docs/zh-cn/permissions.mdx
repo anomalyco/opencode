@@ -1,0 +1,192 @@
+---
+title: Permissions
+description: 控制哪些操作需要审批。
+---
+
+OpenCode 使用 `permission` 配置来决定某个操作是自动执行、提示审批，还是被阻止。
+
+从 `v1.1.1` 起，旧的 `tools` 布尔配置已弃用并合并到 `permission`。旧的 `tools` 配置仍为兼容而保留。
+
+---
+
+## Actions
+
+每条权限规则会解析为以下之一：
+
+- `"allow"` — 无需审批直接运行
+- `"ask"` — 提示审批
+- `"deny"` — 阻止该操作
+
+---
+
+## 配置
+
+你可以设置全局权限（使用 `*`），并覆盖特定 tools。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "*": "ask",
+    "bash": "allow",
+    "edit": "deny"
+  }
+}
+```
+
+你也可以一次性设置所有权限：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": "allow"
+}
+```
+
+---
+
+## 细粒度规则（对象语法）
+
+对多数权限，你可以使用对象来根据 tool 输入应用不同策略。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "npm *": "allow",
+      "rm *": "deny",
+      "grep *": "allow"
+    },
+    "edit": {
+      "*": "deny",
+      "packages/web/src/content/docs/**/*.mdx": "allow"
+    }
+  }
+}
+```
+
+规则按模式匹配评估，**最后匹配的规则生效**。常见做法是将兜底规则 `"*"` 放在前面，将更具体的规则放在后面。
+
+### 通配符
+
+权限模式使用简单通配匹配：
+
+- `*` 匹配零个或多个任意字符
+- `?` 匹配一个字符
+- 其他字符为字面匹配
+
+---
+
+## 可用权限
+
+OpenCode 权限以 tool 名称为键，外加几个安全保护项：
+
+- `read` — 读取文件（匹配文件路径）
+- `edit` — 所有文件修改（包含 `edit`、`write`、`patch`、`multiedit`）
+- `glob` — 文件 glob（匹配 glob 模式）
+- `grep` — 内容搜索（匹配正则表达式）
+- `list` — 列出目录（匹配目录路径）
+- `bash` — 运行 shell 命令（匹配解析后的命令，例如 `git status --porcelain`）
+- `task` — 启动 subagents（匹配 subagent 类型）
+- `skill` — 加载 skill（匹配 skill 名称）
+- `lsp` — 运行 LSP 查询（当前不支持细粒度）
+- `todoread`、`todowrite` — 读取/更新 todo 列表
+- `webfetch` — 获取 URL（匹配 URL）
+- `websearch`、`codesearch` — Web/代码搜索（匹配查询）
+- `external_directory` — tool 触及项目工作目录外路径时触发
+- `doom_loop` — 同一 tool 调用以相同输入重复 3 次时触发
+
+---
+
+## 默认值
+
+如果你不做任何配置，OpenCode 会使用宽松的默认值：
+
+- 大多数权限默认为 `"allow"`。
+- `doom_loop` 与 `external_directory` 默认为 `"ask"`。
+- `read` 默认为 `"allow"`，但 `.env` 文件默认禁止：
+
+```json title="opencode.json"
+{
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    }
+  }
+}
+```
+
+---
+
+## “Ask” 的行为
+
+当 OpenCode 提示审批时，UI 提供三种结果：
+
+- `once` — 仅批准本次请求
+- `always` — 批准未来匹配建议模式的请求（在当前 OpenCode 会话内）
+- `reject` — 拒绝请求
+
+`always` 会批准的模式由 tool 提供（例如 bash 审批通常会对白名单前缀如 `git status*` 给出建议）。
+
+---
+
+## Agents
+
+你可以为每个 agent 覆盖权限。agent 权限与全局配置合并，且 agent 规则优先生效。[了解更多](/docs/agents#permissions)。
+
+:::note
+更详细的模式匹配示例请参考上方 [细粒度规则（对象语法）](#granular-rules-object-syntax)。
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "grep *": "allow"
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "git commit *": "ask",
+          "git push *": "deny",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+你也可以在 Markdown 中配置 agent 权限：
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash: ask
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+:::tip
+对带参数的命令使用模式匹配。例如 `"grep *"` 允许 `grep pattern file.txt`，而 `"grep"` 会阻止它。像 `git status` 这样的命令在默认行为下可用，但当带参数时需要显式权限（例如 `"git status *"`）。
+:::

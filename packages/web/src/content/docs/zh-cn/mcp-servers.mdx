@@ -1,0 +1,511 @@
+---
+title: MCP servers
+description: 添加本地与远程 MCP tools。
+---
+
+你可以使用 _Model Context Protocol_（MCP）将外部 tools 添加到 OpenCode。OpenCode 同时支持本地与远程 servers。
+
+添加后，MCP tools 会与内置 tools 一起自动可用于 LLM。
+
+---
+
+#### 注意事项
+
+使用 MCP server 会增加上下文。如果你的 tools 很多，token 会迅速累积。我们建议谨慎选择启用的 MCP servers。
+
+:::tip
+MCP servers 会增加上下文，所以请谨慎启用。
+:::
+
+某些 MCP servers（如 GitHub MCP server）会增加大量 tokens，很容易超过上下文上限。
+
+---
+
+## 启用
+
+你可以在 [OpenCode Config](https://opencode.ai/docs/config/) 的 `mcp` 下定义 MCP servers。为每个 MCP 设置唯一名称，在提示 LLM 时可以用名称引用。
+
+```jsonc title="opencode.jsonc" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "name-of-mcp-server": {
+      // ...
+      "enabled": true,
+    },
+    "name-of-other-mcp-server": {
+      // ...
+    },
+  },
+}
+```
+
+你也可以将 `enabled` 设为 `false` 来禁用某个 server。这在不移除配置的情况下临时关闭 server 很有用。
+
+---
+
+### 覆盖远程默认值
+
+组织可以通过 `.well-known/opencode` 端点提供默认 MCP servers。这些 servers 可能默认禁用，用户可按需启用。
+
+要从组织的远程配置中启用特定 server，请在本地配置中添加并设置 `enabled: true`：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+本地配置会覆盖远程默认值。详见 [config precedence](/docs/config#precedence-order)。
+
+---
+
+## Local
+
+在 MCP 对象中将 `type` 设为 `"local"` 来添加本地 MCP servers。
+
+```jsonc title="opencode.jsonc" {15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-local-mcp-server": {
+      "type": "local",
+      // 或 ["bun", "x", "my-mcp-command"]
+      "command": ["npx", "-y", "my-mcp-command"],
+      "enabled": true,
+      "environment": {
+        "MY_ENV_VAR": "my_env_var_value",
+      },
+    },
+  },
+}
+```
+
+`command` 用于启动本地 MCP server。你也可以传入环境变量列表。
+
+例如，以下示例展示如何添加测试用的 [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP server。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mcp_everything": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+    },
+  },
+}
+```
+
+在提示中加入 `use the mcp_everything tool` 即可使用它。
+
+```txt "mcp_everything"
+use the mcp_everything tool to add the number 3 and 4
+```
+
+---
+
+#### 选项
+
+以下是配置本地 MCP server 的全部选项。
+
+| Option        | Type    | Required | Description                                            |
+| ------------- | ------- | -------- | ------------------------------------------------------ |
+| `type`        | String  | Y        | MCP server 连接类型，必须为 `"local"`。                |
+| `command`     | Array   | Y        | 启动 MCP server 的命令与参数。                         |
+| `environment` | Object  |          | 运行 server 时设置的环境变量。                         |
+| `enabled`     | Boolean |          | 启动时启用或禁用 MCP server。                          |
+| `timeout`     | Number  |          | 获取 MCP tools 的超时时间（毫秒）。默认 5000（5 秒）。 |
+
+---
+
+## Remote
+
+将 `type` 设为 `"remote"` 以添加远程 MCP servers。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-remote-mcp": {
+      "type": "remote",
+      "url": "https://my-mcp-server.com",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer MY_API_KEY"
+      }
+    }
+  }
+}
+```
+
+`url` 是远程 MCP server 的地址，`headers` 用于传入请求头。
+
+---
+
+#### 选项
+
+| Option    | Type    | Required | Description                                            |
+| --------- | ------- | -------- | ------------------------------------------------------ |
+| `type`    | String  | Y        | MCP server 连接类型，必须为 `"remote"`。               |
+| `url`     | String  | Y        | 远程 MCP server 的 URL。                               |
+| `enabled` | Boolean |          | 启动时启用或禁用 MCP server。                          |
+| `headers` | Object  |          | 请求头。                                               |
+| `oauth`   | Object  |          | OAuth 认证配置。详见下方 [OAuth](#oauth)。             |
+| `timeout` | Number  |          | 获取 MCP tools 的超时时间（毫秒）。默认 5000（5 秒）。 |
+
+---
+
+## OAuth
+
+OpenCode 会自动处理远程 MCP servers 的 OAuth 认证。当 server 需要认证时，OpenCode 会：
+
+1. 检测到 401 响应并启动 OAuth 流程
+2. 如果 server 支持，使用 **Dynamic Client Registration (RFC 7591)**
+3. 安全存储 tokens 以供后续请求使用
+
+---
+
+### 自动
+
+对大多数支持 OAuth 的 MCP servers，不需要额外配置。只需配置远程 server：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp"
+    }
+  }
+}
+```
+
+如果 server 需要认证，OpenCode 会在首次使用时提示你认证。如果没有提示，可使用 `opencode mcp auth <server-name>` [手动触发流程](#authenticating)。
+
+---
+
+### 预注册
+
+如果你有 MCP server provider 提供的 client 凭证，可以这样配置：
+
+```json title="opencode.json" {7-11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "clientId": "{env:MY_MCP_CLIENT_ID}",
+        "clientSecret": "{env:MY_MCP_CLIENT_SECRET}",
+        "scope": "tools:read tools:execute"
+      }
+    }
+  }
+}
+```
+
+---
+
+### 认证
+
+你可以手动触发认证或管理凭证。
+
+认证特定 MCP server：
+
+```bash
+opencode mcp auth my-oauth-server
+```
+
+列出所有 MCP servers 及其认证状态：
+
+```bash
+opencode mcp list
+```
+
+移除已存储凭证：
+
+```bash
+opencode mcp logout my-oauth-server
+```
+
+`mcp auth` 命令会打开浏览器进行授权。授权后，OpenCode 会将 tokens 安全存储在 `~/.local/share/opencode/mcp-auth.json`。
+
+---
+
+#### 禁用 OAuth
+
+如果你希望禁用某个 server 的自动 OAuth（例如使用 API key 的 server），将 `oauth` 设为 `false`：
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-api-key-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MY_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+---
+
+#### OAuth 选项
+
+| Option         | Type            | Description                                            |
+| -------------- | --------------- | ------------------------------------------------------ |
+| `oauth`        | Object \| false | OAuth 配置对象，或设为 `false` 以禁用 OAuth 自动检测。 |
+| `clientId`     | String          | OAuth client ID。若未提供，将尝试动态客户端注册。      |
+| `clientSecret` | String          | OAuth client secret（如授权服务器需要）。              |
+| `scope`        | String          | 授权时请求的 OAuth scopes。                            |
+
+#### 调试
+
+如果远程 MCP server 认证失败，可使用以下命令诊断：
+
+```bash
+# 查看所有支持 OAuth 的 server 的认证状态
+opencode mcp auth list
+
+# 调试特定 server 的连接与 OAuth 流程
+opencode mcp debug my-oauth-server
+```
+
+`mcp debug` 命令会显示当前认证状态、测试 HTTP 连接，并尝试 OAuth 发现流程。
+
+---
+
+## 管理
+
+你的 MCPs 会作为 tools 出现在 OpenCode 中，与内置 tools 并列。因此你可以像管理其他 tools 一样，通过 OpenCode 配置进行管理。
+
+---
+
+### Global
+
+这意味着你可以全局启用或禁用它们。
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp-foo": false
+  }
+}
+```
+
+你也可以使用 glob 模式来禁用所有匹配的 MCPs。
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  }
+}
+```
+
+这里使用 glob 模式 `my-mcp*` 来禁用所有 MCPs。
+
+---
+
+### Per agent
+
+如果你有大量 MCP servers，可能希望仅在特定 agent 中启用，并在全局禁用。做法：
+
+1. 全局将其作为 tool 禁用。
+2. 在你的 [agent config](/docs/agents#tools) 中，将该 MCP server 作为 tool 启用。
+
+```json title="opencode.json" {11, 14-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command"],
+      "enabled": true
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  },
+  "agent": {
+    "my-agent": {
+      "tools": {
+        "my-mcp*": true
+      }
+    }
+  }
+}
+```
+
+---
+
+#### Glob patterns
+
+glob 模式使用简单的正则通配规则：
+
+- `*` 匹配零个或多个任意字符（例如 `"my-mcp*"` 匹配 `my-mcp_search`、`my-mcp_list` 等）
+- `?` 匹配一个字符
+- 其他字符为字面匹配
+
+:::note
+MCP server tools 会以 server 名作为前缀注册，因此要禁用某个 server 的所有 tools，可直接使用：
+
+```
+"mymcpservername_*": false
+```
+
+:::
+
+---
+
+## 示例
+
+以下为常见 MCP servers 示例。如需补充其他 servers，欢迎提交 PR。
+
+---
+
+### Sentry
+
+添加 [Sentry MCP server](https://mcp.sentry.dev) 以与 Sentry 项目与 issues 交互。
+
+```json title="opencode.json" {4-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "sentry": {
+      "type": "remote",
+      "url": "https://mcp.sentry.dev/mcp",
+      "oauth": {}
+    }
+  }
+}
+```
+
+添加配置后，与 Sentry 认证：
+
+```bash
+opencode mcp auth sentry
+```
+
+这会打开浏览器完成 OAuth 流程并将 OpenCode 连接到你的 Sentry 账号。
+
+认证完成后，你可以在 prompts 中使用 Sentry tools 来查询 issues、项目与错误数据。
+
+```txt "use sentry"
+Show me the latest unresolved issues in my project. use sentry
+```
+
+---
+
+### Context7
+
+添加 [Context7 MCP server](https://github.com/upstash/context7) 用于搜索文档。
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}
+```
+
+如果你注册了免费账号，可以使用 API key 获得更高 rate-limit。
+
+```json title="opencode.json" {7-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+这里假设你已设置 `CONTEXT7_API_KEY` 环境变量。
+
+在 prompts 中添加 `use context7` 以使用 Context7 MCP server。
+
+```txt "use context7"
+Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
+```
+
+或者，你可以在 [AGENTS.md](/docs/rules/) 中添加如下内容。
+
+```md title="AGENTS.md"
+When you need to search docs, use `context7` tools.
+```
+
+---
+
+### Grep by Vercel
+
+添加 [Grep by Vercel](https://grep.app) MCP server 以搜索 GitHub 上的代码片段。
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "gh_grep": {
+      "type": "remote",
+      "url": "https://mcp.grep.app"
+    }
+  }
+}
+```
+
+由于 MCP server 命名为 `gh_grep`，你可以在 prompts 中添加 `use the gh_grep tool` 来使用它。
+
+```txt "use the gh_grep tool"
+What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
+```
+
+或者，你可以在 [AGENTS.md](/docs/rules/) 中添加如下内容。
+
+```md title="AGENTS.md"
+If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
+```

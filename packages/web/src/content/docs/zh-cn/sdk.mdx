@@ -1,0 +1,391 @@
+---
+title: SDK
+description: opencode server 的类型安全 JS 客户端。
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+opencode JS/TS SDK 提供与 server 交互的类型安全客户端。
+用它来构建集成并以编程方式控制 opencode。
+
+[了解更多](/docs/server) server 的工作方式。更多示例可参考社区构建的 [projects](/docs/ecosystem#projects)。
+
+---
+
+## 安装
+
+从 npm 安装 SDK：
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## 创建 client
+
+创建 opencode 实例：
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
+
+这会同时启动 server 与 client。
+
+#### Options
+
+| Option     | Type          | Description                    | Default     |
+| ---------- | ------------- | ------------------------------ | ----------- |
+| `hostname` | `string`      | Server hostname                | `127.0.0.1` |
+| `port`     | `number`      | Server port                    | `4096`      |
+| `signal`   | `AbortSignal` | Abort signal for cancellation  | `undefined` |
+| `timeout`  | `number`      | Timeout in ms for server start | `5000`      |
+| `config`   | `Config`      | Configuration object           | `{}`        |
+
+---
+
+## Config
+
+你可以传入配置对象来自定义行为。实例仍会读取 `opencode.json`，但你可以以内联方式覆盖或追加配置：
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const opencode = await createOpencode({
+  hostname: "127.0.0.1",
+  port: 4096,
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022",
+  },
+})
+
+console.log(`Server running at ${opencode.server.url}`)
+
+opencode.server.close()
+```
+
+## 仅 client
+
+如果你已有运行中的 opencode 实例，可以创建 client 并连接到它：
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### Options
+
+| Option          | Type       | Description                      | Default                 |
+| --------------- | ---------- | -------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | URL of the server                | `http://localhost:4096` |
+| `fetch`         | `function` | Custom fetch implementation      | `globalThis.fetch`      |
+| `parseAs`       | `string`   | Response parsing method          | `auto`                  |
+| `responseStyle` | `string`   | Return style: `data` or `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | Throw errors instead of return   | `false`                 |
+
+---
+
+## Types
+
+SDK 包含所有 API types 的 TypeScript 定义，可直接导入：
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+所有 types 均由 server 的 OpenAPI 规范生成，并可在 <a href={typesUrl}>types file</a> 查看。
+
+---
+
+## Errors
+
+SDK 可能抛出错误，你可以捕获并处理：
+
+```typescript
+try {
+  await client.session.get({ path: { id: "invalid-id" } })
+} catch (error) {
+  console.error("Failed to get session:", (error as Error).message)
+}
+```
+
+---
+
+## APIs
+
+SDK 通过类型安全 client 暴露所有 server APIs。
+
+---
+
+### Global
+
+| Method            | Description                     | Response                             |
+| ----------------- | ------------------------------- | ------------------------------------ |
+| `global.health()` | Check server health and version | `{ healthy: true, version: string }` |
+
+---
+
+#### Examples
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
+### App
+
+| Method         | Description               | Response                                    |
+| -------------- | ------------------------- | ------------------------------------------- |
+| `app.log()`    | Write a log entry         | `boolean`                                   |
+| `app.agents()` | List all available agents | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+#### Examples
+
+```javascript
+// Write a log entry
+await client.app.log({
+  body: {
+    service: "my-app",
+    level: "info",
+    message: "Operation completed",
+  },
+})
+
+// List available agents
+const agents = await client.app.agents()
+```
+
+---
+
+### Project
+
+| Method              | Description         | Response                                      |
+| ------------------- | ------------------- | --------------------------------------------- |
+| `project.list()`    | List all projects   | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | Get current project | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+#### Examples
+
+```javascript
+// List all projects
+const projects = await client.project.list()
+
+// Get current project
+const currentProject = await client.project.current()
+```
+
+---
+
+### Path
+
+| Method       | Description      | Response                                 |
+| ------------ | ---------------- | ---------------------------------------- |
+| `path.get()` | Get current path | <a href={typesUrl}><code>Path</code></a> |
+
+---
+
+#### Examples
+
+```javascript
+// Get current path information
+const pathInfo = await client.path.get()
+```
+
+---
+
+### Config
+
+| Method               | Description                       | Response                                                                                              |
+| -------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | Get config info                   | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | List providers and default models | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### Examples
+
+```javascript
+const config = await client.config.get()
+
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+### Sessions
+
+| Method                                                     | Description                        | Notes                                                                                                                                          |
+| ---------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | List sessions                      | Returns <a href={typesUrl}><code>Session[]</code></a>                                                                                          |
+| `session.get({ path })`                                    | Get session                        | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.children({ path })`                               | List child sessions                | Returns <a href={typesUrl}><code>Session[]</code></a>                                                                                          |
+| `session.create({ body })`                                 | Create session                     | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.delete({ path })`                                 | Delete session                     | Returns `boolean`                                                                                                                              |
+| `session.update({ path, body })`                           | Update session properties          | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.init({ path, body })`                             | Analyze app and create `AGENTS.md` | Returns `boolean`                                                                                                                              |
+| `session.abort({ path })`                                  | Abort a running session            | Returns `boolean`                                                                                                                              |
+| `session.share({ path })`                                  | Share session                      | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.unshare({ path })`                                | Unshare session                    | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.summarize({ path, body })`                        | Summarize session                  | Returns `boolean`                                                                                                                              |
+| `session.messages({ path })`                               | List messages in a session         | Returns `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                        |
+| `session.message({ path })`                                | Get message details                | Returns `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                          |
+| `session.prompt({ path, body })`                           | Send prompt message                | `body.noReply: true` returns UserMessage (context only). Default returns <a href={typesUrl}><code>AssistantMessage</code></a> with AI response |
+| `session.command({ path, body })`                          | Send command to session            | Returns `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                 |
+| `session.shell({ path, body })`                            | Run a shell command                | Returns <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                   |
+| `session.revert({ path, body })`                           | Revert a message                   | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.unrevert({ path })`                               | Restore reverted messages          | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Respond to a permission request    | Returns `boolean`                                                                                                                              |
+
+---
+
+#### Examples
+
+```javascript
+// Create and manage sessions
+const session = await client.session.create({
+  body: { title: "My session" },
+})
+
+const sessions = await client.session.list()
+
+// Send a prompt message
+const result = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
+    parts: [{ type: "text", text: "Hello!" }],
+  },
+})
+
+// Inject context without triggering AI response (useful for plugins)
+await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    noReply: true,
+    parts: [{ type: "text", text: "You are a helpful assistant." }],
+  },
+})
+```
+
+---
+
+### Files
+
+| Method                    | Description                        | Response                                                                                    |
+| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `find.text({ query })`    | Search for text in files           | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | Find files and directories by name | `string[]` (paths)                                                                          |
+| `find.symbols({ query })` | Find workspace symbols             | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
+| `file.read({ query })`    | Read a file                        | `{ type: "raw" \| "patch", content: string }`                                               |
+| `file.status({ query? })` | Get status for tracked files       | <a href={typesUrl}><code>File[]</code></a>                                                  |
+
+`find.files` 支持以下可选查询字段：
+
+- `type`: `"file"` 或 `"directory"`
+- `directory`: 覆盖搜索的项目根目录
+- `limit`: 最大结果数量（1–200）
+
+---
+
+#### Examples
+
+```javascript
+// Search and read files
+const textResults = await client.find.text({
+  query: { pattern: "function.*opencode" },
+})
+
+const files = await client.find.files({
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
+})
+
+const content = await client.file.read({
+  query: { path: "src/index.ts" },
+})
+```
+
+---
+
+### TUI
+
+| Method                         | Description               | Response  |
+| ------------------------------ | ------------------------- | --------- |
+| `tui.appendPrompt({ body })`   | Append text to the prompt | `boolean` |
+| `tui.openHelp()`               | Open the help dialog      | `boolean` |
+| `tui.openSessions()`           | Open the session selector | `boolean` |
+| `tui.openThemes()`             | Open the theme selector   | `boolean` |
+| `tui.openModels()`             | Open the model selector   | `boolean` |
+| `tui.submitPrompt()`           | Submit the current prompt | `boolean` |
+| `tui.clearPrompt()`            | Clear the prompt          | `boolean` |
+| `tui.executeCommand({ body })` | Execute a command         | `boolean` |
+| `tui.showToast({ body })`      | Show toast notification   | `boolean` |
+
+---
+
+#### Examples
+
+```javascript
+// Control TUI interface
+await client.tui.appendPrompt({
+  body: { text: "Add this to prompt" },
+})
+
+await client.tui.showToast({
+  body: { message: "Task completed", variant: "success" },
+})
+```
+
+---
+
+### Auth
+
+| Method              | Description                    | Response  |
+| ------------------- | ------------------------------ | --------- |
+| `auth.set({ ... })` | Set authentication credentials | `boolean` |
+
+---
+
+#### Examples
+
+```javascript
+await client.auth.set({
+  path: { id: "anthropic" },
+  body: { type: "api", key: "your-api-key" },
+})
+```
+
+---
+
+### Events
+
+| Method              | Description               | Response                  |
+| ------------------- | ------------------------- | ------------------------- |
+| `event.subscribe()` | Server-sent events stream | Server-sent events stream |
+
+---
+
+#### Examples
+
+```javascript
+// Listen to real-time events
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  console.log("Event:", event.type, event.properties)
+}
+```

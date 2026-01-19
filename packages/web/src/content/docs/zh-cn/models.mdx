@@ -1,0 +1,221 @@
+---
+title: Models
+description: 配置 LLM provider 与 model。
+---
+
+OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) 来支持 **75+ LLM providers**，并支持运行本地 models。
+
+---
+
+## Providers
+
+常见 providers 默认已预置。如果你通过 `/connect` 命令添加了 provider 的凭证，它们会在 OpenCode 启动时可用。
+
+了解更多 [providers](/docs/providers)。
+
+---
+
+## 选择 model
+
+配置好 provider 后，你可以输入以下命令选择 model：
+
+```bash frame="none"
+/models
+```
+
+---
+
+## 推荐 models
+
+市面上的 models 很多，几乎每周都有新模型发布。
+
+:::tip
+建议使用我们推荐的 models 之一。
+:::
+
+但真正同时擅长代码生成与工具调用的模型并不多。
+
+以下是若干与 OpenCode 配合良好的 models，顺序不分先后（并非完整列表，也不保证始终最新）：
+
+- GPT 5.2
+- GPT 5.1 Codex
+- Claude Opus 4.5
+- Claude Sonnet 4.5
+- Minimax M2.1
+- Gemini 3 Pro
+
+---
+
+## 设置默认 model
+
+要将其中一个设为默认 model，可在 OpenCode 配置中设置 `model`。
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-3n-e4b"
+}
+```
+
+这里的完整 ID 格式为 `provider_id/model_id`。例如，如果你使用 [OpenCode Zen](/docs/zen)，则 GPT 5.1 Codex 需要使用 `opencode/gpt-5.1-codex`。
+
+如果你配置了 [custom provider](/docs/providers#custom)，`provider_id` 为配置中 `provider` 的 key，`model_id` 为 `provider.models` 中的 key。
+
+---
+
+## 配置 models
+
+你可以在配置中全局设置 model 的选项。
+
+```jsonc title="opencode.jsonc" {7-12,19-24}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    },
+    "anthropic": {
+      "models": {
+        "claude-sonnet-4-5-20250929": {
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 16000,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+这里为两个内置 models 配置了全局设置：`openai` provider 下的 `gpt-5`，以及 `anthropic` provider 下的 `claude-sonnet-4-20250514`。内置 provider 与 model 名称可在 [Models.dev](https://models.dev) 查找。
+
+你也可以为正在使用的 agents 配置这些选项。agent 配置会覆盖全局选项。[了解更多](/docs/agents/#additional)。
+
+你还可以定义扩展内置 model 的自定义 variants。variants 允许你为同一 model 配置不同设置，而无需重复条目：
+
+```jsonc title="opencode.jsonc" {6-21}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "high": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+            "low": {
+              "reasoningEffort": "low",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+---
+
+## Variants
+
+许多 models 支持不同配置的 variants。OpenCode 为常见 providers 内置了默认 variants。
+
+### 内置 variants
+
+OpenCode 为多个 providers 提供默认 variants：
+
+**Anthropic**:
+
+- `high` - 高思考预算（默认）
+- `max` - 最大思考预算
+
+**OpenAI**:
+
+因模型而异，但大致为：
+
+- `none` - 无推理
+- `minimal` - 最小推理强度
+- `low` - 低推理强度
+- `medium` - 中等推理强度
+- `high` - 高推理强度
+- `xhigh` - 超高推理强度
+
+**Google**:
+
+- `low` - 较低 effort/token 预算
+- `high` - 较高 effort/token 预算
+
+:::tip
+此列表并不完整。许多其他 providers 也有内置默认值。
+:::
+
+### 自定义 variants
+
+你可以覆盖已有 variants 或添加新的：
+
+```jsonc title="opencode.jsonc" {7-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "thinking": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+            },
+            "fast": {
+              "disabled": true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+### 轮换 variants
+
+使用 keybind `variant_cycle` 快速切换 variants。[了解更多](/docs/keybinds)。
+
+---
+
+## 加载 models
+
+OpenCode 启动时按以下优先级查找 models：
+
+1. `--model` 或 `-m` 命令行参数。格式与配置文件一致：`provider_id/model_id`。
+
+2. OpenCode 配置中的 model 列表。
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "model": "anthropic/claude-sonnet-4-20250514"
+   }
+   ```
+
+   格式为 `provider/model`。
+
+3. 上次使用的 model。
+
+4. 内部优先级的第一个 model。

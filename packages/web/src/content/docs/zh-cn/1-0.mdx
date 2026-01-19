@@ -1,0 +1,66 @@
+---
+title: 迁移到 1.0
+description: OpenCode 1.0 的新变化。
+---
+
+OpenCode 1.0 是对 TUI 的完全重写。
+
+我们从基于 go+bubbletea 的 TUI 迁移到自研框架（OpenTUI），使用 zig+solidjs 编写，以解决性能与能力上的问题。
+
+新的 TUI 与旧版行为一致，因为它连接的是同一个 opencode server。
+
+---
+
+## 升级
+
+如果你当前使用的是旧版本，不会自动升级到 1.0。不过某些较旧版本的 OpenCode 会始终拉取最新版本。
+
+要手动升级，运行：
+
+```bash
+$ opencode upgrade 1.0.0
+```
+
+要降级回 0.x，运行：
+
+```bash
+$ opencode upgrade 0.15.31
+```
+
+---
+
+## UX 变更
+
+会话历史更紧凑，仅显示编辑和 bash tool 的完整详情。
+
+我们新增了一个命令栏，几乎所有操作都会经过这里。按下 ctrl+p 可在任意上下文中打开，查看所有可用操作。
+
+新增会话侧边栏（可切换），提供实用信息。
+
+我们移除了一些不确定是否有人实际使用的功能。如果有重要功能缺失，请提 issue，我们会尽快补回。
+
+---
+
+## 破坏性变更
+
+### Keybinds 重命名
+
+- messages_revert -> messages_undo
+- switch_agent -> agent_cycle
+- switch_agent_reverse -> agent_cycle_reverse
+- switch_mode -> agent_cycle
+- switch_mode_reverse -> agent_cycle_reverse
+
+### Keybinds 移除
+
+- messages_layout_toggle
+- messages_next
+- messages_previous
+- file_diff_toggle
+- file_search
+- file_close
+- file_list
+- app_help
+- project_init
+- tool_details
+- thinking_blocks

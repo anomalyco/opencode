@@ -1,0 +1,128 @@
+---
+title: Formatters
+description: OpenCode 使用语言特定的 formatter。
+---
+
+OpenCode 会在写入或编辑文件后，使用语言特定的 formatter 自动格式化。这确保生成的代码符合你的项目代码风格。
+
+---
+
+## 内置
+
+OpenCode 内置多种常见语言与框架的 formatter。下面是 formatter、支持的文件扩展名与所需命令或配置项列表。
+
+| Formatter            | Extensions                                                                                               | Requirements                                                                             |
+| -------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| gofmt                | .go                                                                                                      | 可用的 `gofmt` 命令                                                                      |
+| mix                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                             | 可用的 `mix` 命令                                                                        |
+| prettier             | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, and [more](https://prettier.io/docs/en/index.html) | `package.json` 中包含 `prettier` 依赖                                                    |
+| biome                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, and [more](https://biomejs.dev/)                   | `biome.json(c)` 配置文件                                                                 |
+| zig                  | .zig, .zon                                                                                               | 可用的 `zig` 命令                                                                        |
+| clang-format         | .c, .cpp, .h, .hpp, .ino, and [more](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` 配置文件                                                                 |
+| ktlint               | .kt, .kts                                                                                                | 可用的 `ktlint` 命令                                                                     |
+| ruff                 | .py, .pyi                                                                                                | 可用并配置好的 `ruff` 命令                                                               |
+| rustfmt              | .rs                                                                                                      | 可用的 `rustfmt` 命令                                                                    |
+| cargofmt             | .rs                                                                                                      | 可用的 `cargo fmt` 命令                                                                  |
+| uv                   | .py, .pyi                                                                                                | 可用的 `uv` 命令                                                                         |
+| rubocop              | .rb, .rake, .gemspec, .ru                                                                                | 可用的 `rubocop` 命令                                                                    |
+| standardrb           | .rb, .rake, .gemspec, .ru                                                                                | 可用的 `standardrb` 命令                                                                 |
+| htmlbeautifier       | .erb, .html.erb                                                                                          | 可用的 `htmlbeautifier` 命令                                                             |
+| air                  | .R                                                                                                       | 可用的 `air` 命令                                                                        |
+| dart                 | .dart                                                                                                    | 可用的 `dart` 命令                                                                       |
+| ocamlformat          | .ml, .mli                                                                                                | 可用的 `ocamlformat` 命令与 `.ocamlformat` 配置文件                                      |
+| terraform            | .tf, .tfvars                                                                                             | 可用的 `terraform` 命令                                                                  |
+| gleam                | .gleam                                                                                                   | 可用的 `gleam` 命令                                                                      |
+| nixfmt               | .nix                                                                                                     | 可用的 `nixfmt` 命令                                                                     |
+| shfmt                | .sh, .bash                                                                                               | 可用的 `shfmt` 命令                                                                      |
+| oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                     | `package.json` 中包含 `oxfmt` 依赖，并启用 [实验性环境变量开关](/docs/cli/#experimental) |
+
+如果你的项目在 `package.json` 中包含 `prettier`，OpenCode 会自动使用它。
+
+---
+
+## 工作方式
+
+当 OpenCode 写入或编辑文件时，它会：
+
+1. 将文件扩展名与所有启用的 formatter 进行匹配。
+2. 对文件运行对应的 formatter 命令。
+3. 自动应用格式化更改。
+
+该流程在后台执行，确保你的代码风格在无需手动操作的情况下保持一致。
+
+---
+
+## 配置
+
+你可以通过 OpenCode 配置中的 `formatter` 部分自定义 formatter。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {}
+}
+```
+
+每个 formatter 配置支持以下字段：
+
+| Property      | Type     | Description                     |
+| ------------- | -------- | ------------------------------- |
+| `disabled`    | boolean  | 设为 `true` 可禁用该 formatter  |
+| `command`     | string[] | 格式化时运行的命令              |
+| `environment` | object   | 运行 formatter 时设置的环境变量 |
+| `extensions`  | string[] | 该 formatter 处理的文件扩展名   |
+
+下面是一些示例。
+
+---
+
+### 禁用 formatter
+
+要全局禁用 **所有** formatter，将 `formatter` 设为 `false`：
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false
+}
+```
+
+要禁用 **特定** formatter，将 `disabled` 设为 `true`：
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### 自定义 formatter
+
+你可以通过指定命令、环境变量与文件扩展名来覆盖内置 formatter 或新增 formatter：
+
+```json title="opencode.json" {4-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    },
+    "custom-markdown-formatter": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"]
+    }
+  }
+}
+```
+
+命令中的 **`$FILE` 占位符** 会被替换为正在格式化的文件路径。

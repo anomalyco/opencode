@@ -27,6 +27,37 @@ const protocol = "https://"
 const url = "opencode.ai/install"
 const bash = "| bash"
 
+const path = Astro.url.pathname
+
+let relativePath = path.replace(/\/$/, "")
+if (relativePath.startsWith("/docs")) relativePath = relativePath.slice(5)
+if (relativePath.startsWith("/")) relativePath = relativePath.slice(1)
+
+const locales = config.locales || {}
+const localeKeys = Object.keys(locales)
+
+const segments = relativePath.split("/").filter(Boolean)
+const firstLower = (segments[0] || "").toLowerCase()
+
+let locale = "root"
+if (firstLower === "en") {
+	segments.shift()
+} else {
+	const key = localeKeys.find((k) => k.toLowerCase() === firstLower)
+	if (key && key !== "root") {
+		locale = key
+		segments.shift()
+	}
+}
+
+const slug = segments.join("/")
+const localeLabel = locales[locale]?.label ?? (locale === "root" ? "English" : locale)
+const localeLinks = localeKeys.map((key) => {
+	const isRoot = key === "root"
+	const href = isRoot ? (slug ? `/docs/${slug}` : "/docs") : (slug ? `/docs/${key}/${slug}` : `/docs/${key}`)
+	return { key, href, label: locales[key]?.label ?? key }
+})
+
 let darkImage: ImageMetadata | undefined;
 let lightImage: ImageMetadata | undefined;
 let rawHtml: string | undefined;
@@ -51,12 +82,27 @@ if (image) {
         />
         <Image src={lightImage} {...imageAttrs} class="dark:sl-hidden" />
       </div>
+      <div class="top-right">
+        <div class="language">
+          <button class="language-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span>{localeLabel}</span>
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M4 6l4 4 4-4" fill="currentColor" />
+            </svg>
+          </button>
+          <div class="language-menu" role="listbox">
+            {localeLinks.map((l) => (
+              <a class={`language-item ${locale === l.key ? "is-active" : ""}`} href={l.href}>{l.label}</a>
+            ))}
+          </div>
+        </div>
+      </div>
       <h1>The AI coding agent built for the terminal.</h1>
     </section>
 
     <section class="cta">
       <div class="col1">
-        <a href="/docs">Get Started</a>
+        <a href={locale === "root" ? "/docs" : `/docs/${locale}`}>Get Started</a>
       </div>
       <div class="col2">
       <button class="command" data-command={`${command} ${protocol}${url} ${bash}`}>
@@ -150,7 +196,7 @@ if (image) {
       <div class="left">
         <figure>
           <figcaption>opencode TUI with the tokyonight theme</figcaption>
-          <a href="/docs/cli">
+          <a href={`/docs/${locale}/cli`}>
             <Image src={TuiScreenshot} alt="opencode TUI with the tokyonight theme" />
           </a>
         </figure>
@@ -159,7 +205,7 @@ if (image) {
         <div class="row1">
           <figure>
             <figcaption>opencode in VS Code</figcaption>
-            <a href="/docs/ide">
+            <a href={`/docs/${locale}/ide`}>
               <Image src={VscodeScreenshot} alt="opencode in VS Code" />
             </a>
           </figure>
@@ -167,7 +213,7 @@ if (image) {
         <div class="row2">
           <figure>
             <figcaption>opencode in GitHub</figcaption>
-            <a href="/docs/github">
+            <a href={`/docs/${locale}/github`}>
               <Image src={GithubScreenshot} alt="opencode in GitHub" />
             </a>
           </figure>
@@ -209,6 +255,7 @@ if (image) {
 
 section.top {
   padding: var(--padding);
+  position: relative;
 
   h1 {
     margin-top: calc(var(--vertical-padding) / 8);
@@ -220,6 +267,87 @@ section.top {
   img {
     height: auto;
     width: clamp(200px, 70vw, 400px);
+  }
+}
+
+.top-right {
+  position: absolute;
+  top: calc(var(--vertical-padding) / 2);
+  right: var(--padding);
+}
+
+.language {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.language-trigger {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border-weak);
+  background: var(--color-background-weak);
+  color: var(--color-text-strong);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.language-trigger svg {
+  width: 12px;
+  height: 12px;
+  color: var(--color-icon);
+}
+
+.language-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 140px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border-weak);
+  border-radius: 6px;
+  padding: 6px;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+  z-index: 10;
+}
+
+.language:hover .language-menu,
+.language:focus-within .language-menu {
+  display: flex;
+}
+
+.language-item {
+  text-decoration: none;
+  color: var(--color-text-strong);
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.language-item:hover {
+  background: var(--color-background-weak);
+}
+
+.language-item.is-active {
+  background: var(--color-background-interactive-weaker);
+  color: var(--color-text-strong);
+  font-weight: 500;
+}
+
+@media (max-width: 40rem) {
+  .top-right {
+    position: static;
+    margin-top: calc(var(--vertical-padding) / 2);
+    display: flex;
+    justify-content: flex-end;
   }
 }
 

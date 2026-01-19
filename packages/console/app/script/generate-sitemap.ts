@@ -42,19 +42,47 @@ async function getDocsRoutes(): Promise<SitemapEntry[]> {
   const routes: SitemapEntry[] = []
 
   try {
-    const files = await readdir(DOCS_DIR)
+    async function walkMdxFiles(rootDir: string, currentDir = rootDir): Promise<string[]> {
+      const entries = await readdir(currentDir, { withFileTypes: true })
+      const results: string[] = []
 
-    for (const file of files) {
-      if (!file.endsWith(".mdx")) continue
+      for (const entry of entries) {
+        const absolute = join(currentDir, entry.name)
+        if (entry.isDirectory()) {
+          results.push(...(await walkMdxFiles(rootDir, absolute)))
+          continue
+        }
+        if (!entry.isFile()) continue
+        if (!entry.name.endsWith(".mdx")) continue
+        results.push(absolute)
+      }
 
-      const slug = file.replace(".mdx", "")
-      const path = slug === "index" ? "/docs/" : `/docs/${slug}`
+      return results
+    }
 
-      routes.push({
-        url: `${BASE_URL}${path}`,
-        priority: slug === "index" ? 0.9 : 0.7,
-        changefreq: "weekly",
-      })
+    const localeDirs = (await readdir(DOCS_DIR, { withFileTypes: true }))
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name)
+
+    for (const docsDirName of localeDirs) {
+      const routeLocale = docsDirName === "en" ? "root" : docsDirName
+      const localeDir = join(DOCS_DIR, docsDirName)
+      const files = await walkMdxFiles(localeDir)
+
+      for (const absolutePath of files) {
+        const relative = absolutePath.slice(localeDir.length + 1)
+        const slug = relative.replace(/\.mdx$/, "").replace(/\\/g, "/")
+        const normalizedSlug =
+          slug === "index" ? "" : slug.endsWith("/index") ? slug.slice(0, -6) : slug
+        const basePath = routeLocale === "root" ? "/docs/" : `/docs/${routeLocale}/`
+        const path = normalizedSlug ? `${basePath}${normalizedSlug}/` : basePath
+
+        routes.push({
+          url: `${BASE_URL}${path}`,
+          priority: slug === "index" ? 0.9 : 0.7,
+          changefreq: "weekly",
+        })
+      }
     }
   } catch (error) {
     console.error("Error reading docs directory:", error)

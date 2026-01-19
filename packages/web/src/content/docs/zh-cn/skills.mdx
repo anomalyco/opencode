@@ -1,0 +1,220 @@
+---
+title: "Agent Skills"
+description: "通过 SKILL.md 定义可复用行为"
+---
+
+Agent skills 让 OpenCode 能从你的仓库或主目录发现可复用指令。
+Skills 通过原生 `skill` tool 按需加载——agents 可以看到可用 skills，并在需要时加载完整内容。
+
+---
+
+## 放置文件
+
+为每个 skill 名称创建一个文件夹，并在其中放置 `SKILL.md`。
+OpenCode 会在以下位置搜索：
+
+- 项目配置：`.opencode/skills/<name>/SKILL.md`
+- 全局配置：`~/.config/opencode/skills/<name>/SKILL.md`
+- 项目 Claude 兼容：`.claude/skills/<name>/SKILL.md`
+- 全局 Claude 兼容：`~/.claude/skills/<name>/SKILL.md`
+
+---
+
+## 了解发现机制
+
+对项目本地路径，OpenCode 会从当前工作目录向上遍历直到 git worktree。
+它会沿途加载 `.opencode/skills/*/SKILL.md` 与 `.claude/skills/*/SKILL.md`。
+
+全局定义也会从 `~/.config/opencode/skills/*/SKILL.md` 与 `~/.claude/skills/*/SKILL.md` 加载。
+
+---
+
+## 编写 frontmatter
+
+每个 `SKILL.md` 必须以 YAML frontmatter 开头。
+仅识别以下字段：
+
+- `name`（必填）
+- `description`（必填）
+- `license`（可选）
+- `compatibility`（可选）
+- `metadata`（可选，string 到 string 的映射）
+
+未知字段会被忽略。
+
+---
+
+## 校验名称
+
+`name` 必须：
+
+- 长度 1–64 字符
+- 小写字母数字，并用单个连字符分隔
+- 不能以 `-` 开头或结尾
+- 不能包含连续的 `--`
+- 必须与包含 `SKILL.md` 的目录名一致
+
+等价正则：
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+---
+
+## 长度规则
+
+`description` 长度必须为 1–1024 字符。
+请保持足够具体，便于 agent 正确选择。
+
+---
+
+## 示例
+
+创建 `.opencode/skills/git-release/SKILL.md`：
+
+```markdown
+---
+name: git-release
+description: Create consistent releases and changelogs
+license: MIT
+compatibility: opencode
+metadata:
+  audience: maintainers
+  workflow: github
+---
+
+## What I do
+
+- Draft release notes from merged PRs
+- Propose a version bump
+- Provide a copy-pasteable `gh release create` command
+
+## When to use me
+
+Use this when you are preparing a tagged release.
+Ask clarifying questions if the target versioning scheme is unclear.
+```
+
+---
+
+## 识别 tool 描述
+
+OpenCode 会在 `skill` tool 的描述中列出可用 skills。
+每条包含 skill 名称与描述：
+
+```xml
+<available_skills>
+  <skill>
+    <name>git-release</name>
+    <description>Create consistent releases and changelogs</description>
+  </skill>
+</available_skills>
+```
+
+agent 通过调用该 tool 加载 skill：
+
+```
+skill({ name: "git-release" })
+```
+
+---
+
+## 配置权限
+
+使用 `opencode.json` 中基于模式的权限配置来控制 agent 可访问的 skills：
+
+```json
+{
+  "permission": {
+    "skill": {
+      "*": "allow",
+      "pr-review": "allow",
+      "internal-*": "deny",
+      "experimental-*": "ask"
+    }
+  }
+}
+```
+
+| Permission | Behavior                                  |
+| ---------- | ----------------------------------------- |
+| `allow`    | Skill loads immediately                   |
+| `deny`     | Skill hidden from agent, access rejected  |
+| `ask`      | User prompted for approval before loading |
+
+模式支持通配符：`internal-*` 匹配 `internal-docs`、`internal-tools` 等。
+
+---
+
+## 按 agent 覆盖
+
+为特定 agent 设置不同于全局默认值的权限。
+
+**自定义 agents**（在 agent frontmatter 中）：
+
+```yaml
+---
+permission:
+  skill:
+    "documents-*": "allow"
+---
+```
+
+**内置 agents**（在 `opencode.json` 中）：
+
+```json
+{
+  "agent": {
+    "plan": {
+      "permission": {
+        "skill": {
+          "internal-*": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## 禁用 skill tool
+
+对不应使用 skills 的 agents，可完全禁用：
+
+**自定义 agents**：
+
+```yaml
+---
+tools:
+  skill: false
+---
+```
+
+**内置 agents**：
+
+```json
+{
+  "agent": {
+    "plan": {
+      "tools": {
+        "skill": false
+      }
+    }
+  }
+}
+```
+
+禁用后，`<available_skills>` 部分会完全省略。
+
+---
+
+## 排查加载问题
+
+如果 skill 未显示：
+
+1. 确认 `SKILL.md` 全大写拼写
+2. 检查 frontmatter 是否包含 `name` 与 `description`
+3. 确保各位置的 skill 名称唯一
+4. 检查权限—被 `deny` 的 skill 会被隐藏

@@ -1,0 +1,127 @@
+---
+title: Share
+description: 分享你的 OpenCode 对话。
+---
+
+OpenCode 的分享功能允许你创建公开链接来分享 OpenCode 对话，以便与团队协作或寻求帮助。
+
+:::note
+分享的对话对任何拥有链接的人公开可访问。
+:::
+
+---
+
+## 工作方式
+
+当你分享对话时，OpenCode 会：
+
+1. 为你的 session 创建唯一的公开 URL
+2. 将对话历史同步到我们的 servers
+3. 通过分享链接访问对话 — `opncd.ai/s/<share-id>`
+
+---
+
+## Sharing
+
+OpenCode 支持三种分享模式，用于控制对话的分享方式：
+
+---
+
+### 手动（默认）
+
+默认使用手动分享模式。会话不会自动分享，但你可以通过 `/share` 手动分享：
+
+```
+/share
+```
+
+这会生成唯一 URL 并复制到剪贴板。
+
+要在 [config file](/docs/config) 中显式设置手动模式：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opncd.ai/config.json",
+  "share": "manual"
+}
+```
+
+---
+
+### 自动分享
+
+在 [config file](/docs/config) 中将 `share` 设为 `"auto"` 可开启自动分享：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opncd.ai/config.json",
+  "share": "auto"
+}
+```
+
+启用后，每个新对话都会自动分享并生成链接。
+
+---
+
+### 禁用
+
+在 [config file](/docs/config) 中将 `share` 设为 `"disabled"` 可完全禁用分享：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opncd.ai/config.json",
+  "share": "disabled"
+}
+```
+
+如需在项目中强制执行，请将其加入项目的 `opencode.json` 并提交到 Git。
+
+---
+
+## 取消分享
+
+要停止分享对话并移除公开访问：
+
+```
+/unshare
+```
+
+这会移除分享链接并删除与对话相关的数据。
+
+---
+
+## 隐私
+
+分享对话时需要注意以下事项。
+
+---
+
+### 数据保留
+
+分享的对话会一直可访问，直到你显式取消分享。包括：
+
+- 完整对话历史
+- 所有消息与响应
+- 会话元数据
+
+---
+
+### 建议
+
+- 只分享不包含敏感信息的对话。
+- 分享前先审阅对话内容。
+- 协作完成后取消分享。
+- 避免分享包含专有代码或机密数据的对话。
+- 对敏感项目，完全禁用分享。
+
+---
+
+## 企业场景
+
+在企业部署中，分享功能可以：
+
+- **完全禁用**，满足安全合规
+- **限制**为仅 SSO 认证用户可访问
+- **自托管**到你的基础设施
+
+[了解更多](/docs/enterprise) 在组织中使用 opencode。

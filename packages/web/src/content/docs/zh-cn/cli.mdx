@@ -1,0 +1,593 @@
+---
+title: CLI
+description: OpenCode CLI 选项与命令。
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode CLI 默认在不带参数运行时启动 [TUI](/docs/tui)。
+
+```bash
+opencode
+```
+
+它也支持本页列出的命令，以便你通过编程方式与 OpenCode 交互。
+
+```bash
+opencode run "Explain how closures work in JavaScript"
+```
+
+---
+
+### tui
+
+启动 OpenCode 终端用户界面。
+
+```bash
+opencode [project]
+```
+
+#### Flags
+
+| Flag         | Short | Description                       |
+| ------------ | ----- | --------------------------------- |
+| `--continue` | `-c`  | 继续上一会话                      |
+| `--session`  | `-s`  | 要继续的会话 ID                   |
+| `--prompt`   |       | 使用的 prompt                     |
+| `--model`    | `-m`  | 使用的模型（provider/model 格式） |
+| `--agent`    |       | 使用的 Agent                      |
+| `--port`     |       | 监听端口                          |
+| `--hostname` |       | 监听 hostname                     |
+
+---
+
+## Commands
+
+OpenCode CLI 还提供以下命令。
+
+---
+
+### agent
+
+管理 OpenCode 的 agents。
+
+```bash
+opencode agent [command]
+```
+
+---
+
+### attach
+
+将终端连接到通过 `serve` 或 `web` 命令启动的 OpenCode 后端 server。
+
+```bash
+opencode attach [url]
+```
+
+这允许在远程 OpenCode 后端上使用 TUI。例如：
+
+```bash
+# 启动可供 web/移动端访问的后端 server
+opencode web --port 4096 --hostname 0.0.0.0
+
+# 在另一个终端，将 TUI 连接到运行中的后端
+opencode attach http://10.20.30.40:4096
+```
+
+#### Flags
+
+| Flag        | Short | Description         |
+| ----------- | ----- | ------------------- |
+| `--dir`     |       | 启动 TUI 的工作目录 |
+| `--session` | `-s`  | 要继续的会话 ID     |
+
+---
+
+#### create
+
+创建带自定义配置的新 agent。
+
+```bash
+opencode agent create
+```
+
+该命令会引导你创建带自定义系统 prompt 与工具配置的新 agent。
+
+---
+
+#### list
+
+列出所有可用 agents。
+
+```bash
+opencode agent list
+```
+
+---
+
+### auth
+
+用于管理 provider 凭证与登录的命令。
+
+```bash
+opencode auth [command]
+```
+
+---
+
+#### login
+
+OpenCode 使用 [Models.dev](https://models.dev) 的 provider 列表，因此你可以通过 `opencode auth login` 为任意 provider 配置 API key。该配置存储在 `~/.local/share/opencode/auth.json`。
+
+```bash
+opencode auth login
+```
+
+OpenCode 启动时会从凭证文件加载 providers，也会读取环境变量或项目中的 `.env` 文件里配置的 keys。
+
+---
+
+#### list
+
+列出凭证文件中已认证的 providers。
+
+```bash
+opencode auth list
+```
+
+或使用短命令：
+
+```bash
+opencode auth ls
+```
+
+---
+
+#### logout
+
+通过从凭证文件中清除该 provider 来退出登录。
+
+```bash
+opencode auth logout
+```
+
+---
+
+### github
+
+管理用于仓库自动化的 GitHub agent。
+
+```bash
+opencode github [command]
+```
+
+---
+
+#### install
+
+在你的仓库中安装 GitHub agent。
+
+```bash
+opencode github install
+```
+
+这会设置必要的 GitHub Actions 工作流并引导配置流程。[了解更多](/docs/github)。
+
+---
+
+#### run
+
+运行 GitHub agent。通常在 GitHub Actions 中使用。
+
+```bash
+opencode github run
+```
+
+##### Flags
+
+| Flag      | Description                         |
+| --------- | ----------------------------------- |
+| `--event` | 用于运行 agent 的 GitHub mock event |
+| `--token` | GitHub personal access token        |
+
+---
+
+### mcp
+
+管理 Model Context Protocol servers。
+
+```bash
+opencode mcp [command]
+```
+
+---
+
+#### add
+
+将 MCP server 添加到配置中。
+
+```bash
+opencode mcp add
+```
+
+该命令会引导你添加本地或远程 MCP server。
+
+---
+
+#### list
+
+列出所有已配置的 MCP servers 及其连接状态。
+
+```bash
+opencode mcp list
+```
+
+或使用短命令：
+
+```bash
+opencode mcp ls
+```
+
+---
+
+#### auth
+
+与支持 OAuth 的 MCP server 进行认证。
+
+```bash
+opencode mcp auth [name]
+```
+
+如果你未提供 server 名称，系统会提示你从可用的 OAuth server 中选择。
+
+你也可以列出 OAuth server 及其认证状态。
+
+```bash
+opencode mcp auth list
+```
+
+或使用短命令：
+
+```bash
+opencode mcp auth ls
+```
+
+---
+
+#### logout
+
+移除 MCP server 的 OAuth 凭证。
+
+```bash
+opencode mcp logout [name]
+```
+
+---
+
+#### debug
+
+调试 MCP server 的 OAuth 连接问题。
+
+```bash
+opencode mcp debug <name>
+```
+
+---
+
+### models
+
+列出配置的 providers 中所有可用模型。
+
+```bash
+opencode models [provider]
+```
+
+该命令会以 `provider/model` 的格式显示已配置 providers 的所有模型。
+
+这有助于确认在 [配置](/docs/config/) 中使用的确切模型名称。
+
+你也可以传入 provider ID 以过滤该 provider 的模型。
+
+```bash
+opencode models anthropic
+```
+
+#### Flags
+
+| Flag        | Description                              |
+| ----------- | ---------------------------------------- |
+| `--refresh` | 从 models.dev 刷新模型缓存               |
+| `--verbose` | 使用更详细的模型输出（包含成本等元数据） |
+
+使用 `--refresh` 更新缓存模型列表。这在 provider 新增模型时很有用，你可以在 OpenCode 中看到它们。
+
+```bash
+opencode models --refresh
+```
+
+---
+
+### run
+
+通过直接传入 prompt 以非交互模式运行 opencode。
+
+```bash
+opencode run [message..]
+```
+
+这适用于脚本、自动化，或你希望快速得到答案而不启动完整 TUI 的场景。例如：
+
+```bash "opencode run"
+opencode run Explain the use of context in Go
+```
+
+你也可以连接到运行中的 `opencode serve` 实例，以避免每次运行都触发 MCP server 冷启动：
+
+```bash
+# 在一个终端启动无界面 server
+opencode serve
+
+# 在另一个终端运行并连接它
+opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+```
+
+#### Flags
+
+| Flag         | Short | Description                                                |
+| ------------ | ----- | ---------------------------------------------------------- |
+| `--command`  |       | 要运行的命令，message 用作参数                             |
+| `--continue` | `-c`  | 继续上一会话                                               |
+| `--session`  | `-s`  | 要继续的会话 ID                                            |
+| `--share`    |       | 分享会话                                                   |
+| `--model`    | `-m`  | 使用的模型（provider/model 格式）                          |
+| `--agent`    |       | 使用的 Agent                                               |
+| `--file`     | `-f`  | 附加到消息的文件                                           |
+| `--format`   |       | 格式：default（格式化）或 json（原始 JSON 事件）           |
+| `--title`    |       | 会话标题（未提供则使用截断后的 prompt）                    |
+| `--attach`   |       | 连接运行中的 opencode server（例如 http://localhost:4096） |
+| `--port`     |       | 本地 server 端口（默认随机端口）                           |
+
+---
+
+### serve
+
+启动无界面的 OpenCode server 供 API 访问。完整 HTTP 接口请参考 [server docs](/docs/server)。
+
+```bash
+opencode serve
+```
+
+这会启动一个 HTTP server，提供不包含 TUI 界面的 opencode API 访问。设置 `OPENCODE_SERVER_PASSWORD` 可启用 HTTP basic auth（用户名默认 `opencode`）。
+
+#### Flags
+
+| Flag         | Description                   |
+| ------------ | ----------------------------- |
+| `--port`     | 监听端口                      |
+| `--hostname` | 监听 hostname                 |
+| `--mdns`     | 启用 mDNS discovery           |
+| `--cors`     | 允许 CORS 的额外浏览器 origin |
+
+---
+
+### session
+
+管理 OpenCode 会话。
+
+```bash
+opencode session [command]
+```
+
+---
+
+#### list
+
+列出所有 OpenCode 会话。
+
+```bash
+opencode session list
+```
+
+##### Flags
+
+| Flag          | Short | Description                      |
+| ------------- | ----- | -------------------------------- |
+| `--max-count` | `-n`  | 限制为最近 N 个会话              |
+| `--format`    |       | 输出格式：table 或 json（table） |
+
+---
+
+### stats
+
+显示 OpenCode 会话的 token 使用量与成本统计。
+
+```bash
+opencode stats
+```
+
+#### Flags
+
+| Flag        | Description                                       |
+| ----------- | ------------------------------------------------- |
+| `--days`    | 显示最近 N 天的数据（默认全部）                   |
+| `--tools`   | 显示的工具数量（默认全部）                        |
+| `--models`  | 显示模型使用统计（默认隐藏）。传入数字显示前 N 名 |
+| `--project` | 按项目过滤（默认全部项目，空字符串表示当前项目）  |
+
+---
+
+### export
+
+将会话数据导出为 JSON。
+
+```bash
+opencode export [sessionID]
+```
+
+若未提供会话 ID，将提示你从可用会话中选择。
+
+---
+
+### import
+
+从 JSON 文件或 OpenCode share URL 导入会话数据。
+
+```bash
+opencode import <file>
+```
+
+你可以从本地文件或 OpenCode share URL 导入。
+
+```bash
+opencode import session.json
+opencode import https://opncd.ai/s/abc123
+```
+
+---
+
+### web
+
+启动带 Web 界面的无界面 OpenCode server。
+
+```bash
+opencode web
+```
+
+这会启动 HTTP server 并打开浏览器，通过 web 界面访问 OpenCode。设置 `OPENCODE_SERVER_PASSWORD` 可启用 HTTP basic auth（用户名默认 `opencode`）。
+
+#### Flags
+
+| Flag         | Description                   |
+| ------------ | ----------------------------- |
+| `--port`     | 监听端口                      |
+| `--hostname` | 监听 hostname                 |
+| `--mdns`     | 启用 mDNS discovery           |
+| `--cors`     | 允许 CORS 的额外浏览器 origin |
+
+---
+
+### acp
+
+启动 ACP（Agent Client Protocol）server。
+
+```bash
+opencode acp
+```
+
+该命令会启动一个 ACP server，通过 stdin/stdout 使用 nd-JSON 通信。
+
+#### Flags
+
+| Flag         | Description   |
+| ------------ | ------------- |
+| `--cwd`      | 工作目录      |
+| `--port`     | 监听端口      |
+| `--hostname` | 监听 hostname |
+
+---
+
+### uninstall
+
+卸载 OpenCode 并移除所有相关文件。
+
+```bash
+opencode uninstall
+```
+
+#### Flags
+
+| Flag            | Short | Description                      |
+| --------------- | ----- | -------------------------------- |
+| `--keep-config` | `-c`  | 保留配置文件                     |
+| `--keep-data`   | `-d`  | 保留会话数据与快照               |
+| `--dry-run`     |       | 仅显示将要删除的内容，不实际删除 |
+| `--force`       | `-f`  | 跳过确认提示                     |
+
+---
+
+### upgrade
+
+将 opencode 更新到最新版本或指定版本。
+
+```bash
+opencode upgrade [target]
+```
+
+升级到最新版本：
+
+```bash
+opencode upgrade
+```
+
+升级到指定版本：
+
+```bash
+opencode upgrade v0.1.48
+```
+
+#### Flags
+
+| Flag       | Short | Description                                |
+| ---------- | ----- | ------------------------------------------ |
+| `--method` | `-m`  | 使用的安装方式：curl、npm、pnpm、bun、brew |
+
+---
+
+## Global Flags
+
+opencode CLI 支持以下全局 flags。
+
+| Flag           | Short | Description                          |
+| -------------- | ----- | ------------------------------------ |
+| `--help`       | `-h`  | 显示帮助                             |
+| `--version`    | `-v`  | 打印版本号                           |
+| `--print-logs` |       | 将日志打印到 stderr                  |
+| `--log-level`  |       | 日志级别（DEBUG、INFO、WARN、ERROR） |
+
+---
+
+## 环境变量
+
+OpenCode 可通过环境变量进行配置。
+
+| Variable                              | Type    | Description                               |
+| ------------------------------------- | ------- | ----------------------------------------- |
+| `OPENCODE_AUTO_SHARE`                 | boolean | 自动分享会话                              |
+| `OPENCODE_GIT_BASH_PATH`              | string  | Windows 上 Git Bash 可执行文件路径        |
+| `OPENCODE_CONFIG`                     | string  | 配置文件路径                              |
+| `OPENCODE_CONFIG_DIR`                 | string  | 配置目录路径                              |
+| `OPENCODE_CONFIG_CONTENT`             | string  | 内联 json 配置内容                        |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | 禁用自动更新检查                          |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | 禁用旧数据清理                            |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | 禁用终端标题自动更新                      |
+| `OPENCODE_PERMISSION`                 | string  | 内联 json 权限配置                        |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | 禁用默认 plugins                          |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | 禁用 LSP server 自动下载                  |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | 启用实验性模型                            |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | 禁用自动上下文压缩                        |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | 禁用从 `.claude` 读取（prompt + skills）  |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | 禁用读取 `~/.claude/CLAUDE.md`            |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | 禁用加载 `.claude/skills`                 |
+| `OPENCODE_CLIENT`                     | string  | 客户端标识（默认 `cli`）                  |
+| `OPENCODE_ENABLE_EXA`                 | boolean | 启用 Exa web search tools                 |
+| `OPENCODE_SERVER_PASSWORD`            | string  | 为 `serve`/`web` 启用 basic auth          |
+| `OPENCODE_SERVER_USERNAME`            | string  | 覆盖 basic auth 用户名（默认 `opencode`） |
+
+---
+
+### Experimental
+
+这些环境变量用于启用实验功能，可能会变更或移除。
+
+| Variable                                        | Type    | Description                 |
+| ----------------------------------------------- | ------- | --------------------------- |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | 启用全部实验功能            |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 启用图标发现                |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | 禁用 TUI 中的选中即复制     |
+| `OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH`  | number  | bash 命令的最大输出长度     |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 命令默认超时（毫秒）   |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 响应的最大输出 token 数 |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | 启用整个目录的文件监听      |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | 启用 oxfmt formatter        |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | 启用实验性 LSP tool         |
