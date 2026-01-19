@@ -514,7 +514,7 @@ export namespace ProviderTransform {
         return {}
 
       case "@mymediset/sap-ai-provider":
-      case "@jerome-benoit/sap-ai-provider":
+      case "@jerome-benoit/sap-ai-provider-v2":
         if (model.api.id.includes("anthropic")) {
           return {
             high: {
