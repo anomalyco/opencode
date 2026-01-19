@@ -159,14 +159,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const keybind = useKeybind()
   useKeyboard((evt) => {
     setStore("input", "keyboard")
-    
+
     if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
     if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
     if (evt.name === "pageup") move(-10)
     if (evt.name === "pagedown") move(10)
     if (evt.name === "home") moveTo(0)
     if (evt.name === "end") moveTo(flat().length - 1)
-      
+
     if (evt.name === "return") {
       const option = selected()
       if (option) {
