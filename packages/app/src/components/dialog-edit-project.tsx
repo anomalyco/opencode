@@ -94,10 +94,11 @@ export function DialogEditProject(props: { project: LocalProject }) {
             <div class="flex gap-3 items-start">
               <div class="relative">
                 <div
-                  class="size-16 rounded-lg overflow-hidden border border-dashed transition-colors cursor-pointer"
+                  class="size-16 rounded-md transition-colors cursor-pointer"
                   classList={{
                     "border-text-interactive-base bg-surface-info-base/20": dragOver(),
                     "border-border-base hover:border-border-strong": !dragOver(),
+                    "overflow-hidden": !!store.iconUrl,
                   }}
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
