@@ -206,7 +206,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                           setActive(props.key(item))
                         }}
                         onMouseLeave={() => {
-                          if (!store.mouseActive) return;
+                          if (!store.mouseActive) return
                           setActive(null)
                         }}
                       >
