@@ -130,9 +130,8 @@ export function DialogEditProject(props: { project: LocalProject }) {
                 </Show>
               </div>
               <input id="icon-upload" type="file" accept="image/*" class="hidden" onChange={handleInputChange} />
-              <div class="flex flex-col gap-1.5 text-12-regular text-text-weak">
-                <span>Click or drag an image</span>
-                <span>Recommended: 128x128px</span>
+              <div class="flex flex-col gap-1.5 text-12-regular text-text-weak self-center">
+                <span>Recommended size 128x128px</span>
               </div>
             </div>
           </div>
