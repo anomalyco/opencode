@@ -964,12 +964,29 @@ export default function Layout(props: ParentProps) {
     if (!current) return
     if (directory === current.worktree) return
 
-    const sessions = await globalSDK.client.session
-      .list({ directory })
-      .then((x) => x.data ?? [])
-      .catch(() => [])
+    const reset = globalSDK.client.worktree
+      .reset({ directory: current.worktree, worktreeResetInput: { directory } })
+      .then((x) => x.data)
+      .catch((err) => {
+        showToast({
+          title: "Failed to reset workspace",
+          description: errorMessage(err),
+        })
+        return false
+      })
 
-    if (sessions.length > 0) {
+    const href = `/${base64Encode(directory)}/session`
+    navigate(href)
+    layout.mobileSidebar.hide()
+
+    void (async () => {
+      const sessions = await globalSDK.client.session
+        .list({ directory })
+        .then((x) => x.data ?? [])
+        .catch(() => [])
+
+      if (sessions.length === 0) return
+
       const archivedAt = Date.now()
       await Promise.all(
         sessions.map((session) =>
@@ -982,19 +999,9 @@ export default function Layout(props: ParentProps) {
             .catch(() => undefined),
         ),
       )
-    }
+    })()
 
-    const result = await globalSDK.client.worktree
-      .reset({ directory: current.worktree, worktreeResetInput: { directory } })
-      .then((x) => x.data)
-      .catch((err) => {
-        showToast({
-          title: "Failed to reset workspace",
-          description: errorMessage(err),
-        })
-        return false
-      })
-
+    const result = await reset
     if (!result) return
 
     showToast({
@@ -1098,9 +1105,9 @@ export default function Layout(props: ParentProps) {
         })
     })
 
-    const handleReset = async () => {
-      await resetWorkspace(props.directory)
+    const handleReset = () => {
       dialog.close()
+      void resetWorkspace(props.directory)
     }
 
     const archivedCount = () => state.sessions.length
