@@ -531,7 +531,7 @@ export default function Page() {
       title: "Cycle thinking effort",
       description: "Switch to the next effort level",
       category: "Model",
-      keybind: "shift+mod+t",
+      keybind: "shift+mod+d",
       onSelect: () => {
         local.model.variant.cycle()
       },
