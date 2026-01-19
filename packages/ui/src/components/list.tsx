@@ -39,6 +39,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   const searchProps = () => (typeof props.search === "object" ? props.search : {})
 
+  const moved = (event: MouseEvent) => event.movementX !== 0 || event.movementY !== 0
+
   createEffect(() => {
     if (props.filter !== undefined) {
       onInput(props.filter)
@@ -201,11 +203,13 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                         data-selected={item === props.current}
                         onClick={() => handleSelect(item, i())}
                         type="button"
-                        onMouseMove={() => {
+                        onMouseMove={(event) => {
+                          if (!moved(event)) return
                           setStore("mouseActive", true)
                           setActive(props.key(item))
                         }}
                         onMouseLeave={() => {
+                          if (!store.mouseActive) return
                           setActive(null)
                         }}
                       >
