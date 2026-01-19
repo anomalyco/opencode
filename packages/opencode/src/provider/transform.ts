@@ -325,9 +325,24 @@ export namespace ProviderTransform {
     const id = model.id.toLowerCase()
     if (id.includes("deepseek") || id.includes("minimax") || id.includes("glm") || id.includes("mistral")) return {}
 
+    // see: https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
+    if (id.includes("grok") && id.includes("grok-3-mini")) {
+      if (model.api.npm === "@openrouter/ai-sdk-provider") {
+        return {
+          low: { reasoning: { effort: "low" } },
+          high: { reasoning: { effort: "high" } },
+        }
+      }
+      return {
+        low: { reasoningEffort: "low" },
+        high: { reasoningEffort: "high" },
+      }
+    }
+    if (id.includes("grok")) return {}
+
     switch (model.api.npm) {
       case "@openrouter/ai-sdk-provider":
-        if (!model.id.includes("gpt") && !model.id.includes("gemini-3") && !model.id.includes("grok-4")) return {}
+        if (!model.id.includes("gpt") && !model.id.includes("gemini-3")) return {}
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
 
       // TODO: YOU CANNOT SET max_tokens if this is set!!!
