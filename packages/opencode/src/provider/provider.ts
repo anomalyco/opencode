@@ -598,11 +598,14 @@ export namespace Provider {
       providerID: provider.id,
       name: model.name,
       family: model.family,
-      api: {
-        id: model.id,
-        url: provider.api!,
-        npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
-      },
+       api: {
+         id: model.id,
+         url: provider.api!,
+         npm: iife(() => {
+           if (provider.id.startsWith("github-copilot")) return "@ai-sdk/github-copilot"
+           return model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible"
+         }),
+       },
       status: model.status ?? "active",
       headers: model.headers ?? {},
       options: model.options ?? {},
@@ -906,16 +909,6 @@ export namespace Provider {
       if (!isProviderAllowed(providerID)) {
         delete providers[providerID]
         continue
-      }
-
-      if (providerID === "github-copilot" || providerID === "github-copilot-enterprise") {
-        provider.models = mapValues(provider.models, (model) => ({
-          ...model,
-          api: {
-            ...model.api,
-            npm: "@ai-sdk/github-copilot",
-          },
-        }))
       }
 
       const configProvider = config.provider?.[providerID]
