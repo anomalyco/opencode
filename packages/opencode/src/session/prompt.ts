@@ -385,6 +385,7 @@ export namespace SessionPrompt {
           sessionID: sessionID,
           abort,
           callID: part.callID,
+          cwd: getCwd(),
           extra: { bypassAgentCheck: true },
           async metadata(input) {
             await Session.updatePart({
@@ -601,11 +602,11 @@ export namespace SessionPrompt {
           ...MessageV2.toModelMessage(sessionMessages),
           ...(isLastStep
             ? [
-                {
-                  role: "assistant" as const,
-                  content: MAX_STEPS,
-                },
-              ]
+              {
+                role: "assistant" as const,
+                content: MAX_STEPS,
+              },
+            ]
             : []),
         ],
         tools,
@@ -657,6 +658,7 @@ export namespace SessionPrompt {
       abort: options.abortSignal!,
       messageID: input.processor.message.id,
       callID: options.toolCallId,
+      cwd: getCwd(),
       extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
       agent: input.agent.name,
       metadata: async (val: { title?: string; metadata?: any }) => {
@@ -1011,8 +1013,8 @@ export namespace SessionPrompt {
                       agent: input.agent!,
                       messageID: info.id,
                       extra: { bypassCwdCheck: true, model },
-                      metadata: async () => {},
-                      ask: async () => {},
+                      metadata: async () => { },
+                      ask: async () => { },
                     }
                     const result = await t.execute(args, readCtx)
                     pieces.push({
@@ -1072,8 +1074,8 @@ export namespace SessionPrompt {
                   agent: input.agent!,
                   messageID: info.id,
                   extra: { bypassCwdCheck: true },
-                  metadata: async () => {},
-                  ask: async () => {},
+                  metadata: async () => { },
+                  ask: async () => { },
                 }
                 const result = await ListTool.init().then((t) => t.execute(args, listCtx))
                 return [
@@ -1719,19 +1721,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const isSubtask = (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
     const parts = isSubtask
       ? [
-          {
-            type: "subtask" as const,
-            agent: agent.name,
-            description: command.description ?? "",
-            command: input.command,
-            model: {
-              providerID: taskModel.providerID,
-              modelID: taskModel.modelID,
-            },
-            // TODO: how can we make task tool accept a more complex input?
-            prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
+        {
+          type: "subtask" as const,
+          agent: agent.name,
+          description: command.description ?? "",
+          command: input.command,
+          model: {
+            providerID: taskModel.providerID,
+            modelID: taskModel.modelID,
           },
-        ]
+          // TODO: how can we make task tool accept a more complex input?
+          prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
+        },
+      ]
       : [...templateParts, ...(input.parts ?? [])]
 
     const userAgent = isSubtask ? (input.agent ?? (await Agent.defaultAgent())) : agentName

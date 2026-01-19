@@ -3,7 +3,6 @@ import { Tool } from "./tool"
 import * as path from "path"
 import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"
-import { getCwd } from "@shell-mode"
 import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectory } from "./external-directory"
 
@@ -43,7 +42,7 @@ export const ListTool = Tool.define("list", {
     ignore: z.array(z.string()).describe("List of glob patterns to ignore").optional(),
   }),
   async execute(params, ctx) {
-    const searchPath = path.resolve(getCwd(), params.path || ".")
+    const searchPath = path.resolve(ctx.cwd || Instance.directory, params.path || ".")
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     await ctx.ask({

@@ -10,7 +10,7 @@ export enum ExecutionMode {
 export type ModeDisplay = {
   name: string
   icon: string
-  color: "primary" | "secondary" | "success" | "border"
+  color: string
 }
 
 /**
@@ -41,11 +41,11 @@ export class ModeController {
   getModeDisplay(): ModeDisplay {
     switch (this.currentMode) {
       case ExecutionMode.Shell:
-        return { name: "Shell", icon: ">", color: "primary" }
+        return { name: "Shell", icon: ">", color: "syntaxOperator" }
       case ExecutionMode.Agent:
-        return { name: "Agent", icon: "◆", color: "secondary" }
+        return { name: "Agent", icon: "◆", color: "syntaxType" }
       case ExecutionMode.Auto:
-        return { name: "Auto", icon: "☯", color: "success" }
+        return { name: "Auto", icon: "∞", color: "diffAdded" }
     }
   }
 }

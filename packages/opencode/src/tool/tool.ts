@@ -19,6 +19,7 @@ export namespace Tool {
     agent: string
     abort: AbortSignal
     callID?: string
+    cwd?: string
     extra?: { [key: string]: any }
     metadata(input: { title?: string; metadata?: M }): void
     ask(input: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">): Promise<void>

@@ -708,10 +708,6 @@ export function Prompt(props: PromptProps) {
 
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
-
-    // Use execution mode color when in Shell mode
-    const mode = executionMode.mode()
-    if (mode === ExecutionMode.Shell) return theme.secondary
     return local.agent.color(local.agent.current().name)
   })
 
@@ -725,16 +721,7 @@ export function Prompt(props: PromptProps) {
   // Mode prefix color for the input
   const modePrefixColor = createMemo(() => {
     const modeDisplay = executionMode.getModeDisplay()
-    switch (modeDisplay.color) {
-      case "primary":
-        return theme.primary
-      case "secondary":
-        return theme.secondary
-      case "success":
-        return theme.success
-      case "border":
-        return theme.border
-    }
+    return theme[modeDisplay.color]
   })
 
   const spinnerDef = createMemo(() => {
@@ -847,7 +834,7 @@ export function Prompt(props: PromptProps) {
                       // If no image, let the default paste behavior continue
                     }
                     // Handle Ctrl+Space to toggle execution mode
-                    if (handleModeToggleKey(e, { setMode: executionMode.setMode })) {
+                    if (handleModeToggleKey(e, { setMode: executionMode.setMode }, keybind)) {
                       e.preventDefault()
                       return
                     }
@@ -1181,7 +1168,7 @@ export function Prompt(props: PromptProps) {
           <Show when={status().type !== "retry"}>
             <box gap={2} flexDirection="row">
               <text fg={theme.text}>
-                ctrl+space <span style={{ fg: modePrefixColor() }}>{executionMode.getModeDisplay().name}</span>
+                {keybind.print("mode_toggle")} <span style={{ fg: modePrefixColor() }}>{executionMode.getModeDisplay().name}</span>
               </text>
               <Show when={local.model.variant.list().length > 0}>
                 <text fg={theme.text}>

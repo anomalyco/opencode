@@ -470,32 +470,10 @@ export type EventMessagePartRemoved = {
   }
 }
 
-export type PermissionRequest = {
-  id: string
-  sessionID: string
-  permission: string
-  patterns: Array<string>
-  metadata: {
-    [key: string]: unknown
-  }
-  always: Array<string>
-  tool?: {
-    messageID: string
-    callID: string
-  }
-}
-
-export type EventPermissionAsked = {
-  type: "permission.asked"
-  properties: PermissionRequest
-}
-
-export type EventPermissionReplied = {
-  type: "permission.replied"
+export type EventCwdUpdated = {
+  type: "cwd.updated"
   properties: {
-    sessionID: string
-    requestID: string
-    reply: "once" | "always" | "reject"
+    cwd: string
   }
 }
 
@@ -525,6 +503,35 @@ export type EventSessionIdle = {
   type: "session.idle"
   properties: {
     sessionID: string
+  }
+}
+
+export type PermissionRequest = {
+  id: string
+  sessionID: string
+  permission: string
+  patterns: Array<string>
+  metadata: {
+    [key: string]: unknown
+  }
+  always: Array<string>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventPermissionAsked = {
+  type: "permission.asked"
+  properties: PermissionRequest
+}
+
+export type EventPermissionReplied = {
+  type: "permission.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    reply: "once" | "always" | "reject"
   }
 }
 
@@ -871,10 +878,11 @@ export type Event =
   | EventMessageRemoved
   | EventMessagePartUpdated
   | EventMessagePartRemoved
-  | EventPermissionAsked
-  | EventPermissionReplied
+  | EventCwdUpdated
   | EventSessionStatus
   | EventSessionIdle
+  | EventPermissionAsked
+  | EventPermissionReplied
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
@@ -1117,6 +1125,10 @@ export type KeybindsConfig = {
    * Cycle model variants
    */
   variant_cycle?: string
+  /**
+   * Toggle execution mode
+   */
+  mode_toggle?: string
   /**
    * Clear input field
    */
@@ -2056,6 +2068,7 @@ export type Path = {
   config: string
   worktree: string
   directory: string
+  cwd: string
 }
 
 export type VcsInfo = {

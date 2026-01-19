@@ -77,10 +77,21 @@ export function applyCompletionAtIndex(
  * Handle Ctrl+Space to toggle execution mode.
  * Returns true if the event was handled, false otherwise.
  */
-export function handleModeToggleKey(e: KeyEvent, ctx: ModeToggleContext): boolean {
+export type KeybindMatcher = {
+  match(key: string, evt: KeyEvent): boolean | undefined
+}
+
+export function handleModeToggleKey(e: KeyEvent, ctx: ModeToggleContext, keybind?: KeybindMatcher): boolean {
+  if (keybind?.match("mode_toggle", e)) {
+    const newMode = getModeController().toggleMode()
+    ctx.setMode(newMode)
+    return true
+  }
+
   // Ctrl+Space to toggle mode
   // Note: Ctrl+Space can appear as sequence "\x00" (null) in some terminals
   if (
+    !keybind &&
     e.ctrl &&
     !e.meta &&
     !e.shift &&

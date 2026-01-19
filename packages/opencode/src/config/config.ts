@@ -203,11 +203,11 @@ export namespace Config {
       {
         cwd: dir,
       },
-    ).catch(() => {})
+    ).catch(() => { })
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
+    await BunProc.run(["install"], { cwd: dir }).catch(() => { })
   }
 
   function rel(item: string, patterns: string[]) {
@@ -689,6 +689,7 @@ export namespace Config {
       agent_cycle: z.string().optional().default("shift+tab").describe("Next agent"),
       agent_cycle_reverse: z.string().optional().default("none").describe("Previous agent"),
       variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
+      mode_toggle: z.string().optional().default("ctrl+space").describe("Toggle execution mode"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
@@ -1103,7 +1104,7 @@ export namespace Config {
         await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
         await fs.unlink(path.join(Global.Path.config, "config"))
       })
-      .catch(() => {})
+      .catch(() => { })
 
     return result
   })
@@ -1193,7 +1194,7 @@ export namespace Config {
         parsed.data.$schema = "https://opencode.ai/config.json"
         // Write the $schema to the original text to preserve variables like {env:VAR}
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Bun.write(configFilepath, updated).catch(() => {})
+        await Bun.write(configFilepath, updated).catch(() => { })
       }
       const data = parsed.data
       if (data.plugin) {
@@ -1201,7 +1202,7 @@ export namespace Config {
           const plugin = data.plugin[i]
           try {
             data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
-          } catch (err) {}
+          } catch (err) { }
         }
       }
       return data
