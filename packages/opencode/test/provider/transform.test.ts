@@ -914,6 +914,88 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
   })
 })
 
+describe("ProviderTransform.message - providerOptions key remapping", () => {
+  const createModel = (providerID: string, npm: string) =>
+    ({
+      id: `${providerID}/test-model`,
+      providerID,
+      api: {
+        id: "test-model",
+        url: "https://api.test.com",
+        npm,
+      },
+      name: "Test Model",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+      limit: { context: 128000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("azure keeps 'azure' key and does not remap to 'openai'", () => {
+    const model = createModel("azure", "@ai-sdk/azure")
+    const msgs = [
+      {
+        role: "user",
+        content: "Hello",
+        providerOptions: {
+          azure: { someOption: "value" },
+        },
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect(result[0].providerOptions?.azure).toEqual({ someOption: "value" })
+    expect(result[0].providerOptions?.openai).toBeUndefined()
+  })
+
+  test("openai with github-copilot npm remaps providerID to 'openai'", () => {
+    const model = createModel("github-copilot", "@ai-sdk/github-copilot")
+    const msgs = [
+      {
+        role: "user",
+        content: "Hello",
+        providerOptions: {
+          "github-copilot": { someOption: "value" },
+        },
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect(result[0].providerOptions?.openai).toEqual({ someOption: "value" })
+    expect(result[0].providerOptions?.["github-copilot"]).toBeUndefined()
+  })
+
+  test("bedrock remaps providerID to 'bedrock' key", () => {
+    const model = createModel("my-bedrock", "@ai-sdk/amazon-bedrock")
+    const msgs = [
+      {
+        role: "user",
+        content: "Hello",
+        providerOptions: {
+          "my-bedrock": { someOption: "value" },
+        },
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect(result[0].providerOptions?.bedrock).toEqual({ someOption: "value" })
+    expect(result[0].providerOptions?.["my-bedrock"]).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.variants", () => {
   const createMockModel = (overrides: Partial<any> = {}): any => ({
     id: "test/test-model",
@@ -1058,7 +1140,7 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
     })
 
-    test("grok-4 returns OPENAI_EFFORTS with reasoning", () => {
+    test("grok-4 returns empty object", () => {
       const model = createMockModel({
         id: "openrouter/grok-4",
         providerID: "openrouter",
@@ -1069,7 +1151,23 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+      expect(result).toEqual({})
+    })
+
+    test("grok-3-mini returns low and high with reasoning", () => {
+      const model = createMockModel({
+        id: "openrouter/grok-3-mini",
+        providerID: "openrouter",
+        api: {
+          id: "grok-3-mini",
+          url: "https://openrouter.ai",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "high"])
+      expect(result.low).toEqual({ reasoning: { effort: "low" } })
+      expect(result.high).toEqual({ reasoning: { effort: "high" } })
     })
   })
 
@@ -1128,7 +1226,7 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/xai", () => {
-    test("returns WIDELY_SUPPORTED_EFFORTS with reasoningEffort", () => {
+    test("grok-3 returns empty object", () => {
       const model = createMockModel({
         id: "xai/grok-3",
         providerID: "xai",
@@ -1139,7 +1237,21 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result).toEqual({})
+    })
+
+    test("grok-3-mini returns low and high with reasoningEffort", () => {
+      const model = createMockModel({
+        id: "xai/grok-3-mini",
+        providerID: "xai",
+        api: {
+          id: "grok-3-mini",
+          url: "https://api.x.ai",
+          npm: "@ai-sdk/xai",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "high"])
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })

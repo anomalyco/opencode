@@ -12,7 +12,7 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
-import { Logo } from "@opencode-ai/ui/logo"
+import { Splash } from "@opencode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
 
 import { UPDATER_ENABLED } from "./updater"
@@ -25,6 +25,17 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
     "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
   )
 }
+
+// Floating UI can call getComputedStyle with non-elements (e.g., null refs, virtual elements).
+// This happens on all platforms (WebView2 on Windows, WKWebView on macOS), not just Windows.
+const originalGetComputedStyle = window.getComputedStyle
+window.getComputedStyle = ((elt: Element, pseudoElt?: string | null) => {
+  if (!(elt instanceof Element)) {
+    // Fall back to a safe element when a non-element is passed.
+    return originalGetComputedStyle(document.documentElement, pseudoElt ?? undefined)
+  }
+  return originalGetComputedStyle(elt, pseudoElt ?? undefined)
+}) as typeof window.getComputedStyle
 
 let update: Update | null = null
 
@@ -345,8 +356,7 @@ function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.
       when={serverData.state !== "pending" && serverData()}
       fallback={
         <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-          <Logo class="w-xl opacity-12 animate-pulse" />
-          <div class="mt-8 text-14-regular text-text-weak">Initializing...</div>
+          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
         </div>
       }
     >

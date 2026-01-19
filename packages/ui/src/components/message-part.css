@@ -689,3 +689,75 @@
     }
   }
 }
+
+[data-component="apply-patch-files"] {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-component="apply-patch-file"] {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-weaker-base);
+
+  &:first-child {
+    border-top: 1px solid var(--border-weaker-base);
+  }
+
+  [data-slot="apply-patch-file-header"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background-color: var(--surface-inset-base);
+  }
+
+  [data-slot="apply-patch-file-action"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    color: var(--text-base);
+    flex-shrink: 0;
+
+    &[data-type="delete"] {
+      color: var(--text-critical-base);
+    }
+
+    &[data-type="add"] {
+      color: var(--text-success-base);
+    }
+
+    &[data-type="move"] {
+      color: var(--text-warning-base);
+    }
+  }
+
+  [data-slot="apply-patch-file-path"] {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-small);
+    color: var(--text-weak);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-grow: 1;
+  }
+
+  [data-slot="apply-patch-deletion-count"] {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-small);
+    color: var(--text-critical-base);
+    flex-shrink: 0;
+  }
+}
+
+[data-component="apply-patch-file-diff"] {
+  max-height: 420px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
