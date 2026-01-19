@@ -60,7 +60,7 @@ export function DialogHelp() {
           scroll = r
         }}
         maxHeight={maxHeight()}
-        backgroundColor={theme.backgroundPanel}
+        scrollbarOptions={{ visible: false }}
       >
         <For each={commands}>
           {(cmd) => (
