@@ -41,6 +41,17 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
 
+      const agent = await Agent.get(params.subagent_type)
+      if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+
+      const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
+      if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
+
+      const model = agent.model ?? {
+        modelID: msg.info.modelID,
+        providerID: msg.info.providerID,
+      }
+
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
         await ctx.ask({
@@ -50,12 +61,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           metadata: {
             description: params.description,
             subagent_type: params.subagent_type,
+            model,
           },
         })
       }
-
-      const agent = await Agent.get(params.subagent_type)
-      if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
       const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
 
@@ -96,16 +105,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           ],
         })
       })
-      const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
-      if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
-
-      ctx.metadata({
-        title: params.description,
-        metadata: {
-          sessionId: session.id,
-        },
-      })
-
       const messageID = Identifier.ascending("message")
       const parts: Record<string, { id: string; tool: string; state: { status: string; title?: string } }> = {}
       const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
@@ -129,11 +128,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           },
         })
       })
-
-      const model = agent.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
 
       function cancel() {
         SessionPrompt.cancel(session.id)
@@ -180,6 +174,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         metadata: {
           summary,
           sessionId: session.id,
+          model,
         },
         output,
       }

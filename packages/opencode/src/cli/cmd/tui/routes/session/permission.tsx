@@ -223,7 +223,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                   <Match when={props.request.permission === "task"}>
                     <TextBody
                       icon="#"
-                      title={`${Locale.titlecase((input().subagent_type as string) ?? "Unknown")} Task`}
+                      title={`${Locale.titlecase((input().subagent_type as string) ?? "Unknown")} Task${
+                        (props.request.metadata?.model as any)?.modelID
+                          ? ` · ${(props.request.metadata?.model as any).modelID}`
+                          : ""
+                      }`}
                       description={"◉ " + input().description}
                     />
                   </Match>

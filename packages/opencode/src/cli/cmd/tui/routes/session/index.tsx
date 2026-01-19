@@ -1785,7 +1785,12 @@ function Task(props: ToolProps<typeof TaskTool>) {
     <Switch>
       <Match when={props.metadata.summary?.length}>
         <BlockTool
-          title={"# " + Locale.titlecase(props.input.subagent_type ?? "unknown") + " Task"}
+          title={
+            "# " +
+            Locale.titlecase(props.input.subagent_type ?? "unknown") +
+            " Task" +
+            (props.metadata.model?.modelID ? ` · ${props.metadata.model.modelID}` : "")
+          }
           onClick={
             props.metadata.sessionId
               ? () => navigate({ type: "session", sessionID: props.metadata.sessionId! })
