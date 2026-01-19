@@ -233,6 +233,12 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         title: "Write",
         subtitle: input.filePath ? getFilename(input.filePath) : undefined,
       }
+    case "apply_patch":
+      return {
+        icon: "code-lines",
+        title: "Patch",
+        subtitle: input.files?.length ? `${input.files.length} file${input.files.length > 1 ? "s" : ""}` : undefined,
+      }
     case "todowrite":
       return {
         icon: "checklist",
@@ -1022,6 +1028,94 @@ ToolRegistry.register({
           </div>
         </Show>
         <DiagnosticsDisplay diagnostics={diagnostics()} />
+      </BasicTool>
+    )
+  },
+})
+
+interface ApplyPatchFile {
+  filePath: string
+  relativePath: string
+  type: "add" | "update" | "delete" | "move"
+  diff: string
+  before: string
+  after: string
+  additions: number
+  deletions: number
+  movePath?: string
+}
+
+ToolRegistry.register({
+  name: "apply_patch",
+  render(props) {
+    const diffComponent = useDiffComponent()
+    const files = createMemo(() => (props.metadata.files ?? []) as ApplyPatchFile[])
+
+    const subtitle = createMemo(() => {
+      const count = files().length
+      if (count === 0) return ""
+      return `${count} file${count > 1 ? "s" : ""}`
+    })
+
+    return (
+      <BasicTool
+        {...props}
+        icon="code-lines"
+        trigger={{
+          title: "Patch",
+          subtitle: subtitle(),
+        }}
+      >
+        <Show when={files().length > 0}>
+          <div data-component="apply-patch-files">
+            <For each={files()}>
+              {(file) => (
+                <div data-component="apply-patch-file">
+                  <div data-slot="apply-patch-file-header">
+                    <Switch>
+                      <Match when={file.type === "delete"}>
+                        <span data-slot="apply-patch-file-action" data-type="delete">
+                          Deleted
+                        </span>
+                      </Match>
+                      <Match when={file.type === "add"}>
+                        <span data-slot="apply-patch-file-action" data-type="add">
+                          Created
+                        </span>
+                      </Match>
+                      <Match when={file.type === "move"}>
+                        <span data-slot="apply-patch-file-action" data-type="move">
+                          Moved
+                        </span>
+                      </Match>
+                      <Match when={file.type === "update"}>
+                        <span data-slot="apply-patch-file-action" data-type="update">
+                          Patched
+                        </span>
+                      </Match>
+                    </Switch>
+                    <span data-slot="apply-patch-file-path">{file.relativePath}</span>
+                    <Show when={file.type !== "delete"}>
+                      <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
+                    </Show>
+                    <Show when={file.type === "delete"}>
+                      <span data-slot="apply-patch-deletion-count">-{file.deletions}</span>
+                    </Show>
+                  </div>
+                  <Show when={file.type !== "delete"}>
+                    <div data-component="apply-patch-file-diff">
+                      <Dynamic
+                        component={diffComponent}
+                        before={{ name: file.filePath, contents: file.before }}
+                        after={{ name: file.filePath, contents: file.after }}
+                      />
+                    </div>
+                  </Show>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
       </BasicTool>
     )
   },
