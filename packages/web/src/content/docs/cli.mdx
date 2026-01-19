@@ -124,7 +124,7 @@ OpenCode is powered by the provider list at [Models.dev](https://models.dev), so
 opencode auth login
 ```
 
-When OpenCode starts up it loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
+When OpenCode starts up it loads the providers from the credentials file and checks the environment for any configured keys. The CLI does not automatically load `.env` files from your project.
 
 ---
 
