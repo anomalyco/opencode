@@ -23,7 +23,8 @@ jobs:
         run: bunx playwright install --with-deps
 
       - name: Seed opencode data
-        run: bun --cwd packages/opencode script/seed-e2e.ts
+        working-directory: packages/opencode
+        run: bun script/seed-e2e.ts
         env:
           MODELS_DEV_API_JSON: ${{ github.workspace }}/packages/opencode/test/tool/fixtures/models-api.json
           OPENCODE_DISABLE_MODELS_FETCH: "true"
@@ -42,7 +43,7 @@ jobs:
           OPENCODE_E2E_MODEL: "opencode/gpt-5-nano"
 
       - name: Run opencode server
-        run: bun --cwd packages/opencode run dev -- --print-logs --log-level WARN serve --port 4096 --hostname 0.0.0.0 &
+        run: bun run dev -- --print-logs --log-level WARN serve --port 4096 --hostname 0.0.0.0 &
         env:
           MODELS_DEV_API_JSON: ${{ github.workspace }}/packages/opencode/test/tool/fixtures/models-api.json
           OPENCODE_DISABLE_MODELS_FETCH: "true"
