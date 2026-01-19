@@ -149,7 +149,9 @@ function createGlobalSync() {
           part: {},
           new: options?.new,
         })
-        bootstrapPromises[directory] = bootstrapInstance(directory)
+        bootstrapPromises[directory] = bootstrapInstance(directory).finally(() => {
+          delete bootstrapPromises[directory]
+        })
       }
 
       runWithOwner(owner, init)
@@ -367,7 +369,9 @@ function createGlobalSync() {
     const [store, setStore] = child(directory)
     switch (event.type) {
       case "server.instance.disposed": {
-        bootstrapPromises[directory] = bootstrapInstance(directory)
+        bootstrapPromises[directory] = bootstrapInstance(directory).finally(() => {
+          delete bootstrapPromises[directory]
+        })
         break
       }
       case "session.created": {
