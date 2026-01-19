@@ -5,7 +5,7 @@
 [data-slot="tooltip-keybind"] {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 [data-slot="tooltip-keybind-key"] {
@@ -18,11 +18,11 @@
 [data-component="tooltip"] {
   z-index: 1000;
   max-width: 320px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background-color: var(--surface-float-base);
   color: var(--text-invert-strong);
   background: var(--surface-float-base);
-  padding: 6px 12px;
+  padding: 2px 8px;
   border: 1px solid var(--border-weak-base, rgba(0, 0, 0, 0.07));
 
   box-shadow: var(--shadow-md);

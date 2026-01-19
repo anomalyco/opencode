@@ -37,7 +37,7 @@ export const BatchTool = Tool.define("batch", async () => {
       const discardedCalls = params.tool_calls.slice(10)
 
       const { ToolRegistry } = await import("./registry")
-      const availableTools = await ToolRegistry.tools("")
+      const availableTools = await ToolRegistry.tools({ modelID: "", providerID: "" })
       const toolMap = new Map(availableTools.map((t) => [t.id, t]))
 
       const executeCall = async (call: (typeof toolCalls)[0]) => {

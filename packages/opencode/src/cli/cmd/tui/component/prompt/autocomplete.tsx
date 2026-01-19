@@ -332,16 +332,15 @@ export function Autocomplete(props: {
       )
   })
 
-  const session = createMemo(() => (props.sessionID ? sync.session.get(props.sessionID) : undefined))
   const commands = createMemo((): AutocompleteOption[] => {
-    const results: AutocompleteOption[] = []
-    const s = session()
-    for (const command of sync.data.command) {
+    const results: AutocompleteOption[] = [...command.slashes()]
+
+    for (const serverCommand of sync.data.command) {
       results.push({
-        display: "/" + command.name + (command.mcp ? " (MCP)" : ""),
-        description: command.description,
+        display: "/" + serverCommand.name + (serverCommand.mcp ? " (MCP)" : ""),
+        description: serverCommand.description,
         onSelect: () => {
-          const newText = "/" + command.name + " "
+          const newText = "/" + serverCommand.name + " "
           const cursor = props.input().logicalCursor
           props.input().deleteRange(0, 0, cursor.row, cursor.col)
           props.input().insertText(newText)
@@ -349,138 +348,9 @@ export function Autocomplete(props: {
         },
       })
     }
-    if (s) {
-      results.push(
-        {
-          display: "/undo",
-          description: "undo the last message",
-          onSelect: () => {
-            command.trigger("session.undo")
-          },
-        },
-        {
-          display: "/redo",
-          description: "redo the last message",
-          onSelect: () => command.trigger("session.redo"),
-        },
-        {
-          display: "/compact",
-          aliases: ["/summarize"],
-          description: "compact the session",
-          onSelect: () => command.trigger("session.compact"),
-        },
-        {
-          display: "/unshare",
-          disabled: !s.share,
-          description: "unshare a session",
-          onSelect: () => command.trigger("session.unshare"),
-        },
-        {
-          display: "/rename",
-          description: "rename session",
-          onSelect: () => command.trigger("session.rename"),
-        },
-        {
-          display: "/copy",
-          description: "copy session transcript to clipboard",
-          onSelect: () => command.trigger("session.copy"),
-        },
-        {
-          display: "/export",
-          description: "export session transcript to file",
-          onSelect: () => command.trigger("session.export"),
-        },
-        {
-          display: "/timeline",
-          description: "jump to message",
-          onSelect: () => command.trigger("session.timeline"),
-        },
-        {
-          display: "/fork",
-          description: "fork from message",
-          onSelect: () => command.trigger("session.fork"),
-        },
-        {
-          display: "/thinking",
-          description: "toggle thinking visibility",
-          onSelect: () => command.trigger("session.toggle.thinking"),
-        },
-      )
-      if (sync.data.config.share !== "disabled") {
-        results.push({
-          display: "/share",
-          disabled: !!s.share?.url,
-          description: "share a session",
-          onSelect: () => command.trigger("session.share"),
-        })
-      }
-    }
 
-    results.push(
-      {
-        display: "/new",
-        aliases: ["/clear"],
-        description: "create a new session",
-        onSelect: () => command.trigger("session.new"),
-      },
-      {
-        display: "/models",
-        description: "list models",
-        onSelect: () => command.trigger("model.list"),
-      },
-      {
-        display: "/agents",
-        description: "list agents",
-        onSelect: () => command.trigger("agent.list"),
-      },
-      {
-        display: "/session",
-        aliases: ["/resume", "/continue"],
-        description: "list sessions",
-        onSelect: () => command.trigger("session.list"),
-      },
-      {
-        display: "/status",
-        description: "show status",
-        onSelect: () => command.trigger("opencode.status"),
-      },
-      {
-        display: "/mcp",
-        description: "toggle MCPs",
-        onSelect: () => command.trigger("mcp.list"),
-      },
-      {
-        display: "/theme",
-        description: "toggle theme",
-        onSelect: () => command.trigger("theme.switch"),
-      },
-      {
-        display: "/editor",
-        description: "open editor",
-        onSelect: () => command.trigger("prompt.editor", "prompt"),
-      },
-      {
-        display: "/connect",
-        description: "connect to a provider",
-        onSelect: () => command.trigger("provider.connect"),
-      },
-      {
-        display: "/help",
-        description: "show help",
-        onSelect: () => command.trigger("help.show"),
-      },
-      {
-        display: "/commands",
-        description: "show all commands",
-        onSelect: () => command.show(),
-      },
-      {
-        display: "/exit",
-        aliases: ["/quit", "/q"],
-        description: "exit the app",
-        onSelect: () => command.trigger("app.exit"),
-      },
-    )
+    results.sort((a, b) => a.display.localeCompare(b.display))
+
     const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
     if (!max) return results
     return results.map((item) => ({
@@ -494,9 +364,8 @@ export function Autocomplete(props: {
     const agentsValue = agents()
     const commandsValue = commands()
 
-    const mixed: AutocompleteOption[] = (
+    const mixed: AutocompleteOption[] =
       store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
-    ).filter((x) => x.disabled !== true)
 
     const currentFilter = filter()
 

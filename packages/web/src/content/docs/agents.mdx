@@ -21,7 +21,7 @@ There are two types of agents in OpenCode; primary agents and subagents.
 
 ### Primary agents
 
-Primary agents are the main assistants you interact with directly. You can cycle through them using the **Tab** key, or your configured `switch_agent` keybind. These agents handle your main conversation and can access all configured tools.
+Primary agents are the main assistants you interact with directly. You can cycle through them using the **Tab** key, or your configured `switch_agent` keybind. These agents handle your main conversation. Tool access is configured via permissions — for example, Build has all tools enabled while Plan is restricted.
 
 :::tip
 You can use the **Tab** key to switch between primary agents during a session.
@@ -72,7 +72,7 @@ This agent is useful when you want the LLM to analyze code, suggest changes, or 
 
 _Mode_: `subagent`
 
-A general-purpose agent for researching complex questions, searching for code, and executing multi-step tasks. Use when searching for keywords or files and you're not confident you'll find the right match in the first few tries.
+A general-purpose agent for researching complex questions and executing multi-step tasks. Has full tool access (except todo), so it can make file changes when needed. Use this to run multiple units of work in parallel.
 
 ---
 
@@ -80,7 +80,7 @@ A general-purpose agent for researching complex questions, searching for code, a
 
 _Mode_: `subagent`
 
-A fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns, search code for keywords, or answer questions about the codebase.
+A fast, read-only agent for exploring codebases. Cannot modify files. Use this when you need to quickly find files by patterns, search code for keywords, or answer questions about the codebase.
 
 ---
 
@@ -157,10 +157,10 @@ Configure agents in your `opencode.json` config file:
 
 You can also define agents using markdown files. Place them in:
 
-- Global: `~/.config/opencode/agent/`
-- Per-project: `.opencode/agent/`
+- Global: `~/.config/opencode/agents/`
+- Per-project: `.opencode/agents/`
 
-```markdown title="~/.config/opencode/agent/review.md"
+```markdown title="~/.config/opencode/agents/review.md"
 ---
 description: Reviews code for quality and best practices
 mode: subagent
@@ -419,7 +419,7 @@ You can override these permissions per agent.
 
 You can also set permissions in Markdown agents.
 
-```markdown title="~/.config/opencode/agent/review.md"
+```markdown title="~/.config/opencode/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -429,6 +429,7 @@ permission:
     "*": ask
     "git diff": allow
     "git log*": allow
+    "grep *": allow
   webfetch: deny
 ---
 
@@ -444,7 +445,8 @@ You can set permissions for specific bash commands.
     "build": {
       "permission": {
         "bash": {
-          "git push": "ask"
+          "git push": "ask",
+          "grep *": "allow"
         }
       }
     }
@@ -480,7 +482,7 @@ Since the last matching rule takes precedence, put the `*` wildcard first and sp
       "permission": {
         "bash": {
           "*": "ask",
-          "git status": "allow"
+          "git status *": "allow"
         }
       }
     }
@@ -625,7 +627,7 @@ Here are some common use cases for different agents.
 
 ## Examples
 
-Here are some examples agents you might find useful.
+Here are some example agents you might find useful.
 
 :::tip
 Do you have an agent you'd like to share? [Submit a PR](https://github.com/anomalyco/opencode).
@@ -635,7 +637,7 @@ Do you have an agent you'd like to share? [Submit a PR](https://github.com/anoma
 
 ### Documentation agent
 
-```markdown title="~/.config/opencode/agent/docs-writer.md"
+```markdown title="~/.config/opencode/agents/docs-writer.md"
 ---
 description: Writes and maintains project documentation
 mode: subagent
@@ -657,7 +659,7 @@ Focus on:
 
 ### Security auditor
 
-```markdown title="~/.config/opencode/agent/security-auditor.md"
+```markdown title="~/.config/opencode/agents/security-auditor.md"
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent
