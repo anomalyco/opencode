@@ -119,7 +119,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const providers = useProviders()
   const command = useCommand()
   const permission = usePermission()
-  const isTouchDevice = createMediaQuery("(pointer: coarse)")
+  const isTouchDevice = createMemo(() => {
+    const isCoarsePointer = window.matchMedia("(pointer: coarse)").matches
+    const hasTouchSupport = "ontouchstart" in window || navigator.maxTouchPoints > 0
+    return isCoarsePointer || hasTouchSupport
+  })
   let editorRef!: HTMLDivElement
   let fileInputRef!: HTMLInputElement
   let scrollRef!: HTMLDivElement
