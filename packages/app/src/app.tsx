@@ -21,6 +21,7 @@ import { FileProvider } from "@/context/file"
 import { NotificationProvider } from "@/context/notification"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
+import { LanguageProvider } from "@/context/language"
 import { Logo } from "@opencode-ai/ui/logo"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
@@ -84,15 +85,17 @@ export function AppInterface(props: { defaultUrl?: string }) {
             <Router
               root={(props) => (
                 <SettingsProvider>
-                  <PermissionProvider>
-                    <LayoutProvider>
-                      <NotificationProvider>
-                        <CommandProvider>
-                          <Layout>{props.children}</Layout>
-                        </CommandProvider>
-                      </NotificationProvider>
-                    </LayoutProvider>
-                  </PermissionProvider>
+                  <LanguageProvider>
+                    <PermissionProvider>
+                      <LayoutProvider>
+                        <NotificationProvider>
+                          <CommandProvider>
+                            <Layout>{props.children}</Layout>
+                          </CommandProvider>
+                        </NotificationProvider>
+                      </LayoutProvider>
+                    </PermissionProvider>
+                  </LanguageProvider>
                 </SettingsProvider>
               )}
             >

@@ -69,6 +69,7 @@ import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
+import { useLanguage, type Locale } from "@/context/language"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -109,6 +110,7 @@ export default function Layout(props: ParentProps) {
   const dialog = useDialog()
   const command = useCommand()
   const theme = useTheme()
+  const language = useLanguage()
   const initialDir = params.dir
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
@@ -266,6 +268,24 @@ export default function Layout(props: ParentProps) {
       title: "Color scheme",
       description: colorSchemeLabel[next],
     })
+  }
+
+  function setLocale(next: Locale) {
+    if (next === language.locale()) return
+    language.setLocale(next)
+    showToast({
+      title: language.t("toast.language.title"),
+      description: language.t("toast.language.description", { language: language.label(next) }),
+    })
+  }
+
+  function cycleLanguage(direction = 1) {
+    const locales = language.locales
+    const currentIndex = locales.indexOf(language.locale())
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + direction + locales.length) % locales.length
+    const next = locales[nextIndex]
+    if (!next) return
+    setLocale(next)
   }
 
   onMount(() => {
@@ -903,6 +923,22 @@ export default function Layout(props: ParentProps) {
           theme.previewColorScheme(scheme)
           return () => theme.cancelPreview()
         },
+      })
+    }
+
+    commands.push({
+      id: "language.cycle",
+      title: language.t("command.language.cycle"),
+      category: language.t("command.category.language"),
+      onSelect: () => cycleLanguage(1),
+    })
+
+    for (const locale of language.locales) {
+      commands.push({
+        id: `language.set.${locale}`,
+        title: language.t("command.language.set", { language: language.label(locale) }),
+        category: language.t("command.category.language"),
+        onSelect: () => setLocale(locale),
       })
     }
 
