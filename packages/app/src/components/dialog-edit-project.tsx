@@ -22,7 +22,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
   const [store, setStore] = createStore({
     name: defaultName(),
     color: props.project.icon?.color || "pink",
-    iconUrl: props.project.icon?.url || "",
+    iconUrl: props.project.icon?.override || "",
     saving: false,
   })
 
@@ -74,7 +74,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
     await globalSDK.client.project.update({
       projectID: props.project.id,
       name,
-      icon: { color: store.color, url: store.iconUrl },
+      icon: { color: store.color, override: store.iconUrl },
     })
     setStore("saving", false)
     dialog.close()
