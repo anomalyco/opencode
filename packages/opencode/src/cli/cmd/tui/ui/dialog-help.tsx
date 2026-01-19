@@ -45,7 +45,8 @@ export function DialogHelp() {
     }
   })
 
-  const maxHeight = createMemo(() => Math.floor(dimensions().height * 0.6))
+  const maxHeight = createMemo(() => Math.floor(dimensions().height / 2) - 6)
+  const height = createMemo(() => Math.min(commands.length, maxHeight()))
 
   return (
     <box paddingLeft={2} paddingRight={2}>
@@ -59,7 +60,7 @@ export function DialogHelp() {
         ref={(r: ScrollBoxRenderable) => {
           scroll = r
         }}
-        maxHeight={maxHeight()}
+        height={height()}
         scrollbarOptions={{ visible: false }}
       >
         <For each={commands}>
