@@ -14,6 +14,7 @@ import { Bus } from "../bus"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
+import { Session } from "../session"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
 
@@ -40,7 +41,7 @@ export const EditTool = Tool.define("edit", {
       throw new Error("oldString and newString must be different")
     }
 
-    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Session.directory.get(), params.filePath)
     await assertExternalDirectory(ctx, filePath)
 
     let diff = ""

@@ -110,7 +110,7 @@ export namespace SessionCompaction {
       agent: "compaction",
       summary: true,
       path: {
-        cwd: Instance.directory,
+        cwd: Session.directory.get(),
         root: Instance.worktree,
       },
       cost: 0,

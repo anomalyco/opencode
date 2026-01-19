@@ -4,6 +4,7 @@ import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
 
 import { Instance } from "../project/instance"
+import { Session } from "./index"
 import path from "path"
 import os from "os"
 
@@ -43,7 +44,7 @@ export namespace SystemPrompt {
       [
         `Here is some useful information about the environment you are running in:`,
         `<env>`,
-        `  Working directory: ${Instance.directory}`,
+        `  Working directory: ${Session.directory.get()}`,
         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
@@ -52,7 +53,7 @@ export namespace SystemPrompt {
         `  ${
           project.vcs === "git" && false
             ? await Ripgrep.tree({
-                cwd: Instance.directory,
+                cwd: Session.directory.get(),
                 limit: 200,
               })
             : ""

@@ -23,8 +23,21 @@ import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
 
+// Current working directory for the active session.
+let _sessionDirectory: string | undefined
+
 export namespace Session {
   const log = Log.create({ service: "session" })
+
+  /** Get/set the current session's working directory. Falls back to Instance.directory if not set. */
+  export const directory = {
+    get() {
+      return _sessionDirectory ?? Instance.directory
+    },
+    set(value: string | undefined) {
+      _sessionDirectory = value
+    },
+  }
 
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
