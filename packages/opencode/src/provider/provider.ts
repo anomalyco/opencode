@@ -598,14 +598,14 @@ export namespace Provider {
       providerID: provider.id,
       name: model.name,
       family: model.family,
-       api: {
-         id: model.id,
-         url: provider.api!,
-         npm: iife(() => {
-           if (provider.id.startsWith("github-copilot")) return "@ai-sdk/github-copilot"
-           return model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible"
-         }),
-       },
+      api: {
+        id: model.id,
+        url: provider.api!,
+        npm: iife(() => {
+          if (provider.id.startsWith("github-copilot")) return "@ai-sdk/github-copilot"
+          return model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible"
+        }),
+      },
       status: model.status ?? "active",
       headers: model.headers ?? {},
       options: model.options ?? {},
