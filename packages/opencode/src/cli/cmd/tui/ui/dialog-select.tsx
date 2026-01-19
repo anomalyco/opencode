@@ -88,7 +88,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard
   // that the mouseover event doesn't trigger when filtering.
   createEffect(() => {
-    filtered();
+    filtered()
     setStore("input", "keyboard")
   })
 

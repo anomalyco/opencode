@@ -133,7 +133,7 @@ export function Autocomplete(props: {
   // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard so
   // that the mouseover event doesn't trigger when filtering.
   createEffect(() => {
-    filter();
+    filter()
     setStore("input", "keyboard")
   })
 
