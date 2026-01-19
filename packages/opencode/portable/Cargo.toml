@@ -1,0 +1,9 @@
+[package]
+name = "launcher"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tempfile = "3.24"
+
+[build-dependencies]

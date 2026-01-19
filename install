@@ -7,6 +7,10 @@ RED='\033[0;31m'
 ORANGE='\033[38;5;214m'
 NC='\033[0m' # No Color
 
+# Minimum glibc version may change with Bun upgrades.
+# Update using: `readelf --version-info dist/opencode-linux-x64/bin/opencode | rg -o "GLIBC_[0-9.]+" | sort -V | tail -1`
+GLIBC_REQUIRED_VERSION=2.25
+
 usage() {
     cat <<EOF
 OpenCode Installer
@@ -122,6 +126,23 @@ else
 
       if command -v ldd >/dev/null 2>&1; then
         if ldd --version 2>&1 | grep -qi musl; then
+          is_musl=true
+        fi
+      fi
+
+      glibc_version=""
+      if [ "$is_musl" = "false" ] && command -v getconf >/dev/null 2>&1; then
+        glibc_version=$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}')
+      fi
+
+      if [ "$is_musl" = "false" ] && [ -z "$glibc_version" ] && command -v ldd >/dev/null 2>&1; then
+        glibc_version=$(ldd --version 2>&1 | head -n1 | sed -n 's/.* \([0-9]\+\.[0-9]\+\).*/\1/p')
+      fi
+
+      if [ "$is_musl" = "false" ] && [ -n "$glibc_version" ]; then
+        # Sort the versions to get the min(GLIBC_REQUIRED_VERSION, glibc_version)
+        glibc_min=$(printf '%s\n' "$GLIBC_REQUIRED_VERSION" "$glibc_version" | sort -V | head -n1)
+        if [ "$glibc_min" != "$GLIBC_REQUIRED_VERSION" ]; then
           is_musl=true
         fi
       fi
