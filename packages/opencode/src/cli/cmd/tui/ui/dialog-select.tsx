@@ -163,6 +163,34 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     if (evt.name === "pagedown") move(10)
     if (evt.name === "home") moveTo(0)
     if (evt.name === "end") moveTo(flat().length - 1)
+
+    const isBackspace = evt.name === "backspace" || evt.name === "delete"
+    const isWordDelete = (isBackspace && (evt.option || evt.meta)) || (evt.name === "w" && evt.ctrl)
+
+    if (isWordDelete) {
+      evt.preventDefault()
+      evt.stopPropagation()
+
+      const val = input.value
+      const pos = input.cursorPosition
+
+      if (pos > 0) {
+        let cut = pos
+        if (val[cut - 1] === " ") {
+          while (cut > 0 && val[cut - 1] === " ") cut--
+        } else {
+          while (cut > 0 && val[cut - 1] !== " ") cut--
+        }
+        const newVal = val.slice(0, cut) + val.slice(pos)
+
+        input.value = newVal
+        input.cursorPosition = cut
+        batch(() => {
+          setStore("filter", newVal)
+          props.onFilter?.(newVal)
+        })
+      }
+    }
     if (evt.name === "return") {
       const option = selected()
       if (option) {
