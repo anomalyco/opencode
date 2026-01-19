@@ -4,17 +4,18 @@ import { modKey } from "./utils"
 test("sidebar can be collapsed and expanded", async ({ page, gotoSession }) => {
   await gotoSession()
 
-  const createButton = page.getByRole("button", { name: /New (session|workspace)/ }).first()
-  const opened = (await createButton.count()) > 0
+  const main = page.locator("main")
+  const closedClass = /xl:border-l/
+  const isClosed = await main.evaluate((node) => node.className.includes("xl:border-l"))
 
-  if (!opened) {
+  if (isClosed) {
     await page.keyboard.press(`${modKey}+B`)
-    await expect(createButton).toBeVisible()
+    await expect(main).not.toHaveClass(closedClass)
   }
 
   await page.keyboard.press(`${modKey}+B`)
-  await expect(createButton).toHaveCount(0)
+  await expect(main).toHaveClass(closedClass)
 
   await page.keyboard.press(`${modKey}+B`)
-  await expect(createButton).toBeVisible()
+  await expect(main).not.toHaveClass(closedClass)
 })

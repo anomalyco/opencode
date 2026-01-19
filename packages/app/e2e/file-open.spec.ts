@@ -12,13 +12,12 @@ test("can open a file tab from the search palette", async ({ page, gotoSession }
   const input = dialog.getByRole("textbox").first()
   await input.fill("package.json")
 
-  const firstItem = dialog.locator('[data-slot="list-item"]').first()
-  await expect(firstItem).toBeVisible()
-  await firstItem.click()
+  const fileItem = dialog.locator('[data-slot="list-item"][data-key^="file:"]').first()
+  await expect(fileItem).toBeVisible()
+  await fileItem.click()
 
   await expect(dialog).toHaveCount(0)
 
   const tabs = page.locator('[data-component="tabs"][data-variant="normal"]')
-  await expect(tabs).toBeVisible()
-  await expect(tabs.getByRole("tab").first()).toBeVisible()
+  await expect(tabs.locator('[data-slot="tabs-trigger"]').first()).toBeVisible()
 })

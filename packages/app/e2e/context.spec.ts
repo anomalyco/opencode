@@ -9,12 +9,29 @@ test("context panel can be opened from the prompt", async ({ page, sdk, gotoSess
   const sessionID = created.id
 
   try {
+    await sdk.session.promptAsync({
+      sessionID,
+      noReply: true,
+      parts: [
+        {
+          type: "text",
+          text: "seed context",
+        },
+      ],
+    })
+
+    await expect
+      .poll(async () => {
+        const messages = await sdk.session.messages({ sessionID, limit: 1 }).then((r) => r.data ?? [])
+        return messages.length
+      })
+      .toBeGreaterThan(0)
+
     await gotoSession(sessionID)
 
-    const promptForm = page.locator("form").filter({ has: page.locator(promptSelector) }).first()
-    const contextButton = promptForm
-      .locator("button")
-      .filter({ has: promptForm.locator('[data-component="progress-circle"]').first() })
+    const contextButton = page
+      .locator('[data-component="button"]')
+      .filter({ has: page.locator('[data-component="progress-circle"]').first() })
       .first()
 
     await expect(contextButton).toBeVisible()
