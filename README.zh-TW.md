@@ -26,7 +26,7 @@ curl -fsSL https://opencode.ai/install | bash
 
 # 套件管理員
 npm i -g opencode-ai@latest        # 也可使用 bun/pnpm/yarn
-scoop bucket add extras; scoop install extras/opencode  # Windows
+scoop install opencode             # Windows
 choco install opencode             # Windows
 brew install anomalyco/tap/opencode # macOS 與 Linux（推薦，始終保持最新）
 brew install opencode              # macOS 與 Linux（官方 brew formula，更新頻率較低）
@@ -52,6 +52,8 @@ OpenCode 也提供桌面版應用程式。您可以直接從 [發佈頁面 (rele
 ```bash
 # macOS (Homebrew Cask)
 brew install --cask opencode-desktop
+# Windows (Scoop)
+scoop bucket add extras; scoop install extras/opencode-desktop
 ```
 
 #### 安裝目錄
