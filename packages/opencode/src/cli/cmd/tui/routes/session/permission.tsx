@@ -43,7 +43,7 @@ function filetype(input?: string) {
   return language
 }
 
-function EditBody(props: { request: PermissionRequest }) {
+function EditBody(props: { request: PermissionRequest; full: boolean }) {
   const themeState = useTheme()
   const theme = themeState.theme
   const syntax = themeState.syntax
@@ -52,6 +52,8 @@ function EditBody(props: { request: PermissionRequest }) {
 
   const filepath = createMemo(() => (props.request.metadata?.filepath as string) ?? "")
   const diff = createMemo(() => (props.request.metadata?.diff as string) ?? "")
+  const diffFull = createMemo(() => (props.request.metadata?.diffFull as string) ?? "")
+  const activeDiff = createMemo(() => (props.full && diffFull() ? diffFull() : diff()))
 
   const view = createMemo(() => {
     const diffStyle = sync.data.config.tui?.diff_style
@@ -67,10 +69,10 @@ function EditBody(props: { request: PermissionRequest }) {
         <text fg={theme.textMuted}>{"→"}</text>
         <text fg={theme.textMuted}>Edit {normalizePath(filepath())}</text>
       </box>
-      <Show when={diff()}>
+      <Show when={activeDiff()}>
         <scrollbox height="100%">
           <diff
-            diff={diff()}
+            diff={activeDiff()}
             view={view()}
             filetype={ft()}
             syntaxStyle={syntax()}
@@ -120,6 +122,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
   const sync = useSync()
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
+    full: false,
   })
 
   const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
@@ -199,7 +202,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               body={
                 <Switch>
                   <Match when={props.request.permission === "edit"}>
-                    <EditBody request={props.request} />
+                    <EditBody request={props.request} full={store.full} />
                   </Match>
                   <Match when={props.request.permission === "read"}>
                     <TextBody icon="→" title={`Read ` + normalizePath(input().filePath as string)} />
@@ -266,6 +269,9 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
               escapeKey="reject"
               fullscreen
+              full={Boolean(props.request.metadata?.diffFull)}
+              fullActive={store.full}
+              onFull={() => setStore("full", (current) => !current)}
               onSelect={(option) => {
                 if (option === "always") {
                   setStore("stage", "always")
@@ -367,6 +373,9 @@ function Prompt<const T extends Record<string, string>>(props: {
   options: T
   escapeKey?: keyof T
   fullscreen?: boolean
+  full?: boolean
+  fullActive?: boolean
+  onFull?: () => void
   onSelect: (option: keyof T) => void
 }) {
   const { theme } = useTheme()
@@ -378,6 +387,7 @@ function Prompt<const T extends Record<string, string>>(props: {
     expanded: false,
   })
   const diffKey = Keybind.parse("ctrl+f")[0]
+  const fullKey = Keybind.parse("ctrl+o")[0]
 
   useKeyboard((evt) => {
     if (evt.name === "left" || evt.name == "h") {
@@ -408,10 +418,18 @@ function Prompt<const T extends Record<string, string>>(props: {
       evt.preventDefault()
       evt.stopPropagation()
       setStore("expanded", (v) => !v)
+      return
+    }
+
+    if (props.fullscreen && store.expanded && fullKey && props.full && Keybind.match(fullKey, keybind.parse(evt))) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      props.onFull?.()
     }
   })
 
   const hint = createMemo(() => (store.expanded ? "minimize" : "fullscreen"))
+  const fullHint = createMemo(() => (props.fullActive ? "collapse" : "full file"))
   const renderer = useRenderer()
 
   const content = () => (
@@ -468,6 +486,11 @@ function Prompt<const T extends Record<string, string>>(props: {
           <Show when={props.fullscreen}>
             <text fg={theme.text}>
               {"ctrl+f"} <span style={{ fg: theme.textMuted }}>{hint()}</span>
+            </text>
+          </Show>
+          <Show when={store.expanded && props.full}>
+            <text fg={theme.text}>
+              {"ctrl+o"} <span style={{ fg: theme.textMuted }}>{fullHint()}</span>
             </text>
           </Show>
           <text fg={theme.text}>

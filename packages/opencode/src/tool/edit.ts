@@ -23,6 +23,17 @@ function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
 }
 
+export function fullDiff(filePath: string, before: string, after: string, trim = true) {
+  const left = before.split("\n").length
+  const right = after.split("\n").length
+  const count = Math.max(left, right)
+  const diff = createTwoFilesPatch(filePath, filePath, before, after, undefined, undefined, {
+    context: count,
+  })
+  if (!trim) return diff
+  return trimDiff(diff)
+}
+
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -49,6 +60,7 @@ export const EditTool = Tool.define("edit", {
     await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
         contentNew = params.newString
+        const diffFull = fullDiff(filePath, contentOld, contentNew)
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
         await ctx.ask({
           permission: "edit",
@@ -57,6 +69,7 @@ export const EditTool = Tool.define("edit", {
           metadata: {
             filepath: filePath,
             diff,
+            diffFull,
           },
         })
         await Bun.write(filePath, params.newString)
@@ -75,6 +88,7 @@ export const EditTool = Tool.define("edit", {
       contentOld = await file.text()
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
 
+      const diffFull = fullDiff(filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew))
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
       )
@@ -85,6 +99,7 @@ export const EditTool = Tool.define("edit", {
         metadata: {
           filepath: filePath,
           diff,
+          diffFull,
         },
       })
 
@@ -99,6 +114,7 @@ export const EditTool = Tool.define("edit", {
       FileTime.read(ctx.sessionID, filePath)
     })
 
+    const diffFull = fullDiff(filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew))
     const filediff: Snapshot.FileDiff = {
       file: filePath,
       before: contentOld,
@@ -114,6 +130,7 @@ export const EditTool = Tool.define("edit", {
     ctx.metadata({
       metadata: {
         diff,
+        diffFull,
         filediff,
         diagnostics: {},
       },
@@ -136,6 +153,7 @@ export const EditTool = Tool.define("edit", {
       metadata: {
         diagnostics,
         diff,
+        diffFull,
         filediff,
       },
       title: `${path.relative(Instance.worktree, filePath)}`,

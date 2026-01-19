@@ -9,7 +9,7 @@ import { File } from "../file"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
-import { trimDiff } from "./edit"
+import { fullDiff, trimDiff } from "./edit"
 import { assertExternalDirectory } from "./external-directory"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
@@ -30,6 +30,7 @@ export const WriteTool = Tool.define("write", {
     const contentOld = exists ? await file.text() : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
+    const diffFull = fullDiff(filepath, contentOld, params.content)
     const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
     await ctx.ask({
       permission: "edit",
@@ -38,6 +39,7 @@ export const WriteTool = Tool.define("write", {
       metadata: {
         filepath,
         diff,
+        diffFull,
       },
     })
 

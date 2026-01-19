@@ -46,6 +46,7 @@ export const PatchTool = Tool.define("patch", {
     }> = []
 
     let totalDiff = ""
+    const totalDiffFull: string[] = []
 
     for (const hunk of hunks) {
       const filePath = path.resolve(Instance.directory, hunk.path)
@@ -57,6 +58,9 @@ export const PatchTool = Tool.define("patch", {
             const oldContent = ""
             const newContent = hunk.contents
             const diff = createTwoFilesPatch(filePath, filePath, oldContent, newContent)
+            const diffFull = createTwoFilesPatch(filePath, filePath, oldContent, newContent, undefined, undefined, {
+              context: Math.max(oldContent.split("\n").length, newContent.split("\n").length),
+            })
 
             fileChanges.push({
               filePath,
@@ -66,6 +70,7 @@ export const PatchTool = Tool.define("patch", {
             })
 
             totalDiff += diff + "\n"
+            totalDiffFull.push(diffFull)
           }
           break
 
@@ -90,6 +95,9 @@ export const PatchTool = Tool.define("patch", {
           }
 
           const diff = createTwoFilesPatch(filePath, filePath, oldContent, newContent)
+          const diffFull = createTwoFilesPatch(filePath, filePath, oldContent, newContent, undefined, undefined, {
+            context: Math.max(oldContent.split("\n").length, newContent.split("\n").length),
+          })
 
           const movePath = hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined
           await assertExternalDirectory(ctx, movePath)
@@ -103,6 +111,7 @@ export const PatchTool = Tool.define("patch", {
           })
 
           totalDiff += diff + "\n"
+          totalDiffFull.push(diffFull)
           break
 
         case "delete":
@@ -110,6 +119,9 @@ export const PatchTool = Tool.define("patch", {
           await FileTime.assert(ctx.sessionID, filePath)
           const contentToDelete = await fs.readFile(filePath, "utf-8")
           const deleteDiff = createTwoFilesPatch(filePath, filePath, contentToDelete, "")
+          const deleteDiffFull = createTwoFilesPatch(filePath, filePath, contentToDelete, "", undefined, undefined, {
+            context: Math.max(contentToDelete.split("\n").length, 1),
+          })
 
           fileChanges.push({
             filePath,
@@ -119,17 +131,20 @@ export const PatchTool = Tool.define("patch", {
           })
 
           totalDiff += deleteDiff + "\n"
+          totalDiffFull.push(deleteDiffFull)
           break
       }
     }
 
     // Check permissions if needed
+    const diffFull = totalDiffFull.join("\n")
     await ctx.ask({
       permission: "edit",
       patterns: fileChanges.map((c) => path.relative(Instance.worktree, c.filePath)),
       always: ["*"],
       metadata: {
         diff: totalDiff,
+        diffFull,
       },
     })
 
@@ -194,8 +209,10 @@ export const PatchTool = Tool.define("patch", {
       title: summary,
       metadata: {
         diff: totalDiff,
+        diffFull,
       },
-      output: `Patch applied successfully. ${summary}:\n${relativePaths.map((p) => `  ${p}`).join("\n")}`,
+      output: `Patch applied successfully. ${summary}:
+${relativePaths.map((p) => `  ${p}`).join("\n")}`,
     }
   },
 })
