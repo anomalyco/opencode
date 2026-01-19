@@ -1102,12 +1102,14 @@ export default function Page() {
     visibleUserMessages().length
     store.turnStart
 
-    const targetId = pendingMessage() ?? (() => {
-      const hash = window.location.hash.slice(1)
-      const match = hash.match(/^message-(.+)$/)
-      if (!match) return undefined
-      return match[1]
-    })()
+    const targetId =
+      pendingMessage() ??
+      (() => {
+        const hash = window.location.hash.slice(1)
+        const match = hash.match(/^message-(.+)$/)
+        if (!match) return undefined
+        return match[1]
+      })()
     if (!targetId) return
     if (store.messageId === targetId) return
 

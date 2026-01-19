@@ -231,6 +231,9 @@
                       "url": {
                         "type": "string"
                       },
+                      "override": {
+                        "type": "string"
+                      },
                       "color": {
                         "type": "string"
                       }
@@ -5794,6 +5797,9 @@
             "type": "object",
             "properties": {
               "url": {
+                "type": "string"
+              },
+              "override": {
                 "type": "string"
               },
               "color": {
