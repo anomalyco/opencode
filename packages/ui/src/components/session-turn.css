@@ -331,7 +331,11 @@
   }
 
   [data-component="sticky-accordion-header"] {
-    position: static;
+    top: var(--sticky-header-height, 40px);
+    &[data-expanded]::before {
+      top: calc(-1 * var(--sticky-header-height, 40px));
+    }
+    /* position: static; */
   }
 
   [data-slot="session-turn-accordion-trigger-content"] {
