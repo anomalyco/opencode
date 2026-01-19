@@ -1,5 +1,7 @@
 [data-slot="hover-card-trigger"] {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
+  min-width: 0;
 }
 
 [data-component="hover-card-content"] {
@@ -8,6 +10,7 @@
   max-width: 320px;
   border-radius: var(--radius-md);
   background-color: var(--surface-raised-stronger-non-alpha);
+  pointer-events: auto;
 
   border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);
   background-clip: padding-box;
