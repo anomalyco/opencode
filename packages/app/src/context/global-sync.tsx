@@ -159,6 +159,17 @@ function createGlobalSync() {
     return childStore
   }
 
+  function reactive(directory: () => string) {
+    return {
+      get store() {
+        return child(directory())[0]
+      },
+      get setStore() {
+        return child(directory())[1]
+      },
+    }
+  }
+
   function wait(directory: string) {
     return bootstrapPromises[directory] ?? Promise.resolve()
   }
@@ -646,6 +657,7 @@ function createGlobalSync() {
       return globalStore.error
     },
     child,
+    reactive,
     wait,
     bootstrap,
     project: {
