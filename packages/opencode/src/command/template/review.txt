@@ -13,6 +13,7 @@ Based on the input provided, determine which type of review to perform:
 1. **No arguments (default)**: Review all uncommitted changes
    - Run: `git diff` for unstaged changes
    - Run: `git diff --cached` for staged changes
+   - Run: `git status --short` to identify untracked (net new) files
 
 2. **Commit hash** (40-char SHA or short hash): Review that specific commit
    - Run: `git show $ARGUMENTS`
@@ -33,6 +34,7 @@ Use best judgement when processing input.
 **Diffs alone are not enough.** After getting the diff, read the entire file(s) being modified to understand the full context. Code that looks wrong in isolation may be correct given surrounding logic—and vice versa.
 
 - Use the diff to identify which files changed
+- Use `git status --short` to identify untracked files, then read their full contents
 - Read the full file to understand existing patterns, control flow, and error handling
 - Check for existing style guide or conventions files (CONVENTIONS.md, AGENTS.md, .editorconfig, etc.)
 
