@@ -119,7 +119,9 @@ export const TuiRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        // TODO: open dialog
+        await Bus.publish(TuiEvent.CommandExecute, {
+          command: "help.show",
+        })
         return c.json(true)
       },
     )
@@ -273,6 +275,8 @@ export const TuiRoutes = lazy(() =>
             session_compact: "session.compact",
             messages_page_up: "session.page.up",
             messages_page_down: "session.page.down",
+            messages_line_up: "session.line.up",
+            messages_line_down: "session.line.down",
             messages_half_page_up: "session.half.page.up",
             messages_half_page_down: "session.half.page.down",
             messages_first: "session.first",
