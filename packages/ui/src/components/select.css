@@ -53,11 +53,7 @@
   background-color: var(--surface-raised-stronger-non-alpha);
   padding: 2px;
   box-shadow: var(--shadow-xs-border);
-  z-index: 50;
-
-  &[data-closed] {
-    animation: select-close 0.15s ease-out;
-  }
+  z-index: 60;
 
   &[data-expanded] {
     animation: select-open 0.15s ease-out;
@@ -79,9 +75,6 @@
       margin-top: 2px;
     }
   }
-
-  /* [data-slot="select-section"] { */
-  /* } */
 
   [data-slot="select-select-item"] {
     position: relative;
@@ -142,13 +135,3 @@
   }
 }
 
-@keyframes select-close {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-}
