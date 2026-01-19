@@ -347,13 +347,14 @@ export const rustfmt: Info = {
   },
 }
 
-export const cargofmt: Info = {
-  name: "cargofmt",
-  command: ["cargo", "fmt", "--", "$FILE"],
-  extensions: [".rs"],
-  async enabled() {
-    if (!Bun.which("cargo")) return false
-    const found = await Filesystem.findUp("Cargo.toml", Instance.directory, Instance.worktree)
-    return found.length > 0
-  },
-}
+// cargo fmt actually does not support formatting single files
+// export const cargofmt: Info = {
+//   name: "cargofmt",
+//   command: ["cargo", "fmt", "--", "$FILE"],
+//   extensions: [".rs"],
+//   async enabled() {
+//     if (!Bun.which("cargo")) return false
+//     const found = await Filesystem.findUp("Cargo.toml", Instance.directory, Instance.worktree)
+//     return found.length > 0
+//   },
+// }
