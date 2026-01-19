@@ -48,7 +48,7 @@ export function DialogHelp() {
   const maxHeight = createMemo(() => Math.floor(dimensions().height * 0.6))
 
   return (
-    <box paddingLeft={2} paddingRight={2}>
+    <box paddingLeft={2} paddingRight={2} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between" marginBottom={1}>
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           Keyboard Shortcuts
@@ -60,6 +60,7 @@ export function DialogHelp() {
           scroll = r
         }}
         maxHeight={maxHeight()}
+        backgroundColor={theme.backgroundPanel}
       >
         <For each={commands}>
           {(cmd) => (

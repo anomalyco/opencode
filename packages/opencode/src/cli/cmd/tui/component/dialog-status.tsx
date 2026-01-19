@@ -78,7 +78,7 @@ export function DialogStatus() {
   const maxHeight = createMemo(() => Math.floor(dimensions().height * 0.6))
 
   return (
-    <box paddingLeft={2} paddingRight={2}>
+    <box paddingLeft={2} paddingRight={2} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between" marginBottom={1}>
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           Status
@@ -93,6 +93,7 @@ export function DialogStatus() {
           scroll = r
         }}
         maxHeight={maxHeight()}
+        backgroundColor={theme.backgroundPanel}
       >
         <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
           <box>
