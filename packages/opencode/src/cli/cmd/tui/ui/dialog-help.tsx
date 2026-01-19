@@ -46,9 +46,10 @@ export function DialogHelp() {
   })
 
   const maxHeight = createMemo(() => Math.floor(dimensions().height * 0.6))
+  const height = createMemo(() => Math.min(commands.length, maxHeight()))
 
   return (
-    <box paddingLeft={2} paddingRight={2} paddingBottom={1}>
+    <box paddingLeft={2} paddingRight={2} backgroundColor={theme.backgroundPanel} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between" marginBottom={1}>
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           Keyboard Shortcuts
@@ -59,7 +60,7 @@ export function DialogHelp() {
         ref={(r: ScrollBoxRenderable) => {
           scroll = r
         }}
-        maxHeight={maxHeight()}
+        height={height()}
         scrollbarOptions={{ visible: false }}
       >
         <For each={commands}>
