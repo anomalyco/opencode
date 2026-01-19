@@ -1284,7 +1284,7 @@ export default function Layout(props: ParentProps) {
         <div class="size-full rounded overflow-clip">
           <Avatar
             fallback={name()}
-            src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
+            src={props.project.id === opencode ? "https://opencode.ai/favicon-v2.svg" : props.project.icon?.url}
             {...getAvatarColors(props.project.icon?.color)}
             class="size-full rounded"
             style={
