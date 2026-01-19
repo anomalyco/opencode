@@ -38,6 +38,47 @@ export namespace ProviderTransform {
     return undefined
   }
 
+  function ensureMessageAlternation(msgs: ModelMessage[]): ModelMessage[] {
+    const result: ModelMessage[] = []
+
+    for (let i = 0; i < msgs.length; i++) {
+      const currentMsg = msgs[i]
+      const prevMsg = result[result.length - 1]
+
+      // If this is a consecutive user message, merge it with the previous user message
+      if (currentMsg.role === "user" && prevMsg && prevMsg.role === "user") {
+        // Merge the content of consecutive user messages
+        const mergedContent = mergeMessageContent(prevMsg.content, currentMsg.content)
+        result[result.length - 1] = {
+          ...prevMsg,
+          content: mergedContent,
+        }
+      } else {
+        result.push(currentMsg)
+      }
+    }
+
+    return result
+  }
+
+  function mergeMessageContent(content1: string | Array<any>, content2: string | Array<any>): string | Array<any> {
+    // Handle string content
+    if (typeof content1 === "string" && typeof content2 === "string") {
+      return content1 + "\n\n" + content2
+    }
+
+    // Handle array content
+    if (Array.isArray(content1) && Array.isArray(content2)) {
+      return [...content1, ...content2]
+    }
+
+    // Handle mixed types - convert both to array
+    const arr1 = Array.isArray(content1) ? content1 : [{ type: "text", text: content1 }]
+    const arr2 = Array.isArray(content2) ? content2 : [{ type: "text", text: content2 }]
+
+    return [...arr1, ...arr2]
+  }
+
   function normalizeMessages(
     msgs: ModelMessage[],
     model: Provider.Model,
@@ -81,6 +122,45 @@ export namespace ProviderTransform {
         return msg
       })
     }
+
+    if (
+      model.capabilities.interleaved &&
+      typeof model.capabilities.interleaved === "object" &&
+      model.capabilities.interleaved.field === "reasoning_content"
+    ) {
+      return msgs.map((msg) => {
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
+          const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+
+          // Filter out reasoning parts from content
+          const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+
+          // Include reasoning_content directly on the message for all assistant messages
+          if (reasoningText) {
+            return {
+              ...msg,
+              content: filteredContent,
+              providerOptions: {
+                ...msg.providerOptions,
+                openaiCompatible: {
+                  ...(msg.providerOptions as any)?.openaiCompatible,
+                  reasoning_content: reasoningText,
+                },
+              },
+            }
+          }
+
+          return {
+            ...msg,
+            content: filteredContent,
+          }
+        }
+
+        return msg
+      })
+    }
+
     if (model.providerID === "mistral" || model.api.id.toLowerCase().includes("mistral")) {
       const result: ModelMessage[] = []
       for (let i = 0; i < msgs.length; i++) {
@@ -123,42 +203,10 @@ export namespace ProviderTransform {
       return result
     }
 
-    if (
-      model.capabilities.interleaved &&
-      typeof model.capabilities.interleaved === "object" &&
-      model.capabilities.interleaved.field === "reasoning_content"
-    ) {
-      return msgs.map((msg) => {
-        if (msg.role === "assistant" && Array.isArray(msg.content)) {
-          const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-          const reasoningText = reasoningParts.map((part: any) => part.text).join("")
-
-          // Filter out reasoning parts from content
-          const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
-
-          // Include reasoning_content directly on the message for all assistant messages
-          if (reasoningText) {
-            return {
-              ...msg,
-              content: filteredContent,
-              providerOptions: {
-                ...msg.providerOptions,
-                openaiCompatible: {
-                  ...(msg.providerOptions as any)?.openaiCompatible,
-                  reasoning_content: reasoningText,
-                },
-              },
-            }
-          }
-
-          return {
-            ...msg,
-            content: filteredContent,
-          }
-        }
-
-        return msg
-      })
+    // Perplexity requires alternating user/assistant roles after system messages
+    // Merge consecutive user messages to prevent 400 errors
+    if (model.providerID === "perplexity" || model.api.npm === "@ai-sdk/perplexity") {
+      msgs = ensureMessageAlternation(msgs)
     }
 
     return msgs
