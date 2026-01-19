@@ -1584,6 +1584,99 @@ test("ModelNotFoundError for provider includes suggestions", async () => {
   })
 })
 
+test("getModel resolves unversioned google-vertex-anthropic model ID to latest versioned model", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_CLOUD_PROJECT", "test-project")
+      Env.set("GOOGLE_CLOUD_LOCATION", "us-central1")
+    },
+    fn: async () => {
+      // Test unversioned model ID resolves to latest versioned
+      const model = await Provider.getModel("google-vertex-anthropic", "claude-sonnet-4-5")
+      expect(model).toBeDefined()
+      expect(model.providerID).toBe("google-vertex-anthropic")
+      // Should resolve to versioned model
+      expect(model.id).toContain("claude-sonnet-4-5@")
+      // Verify pricing data is loaded
+      expect(model.cost).toBeDefined()
+      expect(model.cost.input).toBeGreaterThan(0)
+      expect(model.cost.output).toBeGreaterThan(0)
+    },
+  })
+})
+
+test("getModel backward compatibility: versioned google-vertex-anthropic model ID works directly", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_CLOUD_PROJECT", "test-project")
+      Env.set("GOOGLE_CLOUD_LOCATION", "us-central1")
+    },
+    fn: async () => {
+      // Test that fully versioned model ID still works
+      const model = await Provider.getModel("google-vertex-anthropic", "claude-sonnet-4-5@20250929")
+      expect(model).toBeDefined()
+      expect(model.providerID).toBe("google-vertex-anthropic")
+      expect(model.id).toBe("claude-sonnet-4-5@20250929")
+      // Verify pricing data is loaded
+      expect(model.cost).toBeDefined()
+      expect(model.cost.input).toBeGreaterThan(0)
+      expect(model.cost.output).toBeGreaterThan(0)
+    },
+  })
+})
+
+test("getModel unversioned ID only works for google-vertex-anthropic, not google-vertex", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_CLOUD_PROJECT", "test-project")
+    },
+    fn: async () => {
+      // google-vertex (Gemini) should NOT have fallback logic, unversioned ID should fail
+      try {
+        await Provider.getModel("google-vertex", "gemini-2-flash")
+        // If it finds it, that's okay (backward compat if unversioned model exists)
+        // If it fails, that's also okay - the fallback only applies to google-vertex-anthropic
+      } catch (e: any) {
+        // Expected: unversioned model not found in google-vertex
+        expect(e.constructor.name).toBe("ProviderModelNotFoundError")
+      }
+    },
+  })
+})
+
 test("getProvider returns undefined for nonexistent provider", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

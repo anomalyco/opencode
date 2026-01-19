@@ -1073,7 +1073,21 @@ export namespace Provider {
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
 
-    const info = provider.models[modelID]
+    let info = provider.models[modelID]
+
+    // Fallback for google-vertex-anthropic: if model not found and ID is unversioned,
+    // search for versioned models (e.g., claude-sonnet-4-5@20250929)
+    if (!info && providerID === "google-vertex-anthropic" && !modelID.includes("@")) {
+      const versionedMatches = Object.keys(provider.models)
+        .filter((key) => key.startsWith(modelID + "@"))
+        .sort()
+        .reverse()
+
+      if (versionedMatches.length > 0) {
+        info = provider.models[versionedMatches[0]]
+      }
+    }
+
     if (!info) {
       const availableModels = Object.keys(provider.models)
       const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
