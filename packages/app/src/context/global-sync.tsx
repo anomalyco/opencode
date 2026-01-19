@@ -74,6 +74,7 @@ type State = {
   lsp: LspStatus[]
   vcs: VcsInfo | undefined
   limit: number
+  new?: boolean
   message: {
     [sessionID: string]: Message[]
   }
@@ -110,8 +111,9 @@ function createGlobalSync() {
   })
 
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
+  const bootstrapPromises: Record<string, Promise<void>> = {}
 
-  function child(directory: string) {
+  function child(directory: string, options?: { new?: boolean }) {
     if (!directory) console.error("No directory provided")
     if (!children[directory]) {
       const cache = runWithOwner(owner, () =>
@@ -145,8 +147,9 @@ function createGlobalSync() {
           limit: 5,
           message: {},
           part: {},
+          new: options?.new,
         })
-        bootstrapInstance(directory)
+        bootstrapPromises[directory] = bootstrapInstance(directory)
       }
 
       runWithOwner(owner, init)
@@ -154,6 +157,10 @@ function createGlobalSync() {
     const childStore = children[directory]
     if (!childStore) throw new Error("Failed to create store")
     return childStore
+  }
+
+  function wait(directory: string) {
+    return bootstrapPromises[directory] ?? Promise.resolve()
   }
 
   async function loadSessions(directory: string) {
@@ -348,7 +355,7 @@ function createGlobalSync() {
     const [store, setStore] = child(directory)
     switch (event.type) {
       case "server.instance.disposed": {
-        bootstrapInstance(directory)
+        bootstrapPromises[directory] = bootstrapInstance(directory)
         break
       }
       case "session.created": {
@@ -638,6 +645,7 @@ function createGlobalSync() {
       return globalStore.error
     },
     child,
+    wait,
     bootstrap,
     project: {
       loadSessions,

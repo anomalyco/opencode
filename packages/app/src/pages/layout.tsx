@@ -1521,7 +1521,9 @@ export default function Layout(props: ParentProps) {
       return workspaceName(props.directory) ?? name
     })
     const open = createMemo(() => store.workspaceExpanded[props.directory] ?? true)
-    const loading = createMemo(() => open() && workspaceStore.status !== "complete" && sessions().length === 0)
+    const loading = createMemo(
+      () => open() && !workspaceStore.new && workspaceStore.status !== "complete" && sessions().length === 0,
+    )
     const hasMore = createMemo(() => local() && workspaceStore.sessionTotal > workspaceStore.session.length)
     const loadMore = async () => {
       if (!local()) return
@@ -1804,7 +1806,9 @@ export default function Layout(props: ParentProps) {
         .filter((session) => !session.parentID && !session.time?.archived)
         .toSorted(sortSessions),
     )
-    const loading = createMemo(() => workspaceStore.status !== "complete" && sessions().length === 0)
+    const loading = createMemo(
+      () => !workspaceStore.new && workspaceStore.status !== "complete" && sessions().length === 0,
+    )
     const hasMore = createMemo(() => workspaceStore.sessionTotal > workspaceStore.session.length)
     const loadMore = async () => {
       setWorkspaceStore("limit", (limit) => limit + 5)
@@ -1876,7 +1880,8 @@ export default function Layout(props: ParentProps) {
 
       if (!created?.directory) return
 
-      globalSync.child(created.directory)
+      globalSync.child(created.directory, { new: true })
+      await globalSync.wait(created.directory)
       navigate(`/${base64Encode(created.directory)}/session`)
     }
 
