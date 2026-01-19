@@ -84,6 +84,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     return result
   })
 
+  // When the filter changes due to how TUI works, the mousemove might still be triggered
+  // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard
+  // that the mouseover event doesn't trigger when filtering.
+  createEffect(() => {
+    filtered();
+    setStore("input", "keyboard")
+  })
+
   const grouped = createMemo(() => {
     const result = pipe(
       filtered(),

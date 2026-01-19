@@ -129,6 +129,14 @@ export function Autocomplete(props: {
     return props.input().getTextRange(store.index + 1, props.input().cursorOffset)
   })
 
+  // When the filter changes due to how TUI works, the mousemove might still be triggered
+  // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard so
+  // that the mouseover event doesn't trigger when filtering.
+  createEffect(() => {
+    filter();
+    setStore("input", "keyboard")
+  })
+
   function insertPart(text: string, part: PromptInfo["parts"][number]) {
     const input = props.input()
     const currentCursorOffset = input.cursorOffset
