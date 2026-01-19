@@ -920,40 +920,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    const isCtrlPaste =
-      event.key.toLowerCase() === "v" && event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
-    const clipboard = navigator.clipboard
-    if (isCtrlPaste && platform.platform === "desktop" && clipboard?.read) {
-      event.preventDefault()
-      event.stopPropagation()
-
-      void clipboard
-        .read()
-        .then(async (items) => {
-          const fileItem = items
-            .flatMap((item) => item.types.map((type) => ({ item, type })))
-            .find((entry) => ACCEPTED_FILE_TYPES.includes(entry.type) || entry.type === "image/svg+xml")
-          if (fileItem) {
-            const blob = await fileItem.item.getType(fileItem.type)
-            if (fileItem.type === "image/svg+xml") {
-              const text = await blob.text()
-              if (text) addPart({ type: "text", content: text, start: 0, end: 0 })
-              return
-            }
-            await addImageAttachment(new File([blob], "clipboard", { type: fileItem.type }))
-            return
-          }
-
-          const text = await clipboard.readText().catch(() => "")
-          if (!text) return
-          const handled = await attachClipboardFiles(text)
-          if (handled) return
-          addPart({ type: "text", content: text, start: 0, end: 0 })
-        })
-        .catch(() => {})
-      return
-    }
-
     if (event.key === "Backspace") {
       const selection = window.getSelection()
       if (selection && selection.isCollapsed) {
