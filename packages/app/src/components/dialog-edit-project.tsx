@@ -78,7 +78,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
 
   return (
     <Dialog title="Edit project">
-      <form onSubmit={handleSubmit} class="flex flex-col gap-6 px-2.5 pb-3">
+      <form onSubmit={handleSubmit} class="flex flex-col gap-6 p-6">
         <div class="flex flex-col gap-4">
           <TextField
             autofocus
@@ -145,15 +145,20 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   {(color) => (
                     <button
                       type="button"
-                      class="relative size-8 rounded-md transition-all"
                       classList={{
-                        "ring-2 ring-offset-2 ring-offset-surface-base ring-text-interactive-base":
+                        "flex items-center justify-center size-10 p-0.5 rounded-lg overflow-hidden transition-colors cursor-default": true,
+                        "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover":
                           store.color === color,
+                        "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+                          store.color !== color,
                       }}
-                      style={{ background: getAvatarColors(color).background }}
                       onClick={() => setStore("color", color)}
                     >
-                      <Avatar fallback={store.name || defaultName()} {...getAvatarColors(color)} class="size-full" />
+                      <Avatar
+                        fallback={store.name || defaultName()}
+                        {...getAvatarColors(color)}
+                        class="size-full rounded"
+                      />
                     </button>
                   )}
                 </For>
