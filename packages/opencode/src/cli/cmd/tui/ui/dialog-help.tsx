@@ -48,7 +48,7 @@ export function DialogHelp() {
   const maxHeight = createMemo(() => Math.floor(dimensions().height * 0.6))
 
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
+    <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           Keyboard Shortcuts
