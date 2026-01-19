@@ -127,6 +127,44 @@ test("handles environment variable substitution", async () => {
   }
 })
 
+test("preserves env variables when adding $schema to config", async () => {
+  const originalEnv = process.env["PRESERVE_VAR"]
+  process.env["PRESERVE_VAR"] = "secret_value"
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // Config without $schema - should trigger auto-add
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            theme: "{env:PRESERVE_VAR}",
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.theme).toBe("secret_value")
+
+        // Read the file to verify the env variable was preserved
+        const content = await Bun.file(path.join(tmp.path, "opencode.json")).text()
+        expect(content).toContain("{env:PRESERVE_VAR}")
+        expect(content).not.toContain("secret_value")
+        expect(content).toContain("$schema")
+      },
+    })
+  } finally {
+    if (originalEnv !== undefined) {
+      process.env["PRESERVE_VAR"] = originalEnv
+    } else {
+      delete process.env["PRESERVE_VAR"]
+    }
+  }
+})
+
 test("handles file inclusion substitution", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
