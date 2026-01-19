@@ -38,6 +38,14 @@ export default defineConfig({
           tag: "link",
           attrs: {
             rel: "icon",
+            href: "/favicon.ico",
+            sizes: "32x32",
+          },
+        },
+        {
+          tag: "link",
+          attrs: {
+            rel: "icon",
             href: "/favicon-v2.ico",
             sizes: "32x32",
           },
