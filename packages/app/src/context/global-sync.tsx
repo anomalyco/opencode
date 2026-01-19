@@ -319,6 +319,7 @@ function createGlobalSync() {
           }),
         ]).then(() => {
           setStore("status", "complete")
+          setStore("new", false)
         })
       })
       .catch((e) => setGlobalStore("error", e))
