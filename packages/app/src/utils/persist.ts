@@ -17,6 +17,36 @@ type PersistTarget = {
 const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "opencode.global.dat"
 
+function quota(error: unknown) {
+  if (error instanceof DOMException) {
+    if (error.name === "QuotaExceededError") return true
+    if (error.name === "NS_ERROR_DOM_QUOTA_REACHED") return true
+    if (error.code === 22 || error.code === 1014) return true
+    return false
+  }
+
+  if (!error || typeof error !== "object") return false
+  const name = (error as { name?: string }).name
+  if (name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED") return true
+  return false
+}
+
+function write(storage: Storage, key: string, value: string) {
+  try {
+    storage.setItem(key, value)
+    return
+  } catch (error) {
+    if (!quota(error)) throw error
+  }
+
+  try {
+    storage.removeItem(key)
+    storage.setItem(key, value)
+  } catch (error) {
+    if (!quota(error)) throw error
+  }
+}
+
 function snapshot(value: unknown) {
   return JSON.parse(JSON.stringify(value)) as unknown
 }
@@ -67,10 +97,19 @@ function workspaceStorage(dir: string) {
 
 function localStorageWithPrefix(prefix: string): SyncStorage {
   const base = `${prefix}:`
+  const item = (key: string) => base + key
   return {
-    getItem: (key) => localStorage.getItem(base + key),
-    setItem: (key, value) => localStorage.setItem(base + key, value),
-    removeItem: (key) => localStorage.removeItem(base + key),
+    getItem: (key) => localStorage.getItem(item(key)),
+    setItem: (key, value) => write(localStorage, item(key), value),
+    removeItem: (key) => localStorage.removeItem(item(key)),
+  }
+}
+
+function localStorageDirect(): SyncStorage {
+  return {
+    getItem: (key) => localStorage.getItem(key),
+    setItem: (key, value) => write(localStorage, key, value),
+    removeItem: (key) => localStorage.removeItem(key),
   }
 }
 
@@ -99,7 +138,7 @@ export function removePersisted(target: { storage?: string; key: string }) {
   }
 
   if (!target.storage) {
-    localStorage.removeItem(target.key)
+    localStorageDirect().removeItem(target.key)
     return
   }
 
@@ -120,12 +159,12 @@ export function persisted<T>(
 
   const currentStorage = (() => {
     if (isDesktop) return platform.storage?.(config.storage)
-    if (!config.storage) return localStorage
+    if (!config.storage) return localStorageDirect()
     return localStorageWithPrefix(config.storage)
   })()
 
   const legacyStorage = (() => {
-    if (!isDesktop) return localStorage
+    if (!isDesktop) return localStorageDirect()
     if (!config.storage) return platform.storage?.()
     return platform.storage?.(LEGACY_STORAGE)
   })()
