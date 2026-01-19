@@ -1,0 +1,26 @@
+name: create-excalidraw-diagram
+description: "Create system architecture diagrams, ERDs, UML diagrams, or general technical diagrams in Excalidraw format"
+author: "BMad"
+
+# Config values
+config_source: "{project-root}/_bmad/bmm/config.yaml"
+output_folder: "{config_source}:output_folder"
+
+# Workflow components
+installed_path: "{project-root}/_bmad/bmm/workflows/excalidraw-diagrams/create-diagram"
+shared_path: "{project-root}/_bmad/bmm/workflows/excalidraw-diagrams/_shared"
+instructions: "{installed_path}/instructions.md"
+validation: "{installed_path}/checklist.md"
+
+# Core Excalidraw resources (universal knowledge)
+helpers: "{project-root}/_bmad/core/resources/excalidraw/excalidraw-helpers.md"
+json_validation: "{project-root}/_bmad/core/resources/excalidraw/validate-json-instructions.md"
+
+# Domain-specific resources (technical diagrams)
+templates: "{shared_path}/excalidraw-templates.yaml"
+library: "{shared_path}/excalidraw-library.json"
+
+# Output file (respects user's configured output_folder)
+default_output_file: "{output_folder}/excalidraw-diagrams/diagram-{timestamp}.excalidraw"
+
+standalone: true

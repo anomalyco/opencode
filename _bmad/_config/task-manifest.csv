@@ -1,0 +1,5 @@
+name,displayName,description,module,path,standalone
+"index-docs","Index Docs","Generates or updates an index.md of all documents in the specified directory","core","_bmad/core/tasks/index-docs.xml","true"
+"review-adversarial-general","Adversarial Review (General)","Cynically review content and produce findings","core","_bmad/core/tasks/review-adversarial-general.xml","false"
+"shard-doc","Shard Document","Splits large markdown documents into smaller, organized files based on level 2 (default) sections","core","_bmad/core/tasks/shard-doc.xml","true"
+"workflow","Execute Workflow","Execute given workflow by loading its configuration, following instructions, and producing output","core","_bmad/core/tasks/workflow.xml","false"

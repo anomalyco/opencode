@@ -1,0 +1,52 @@
+# Test Architect workflow: automate
+name: testarch-automate
+description: "Expand test automation coverage after implementation or analyze existing codebase to generate comprehensive test suite"
+author: "BMad"
+
+# Critical variables from config
+config_source: "{project-root}/_bmad/bmm/config.yaml"
+output_folder: "{config_source}:output_folder"
+user_name: "{config_source}:user_name"
+communication_language: "{config_source}:communication_language"
+document_output_language: "{config_source}:document_output_language"
+date: system-generated
+
+# Workflow components
+installed_path: "{project-root}/_bmad/bmm/workflows/testarch/automate"
+instructions: "{installed_path}/instructions.md"
+validation: "{installed_path}/checklist.md"
+template: false
+
+# Variables and inputs
+variables:
+  # Execution mode and targeting
+  standalone_mode: true # Can work without BMad artifacts (true) or integrate with BMad (false)
+  coverage_target: "critical-paths" # critical-paths, comprehensive, selective
+
+  # Directory paths
+  test_dir: "{project-root}/tests" # Root test directory
+  source_dir: "{project-root}/src" # Source code directory
+
+# Output configuration
+default_output_file: "{output_folder}/automation-summary.md"
+
+# Required tools
+required_tools:
+  - read_file # Read source code, existing tests, BMad artifacts
+  - write_file # Create test files, fixtures, factories, summaries
+  - create_directory # Create test directories
+  - list_files # Discover features and existing tests
+  - search_repo # Find coverage gaps and patterns
+  - glob # Find test files and source files
+
+tags:
+  - qa
+  - automation
+  - test-architect
+  - regression
+  - coverage
+
+execution_hints:
+  interactive: false # Minimize prompts
+  autonomous: true # Proceed without user input unless blocked
+  iterative: true

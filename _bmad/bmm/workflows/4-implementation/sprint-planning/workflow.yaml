@@ -1,0 +1,52 @@
+name: sprint-planning
+description: "Generate and manage the sprint status tracking file for Phase 4 implementation, extracting all epics and stories from epic files and tracking their status through the development lifecycle"
+author: "BMad"
+
+# Critical variables from config
+config_source: "{project-root}/_bmad/bmm/config.yaml"
+user_name: "{config_source}:user_name"
+communication_language: "{config_source}:communication_language"
+date: system-generated
+implementation_artifacts: "{config_source}:implementation_artifacts"
+planning_artifacts: "{config_source}:planning_artifacts"
+output_folder: "{implementation_artifacts}"
+
+# Workflow components
+installed_path: "{project-root}/_bmad/bmm/workflows/4-implementation/sprint-planning"
+instructions: "{installed_path}/instructions.md"
+template: "{installed_path}/sprint-status-template.yaml"
+validation: "{installed_path}/checklist.md"
+
+# Variables and inputs
+variables:
+  # Project context
+  project_context: "**/project-context.md"
+  # Project identification
+  project_name: "{config_source}:project_name"
+
+  # Tracking system configuration
+  tracking_system: "file-system" # Options: file-system, Future will support other options from config of mcp such as jira, linear, trello
+  story_location: "{config_source}:implementation_artifacts" # Relative path for file-system, Future will support URL for Jira/Linear/Trello
+  story_location_absolute: "{config_source}:implementation_artifacts" # Absolute path for file operations
+
+  # Source files (file-system only)
+  epics_location: "{planning_artifacts}" # Directory containing epic*.md files
+  epics_pattern: "epic*.md" # Pattern to find epic files
+
+  # Output configuration
+  status_file: "{implementation_artifacts}/sprint-status.yaml"
+
+# Smart input file references - handles both whole docs and sharded docs
+# Priority: Whole document first, then sharded version
+# Strategy: FULL LOAD - sprint planning needs ALL epics to build complete status
+input_file_patterns:
+  epics:
+    description: "All epics with user stories"
+    whole: "{output_folder}/*epic*.md"
+    sharded: "{output_folder}/*epic*/*.md"
+    load_strategy: "FULL_LOAD"
+
+# Output configuration
+default_output_file: "{status_file}"
+
+standalone: true

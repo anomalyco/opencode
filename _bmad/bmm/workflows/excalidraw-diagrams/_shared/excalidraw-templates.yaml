@@ -1,0 +1,127 @@
+flowchart:
+  viewport:
+    x: 0
+    y: 0
+    zoom: 1
+  grid:
+    size: 20
+  spacing:
+    vertical: 100
+    horizontal: 180
+  elements:
+    start:
+      type: ellipse
+      width: 120
+      height: 60
+      label: "Start"
+    process:
+      type: rectangle
+      width: 160
+      height: 80
+      roundness: 8
+    decision:
+      type: diamond
+      width: 140
+      height: 100
+    end:
+      type: ellipse
+      width: 120
+      height: 60
+      label: "End"
+
+diagram:
+  viewport:
+    x: 0
+    y: 0
+    zoom: 1
+  grid:
+    size: 20
+  spacing:
+    vertical: 120
+    horizontal: 200
+  elements:
+    component:
+      type: rectangle
+      width: 180
+      height: 100
+      roundness: 8
+    database:
+      type: rectangle
+      width: 140
+      height: 80
+    service:
+      type: rectangle
+      width: 160
+      height: 90
+      roundness: 12
+    external:
+      type: rectangle
+      width: 140
+      height: 80
+
+wireframe:
+  viewport:
+    x: 0
+    y: 0
+    zoom: 0.8
+  grid:
+    size: 20
+  spacing:
+    vertical: 40
+    horizontal: 40
+  elements:
+    container:
+      type: rectangle
+      width: 800
+      height: 600
+      strokeStyle: solid
+      strokeWidth: 2
+    header:
+      type: rectangle
+      width: 800
+      height: 80
+    button:
+      type: rectangle
+      width: 120
+      height: 40
+      roundness: 4
+    input:
+      type: rectangle
+      width: 300
+      height: 40
+      roundness: 4
+    text:
+      type: text
+      fontSize: 16
+
+dataflow:
+  viewport:
+    x: 0
+    y: 0
+    zoom: 1
+  grid:
+    size: 20
+  spacing:
+    vertical: 120
+    horizontal: 200
+  elements:
+    process:
+      type: ellipse
+      width: 140
+      height: 80
+      label: "Process"
+    datastore:
+      type: rectangle
+      width: 140
+      height: 80
+      label: "Data Store"
+    external:
+      type: rectangle
+      width: 120
+      height: 80
+      strokeWidth: 3
+      label: "External Entity"
+    dataflow:
+      type: arrow
+      strokeWidth: 2
+      label: "Data Flow"

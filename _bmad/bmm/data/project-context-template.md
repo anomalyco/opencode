@@ -1,0 +1,40 @@
+# Project Brainstorming Context Template
+
+## Project Focus Areas
+
+This brainstorming session focuses on software and product development considerations:
+
+### Key Exploration Areas
+
+- **User Problems and Pain Points** - What challenges do users face?
+- **Feature Ideas and Capabilities** - What could the product do?
+- **Technical Approaches** - How might we build it?
+- **User Experience** - How will users interact with it?
+- **Business Model and Value** - How does it create value?
+- **Market Differentiation** - What makes it unique?
+- **Technical Risks and Challenges** - What could go wrong?
+- **Success Metrics** - How will we measure success?
+
+### Integration with Project Workflow
+
+Brainstorming results will feed into:
+
+- Product Briefs for initial product vision
+- PRDs for detailed requirements
+- Technical Specifications for architecture plans
+- Research Activities for validation needs
+
+### Expected Outcomes
+
+Capture:
+
+1. Problem Statements - Clearly defined user challenges
+2. Solution Concepts - High-level approach descriptions
+3. Feature Priorities - Categorized by importance and feasibility
+4. Technical Considerations - Architecture and implementation thoughts
+5. Next Steps - Actions needed to advance concepts
+6. Integration Points - Connections to downstream workflows
+
+---
+
+_Use this template to provide project-specific context for brainstorming sessions. Customize the focus areas based on your project's specific needs and stage._

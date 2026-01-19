@@ -1,0 +1,24 @@
+# Workflow Status Template
+
+# This tracks progress through BMM methodology Analysis, Planning, and Solutioning phases.
+# Implementation phase is tracked separately in sprint-status.yaml
+
+# STATUS DEFINITIONS:
+# ==================
+# Initial Status (before completion):
+#   - required: Must be completed to progress
+#   - optional: Can be completed but not required
+#   - recommended: Strongly suggested but not required
+#   - conditional: Required only if certain conditions met (e.g., if_has_ui)
+#
+# Completion Status:
+#   - {file-path}: File created/found (e.g., "docs/product-brief.md")
+#   - skipped: Optional/conditional workflow that was skipped
+
+generated: "{{generated}}"
+project: "{{project_name}}"
+project_type: "{{project_type}}"
+selected_track: "{{selected_track}}"
+field_type: "{{field_type}}"
+workflow_path: "{{workflow_path_file}}"
+workflow_status: "{{workflow_items}}"

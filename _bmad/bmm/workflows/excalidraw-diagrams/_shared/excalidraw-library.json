@@ -1,0 +1,90 @@
+{
+  "type": "excalidrawlib",
+  "version": 2,
+  "library": [
+    {
+      "id": "start-end-circle",
+      "status": "published",
+      "elements": [
+        {
+          "type": "ellipse",
+          "width": 120,
+          "height": 60,
+          "strokeColor": "#1976d2",
+          "backgroundColor": "#e3f2fd",
+          "fillStyle": "solid",
+          "strokeWidth": 2,
+          "roughness": 0
+        }
+      ]
+    },
+    {
+      "id": "process-rectangle",
+      "status": "published",
+      "elements": [
+        {
+          "type": "rectangle",
+          "width": 160,
+          "height": 80,
+          "strokeColor": "#1976d2",
+          "backgroundColor": "#e3f2fd",
+          "fillStyle": "solid",
+          "strokeWidth": 2,
+          "roughness": 0,
+          "roundness": {
+            "type": 3,
+            "value": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "decision-diamond",
+      "status": "published",
+      "elements": [
+        {
+          "type": "diamond",
+          "width": 140,
+          "height": 100,
+          "strokeColor": "#f57c00",
+          "backgroundColor": "#fff3e0",
+          "fillStyle": "solid",
+          "strokeWidth": 2,
+          "roughness": 0
+        }
+      ]
+    },
+    {
+      "id": "data-store",
+      "status": "published",
+      "elements": [
+        {
+          "type": "rectangle",
+          "width": 140,
+          "height": 80,
+          "strokeColor": "#388e3c",
+          "backgroundColor": "#e8f5e9",
+          "fillStyle": "solid",
+          "strokeWidth": 2,
+          "roughness": 0
+        }
+      ]
+    },
+    {
+      "id": "external-entity",
+      "status": "published",
+      "elements": [
+        {
+          "type": "rectangle",
+          "width": 120,
+          "height": 80,
+          "strokeColor": "#7b1fa2",
+          "backgroundColor": "#f3e5f5",
+          "fillStyle": "solid",
+          "strokeWidth": 3,
+          "roughness": 0
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+id,name,description,tags,fragment_file
+fixture-architecture,Fixture Architecture,"Composable fixture patterns (pure function → fixture → merge) and reuse rules","fixtures,architecture,playwright,cypress",knowledge/fixture-architecture.md
+network-first,Network-First Safeguards,"Intercept-before-navigate workflow, HAR capture, deterministic waits, edge mocking","network,stability,playwright,cypress,ui",knowledge/network-first.md
+data-factories,Data Factories and API Setup,"Factories with overrides, API seeding, cleanup discipline","data,factories,setup,api,backend,seeding",knowledge/data-factories.md
+component-tdd,Component TDD Loop,"Red→green→refactor workflow, provider isolation, accessibility assertions","component-testing,tdd,ui",knowledge/component-tdd.md
+playwright-config,Playwright Config Guardrails,"Environment switching, timeout standards, artifact outputs","playwright,config,env",knowledge/playwright-config.md
+ci-burn-in,CI and Burn-In Strategy,"Staged jobs, shard orchestration, burn-in loops, artifact policy","ci,automation,flakiness",knowledge/ci-burn-in.md
+selective-testing,Selective Test Execution,"Tag/grep usage, spec filters, diff-based runs, promotion rules","risk-based,selection,strategy",knowledge/selective-testing.md
+feature-flags,Feature Flag Governance,"Enum management, targeting helpers, cleanup, release checklists","feature-flags,governance,launchdarkly",knowledge/feature-flags.md
+contract-testing,Contract Testing Essentials,"Pact publishing, provider verification, resilience coverage","contract-testing,pact,api,backend,microservices,service-contract",knowledge/contract-testing.md
+email-auth,Email Authentication Testing,"Magic link extraction, state preservation, caching, negative flows","email-authentication,security,workflow",knowledge/email-auth.md
+error-handling,Error Handling Checks,"Scoped exception handling, retry validation, telemetry logging","resilience,error-handling,stability,api,backend",knowledge/error-handling.md
+visual-debugging,Visual Debugging Toolkit,"Trace viewer usage, artifact expectations, accessibility integration","debugging,dx,tooling,ui",knowledge/visual-debugging.md
+risk-governance,Risk Governance,"Scoring matrix, category ownership, gate decision rules","risk,governance,gates",knowledge/risk-governance.md
+probability-impact,Probability and Impact Scale,"Shared definitions for scoring matrix and gate thresholds","risk,scoring,scale",knowledge/probability-impact.md
+test-quality,Test Quality Definition of Done,"Execution limits, isolation rules, green criteria","quality,definition-of-done,tests",knowledge/test-quality.md
+nfr-criteria,NFR Review Criteria,"Security, performance, reliability, maintainability status definitions","nfr,assessment,quality",knowledge/nfr-criteria.md
+test-levels,Test Levels Framework,"Guidelines for choosing unit, integration, or end-to-end coverage","testing,levels,selection,api,backend,ui",knowledge/test-levels-framework.md
+test-priorities,Test Priorities Matrix,"P0–P3 criteria, coverage targets, execution ordering","testing,prioritization,risk",knowledge/test-priorities-matrix.md
+test-healing-patterns,Test Healing Patterns,"Common failure patterns and automated fixes","healing,debugging,patterns",knowledge/test-healing-patterns.md
+selector-resilience,Selector Resilience,"Robust selector strategies and debugging techniques","selectors,locators,debugging,ui",knowledge/selector-resilience.md
+timing-debugging,Timing Debugging,"Race condition identification and deterministic wait fixes","timing,async,debugging",knowledge/timing-debugging.md
+overview,Playwright Utils Overview,"Installation, design principles, fixture patterns for API and UI testing","playwright-utils,fixtures,api,backend,ui",knowledge/overview.md
+api-request,API Request,"Typed HTTP client, schema validation, retry logic for API and service testing","api,backend,service-testing,api-testing,playwright-utils",knowledge/api-request.md
+network-recorder,Network Recorder,"HAR record/playback, CRUD detection for offline UI testing","network,playwright-utils,ui,har",knowledge/network-recorder.md
+auth-session,Auth Session,"Token persistence, multi-user, API and browser authentication","auth,playwright-utils,api,backend,jwt,token",knowledge/auth-session.md
+intercept-network-call,Intercept Network Call,"Network spy/stub, JSON parsing for UI tests","network,playwright-utils,ui",knowledge/intercept-network-call.md
+recurse,Recurse Polling,"Async polling for API responses, background jobs, eventual consistency","polling,playwright-utils,api,backend,async,eventual-consistency",knowledge/recurse.md
+log,Log Utility,"Report logging, structured output for API and UI tests","logging,playwright-utils,api,ui",knowledge/log.md
+file-utils,File Utilities,"CSV/XLSX/PDF/ZIP validation for API exports and UI downloads","files,playwright-utils,api,backend,ui",knowledge/file-utils.md
+burn-in,Burn-in Runner,"Smart test selection, git diff for CI optimization","ci,playwright-utils",knowledge/burn-in.md
+network-error-monitor,Network Error Monitor,"HTTP 4xx/5xx detection for UI tests","monitoring,playwright-utils,ui",knowledge/network-error-monitor.md
+fixtures-composition,Fixtures Composition,"mergeTests composition patterns for combining utilities","fixtures,playwright-utils",knowledge/fixtures-composition.md
+api-testing-patterns,API Testing Patterns,"Pure API test patterns without browser: service testing, microservices, GraphQL","api,backend,service-testing,api-testing,microservices,graphql,no-browser",knowledge/api-testing-patterns.md

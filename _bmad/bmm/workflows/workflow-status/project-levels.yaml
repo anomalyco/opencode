@@ -1,0 +1,59 @@
+# BMM Project Scale Levels - Source of Truth
+# Reference: /_bmad/bmm/README.md lines 77-85
+
+levels:
+  0:
+    name: "Level 0"
+    title: "Single Atomic Change"
+    stories: "1 story"
+    description: "Bug fix, tiny feature, one small change"
+    documentation: "Minimal - tech spec only"
+    architecture: false
+
+  1:
+    name: "Level 1"
+    title: "Small Feature"
+    stories: "1-10 stories"
+    description: "Small coherent feature, minimal documentation"
+    documentation: "Tech spec"
+    architecture: false
+
+  2:
+    name: "Level 2"
+    title: "Medium Project"
+    stories: "5-15 stories"
+    description: "Multiple features, focused PRD"
+    documentation: "PRD + optional tech spec"
+    architecture: false
+
+  3:
+    name: "Level 3"
+    title: "Complex System"
+    stories: "12-40 stories"
+    description: "Subsystems, integrations, full architecture"
+    documentation: "PRD + architecture + JIT tech specs"
+    architecture: true
+
+  4:
+    name: "Level 4"
+    title: "Enterprise Scale"
+    stories: "40+ stories"
+    description: "Multiple products, enterprise architecture"
+    documentation: "PRD + architecture + JIT tech specs"
+    architecture: true
+
+# Quick detection hints for workflow-init
+detection_hints:
+  keywords:
+    level_0: ["fix", "bug", "typo", "small change", "quick update", "patch"]
+    level_1: ["simple", "basic", "small feature", "add", "minor"]
+    level_2: ["dashboard", "several features", "admin panel", "medium"]
+    level_3: ["platform", "integration", "complex", "system", "architecture"]
+    level_4: ["enterprise", "multi-tenant", "multiple products", "ecosystem", "scale"]
+
+  story_counts:
+    level_0: [1, 1]
+    level_1: [1, 10]
+    level_2: [5, 15]
+    level_3: [12, 40]
+    level_4: [40, 999]

@@ -1,0 +1,54 @@
+# Test Architect workflow: test-design
+name: testarch-test-design
+description: "Dual-mode workflow: (1) System-level testability review in Solutioning phase, or (2) Epic-level test planning in Implementation phase. Auto-detects mode based on project phase."
+author: "BMad"
+
+# Critical variables from config
+config_source: "{project-root}/_bmad/bmm/config.yaml"
+output_folder: "{config_source}:output_folder"
+user_name: "{config_source}:user_name"
+communication_language: "{config_source}:communication_language"
+document_output_language: "{config_source}:document_output_language"
+date: system-generated
+
+# Workflow components
+installed_path: "{project-root}/_bmad/bmm/workflows/testarch/test-design"
+instructions: "{installed_path}/instructions.md"
+validation: "{installed_path}/checklist.md"
+template: "{installed_path}/test-design-template.md"
+
+# Variables and inputs
+variables:
+  design_level: "full" # full, targeted, minimal - scope of design effort
+  mode: "auto-detect" # auto-detect (default), system-level, epic-level
+
+# Output configuration
+# Note: Actual output file determined dynamically based on mode detection
+# Declared outputs for new workflow format
+outputs:
+  - id: system-level
+    description: "System-level testability review (Phase 3)"
+    path: "{output_folder}/test-design-system.md"
+  - id: epic-level
+    description: "Epic-level test plan (Phase 4)"
+    path: "{output_folder}/test-design-epic-{epic_num}.md"
+default_output_file: "{output_folder}/test-design-epic-{epic_num}.md"
+
+# Required tools
+required_tools:
+  - read_file # Read PRD, epics, stories, architecture docs
+  - write_file # Create test design document
+  - list_files # Find related documentation
+  - search_repo # Search for existing tests and patterns
+
+tags:
+  - qa
+  - planning
+  - test-architect
+  - risk-assessment
+  - coverage
+
+execution_hints:
+  interactive: false # Minimize prompts
+  autonomous: true # Proceed without user input unless blocked
+  iterative: true

@@ -1,0 +1,103 @@
+# BMad Enterprise Method - Brownfield
+# Extended enterprise planning for complex brownfield with security/devops/test (30+ stories typically)
+
+method_name: "BMad Enterprise Method"
+track: "enterprise-bmad-method"
+field_type: "brownfield"
+description: "Enterprise-grade planning for complex brownfield additions with extended requirements"
+
+phases:
+  - phase: 0
+    name: "Documentation"
+    conditional: "if_undocumented"
+    note: "Prerequisite for brownfield without docs"
+    workflows:
+      - id: "document-project"
+        required: true
+        workflow: "{project-root}/_bmad/bmm/workflows/document-project/workflow.yaml"
+        agent: "analyst"
+        command: "/bmad:bmm:workflows:document-project"
+        output: "Comprehensive project documentation"
+        purpose: "Understand existing codebase before planning"
+  - phase: 1
+    name: "Analysis (Optional)"
+    optional: true
+    note: "User-selected during workflow-init"
+    workflows:
+      - id: "brainstorm-project"
+        exec: "{project-root}/_bmad/core/workflows/brainstorming/workflow.md"
+        optional: true
+        agent: "analyst"
+        command: "/bmad:bmm:workflows:brainstorming"
+        included_by: "user_choice"
+        note: "Uses core brainstorming workflow with project context template"
+      - id: "research"
+        exec: "{project-root}/_bmad/bmm/workflows/1-analysis/research/workflow.md"
+        optional: true
+        agent: "analyst"
+        command: "/bmad:bmm:workflows:research"
+        included_by: "user_choice"
+        note: "Can have multiple research workflows"
+      - id: "product-brief"
+        exec: "{project-root}/_bmad/bmm/workflows/1-analysis/create-product-brief/workflow.md"
+        optional: true
+        agent: "analyst"
+        command: "/bmad:bmm:workflows:create-product-brief"
+        included_by: "user_choice"
+        note: "Recommended for greenfield Method projects"
+  - phase: 2
+    name: "Planning"
+    required: true
+    workflows:
+      - id: "prd"
+        exec: "{project-root}/_bmad/bmm/workflows/2-plan-workflows/prd/workflow.md"
+        required: true
+        agent: "pm"
+        command: "/bmad:bmm:workflows:create-prd"
+        output: "Product Requirements Document with FRs and NFRs"
+      - id: "create-ux-design"
+        conditional: "if_has_ui"
+        exec: "{project-root}/_bmad/bmm/workflows/2-plan-workflows/create-ux-design/workflow.md"
+        agent: "ux-designer"
+        command: "/bmad:bmm:workflows:create-ux-design"
+        note: "Determined after PRD - user/agent decides if needed"
+  - phase: 3
+    name: "Solutioning"
+    required: true
+    workflows:
+      - id: "create-architecture"
+        required: true
+        exec: "{project-root}/_bmad/bmm/workflows/3-solutioning/create-architecture/workflow.md"
+        agent: "architect"
+        command: "/bmad:bmm:workflows:create-architecture"
+        output: "System architecture document"
+        note: "Complete system design for greenfield projects"
+      - id: "create-epics-and-stories"
+        required: true
+        exec: "{project-root}/_bmad/bmm/workflows/3-solutioning/create-epics-and-stories/workflow.md"
+        agent: "pm"
+        command: "/bmad:bmm:workflows:create-epics-and-stories"
+        note: "Required: Break down PRD into implementable epics and stories with full context (PRD + UX + Architecture)"
+      - id: "test-design"
+        optional: true
+        workflow: "{project-root}/_bmad/bmm/workflows/testarch/test-design/workflow.yaml"
+        agent: "tea"
+        command: "/bmad:bmm:workflows:test-design"
+        output: "System-level testability review"
+        note: "Testability assessment before gate check - auto-detects system-level mode"
+      - id: "implementation-readiness"
+        required: true
+        exec: "{project-root}/_bmad/bmm/workflows/3-solutioning/check-implementation-readiness/workflow.md"
+        agent: "architect"
+        command: "/bmad:bmm:workflows:implementation-readiness"
+        note: "Validates PRD + Architecture + Epics + UX (optional)"
+  - phase: 4
+    name: "Implementation"
+    required: true
+    workflows:
+      - id: "sprint-planning"
+        required: true
+        workflow: "{project-root}/_bmad/bmm/workflows/4-implementation/sprint-planning/workflow.yaml"
+        agent: "sm"
+        command: "/bmad:bmm:workflows:sprint-planning"
+        note: "Creates sprint plan - subsequent work tracked there"
