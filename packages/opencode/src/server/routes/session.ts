@@ -782,6 +782,9 @@ export const SessionRoutes = lazy(() =>
               },
             },
           },
+          204: {
+            description: "Command execution was prevented by a plugin",
+          },
           ...errors(400, 404),
         },
       }),
@@ -796,6 +799,7 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
         const msg = await SessionPrompt.command({ ...body, sessionID })
+        if (!msg) return c.body(null, 204)
         return c.json(msg)
       },
     )
