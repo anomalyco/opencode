@@ -474,7 +474,7 @@ function Prompt<const T extends Record<string, string>>(props: {
                 }}
               >
                 <text fg={option === store.selected ? selectedForeground(theme, theme.warning) : theme.textMuted}>
-                  {index() + 1}. {props.options[option]}
+                  {index() + 1}.{props.options[option]}
                 </text>
               </box>
             )}
