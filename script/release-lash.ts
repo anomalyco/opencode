@@ -81,9 +81,10 @@ if (shouldRelease) {
 
     // Create Release on Lash repo
     // Ensure 'gh' is authenticated for lacymorrow/lash or use token
-    await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz`
+    await $`gh release create v${Script.version} --repo lacymorrow/lash -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz`
 
-    const release = await $`gh release view v${Script.version} --json id,tagName`.json()
+    const release = await $`gh release view v${Script.version} --repo lacymorrow/lash --json id,tagName`.json()
+
     output += `release=${release.id}\n`
     output += `tag=${release.tagName}\n`
 
