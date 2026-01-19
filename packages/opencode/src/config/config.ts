@@ -651,8 +651,14 @@ export namespace Config {
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
       session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
-      messages_page_up: z.string().optional().default("pageup").describe("Scroll messages up by one page"),
-      messages_page_down: z.string().optional().default("pagedown").describe("Scroll messages down by one page"),
+      messages_page_up: z.string().optional().default("pageup,ctrl+alt+b").describe("Scroll messages up by one page"),
+      messages_page_down: z
+        .string()
+        .optional()
+        .default("pagedown,ctrl+alt+f")
+        .describe("Scroll messages down by one page"),
+      messages_line_up: z.string().optional().default("ctrl+alt+y").describe("Scroll messages up by one line"),
+      messages_line_down: z.string().optional().default("ctrl+alt+e").describe("Scroll messages down by one line"),
       messages_half_page_up: z.string().optional().default("ctrl+alt+u").describe("Scroll messages up by half page"),
       messages_half_page_down: z
         .string()
@@ -1115,6 +1121,7 @@ export namespace Config {
   }
 
   async function load(text: string, configFilepath: string) {
+    const original = text
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
       return process.env[varName] || ""
     })
@@ -1184,7 +1191,9 @@ export namespace Config {
     if (parsed.success) {
       if (!parsed.data.$schema) {
         parsed.data.$schema = "https://opencode.ai/config.json"
-        await Bun.write(configFilepath, JSON.stringify(parsed.data, null, 2)).catch(() => {})
+        // Write the $schema to the original text to preserve variables like {env:VAR}
+        const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
+        await Bun.write(configFilepath, updated).catch(() => {})
       }
       const data = parsed.data
       if (data.plugin) {
