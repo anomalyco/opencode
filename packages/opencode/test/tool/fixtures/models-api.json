@@ -248,6 +248,22 @@
         "cost": { "input": 0, "output": 0, "cache_read": 0, "cache_write": 0 },
         "limit": { "context": 204800, "output": 131072 }
       },
+      "glm-4.7-flash": {
+        "id": "glm-4.7-flash",
+        "name": "GLM-4.7-Flash",
+        "family": "glm-4.7-flash",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": true,
+        "knowledge": "2025-04",
+        "release_date": "2026-01-19",
+        "last_updated": "2026-01-19",
+        "modalities": { "input": ["text"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0, "output": 0, "cache_read": 0, "cache_write": 0 },
+        "limit": { "context": 200000, "output": 131072 }
+      },
       "glm-4.5-flash": {
         "id": "glm-4.5-flash",
         "name": "GLM-4.5-Flash",
