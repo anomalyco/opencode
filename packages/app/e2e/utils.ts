@@ -1,6 +1,5 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/util/encode"
-import type { Page } from "@playwright/test"
 
 export const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "localhost"
 export const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
@@ -36,10 +35,4 @@ export function dirPath(directory: string) {
 
 export function sessionPath(directory: string, sessionID?: string) {
   return `${dirPath(directory)}/session${sessionID ? `/${sessionID}` : ""}`
-}
-
-export async function gotoSession(page: Page, sessionID?: string) {
-  const directory = await getWorktree()
-  await page.goto(sessionPath(directory, sessionID))
-  return { directory, slug: dirSlug(directory) }
 }

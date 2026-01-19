@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test"
+import { test, expect } from "./fixtures"
 import { serverName } from "./utils"
 
 test("home renders and shows core entrypoints", async ({ page }) => {

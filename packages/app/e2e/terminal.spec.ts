@@ -1,9 +1,8 @@
-import { test, expect } from "@playwright/test"
-import { gotoSession, promptSelector, terminalSelector, terminalToggleKey } from "./utils"
+import { test, expect } from "./fixtures"
+import { terminalSelector, terminalToggleKey } from "./utils"
 
-test("terminal panel can be toggled", async ({ page }) => {
-  await gotoSession(page)
-  await expect(page.locator(promptSelector)).toBeVisible()
+test("terminal panel can be toggled", async ({ page, gotoSession }) => {
+  await gotoSession()
 
   const terminal = page.locator(terminalSelector)
   const initiallyOpen = await terminal.isVisible()

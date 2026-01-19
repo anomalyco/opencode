@@ -1,9 +1,8 @@
-import { test, expect } from "@playwright/test"
-import { gotoSession, modKey, promptSelector } from "./utils"
+import { test, expect } from "./fixtures"
+import { modKey } from "./utils"
 
-test("search palette opens and closes", async ({ page }) => {
-  await gotoSession(page)
-  await expect(page.locator(promptSelector)).toBeVisible()
+test("search palette opens and closes", async ({ page, gotoSession }) => {
+  await gotoSession()
 
   await page.keyboard.press(`${modKey}+P`)
 
