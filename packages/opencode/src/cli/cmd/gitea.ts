@@ -153,6 +153,7 @@ jobs:
       startsWith(github.event.comment.body, '/oc') ||
       contains(github.event.comment.body, ' /opencode') ||
       startsWith(github.event.comment.body, '/opencode')
+    # Note: github.event context variables are compatible with Gitea/Forgejo via the act runner
     # Adjust runs-on and container to match your runner configuration
     runs-on: linux
     container: catthehacker/ubuntu:act-latest
@@ -210,7 +211,7 @@ export const GiteaRunCommand = cmd({
         process.exit(1)
       }
 
-      const baseUrl = args.url || process.env.OPENCODE_GIT_URL
+      const baseUrl: string = args.url || process.env.OPENCODE_GIT_URL || ""
       if (!baseUrl) {
         console.error("OPENCODE_GIT_URL environment variable is not set")
         process.exit(1)
@@ -484,8 +485,9 @@ export const GiteaRunCommand = cmd({
 
         if (result.info.role === "assistant" && result.info.error) {
           console.error("Agent error:", result.info.error)
+          const message = "message" in result.info.error ? result.info.error.message : ""
           throw new Error(
-            `${result.info.error.name}: ${"message" in result.info.error ? result.info.error.message : ""}`,
+            `${result.info.error.name}: ${message}`,
           )
         }
 
@@ -508,8 +510,9 @@ export const GiteaRunCommand = cmd({
         })
 
         if (summary.info.role === "assistant" && summary.info.error) {
+          const message = "message" in summary.info.error ? summary.info.error.message : ""
           throw new Error(
-            `${summary.info.error.name}: ${"message" in summary.info.error ? summary.info.error.message : ""}`,
+            `${summary.info.error.name}: ${message}`,
           )
         }
 
@@ -528,6 +531,7 @@ export const GiteaRunCommand = cmd({
 
       async function handlePR(pr: PullRequest, userPrompt: string, dataPrompt: string, owner: string, repo: string) {
         const isSameRepo = pr.baseRepo.owner === pr.headRepo.owner && pr.baseRepo.repo === pr.headRepo.repo
+        const instanceDomain = new URL(baseUrl).hostname
 
         if (isSameRepo) {
           await checkoutBranch(pr.headRef, pr.commitCount)
@@ -541,10 +545,11 @@ export const GiteaRunCommand = cmd({
 
         if (dirty) {
           const summary = await summarize(response)
+          if (!actor) throw new Error("Could not determine actor for commit")
           if (isSameRepo) {
-            await pushToLocalBranch(summary, uncommitted, actor!)
+            await pushToLocalBranch(summary, uncommitted, actor, instanceDomain)
           } else {
-            await pushToForkBranch(summary, pr, uncommitted, actor!)
+            await pushToForkBranch(summary, pr, uncommitted, actor, instanceDomain)
           }
         }
 
@@ -557,6 +562,7 @@ export const GiteaRunCommand = cmd({
       async function handleIssue(userPrompt: string, dataPrompt: string, owner: string, repo: string, number: number) {
         const repoData = await adapter.getRepository(owner, repo)
         const branch = generateBranchName("issue", number)
+        const instanceDomain = new URL(baseUrl).hostname
 
         await $`git checkout -b ${branch}`
         const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
@@ -565,7 +571,8 @@ export const GiteaRunCommand = cmd({
 
         if (dirty) {
           const summary = await summarize(response)
-          await pushToNewBranch(summary, branch, uncommitted, actor!)
+          if (!actor) throw new Error("Could not determine actor for commit")
+          await pushToNewBranch(summary, branch, uncommitted, actor, instanceDomain)
           const pr = await adapter.createPullRequest({
             owner,
             repo,
@@ -626,29 +633,29 @@ export const GiteaRunCommand = cmd({
         }
       }
 
-      async function pushToNewBranch(summary: string, branch: string, commit: boolean, coauthor: string) {
+      async function pushToNewBranch(summary: string, branch: string, commit: boolean, coauthor: string, instanceDomain: string) {
         console.log("Pushing to new branch...")
         if (commit) {
           await $`git add .`
           await $`git commit -m "${summary}
 
-Co-authored-by: ${coauthor} <${coauthor}@users.noreply.gitea.io>"`
+Co-authored-by: ${coauthor} <${coauthor}@users.noreply.${instanceDomain}>"`
         }
         await $`git push -u origin ${branch}`
       }
 
-      async function pushToLocalBranch(summary: string, commit: boolean, coauthor: string) {
+      async function pushToLocalBranch(summary: string, commit: boolean, coauthor: string, instanceDomain: string) {
         console.log("Pushing to local branch...")
         if (commit) {
           await $`git add .`
           await $`git commit -m "${summary}
 
-Co-authored-by: ${coauthor} <${coauthor}@users.noreply.gitea.io>"`
+Co-authored-by: ${coauthor} <${coauthor}@users.noreply.${instanceDomain}>"`
         }
         await $`git push`
       }
 
-      async function pushToForkBranch(summary: string, pr: PullRequest, commit: boolean, coauthor: string) {
+      async function pushToForkBranch(summary: string, pr: PullRequest, commit: boolean, coauthor: string, instanceDomain: string) {
         console.log("Pushing to fork branch...")
         const remoteBranch = pr.headRef
 
@@ -656,7 +663,7 @@ Co-authored-by: ${coauthor} <${coauthor}@users.noreply.gitea.io>"`
           await $`git add .`
           await $`git commit -m "${summary}
 
-Co-authored-by: ${coauthor} <${coauthor}@users.noreply.gitea.io>"`
+Co-authored-by: ${coauthor} <${coauthor}@users.noreply.${instanceDomain}>"`
         }
         await $`git push fork HEAD:${remoteBranch}`
       }

@@ -1,16 +1,16 @@
 #!/usr/bin/env bun
 
 /**
- * 发布开发版本到 npm 的脚本
+ * Script to publish development version to npm
  *
- * 使用方法:
- *   1. 确保你已登录 npm: npm login
- *   2. 运行: bun run script/publish-dev.ts --name=你的包名
+ * Usage:
+ *   1. Make sure you have logged in to npm: npm login
+ *   2. Run: bun run script/publish-dev.ts --name=your-package-name
  *
- * 例如:
+ * Example:
  *   bun run script/publish-dev.ts --name=opencode-ai-gitea
  *
- * 然后安装:
+ * Then install:
  *   bun install -g opencode-ai-gitea@latest
  */
 
@@ -93,7 +93,7 @@ await Bun.file(`dist/${targetName}/package.json`).write(
   ),
 )
 
-// 写入主包的 package.json
+// Write main package.json
 await $`mkdir -p dist/${packageName}`
 await Bun.file(`dist/${packageName}/package.json`).write(
   JSON.stringify(

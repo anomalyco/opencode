@@ -314,7 +314,11 @@ root?.addEventListener("mousewheel", (e) => {
 // Handle external links - open in system browser instead of webview
 document.addEventListener("click", (e) => {
   const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
-  if (link?.href && platformInstance) {
+  if (link?.href) {
+    if (!platformInstance) {
+      console.warn("Platform instance not yet initialized")
+      return
+    }
     e.preventDefault()
     platformInstance.openLink(link.href)
   }
