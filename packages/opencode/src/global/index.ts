@@ -42,7 +42,7 @@ if (!(await Bun.file(binPackageJson).exists())) {
     .catch(() => {})
 }
 
-const CACHE_VERSION = "14"
+const CACHE_VERSION = "18"
 
 const version = await Bun.file(path.join(Global.Path.cache, "version"))
   .text()

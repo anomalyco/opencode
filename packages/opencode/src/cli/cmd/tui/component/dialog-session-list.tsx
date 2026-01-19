@@ -4,7 +4,7 @@ import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { createMemo, createSignal, createResource, onMount, Show } from "solid-js"
 import { Locale } from "@/util/locale"
-import { Keybind } from "@/util/keybind"
+import { useKeybind } from "../context/keybind"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
 import { DialogSessionRename } from "./dialog-session-rename"
@@ -14,9 +14,10 @@ import "opentui-spinner/solid"
 
 export function DialogSessionList() {
   const dialog = useDialog()
-  const sync = useSync()
-  const { theme } = useTheme()
   const route = useRoute()
+  const sync = useSync()
+  const keybind = useKeybind()
+  const { theme } = useTheme()
   const sdk = useSDK()
   const kv = useKV()
 
@@ -28,8 +29,6 @@ export function DialogSessionList() {
     const result = await sdk.client.session.list({ search: query, limit: 30 })
     return result.data ?? []
   })
-
-  const deleteKeybind = "ctrl+d"
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
 
@@ -52,7 +51,7 @@ export function DialogSessionList() {
         const status = sync.data.session_status?.[x.id]
         const isWorking = status?.type === "busy"
         return {
-          title: isDeleting ? `Press ${deleteKeybind} again to confirm` : x.title,
+          title: isDeleting ? `Press ${keybind.print("session_delete")} again to confirm` : x.title,
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,
@@ -89,7 +88,7 @@ export function DialogSessionList() {
       }}
       keybind={[
         {
-          keybind: Keybind.parse(deleteKeybind)[0],
+          keybind: keybind.all.session_delete?.[0],
           title: "delete",
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
@@ -103,7 +102,7 @@ export function DialogSessionList() {
           },
         },
         {
-          keybind: Keybind.parse("ctrl+r")[0],
+          keybind: keybind.all.session_rename?.[0],
           title: "rename",
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)

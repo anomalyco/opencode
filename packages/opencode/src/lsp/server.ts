@@ -13,6 +13,11 @@ import { Archive } from "../util/archive"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
+  const pathExists = async (p: string) =>
+    fs
+      .stat(p)
+      .then(() => true)
+      .catch(() => false)
 
   export interface Handle {
     process: ChildProcessWithoutNullStreams
@@ -1148,17 +1153,31 @@ export namespace LSPServer {
       }
       const distPath = path.join(Global.Path.bin, "jdtls")
       const launcherDir = path.join(distPath, "plugins")
-      const installed = await fs.exists(launcherDir)
+      const installed = await pathExists(launcherDir)
       if (!installed) {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("Downloading JDTLS LSP server.")
         await fs.mkdir(distPath, { recursive: true })
         const releaseURL =
           "https://www.eclipse.org/downloads/download.php?file=/jdtls/snapshots/jdt-language-server-latest.tar.gz"
-        const archivePath = path.join(distPath, "release.tar.gz")
-        await $`curl -L -o '${archivePath}' '${releaseURL}'`.quiet().nothrow()
-        await $`tar -xzf ${archivePath}`.cwd(distPath).quiet().nothrow()
-        await fs.rm(archivePath, { force: true })
+        const archiveName = "release.tar.gz"
+
+        log.info("Downloading JDTLS archive", { url: releaseURL, dest: distPath })
+        const curlResult = await $`curl -L -o ${archiveName} '${releaseURL}'`.cwd(distPath).quiet().nothrow()
+        if (curlResult.exitCode !== 0) {
+          log.error("Failed to download JDTLS", { exitCode: curlResult.exitCode, stderr: curlResult.stderr.toString() })
+          return
+        }
+
+        log.info("Extracting JDTLS archive")
+        const tarResult = await $`tar -xzf ${archiveName}`.cwd(distPath).quiet().nothrow()
+        if (tarResult.exitCode !== 0) {
+          log.error("Failed to extract JDTLS", { exitCode: tarResult.exitCode, stderr: tarResult.stderr.toString() })
+          return
+        }
+
+        await fs.rm(path.join(distPath, archiveName), { force: true })
+        log.info("JDTLS download and extraction completed")
       }
       const jarFileName = await $`ls org.eclipse.equinox.launcher_*.jar`
         .cwd(launcherDir)
@@ -1166,7 +1185,7 @@ export namespace LSPServer {
         .nothrow()
         .then(({ stdout }) => stdout.toString().trim())
       const launcherJar = path.join(launcherDir, jarFileName)
-      if (!(await fs.exists(launcherJar))) {
+      if (!(await pathExists(launcherJar))) {
         log.error(`Failed to locate the JDTLS launcher module in the installed directory: ${distPath}.`)
         return
       }
@@ -1526,7 +1545,11 @@ export namespace LSPServer {
       })
       return {
         process: proc,
-        initialization: {},
+        initialization: {
+          telemetry: {
+            enabled: false,
+          },
+        },
       }
     },
   }

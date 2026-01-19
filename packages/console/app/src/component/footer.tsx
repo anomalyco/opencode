@@ -25,6 +25,9 @@ export function Footer() {
         <a href="/docs">Docs</a>
       </div>
       <div data-slot="cell">
+        <a href="/changelog">Changelog</a>
+      </div>
+      <div data-slot="cell">
         <a href="/discord">Discord</a>
       </div>
       <div data-slot="cell">
