@@ -54,7 +54,7 @@ import { usePlatform } from "@/context/platform"
 import { createOpencodeClient, type Message, type Part } from "@opencode-ai/sdk/v2/client"
 import { Binary } from "@opencode-ai/util/binary"
 import { showToast } from "@opencode-ai/ui/toast"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
@@ -285,6 +285,77 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     reader.readAsDataURL(file)
   }
 
+  const normalizeClipboardPath = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) return ""
+    return trimmed.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+  }
+
+  const resolveClipboardPath = (value: string) => {
+    if (!value) return ""
+    if (/^(https?):\/\//.test(value)) return ""
+
+    const normalized = value.replace(/\\/g, "/")
+    const directory = sdk.directory.replace(/\\/g, "/").replace(/\/+$/, "")
+    const isDrivePath = /^[a-zA-Z]:\//.test(normalized)
+    if (isDrivePath && !normalized.startsWith(directory)) return ""
+    if (normalized.startsWith("/") && !normalized.startsWith(directory)) return ""
+
+    if (!normalized.startsWith(directory)) return normalized
+
+    const relative = normalized.slice(directory.length).replace(/^\/+/, "")
+    if (!relative) return ""
+    return relative
+  }
+
+  const attachClipboardFile = async (path: string) => {
+    const resolved = resolveClipboardPath(path)
+    if (!resolved) return false
+
+    const result = await sdk.client.file.read({ path: resolved }).catch(() => undefined)
+    if (!result?.data) return false
+
+    const content = result.data
+    const mime = content.mimeType ?? "text/plain"
+    if (mime === "image/svg+xml") {
+      const text = content.encoding === "base64" ? base64Decode(content.content) : content.content
+      if (text) addPart({ type: "text", content: text, start: 0, end: 0 })
+      return true
+    }
+
+    if (content.encoding !== "base64") return false
+
+    if (mime.startsWith("image/") || mime === "application/pdf") {
+      const attachment: ImageAttachmentPart = {
+        type: "image",
+        id: crypto.randomUUID(),
+        filename: getFilename(resolved),
+        mime,
+        dataUrl: `data:${mime};base64,${content.content}`,
+      }
+      const cursorPosition = prompt.cursor() ?? getCursorPosition(editorRef)
+      prompt.set([...prompt.current(), attachment], cursorPosition)
+      return true
+    }
+
+    return false
+  }
+
+  const attachClipboardFiles = async (value: string) => {
+    const candidates = value
+      .split(/\r?\n/)
+      .map((entry) => normalizeClipboardPath(entry))
+      .filter(Boolean)
+
+    if (candidates.length === 0) return false
+
+    for (const candidate of candidates) {
+      if (await attachClipboardFile(candidate)) return true
+    }
+
+    return false
+  }
+
   const removeImageAttachment = (id: string) => {
     const current = prompt.current()
     const next = current.filter((part) => part.type !== "image" || part.id !== id)
@@ -311,6 +382,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     const plainText = clipboardData.getData("text/plain") ?? ""
+    const handled = await attachClipboardFiles(plainText)
+    if (handled) return
+
     addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }
 
@@ -846,6 +920,40 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    const isCtrlPaste =
+      event.key.toLowerCase() === "v" && event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+    const clipboard = navigator.clipboard
+    if (isCtrlPaste && platform.platform === "desktop" && clipboard?.read) {
+      event.preventDefault()
+      event.stopPropagation()
+
+      void clipboard
+        .read()
+        .then(async (items) => {
+          const fileItem = items
+            .flatMap((item) => item.types.map((type) => ({ item, type })))
+            .find((entry) => ACCEPTED_FILE_TYPES.includes(entry.type) || entry.type === "image/svg+xml")
+          if (fileItem) {
+            const blob = await fileItem.item.getType(fileItem.type)
+            if (fileItem.type === "image/svg+xml") {
+              const text = await blob.text()
+              if (text) addPart({ type: "text", content: text, start: 0, end: 0 })
+              return
+            }
+            await addImageAttachment(new File([blob], "clipboard", { type: fileItem.type }))
+            return
+          }
+
+          const text = await clipboard.readText().catch(() => "")
+          if (!text) return
+          const handled = await attachClipboardFiles(text)
+          if (handled) return
+          addPart({ type: "text", content: text, start: 0, end: 0 })
+        })
+        .catch(() => {})
+      return
+    }
+
     if (event.key === "Backspace") {
       const selection = window.getSelection()
       if (selection && selection.isCollapsed) {
