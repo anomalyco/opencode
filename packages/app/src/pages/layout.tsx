@@ -1857,7 +1857,7 @@ export default function Layout(props: ParentProps) {
             </DragDropProvider>
           </div>
           <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
-            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Settings">
+            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Settings" class="hidden">
               <IconButton disabled icon="settings-gear" variant="ghost" size="large" />
             </Tooltip>
             <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Help">
