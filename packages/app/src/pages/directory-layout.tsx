@@ -16,8 +16,8 @@ export default function Layout(props: ParentProps) {
     return base64Decode(params.dir!)
   })
   return (
-    <Show when={params.dir} keyed>
-      <SDKProvider directory={directory()}>
+    <Show when={params.dir}>
+      <SDKProvider directory={directory}>
         <SyncProvider>
           {iife(() => {
             const sync = useSync()
@@ -40,7 +40,7 @@ export default function Layout(props: ParentProps) {
             return (
               <DataProvider
                 data={sync.data}
-                directory={directory()}
+                directory={sdk.directory}
                 onPermissionRespond={respond}
                 onQuestionReply={replyToQuestion}
                 onQuestionReject={rejectQuestion}
