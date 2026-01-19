@@ -1,34 +1,46 @@
 mod cli;
+#[cfg(windows)]
+mod job_object;
 mod window_customizer;
 
 use cli::{install_cli, sync_cli};
 use futures::FutureExt;
+use futures::future;
+#[cfg(windows)]
+use job_object::*;
 use std::{
     collections::VecDeque,
     net::TcpListener,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewUrl, WebviewWindow};
+use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewWindowBuilder};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_store::StoreExt;
+use tokio::sync::oneshot;
 
 use crate::window_customizer::PinchZoomDisablePlugin;
 
 const SETTINGS_STORE: &str = "opencode.settings.dat";
 const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
 
+#[derive(Clone, serde::Serialize)]
+struct ServerReadyData {
+    url: String,
+    password: Option<String>,
+}
+
 #[derive(Clone)]
 struct ServerState {
     child: Arc<Mutex<Option<CommandChild>>>,
-    status: futures::future::Shared<tokio::sync::oneshot::Receiver<Result<String, String>>>,
+    status: future::Shared<oneshot::Receiver<Result<ServerReadyData, String>>>,
 }
 
 impl ServerState {
     pub fn new(
         child: Option<CommandChild>,
-        status: tokio::sync::oneshot::Receiver<Result<String, String>>,
+        status: oneshot::Receiver<Result<ServerReadyData, String>>,
     ) -> Self {
         Self {
             child: Arc::new(Mutex::new(child)),
@@ -80,7 +92,7 @@ async fn get_logs(app: AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn ensure_server_ready(state: State<'_, ServerState>) -> Result<String, String> {
+async fn ensure_server_ready(state: State<'_, ServerState>) -> Result<ServerReadyData, String> {
     state
         .status
         .clone()
@@ -137,13 +149,14 @@ fn get_sidecar_port() -> u32 {
         }) as u32
 }
 
-fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
+fn spawn_sidecar(app: &AppHandle, port: u32, password: &str) -> CommandChild {
     let log_state = app.state::<LogState>();
     let log_state_clone = log_state.inner().clone();
 
     println!("spawning sidecar on port {port}");
 
     let (mut rx, child) = cli::create_command(app, format!("serve --port {port}").as_str())
+        .env("OPENCODE_SERVER_PASSWORD", password)
         .spawn()
         .expect("Failed to spawn opencode");
 
@@ -184,8 +197,8 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
     child
 }
 
-async fn check_server_health(url: &str) -> bool {
-    let health_url = format!("{}/health", url.trim_end_matches('/'));
+async fn check_server_health(url: &str, password: Option<&str>) -> bool {
+    let health_url = format!("{}/global/health", url.trim_end_matches('/'));
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
         .build();
@@ -194,9 +207,13 @@ async fn check_server_health(url: &str) -> bool {
         return false;
     };
 
-    client
-        .get(&health_url)
-        .send()
+    let mut req = client.get(&health_url);
+
+    if let Some(password) = password {
+        req = req.basic_auth("opencode", Some(password));
+    }
+
+    req.send()
         .await
         .map(|r| r.status().is_success())
         .unwrap_or(false)
@@ -205,6 +222,11 @@ async fn check_server_health(url: &str) -> bool {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let updater_enabled = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
+
+    #[cfg(all(target_os = "macos", not(debug_assertions)))]
+    let _ = std::process::Command::new("killall")
+        .arg("opencode-cli")
+        .output();
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -215,7 +237,14 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        - tauri_plugin_window_state::StateFlags::DECORATIONS,
+                )
+                .build(),
+        )
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
@@ -238,36 +267,40 @@ pub fn run() {
             // Initialize log state
             app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
 
+            #[cfg(windows)]
+            app.manage(JobObjectState::new());
+
             let primary_monitor = app.primary_monitor().ok().flatten();
             let size = primary_monitor
                 .map(|m| m.size().to_logical(m.scale_factor()))
                 .unwrap_or(LogicalSize::new(1920, 1080));
 
-            #[allow(unused_mut)]
-            let mut window_builder =
-                WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
-                    .title("OpenCode")
-                    .inner_size(size.width as f64, size.height as f64)
-                    .decorations(true)
-                    .zoom_hotkeys_enabled(true)
-                    .disable_drag_drop_handler()
-                    .initialization_script(format!(
-                        r#"
+            let config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|w| w.label == "main")
+                .expect("main window config missing");
+
+            let window_builder = WebviewWindowBuilder::from_config(&app, config)
+                .expect("Failed to create window builder from config")
+                .inner_size(size.width as f64, size.height as f64)
+                .initialization_script(format!(
+                    r#"
                       window.__OPENCODE__ ??= {{}};
                       window.__OPENCODE__.updaterEnabled = {updater_enabled};
                     "#
-                    ));
+                ));
 
             #[cfg(target_os = "macos")]
-            {
-                window_builder = window_builder
-                    .title_bar_style(tauri::TitleBarStyle::Overlay)
-                    .hidden_title(true);
-            }
+            let window_builder = window_builder
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true);
 
-            window_builder.build().expect("Failed to create window");
+            let _window = window_builder.build().expect("Failed to create window");
 
-            let (tx, rx) = tokio::sync::oneshot::channel();
+            let (tx, rx) = oneshot::channel();
             app.manage(ServerState::new(None, rx));
 
             {
@@ -290,7 +323,14 @@ pub fn run() {
 
                     let res = match setup_server_connection(&app, custom_url).await {
                         Ok((child, url)) => {
+                            #[cfg(windows)]
+                            if let Some(child) = &child {
+                                let job_state = app.state::<JobObjectState>();
+                                job_state.assign_pid(child.pid());
+                            }
+
                             app.state::<ServerState>().set_child(child);
+
                             Ok(url)
                         }
                         Err(e) => Err(e),
@@ -344,12 +384,18 @@ fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
 async fn setup_server_connection(
     app: &AppHandle,
     custom_url: Option<String>,
-) -> Result<(Option<CommandChild>, String), String> {
+) -> Result<(Option<CommandChild>, ServerReadyData), String> {
     if let Some(url) = custom_url {
         loop {
-            if check_server_health(&url).await {
+            if check_server_health(&url, None).await {
                 println!("Connected to custom server: {}", url);
-                return Ok((None, url.clone()));
+                return Ok((
+                    None,
+                    ServerReadyData {
+                        url: url.clone(),
+                        password: None,
+                    },
+                ));
             }
 
             const RETRY: &str = "Retry";
@@ -374,24 +420,41 @@ async fn setup_server_connection(
     let local_port = get_sidecar_port();
     let local_url = format!("http://127.0.0.1:{local_port}");
 
-    if !check_server_health(&local_url).await {
-        match spawn_local_server(app, local_port).await {
-            Ok(child) => Ok(Some(child)),
+    if !check_server_health(&local_url, None).await {
+        let password = uuid::Uuid::new_v4().to_string();
+
+        match spawn_local_server(app, local_port, &password).await {
+            Ok(child) => Ok((
+                Some(child),
+                ServerReadyData {
+                    url: local_url,
+                    password: Some(password),
+                },
+            )),
             Err(err) => Err(err),
         }
     } else {
-        Ok(None)
+        Ok((
+            None,
+            ServerReadyData {
+                url: local_url,
+                password: None,
+            },
+        ))
     }
-    .map(|child| (child, local_url))
 }
 
-async fn spawn_local_server(app: &AppHandle, port: u32) -> Result<CommandChild, String> {
-    let child = spawn_sidecar(app, port);
+async fn spawn_local_server(
+    app: &AppHandle,
+    port: u32,
+    password: &str,
+) -> Result<CommandChild, String> {
+    let child = spawn_sidecar(app, port, password);
     let url = format!("http://127.0.0.1:{port}");
 
     let timestamp = Instant::now();
     loop {
-        if timestamp.elapsed() > Duration::from_secs(7) {
+        if timestamp.elapsed() > Duration::from_secs(30) {
             break Err(format!(
                 "Failed to spawn OpenCode Server. Logs:\n{}",
                 get_logs(app.clone()).await.unwrap()
@@ -400,7 +463,7 @@ async fn spawn_local_server(app: &AppHandle, port: u32) -> Result<CommandChild, 
 
         tokio::time::sleep(Duration::from_millis(10)).await;
 
-        if check_server_health(&url).await {
+        if check_server_health(&url, Some(password)).await {
             println!("Server ready after {:?}", timestamp.elapsed());
             break Ok(child);
         }

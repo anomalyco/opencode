@@ -394,6 +394,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Run opencode
         uses: anomalyco/opencode/github@latest${envStr}
@@ -624,7 +626,7 @@ export const GithubRunCommand = cmd({
         }
       } catch (e: any) {
         exitCode = 1
-        console.error(e)
+        console.error(e instanceof Error ? e.message : String(e))
         let msg = e
         if (e instanceof $.ShellError) {
           msg = e.stderr.toString()
@@ -915,7 +917,7 @@ export const GithubRunCommand = cmd({
 
         // result should always be assistant just satisfying type checker
         if (result.info.role === "assistant" && result.info.error) {
-          console.error(result.info)
+          console.error("Agent error:", result.info.error)
           throw new Error(
             `${result.info.error.name}: ${"message" in result.info.error ? result.info.error.message : ""}`,
           )
@@ -944,7 +946,7 @@ export const GithubRunCommand = cmd({
         })
 
         if (summary.info.role === "assistant" && summary.info.error) {
-          console.error(summary.info)
+          console.error("Summary agent error:", summary.info.error)
           throw new Error(
             `${summary.info.error.name}: ${"message" in summary.info.error ? summary.info.error.message : ""}`,
           )
@@ -962,7 +964,7 @@ export const GithubRunCommand = cmd({
         try {
           return await core.getIDToken("opencode-github-action")
         } catch (error) {
-          console.error("Failed to get OIDC token:", error)
+          console.error("Failed to get OIDC token:", error instanceof Error ? error.message : error)
           throw new Error(
             "Could not fetch an OIDC token. Make sure to add `id-token: write` to your workflow permissions.",
           )

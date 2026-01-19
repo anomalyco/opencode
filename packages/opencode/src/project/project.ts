@@ -272,7 +272,11 @@ export namespace Project {
 
   export async function list() {
     const keys = await Storage.list(["project"])
-    return await Promise.all(keys.map((x) => Storage.read<Info>(x)))
+    const projects = await Promise.all(keys.map((x) => Storage.read<Info>(x)))
+    return projects.map((project) => ({
+      ...project,
+      sandboxes: project.sandboxes?.filter((x) => existsSync(x)),
+    }))
   }
 
   export const update = fn(
@@ -312,5 +316,20 @@ export namespace Project {
       if (stat?.isDirectory()) valid.push(dir)
     }
     return valid
+  }
+
+  export async function removeSandbox(projectID: string, directory: string) {
+    const result = await Storage.update<Info>(["project", projectID], (draft) => {
+      const sandboxes = draft.sandboxes ?? []
+      draft.sandboxes = sandboxes.filter((sandbox) => sandbox !== directory)
+      draft.time.updated = Date.now()
+    })
+    GlobalBus.emit("event", {
+      payload: {
+        type: Event.Updated.type,
+        properties: result,
+      },
+    })
+    return result
   }
 }

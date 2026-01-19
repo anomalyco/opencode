@@ -22,6 +22,8 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
+import { ProviderIcon } from "./provider-icon"
+import type { IconName } from "./provider-icons/types"
 import { IconButton } from "./icon-button"
 import { Tooltip } from "./tooltip"
 import { Card } from "./card"
@@ -374,7 +376,6 @@ export function SessionTurn(
     diffLimit: diffInit,
     status: rawStatus(),
     duration: duration(),
-    userMessageHovered: false,
   })
 
   createEffect(
@@ -475,8 +476,6 @@ export function SessionTurn(
                 data-slot="session-turn-message-container"
                 class={props.classes?.container}
                 style={{ "--sticky-header-height": `${store.stickyHeaderHeight}px` }}
-                onMouseEnter={() => setStore("userMessageHovered", true)}
-                onMouseLeave={() => setStore("userMessageHovered", false)}
               >
                 <Switch>
                   <Match when={isShellMode()}>
@@ -496,12 +495,18 @@ export function SessionTurn(
                             </Match>
                           </Switch>
                         </div>
-                        <div data-slot="session-turn-user-badges" data-visible={store.userMessageHovered}>
+                        <div data-slot="session-turn-user-badges">
                           <Show when={(msg() as UserMessage).agent}>
                             <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
                           </Show>
                           <Show when={(msg() as UserMessage).model?.modelID}>
-                            <span data-slot="session-turn-badge">{(msg() as UserMessage).model?.modelID}</span>
+                            <span data-slot="session-turn-badge" class="inline-flex items-center gap-1">
+                              <ProviderIcon
+                                id={(msg() as UserMessage).model!.providerID as IconName}
+                                class="size-3.5 shrink-0"
+                              />
+                              {(msg() as UserMessage).model?.modelID}
+                            </span>
                           </Show>
                           <span data-slot="session-turn-badge">{(msg() as UserMessage).variant || "default"}</span>
                         </div>
