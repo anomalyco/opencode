@@ -48,8 +48,8 @@ export function DialogHelp() {
   const maxHeight = createMemo(() => Math.floor(dimensions().height * 0.6))
 
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
+    <box paddingLeft={2} paddingRight={2}>
+      <box flexDirection="row" justifyContent="space-between" marginBottom={1}>
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           Keyboard Shortcuts
         </text>
