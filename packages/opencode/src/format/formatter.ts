@@ -226,7 +226,7 @@ export const rlang: Info = {
 }
 
 export const uvformat: Info = {
-  name: "uv format",
+  name: "uv",
   command: ["uv", "format", "--", "$FILE"],
   extensions: [".py", ".pyi"],
   async enabled() {
