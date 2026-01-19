@@ -50,7 +50,7 @@
           moduleUpdaters = pkgs.lib.listToAttrs (
             pkgs.lib.concatMap (cpu:
               map (os: {
-                name = "${cpu}_${os}_node_modules";
+                name = "${cpu}-${os}_node_modules";
                 value = node_modules.override {
                   bunCpu = cpuMap.${cpu};
                   bunOs = os;
