@@ -1,4 +1,6 @@
 [data-component="session-turn"] {
+  --session-turn-sticky-height: 0px;
+  --sticky-header-height: calc(var(--session-title-height, 0px) + var(--session-turn-sticky-height, 0px) + 12px);
   /* flex: 1; */
   height: 100%;
   min-height: 0;
@@ -42,6 +44,12 @@
       color: var(--text-base);
       background: var(--surface-raised-base);
     }
+  }
+
+  [data-slot="session-turn-attachments"] {
+    width: 100%;
+    min-width: 0;
+    align-self: stretch;
   }
 
   [data-slot="session-turn-sticky"] {
@@ -331,11 +339,10 @@
   }
 
   [data-component="sticky-accordion-header"] {
-    top: var(--sticky-header-height, 40px);
+    top: var(--sticky-header-height, 0px);
     &[data-expanded]::before {
-      top: calc(-1 * var(--sticky-header-height, 40px));
+      top: calc(-1 * var(--sticky-header-height, 0px));
     }
-    /* position: static; */
   }
 
   [data-slot="session-turn-accordion-trigger-content"] {

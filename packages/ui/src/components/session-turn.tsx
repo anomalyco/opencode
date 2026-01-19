@@ -1,5 +1,6 @@
 import {
   AssistantMessage,
+  FilePart,
   Message as MessageType,
   Part as PartType,
   type PermissionRequest,
@@ -29,6 +30,7 @@ import { Spinner } from "./spinner"
 import { createStore } from "solid-js/store"
 import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 
 function computeStatusFromPart(part: PartType | undefined): string | undefined {
   if (!part) return undefined
@@ -73,6 +75,12 @@ function same<T>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
   if (a.length !== b.length) return false
   return a.every((x, i) => x === b[i])
+}
+
+function isAttachment(part: PartType | undefined) {
+  if (part?.type !== "file") return false
+  const mime = (part as FilePart).mime ?? ""
+  return mime.startsWith("image/") || mime === "application/pdf"
 }
 
 function AssistantMessageItem(props: {
@@ -133,6 +141,7 @@ export function SessionTurn(
 
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
+  const emptyFiles: FilePart[] = []
   const emptyAssistant: AssistantMessage[] = []
   const emptyPermissions: PermissionRequest[] = []
   const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
@@ -178,6 +187,19 @@ export function SessionTurn(
     const msg = message()
     if (!msg) return emptyParts
     return data.store.part[msg.id] ?? emptyParts
+  })
+
+  const attachmentParts = createMemo(() => {
+    const msgParts = parts()
+    if (msgParts.length === 0) return emptyFiles
+    return msgParts.filter((part) => isAttachment(part)) as FilePart[]
+  })
+
+  const stickyParts = createMemo(() => {
+    const msgParts = parts()
+    if (msgParts.length === 0) return emptyParts
+    if (attachmentParts().length === 0) return msgParts
+    return msgParts.filter((part) => !isAttachment(part))
   })
 
   const assistantMessages = createMemo(
@@ -331,6 +353,15 @@ export function SessionTurn(
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
   const [responseCopied, setResponseCopied] = createSignal(false)
+  const [rootRef, setRootRef] = createSignal<HTMLDivElement | undefined>()
+  const [stickyRef, setStickyRef] = createSignal<HTMLDivElement | undefined>()
+
+  const updateStickyHeight = (height: number) => {
+    const root = rootRef()
+    if (!root) return
+    const next = Math.ceil(height)
+    root.style.setProperty("--session-turn-sticky-height", `${next}px`)
+  }
   const handleCopyResponse = async () => {
     const content = response()
     if (!content) return
@@ -359,6 +390,24 @@ export function SessionTurn(
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
+  })
+
+  createResizeObserver(
+    () => stickyRef(),
+    ({ height }) => {
+      updateStickyHeight(height)
+    },
+  )
+
+  createEffect(() => {
+    const root = rootRef()
+    if (!root) return
+    const sticky = stickyRef()
+    if (!sticky) {
+      root.style.setProperty("--session-turn-sticky-height", "0px")
+      return
+    }
+    updateStickyHeight(sticky.getBoundingClientRect().height)
   })
 
   const diffInit = 20
@@ -438,7 +487,7 @@ export function SessionTurn(
   })
 
   return (
-    <div data-component="session-turn" class={props.classes?.root}>
+    <div data-component="session-turn" class={props.classes?.root} ref={setRootRef}>
       <div
         ref={autoScroll.scrollRef}
         onScroll={autoScroll.handleScroll}
@@ -459,10 +508,15 @@ export function SessionTurn(
                     <Part part={shellModePart()!} message={msg()} defaultOpen />
                   </Match>
                   <Match when={true}>
-                    <div data-slot="session-turn-sticky">
+                    <Show when={attachmentParts().length > 0}>
+                      <div data-slot="session-turn-attachments">
+                        <Message message={msg()} parts={attachmentParts()} />
+                      </div>
+                    </Show>
+                    <div data-slot="session-turn-sticky" ref={setStickyRef}>
                       {/* User Message */}
                       <div data-slot="session-turn-message-content">
-                        <Message message={msg()} parts={parts()} />
+                        <Message message={msg()} parts={stickyParts()} />
                       </div>
 
                       {/* Trigger (sticky) */}
