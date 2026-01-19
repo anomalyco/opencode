@@ -1170,17 +1170,19 @@ export function Prompt(props: PromptProps) {
               <text fg={theme.text}>
                 {keybind.print("mode_toggle")} <span style={{ fg: modePrefixColor() }}>{executionMode.getModeDisplay().name}</span>
               </text>
-              <Show when={local.model.variant.list().length > 0}>
+              <Show when={lastUserMessage() === undefined}>
+                <Show when={local.model.variant.list().length > 0}>
+                  <text fg={theme.text}>
+                    {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
+                  </text>
+                </Show>
                 <text fg={theme.text}>
-                  {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
+                  {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
+                </text>
+                <text fg={theme.text}>
+                  {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                 </text>
               </Show>
-              <text fg={theme.text}>
-                shift+tab <span style={{ fg: theme.textMuted }}>agents</span>
-              </text>
-              <text fg={theme.text}>
-                {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
-              </text>
             </box>
           </Show>
         </box>
