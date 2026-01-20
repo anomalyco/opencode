@@ -2,11 +2,8 @@ import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useSync } from "@tui/context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
-<<<<<<< HEAD
 import { Installation } from "@/installation"
-=======
 import { useTerminalDimensions } from "@opentui/solid"
->>>>>>> aa170edd4 (feat(tui): add scrollable dialog)
 
 export type DialogStatusProps = {}
 
@@ -42,37 +39,27 @@ export function DialogStatus() {
     return result.toSorted((a, b) => a.name.localeCompare(b.name))
   })
 
-  const height = createMemo(() => Math.floor(dimensions().height / 2) - 4)
+  const maxHeight = createMemo(() => Math.floor(dimensions().height / 2) - 4)
+
+  const contentHeight = createMemo(() => {
+    let h = 1
+    h += Object.keys(sync.data.mcp).length > 0 ? 1 + Object.keys(sync.data.mcp).length : 1
+    h += sync.data.lsp.length > 0 ? 1 + sync.data.lsp.length : 0
+    h += enabledFormatters().length > 0 ? 1 + enabledFormatters().length : 1
+    h += plugins().length > 0 ? 1 + plugins().length : 1
+    return h
+  })
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
-<<<<<<< HEAD
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text} attributes={TextAttributes.BOLD}>
-          Status
-        </text>
-        <text fg={theme.textMuted}>esc</text>
-      </box>
-      <text fg={theme.textMuted}>OpenCode v{Installation.VERSION}</text>
-      <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
-        <box>
-          <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>
-          <For each={Object.entries(sync.data.mcp)}>
-            {([key, item]) => (
-              <box flexDirection="row" gap={1}>
-                <text
-                  flexShrink={0}
-                  style={{
-                    fg: (
-                      {
-=======
-      <scrollbox maxHeight={height()}>
+      <scrollbox maxHeight={maxHeight()} height={Math.min(contentHeight(), maxHeight())}>
         <box flexDirection="row" justifyContent="space-between">
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
             Status
           </text>
           <text fg={theme.textMuted}>esc</text>
         </box>
+        <text fg={theme.textMuted}>OpenCode v{Installation.VERSION}</text>
         <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
           <box>
             <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>
@@ -126,7 +113,6 @@ export function DialogStatus() {
                     flexShrink={0}
                     style={{
                       fg: {
->>>>>>> aa170edd4 (feat(tui): add scrollable dialog)
                         connected: theme.success,
                         error: theme.error,
                       }[item.status],
@@ -191,3 +177,4 @@ export function DialogStatus() {
     </box>
   )
 }
+
