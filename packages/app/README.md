@@ -29,6 +29,21 @@ It correctly bundles Solid in production mode and optimizes the build for the be
 The build is minified and the filenames include the hashes.<br>
 Your app is ready to be deployed!
 
+## E2E Testing
+
+The Playwright runner expects the app already running at `http://localhost:3000`.
+
+```bash
+bun add -D @playwright/test
+bunx playwright install
+bun run test:e2e
+```
+
+Environment options:
+
+- `PLAYWRIGHT_BASE_URL` (default: `http://localhost:3000`)
+- `PLAYWRIGHT_PORT` (default: `3000`)
+
 ## Deployment
 
 You can deploy the `dist` folder to any static host provider (netlify, surge, now, etc.)
