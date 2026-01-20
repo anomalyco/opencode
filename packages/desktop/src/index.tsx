@@ -95,6 +95,21 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     const apiCache = new Map<string, AsyncStorage & { flush: () => Promise<void> }>()
     const memoryCache = new Map<string, StoreLike>()
 
+    const flushAll = async () => {
+      const apis = Array.from(apiCache.values())
+      await Promise.all(apis.map((api) => api.flush().catch(() => undefined)))
+    }
+
+    if ("addEventListener" in globalThis) {
+      const handleVisibility = () => {
+        if (document.visibilityState !== "hidden") return
+        void flushAll()
+      }
+
+      window.addEventListener("pagehide", () => void flushAll())
+      document.addEventListener("visibilitychange", handleVisibility)
+    }
+
     const createMemoryStore = () => {
       const data = new Map<string, string>()
       const store: StoreLike = {
