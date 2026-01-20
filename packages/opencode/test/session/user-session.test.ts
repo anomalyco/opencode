@@ -56,6 +56,48 @@ describe("UserSession", () => {
       expect(retrieved?.id).toBe(session.id)
       expect(retrieved?.username).toBe(session.username)
     })
+
+    test("stores UNIX user info when provided", () => {
+      const userInfo = {
+        uid: 1001,
+        gid: 1001,
+        home: "/home/testuser",
+        shell: "/bin/bash",
+      }
+
+      const session = UserSession.create("testuser", undefined, userInfo)
+
+      expect(session.uid).toBe(1001)
+      expect(session.gid).toBe(1001)
+      expect(session.home).toBe("/home/testuser")
+      expect(session.shell).toBe("/bin/bash")
+    })
+
+    test("UNIX user info is undefined when not provided", () => {
+      const session = UserSession.create("testuser")
+
+      expect(session.uid).toBeUndefined()
+      expect(session.gid).toBeUndefined()
+      expect(session.home).toBeUndefined()
+      expect(session.shell).toBeUndefined()
+    })
+
+    test("stores both userAgent and userInfo when both provided", () => {
+      const userInfo = {
+        uid: 501,
+        gid: 20,
+        home: "/Users/testuser",
+        shell: "/bin/zsh",
+      }
+
+      const session = UserSession.create("testuser", "Test Browser/1.0", userInfo)
+
+      expect(session.userAgent).toBe("Test Browser/1.0")
+      expect(session.uid).toBe(501)
+      expect(session.gid).toBe(20)
+      expect(session.home).toBe("/Users/testuser")
+      expect(session.shell).toBe("/bin/zsh")
+    })
   })
 
   describe("get", () => {
