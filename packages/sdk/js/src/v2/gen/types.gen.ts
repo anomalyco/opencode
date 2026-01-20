@@ -25,6 +25,7 @@ export type Project = {
   name?: string
   icon?: {
     url?: string
+    override?: string
     color?: string
   }
   time: {
@@ -2229,6 +2230,7 @@ export type ProjectUpdateData = {
     name?: string
     icon?: {
       url?: string
+      override?: string
       color?: string
     }
   }

@@ -253,7 +253,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
       .then(() => {
         const notification = new Notification(title, {
           body: description ?? "",
-          icon: "https://opencode.ai/favicon-96x96.png",
+          icon: "https://opencode.ai/favicon-96x96-v2.png",
         })
         notification.onclick = () => {
           const win = getCurrentWindow()
