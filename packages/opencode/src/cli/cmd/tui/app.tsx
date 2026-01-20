@@ -103,6 +103,7 @@ export function tui(input: {
   url: string
   args: Args
   directory?: string
+  unix?: string
   fetch?: typeof fetch
   events?: EventSource
   onExit?: () => Promise<void>
@@ -129,6 +130,7 @@ export function tui(input: {
                       <SDKProvider
                         url={input.url}
                         directory={input.directory}
+                        unix={input.unix}
                         fetch={input.fetch}
                         events={input.events}
                       >
@@ -491,7 +493,17 @@ function App() {
     {
       title: "Open WebUI",
       value: "webui.open",
+      hidden: sdk.url.startsWith("unix://"),
       onSelect: () => {
+        if (sdk.url.startsWith("unix://")) {
+          toast.show({
+            variant: "warning",
+            message: "Cannot open WebUI for Unix socket connections",
+            duration: 3000,
+          })
+          dialog.clear()
+          return
+        }
         open(sdk.url).catch(() => {})
         dialog.clear()
       },

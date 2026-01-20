@@ -9,12 +9,13 @@ export type EventSource = {
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
-  init: (props: { url: string; directory?: string; fetch?: typeof fetch; events?: EventSource }) => {
+  init: (props: { url: string; directory?: string; unix?: string; fetch?: typeof fetch; events?: EventSource }) => {
     const abort = new AbortController()
     const sdk = createOpencodeClient({
       baseUrl: props.url,
       signal: abort.signal,
       directory: props.directory,
+      unix: props.unix,
       fetch: props.fetch,
     })
 
@@ -89,6 +90,8 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       if (timer) clearTimeout(timer)
     })
 
-    return { client: sdk, event: emitter, url: props.url }
+    const displayUrl = props.unix ? `unix://${props.unix}` : props.url
+
+    return { client: sdk, event: emitter, url: displayUrl }
   },
 })

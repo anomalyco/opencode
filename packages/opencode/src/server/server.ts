@@ -529,24 +529,38 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+  export function listen(opts: { port?: number; hostname?: string; mdns?: boolean; cors?: string[]; unix?: string }) {
     _corsWhitelist = opts.cors ?? []
 
-    const args = {
-      hostname: opts.hostname,
+    const baseArgs: any = {
       idleTimeout: 0,
       fetch: App().fetch,
       websocket: websocket,
-    } as const
-    const tryServe = (port: number) => {
-      try {
-        return Bun.serve({ ...args, port })
-      } catch {
-        return undefined
-      }
     }
-    const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
-    if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+
+    let server: ReturnType<typeof Bun.serve>
+
+    if (opts.unix) {
+      // Unix socket mode
+      server = Bun.serve({ ...baseArgs, unix: opts.unix })
+    } else {
+      // TCP socket mode
+      const args = {
+        ...baseArgs,
+        hostname: opts.hostname ?? "127.0.0.1",
+      } as const
+      const tryServe = (port: number) => {
+        try {
+          return Bun.serve({ ...args, port })
+        } catch {
+          return undefined
+        }
+      }
+      const port = opts.port ?? 0
+      const result = port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(port)
+      if (!result) throw new Error(`Failed to start server on port ${port}`)
+      server = result
+    }
 
     _url = server.url
 

@@ -13,7 +13,11 @@ export const ServeCommand = cmd({
     }
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
-    console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
+    if (opts.unix) {
+      console.log(`opencode server listening on unix socket: ${opts.unix}`)
+    } else {
+      console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
+    }
     await new Promise(() => {})
     await server.stop()
   },

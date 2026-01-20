@@ -5,12 +5,51 @@ import { type Config } from "./gen/client/types.gen.js"
 import { OpencodeClient } from "./gen/sdk.gen.js"
 export { type Config as OpencodeClientConfig, OpencodeClient }
 
-export function createOpencodeClient(config?: Config & { directory?: string }) {
+export function createOpencodeClient(config?: Config & { directory?: string; unix?: string }) {
   if (!config?.fetch) {
+    if (config?.unix) {
+      const unixPath = config.unix
+      const customFetch: any = (req: any) => {
+        return fetch(
+          req.url,
+          {
+            method: req.method,
+            headers: req.headers,
+            body: req.body,
+            unix: unixPath,
+            timeout: false,
+          } as any,
+        )
+      }
+      config = {
+        ...config,
+        fetch: customFetch,
+      }
+    } else {
+      const customFetch: any = (req: any) => {
+        // @ts-ignore
+        req.timeout = false
+        return fetch(req)
+      }
+      config = {
+        ...config,
+        fetch: customFetch,
+      }
+    }
+  } else if (config?.unix) {
+    const unixPath = config.unix
+    const originalFetch: any = config.fetch
     const customFetch: any = (req: any) => {
-      // @ts-ignore
-      req.timeout = false
-      return fetch(req)
+      return originalFetch(
+        req.url,
+        {
+          method: req.method,
+          headers: req.headers,
+          body: req.body,
+          unix: unixPath,
+          timeout: false,
+        } as any,
+      )
     }
     config = {
       ...config,

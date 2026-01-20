@@ -23,6 +23,10 @@ const options = {
     describe: "additional domains to allow for CORS",
     default: [] as string[],
   },
+  unix: {
+    type: "string" as const,
+    describe: "unix socket path to bind to (overrides port/hostname)",
+  },
 }
 
 export type NetworkOptions = InferredOptionTypes<typeof options>
@@ -37,7 +41,9 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const hostnameExplicitlySet = process.argv.includes("--hostname")
   const mdnsExplicitlySet = process.argv.includes("--mdns")
   const corsExplicitlySet = process.argv.includes("--cors")
+  const unixExplicitlySet = process.argv.includes("--unix")
 
+  const unix = unixExplicitlySet ? args.unix : (config?.server?.unix ?? args.unix)
   const mdns = mdnsExplicitlySet ? args.mdns : (config?.server?.mdns ?? args.mdns)
   const port = portExplicitlySet ? args.port : (config?.server?.port ?? args.port)
   const hostname = hostnameExplicitlySet
@@ -49,5 +55,5 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
 
-  return { hostname, port, mdns, cors }
+  return { hostname, port, mdns, cors, unix }
 }

@@ -1,5 +1,6 @@
 import { cmd } from "../cmd"
 import { tui } from "./app"
+import { parseAttachUrl } from "./parse-url"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -8,7 +9,7 @@ export const AttachCommand = cmd({
     yargs
       .positional("url", {
         type: "string",
-        describe: "http://localhost:4096",
+        describe: "Server URL: http://localhost:4096 or unix:///path/to/socket",
         demandOption: true,
       })
       .option("dir", {
@@ -22,10 +23,20 @@ export const AttachCommand = cmd({
       }),
   handler: async (args) => {
     if (args.dir) process.chdir(args.dir)
+
+    let parsed
+    try {
+      parsed = parseAttachUrl(args.url)
+    } catch (error) {
+      console.error(`Error: ${error instanceof Error ? error.message : error}`)
+      process.exit(1)
+    }
+
     await tui({
-      url: args.url,
+      url: parsed.baseUrl,
       args: { sessionID: args.session },
       directory: args.dir ? process.cwd() : undefined,
+      unix: parsed.unix,
     })
   },
 })
