@@ -35,10 +35,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. opencode starts normally when auth config is absent (existing behavior unchanged)
   3. opencode validates auth config and reports clear errors for invalid values
   4. Auth is disabled by default when config section is missing
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
+- [ ] 01-01-PLAN.md — Auth schema definition (duration utility + AuthConfig Zod schema)
+- [ ] 01-02-PLAN.md — Config integration (add auth to Config.Info + error formatting)
+- [ ] 01-03-PLAN.md — Startup validation (PAM service file check + backward compatibility)
 
 ### Phase 2: Session Infrastructure
 **Goal**: Users have secure session cookies with configurable expiration and logout capability
@@ -186,7 +188,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Configuration Foundation | 0/TBD | Not started | - |
+| 1. Configuration Foundation | 0/3 | Ready to execute | - |
 | 2. Session Infrastructure | 0/TBD | Not started | - |
 | 3. Auth Broker Core | 0/TBD | Not started | - |
 | 4. Authentication Flow | 0/TBD | Not started | - |
