@@ -3,12 +3,13 @@ import path from "path"
 import { Global } from "../global"
 import { Identifier } from "../id/id"
 import { PermissionNext } from "../permission/next"
+import { Token } from "../util/token"
 import type { Agent } from "../agent/agent"
 import { Scheduler } from "../scheduler"
 
 export namespace Truncate {
   export const MAX_LINES = 2000
-  export const MAX_BYTES = 50 * 1024
+  export const MAX_TOKENS = 10_000
   export const DIR = path.join(Global.Path.data, "tool-output")
   export const GLOB = path.join(DIR, "*")
   const RETENTION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
@@ -18,7 +19,7 @@ export namespace Truncate {
 
   export interface Options {
     maxLines?: number
-    maxBytes?: number
+    maxTokens?: number
     direction?: "head" | "tail"
   }
 
@@ -49,44 +50,44 @@ export namespace Truncate {
 
   export async function output(text: string, options: Options = {}, agent?: Agent.Info): Promise<Result> {
     const maxLines = options.maxLines ?? MAX_LINES
-    const maxBytes = options.maxBytes ?? MAX_BYTES
+    const maxTokens = options.maxTokens ?? MAX_TOKENS
     const direction = options.direction ?? "head"
     const lines = text.split("\n")
-    const totalBytes = Buffer.byteLength(text, "utf-8")
+    const totalTokens = Token.estimate(text)
 
-    if (lines.length <= maxLines && totalBytes <= maxBytes) {
+    if (lines.length <= maxLines && totalTokens <= maxTokens) {
       return { content: text, truncated: false }
     }
 
     const out: string[] = []
     let i = 0
-    let bytes = 0
-    let hitBytes = false
+    let tokens = 0
+    let hitTokens = false
 
     if (direction === "head") {
       for (i = 0; i < lines.length && i < maxLines; i++) {
-        const size = Buffer.byteLength(lines[i], "utf-8") + (i > 0 ? 1 : 0)
-        if (bytes + size > maxBytes) {
-          hitBytes = true
+        const size = Token.estimate(lines[i]) + (out.length > 0 ? 1 : 0)
+        if (tokens + size > maxTokens) {
+          hitTokens = true
           break
         }
         out.push(lines[i])
-        bytes += size
+        tokens += size
       }
     } else {
       for (i = lines.length - 1; i >= 0 && out.length < maxLines; i--) {
-        const size = Buffer.byteLength(lines[i], "utf-8") + (out.length > 0 ? 1 : 0)
-        if (bytes + size > maxBytes) {
-          hitBytes = true
+        const size = Token.estimate(lines[i]) + (out.length > 0 ? 1 : 0)
+        if (tokens + size > maxTokens) {
+          hitTokens = true
           break
         }
         out.unshift(lines[i])
-        bytes += size
+        tokens += size
       }
     }
 
-    const removed = hitBytes ? totalBytes - bytes : lines.length - out.length
-    const unit = hitBytes ? "bytes" : "lines"
+    const removed = hitTokens ? totalTokens - tokens : lines.length - out.length
+    const unit = hitTokens ? "tokens" : "lines"
     const preview = out.join("\n")
 
     const id = Identifier.ascending("tool")

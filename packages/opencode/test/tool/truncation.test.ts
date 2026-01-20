@@ -1,6 +1,7 @@
 import { describe, test, expect, afterAll } from "bun:test"
 import { Truncate } from "../../src/tool/truncation"
 import { Identifier } from "../../src/id/id"
+import { Token } from "../../src/util/token"
 import fs from "fs/promises"
 import path from "path"
 
@@ -8,7 +9,7 @@ const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
 describe("Truncate", () => {
   describe("output", () => {
-    test("truncates large json file by bytes", async () => {
+    test("truncates large json file by tokens", async () => {
       const content = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
       const result = await Truncate.output(content)
 
@@ -33,9 +34,9 @@ describe("Truncate", () => {
       expect(result.content).toContain("...90 lines truncated...")
     })
 
-    test("truncates by byte count", async () => {
+    test("truncates by token count", async () => {
       const content = "a".repeat(1000)
-      const result = await Truncate.output(content, { maxBytes: 100 })
+      const result = await Truncate.output(content, { maxTokens: 100 })
 
       expect(result.truncated).toBe(true)
       expect(result.content).toContain("truncated...")
@@ -63,18 +64,18 @@ describe("Truncate", () => {
       expect(result.content).not.toContain("line0")
     })
 
-    test("uses default MAX_LINES and MAX_BYTES", () => {
+    test("uses default MAX_LINES and MAX_TOKENS", () => {
       expect(Truncate.MAX_LINES).toBe(2000)
-      expect(Truncate.MAX_BYTES).toBe(50 * 1024)
+      expect(Truncate.MAX_TOKENS).toBe(10_000)
     })
 
-    test("large single-line file truncates with byte message", async () => {
+    test("large single-line file truncates with token message", async () => {
       const content = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
       const result = await Truncate.output(content)
 
       expect(result.truncated).toBe(true)
-      expect(result.content).toContain("bytes truncated...")
-      expect(Buffer.byteLength(content, "utf-8")).toBeGreaterThan(Truncate.MAX_BYTES)
+      expect(result.content).toContain("tokens truncated...")
+      expect(Token.estimate(content)).toBeGreaterThan(Truncate.MAX_TOKENS)
     })
 
     test("writes full output to file when truncated", async () => {

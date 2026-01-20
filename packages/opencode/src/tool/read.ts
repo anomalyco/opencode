@@ -8,10 +8,11 @@ import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import { assertExternalDirectory } from "./external-directory"
+import { Token } from "../util/token"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
-const MAX_BYTES = 50 * 1024
+const MAX_TOKENS = 10_000
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
@@ -94,17 +95,17 @@ export const ReadTool = Tool.define("read", {
     const lines = await file.text().then((text) => text.split("\n"))
 
     const raw: string[] = []
-    let bytes = 0
-    let truncatedByBytes = false
+    let tokens = 0
+    let truncatedByTokens = false
     for (let i = offset; i < Math.min(lines.length, offset + limit); i++) {
       const line = lines[i].length > MAX_LINE_LENGTH ? lines[i].substring(0, MAX_LINE_LENGTH) + "..." : lines[i]
-      const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
-      if (bytes + size > MAX_BYTES) {
-        truncatedByBytes = true
+      const size = Token.estimate(line) + (raw.length > 0 ? 1 : 0)
+      if (tokens + size > MAX_TOKENS) {
+        truncatedByTokens = true
         break
       }
       raw.push(line)
-      bytes += size
+      tokens += size
     }
 
     const content = raw.map((line, index) => {
@@ -118,10 +119,10 @@ export const ReadTool = Tool.define("read", {
     const totalLines = lines.length
     const lastReadLine = offset + raw.length
     const hasMoreLines = totalLines > lastReadLine
-    const truncated = hasMoreLines || truncatedByBytes
+    const truncated = hasMoreLines || truncatedByTokens
 
-    if (truncatedByBytes) {
-      output += `\n\n(Output truncated at ${MAX_BYTES} bytes. Use 'offset' parameter to read beyond line ${lastReadLine})`
+    if (truncatedByTokens) {
+      output += `\n\n(Output truncated at ${MAX_TOKENS} tokens. Use 'offset' parameter to read beyond line ${lastReadLine})`
     } else if (hasMoreLines) {
       output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
     } else {
