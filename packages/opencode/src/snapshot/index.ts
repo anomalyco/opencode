@@ -65,7 +65,22 @@ export namespace Snapshot {
       await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
       log.info("initialized")
     }
-    await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
+    // Try to add all files, with fallback for problematic files (e.g., Windows reserved names like 'nul')
+    const addResult = await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+    if (addResult.exitCode !== 0) {
+      log.warn("git add failed, retrying with --ignore-errors", {
+        exitCode: addResult.exitCode,
+        stderr: addResult.stderr.toString(),
+      })
+      // Retry with --ignore-errors to skip problematic files and continue
+      await $`git --git-dir ${git} --work-tree ${Instance.worktree} add --ignore-errors .`
+        .quiet()
+        .cwd(Instance.directory)
+        .nothrow()
+    }
     const hash = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
       .quiet()
       .cwd(Instance.directory)
