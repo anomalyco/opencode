@@ -49,7 +49,7 @@
   min-width: 180px;
   max-width: 23rem;
   overflow: hidden;
-  border-radius: var(--radius-md);
+  border-radius: 8px;
   background-color: var(--surface-raised-stronger-non-alpha);
   padding: 0;
   box-shadow: var(--shadow-xs-border);
