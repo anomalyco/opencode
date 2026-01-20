@@ -30,4 +30,61 @@ export const dict = {
   "ui.messagePart.title.write": "Write",
   "ui.messagePart.option.typeOwnAnswer": "Type your own answer",
   "ui.messagePart.review.title": "Review your answers",
+
+  "ui.list.loading": "Loading",
+  "ui.list.empty": "No results",
+  "ui.list.emptyWithFilter.prefix": "No results for",
+  "ui.list.emptyWithFilter.suffix": "",
+
+  "ui.messageNav.newMessage": "New message",
+
+  "ui.textField.copyToClipboard": "Copy to clipboard",
+  "ui.textField.copied": "Copied",
+
+  "ui.imagePreview.alt": "Image preview",
+
+  "ui.tool.read": "Read",
+  "ui.tool.list": "List",
+  "ui.tool.glob": "Glob",
+  "ui.tool.grep": "Grep",
+  "ui.tool.webfetch": "Webfetch",
+  "ui.tool.shell": "Shell",
+  "ui.tool.patch": "Patch",
+  "ui.tool.todos": "To-dos",
+  "ui.tool.todos.read": "Read to-dos",
+  "ui.tool.questions": "Questions",
+  "ui.tool.agent": "{{type}} Agent",
+
+  "ui.common.file.one": "file",
+  "ui.common.file.other": "files",
+  "ui.common.question.one": "question",
+  "ui.common.question.other": "questions",
+
+  "ui.common.add": "Add",
+  "ui.common.cancel": "Cancel",
+  "ui.common.confirm": "Confirm",
+  "ui.common.dismiss": "Dismiss",
+  "ui.common.next": "Next",
+  "ui.common.submit": "Submit",
+
+  "ui.permission.deny": "Deny",
+  "ui.permission.allowAlways": "Allow always",
+  "ui.permission.allowOnce": "Allow once",
+
+  "ui.message.expand": "Expand message",
+  "ui.message.collapse": "Collapse message",
+  "ui.message.copy": "Copy",
+  "ui.message.copied": "Copied!",
+  "ui.message.attachment.alt": "attachment",
+
+  "ui.patch.action.deleted": "Deleted",
+  "ui.patch.action.created": "Created",
+  "ui.patch.action.moved": "Moved",
+  "ui.patch.action.patched": "Patched",
+
+  "ui.question.subtitle.answered": "{{count}} answered",
+  "ui.question.answer.none": "(no answer)",
+  "ui.question.review.notAnswered": "(not answered)",
+  "ui.question.multiHint": "(select all that apply)",
+  "ui.question.custom.placeholder": "Type your answer...",
 }

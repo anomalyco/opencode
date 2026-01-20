@@ -120,6 +120,22 @@ Examples (non-exhaustive):
 - `Type your own answer`
 - `Review your answers`
 
+### 4) Additional Hardcoded Strings (Full Audit)
+
+Found during a full `packages/ui/src/components` + `packages/ui/src/context` sweep:
+
+- `packages/ui/src/components/list.tsx`
+  - `Loading`
+  - `No results`
+  - `No results for "{{filter}}"`
+- `packages/ui/src/components/message-nav.tsx`
+  - `New message`
+- `packages/ui/src/components/text-field.tsx`
+  - `Copied`
+  - `Copy to clipboard`
+- `packages/ui/src/components/image-preview.tsx`
+  - `Image preview` (alt text)
+
 ## Prioritized Implementation Plan
 
 1. Completed (2026-01-20): Add `@opencode-ai/ui` i18n context (`packages/ui/src/context/i18n.tsx`) + export it.
@@ -128,8 +144,8 @@ Examples (non-exhaustive):
    - `packages/app/src/app.tsx`
    - `packages/enterprise/src/app.tsx`
 4. Completed (2026-01-20): Convert `packages/ui/src/components/session-review.tsx` and `packages/ui/src/components/session-turn.tsx` to use `useI18n().t(...)`.
-5. Convert `packages/ui/src/components/message-part.tsx`.
-6. Do a full `packages/ui/src/components` + `packages/ui/src/context` audit for additional hardcoded copy.
+5. Completed (2026-01-20): Convert `packages/ui/src/components/message-part.tsx`.
+6. Completed (2026-01-20): Do a full `packages/ui/src/components` + `packages/ui/src/context` audit for additional hardcoded copy.
 
 ## Notes / Risks
 
