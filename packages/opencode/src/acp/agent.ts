@@ -12,6 +12,7 @@ import {
   type PermissionOption,
   type PlanEntry,
   type PromptRequest,
+  type Role,
   type SetSessionModelRequest,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
@@ -687,7 +688,12 @@ export namespace ACP {
               break
           }
         } else if (part.type === "text") {
-          if (part.text && !part.ignored) {
+          if (part.text) {
+            const audience: Role[] | undefined = part.synthetic
+              ? ["assistant"]
+              : part.ignored
+                ? ["user"]
+                : undefined
             await this.connection
               .sessionUpdate({
                 sessionId,
@@ -696,6 +702,7 @@ export namespace ACP {
                   content: {
                     type: "text",
                     text: part.text,
+                    ...(audience && { annotations: { audience } }),
                   },
                 },
               })
@@ -968,14 +975,19 @@ export namespace ACP {
       const agent = session.modeId ?? (await AgentModule.defaultAgent())
 
       const parts: Array<
-        { type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }
+        { type: "text"; text: string; synthetic?: boolean; ignored?: boolean } | { type: "file"; url: string; filename: string; mime: string }
       > = []
       for (const part of params.prompt) {
         switch (part.type) {
           case "text":
+            const audience = part.annotations?.audience
+            const forAssistant = audience?.length === 1 && audience[0] === "assistant"
+            const forUser = audience?.length === 1 && audience[0] === "user"
             parts.push({
               type: "text" as const,
               text: part.text,
+              ...(forAssistant && { synthetic: true }),
+              ...(forUser && { ignored: true }),
             })
             break
           case "image": {
