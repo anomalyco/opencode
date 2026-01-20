@@ -689,11 +689,7 @@ export namespace ACP {
           }
         } else if (part.type === "text") {
           if (part.text) {
-            const audience: Role[] | undefined = part.synthetic
-              ? ["assistant"]
-              : part.ignored
-                ? ["user"]
-                : undefined
+            const audience: Role[] | undefined = part.synthetic ? ["assistant"] : part.ignored ? ["user"] : undefined
             await this.connection
               .sessionUpdate({
                 sessionId,
@@ -975,7 +971,8 @@ export namespace ACP {
       const agent = session.modeId ?? (await AgentModule.defaultAgent())
 
       const parts: Array<
-        { type: "text"; text: string; synthetic?: boolean; ignored?: boolean } | { type: "file"; url: string; filename: string; mime: string }
+        | { type: "text"; text: string; synthetic?: boolean; ignored?: boolean }
+        | { type: "file"; url: string; filename: string; mime: string }
       > = []
       for (const part of params.prompt) {
         switch (part.type) {
