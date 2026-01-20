@@ -1,7 +1,56 @@
 import { describe, expect, test } from "bun:test"
 import { MessageV2 } from "../../src/session/message-v2"
+import type { Provider } from "../../src/provider/provider"
 
 const sessionID = "session"
+const model: Provider.Model = {
+  id: "test-model",
+  providerID: "test",
+  api: {
+    id: "test-model",
+    url: "https://example.com",
+    npm: "@ai-sdk/openai",
+  },
+  name: "Test Model",
+  capabilities: {
+    temperature: true,
+    reasoning: false,
+    attachment: false,
+    toolcall: true,
+    input: {
+      text: true,
+      audio: false,
+      image: false,
+      video: false,
+      pdf: false,
+    },
+    output: {
+      text: true,
+      audio: false,
+      image: false,
+      video: false,
+      pdf: false,
+    },
+    interleaved: false,
+  },
+  cost: {
+    input: 0,
+    output: 0,
+    cache: {
+      read: 0,
+      write: 0,
+    },
+  },
+  limit: {
+    context: 0,
+    input: 0,
+    output: 0,
+  },
+  status: "active",
+  options: {},
+  headers: {},
+  release_date: "2026-01-01",
+}
 
 function userInfo(id: string): MessageV2.User {
   return {
@@ -16,7 +65,13 @@ function userInfo(id: string): MessageV2.User {
   } as unknown as MessageV2.User
 }
 
-function assistantInfo(id: string, parentID: string, error?: MessageV2.Assistant["error"]): MessageV2.Assistant {
+function assistantInfo(
+  id: string,
+  parentID: string,
+  error?: MessageV2.Assistant["error"],
+  meta?: { providerID: string; modelID: string },
+): MessageV2.Assistant {
+  const infoModel = meta ?? { providerID: model.providerID, modelID: model.api.id }
   return {
     id,
     sessionID,
@@ -24,8 +79,8 @@ function assistantInfo(id: string, parentID: string, error?: MessageV2.Assistant
     time: { created: 0 },
     error,
     parentID,
-    modelID: "model",
-    providerID: "provider",
+    modelID: infoModel.modelID,
+    providerID: infoModel.providerID,
     mode: "",
     agent: "agent",
     path: { cwd: "/", root: "/" },
@@ -66,7 +121,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
@@ -91,7 +146,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input)).toStrictEqual([])
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
   test("includes synthetic text parts", () => {
@@ -122,7 +177,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
@@ -189,7 +244,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [
@@ -259,7 +314,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -305,6 +360,81 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("omits provider metadata when assistant model differs", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID, undefined, { providerID: "other", modelID: "other" }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "text",
+            text: "done",
+            metadata: { openai: { assistant: "meta" } },
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "ok",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+            metadata: { openai: { tool: "meta" } },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "done" },
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "bash",
+            output: { type: "text", value: "ok" },
+          },
+        ],
+      },
+    ])
+  })
+
   test("replaces compacted tool output with placeholder", () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
@@ -341,7 +471,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -408,7 +538,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -461,7 +591,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input)).toStrictEqual([])
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
   test("includes aborted assistant messages only when they have non-step-start/reasoning content", () => {
@@ -504,7 +634,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "assistant",
         content: [
@@ -540,7 +670,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "assistant",
         content: [{ type: "text", text: "first" }],
@@ -567,7 +697,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input)).toStrictEqual([])
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
   test("converts pending/running tool calls to error results to prevent dangling tool_use", () => {
@@ -614,7 +744,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    const result = MessageV2.toModelMessages(input)
+    const result = MessageV2.toModelMessages(input, model)
 
     expect(result).toStrictEqual([
       {
