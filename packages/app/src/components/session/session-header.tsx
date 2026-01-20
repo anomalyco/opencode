@@ -244,7 +244,11 @@ export function SessionHeader() {
                     }
                     trigger={
                       <Tooltip class="shrink-0" value="Share session">
-                        <Button variant="secondary" classList={{ "rounded-r-none": shareUrl() !== undefined }}>
+                        <Button
+                          variant="secondary"
+                          classList={{ "rounded-r-none": shareUrl() !== undefined }}
+                          style={{ scale: 1 }}
+                        >
                           Share
                         </Button>
                       </Tooltip>
@@ -293,12 +297,12 @@ export function SessionHeader() {
                       </Show>
                     </div>
                   </Popover>
-                  <Show when={shareUrl()}>
+                  <Show when={shareUrl()} fallback={<div class="size-6" aria-hidden="true" />}>
                     <Tooltip value={state.copied ? "Copied" : "Copy link"} placement="top" gutter={8}>
                       <IconButton
                         icon={state.copied ? "check" : "copy"}
                         variant="secondary"
-                        class="rounded-l-none border-l border-border-weak-base"
+                        class="rounded-l-none"
                         onClick={copyLink}
                         disabled={state.unshare}
                       />
