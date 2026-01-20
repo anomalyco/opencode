@@ -1421,7 +1421,7 @@ export default function Layout(props: ParentProps) {
             </Tooltip>
           }
         >
-          <HoverCard openDelay={150} closeDelay={100} placement="right-start" gutter={16} trigger={item}>
+          <HoverCard openDelay={150} closeDelay={100} placement="right-start" gutter={28} trigger={item}>
             <Show when={hoverReady()} fallback={<div class="text-12-regular text-text-weak">Loading messages…</div>}>
               <MessageNav
                 messages={hoverMessages() ?? []}
