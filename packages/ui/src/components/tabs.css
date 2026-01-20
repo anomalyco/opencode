@@ -315,10 +315,10 @@
         border: none;
         border-radius: var(--radius-md);
 
-        /* text-14-regular */
+        /* text-14-medium */
         font-family: var(--font-family-sans);
         font-size: var(--font-size-base);
-        font-weight: var(--font-weight-regular);
+        font-weight: var(--font-weight-medium);
         line-height: var(--line-height-large);
 
         [data-slot="tabs-trigger"] {
