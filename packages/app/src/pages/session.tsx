@@ -424,6 +424,30 @@ export default function Page() {
       onSelect: () => navigateMessageByOffset(1),
     },
     {
+      id: "message.first",
+      title: "First message",
+      description: "Go to the first message",
+      category: "Session",
+      keybind: "home",
+      disabled: !params.id,
+      onSelect: () => {
+        const msgs = visibleUserMessages()
+        if (msgs.length > 0) scrollToMessage(msgs[0], "smooth")
+      },
+    },
+    {
+      id: "message.last",
+      title: "Last message",
+      description: "Go to the last message",
+      category: "Session",
+      keybind: "end",
+      disabled: !params.id,
+      onSelect: () => {
+        const msgs = visibleUserMessages()
+        if (msgs.length > 0) scrollToMessage(msgs[msgs.length - 1], "smooth")
+      },
+    },
+    {
       id: "model.choose",
       title: "Choose model",
       description: "Select a different model",
@@ -956,6 +980,7 @@ export default function Page() {
                       </Show>
                       <div
                         ref={setScrollRef}
+                        data-session-scroll
                         onScroll={(e) => {
                           autoScroll.handleScroll()
                           if (isDesktop()) scheduleScrollSpy(e.currentTarget)
@@ -1018,8 +1043,57 @@ export default function Page() {
             </Switch>
           </div>
 
+          {/* Navigation buttons */}
+          <Show when={params.id && visibleUserMessages().length > 0}>
+            <div
+              data-e2e="nav-buttons"
+              class="fixed md:absolute right-4 md:right-6 bottom-32 md:bottom-36 z-50 flex flex-col gap-1 pointer-events-auto"
+            >
+              <Tooltip value="Go to top" placement="left">
+                <IconButton
+                  data-e2e="nav-top"
+                  icon="chevron-grabber-vertical"
+                  variant="ghost"
+                  class="rotate-180"
+                  onClick={() => {
+                    const container = document.querySelector("[data-session-scroll]")
+                    container?.scrollTo({ top: 0, behavior: "smooth" })
+                  }}
+                />
+              </Tooltip>
+              <Tooltip value="Previous message" placement="left">
+                <IconButton
+                  data-e2e="nav-prev-msg"
+                  icon="chevron-down"
+                  variant="ghost"
+                  class="rotate-180"
+                  onClick={() => navigateMessageByOffset(-1)}
+                />
+              </Tooltip>
+              <Tooltip value="Next message" placement="left">
+                <IconButton
+                  data-e2e="nav-next-msg"
+                  icon="chevron-down"
+                  variant="ghost"
+                  onClick={() => navigateMessageByOffset(1)}
+                />
+              </Tooltip>
+              <Tooltip value="Go to bottom" placement="left">
+                <IconButton
+                  data-e2e="nav-bottom"
+                  icon="chevron-grabber-vertical"
+                  variant="ghost"
+                  onClick={() => {
+                    const container = document.querySelector("[data-session-scroll]")
+                    if (container) container.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
+                  }}
+                />
+              </Tooltip>
+            </div>
+          </Show>
+
           {/* Prompt input */}
-          <div class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-8 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none">
+          <div class="fixed md:absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-8 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none">
             <div
               classList={{
                 "w-full md:px-6 pointer-events-auto": true,
