@@ -49,7 +49,7 @@ export const SettingsGeneral: Component = () => {
         </div>
       </div>
 
-      <div class="flex flex-col gap-8 p-8 pt-6 max-w-[720px]">
+      <div class="flex flex-col gap-8 p-8 pt-0 max-w-[720px]">
         {/* Appearance Section */}
         <div class="flex flex-col gap-1">
           <h3 class="text-14-medium text-text-strong pb-2">Appearance</h3>
