@@ -563,9 +563,13 @@ export default function Layout(props: ParentProps) {
     if (!project) return [] as Session[]
     if (workspaceSetting()) {
       const dirs = workspaceIds(project)
+      const activeDir = params.dir ? base64Decode(params.dir) : ""
       const result: Session[] = []
       for (const dir of dirs) {
-        const [dirStore] = globalSync.child(dir)
+        const expanded = store.workspaceExpanded[dir] ?? dir === project.worktree
+        const active = dir === activeDir
+        if (!expanded && !active) continue
+        const [dirStore] = globalSync.child(dir, { bootstrap: true })
         const dirSessions = dirStore.session
           .filter((session) => session.directory === dirStore.path.directory)
           .filter((session) => !session.parentID && !session.time?.archived)
@@ -1238,8 +1242,12 @@ export default function Layout(props: ParentProps) {
     if (!project) return
 
     if (workspaceSetting()) {
+      const activeDir = params.dir ? base64Decode(params.dir) : ""
       const dirs = [project.worktree, ...(project.sandboxes ?? [])]
       for (const directory of dirs) {
+        const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
+        const active = directory === activeDir
+        if (!expanded && !active) continue
         globalSync.project.loadSessions(directory)
       }
       return
@@ -1558,7 +1566,7 @@ export default function Layout(props: ParentProps) {
 
   const SortableWorkspace = (props: { directory: string; project: LocalProject; mobile?: boolean }): JSX.Element => {
     const sortable = createSortable(props.directory)
-    const [workspaceStore, setWorkspaceStore] = globalSync.child(props.directory)
+    const [workspaceStore, setWorkspaceStore] = globalSync.child(props.directory, { bootstrap: false })
     const [menuOpen, setMenuOpen] = createSignal(false)
     const [pendingRename, setPendingRename] = createSignal(false)
     const slug = createMemo(() => base64Encode(props.directory))
@@ -1569,12 +1577,17 @@ export default function Layout(props: ParentProps) {
         .toSorted(sortSessions),
     )
     const local = createMemo(() => props.directory === props.project.worktree)
+    const active = createMemo(() => {
+      const current = params.dir ? base64Decode(params.dir) : ""
+      return current === props.directory
+    })
     const workspaceValue = createMemo(() => {
       const branch = workspaceStore.vcs?.branch
       const name = branch ?? getFilename(props.directory)
       return workspaceName(props.directory, props.project.id, branch) ?? name
     })
-    const open = createMemo(() => store.workspaceExpanded[props.directory] ?? true)
+    const open = createMemo(() => store.workspaceExpanded[props.directory] ?? local())
+    const boot = createMemo(() => open() || active())
     const loading = createMemo(() => open() && workspaceStore.status !== "complete" && sessions().length === 0)
     const hasMore = createMemo(() => local() && workspaceStore.sessionTotal > workspaceStore.session.length)
     const loadMore = async () => {
@@ -1590,6 +1603,11 @@ export default function Layout(props: ParentProps) {
       if (value) return
       if (editorOpen(`workspace:${props.directory}`)) closeEditor()
     }
+
+    createEffect(() => {
+      if (!boot()) return
+      globalSync.child(props.directory, { bootstrap: true })
+    })
 
     const header = () => (
       <div class="flex items-center gap-1 min-w-0 flex-1">

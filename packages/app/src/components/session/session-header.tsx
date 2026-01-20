@@ -45,6 +45,8 @@ export function SessionHeader() {
 
   const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
+  const showReview = createMemo(() => !!currentSession()?.summary?.files)
+  const showShare = createMemo(() => shareEnabled() && !!currentSession())
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey()))
 
@@ -172,12 +174,14 @@ export function SessionHeader() {
               {/*   <SessionMcpIndicator /> */}
               {/* </div> */}
               <div class="flex items-center gap-1">
-                <Show when={currentSession()?.summary?.files}>
-                  <TooltipKeybind
-                    class="hidden md:block shrink-0"
-                    title="Toggle review"
-                    keybind={command.keybind("review.toggle")}
-                  >
+                <div
+                  class="hidden md:block shrink-0"
+                  classList={{
+                    "opacity-0 pointer-events-none": !showReview(),
+                  }}
+                  aria-hidden={!showReview()}
+                >
+                  <TooltipKeybind title="Toggle review" keybind={command.keybind("review.toggle")}>
                     <Button
                       variant="ghost"
                       class="group/review-toggle size-6 p-0"
@@ -202,7 +206,7 @@ export function SessionHeader() {
                       </div>
                     </Button>
                   </TooltipKeybind>
-                </Show>
+                </div>
                 <TooltipKeybind
                   class="hidden md:block shrink-0"
                   title="Toggle terminal"
@@ -233,8 +237,13 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <Show when={shareEnabled() && currentSession()}>
-                <div class="flex items-center">
+              <div
+                class="flex items-center"
+                classList={{
+                  "opacity-0 pointer-events-none": !showShare(),
+                }}
+                aria-hidden={!showShare()}
+              >
                   <Popover
                     title="Publish on web"
                     description={
@@ -308,8 +317,7 @@ export function SessionHeader() {
                       />
                     </Tooltip>
                   </Show>
-                </div>
-              </Show>
+              </div>
             </div>
           </Portal>
         )}
