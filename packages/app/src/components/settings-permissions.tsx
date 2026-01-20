@@ -129,6 +129,7 @@ export const SettingsPermissions: Component = () => {
                     onSelect={(option) => option && setPermission(item.id, option.value)}
                     variant="secondary"
                     size="small"
+                    triggerVariant="settings"
                   />
                 </SettingsRow>
               )}

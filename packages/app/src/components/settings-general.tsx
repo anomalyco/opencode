@@ -69,6 +69,7 @@ export const SettingsGeneral: Component = () => {
                 }}
                 variant="secondary"
                 size="small"
+                triggerVariant="settings"
               />
             </SettingsRow>
 
@@ -99,6 +100,7 @@ export const SettingsGeneral: Component = () => {
                 }}
                 variant="secondary"
                 size="small"
+                triggerVariant="settings"
               />
             </SettingsRow>
 
@@ -111,6 +113,7 @@ export const SettingsGeneral: Component = () => {
                 onSelect={(option) => option && settings.appearance.setFont(option.value)}
                 variant="secondary"
                 size="small"
+                triggerVariant="settings"
                 triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()), "min-width": "180px" }}
               >
                 {(option) => <span style={{ "font-family": monoFontFamily(option?.value) }}>{option?.label}</span>}
@@ -172,6 +175,7 @@ export const SettingsGeneral: Component = () => {
                 }}
                 variant="secondary"
                 size="small"
+                triggerVariant="settings"
               />
             </SettingsRow>
 
@@ -192,6 +196,7 @@ export const SettingsGeneral: Component = () => {
                 }}
                 variant="secondary"
                 size="small"
+                triggerVariant="settings"
               />
             </SettingsRow>
 
@@ -212,6 +217,7 @@ export const SettingsGeneral: Component = () => {
                 }}
                 variant="secondary"
                 size="small"
+                triggerVariant="settings"
               />
             </SettingsRow>
           </div>
