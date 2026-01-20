@@ -6,6 +6,9 @@ import z from "zod"
 // Re-export broker client for PAM authentication
 export { BrokerClient, type AuthResult } from "./broker-client.js"
 
+// Re-export user info lookup for UNIX user identity
+export { getUserInfo, type UnixUserInfo } from "./user-info.js"
+
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
 export namespace Auth {
