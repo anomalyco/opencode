@@ -82,6 +82,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
       {...others}
       data-component="select"
       placement="bottom-end"
+      gutter={4}
       value={local.current}
       options={grouped()}
       optionValue={(x) => (local.value ? local.value(x) : (x as string))}
