@@ -28,6 +28,7 @@ import { existsSync } from "fs"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
+import { PackageRegistry } from "@/bun/registry"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -233,7 +234,7 @@ export namespace Config {
 
     const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
     if (targetVersion === "latest") {
-      const isOutdated = await BunProc.isOutdated("@opencode-ai/plugin", depVersion, dir)
+      const isOutdated = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
       if (!isOutdated) return false
       log.info("Cached version is outdated, proceeding with install", {
         pkg: "@opencode-ai/plugin",

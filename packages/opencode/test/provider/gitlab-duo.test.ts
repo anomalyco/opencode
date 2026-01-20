@@ -1,3 +1,4 @@
+import type { PackageRegistry } from "@/bun/registry"
 import { test, expect, mock } from "bun:test"
 import path from "path"
 
@@ -6,8 +7,6 @@ import path from "path"
 
 mock.module("../../src/bun/index", () => ({
   BunProc: {
-    info: async () => null,
-    isOutdated: async () => false,
     install: async (pkg: string, _version?: string) => {
       // Return package name without version for mocking
       const lastAtIndex = pkg.lastIndexOf("@")
@@ -18,6 +17,10 @@ mock.module("../../src/bun/index", () => ({
     },
     which: () => process.execPath,
     InstallFailedError: class extends Error {},
+  },
+  PackageRegistry: {
+    info: async () => null,
+    isOutdated: async () => false,
   },
 }))
 
