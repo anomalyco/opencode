@@ -1,4 +1,4 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on, createSignal } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -18,7 +18,7 @@ import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
-import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
+import { Mark } from "@opencode-ai/ui/logo"
 
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
@@ -167,6 +167,7 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
   const permission = usePermission()
+  const [pendingMessage, setPendingMessage] = createSignal<string | undefined>(undefined)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
@@ -530,7 +531,7 @@ export default function Page() {
       title: "Cycle thinking effort",
       description: "Switch to the next effort level",
       category: "Model",
-      keybind: "shift+mod+t",
+      keybind: "shift+mod+d",
       onSelect: () => {
         local.model.variant.cycle()
       },
@@ -788,17 +789,14 @@ export default function Page() {
       .filter((tab) => tab !== "context"),
   )
 
-  const reviewTab = createMemo(() => hasReview() || tabs().active() === "review")
-  const mobileReview = createMemo(() => !isDesktop() && hasReview() && store.mobileTab === "review")
+  const mobileReview = createMemo(() => !isDesktop() && view().reviewPanel.opened() && store.mobileTab === "review")
 
-  const showTabs = createMemo(
-    () => view().reviewPanel.opened() && (hasReview() || tabs().all().length > 0 || contextOpen()),
-  )
+  const showTabs = createMemo(() => view().reviewPanel.opened())
 
   const activeTab = createMemo(() => {
     const active = tabs().active()
     if (active) return active
-    if (reviewTab()) return "review"
+    if (hasReview()) return "review"
 
     const first = openedTabs()[0]
     if (first) return first
@@ -946,17 +944,30 @@ export default function Page() {
     window.history.replaceState(null, "", `#${anchor(id)}`)
   }
 
+  createEffect(() => {
+    const sessionID = params.id
+    if (!sessionID) return
+    const raw = sessionStorage.getItem("opencode.pendingMessage")
+    if (!raw) return
+    const parts = raw.split("|")
+    const pendingSessionID = parts[0]
+    const messageID = parts[1]
+    if (!pendingSessionID || !messageID) return
+    if (pendingSessionID !== sessionID) return
+
+    sessionStorage.removeItem("opencode.pendingMessage")
+    setPendingMessage(messageID)
+  })
+
   const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
     const root = scroller
-    if (!root) {
-      el.scrollIntoView({ behavior, block: "start" })
-      return
-    }
+    if (!root) return false
 
     const a = el.getBoundingClientRect()
     const b = root.getBoundingClientRect()
     const top = a.top - b.top + root.scrollTop
     root.scrollTo({ top, behavior })
+    return true
   }
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
@@ -970,7 +981,15 @@ export default function Page() {
 
       requestAnimationFrame(() => {
         const el = document.getElementById(anchor(message.id))
-        if (el) scrollToElement(el, behavior)
+        if (!el) {
+          requestAnimationFrame(() => {
+            const next = document.getElementById(anchor(message.id))
+            if (!next) return
+            scrollToElement(next, behavior)
+          })
+          return
+        }
+        scrollToElement(el, behavior)
       })
 
       updateHash(message.id)
@@ -978,8 +997,55 @@ export default function Page() {
     }
 
     const el = document.getElementById(anchor(message.id))
-    if (el) scrollToElement(el, behavior)
+    if (!el) {
+      updateHash(message.id)
+      requestAnimationFrame(() => {
+        const next = document.getElementById(anchor(message.id))
+        if (!next) return
+        if (!scrollToElement(next, behavior)) return
+      })
+      return
+    }
+    if (scrollToElement(el, behavior)) {
+      updateHash(message.id)
+      return
+    }
+
+    requestAnimationFrame(() => {
+      const next = document.getElementById(anchor(message.id))
+      if (!next) return
+      if (!scrollToElement(next, behavior)) return
+    })
     updateHash(message.id)
+  }
+
+  const applyHash = (behavior: ScrollBehavior) => {
+    const hash = window.location.hash.slice(1)
+    if (!hash) {
+      autoScroll.forceScrollToBottom()
+      return
+    }
+
+    const match = hash.match(/^message-(.+)$/)
+    if (match) {
+      const msg = visibleUserMessages().find((m) => m.id === match[1])
+      if (msg) {
+        scrollToMessage(msg, behavior)
+        return
+      }
+
+      // If we have a message hash but the message isn't loaded/rendered yet,
+      // don't fall back to "bottom". We'll retry once messages arrive.
+      return
+    }
+
+    const target = document.getElementById(hash)
+    if (target) {
+      scrollToElement(target, behavior)
+      return
+    }
+
+    autoScroll.forceScrollToBottom()
   }
 
   const getActiveMessageId = (container: HTMLDivElement) => {
@@ -1022,29 +1088,45 @@ export default function Page() {
     if (!sessionID || !ready) return
 
     requestAnimationFrame(() => {
-      const hash = window.location.hash.slice(1)
-      if (!hash) {
-        autoScroll.forceScrollToBottom()
-        return
-      }
-
-      const hashTarget = document.getElementById(hash)
-      if (hashTarget) {
-        scrollToElement(hashTarget, "auto")
-        return
-      }
-
-      const match = hash.match(/^message-(.+)$/)
-      if (match) {
-        const msg = visibleUserMessages().find((m) => m.id === match[1])
-        if (msg) {
-          scrollToMessage(msg, "auto")
-          return
-        }
-      }
-
-      autoScroll.forceScrollToBottom()
+      applyHash("auto")
     })
+  })
+
+  // Retry message navigation once the target message is actually loaded.
+  createEffect(() => {
+    const sessionID = params.id
+    const ready = messagesReady()
+    if (!sessionID || !ready) return
+
+    // dependencies
+    visibleUserMessages().length
+    store.turnStart
+
+    const targetId =
+      pendingMessage() ??
+      (() => {
+        const hash = window.location.hash.slice(1)
+        const match = hash.match(/^message-(.+)$/)
+        if (!match) return undefined
+        return match[1]
+      })()
+    if (!targetId) return
+    if (store.messageId === targetId) return
+
+    const msg = visibleUserMessages().find((m) => m.id === targetId)
+    if (!msg) return
+    if (pendingMessage() === targetId) setPendingMessage(undefined)
+    requestAnimationFrame(() => scrollToMessage(msg, "auto"))
+  })
+
+  createEffect(() => {
+    const sessionID = params.id
+    const ready = messagesReady()
+    if (!sessionID || !ready) return
+
+    const handler = () => requestAnimationFrame(() => applyHash("auto"))
+    window.addEventListener("hashchange", handler)
+    onCleanup(() => window.removeEventListener("hashchange", handler))
   })
 
   createEffect(() => {
@@ -1096,8 +1178,8 @@ export default function Page() {
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
-        {/* Mobile tab bar - only shown on mobile when there are diffs */}
-        <Show when={!isDesktop() && hasReview()}>
+        {/* Mobile tab bar - only shown on mobile when user opened review */}
+        <Show when={!isDesktop() && view().reviewPanel.opened()}>
           <Tabs class="h-auto">
             <Tabs.List>
               <Tabs.Trigger
@@ -1114,7 +1196,10 @@ export default function Page() {
                 classes={{ button: "w-full" }}
                 onClick={() => setStore("mobileTab", "review")}
               >
-                {reviewCount()} Files Changed
+                <Switch>
+                  <Match when={hasReview()}>{reviewCount()} Files Changed</Match>
+                  <Match when={true}>Review</Match>
+                </Switch>
               </Tabs.Trigger>
             </Tabs.List>
           </Tabs>
@@ -1139,41 +1224,40 @@ export default function Page() {
                     when={!mobileReview()}
                     fallback={
                       <div class="relative h-full overflow-hidden">
-                        <Show
-                          when={diffsReady()}
-                          fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
-                        >
-                          <SessionReviewTab
-                            diffs={diffs}
-                            view={view}
-                            diffStyle="unified"
-                            onViewFile={(path) => {
-                              const value = file.tab(path)
-                              tabs().open(value)
-                              file.load(path)
-                            }}
-                            classes={{
-                              root: "pb-[calc(var(--prompt-height,8rem)+24px)]",
-                              header: "px-4",
-                              container: "px-4",
-                            }}
-                          />
-                        </Show>
+                        <Switch>
+                          <Match when={hasReview()}>
+                            <Show
+                              when={diffsReady()}
+                              fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
+                            >
+                              <SessionReviewTab
+                                diffs={diffs}
+                                view={view}
+                                diffStyle="unified"
+                                onViewFile={(path) => {
+                                  const value = file.tab(path)
+                                  tabs().open(value)
+                                  file.load(path)
+                                }}
+                                classes={{
+                                  root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
+                                  header: "px-4",
+                                  container: "px-4",
+                                }}
+                              />
+                            </Show>
+                          </Match>
+                          <Match when={true}>
+                            <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
+                              <Mark class="w-14 opacity-10" />
+                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet</div>
+                            </div>
+                          </Match>
+                        </Switch>
                       </div>
                     }
                   >
                     <div class="relative w-full h-full min-w-0">
-                      <Show when={isDesktop()}>
-                        <div class="absolute inset-0 pointer-events-none z-10">
-                          <SessionMessageRail
-                            messages={visibleUserMessages()}
-                            current={activeMessage()}
-                            onMessageSelect={scrollToMessage}
-                            wide={!showTabs()}
-                            class="pointer-events-auto"
-                          />
-                        </div>
-                      </Show>
                       <div
                         ref={setScrollRef}
                         onScroll={(e) => {
@@ -1182,11 +1266,29 @@ export default function Page() {
                         }}
                         onClick={autoScroll.handleInteraction}
                         class="relative min-w-0 w-full h-full overflow-y-auto no-scrollbar"
+                        style={{ "--session-title-height": info()?.title ? "40px" : "0px" }}
                       >
+                        <Show when={info()?.title}>
+                          <div
+                            classList={{
+                              "sticky top-0 z-30 bg-background-stronger": true,
+                              "w-full": true,
+                              "px-4 md:px-6": true,
+                              "md:max-w-200 md:mx-auto": !showTabs(),
+                            }}
+                          >
+                            <div class="h-10 flex items-center">
+                              <h1 class="text-16-medium text-text-strong truncate">{info()?.title}</h1>
+                            </div>
+                          </div>
+                        </Show>
+
                         <div
                           ref={autoScroll.contentRef}
                           class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
+                            "w-full": true,
+                            "md:max-w-200 md:mx-auto": !showTabs(),
                             "mt-0.5": !showTabs(),
                             "mt-0": showTabs(),
                           }}
@@ -1237,6 +1339,7 @@ export default function Page() {
                                   data-message-id={message.id}
                                   classList={{
                                     "min-w-0 w-full max-w-full": true,
+                                    "md:max-w-200": !showTabs(),
                                     "last:min-h-[calc(100vh-5.5rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-4.5rem-var(--prompt-height,10rem)-64px)]":
                                       platform.platform !== "desktop",
                                     "last:min-h-[calc(100vh-7rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-6rem-var(--prompt-height,10rem)-64px)]":
@@ -1253,15 +1356,8 @@ export default function Page() {
                                     }
                                     classes={{
                                       root: "min-w-0 w-full relative",
-                                      content:
-                                        "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
-                                      container:
-                                        "px-4 md:px-6 " +
-                                        (!showTabs()
-                                          ? "md:max-w-200 md:mx-auto"
-                                          : visibleUserMessages().length > 1
-                                            ? "md:pr-6 md:pl-18"
-                                            : ""),
+                                      content: "flex flex-col justify-between !overflow-visible",
+                                      container: "w-full px-4 md:px-6",
                                     }}
                                   />
                                 </div>
@@ -1351,7 +1447,7 @@ export default function Page() {
               <Tabs value={activeTab()} onChange={openTab}>
                 <div class="sticky top-0 shrink-0 flex">
                   <Tabs.List>
-                    <Show when={reviewTab()}>
+                    <Show when={true}>
                       <Tabs.Trigger value="review">
                         <div class="flex items-center gap-3">
                           <Show when={diffs()}>
@@ -1404,26 +1500,36 @@ export default function Page() {
                     </div>
                   </Tabs.List>
                 </div>
-                <Show when={reviewTab()}>
+                <Show when={true}>
                   <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                     <Show when={activeTab() === "review"}>
                       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                        <Show
-                          when={diffsReady()}
-                          fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
-                        >
-                          <SessionReviewTab
-                            diffs={diffs}
-                            view={view}
-                            diffStyle={layout.review.diffStyle()}
-                            onDiffStyleChange={layout.review.setDiffStyle}
-                            onViewFile={(path) => {
-                              const value = file.tab(path)
-                              tabs().open(value)
-                              file.load(path)
-                            }}
-                          />
-                        </Show>
+                        <Switch>
+                          <Match when={hasReview()}>
+                            <Show
+                              when={diffsReady()}
+                              fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
+                            >
+                              <SessionReviewTab
+                                diffs={diffs}
+                                view={view}
+                                diffStyle={layout.review.diffStyle()}
+                                onDiffStyleChange={layout.review.setDiffStyle}
+                                onViewFile={(path) => {
+                                  const value = file.tab(path)
+                                  tabs().open(value)
+                                  file.load(path)
+                                }}
+                              />
+                            </Show>
+                          </Match>
+                          <Match when={true}>
+                            <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
+                              <Mark class="w-14 opacity-10" />
+                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet</div>
+                            </div>
+                          </Match>
+                        </Switch>
                       </div>
                     </Show>
                   </Tabs.Content>
