@@ -1,16 +1,36 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createSignal, createEffect, For, Show, Switch, Match, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
+import { formatDuration } from "@/util/format"
 import path from "path"
-import type { AssistantMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, ToolPart, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
 import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { extractToolCommand } from "../../util/running"
+
+const RUNNING_THRESHOLD_MS = 2000
+
+function RunningToolItem(props: { command: string; startTime: number; now: number }) {
+  const { theme } = useTheme()
+
+  return (
+    <box flexDirection="row" gap={1}>
+      <text flexShrink={0} fg={theme.warning}>
+        ●
+      </text>
+      <text fg={theme.text} wrapMode="none">
+        {props.command}
+        <span style={{ fg: theme.textMuted }}> {formatDuration(Math.floor((props.now - props.startTime) / 1000))}</span>
+      </text>
+    </box>
+  )
+}
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -19,6 +39,124 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+
+  // Tick signal for live time updates
+  const [tick, setTick] = createSignal(Date.now())
+  onMount(() => {
+    const interval = setInterval(() => setTick(Date.now()), 1000)
+    onCleanup(() => clearInterval(interval))
+  })
+
+  // Track session status for LLM inference state
+  const sessionStatus = createMemo(() => sync.data.session_status?.[props.sessionID] ?? { type: "idle" as const })
+  const [thinkingStartTime, setThinkingStartTime] = createSignal<number | null>(null)
+
+  createEffect(() => {
+    const status = sessionStatus()
+    if (status.type === "busy") {
+      if (thinkingStartTime() === null) {
+        setThinkingStartTime(Date.now())
+      }
+    } else {
+      setThinkingStartTime(null)
+    }
+  })
+
+  const runningTools = createMemo(() => {
+    const now = tick()
+    const sessionMessages = messages()
+    const tools: Array<{
+      id: string
+      command: string
+      startTime: number
+    }> = []
+
+    for (const message of sessionMessages) {
+      const parts = sync.data.part[message.id] ?? []
+      for (const part of parts) {
+        if (part.type === "tool") {
+          const toolPart = part as ToolPart
+          if (toolPart.state.status === "running") {
+            const startTime = toolPart.state.time.start
+            if (now - startTime >= RUNNING_THRESHOLD_MS) {
+              tools.push({
+                id: toolPart.id,
+                command: extractToolCommand(toolPart.tool, toolPart.state.input),
+                startTime,
+              })
+            }
+          }
+        }
+      }
+    }
+
+    return tools.sort((a, b) => a.startTime - b.startTime)
+  })
+
+  const inferenceStatus = createMemo(() => {
+    const now = tick()
+    const status = sessionStatus()
+
+    // Handle retry state
+    if (status.type === "retry") {
+      const remaining = Math.max(0, Math.ceil((status.next - now) / 1000))
+      return { type: "retry" as const, message: status.message, remaining }
+    }
+
+    // Not busy = no inference happening
+    if (status.type !== "busy") return null
+
+    // Check threshold
+    const startTime = thinkingStartTime()
+    if (!startTime || now - startTime < RUNNING_THRESHOLD_MS) return null
+
+    // If tools are running, don't show inference status (tools will show instead)
+    if (runningTools().length > 0) return null
+
+    const sessionMessages = messages()
+    const lastMsg = sessionMessages.at(-1)
+
+    // No messages or last is user message = sending request
+    if (!lastMsg || lastMsg.role === "user") {
+      return { type: "sending" as const, startTime }
+    }
+
+    // Have assistant message - check parts
+    const parts = sync.data.part[lastMsg.id] ?? []
+
+    // No parts yet = pondering (waiting for first token)
+    if (parts.length === 0) {
+      return { type: "pondering" as const, startTime }
+    }
+
+    // Check for active text/reasoning streaming (ignore tool parts)
+    const lastTextOrReasoning = [...parts]
+      .reverse()
+      .find((p): p is TextPart | ReasoningPart => p.type === "text" || p.type === "reasoning")
+
+    if (lastTextOrReasoning) {
+      const hasContent = lastTextOrReasoning.text?.length > 0
+      const isComplete = lastTextOrReasoning.time?.end !== undefined
+
+      if (!hasContent) {
+        // Part exists but no content yet = pondering
+        return { type: "pondering" as const, startTime }
+      }
+
+      if (!isComplete) {
+        // Has content, not complete = actively streaming
+        const streamStartTime = lastTextOrReasoning.time?.start ?? startTime
+        return { type: "streaming" as const, startTime: streamStartTime }
+      }
+    }
+
+    // Between tool calls or other intermediate state = pondering
+    if (!lastMsg.time.completed) {
+      return { type: "pondering" as const, startTime }
+    }
+
+    return null
+  })
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
@@ -97,6 +235,90 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
+            <Show when={runningTools().length > 0 || inferenceStatus()}>
+              <box>
+                <text fg={theme.text}>
+                  <b>Running</b>
+                </text>
+                <Show when={inferenceStatus()}>
+                  {(status) => (
+                    <Switch>
+                      <Match when={status().type === "sending"}>
+                        <box flexDirection="row" gap={1}>
+                          <text flexShrink={0} fg={theme.warning}>
+                            ●
+                          </text>
+                          <text fg={theme.text} wrapMode="none">
+                            Sending...
+                            <span style={{ fg: theme.textMuted }}>
+                              {" "}
+                              {formatDuration(
+                                Math.floor(
+                                  (tick() - (status() as { type: "sending"; startTime: number }).startTime) / 1000,
+                                ),
+                              )}
+                            </span>
+                          </text>
+                        </box>
+                      </Match>
+                      <Match when={status().type === "pondering"}>
+                        <box flexDirection="row" gap={1}>
+                          <text flexShrink={0} fg={theme.warning}>
+                            ●
+                          </text>
+                          <text fg={theme.text} wrapMode="none">
+                            Pondering...
+                            <span style={{ fg: theme.textMuted }}>
+                              {" "}
+                              {formatDuration(
+                                Math.floor(
+                                  (tick() - (status() as { type: "pondering"; startTime: number }).startTime) / 1000,
+                                ),
+                              )}
+                            </span>
+                          </text>
+                        </box>
+                      </Match>
+                      <Match when={status().type === "streaming"}>
+                        <box flexDirection="row" gap={1}>
+                          <text flexShrink={0} fg={theme.warning}>
+                            ●
+                          </text>
+                          <text fg={theme.text} wrapMode="none">
+                            Streaming...
+                            <span style={{ fg: theme.textMuted }}>
+                              {" "}
+                              {formatDuration(
+                                Math.floor(
+                                  (tick() - (status() as { type: "streaming"; startTime: number }).startTime) / 1000,
+                                ),
+                              )}
+                            </span>
+                          </text>
+                        </box>
+                      </Match>
+                      <Match when={status().type === "retry"}>
+                        <box flexDirection="row" gap={1}>
+                          <text flexShrink={0} fg={theme.warning}>
+                            ●
+                          </text>
+                          <text fg={theme.text} wrapMode="none">
+                            Retrying in {(status() as { type: "retry"; message: string; remaining: number }).remaining}s
+                            <span style={{ fg: theme.textMuted }}>
+                              {" "}
+                              ({(status() as { type: "retry"; message: string; remaining: number }).message})
+                            </span>
+                          </text>
+                        </box>
+                      </Match>
+                    </Switch>
+                  )}
+                </Show>
+                <For each={runningTools()}>
+                  {(item) => <RunningToolItem command={item.command} startTime={item.startTime} now={tick()} />}
+                </For>
+              </box>
+            </Show>
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box
