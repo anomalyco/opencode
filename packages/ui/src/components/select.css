@@ -29,12 +29,9 @@
       transition: transform 0.1s ease-in-out;
     }
 
-    &:hover {
-      background-color: var(--input-base);
-      box-shadow: var(--shadow-xs-border-base);
-    }
-
-    &[data-expanded] {
+    &[data-slot="select-select-trigger"]:hover:not(:disabled),
+    &[data-slot="select-select-trigger"][data-expanded],
+    &[data-slot="select-select-trigger"][data-expanded]:hover:not(:disabled) {
       background-color: var(--input-base);
       box-shadow: var(--shadow-xs-border-base);
     }
