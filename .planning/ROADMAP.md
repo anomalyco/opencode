@@ -86,11 +86,12 @@ Plans:
   3. Successful login creates session mapped to UNIX UID/GID
   4. Failed login returns generic error (no user enumeration)
   5. Session contains user identity for subsequent requests
-**Plans**: 2 plans
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — User info lookup and session schema extension (getUserInfo, UNIX fields in UserSession)
-- [ ] 04-02-PLAN.md — Login endpoint (POST /auth/login, GET /auth/status, broker integration)
+- [x] 04-01-PLAN.md — User info lookup and session schema extension (getUserInfo, UNIX fields in UserSession)
+- [ ] 04-02-PLAN.md — Login endpoint (POST /auth/login, broker integration)
+- [ ] 04-03-PLAN.md — Auth status endpoint (GET /auth/status)
 
 ### Phase 5: User Process Execution
 **Goal**: Commands and file operations execute under the authenticated user's UNIX identity
@@ -198,7 +199,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 1. Configuration Foundation | 3/3 | Complete | 2026-01-20 |
 | 2. Session Infrastructure | 2/2 | Complete | 2026-01-20 |
 | 3. Auth Broker Core | 6/6 | Complete | 2026-01-20 |
-| 4. Authentication Flow | 0/2 | Not started | - |
+| 4. Authentication Flow | 1/3 | In progress | - |
 | 5. User Process Execution | 0/TBD | Not started | - |
 | 6. Login UI | 0/TBD | Not started | - |
 | 7. Security Hardening | 0/TBD | Not started | - |

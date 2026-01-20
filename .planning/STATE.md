@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Secure remote access to your opencode instance from anywhere — authenticate once with your system credentials, work on your projects from any device.
-**Current focus:** Phase 3 (Auth Broker Core) - Plan 04 Complete
+**Current focus:** Phase 4 (Authentication Flow) - Plan 01 Complete
 
 ## Current Position
 
-Phase: 3 of 11 (Auth Broker Core) - COMPLETE
-Plan: 6 of 6 in current phase (all complete)
-Status: Phase complete - ready for Phase 4
-Last activity: 2026-01-20 - Completed 03-06-PLAN.md
+Phase: 4 of 11 (Authentication Flow)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-01-20 - Completed 04-01-PLAN.md
 
-Progress: [█████░░░░░] ~52%
+Progress: [██████░░░░] ~56%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: 4.2 min
-- Total execution time: 50 min
+- Total execution time: 54 min
 
 **By Phase:**
 
@@ -30,10 +30,11 @@ Progress: [█████░░░░░] ~52%
 | 1. Configuration Foundation | 3 | 12 min | 4 min |
 | 2. Session Infrastructure | 2 | 5 min | 2.5 min |
 | 3. Auth Broker Core | 6 | 33 min | 5.5 min |
+| 4. Authentication Flow | 1 | 4 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-03 (4 min), 03-04 (2 min), 03-05 (3 min), 03-06 (8 min)
-- Trend: Stable, checkpoint plans take longer due to verification pause
+- Last 5 plans: 03-04 (2 min), 03-05 (3 min), 03-06 (8 min), 04-01 (4 min)
+- Trend: Stable
 
 *Updated after each plan completion*
 
@@ -66,6 +67,8 @@ Recent decisions affecting current work:
 | 03-05 | Settled flag pattern | Prevent double-resolve/reject in promise-based socket code |
 | 03-04 | systemd Type=notify | Broker signals readiness via sd_notify |
 | 03-04 | Separate PAM configs per platform | Linux pam_unix, macOS pam_opendirectory |
+| 04-01 | getent with dscl fallback | getent works on Linux, dscl for macOS |
+| 04-01 | Optional UNIX fields in UserSession | Backward compatible extension |
 
 ### Pending Todos
 
@@ -83,16 +86,13 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-20
-Stopped at: Completed 03-06-PLAN.md (Phase 3 complete)
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None
-Next: Phase 4 - Authentication Flow
+Next: 04-02-PLAN.md (Login endpoint)
 
-## Phase 3 Progress
+## Phase 4 Progress
 
-**Auth Broker Core - COMPLETE:**
-- [x] Plan 01: Project init, IPC protocol, config loading (15 tests)
-- [x] Plan 02: PAM wrapper, rate limiter, username validation (29 new tests)
-- [x] Plan 03: Unix socket server and request handler (8 new tests)
-- [x] Plan 04: Service files and platform module
-- [x] Plan 05: TypeScript broker client (12 tests)
-- [x] Plan 06: CLI integration and build script (8 min)
+**Authentication Flow - IN PROGRESS:**
+- [x] Plan 01: User info lookup module and session extension (4 min, 10 tests)
+- [ ] Plan 02: Login endpoint
+- [ ] Plan 03: Auth status endpoint
