@@ -133,6 +133,7 @@ function createGlobalSync() {
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
+  const sessionMeta = new Map<string, { limit: number }>()
 
   function ensureChild(directory: string) {
     if (!directory) console.error("No directory provided")
@@ -192,7 +193,8 @@ function createGlobalSync() {
     if (pending) return pending
 
     const [store, setStore] = child(directory, { bootstrap: false })
-    const limit = store.limit
+    const meta = sessionMeta.get(directory)
+    if (meta && meta.limit >= store.limit) return
 
     const promise = globalSDK.client.session
       .list({ directory, roots: true })
@@ -203,9 +205,15 @@ function createGlobalSync() {
           .slice()
           .sort((a, b) => a.id.localeCompare(b.id))
 
+        // Read the current limit at resolve-time so callers that bump the limit while
+        // a request is in-flight still get the expanded result.
+        const limit = store.limit
+
         const sandboxWorkspace = globalStore.project.some((p) => (p.sandboxes ?? []).includes(directory))
         if (sandboxWorkspace) {
+          setStore("sessionTotal", nonArchived.length)
           setStore("session", reconcile(nonArchived, { key: "id" }))
+          sessionMeta.set(directory, { limit })
           return
         }
 
@@ -219,6 +227,7 @@ function createGlobalSync() {
         // Store total session count (used for "load more" pagination)
         setStore("sessionTotal", nonArchived.length)
         setStore("session", reconcile(sessions, { key: "id" }))
+        sessionMeta.set(directory, { limit })
       })
       .catch((err) => {
         console.error("Failed to load sessions", err)
