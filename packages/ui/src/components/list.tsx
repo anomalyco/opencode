@@ -1,6 +1,7 @@
 import { type FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
 import { createEffect, createSignal, For, onCleanup, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
+import { useI18n } from "../context/i18n"
 import { Icon, type IconProps } from "./icon"
 import { IconButton } from "./icon-button"
 import { TextField } from "./text-field"
@@ -30,6 +31,7 @@ export interface ListRef {
 }
 
 export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) {
+  const i18n = useI18n()
   const [scrollRef, setScrollRef] = createSignal<HTMLDivElement | undefined>(undefined)
   const [internalFilter, setInternalFilter] = createSignal("")
   const [store, setStore] = createStore({
@@ -174,6 +176,25 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     )
   }
 
+  const emptyMessage = () => {
+    if (grouped.loading) return props.loadingMessage ?? i18n.t("ui.list.loading")
+    if (props.emptyMessage) return props.emptyMessage
+
+    const query = filter()
+    if (!query) return i18n.t("ui.list.empty")
+
+    const suffix = i18n.t("ui.list.emptyWithFilter.suffix")
+    return (
+      <>
+        <span>{i18n.t("ui.list.emptyWithFilter.prefix")}</span>
+        <span data-slot="list-filter">&quot;{query}&quot;</span>
+        <Show when={suffix}>
+          <span>{suffix}</span>
+        </Show>
+      </>
+    )
+  }
+
   return (
     <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
       <Show when={!!props.search}>
@@ -208,10 +229,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
           fallback={
             <div data-slot="list-empty-state">
               <div data-slot="list-message">
-                {grouped.loading ? props.loadingMessage ?? "Loading" : props.emptyMessage ?? "No results"}
-                <Show when={!props.emptyMessage && !props.loadingMessage && !!filter()}>
-                  {" "}for <span data-slot="list-filter">&quot;{filter()}&quot;</span>
-                </Show>
+                {emptyMessage()}
               </div>
             </div>
           }

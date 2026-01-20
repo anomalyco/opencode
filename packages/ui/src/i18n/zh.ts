@@ -34,4 +34,61 @@ export const dict = {
   "ui.messagePart.title.write": "写入",
   "ui.messagePart.option.typeOwnAnswer": "输入自己的答案",
   "ui.messagePart.review.title": "检查你的答案",
+
+  "ui.list.loading": "加载中",
+  "ui.list.empty": "无结果",
+  "ui.list.emptyWithFilter.prefix": "没有关于",
+  "ui.list.emptyWithFilter.suffix": "的结果",
+
+  "ui.messageNav.newMessage": "新消息",
+
+  "ui.textField.copyToClipboard": "复制到剪贴板",
+  "ui.textField.copied": "已复制",
+
+  "ui.imagePreview.alt": "图片预览",
+
+  "ui.tool.read": "读取",
+  "ui.tool.list": "列表",
+  "ui.tool.glob": "Glob",
+  "ui.tool.grep": "Grep",
+  "ui.tool.webfetch": "Webfetch",
+  "ui.tool.shell": "Shell",
+  "ui.tool.patch": "补丁",
+  "ui.tool.todos": "待办",
+  "ui.tool.todos.read": "读取待办",
+  "ui.tool.questions": "问题",
+  "ui.tool.agent": "{{type}} 智能体",
+
+  "ui.common.file.one": "个文件",
+  "ui.common.file.other": "个文件",
+  "ui.common.question.one": "个问题",
+  "ui.common.question.other": "个问题",
+
+  "ui.common.add": "添加",
+  "ui.common.cancel": "取消",
+  "ui.common.confirm": "确认",
+  "ui.common.dismiss": "忽略",
+  "ui.common.next": "下一步",
+  "ui.common.submit": "提交",
+
+  "ui.permission.deny": "拒绝",
+  "ui.permission.allowAlways": "始终允许",
+  "ui.permission.allowOnce": "允许一次",
+
+  "ui.message.expand": "展开消息",
+  "ui.message.collapse": "收起消息",
+  "ui.message.copy": "复制",
+  "ui.message.copied": "已复制",
+  "ui.message.attachment.alt": "附件",
+
+  "ui.patch.action.deleted": "已删除",
+  "ui.patch.action.created": "已创建",
+  "ui.patch.action.moved": "已移动",
+  "ui.patch.action.patched": "已应用补丁",
+
+  "ui.question.subtitle.answered": "{{count}} 已回答",
+  "ui.question.answer.none": "(无答案)",
+  "ui.question.review.notAnswered": "(未回答)",
+  "ui.question.multiHint": "(可多选)",
+  "ui.question.custom.placeholder": "输入你的答案...",
 } satisfies Partial<Record<Keys, string>>
