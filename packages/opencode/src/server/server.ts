@@ -32,7 +32,7 @@ import { ProviderRoutes } from "./routes/provider"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { Storage } from "../storage/storage"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
-import { websocket } from "hono/bun"
+import { websocket, type BunWebSocketData } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { QuestionRoutes } from "./routes/question"
@@ -582,7 +582,7 @@ export namespace Server {
     _basePath = normalizeBasePath(opts.basePath)
 
     const app = App(_basePath)
-    const fetch: Bun.ServeOptions["fetch"] = (req) => {
+    const fetch = (req: Request): Response | Promise<Response> => {
       if (!_basePath) return app.fetch(req)
       const url = new URL(req.url)
       if (!url.pathname.startsWith(_basePath)) {
@@ -591,20 +591,20 @@ export namespace Server {
       }
       return app.fetch(req)
     }
-    const args: Omit<Bun.ServeOptions, "port"> = {
+    const baseOptions = {
       hostname: opts.hostname,
       idleTimeout: 0,
       fetch,
       websocket: websocket,
     }
-    const tryServe = (port: number): Bun.Server | undefined => {
+    const tryServe = (port: number): Bun.Server<BunWebSocketData> | undefined => {
       try {
-        return Bun.serve({ ...args, port })
+        return Bun.serve<BunWebSocketData>({ ...baseOptions, port })
       } catch {
         return undefined
       }
     }
-    const server: Bun.Server | undefined =
+    const server: Bun.Server<BunWebSocketData> | undefined =
       opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
