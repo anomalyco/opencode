@@ -3,9 +3,12 @@ name: Duplicate Issue Detection
 on:
   issues:
     types: [opened]
+  schedule:
+    - cron: "0 * * * *"
 
 jobs:
   check-duplicates:
+    if: github.event_name == 'issues'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -21,7 +24,66 @@ jobs:
       - name: Install opencode
         run: curl -fsSL https://opencode.ai/install | bash
 
-      - name: Check for duplicate issues
+      - name: Ensure labels exist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create "potential-duplicate" --repo ${{ github.repository }} --color "FEF2C0" --description "Potentially a duplicate issue - pending confirmation" 2>/dev/null || true
+          gh label create "duplicate" --repo ${{ github.repository }} --color "cfd3d7" --description "This issue is a duplicate" 2>/dev/null || true
+          gh label create "spam" --repo ${{ github.repository }} --color "B60205" --description "Spam or low-quality issue" 2>/dev/null || true
+
+      - name: Check for spam/low-quality issues
+        id: spam-check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          # Use env vars to avoid shell injection from issue content
+          BODY_LENGTH=${#ISSUE_BODY}
+          TITLE_LENGTH=${#ISSUE_TITLE}
+
+          IS_SPAM="false"
+          SPAM_REASON=""
+
+          # Count alphanumeric characters in title
+          ALPHA_CHARS=$(printf '%s' "$ISSUE_TITLE" | tr -cd '[:alnum:]' | wc -c | tr -d ' ')
+
+          # Only flag as spam if BOTH conditions are met:
+          # 1. Body is empty/very short (< 10 chars)
+          # 2. Title has very few alphanumeric characters (< 3)
+          if [ "$BODY_LENGTH" -lt 10 ] && [ "$ALPHA_CHARS" -lt 3 ]; then
+            IS_SPAM="true"
+            SPAM_REASON="Issue has no meaningful content (empty body and title with no text)"
+          fi
+
+          # Check for spam service offers (requires first-person language)
+          if printf '%s' "$ISSUE_TITLE" | grep -qiE "(i can fix|i will fix|i.ll fix|hire me|contact me|my service|freelanc)"; then
+            IS_SPAM="true"
+            SPAM_REASON="Issue appears to be spam (unsolicited service offer)"
+          fi
+
+          echo "is_spam=$IS_SPAM" >> $GITHUB_OUTPUT
+
+          if [ "$IS_SPAM" = "true" ]; then
+            echo "Detected spam/low-quality issue: $SPAM_REASON"
+            cat > /tmp/spam_comment.txt << SPAM_EOF
+          This issue has been automatically closed because it appears to be spam or lacks sufficient information.
+
+          **Reason:** ${SPAM_REASON}
+
+          If this was closed in error, please reopen with a detailed description of your issue including:
+          - What you were trying to do
+          - What happened instead
+          - Steps to reproduce (if applicable)
+          - Your environment (OS, OpenCode version)
+          SPAM_EOF
+            gh issue close ${{ github.event.issue.number }} --repo ${{ github.repository }} --comment "$(cat /tmp/spam_comment.txt)"
+            gh issue edit ${{ github.event.issue.number }} --repo ${{ github.repository }} --add-label "spam"
+          fi
+
+      - name: Review new issue
+        if: steps.spam-check.outputs.is_spam != 'true'
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -34,30 +96,120 @@ jobs:
               "webfetch": "deny"
             }
         run: |
-          opencode run -m opencode/claude-haiku-4-5 "A new issue has been created:'
+          opencode run -m opencode/claude-sonnet-4-5 "A new issue has been created: #${{ github.event.issue.number }}
 
-          Issue number:
-          ${{ github.event.issue.number }}
+          STEP 1: Read the issue
+          Look up issue #${{ github.event.issue.number }} and read the FULL content to understand what the user is asking.
 
-          Lookup this issue and search through existing issues (excluding #${{ github.event.issue.number }}) in this repository to find any potential duplicates of this new issue.
+          STEP 2: Search for duplicates
+          Search through existing issues (excluding #${{ github.event.issue.number }}) to find potential duplicates.
+          For each potential duplicate, assign a confidence score (0-100):
+          - 90-100%: Nearly identical (same error message, same context)
+          - 70-89%: Very similar (same feature/bug area, similar symptoms)
+          - 50-69%: Related (overlapping topic, might be same root cause)
+          - <50%: Loosely related (do not include these)
+
           Consider:
           1. Similar titles or descriptions
           2. Same error messages or symptoms
           3. Related functionality or components
           4. Similar feature requests
 
-          If you find any potential duplicates, please comment on the new issue with:
-          - A brief explanation of why it might be a duplicate
-          - Links to the potentially duplicate issues
-          - A suggestion to check those issues first
+          STEP 3: Check for external dependencies
+          If the issue contains images/screenshots, check if they show errors from external sources like MCP servers, plugins, or 3rd-party tools (not OpenCode itself).
 
-          Use this format for the comment:
-          'This issue might be a duplicate of existing issues. Please check:
-          - #[issue_number]: [brief description of similarity]
+          STEP 4: Provide a quick answer (if applicable)
+          If the issue is about OpenCode tooling, configuration, or usage, explore the repository codebase to find relevant code, config files, or documentation that could help answer the question. Provide a concise, helpful answer.
 
-          Feel free to ignore if none of these address your specific case.'
+          STEP 5: Decide whether to comment
+          ONLY comment if:
+          - You found duplicates with >= 50% confidence, OR
+          - You can provide a helpful answer about OpenCode tooling
 
-          Additionally, if the issue mentions keybinds, keyboard shortcuts, or key bindings, please add a comment mentioning the pinned keybinds issue #4997:
-          'For keybind-related issues, please also check our pinned keybinds documentation: #4997'
+          If commenting, use this EXACT format:
+          '## Agent Review
 
-          If no clear duplicates are found, do not comment."
+          ### Duplicate Analysis
+          [If duplicates >= 50% found:]
+          This issue appears to overlap with existing issues:
+          - #[issue_number] ([confidence]%): [specific explanation of what overlaps]
+
+          [If no duplicates >= 50%:]
+          No clear duplicates found.
+
+          ### Quick Answer
+          [If you can answer the question about OpenCode tooling/config, provide a concise answer here. Reference specific files if helpful. Otherwise omit this section.]
+
+          ### External Dependencies
+          [If images show errors from MCP servers, plugins, or 3rd-party tools, note it here. Otherwise omit this section.]
+
+          ---
+          👎 **React with thumbs-down if this does not address your issue.**
+          If no reaction is received within 6 hours, this issue will be automatically closed.
+
+          _Feel free to reopen if your issue persists._'
+
+          STEP 6: Add label (only if duplicates >= 50%)
+          If you found duplicates with >= 50% confidence, add the label:
+          gh issue edit ${{ github.event.issue.number }} --add-label potential-duplicate
+
+          SPECIAL CASE: If the issue mentions keybinds, keyboard shortcuts, or key bindings, include a note about the pinned keybinds issue #4997.
+
+          If you cannot help (no duplicates >= 50% AND no helpful answer), do NOT comment."
+
+  close-stale-duplicates:
+    if: github.event_name == 'schedule'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Ensure labels exist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create "potential-duplicate" --repo ${{ github.repository }} --color "FEF2C0" --description "Potentially a duplicate issue - pending confirmation" 2>/dev/null || true
+          gh label create "duplicate" --repo ${{ github.repository }} --color "cfd3d7" --description "This issue is a duplicate" 2>/dev/null || true
+          gh label create "spam" --repo ${{ github.repository }} --color "B60205" --description "Spam or low-quality issue" 2>/dev/null || true
+
+      - name: Close stale potential duplicates
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get issues with potential-duplicate label that are still open
+          gh issue list --repo ${{ github.repository }} --label "potential-duplicate" --state open --json number --jq '.[].number' | while read -r issue_number; do
+            [ -z "$issue_number" ] && continue
+
+            echo "Checking issue #${issue_number}..."
+
+            # Get comments containing the duplicate marker
+            comment_data=$(gh api "repos/${{ github.repository }}/issues/${issue_number}/comments" --jq '.[] | select(.body | contains("React with thumbs-down")) | {id: .id, created_at: .created_at}' | head -1)
+
+            if [ -n "$comment_data" ]; then
+              comment_id=$(echo "$comment_data" | jq -r '.id')
+              comment_created=$(echo "$comment_data" | jq -r '.created_at')
+
+              # Check if comment is older than 6 hours (21600 seconds)
+              comment_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$comment_created" +%s 2>/dev/null || date -d "$comment_created" +%s)
+              current_epoch=$(date +%s)
+              age=$((current_epoch - comment_epoch))
+
+              if [ "$age" -gt 21600 ]; then
+                # Check for thumbs-down reactions
+                thumbs_down=$(gh api "repos/${{ github.repository }}/issues/comments/${comment_id}/reactions" --jq '[.[] | select(.content == "-1")] | length')
+
+                if [ "$thumbs_down" = "0" ] || [ -z "$thumbs_down" ]; then
+                  echo "Closing issue #${issue_number} - no thumbs-down reaction after 6 hours"
+                  gh issue close "$issue_number" --repo ${{ github.repository }} --comment "This issue has been automatically closed as a potential duplicate. No objection was received within 6 hours. If this was closed in error, please reopen the issue and provide additional context about why it differs from the linked issues."
+                  gh issue edit "$issue_number" --repo ${{ github.repository }} --remove-label "potential-duplicate" --add-label "duplicate"
+                else
+                  echo "Issue #${issue_number} has thumbs-down reactions, removing potential-duplicate label"
+                  gh issue edit "$issue_number" --repo ${{ github.repository }} --remove-label "potential-duplicate"
+                fi
+              else
+                echo "Issue #${issue_number} comment is less than 6 hours old (${age}s), skipping"
+              fi
+            else
+              echo "Issue #${issue_number} has no duplicate comment, skipping"
+            fi
+          done
