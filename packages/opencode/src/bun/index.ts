@@ -6,7 +6,7 @@ import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
 import { Lock } from "../util/lock"
-import { Npm } from "../npm"
+import { PackageRegistry } from "../package-registry"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
@@ -107,7 +107,7 @@ export namespace BunProc {
       }
 
       if (version === "latest") {
-        const isOutdated = await Npm.isOutdated(pkg, cachedVersion, Global.Path.cache)
+        const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
         if (!isOutdated) return mod
         log.info("Cached version is outdated, proceeding with install", {
           pkg,

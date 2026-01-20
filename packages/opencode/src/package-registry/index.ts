@@ -2,7 +2,7 @@ import semver from "semver"
 import { BunProc } from "../bun"
 import { Log } from "../util/log"
 
-export namespace Npm {
+export namespace PackageRegistry {
   const log = Log.create({ service: "npm" })
 
   export async function getLatestVersion(pkg: string, cwd?: string): Promise<string | null> {
