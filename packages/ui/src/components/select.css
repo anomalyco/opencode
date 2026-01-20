@@ -39,15 +39,8 @@
     }
 
     &:not([data-expanded]):focus {
-      &[data-variant="secondary"] {
-        background-color: var(--button-secondary-base);
-      }
-      &[data-variant="ghost"] {
-        background-color: transparent;
-      }
-      &[data-variant="primary"] {
-        background-color: var(--icon-strong-base);
-      }
+      background-color: transparent;
+      box-shadow: none;
     }
   }
 }
