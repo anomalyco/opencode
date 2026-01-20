@@ -142,12 +142,22 @@ export class BrokerClient {
    * 4. Parse JSON response
    * 5. Close connection
    */
-  private sendRequest(request: BrokerRequest): Promise<BrokerResponse> {
+  private async sendRequest(request: BrokerRequest): Promise<BrokerResponse> {
+    // First, check if the socket file exists (fast-fail for ENOENT)
+    // This avoids Bun's sync error throw on createConnection to non-existent paths
+    const { existsSync } = await import("fs")
+    if (!existsSync(this.socketPath)) {
+      throw new Error("socket not found")
+    }
+
     return new Promise((resolve, reject) => {
-      const abortController = new AbortController()
+      let settled = false
       const timeout = setTimeout(() => {
-        abortController.abort()
-        reject(new Error("timeout"))
+        if (!settled) {
+          settled = true
+          cleanup()
+          reject(new Error("timeout"))
+        }
       }, this.timeoutMs)
 
       let socket: Socket | null = null
@@ -162,27 +172,34 @@ export class BrokerClient {
         }
       }
 
-      const handleAbort = () => {
-        cleanup()
-        reject(new Error("aborted"))
-      }
+      // Create socket and attach error handler FIRST before any other operations
+      socket = createConnection({ path: this.socketPath })
 
-      abortController.signal.addEventListener("abort", handleAbort, { once: true })
+      // Error handler must be attached immediately to catch ECONNREFUSED, etc.
+      socket.on("error", (err: Error) => {
+        if (!settled) {
+          settled = true
+          cleanup()
+          reject(err)
+        }
+      })
 
-      try {
-        socket = createConnection({ path: this.socketPath }, () => {
-          // Connected - write request
-          const message = JSON.stringify(request) + "\n"
-          socket!.write(message)
-        })
+      socket.on("connect", () => {
+        // Connected - write request
+        const message = JSON.stringify(request) + "\n"
+        socket!.write(message)
+      })
 
-        socket.on("data", (chunk: Buffer) => {
-          responseData += chunk.toString()
+      socket.on("data", (chunk: Buffer) => {
+        responseData += chunk.toString()
 
-          // Check if we have a complete line (newline-delimited)
-          const newlineIndex = responseData.indexOf("\n")
-          if (newlineIndex !== -1) {
-            const line = responseData.substring(0, newlineIndex)
+        // Check if we have a complete line (newline-delimited)
+        const newlineIndex = responseData.indexOf("\n")
+        if (newlineIndex !== -1) {
+          const line = responseData.substring(0, newlineIndex)
+
+          if (!settled) {
+            settled = true
             cleanup()
 
             try {
@@ -192,24 +209,17 @@ export class BrokerClient {
               reject(new Error("invalid response"))
             }
           }
-        })
+        }
+      })
 
-        socket.on("error", (err: Error) => {
+      socket.on("close", () => {
+        // If we haven't resolved yet, the connection closed unexpectedly
+        if (!settled) {
+          settled = true
           cleanup()
-          reject(err)
-        })
-
-        socket.on("close", () => {
-          // If we haven't resolved yet, the connection closed unexpectedly
-          if (socket) {
-            cleanup()
-            reject(new Error("connection closed"))
-          }
-        })
-      } catch (err) {
-        cleanup()
-        reject(err)
-      }
+          reject(new Error("connection closed"))
+        }
+      })
     })
   }
 }
