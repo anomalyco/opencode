@@ -7,7 +7,7 @@ import { selectionFromLines, useFile, type SelectedLineRange } from "@/context/f
 import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
 import { SessionContextUsage } from "@/components/session-context-usage"
-import { MessageActions } from "@/components/message-actions"
+import { MessageActions, MessageActionsMenu } from "@/components/message-actions"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -1377,6 +1377,7 @@ export default function Page() {
                                       onStepsExpandedToggle={() =>
                                         setStore("expanded", message.id, (open: boolean | undefined) => !open)
                                       }
+                                      actions={<MessageActionsMenu sessionID={params.id!} messageID={message.id} />}
                                       classes={{
                                         root: "min-w-0 w-full relative",
                                         content: "flex flex-col justify-between !overflow-visible",

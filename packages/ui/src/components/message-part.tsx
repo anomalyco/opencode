@@ -89,6 +89,7 @@ function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
 export interface MessageProps {
   message: MessageType
   parts: PartType[]
+  actions?: JSX.Element
 }
 
 export interface MessagePartProps {
@@ -271,7 +272,9 @@ export function Message(props: MessageProps) {
   return (
     <Switch>
       <Match when={props.message.role === "user" && props.message}>
-        {(userMessage) => <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} />}
+        {(userMessage) => (
+          <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} actions={props.actions} />
+        )}
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
         {(assistantMessage) => (
@@ -295,7 +298,7 @@ export function AssistantMessageDisplay(props: { message: AssistantMessage; part
   return <For each={filteredParts()}>{(part) => <Part part={part} message={props.message} />}</For>
 }
 
-export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
+export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[]; actions?: JSX.Element }) {
   const dialog = useDialog()
   const [copied, setCopied] = createSignal(false)
   const [expanded, setExpanded] = createSignal(false)
@@ -406,7 +409,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
           >
             <Icon name="chevron-down" size="small" />
           </button>
-          <div data-slot="user-message-copy-wrapper">
+          <div data-slot="user-message-actions">
             <Tooltip value={copied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
               <IconButton
                 icon={copied() ? "check" : "copy"}
@@ -417,6 +420,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                 }}
               />
             </Tooltip>
+            {props.actions}
           </div>
         </div>
       </Show>

@@ -15,7 +15,7 @@ interface MessageActionsProps {
   messageID: string
 }
 
-export function MessageActions(props: ParentProps<MessageActionsProps>) {
+function useMessageActions(props: MessageActionsProps) {
   const sync = useSync()
   const sdk = useSDK()
   const prompt = usePrompt()
@@ -85,30 +85,40 @@ export function MessageActions(props: ParentProps<MessageActionsProps>) {
     },
   ]
 
+  return { menuItems }
+}
+
+/** Dropdown menu trigger for message actions (Revert, Fork, Copy) */
+export function MessageActionsMenu(props: MessageActionsProps) {
+  const { menuItems } = useMessageActions(props)
+
+  return (
+    <div data-slot="message-actions-menu">
+      <DropdownMenu>
+        <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="ghost" />
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content>
+            {menuItems().map((item) => (
+              <DropdownMenu.Item onSelect={item.onClick} data-slot={item.dataSlot}>
+                <DropdownMenu.ItemLabel>{item.label}</DropdownMenu.ItemLabel>
+                <DropdownMenu.ItemDescription>{item.description}</DropdownMenu.ItemDescription>
+              </DropdownMenu.Item>
+            ))}
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu>
+    </div>
+  )
+}
+
+/** Context menu wrapper for message actions (right-click menu) */
+export function MessageActions(props: ParentProps<MessageActionsProps>) {
+  const { menuItems } = useMessageActions(props)
+
   return (
     <ContextMenu>
-      <ContextMenu.Trigger as="div" data-component="message-actions" class="group/message-actions">
-        <div class="relative">
-          {props.children}
-          <div
-            data-slot="message-actions-trigger"
-            class="absolute top-1 right-1 opacity-0 group-hover/message-actions:opacity-100 transition-opacity"
-          >
-            <DropdownMenu>
-              <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="ghost" />
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content>
-                  {menuItems().map((item) => (
-                    <DropdownMenu.Item onSelect={item.onClick} data-slot={item.dataSlot}>
-                      <DropdownMenu.ItemLabel>{item.label}</DropdownMenu.ItemLabel>
-                      <DropdownMenu.ItemDescription>{item.description}</DropdownMenu.ItemDescription>
-                    </DropdownMenu.Item>
-                  ))}
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu>
-          </div>
-        </div>
+      <ContextMenu.Trigger as="div" data-component="message-actions">
+        {props.children}
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content data-component="context-menu-content">

@@ -30,10 +30,10 @@ test.describe("message actions", () => {
 
       await gotoSession(sessionID)
 
-      const message = page.locator("[data-message-id]").first()
-      await message.hover()
+      const messageText = page.locator('[data-slot="user-message-text"]').first()
+      await messageText.hover()
 
-      await expect(page.locator('[data-slot="message-actions-trigger"]')).toBeVisible()
+      await expect(page.locator('[data-slot="message-actions-menu"]')).toBeVisible()
     } finally {
       await sdk.session.delete({ sessionID }).catch(() => undefined)
     }
@@ -94,10 +94,10 @@ test.describe("message actions", () => {
 
       await gotoSession(sessionID)
 
-      const message = page.locator("[data-message-id]").first()
-      await message.hover()
+      const messageText = page.locator('[data-slot="user-message-text"]').first()
+      await messageText.hover()
 
-      const trigger = page.locator('[data-slot="message-actions-trigger"]')
+      const trigger = page.locator('[data-slot="message-actions-menu"]')
       await trigger.click()
 
       const copyAction = page.getByRole("menuitem", { name: "Copy" })
@@ -136,10 +136,10 @@ test.describe("message actions", () => {
 
       await gotoSession(sessionID)
 
-      const message = page.locator("[data-message-id]").first()
-      await message.hover()
+      const messageText = page.locator('[data-slot="user-message-text"]').first()
+      await messageText.hover()
 
-      const trigger = page.locator('[data-slot="message-actions-trigger"]')
+      const trigger = page.locator('[data-slot="message-actions-menu"]')
       await trigger.click()
 
       const revertAction = page.getByRole("menuitem", { name: "Revert" })
@@ -175,11 +175,11 @@ test.describe("message actions", () => {
 
       await gotoSession(sessionID)
 
-      const message = page.locator("[data-message-id]").first()
-      await expect(message).toContainText(testMessage)
-      await message.hover()
+      const messageText = page.locator('[data-slot="user-message-text"]').first()
+      await expect(messageText).toContainText(testMessage)
+      await messageText.hover()
 
-      const trigger = page.locator('[data-slot="message-actions-trigger"]')
+      const trigger = page.locator('[data-slot="message-actions-menu"]')
       await trigger.click()
 
       const originalUrl = page.url()

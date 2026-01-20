@@ -12,7 +12,19 @@ import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 import { Binary } from "@opencode-ai/util/binary"
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  JSX,
+  Match,
+  on,
+  onCleanup,
+  ParentProps,
+  Show,
+  Switch,
+} from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Message, Part } from "./message-part"
 import { Markdown } from "./markdown"
@@ -126,6 +138,7 @@ export function SessionTurn(
     stepsExpanded?: boolean
     onStepsExpandedToggle?: () => void
     onUserInteracted?: () => void
+    actions?: JSX.Element
     classes?: {
       root?: string
       content?: string
@@ -505,7 +518,7 @@ export function SessionTurn(
                     <div data-slot="session-turn-sticky" ref={setStickyRef}>
                       {/* User Message */}
                       <div data-slot="session-turn-message-content">
-                        <Message message={msg()} parts={stickyParts()} />
+                        <Message message={msg()} parts={stickyParts()} actions={props.actions} />
                       </div>
 
                       {/* Trigger (sticky) */}
