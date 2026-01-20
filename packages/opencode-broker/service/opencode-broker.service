@@ -1,0 +1,30 @@
+[Unit]
+Description=OpenCode Authentication Broker
+Documentation=https://github.com/opencode-ai/opencode
+After=network.target
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/opencode-broker
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=false
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/run/opencode
+
+# Socket directory
+RuntimeDirectory=opencode
+RuntimeDirectoryMode=0755
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=opencode-broker
+
+[Install]
+WantedBy=multi-user.target
