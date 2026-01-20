@@ -303,7 +303,7 @@
 
       [data-slot="tabs-section-title"] {
         width: 100%;
-        padding: 0;
+        padding: 0 0 0 4px;
         font-family: var(--font-family-sans);
         font-size: var(--font-size-small);
         font-weight: var(--font-weight-medium);
