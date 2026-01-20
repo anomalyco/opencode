@@ -1,0 +1,13 @@
+diff --git a/packages/script/src/index.ts b/packages/script/src/index.ts
+index 9d3c6821c..44ed9c21b 100644
+--- a/packages/script/src/index.ts
++++ b/packages/script/src/index.ts
+@@ -11,7 +11,7 @@ if (!expectedBunVersion) {
+ }
+ 
+ if (!satisfies(process.versions.bun, expectedBunVersion)) {
+-  throw new Error(`This script requires bun@${expectedBunVersion}, but you are using bun@${process.versions.bun}`)
++  console.warn(`This script requires bun@${expectedBunVersion}, but you are using bun@${process.versions.bun}`)
+ }
+ 
+ const env = {

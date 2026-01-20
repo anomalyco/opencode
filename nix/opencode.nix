@@ -25,6 +25,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     writableTmpDirAsHomeHook
   ];
 
+  patches = [
+    ./patches/relax-bun-version-check.patch
+  ];
+
   configurePhase = ''
     runHook preConfigure
 
