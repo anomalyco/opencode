@@ -280,7 +280,13 @@ export const SettingsKeybinds: Component = () => {
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
-      <div class="sticky top-0 z-10">
+      <div
+        class="sticky top-0 z-10"
+        style={{
+          background:
+            "linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha) calc(100% - 24px), transparent)",
+        }}
+      >
         <div class="flex items-start justify-between gap-4 p-8 max-w-[720px]">
           <div class="flex flex-col gap-1">
             <h2 class="text-16-medium text-text-strong">Keyboard shortcuts</h2>
