@@ -11,6 +11,7 @@ import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Code } from "@opencode-ai/ui/code"
 import { Markdown } from "@opencode-ai/ui/markdown"
 import type { AssistantMessage, Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
+import { useLanguage } from "@/context/language"
 
 interface SessionContextTabProps {
   messages: () => Message[]
@@ -22,6 +23,7 @@ interface SessionContextTabProps {
 export function SessionContextTab(props: SessionContextTabProps) {
   const params = useParams()
   const sync = useSync()
+  const language = useLanguage()
 
   const ctx = createMemo(() => {
     const last = props.messages().findLast((x) => {
@@ -172,7 +174,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
           return [
             {
               key: "system",
-              label: "System",
+              label: language.t("context.breakdown.system"),
               tokens: tokens.system,
               width: pct(tokens.system),
               percent: pctLabel(tokens.system),
@@ -180,7 +182,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
             },
             {
               key: "user",
-              label: "User",
+              label: language.t("context.breakdown.user"),
               tokens: tokens.user,
               width: pct(tokens.user),
               percent: pctLabel(tokens.user),
@@ -188,7 +190,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
             },
             {
               key: "assistant",
-              label: "Assistant",
+              label: language.t("context.breakdown.assistant"),
               tokens: tokens.assistant,
               width: pct(tokens.assistant),
               percent: pctLabel(tokens.assistant),
@@ -196,7 +198,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
             },
             {
               key: "tool",
-              label: "Tool Calls",
+              label: language.t("context.breakdown.tool"),
               tokens: tokens.tool,
               width: pct(tokens.tool),
               percent: pctLabel(tokens.tool),
@@ -204,7 +206,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
             },
             {
               key: "other",
-              label: "Other",
+              label: language.t("context.breakdown.other"),
               tokens: tokens.other,
               width: pct(tokens.other),
               percent: pctLabel(tokens.other),
@@ -243,22 +245,25 @@ export function SessionContextTab(props: SessionContextTabProps) {
     const c = ctx()
     const count = counts()
     return [
-      { label: "Session", value: props.info()?.title ?? params.id ?? "—" },
-      { label: "Messages", value: count.all.toLocaleString() },
-      { label: "Provider", value: providerLabel() },
-      { label: "Model", value: modelLabel() },
-      { label: "Context Limit", value: number(c?.limit) },
-      { label: "Total Tokens", value: number(c?.total) },
-      { label: "Usage", value: percent(c?.usage) },
-      { label: "Input Tokens", value: number(c?.input) },
-      { label: "Output Tokens", value: number(c?.output) },
-      { label: "Reasoning Tokens", value: number(c?.reasoning) },
-      { label: "Cache Tokens (read/write)", value: `${number(c?.cacheRead)} / ${number(c?.cacheWrite)}` },
-      { label: "User Messages", value: count.user.toLocaleString() },
-      { label: "Assistant Messages", value: count.assistant.toLocaleString() },
-      { label: "Total Cost", value: cost() },
-      { label: "Session Created", value: time(props.info()?.time.created) },
-      { label: "Last Activity", value: time(c?.message.time.created) },
+      { label: language.t("context.stats.session"), value: props.info()?.title ?? params.id ?? "—" },
+      { label: language.t("context.stats.messages"), value: count.all.toLocaleString() },
+      { label: language.t("context.stats.provider"), value: providerLabel() },
+      { label: language.t("context.stats.model"), value: modelLabel() },
+      { label: language.t("context.stats.limit"), value: number(c?.limit) },
+      { label: language.t("context.stats.totalTokens"), value: number(c?.total) },
+      { label: language.t("context.stats.usage"), value: percent(c?.usage) },
+      { label: language.t("context.stats.inputTokens"), value: number(c?.input) },
+      { label: language.t("context.stats.outputTokens"), value: number(c?.output) },
+      { label: language.t("context.stats.reasoningTokens"), value: number(c?.reasoning) },
+      {
+        label: language.t("context.stats.cacheTokens"),
+        value: `${number(c?.cacheRead)} / ${number(c?.cacheWrite)}`,
+      },
+      { label: language.t("context.stats.userMessages"), value: count.user.toLocaleString() },
+      { label: language.t("context.stats.assistantMessages"), value: count.assistant.toLocaleString() },
+      { label: language.t("context.stats.totalCost"), value: cost() },
+      { label: language.t("context.stats.sessionCreated"), value: time(props.info()?.time.created) },
+      { label: language.t("context.stats.lastActivity"), value: time(c?.message.time.created) },
     ] satisfies { label: string; value: JSX.Element }[]
   })
 
@@ -371,7 +376,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
 
         <Show when={breakdown().length > 0}>
           <div class="flex flex-col gap-2">
-            <div class="text-12-regular text-text-weak">Context Breakdown</div>
+            <div class="text-12-regular text-text-weak">{language.t("context.breakdown.title")}</div>
             <div class="h-2 w-full rounded-full bg-surface-base overflow-hidden flex">
               <For each={breakdown()}>
                 {(segment) => (
@@ -397,7 +402,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
               </For>
             </div>
             <div class="hidden text-11-regular text-text-weaker">
-              Approximate breakdown of input tokens. "Other" includes tool definitions and overhead.
+              {language.t("context.breakdown.note")}
             </div>
           </div>
         </Show>
@@ -405,7 +410,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
         <Show when={systemPrompt()}>
           {(prompt) => (
             <div class="flex flex-col gap-2">
-              <div class="text-12-regular text-text-weak">System Prompt</div>
+              <div class="text-12-regular text-text-weak">{language.t("context.systemPrompt.title")}</div>
               <div class="border border-border-base rounded-md bg-surface-base px-3 py-2">
                 <Markdown text={prompt()} class="text-12-regular" />
               </div>
@@ -414,7 +419,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
         </Show>
 
         <div class="flex flex-col gap-2">
-          <div class="text-12-regular text-text-weak">Raw messages</div>
+          <div class="text-12-regular text-text-weak">{language.t("context.rawMessages.title")}</div>
           <Accordion multiple>
             <For each={props.messages()}>{(message) => <RawMessage message={message} />}</For>
           </Accordion>

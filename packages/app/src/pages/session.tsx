@@ -33,6 +33,7 @@ import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
 import { useCommand } from "@/context/command"
+import { useLanguage } from "@/context/language"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import type { FileDiff } from "@opencode-ai/sdk/v2/client"
@@ -161,6 +162,7 @@ export default function Page() {
   const dialog = useDialog()
   const codeComponent = useCodeComponent()
   const command = useCommand()
+  const language = useLanguage()
   const platform = usePlatform()
   const params = useParams()
   const navigate = useNavigate()
@@ -433,51 +435,51 @@ export default function Page() {
   command.register(() => [
     {
       id: "session.new",
-      title: "New session",
-      category: "Session",
+      title: language.t("command.session.new"),
+      category: language.t("command.category.session"),
       keybind: "mod+shift+s",
       slash: "new",
       onSelect: () => navigate(`/${params.dir}/session`),
     },
     {
       id: "file.open",
-      title: "Open file",
-      description: "Search files and commands",
-      category: "File",
+      title: language.t("command.file.open"),
+      description: language.t("command.file.open.description"),
+      category: language.t("command.category.file"),
       keybind: "mod+p",
       slash: "open",
       onSelect: () => dialog.show(() => <DialogSelectFile />),
     },
     {
       id: "terminal.toggle",
-      title: "Toggle terminal",
+      title: language.t("command.terminal.toggle"),
       description: "",
-      category: "View",
+      category: language.t("command.category.view"),
       keybind: "ctrl+`",
       slash: "terminal",
       onSelect: () => view().terminal.toggle(),
     },
     {
       id: "review.toggle",
-      title: "Toggle review",
+      title: language.t("command.review.toggle"),
       description: "",
-      category: "View",
+      category: language.t("command.category.view"),
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     },
     {
       id: "terminal.new",
-      title: "New terminal",
-      description: "Create a new terminal tab",
-      category: "Terminal",
+      title: language.t("command.terminal.new"),
+      description: language.t("command.terminal.new.description"),
+      category: language.t("command.category.terminal"),
       keybind: "ctrl+alt+t",
       onSelect: () => terminal.new(),
     },
     {
       id: "steps.toggle",
-      title: "Toggle steps",
-      description: "Show or hide steps for the current message",
-      category: "View",
+      title: language.t("command.steps.toggle"),
+      description: language.t("command.steps.toggle.description"),
+      category: language.t("command.category.view"),
       keybind: "mod+e",
       slash: "steps",
       disabled: !params.id,
@@ -489,62 +491,62 @@ export default function Page() {
     },
     {
       id: "message.previous",
-      title: "Previous message",
-      description: "Go to the previous user message",
-      category: "Session",
+      title: language.t("command.message.previous"),
+      description: language.t("command.message.previous.description"),
+      category: language.t("command.category.session"),
       keybind: "mod+arrowup",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(-1),
     },
     {
       id: "message.next",
-      title: "Next message",
-      description: "Go to the next user message",
-      category: "Session",
+      title: language.t("command.message.next"),
+      description: language.t("command.message.next.description"),
+      category: language.t("command.category.session"),
       keybind: "mod+arrowdown",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(1),
     },
     {
       id: "model.choose",
-      title: "Choose model",
-      description: "Select a different model",
-      category: "Model",
+      title: language.t("command.model.choose"),
+      description: language.t("command.model.choose.description"),
+      category: language.t("command.category.model"),
       keybind: "mod+'",
       slash: "model",
       onSelect: () => dialog.show(() => <DialogSelectModel />),
     },
     {
       id: "mcp.toggle",
-      title: "Toggle MCPs",
-      description: "Toggle MCPs",
-      category: "MCP",
+      title: language.t("command.mcp.toggle"),
+      description: language.t("command.mcp.toggle.description"),
+      category: language.t("command.category.mcp"),
       keybind: "mod+;",
       slash: "mcp",
       onSelect: () => dialog.show(() => <DialogSelectMcp />),
     },
     {
       id: "agent.cycle",
-      title: "Cycle agent",
-      description: "Switch to the next agent",
-      category: "Agent",
+      title: language.t("command.agent.cycle"),
+      description: language.t("command.agent.cycle.description"),
+      category: language.t("command.category.agent"),
       keybind: "mod+.",
       slash: "agent",
       onSelect: () => local.agent.move(1),
     },
     {
       id: "agent.cycle.reverse",
-      title: "Cycle agent backwards",
-      description: "Switch to the previous agent",
-      category: "Agent",
+      title: language.t("command.agent.cycle.reverse"),
+      description: language.t("command.agent.cycle.reverse.description"),
+      category: language.t("command.category.agent"),
       keybind: "shift+mod+.",
       onSelect: () => local.agent.move(-1),
     },
     {
       id: "model.variant.cycle",
-      title: "Cycle thinking effort",
-      description: "Switch to the next effort level",
-      category: "Model",
+      title: language.t("command.model.variant.cycle"),
+      description: language.t("command.model.variant.cycle.description"),
+      category: language.t("command.category.model"),
       keybind: "shift+mod+d",
       onSelect: () => {
         local.model.variant.cycle()
@@ -554,30 +556,31 @@ export default function Page() {
       id: "permissions.autoaccept",
       title:
         params.id && permission.isAutoAccepting(params.id, sdk.directory)
-          ? "Stop auto-accepting edits"
-          : "Auto-accept edits",
-      category: "Permissions",
+          ? language.t("command.permissions.autoaccept.disable")
+          : language.t("command.permissions.autoaccept.enable"),
+      category: language.t("command.category.permissions"),
       keybind: "mod+shift+a",
       disabled: !params.id || !permission.permissionsEnabled(),
       onSelect: () => {
         const sessionID = params.id
         if (!sessionID) return
         permission.toggleAutoAccept(sessionID, sdk.directory)
+        const enabled = permission.isAutoAccepting(sessionID, sdk.directory)
         showToast({
-          title: permission.isAutoAccepting(sessionID, sdk.directory)
-            ? "Auto-accepting edits"
-            : "Stopped auto-accepting edits",
-          description: permission.isAutoAccepting(sessionID, sdk.directory)
-            ? "Edit and write permissions will be automatically approved"
-            : "Edit and write permissions will require approval",
+          title: enabled
+            ? language.t("toast.permissions.autoaccept.on.title")
+            : language.t("toast.permissions.autoaccept.off.title"),
+          description: enabled
+            ? language.t("toast.permissions.autoaccept.on.description")
+            : language.t("toast.permissions.autoaccept.off.description"),
         })
       },
     },
     {
       id: "session.undo",
-      title: "Undo",
-      description: "Undo the last message",
-      category: "Session",
+      title: language.t("command.session.undo"),
+      description: language.t("command.session.undo.description"),
+      category: language.t("command.category.session"),
       slash: "undo",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -604,9 +607,9 @@ export default function Page() {
     },
     {
       id: "session.redo",
-      title: "Redo",
-      description: "Redo the last undone message",
-      category: "Session",
+      title: language.t("command.session.redo"),
+      description: language.t("command.session.redo.description"),
+      category: language.t("command.category.session"),
       slash: "redo",
       disabled: !params.id || !info()?.revert?.messageID,
       onSelect: async () => {
@@ -633,9 +636,9 @@ export default function Page() {
     },
     {
       id: "session.compact",
-      title: "Compact session",
-      description: "Summarize the session to reduce context size",
-      category: "Session",
+      title: language.t("command.session.compact"),
+      description: language.t("command.session.compact.description"),
+      category: language.t("command.category.session"),
       slash: "compact",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -644,8 +647,8 @@ export default function Page() {
         const model = local.model.current()
         if (!model) {
           showToast({
-            title: "No model selected",
-            description: "Connect a provider to summarize this session",
+            title: language.t("toast.model.none.title"),
+            description: language.t("toast.model.none.description"),
           })
           return
         }
@@ -658,72 +661,72 @@ export default function Page() {
     },
     {
       id: "session.fork",
-      title: "Fork from message",
-      description: "Create a new session from a previous message",
-      category: "Session",
+      title: language.t("command.session.fork"),
+      description: language.t("command.session.fork.description"),
+      category: language.t("command.category.session"),
       slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: () => dialog.show(() => <DialogFork />),
     },
     ...(sync.data.config.share !== "disabled"
       ? [
-          {
-            id: "session.share",
-            title: "Share session",
-            description: "Share this session and copy the URL to clipboard",
-            category: "Session",
-            slash: "share",
-            disabled: !params.id || !!info()?.share?.url,
-            onSelect: async () => {
+           {
+             id: "session.share",
+             title: language.t("command.session.share"),
+             description: language.t("command.session.share.description"),
+             category: language.t("command.category.session"),
+             slash: "share",
+             disabled: !params.id || !!info()?.share?.url,
+             onSelect: async () => {
               if (!params.id) return
               await sdk.client.session
                 .share({ sessionID: params.id })
                 .then((res) => {
                   navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
                     showToast({
-                      title: "Failed to copy URL to clipboard",
+                      title: language.t("toast.session.share.copyFailed.title"),
                       variant: "error",
                     }),
                   )
                 })
                 .then(() =>
                   showToast({
-                    title: "Session shared",
-                    description: "Share URL copied to clipboard!",
+                    title: language.t("toast.session.share.success.title"),
+                    description: language.t("toast.session.share.success.description"),
                     variant: "success",
                   }),
                 )
                 .catch(() =>
                   showToast({
-                    title: "Failed to share session",
-                    description: "An error occurred while sharing the session",
+                    title: language.t("toast.session.share.failed.title"),
+                    description: language.t("toast.session.share.failed.description"),
                     variant: "error",
                   }),
                 )
             },
           },
-          {
-            id: "session.unshare",
-            title: "Unshare session",
-            description: "Stop sharing this session",
-            category: "Session",
-            slash: "unshare",
-            disabled: !params.id || !info()?.share?.url,
-            onSelect: async () => {
+           {
+             id: "session.unshare",
+             title: language.t("command.session.unshare"),
+             description: language.t("command.session.unshare.description"),
+             category: language.t("command.category.session"),
+             slash: "unshare",
+             disabled: !params.id || !info()?.share?.url,
+             onSelect: async () => {
               if (!params.id) return
               await sdk.client.session
                 .unshare({ sessionID: params.id })
                 .then(() =>
                   showToast({
-                    title: "Session unshared",
-                    description: "Session unshared successfully!",
+                    title: language.t("toast.session.unshare.success.title"),
+                    description: language.t("toast.session.unshare.success.description"),
                     variant: "success",
                   }),
                 )
                 .catch(() =>
                   showToast({
-                    title: "Failed to unshare session",
-                    description: "An error occurred while unsharing the session",
+                    title: language.t("toast.session.unshare.failed.title"),
+                    description: language.t("toast.session.unshare.failed.description"),
                     variant: "error",
                   }),
                 )
