@@ -1614,9 +1614,7 @@ export default function Layout(props: ParentProps) {
                     </Collapsible.Trigger>
                   }
                 >
-                  <div class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md">
-                    {header()}
-                  </div>
+                  <div class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md">{header()}</div>
                 </Show>
                 <div
                   class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-opacity"

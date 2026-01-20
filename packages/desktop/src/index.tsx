@@ -89,26 +89,26 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
       length(): Promise<number>
     }
 
-      const WRITE_DEBOUNCE_MS = 250
+    const WRITE_DEBOUNCE_MS = 250
 
-      const storeCache = new Map<string, Promise<StoreLike>>()
-      const apiCache = new Map<string, AsyncStorage & { flush: () => Promise<void> }>()
-      const memoryCache = new Map<string, StoreLike>()
+    const storeCache = new Map<string, Promise<StoreLike>>()
+    const apiCache = new Map<string, AsyncStorage & { flush: () => Promise<void> }>()
+    const memoryCache = new Map<string, StoreLike>()
 
-      const flushAll = async () => {
-        const apis = Array.from(apiCache.values())
-        await Promise.all(apis.map((api) => api.flush().catch(() => undefined)))
+    const flushAll = async () => {
+      const apis = Array.from(apiCache.values())
+      await Promise.all(apis.map((api) => api.flush().catch(() => undefined)))
+    }
+
+    if ("addEventListener" in globalThis) {
+      const handleVisibility = () => {
+        if (document.visibilityState !== "hidden") return
+        void flushAll()
       }
 
-      if ("addEventListener" in globalThis) {
-        const handleVisibility = () => {
-          if (document.visibilityState !== "hidden") return
-          void flushAll()
-        }
-
-        window.addEventListener("pagehide", () => void flushAll())
-        document.addEventListener("visibilitychange", handleVisibility)
-      }
+      window.addEventListener("pagehide", () => void flushAll())
+      document.addEventListener("visibilitychange", handleVisibility)
+    }
 
     const createMemoryStore = () => {
       const data = new Map<string, string>()
