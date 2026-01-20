@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Configuration Foundation** - Auth configuration schema and backward compatibility
 - [x] **Phase 2: Session Infrastructure** - Core session middleware, cookies, and expiration
-- [ ] **Phase 3: Auth Broker Core** - Privileged helper for PAM authentication and IPC
+- [x] **Phase 3: Auth Broker Core** - Privileged helper for PAM authentication and IPC
 - [ ] **Phase 4: Authentication Flow** - Login endpoint with PAM validation and session-user mapping
 - [ ] **Phase 5: User Process Execution** - Commands execute under authenticated user's UID
 - [ ] **Phase 6: Login UI** - Web login form with opencode styling
@@ -69,12 +69,12 @@ Plans:
 **Plans**: 6 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Rust project foundation (Cargo.toml, IPC protocol types, config loading)
-- [ ] 03-02-PLAN.md — Authentication core (PAM wrapper, rate limiting, username validation)
-- [ ] 03-03-PLAN.md — IPC server (Unix socket server, request handler, daemon main)
-- [ ] 03-04-PLAN.md — Platform integration (systemd, launchd, PAM service files)
-- [ ] 03-05-PLAN.md — TypeScript client (broker client class for web server)
-- [ ] 03-06-PLAN.md — Setup command (CLI commands, build integration)
+- [x] 03-01-PLAN.md — Rust project foundation (Cargo.toml, IPC protocol types, config loading)
+- [x] 03-02-PLAN.md — Authentication core (PAM wrapper, rate limiting, username validation)
+- [x] 03-03-PLAN.md — IPC server (Unix socket server, request handler, daemon main)
+- [x] 03-04-PLAN.md — Platform integration (systemd, launchd, PAM service files)
+- [x] 03-05-PLAN.md — TypeScript client (broker client class for web server)
+- [x] 03-06-PLAN.md — Setup command (CLI commands, build integration)
 
 ### Phase 4: Authentication Flow
 **Goal**: Users can log in with UNIX credentials and receive a session mapped to their account
@@ -196,7 +196,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 |-------|----------------|--------|-----------|
 | 1. Configuration Foundation | 3/3 | Complete | 2026-01-20 |
 | 2. Session Infrastructure | 2/2 | Complete | 2026-01-20 |
-| 3. Auth Broker Core | 0/6 | Planned | - |
+| 3. Auth Broker Core | 6/6 | Complete | 2026-01-20 |
 | 4. Authentication Flow | 0/TBD | Not started | - |
 | 5. User Process Execution | 0/TBD | Not started | - |
 | 6. Login UI | 0/TBD | Not started | - |
