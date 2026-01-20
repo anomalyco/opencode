@@ -36,7 +36,7 @@ export const SettingsGeneral: Component = () => {
   const soundOptions = [...SOUND_OPTIONS]
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
+    <div class="flex flex-col h-full overflow-y-auto no-scrollbar" style={{ padding: "0 40px 40px 40px" }}>
       <div
         class="sticky top-0 z-10"
         style={{
@@ -44,12 +44,12 @@ export const SettingsGeneral: Component = () => {
             "linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha) calc(100% - 24px), transparent)",
         }}
       >
-        <div class="flex flex-col gap-1 p-8 max-w-[720px]">
+        <div class="flex flex-col gap-1 pt-6 pb-8">
           <h2 class="text-16-medium text-text-strong">General</h2>
         </div>
       </div>
 
-      <div class="flex flex-col gap-8 p-8 pt-0 max-w-[720px]">
+      <div class="flex flex-col gap-8 w-full">
         {/* Appearance Section */}
         <div class="flex flex-col gap-1">
           <h3 class="text-14-medium text-text-strong pb-2">Appearance</h3>
