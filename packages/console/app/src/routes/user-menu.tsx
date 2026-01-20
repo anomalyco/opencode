@@ -1,6 +1,6 @@
 import { action } from "@solidjs/router"
 import { getRequestEvent } from "solid-js/web"
-import { useAuthSession } from "~/context/auth.session"
+import { useAuthSession } from "~/context/auth"
 import { Dropdown } from "~/component/dropdown"
 import "./user-menu.css"
 

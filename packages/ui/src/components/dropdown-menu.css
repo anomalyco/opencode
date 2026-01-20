@@ -3,12 +3,18 @@
   min-width: 8rem;
   overflow: hidden;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-weak-base);
+  border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);
+  background-clip: padding-box;
   background-color: var(--surface-raised-stronger-non-alpha);
   padding: 4px;
   box-shadow: var(--shadow-md);
   z-index: 50;
   transform-origin: var(--kb-menu-content-transform-origin);
+
+  &:focus,
+  &:focus-visible {
+    outline: none;
+  }
 
   &[data-closed] {
     animation: dropdown-menu-close 0.15s ease-out;

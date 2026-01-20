@@ -1,6 +1,6 @@
 // @refresh reload
 import { render } from "solid-js/web"
-import { App } from "@/app"
+import { AppBaseProviders, AppInterface } from "@/app"
 import { Platform, PlatformProvider } from "@/context/platform"
 import pkg from "../package.json"
 
@@ -37,7 +37,7 @@ const platform: Platform = {
       .then(() => {
         const notification = new Notification(title, {
           body: description ?? "",
-          icon: "https://opencode.ai/favicon-96x96.png",
+          icon: "https://opencode.ai/favicon-96x96-v2.png",
         })
         notification.onclick = () => {
           window.focus()
@@ -55,7 +55,9 @@ const platform: Platform = {
 render(
   () => (
     <PlatformProvider value={platform}>
-      <App />
+      <AppBaseProviders>
+        <AppInterface />
+      </AppBaseProviders>
     </PlatformProvider>
   ),
   root!,

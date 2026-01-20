@@ -15,11 +15,11 @@ Custom commands are in addition to the built-in commands like `/init`, `/undo`, 
 
 ## Create command files
 
-Create markdown files in the `command/` directory to define custom commands.
+Create markdown files in the `commands/` directory to define custom commands.
 
-Create `.opencode/command/test.md`:
+Create `.opencode/commands/test.md`:
 
-```md title=".opencode/command/test.md"
+```md title=".opencode/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -42,7 +42,7 @@ Use the command by typing `/` followed by the command name.
 
 ## Configure
 
-You can add custom commands through the OpenCode config or by creating markdown files in the `command/` directory.
+You can add custom commands through the OpenCode config or by creating markdown files in the `commands/` directory.
 
 ---
 
@@ -58,7 +58,7 @@ Use the `command` option in your OpenCode [config](/docs/config):
     "test": {
       // This is the prompt that will be sent to the LLM
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
-      // This is show as the description in the TUI
+      // This is shown as the description in the TUI
       "description": "Run tests with coverage",
       "agent": "build",
       "model": "anthropic/claude-3-5-sonnet-20241022"
@@ -79,10 +79,10 @@ Now you can run this command in the TUI:
 
 You can also define commands using markdown files. Place them in:
 
-- Global: `~/.config/opencode/command/`
-- Per-project: `.opencode/command/`
+- Global: `~/.config/opencode/commands/`
+- Per-project: `.opencode/commands/`
 
-```markdown title="~/.config/opencode/command/test.md"
+```markdown title="~/.config/opencode/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -112,7 +112,7 @@ The prompts for the custom commands support several special placeholders and syn
 
 Pass arguments to commands using the `$ARGUMENTS` placeholder.
 
-```md title=".opencode/command/component.md"
+```md title=".opencode/commands/component.md"
 ---
 description: Create a new component
 ---
@@ -138,7 +138,7 @@ You can also access individual arguments using positional parameters:
 
 For example:
 
-```md title=".opencode/command/create-file.md"
+```md title=".opencode/commands/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -167,7 +167,7 @@ Use _!`command`_ to inject [bash command](/docs/tui#bash-commands) output into y
 
 For example, to create a custom command that analyzes test coverage:
 
-```md title=".opencode/command/analyze-coverage.md"
+```md title=".opencode/commands/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -180,7 +180,7 @@ Based on these results, suggest improvements to increase coverage.
 
 Or to review recent changes:
 
-```md title=".opencode/command/review-changes.md"
+```md title=".opencode/commands/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -199,7 +199,7 @@ Commands run in your project's root directory and their output becomes part of t
 
 Include files in your command using `@` followed by the filename.
 
-```md title=".opencode/command/review-component.md"
+```md title=".opencode/commands/review-component.md"
 ---
 description: Review component
 ---

@@ -12,6 +12,7 @@ import { fn } from "@opencode-ai/util/fn"
 import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
+import { existsSync } from "fs"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -24,6 +25,7 @@ export namespace Project {
       icon: z
         .object({
           url: z.string().optional(),
+          override: z.string().optional(),
           color: z.string().optional(),
         })
         .optional(),
@@ -53,11 +55,22 @@ export namespace Project {
       if (git) {
         let sandbox = path.dirname(git)
 
+        const gitBinary = Bun.which("git")
+
         // cached id calculation
         let id = await Bun.file(path.join(git, "opencode"))
           .text()
           .then((x) => x.trim())
-          .catch(() => {})
+          .catch(() => undefined)
+
+        if (!gitBinary) {
+          return {
+            id: id ?? "global",
+            worktree: sandbox,
+            sandbox: sandbox,
+            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+          }
+        }
 
         // generate id from root commit
         if (!id) {
@@ -73,24 +86,53 @@ export namespace Project {
                 .map((x) => x.trim())
                 .toSorted(),
             )
+            .catch(() => undefined)
+
+          if (!roots) {
+            return {
+              id: "global",
+              worktree: sandbox,
+              sandbox: sandbox,
+              vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+            }
+          }
+
           id = roots[0]
-          if (id) Bun.file(path.join(git, "opencode")).write(id)
+          if (id) {
+            void Bun.file(path.join(git, "opencode"))
+              .write(id)
+              .catch(() => undefined)
+          }
         }
 
-        if (!id)
+        if (!id) {
           return {
             id: "global",
             worktree: sandbox,
             sandbox: sandbox,
             vcs: "git",
           }
+        }
 
-        sandbox = await $`git rev-parse --show-toplevel`
+        const top = await $`git rev-parse --show-toplevel`
           .quiet()
           .nothrow()
           .cwd(sandbox)
           .text()
           .then((x) => path.resolve(sandbox, x.trim()))
+          .catch(() => undefined)
+
+        if (!top) {
+          return {
+            id,
+            sandbox,
+            worktree: sandbox,
+            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+          }
+        }
+
+        sandbox = top
+
         const worktree = await $`git rev-parse --git-common-dir`
           .quiet()
           .nothrow()
@@ -101,6 +143,17 @@ export namespace Project {
             if (dirname === ".") return sandbox
             return dirname
           })
+          .catch(() => undefined)
+
+        if (!worktree) {
+          return {
+            id,
+            sandbox,
+            worktree: sandbox,
+            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+          }
+        }
+
         return {
           id,
           sandbox,
@@ -138,6 +191,7 @@ export namespace Project {
     if (!existing.sandboxes) existing.sandboxes = []
 
     if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) discover(existing)
+
     const result: Info = {
       ...existing,
       worktree,
@@ -148,6 +202,7 @@ export namespace Project {
       },
     }
     if (sandbox !== result.worktree && !result.sandboxes.includes(sandbox)) result.sandboxes.push(sandbox)
+    result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
     await Storage.write<Info>(["project", id], result)
     GlobalBus.emit("event", {
       payload: {
@@ -160,6 +215,7 @@ export namespace Project {
 
   export async function discover(input: Info) {
     if (input.vcs !== "git") return
+    if (input.icon?.override) return
     if (input.icon?.url) return
     const glob = new Bun.Glob("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}")
     const matches = await Array.fromAsync(
@@ -219,7 +275,11 @@ export namespace Project {
 
   export async function list() {
     const keys = await Storage.list(["project"])
-    return await Promise.all(keys.map((x) => Storage.read<Info>(x)))
+    const projects = await Promise.all(keys.map((x) => Storage.read<Info>(x)))
+    return projects.map((project) => ({
+      ...project,
+      sandboxes: project.sandboxes?.filter((x) => existsSync(x)),
+    }))
   }
 
   export const update = fn(
@@ -236,6 +296,7 @@ export namespace Project {
             ...draft.icon,
           }
           if (input.icon.url !== undefined) draft.icon.url = input.icon.url
+          if (input.icon.override !== undefined) draft.icon.override = input.icon.override || undefined
           if (input.icon.color !== undefined) draft.icon.color = input.icon.color
         }
         draft.time.updated = Date.now()
@@ -259,5 +320,20 @@ export namespace Project {
       if (stat?.isDirectory()) valid.push(dir)
     }
     return valid
+  }
+
+  export async function removeSandbox(projectID: string, directory: string) {
+    const result = await Storage.update<Info>(["project", projectID], (draft) => {
+      const sandboxes = draft.sandboxes ?? []
+      draft.sandboxes = sandboxes.filter((sandbox) => sandbox !== directory)
+      draft.time.updated = Date.now()
+    })
+    GlobalBus.emit("event", {
+      payload: {
+        type: Event.Updated.type,
+        properties: result,
+      },
+    })
+    return result
   }
 }

@@ -23,11 +23,18 @@ export function NewSessionView(props: NewSessionViewProps) {
     if (options().includes(selection)) return selection
     return MAIN_WORKTREE
   })
+  const projectRoot = createMemo(() => sync.project?.worktree ?? sync.data.path.directory)
+  const isWorktree = createMemo(() => {
+    const project = sync.project
+    if (!project) return false
+    return sync.data.path.directory !== project.worktree
+  })
 
   const label = (value: string) => {
     if (value === MAIN_WORKTREE) {
+      if (isWorktree()) return "Main branch"
       const branch = sync.data.vcs?.branch
-      if (branch) return `Current branch (${branch})`
+      if (branch) return `Main branch (${branch})`
       return "Main branch"
     }
 
@@ -37,13 +44,16 @@ export function NewSessionView(props: NewSessionViewProps) {
   }
 
   return (
-    <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6">
+    <div
+      class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6"
+      style={{ "padding-bottom": "calc(var(--prompt-height, 11.25rem) + 64px)" }}
+    >
       <div class="text-20-medium text-text-weaker">New session</div>
       <div class="flex justify-center items-center gap-3">
         <Icon name="folder" size="small" />
         <div class="text-12-medium text-text-weak">
-          {getDirectory(sync.data.path.directory)}
-          <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
+          {getDirectory(projectRoot())}
+          <span class="text-text-strong">{getFilename(projectRoot())}</span>
         </div>
       </div>
       <div class="flex justify-center items-center gap-1">

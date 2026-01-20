@@ -294,6 +294,7 @@ export const AuthLoginCommand = cmd({
                 hint: {
                   opencode: "recommended",
                   anthropic: "Claude Max or API key",
+                  openai: "ChatGPT Plus/Pro or API key",
                 }[x.id],
               })),
             ),
@@ -335,10 +336,12 @@ export const AuthLoginCommand = cmd({
 
         if (provider === "amazon-bedrock") {
           prompts.log.info(
-            "Amazon bedrock can be configured with standard AWS environment variables like AWS_BEARER_TOKEN_BEDROCK, AWS_PROFILE or AWS_ACCESS_KEY_ID",
+            "Amazon Bedrock authentication priority:\n" +
+              "  1. Bearer token (AWS_BEARER_TOKEN_BEDROCK or /connect)\n" +
+              "  2. AWS credential chain (profile, access keys, IAM roles, EKS IRSA)\n\n" +
+              "Configure via opencode.json options (profile, region, endpoint) or\n" +
+              "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_WEB_IDENTITY_TOKEN_FILE).",
           )
-          prompts.outro("Done")
-          return
         }
 
         if (provider === "opencode") {

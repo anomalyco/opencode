@@ -1,8 +1,8 @@
 ## Usage
 
-Those templates dependencies are maintained via [pnpm](https://pnpm.io) via `pnpm up -Lri`.
+Dependencies for these templates are managed with [pnpm](https://pnpm.io) using `pnpm up -Lri`.
 
-This is the reason you see a `pnpm-lock.yaml`. That being said, any package manager will work. This file can be safely be removed once you clone a template.
+This is the reason you see a `pnpm-lock.yaml`. That said, any package manager will work. This file can safely be removed once you clone a template.
 
 ```bash
 $ npm install # or pnpm install or yarn install
@@ -28,6 +28,21 @@ It correctly bundles Solid in production mode and optimizes the build for the be
 
 The build is minified and the filenames include the hashes.<br>
 Your app is ready to be deployed!
+
+## E2E Testing
+
+The Playwright runner expects the app already running at `http://localhost:3000`.
+
+```bash
+bun add -D @playwright/test
+bunx playwright install
+bun run test:e2e
+```
+
+Environment options:
+
+- `PLAYWRIGHT_BASE_URL` (default: `http://localhost:3000`)
+- `PLAYWRIGHT_PORT` (default: `3000`)
 
 ## Deployment
 

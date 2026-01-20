@@ -62,6 +62,7 @@ function init() {
       current.onClose?.()
       setStore("stack", store.stack.slice(0, -1))
       evt.preventDefault()
+      evt.stopPropagation()
       refocus()
     }
   })
@@ -140,11 +141,6 @@ export function DialogProvider(props: ParentProps) {
         onMouseUp={async () => {
           const text = renderer.getSelection()?.getSelectedText()
           if (text && text.length > 0) {
-            const base64 = Buffer.from(text).toString("base64")
-            const osc52 = `\x1b]52;c;${base64}\x07`
-            const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-            /* @ts-expect-error */
-            renderer.writeOut(finalOsc52)
             await Clipboard.copy(text)
               .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
               .catch(toast.error)
