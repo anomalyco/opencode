@@ -344,6 +344,10 @@
           [data-component="icon"] {
             color: var(--icon-strong-base);
           }
+
+          &:hover:not(:disabled) {
+            background-color: var(--surface-raised-base);
+          }
         }
       }
 
