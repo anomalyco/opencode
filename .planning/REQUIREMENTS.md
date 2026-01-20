@@ -95,8 +95,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-02 | Phase 7 | Pending |
 | SEC-03 | Phase 7 | Pending |
 | SEC-04 | Phase 7 | Pending |
-| INFRA-01 | Phase 3 | Pending |
-| INFRA-02 | Phase 3 | Pending |
+| INFRA-01 | Phase 3 | Complete |
+| INFRA-02 | Phase 3 | Complete |
 | INFRA-03 | Phase 1 | Complete |
 | INFRA-04 | Phase 1 | Complete |
 | UI-01 | Phase 6 | Pending |
