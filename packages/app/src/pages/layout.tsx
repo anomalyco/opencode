@@ -1427,7 +1427,7 @@ export default function Layout(props: ParentProps) {
             openDelay={150}
             closeDelay={100}
             placement="right"
-            gutter={16}
+            gutter={28}
             trigger={item}
             open={hoverSession() === props.session.id}
             onOpenChange={(open) => setHoverSession(open ? props.session.id : undefined)}
@@ -1743,7 +1743,7 @@ export default function Layout(props: ParentProps) {
             if (value) setHoverSession(undefined)
           }}
         >
-          <div class="-m-3 flex flex-col w-72">
+          <div class="-m-3 p-2 flex flex-col w-72">
             <div class="px-4 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
             <div class="px-4 pb-2 text-12-medium text-text-weak">Recent sessions</div>
             <div class="px-2 pb-2 flex flex-col gap-2">
