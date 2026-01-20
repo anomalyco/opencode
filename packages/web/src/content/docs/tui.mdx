@@ -373,6 +373,38 @@ You can customize TUI behavior through your OpenCode config file.
 
 - `scroll_acceleration` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `1`). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
+- `attach` - URL of an existing OpenCode server to connect to instead of spawning a new one. Falls back to spawning a new server if unavailable. [Learn more](#attach-to-server).
+
+---
+
+## Attach to server
+
+You can attach the TUI to an existing OpenCode server instead of spawning a new one. This is useful when running OpenCode as a persistent background service.
+
+### Via CLI flag
+
+```bash
+opencode --attach http://localhost:4096
+```
+
+### Via config
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "attach": "http://opencode.local"
+  }
+}
+```
+
+When `attach` is configured, the TUI will:
+
+1. Check if the server is available via a health check
+2. If available, connect directly without spawning a new worker
+3. If unavailable, fall back to spawning a new server
+
+The CLI flag `--attach` takes precedence over the config file setting.
 
 ---
 

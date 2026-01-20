@@ -68,6 +68,32 @@ The [`/tui`](#tui) endpoint can be used to drive the TUI through the server. For
 
 ---
 
+#### Attach TUI to a running server
+
+You can attach a new TUI instance to an existing server using the `--attach` flag or `tui.attach` config:
+
+```bash
+# Start the server
+opencode serve --port 4096
+
+# In another terminal, attach the TUI
+opencode --attach http://localhost:4096
+```
+
+Or configure it in your config file to always attach:
+
+```json title="opencode.json"
+{
+  "tui": {
+    "attach": "http://localhost:4096"
+  }
+}
+```
+
+[Learn more about attaching to servers](/docs/tui#attach-to-server).
+
+---
+
 ## Spec
 
 The server publishes an OpenAPI 3.1 spec that can be viewed at:
