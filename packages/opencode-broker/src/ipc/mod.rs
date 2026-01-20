@@ -1,5 +1,5 @@
 pub mod protocol;
 
 pub use protocol::{
-    AuthenticateParams, Method, PingParams, Request, RequestParams, Response, PROTOCOL_VERSION,
+    AuthenticateParams, Method, PROTOCOL_VERSION, PingParams, Request, RequestParams, Response,
 };

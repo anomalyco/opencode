@@ -109,11 +109,11 @@ pub fn parse_config(json: &str) -> Result<BrokerConfig, ConfigError> {
     let mut config = BrokerConfig::default();
 
     if let Some(auth) = raw.auth {
-        if let Some(pam) = auth.pam {
-            if let Some(service) = pam.service {
-                validate_pam_service(&service)?;
-                config.pam_service = service;
-            }
+        if let Some(pam) = auth.pam
+            && let Some(service) = pam.service
+        {
+            validate_pam_service(&service)?;
+            config.pam_service = service;
         }
 
         // If rate limiting is explicitly disabled, use very high limits
