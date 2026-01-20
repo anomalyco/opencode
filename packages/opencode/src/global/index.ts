@@ -22,6 +22,10 @@ export namespace Global {
     cache,
     config,
     state,
+    // Allow overriding models.dev URL for offline deployments
+    get modelsDevUrl() {
+      return process.env.MODELS_DEV_URL || "https://models.dev"
+    },
   }
 }
 
