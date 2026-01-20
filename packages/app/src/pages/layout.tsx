@@ -1661,8 +1661,8 @@ export default function Layout(props: ParentProps) {
     )
 
     return (
-      // @ts-ignore
       <div
+        // @ts-ignore
         use:sortable
         classList={{
           "opacity-30": sortable.isActiveDraggable,
