@@ -119,6 +119,8 @@ export default function Layout(props: ParentProps) {
   })
   const editorRef = { current: undefined as HTMLInputElement | undefined }
 
+  const [hoverSession, setHoverSession] = createSignal<string | undefined>()
+
   const editorOpen = (id: string) => editor.active === id
   const editorValue = () => editor.value
 
@@ -1421,7 +1423,15 @@ export default function Layout(props: ParentProps) {
             </Tooltip>
           }
         >
-          <HoverCard openDelay={150} closeDelay={100} placement="right-start" gutter={16} trigger={item}>
+          <HoverCard
+            openDelay={150}
+            closeDelay={100}
+            placement="right"
+            gutter={16}
+            trigger={item}
+            open={hoverSession() === props.session.id}
+            onOpenChange={(open) => setHoverSession(open ? props.session.id : undefined)}
+          >
             <Show when={hoverReady()} fallback={<div class="text-12-regular text-text-weak">Loading messages…</div>}>
               <MessageNav
                 messages={hoverMessages() ?? []}
@@ -1728,7 +1738,10 @@ export default function Layout(props: ParentProps) {
           placement="right-start"
           gutter={6}
           trigger={trigger}
-          onOpenChange={setOpen}
+          onOpenChange={(value) => {
+            setOpen(value)
+            if (value) setHoverSession(undefined)
+          }}
         >
           <div class="-m-3 flex flex-col w-72">
             <div class="px-4 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
