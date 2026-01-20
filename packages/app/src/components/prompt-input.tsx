@@ -1071,9 +1071,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const addPart = (part: ContentPart) => {
     const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0) return
+    if (!selection) return
 
-    const cursorPosition = getCursorPosition(editorRef)
+    const hasRange = selection.rangeCount > 0
+    const inEditor = hasRange && editorRef.contains(selection.anchorNode)
+    const cursorPosition = inEditor
+      ? getCursorPosition(editorRef)
+      : (prompt.cursor() ?? getCursorPosition(editorRef))
+    if (!inEditor) {
+      editorRef.focus()
+      setCursorPosition(editorRef, cursorPosition)
+    }
+    if (selection.rangeCount === 0) return
+
     const currentPrompt = prompt.current()
     const rawText = currentPrompt.map((p) => ("content" in p ? p.content : "")).join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
