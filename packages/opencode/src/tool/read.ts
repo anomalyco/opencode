@@ -24,9 +24,15 @@ export const ReadTool = Tool.define("read", {
     })
     .refine((value) => value.filePath || (value.filePaths && value.filePaths.length > 0), {
       message: "filePath or filePaths is required",
+    })
+    .refine((value) => !(value.filePath && value.filePaths && value.filePaths.length > 0), {
+      message: "Use filePath or filePaths, not both",
     }),
   async execute(params, ctx) {
-    const paths = params.filePaths?.length ? params.filePaths : params.filePath ? [params.filePath] : []
+    const hasPath = Boolean(params.filePath)
+    const hasPaths = Boolean(params.filePaths?.length)
+    if (hasPath && hasPaths) throw new Error("Use filePath or filePaths, not both")
+    const paths = hasPaths ? params.filePaths! : hasPath ? [params.filePath!] : []
     if (paths.length === 0) throw new Error("filePath or filePaths is required")
 
     const limit = params.limit ?? DEFAULT_READ_LIMIT
@@ -154,10 +160,7 @@ export const ReadTool = Tool.define("read", {
       return readOne(paths[0])
     }
 
-    const results = []
-    for (const value of paths) {
-      results.push(await readOne(value))
-    }
+    const results = await Promise.all(paths.map((value) => readOne(value)))
 
     const output = results.map((result) => result.output).join("\n\n")
     const preview = results.map((result) => result.metadata.preview).join("\n\n")

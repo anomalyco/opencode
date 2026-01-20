@@ -51,29 +51,6 @@ describe("tool.read external_directory permission", () => {
     })
   })
 
-  test("reads multiple files with filePaths", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "first.txt"), "first content")
-        await Bun.write(path.join(dir, "second.txt"), "second content")
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute(
-          {
-            filePaths: [path.join(tmp.path, "first.txt"), path.join(tmp.path, "second.txt")],
-          },
-          ctx,
-        )
-        expect(result.output).toContain("first content")
-        expect(result.output).toContain("second content")
-      },
-    })
-  })
-
   test("asks for external_directory permission when reading absolute path outside project", async () => {
     await using outerTmp = await tmpdir({
       init: async (dir) => {
@@ -142,6 +119,129 @@ describe("tool.read external_directory permission", () => {
         await read.execute({ filePath: path.join(tmp.path, "internal.txt") }, testCtx)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeUndefined()
+      },
+    })
+  })
+})
+
+describe("tool.read filePaths", () => {
+  test("combines output in order and builds title", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "first.txt"), "first content")
+        await Bun.write(path.join(dir, "second.txt"), "second content")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const first = path.join(tmp.path, "first.txt")
+        const second = path.join(tmp.path, "second.txt")
+        const result = await read.execute({ filePaths: [first, second] }, ctx)
+        const firstIndex = result.output.indexOf("first content")
+        const secondIndex = result.output.indexOf("second content")
+        const blocks = result.output.match(/<file>/g) ?? []
+        const title = `${path.relative(Instance.worktree, first)}, ${path.relative(Instance.worktree, second)}`
+        expect(result.title).toBe(title)
+        expect(firstIndex).toBeGreaterThan(-1)
+        expect(secondIndex).toBeGreaterThan(-1)
+        expect(firstIndex).toBeLessThan(secondIndex)
+        expect(blocks.length).toBe(2)
+      },
+    })
+  })
+
+  test("applies offset and limit to each file", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const firstLines = ["a0", "a1", "a2"].join("\n")
+        const secondLines = ["b0", "b1", "b2"].join("\n")
+        await Bun.write(path.join(dir, "first.txt"), firstLines)
+        await Bun.write(path.join(dir, "second.txt"), secondLines)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const first = path.join(tmp.path, "first.txt")
+        const second = path.join(tmp.path, "second.txt")
+        const result = await read.execute({ filePaths: [first, second], offset: 1, limit: 1 }, ctx)
+        expect(result.output).toContain("a1")
+        expect(result.output).toContain("b1")
+        expect(result.output).not.toContain("a0")
+        expect(result.output).not.toContain("b0")
+        expect(result.output).not.toContain("a2")
+        expect(result.output).not.toContain("b2")
+      },
+    })
+  })
+
+  test("throws when filePaths is empty", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePaths: [] }, ctx)).rejects.toThrow("filePath or filePaths is required")
+      },
+    })
+  })
+
+  test("throws when filePath and filePaths are both provided", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "first.txt"), "first content")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const first = path.join(tmp.path, "first.txt")
+        await expect(read.execute({ filePath: first, filePaths: [first] }, ctx)).rejects.toThrow(
+          "Use filePath or filePaths, not both",
+        )
+      },
+    })
+  })
+
+  test("throws when filePaths contains missing file", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const missing = path.join(tmp.path, "missing.txt")
+        await expect(read.execute({ filePaths: [missing] }, ctx)).rejects.toThrow("File not found")
+      },
+    })
+  })
+
+  test("combines attachments for images and pdfs", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const png = Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
+          "base64",
+        )
+        const pdf = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n")
+        await Bun.write(path.join(dir, "image.png"), png)
+        await Bun.write(path.join(dir, "file.pdf"), pdf)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute(
+          { filePaths: [path.join(tmp.path, "image.png"), path.join(tmp.path, "file.pdf")] },
+          ctx,
+        )
+        expect(result.output).toContain("Image read successfully")
+        expect(result.output).toContain("PDF read successfully")
+        expect(result.attachments?.length).toBe(2)
       },
     })
   })

@@ -52,6 +52,18 @@ describe("session.compaction.isOverflow", () => {
     })
   })
 
+  test("returns true when token count exceeds early compaction threshold", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 100_000, output: 10_000 })
+        const tokens = { input: 80_000, output: 1_001, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(true)
+      },
+    })
+  })
+
   test("returns false when token count within usable context", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
