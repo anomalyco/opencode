@@ -295,7 +295,7 @@ export function Session() {
           sdk.client.permission.reply({
             requestID: first.id,
             reply: "interject",
-            interjection: interjection.trim(),
+            message: interjection.trim(),
           })
         }
         return
