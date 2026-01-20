@@ -3,6 +3,9 @@ import { Global } from "../global"
 import fs from "fs/promises"
 import z from "zod"
 
+// Re-export broker client for PAM authentication
+export { BrokerClient, type AuthResult } from "./broker-client.js"
+
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
 export namespace Auth {
