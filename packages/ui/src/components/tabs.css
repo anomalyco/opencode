@@ -243,7 +243,7 @@
       }
 
       &:has([data-selected]) {
-        background-color: var(--surface-raised-base-hover);
+        background-color: var(--surface-raised-base-active);
         color: var(--text-strong);
       }
     }
@@ -338,7 +338,7 @@
         }
 
         &:has([data-selected]) {
-          background-color: var(--surface-raised-base-hover);
+          background-color: var(--surface-raised-base-active);
           color: var(--text-strong);
 
           [data-component="icon"] {
