@@ -66,7 +66,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
@@ -91,7 +91,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([])
+    expect(MessageV2.toModelMessages(input)).toStrictEqual([])
   })
 
   test("includes synthetic text parts", () => {
@@ -122,7 +122,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
@@ -189,7 +189,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input)).toStrictEqual([
       {
         role: "user",
         content: [
@@ -259,7 +259,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -341,7 +341,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -408,7 +408,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -461,7 +461,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([])
+    expect(MessageV2.toModelMessages(input)).toStrictEqual([])
   })
 
   test("includes aborted assistant messages only when they have non-step-start/reasoning content", () => {
@@ -504,7 +504,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input)).toStrictEqual([
       {
         role: "assistant",
         content: [
@@ -540,7 +540,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input)).toStrictEqual([
       {
         role: "assistant",
         content: [{ type: "text", text: "first" }],
@@ -567,7 +567,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessage(input)).toStrictEqual([])
+    expect(MessageV2.toModelMessages(input)).toStrictEqual([])
   })
 
   test("converts pending/running tool calls to error results to prevent dangling tool_use", () => {
@@ -614,7 +614,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    const result = MessageV2.toModelMessage(input)
+    const result = MessageV2.toModelMessages(input)
 
     expect(result).toStrictEqual([
       {

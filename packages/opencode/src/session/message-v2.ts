@@ -432,7 +432,7 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function toModelMessage(input: WithParts[]): ModelMessage[] {
+  export function toModelMessages(input: WithParts[]): ModelMessage[] {
     const result: UIMessage[] = []
 
     for (const msg of input) {
