@@ -41,7 +41,6 @@ export namespace Agent {
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
       task_budget: z.number().int().nonnegative().optional(),
-      callable_by_subagents: z.boolean().optional(),
     })
     .meta({
       ref: "Agent",
@@ -220,7 +219,6 @@ export namespace Agent {
       item.name = value.name ?? item.name
       item.steps = value.steps ?? item.steps
       item.task_budget = value.task_budget ?? item.task_budget
-      item.callable_by_subagents = value.callable_by_subagents ?? item.callable_by_subagents
       item.options = mergeDeep(item.options, value.options ?? {})
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
     }

@@ -686,10 +686,6 @@ export namespace Config {
       .describe(
         "Maximum task calls this agent can make per session when delegating to other subagents. Set to 0 to explicitly disable, omit to use default (disabled).",
       ),
-    callable_by_subagents: z
-      .boolean()
-      .optional()
-      .describe("Whether this agent can be called by other subagents (default: false)"),
     options: z.record(z.string(), z.any()).optional(),
       color: z
         .union([
@@ -720,7 +716,6 @@ export namespace Config {
         "mode",
         "hidden",
         "task_budget",
-        "callable_by_subagents",
         "color",
         "steps",
         "maxSteps",

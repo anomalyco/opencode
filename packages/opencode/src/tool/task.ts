@@ -87,10 +87,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const callerAgentInfo = ctx.agent ? await Agent.get(ctx.agent) : undefined
 
       // Get config values:
-      // - task_budget on CALLER: how many calls the caller can make per request
-      // - callable_by_subagents on TARGET: whether target can be called by subagents
+      // - task_budget on CALLER: how many calls the caller can make per session
       const callerTaskBudget = callerAgentInfo?.task_budget ?? 0
-      const targetCallable = targetAgent.callable_by_subagents === true
 
       // Get target's task_budget once (used for session permissions and tool availability)
       const targetTaskBudget = targetAgent.task_budget ?? 0
@@ -117,15 +115,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           )
         }
 
-        // Check 2: Target must be callable by subagents
-        if (!targetCallable) {
-          throw new Error(
-            `Target "${params.subagent_type}" is not callable by subagents. ` +
-            `Set callable_by_subagents: true on the target agent to enable.`,
-          )
-        }
-
-        // Check 3: Budget not exhausted for this session
+        // Check 2: Budget not exhausted for this session
         const currentCount = getCallCount(ctx.sessionID)
         if (currentCount >= callerTaskBudget) {
           throw new Error(
