@@ -1121,7 +1121,7 @@ export namespace Config {
     return load(text, filepath)
   }
 
-<<<<<<< HEAD
+
   async function load(text: string, configFilepath: string, enableConfigSubstitutions: boolean = true) {
     const original = text
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
