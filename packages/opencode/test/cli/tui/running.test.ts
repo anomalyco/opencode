@@ -35,11 +35,11 @@ describe("extractToolCommand", () => {
   })
 
   test("formats task with description", () => {
-    expect(extractToolCommand("task", { description: "Search codebase" })).toBe("task: Search codebase")
+    expect(extractToolCommand("task", { description: "Search codebase" })).toBe("agent: Search codebase")
   })
 
   test("falls back to '...' when task description missing", () => {
-    expect(extractToolCommand("task", {})).toBe("task: ...")
+    expect(extractToolCommand("task", {})).toBe("agent: ...")
   })
 
   test("formats webfetch with url", () => {
