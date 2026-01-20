@@ -9,6 +9,8 @@ import { Log } from "@/util/log"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
+import { Global } from "@/global"
+import { parse as parseJsonc } from "jsonc-parser"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -38,6 +40,38 @@ function createEventSource(client: RpcClient): EventSource {
   return {
     on: (handler) => client.on<Event>("event", handler),
   }
+}
+
+async function tryAttachToServer(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${url}/health`, {
+      method: "GET",
+      signal: AbortSignal.timeout(2000),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+async function getAttachUrl(cwd: string): Promise<string | undefined> {
+  const candidates = [
+    path.join(cwd, "opencode.jsonc"),
+    path.join(cwd, "opencode.json"),
+    path.join(Global.Path.config, "opencode.jsonc"),
+    path.join(Global.Path.config, "opencode.json"),
+  ]
+
+  for (const filepath of candidates) {
+    try {
+      const text = await Bun.file(filepath).text()
+      const config = parseJsonc(text) as { tui?: { attach?: string } } | undefined
+      if (config?.tui?.attach) return config.tui.attach
+    } catch {
+      // File doesn't exist or invalid, try next
+    }
+  }
+  return undefined
 }
 
 export const TuiThreadCommand = cmd({
@@ -71,11 +105,49 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("attach", {
+        type: "string",
+        describe: "attach to a running opencode server (e.g., http://localhost:4096)",
       }),
   handler: async (args) => {
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
     const baseCwd = process.env.PWD ?? process.cwd()
     const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
+
+    try {
+      process.chdir(cwd)
+    } catch (e) {
+      UI.error("Failed to change directory to " + cwd)
+      return
+    }
+
+    // Check if --attach flag or tui.attach config is set - try to connect to existing server first
+    const attachUrl = args.attach ?? (await getAttachUrl(cwd))
+    if (attachUrl) {
+      const serverAvailable = await tryAttachToServer(attachUrl)
+      if (serverAvailable) {
+        // Server is available, attach to it directly (no worker spawn)
+        const prompt = await iife(async () => {
+          const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
+          if (!args.prompt) return piped
+          return piped ? piped + "\n" + args.prompt : args.prompt
+        })
+        await tui({
+          url: attachUrl,
+          args: {
+            continue: args.continue,
+            sessionID: args.session,
+            agent: args.agent,
+            model: args.model,
+            prompt,
+          },
+        })
+        return
+      }
+      // Server not available, fall through to spawn a new worker
+    }
+
     const localWorker = new URL("./worker.ts", import.meta.url)
     const distWorker = new URL("./cli/cmd/tui/worker.js", import.meta.url)
     const workerPath = await iife(async () => {
@@ -83,12 +155,6 @@ export const TuiThreadCommand = cmd({
       if (await Bun.file(distWorker).exists()) return distWorker
       return localWorker
     })
-    try {
-      process.chdir(cwd)
-    } catch (e) {
-      UI.error("Failed to change directory to " + cwd)
-      return
-    }
 
     const worker = new Worker(workerPath, {
       env: Object.fromEntries(

@@ -804,6 +804,11 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    attach: z
+      .string()
+      .url()
+      .optional()
+      .describe("URL to attach to existing server. Falls back to spawning new server if unavailable."),
   })
 
   export const Server = z
