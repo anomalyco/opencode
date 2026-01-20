@@ -435,7 +435,13 @@ export function Session() {
         const status = sync.data.session_status?.[route.sessionID]
         if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
         const revert = session()?.revert?.messageID
-        const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
+        const message = messages().findLast((x) => {
+          if (x.role !== "user") return false
+          if (revert && x.id >= revert) return false
+          const parts = sync.data.part[x.id]
+          if (!parts || !Array.isArray(parts)) return false
+          return parts.some((part) => part && part.type === "text" && !part.synthetic && !part.ignored)
+        })
         if (!message) return
         sdk.client.session
           .revert({
@@ -450,7 +456,7 @@ export function Session() {
           parts.reduce(
             (agg, part) => {
               if (part.type === "text") {
-                if (!part.synthetic) agg.input += part.text
+                if (!part.synthetic && !part.ignored) agg.input += part.text
               }
               if (part.type === "file") agg.parts.push(part)
               return agg
@@ -474,7 +480,13 @@ export function Session() {
         dialog.clear()
         const messageID = session()?.revert?.messageID
         if (!messageID) return
-        const message = messages().find((x) => x.role === "user" && x.id > messageID)
+        const message = messages().find((x) => {
+          if (x.role !== "user") return false
+          if (x.id <= messageID) return false
+          const parts = sync.data.part[x.id]
+          if (!parts || !Array.isArray(parts)) return false
+          return parts.some((part) => part && part.type === "text" && !part.synthetic && !part.ignored)
+        })
         if (!message) {
           sdk.client.session.unrevert({
             sessionID: route.sessionID,
