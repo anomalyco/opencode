@@ -44,6 +44,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { Truncate } from "@/tool/truncation"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -612,7 +613,7 @@ export namespace SessionPrompt {
         sessionID,
         system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
         messages: [
-          ...MessageV2.toModelMessage(sessionMessages, { tools }),
+          ...MessageV2.toModelMessage(sessionMessages),
           ...(isLastStep
             ? [
                 {
@@ -700,7 +701,10 @@ export namespace SessionPrompt {
       },
     })
 
-    for (const item of await ToolRegistry.tools(input.model.providerID, input.agent)) {
+    for (const item of await ToolRegistry.tools(
+      { modelID: input.model.api.id, providerID: input.model.providerID },
+      input.agent,
+    )) {
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,
@@ -731,18 +735,10 @@ export namespace SessionPrompt {
           )
           return result
         },
-        toModelOutput(result: { output: string; attachments?: MessageV2.FilePart[] }) {
-          if (!result.attachments?.length) return { type: "text", value: result.output }
+        toModelOutput(result) {
           return {
-            type: "content",
-            value: [
-              { type: "text", text: result.output },
-              ...result.attachments.map((a) => ({
-                type: "media" as const,
-                data: a.url.slice(a.url.indexOf(",") + 1),
-                mediaType: a.mime,
-              })),
-            ],
+            type: "text",
+            value: result.output,
           }
         },
       })
@@ -821,26 +817,25 @@ export namespace SessionPrompt {
           }
         }
 
+        const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
+        const metadata = {
+          ...(result.metadata ?? {}),
+          truncated: truncated.truncated,
+          ...(truncated.truncated && { outputPath: truncated.outputPath }),
+        }
+
         return {
           title: "",
-          metadata: result.metadata ?? {},
-          output: textParts.join("\n\n"),
+          metadata,
+          output: truncated.content,
           attachments,
           content: result.content, // directly return content to preserve ordering when outputting to model
         }
       }
-      item.toModelOutput = (result: { output: string; attachments?: MessageV2.FilePart[] }) => {
-        if (!result.attachments?.length) return { type: "text", value: result.output }
+      item.toModelOutput = (result) => {
         return {
-          type: "content",
-          value: [
-            { type: "text", text: result.output },
-            ...result.attachments.map((a) => ({
-              type: "media" as const,
-              data: a.url.slice(a.url.indexOf(",") + 1),
-              mediaType: a.mime,
-            })),
-          ],
+          type: "text",
+          value: result.output,
         }
       }
       tools[key] = item
@@ -1729,6 +1724,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         ? Provider.parseModel(input.model)
         : await lastModel(input.sessionID)
       : taskModel
+
+    await Plugin.trigger(
+      "command.execute.before",
+      {
+        command: input.command,
+        sessionID: input.sessionID,
+        arguments: input.arguments,
+      },
+      { parts },
+    )
 
     const result = (await prompt({
       sessionID: input.sessionID,

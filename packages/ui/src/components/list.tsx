@@ -8,6 +8,8 @@ import { TextField } from "./text-field"
 export interface ListSearchProps {
   placeholder?: string
   autofocus?: boolean
+  hideIcon?: boolean
+  class?: string
 }
 
 export interface ListProps<T> extends FilteredListProps<T> {
@@ -33,9 +35,30 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     mouseActive: false,
   })
 
+  const scrollIntoView = (container: HTMLDivElement, node: HTMLElement, block: "center" | "nearest") => {
+    const containerRect = container.getBoundingClientRect()
+    const nodeRect = node.getBoundingClientRect()
+    const top = nodeRect.top - containerRect.top + container.scrollTop
+    const bottom = top + nodeRect.height
+    const viewTop = container.scrollTop
+    const viewBottom = viewTop + container.clientHeight
+    const target =
+      block === "center"
+        ? top - container.clientHeight / 2 + nodeRect.height / 2
+        : top < viewTop
+          ? top
+          : bottom > viewBottom
+            ? bottom - container.clientHeight
+            : viewTop
+    const max = Math.max(0, container.scrollHeight - container.clientHeight)
+    container.scrollTop = Math.max(0, Math.min(target, max))
+  }
+
   const { filter, grouped, flat, active, setActive, onKeyDown, onInput } = useFilteredList<T>(props)
 
   const searchProps = () => (typeof props.search === "object" ? props.search : {})
+
+  const moved = (event: MouseEvent) => event.movementX !== 0 || event.movementY !== 0
 
   createEffect(() => {
     if (props.filter !== undefined) {
@@ -63,24 +86,31 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   )
 
   createEffect(() => {
-    if (!scrollRef()) return
+    const scroll = scrollRef()
+    if (!scroll) return
     if (!props.current) return
     const key = props.key(props.current)
     requestAnimationFrame(() => {
-      const element = scrollRef()?.querySelector(`[data-key="${key}"]`)
-      element?.scrollIntoView({ block: "center" })
+      const element = scroll.querySelector(`[data-key="${CSS.escape(key)}"]`)
+      if (!(element instanceof HTMLElement)) return
+      scrollIntoView(scroll, element, "center")
     })
   })
 
   createEffect(() => {
     const all = flat()
     if (store.mouseActive || all.length === 0) return
+    const scroll = scrollRef()
+    if (!scroll) return
     if (active() === props.key(all[0])) {
-      scrollRef()?.scrollTo(0, 0)
+      scroll.scrollTo(0, 0)
       return
     }
-    const element = scrollRef()?.querySelector(`[data-key="${active()}"]`)
-    element?.scrollIntoView({ block: "center", behavior: "smooth" })
+    const key = active()
+    if (!key) return
+    const element = scroll.querySelector(`[data-key="${CSS.escape(key)}"]`)
+    if (!(element instanceof HTMLElement)) return
+    scrollIntoView(scroll, element, "center")
   })
 
   createEffect(() => {
@@ -146,9 +176,11 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   return (
     <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
       <Show when={!!props.search}>
-        <div data-slot="list-search">
+        <div data-slot="list-search" classList={{ [searchProps().class ?? ""]: !!searchProps().class }}>
           <div data-slot="list-search-container">
-            <Icon name="magnifying-glass" />
+            <Show when={!searchProps().hideIcon}>
+              <Icon name="magnifying-glass" />
+            </Show>
             <TextField
               autofocus={searchProps().autofocus}
               variant="ghost"
@@ -197,11 +229,13 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                         data-selected={item === props.current}
                         onClick={() => handleSelect(item, i())}
                         type="button"
-                        onMouseMove={() => {
+                        onMouseMove={(event) => {
+                          if (!moved(event)) return
                           setStore("mouseActive", true)
                           setActive(props.key(item))
                         }}
                         onMouseLeave={() => {
+                          if (!store.mouseActive) return
                           setActive(null)
                         }}
                       >

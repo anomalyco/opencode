@@ -22,16 +22,20 @@ export function DialogEditProject(props: { project: LocalProject }) {
   const [store, setStore] = createStore({
     name: defaultName(),
     color: props.project.icon?.color || "pink",
-    iconUrl: props.project.icon?.url || "",
+    iconUrl: props.project.icon?.override || "",
     saving: false,
   })
 
   const [dragOver, setDragOver] = createSignal(false)
+  const [iconHover, setIconHover] = createSignal(false)
 
   function handleFileSelect(file: File) {
     if (!file.type.startsWith("image/")) return
     const reader = new FileReader()
-    reader.onload = (e) => setStore("iconUrl", e.target?.result as string)
+    reader.onload = (e) => {
+      setStore("iconUrl", e.target?.result as string)
+      setIconHover(false)
+    }
     reader.readAsDataURL(file)
   }
 
@@ -70,15 +74,15 @@ export function DialogEditProject(props: { project: LocalProject }) {
     await globalSDK.client.project.update({
       projectID: props.project.id,
       name,
-      icon: { color: store.color, url: store.iconUrl },
+      icon: { color: store.color, override: store.iconUrl },
     })
     setStore("saving", false)
     dialog.close()
   }
 
   return (
-    <Dialog title="Edit project">
-      <form onSubmit={handleSubmit} class="flex flex-col gap-6 px-2.5 pb-3">
+    <Dialog title="Edit project" class="w-full max-w-[480px] mx-auto">
+      <form onSubmit={handleSubmit} class="flex flex-col gap-6 p-6 pt-0">
         <div class="flex flex-col gap-4">
           <TextField
             autofocus
@@ -92,17 +96,24 @@ export function DialogEditProject(props: { project: LocalProject }) {
           <div class="flex flex-col gap-2">
             <label class="text-12-medium text-text-weak">Icon</label>
             <div class="flex gap-3 items-start">
-              <div class="relative">
+              <div class="relative" onMouseEnter={() => setIconHover(true)} onMouseLeave={() => setIconHover(false)}>
                 <div
-                  class="size-16 rounded-lg overflow-hidden border border-dashed transition-colors cursor-pointer"
+                  class="relative size-16 rounded-md transition-colors cursor-pointer"
                   classList={{
                     "border-text-interactive-base bg-surface-info-base/20": dragOver(),
                     "border-border-base hover:border-border-strong": !dragOver(),
+                    "overflow-hidden": !!store.iconUrl,
                   }}
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
-                  onClick={() => document.getElementById("icon-upload")?.click()}
+                  onClick={() => {
+                    if (store.iconUrl && iconHover()) {
+                      clearIcon()
+                    } else {
+                      document.getElementById("icon-upload")?.click()
+                    }
+                  }}
                 >
                   <Show
                     when={store.iconUrl}
@@ -119,20 +130,48 @@ export function DialogEditProject(props: { project: LocalProject }) {
                     <img src={store.iconUrl} alt="Project icon" class="size-full object-cover" />
                   </Show>
                 </div>
-                <Show when={store.iconUrl}>
-                  <button
-                    type="button"
-                    class="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-surface-raised-base border border-border-base flex items-center justify-center hover:bg-surface-raised-base-hover"
-                    onClick={clearIcon}
-                  >
-                    <Icon name="close" class="size-3 text-icon-base" />
-                  </button>
-                </Show>
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "64px",
+                    height: "64px",
+                    background: "rgba(0,0,0,0.6)",
+                    "border-radius": "6px",
+                    "z-index": 10,
+                    "pointer-events": "none",
+                    opacity: iconHover() && !store.iconUrl ? 1 : 0,
+                    display: "flex",
+                    "align-items": "center",
+                    "justify-content": "center",
+                  }}
+                >
+                  <Icon name="cloud-upload" size="large" class="text-icon-invert-base" />
+                </div>
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "64px",
+                    height: "64px",
+                    background: "rgba(0,0,0,0.6)",
+                    "border-radius": "6px",
+                    "z-index": 10,
+                    "pointer-events": "none",
+                    opacity: iconHover() && store.iconUrl ? 1 : 0,
+                    display: "flex",
+                    "align-items": "center",
+                    "justify-content": "center",
+                  }}
+                >
+                  <Icon name="trash" size="large" class="text-icon-invert-base" />
+                </div>
               </div>
               <input id="icon-upload" type="file" accept="image/*" class="hidden" onChange={handleInputChange} />
-              <div class="flex flex-col gap-1.5 text-12-regular text-text-weak">
-                <span>Click or drag an image</span>
-                <span>Recommended: 128x128px</span>
+              <div class="flex flex-col gap-1.5 text-12-regular text-text-weak self-center">
+                <span>Recommended size 128x128px</span>
               </div>
             </div>
           </div>
@@ -140,20 +179,25 @@ export function DialogEditProject(props: { project: LocalProject }) {
           <Show when={!store.iconUrl}>
             <div class="flex flex-col gap-2">
               <label class="text-12-medium text-text-weak">Color</label>
-              <div class="flex gap-2">
+              <div class="flex gap-1.5">
                 <For each={AVATAR_COLOR_KEYS}>
                   {(color) => (
                     <button
                       type="button"
-                      class="relative size-8 rounded-md transition-all"
                       classList={{
-                        "ring-2 ring-offset-2 ring-offset-surface-base ring-text-interactive-base":
+                        "flex items-center justify-center size-10 p-0.5 rounded-lg overflow-hidden transition-colors cursor-default": true,
+                        "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover":
                           store.color === color,
+                        "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+                          store.color !== color,
                       }}
-                      style={{ background: getAvatarColors(color).background }}
                       onClick={() => setStore("color", color)}
                     >
-                      <Avatar fallback={store.name || defaultName()} {...getAvatarColors(color)} class="size-full" />
+                      <Avatar
+                        fallback={store.name || defaultName()}
+                        {...getAvatarColors(color)}
+                        class="size-full rounded"
+                      />
                     </button>
                   )}
                 </For>

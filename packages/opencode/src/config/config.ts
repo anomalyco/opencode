@@ -20,7 +20,6 @@ import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
 import { existsSync } from "fs"
 import { Bus } from "@/bus"
-import { Session } from "@/session"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -233,10 +232,11 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const md = await ConfigMarkdown.parse(item).catch((err) => {
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
         const message = ConfigMarkdown.FrontmatterError.isInstance(err)
           ? err.data.message
           : `Failed to parse command ${item}`
+        const { Session } = await import("@/session")
         Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
         log.error("failed to load command", { command: item, err })
         return undefined
@@ -272,10 +272,11 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const md = await ConfigMarkdown.parse(item).catch((err) => {
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
         const message = ConfigMarkdown.FrontmatterError.isInstance(err)
           ? err.data.message
           : `Failed to parse agent ${item}`
+        const { Session } = await import("@/session")
         Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
         log.error("failed to load agent", { agent: item, err })
         return undefined
@@ -310,10 +311,11 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const md = await ConfigMarkdown.parse(item).catch((err) => {
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
         const message = ConfigMarkdown.FrontmatterError.isInstance(err)
           ? err.data.message
           : `Failed to parse mode ${item}`
+        const { Session } = await import("@/session")
         Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
         log.error("failed to load mode", { mode: item, err })
         return undefined
@@ -433,10 +435,6 @@ export namespace Config {
         .describe("OAuth client ID. If not provided, dynamic client registration (RFC 7591) will be attempted."),
       clientSecret: z.string().optional().describe("OAuth client secret (if required by the authorization server)"),
       scope: z.string().optional().describe("OAuth scopes to request during authorization"),
-      redirectUri: z
-        .string()
-        .optional()
-        .describe("OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback)."),
     })
     .strict()
     .meta({
@@ -653,8 +651,14 @@ export namespace Config {
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
       session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
-      messages_page_up: z.string().optional().default("pageup").describe("Scroll messages up by one page"),
-      messages_page_down: z.string().optional().default("pagedown").describe("Scroll messages down by one page"),
+      messages_page_up: z.string().optional().default("pageup,ctrl+alt+b").describe("Scroll messages up by one page"),
+      messages_page_down: z
+        .string()
+        .optional()
+        .default("pagedown,ctrl+alt+f")
+        .describe("Scroll messages down by one page"),
+      messages_line_up: z.string().optional().default("ctrl+alt+y").describe("Scroll messages up by one line"),
+      messages_line_down: z.string().optional().default("ctrl+alt+e").describe("Scroll messages down by one line"),
       messages_half_page_up: z.string().optional().default("ctrl+alt+u").describe("Scroll messages up by half page"),
       messages_half_page_down: z
         .string()
@@ -942,7 +946,7 @@ export namespace Config {
         })
         .catchall(Agent)
         .optional()
-        .describe("Agent configuration, see https://opencode.ai/docs/agent"),
+        .describe("Agent configuration, see https://opencode.ai/docs/agents"),
       provider: z
         .record(z.string(), Provider)
         .optional()
@@ -1117,6 +1121,7 @@ export namespace Config {
   }
 
   async function load(text: string, configFilepath: string) {
+    const original = text
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
       return process.env[varName] || ""
     })
@@ -1186,7 +1191,9 @@ export namespace Config {
     if (parsed.success) {
       if (!parsed.data.$schema) {
         parsed.data.$schema = "https://opencode.ai/config.json"
-        await Bun.write(configFilepath, JSON.stringify(parsed.data, null, 2)).catch(() => {})
+        // Write the $schema to the original text to preserve variables like {env:VAR}
+        const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
+        await Bun.write(configFilepath, updated).catch(() => {})
       }
       const data = parsed.data
       if (data.plugin) {
