@@ -7,7 +7,7 @@ import { clearSessionCookie, setSessionCookie, type AuthEnv } from "../middlewar
 import { lazy } from "../../util/lazy"
 import { BrokerClient } from "../../auth/broker-client"
 import { getUserInfo } from "../../auth/user-info"
-import { Config } from "../../config/config"
+import { ServerAuth } from "../../config/server-auth"
 
 /**
  * Login request schema - accepts username and password.
@@ -75,8 +75,8 @@ export const AuthRoutes = lazy(() =>
       }),
       async (c) => {
         // 1. Check if auth is enabled
-        const config = await Config.get()
-        if (!config.auth?.enabled) {
+        const authConfig = ServerAuth.get()
+        if (!authConfig.enabled) {
           return c.json({ error: "auth_disabled", message: "Authentication is not enabled" }, 403)
         }
 
@@ -181,10 +181,10 @@ export const AuthRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const config = await Config.get()
+        const authConfig = ServerAuth.get()
         return c.json({
-          enabled: config.auth?.enabled ?? false,
-          method: config.auth?.enabled ? (config.auth?.method ?? "pam") : undefined,
+          enabled: authConfig.enabled,
+          method: authConfig.enabled ? authConfig.method : undefined,
         })
       },
     )

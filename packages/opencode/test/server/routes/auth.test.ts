@@ -2,6 +2,7 @@ import { describe, test, expect, mock, beforeEach } from "bun:test"
 import { Hono } from "hono"
 import type { AuthResult } from "../../../src/auth/broker-client"
 import type { UnixUserInfo } from "../../../src/auth/user-info"
+import type { AuthConfig } from "../../../src/config/auth"
 
 // Mock state with explicit types
 const mockAuthenticate = mock<() => Promise<AuthResult>>(() => Promise.resolve({ success: true }))
@@ -15,11 +16,18 @@ const mockGetUserInfo = mock<() => Promise<UnixUserInfo | null>>(() =>
     shell: "/bin/bash",
   }),
 )
-const mockConfigGet = mock<() => Promise<{ auth?: { enabled: boolean; method?: string } }>>(() =>
-  Promise.resolve({
-    auth: { enabled: true, method: "pam" },
-  }),
-)
+
+// Server auth config state for mocking
+let mockAuthConfig: AuthConfig = {
+  enabled: true,
+  method: "pam",
+  sessionTimeout: "7d",
+  rememberMeDuration: "90d",
+  requireHttps: "warn",
+  rateLimiting: true,
+  allowedUsers: [],
+  sessionPersistence: true,
+}
 
 // Apply mocks before importing the module under test
 mock.module("../../../src/auth/broker-client", () => ({
@@ -30,12 +38,30 @@ mock.module("../../../src/auth/broker-client", () => ({
 mock.module("../../../src/auth/user-info", () => ({
   getUserInfo: mockGetUserInfo,
 }))
-mock.module("../../../src/config/config", () => ({
-  Config: { get: mockConfigGet },
+mock.module("../../../src/config/server-auth", () => ({
+  ServerAuth: {
+    get: () => mockAuthConfig,
+    isEnabled: () => mockAuthConfig.enabled,
+  },
 }))
 
 // Import after mocking
 const { AuthRoutes } = await import("../../../src/server/routes/auth")
+
+// Helper to set mock auth config
+function setMockAuthConfig(config: Partial<AuthConfig>) {
+  mockAuthConfig = {
+    enabled: true,
+    method: "pam",
+    sessionTimeout: "7d",
+    rememberMeDuration: "90d",
+    requireHttps: "warn",
+    rateLimiting: true,
+    allowedUsers: [],
+    sessionPersistence: true,
+    ...config,
+  }
+}
 
 describe("POST /auth/login", () => {
   let app: Hono
@@ -44,7 +70,6 @@ describe("POST /auth/login", () => {
     // Reset mocks
     mockAuthenticate.mockClear()
     mockGetUserInfo.mockClear()
-    mockConfigGet.mockClear()
 
     // Default successful mocks
     mockAuthenticate.mockResolvedValue({ success: true })
@@ -56,9 +81,7 @@ describe("POST /auth/login", () => {
       home: "/home/testuser",
       shell: "/bin/bash",
     })
-    mockConfigGet.mockResolvedValue({
-      auth: { enabled: true, method: "pam" },
-    })
+    setMockAuthConfig({ enabled: true, method: "pam" })
 
     app = new Hono().route("/auth", AuthRoutes())
   })
@@ -205,7 +228,7 @@ describe("POST /auth/login", () => {
   })
 
   test("returns 403 when auth is disabled", async () => {
-    mockConfigGet.mockResolvedValue({ auth: { enabled: false } })
+    setMockAuthConfig({ enabled: false })
 
     const res = await app.request("/auth/login", {
       method: "POST",
@@ -252,12 +275,12 @@ describe("GET /auth/status", () => {
   let app: Hono
 
   beforeEach(() => {
-    mockConfigGet.mockClear()
+    setMockAuthConfig({ enabled: true, method: "pam" })
     app = new Hono().route("/auth", AuthRoutes())
   })
 
   test("returns enabled true when auth is enabled", async () => {
-    mockConfigGet.mockResolvedValue({ auth: { enabled: true, method: "pam" } })
+    setMockAuthConfig({ enabled: true, method: "pam" })
 
     const res = await app.request("/auth/status")
     expect(res.status).toBe(200)
@@ -267,7 +290,7 @@ describe("GET /auth/status", () => {
   })
 
   test("returns enabled false when auth is disabled", async () => {
-    mockConfigGet.mockResolvedValue({ auth: { enabled: false } })
+    setMockAuthConfig({ enabled: false })
 
     const res = await app.request("/auth/status")
     expect(res.status).toBe(200)
@@ -277,7 +300,7 @@ describe("GET /auth/status", () => {
   })
 
   test("returns enabled false when auth config missing", async () => {
-    mockConfigGet.mockResolvedValue({})
+    setMockAuthConfig({ enabled: false })
 
     const res = await app.request("/auth/status")
     expect(res.status).toBe(200)
@@ -287,7 +310,7 @@ describe("GET /auth/status", () => {
 
   test("does not require authentication", async () => {
     // Status endpoint should be accessible without session cookie
-    mockConfigGet.mockResolvedValue({ auth: { enabled: true, method: "pam" } })
+    setMockAuthConfig({ enabled: true, method: "pam" })
 
     const res = await app.request("/auth/status")
     expect(res.status).toBe(200)

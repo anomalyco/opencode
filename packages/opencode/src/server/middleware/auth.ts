@@ -2,7 +2,7 @@ import { createMiddleware } from "hono/factory"
 import { getCookie, setCookie, deleteCookie } from "hono/cookie"
 import type { Context } from "hono"
 import { UserSession } from "../../session/user-session"
-import { Config } from "../../config/config"
+import { ServerAuth } from "../../config/server-auth"
 import { parseDuration } from "../../util/duration"
 
 /**
@@ -48,10 +48,16 @@ export function clearSessionCookie(c: Context): void {
  * - Sets session and username in context variables
  */
 export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
-  const config = await Config.get()
+  const authConfig = ServerAuth.get()
 
   // Skip auth when disabled
-  if (!config.auth?.enabled) {
+  if (!authConfig.enabled) {
+    return next()
+  }
+
+  // Skip auth for auth routes (login, status, etc.)
+  const path = c.req.path
+  if (path.startsWith("/auth/")) {
     return next()
   }
 
@@ -70,7 +76,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
   }
 
   // Check idle timeout
-  const timeoutStr = config.auth.sessionTimeout ?? "7d"
+  const timeoutStr = authConfig.sessionTimeout ?? "7d"
   const timeout = parseDuration(timeoutStr) ?? DEFAULT_TIMEOUT_MS
   const elapsed = Date.now() - session.lastAccessTime
 
