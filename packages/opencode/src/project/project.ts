@@ -25,6 +25,7 @@ export namespace Project {
       icon: z
         .object({
           url: z.string().optional(),
+          override: z.string().optional(),
           color: z.string().optional(),
         })
         .optional(),
@@ -190,6 +191,7 @@ export namespace Project {
     if (!existing.sandboxes) existing.sandboxes = []
 
     if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) discover(existing)
+
     const result: Info = {
       ...existing,
       worktree,
@@ -213,6 +215,7 @@ export namespace Project {
 
   export async function discover(input: Info) {
     if (input.vcs !== "git") return
+    if (input.icon?.override) return
     if (input.icon?.url) return
     const glob = new Bun.Glob("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}")
     const matches = await Array.fromAsync(
@@ -293,6 +296,7 @@ export namespace Project {
             ...draft.icon,
           }
           if (input.icon.url !== undefined) draft.icon.url = input.icon.url
+          if (input.icon.override !== undefined) draft.icon.override = input.icon.override || undefined
           if (input.icon.color !== undefined) draft.icon.color = input.icon.color
         }
         draft.time.updated = Date.now()
@@ -316,5 +320,20 @@ export namespace Project {
       if (stat?.isDirectory()) valid.push(dir)
     }
     return valid
+  }
+
+  export async function removeSandbox(projectID: string, directory: string) {
+    const result = await Storage.update<Info>(["project", projectID], (draft) => {
+      const sandboxes = draft.sandboxes ?? []
+      draft.sandboxes = sandboxes.filter((sandbox) => sandbox !== directory)
+      draft.time.updated = Date.now()
+    })
+    GlobalBus.emit("event", {
+      payload: {
+        type: Event.Updated.type,
+        properties: result,
+      },
+    })
+    return result
   }
 }

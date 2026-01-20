@@ -123,11 +123,8 @@ export namespace ProviderTransform {
       return result
     }
 
-    if (
-      model.capabilities.interleaved &&
-      typeof model.capabilities.interleaved === "object" &&
-      model.capabilities.interleaved.field === "reasoning_content"
-    ) {
+    if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
+      const field = model.capabilities.interleaved.field
       return msgs.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
           const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
@@ -136,7 +133,7 @@ export namespace ProviderTransform {
           // Filter out reasoning parts from content
           const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
 
-          // Include reasoning_content directly on the message for all assistant messages
+          // Include reasoning_content | reasoning_details directly on the message for all assistant messages
           if (reasoningText) {
             return {
               ...msg,
@@ -145,7 +142,7 @@ export namespace ProviderTransform {
                 ...msg.providerOptions,
                 openaiCompatible: {
                   ...(msg.providerOptions as any)?.openaiCompatible,
-                  reasoning_content: reasoningText,
+                  [field]: reasoningText,
                 },
               },
             }
@@ -348,6 +345,18 @@ export namespace ProviderTransform {
       // TODO: YOU CANNOT SET max_tokens if this is set!!!
       case "@ai-sdk/gateway":
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+
+      case "@ai-sdk/github-copilot":
+        return Object.fromEntries(
+          WIDELY_SUPPORTED_EFFORTS.map((effort) => [
+            effort,
+            {
+              reasoningEffort: effort,
+              reasoningSummary: "auto",
+              include: ["reasoning.encrypted_content"],
+            },
+          ]),
+        )
 
       case "@ai-sdk/cerebras":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cerebras
