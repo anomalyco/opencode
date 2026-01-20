@@ -38,7 +38,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Auth schema definition (duration utility + AuthConfig Zod schema)
+- [x] 01-01-PLAN.md — Auth schema definition (duration utility + AuthConfig Zod schema)
 - [ ] 01-02-PLAN.md — Config integration (add auth to Config.Info + error formatting)
 - [ ] 01-03-PLAN.md — Startup validation (PAM service file check + backward compatibility)
 
@@ -188,7 +188,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Configuration Foundation | 0/3 | Ready to execute | - |
+| 1. Configuration Foundation | 1/3 | In progress | - |
 | 2. Session Infrastructure | 0/TBD | Not started | - |
 | 3. Auth Broker Core | 0/TBD | Not started | - |
 | 4. Authentication Flow | 0/TBD | Not started | - |
