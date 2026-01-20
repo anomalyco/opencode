@@ -297,6 +297,18 @@ function App() {
       },
     },
     {
+      title: "Switch to last session",
+      value: "session.last",
+      keybind: "session_last",
+      category: "Session",
+      suggested: !!route.previous,
+      onSelect: () => {
+        if (!route.previous) return
+        route.navigate({ type: "session", sessionID: route.previous })
+        dialog.clear()
+      },
+    },
+    {
       title: "New session",
       suggested: route.data.type === "session",
       value: "session.new",

@@ -971,6 +971,10 @@ export type KeybindsConfig = {
    */
   session_list?: string
   /**
+   * Switch to last session
+   */
+  session_last?: string
+  /**
    * Show session timeline
    */
   session_timeline?: string

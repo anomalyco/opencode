@@ -26,12 +26,18 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
           },
     )
 
+    let previous: string | undefined
+
     return {
       get data() {
         return store
       },
+      get previous() {
+        return previous
+      },
       navigate(route: Route) {
         console.log("navigate", route)
+        if (store.type === "session") previous = store.sessionID
         setStore(route)
       },
     }
