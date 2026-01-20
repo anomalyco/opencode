@@ -51,6 +51,29 @@ describe("tool.read external_directory permission", () => {
     })
   })
 
+  test("reads multiple files with filePaths", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "first.txt"), "first content")
+        await Bun.write(path.join(dir, "second.txt"), "second content")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute(
+          {
+            filePaths: [path.join(tmp.path, "first.txt"), path.join(tmp.path, "second.txt")],
+          },
+          ctx,
+        )
+        expect(result.output).toContain("first content")
+        expect(result.output).toContain("second content")
+      },
+    })
+  })
+
   test("asks for external_directory permission when reading absolute path outside project", async () => {
     await using outerTmp = await tmpdir({
       init: async (dir) => {

@@ -35,11 +35,13 @@ export namespace SessionCompaction {
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
     const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
     const usable = input.model.limit.input || context - output
-    return count > usable
+    const threshold = Math.floor(usable * EARLY_COMPACT_RATIO)
+    return count > threshold
   }
 
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
+  export const EARLY_COMPACT_RATIO = 0.9
 
   const PRUNE_PROTECTED_TOOLS = ["skill"]
 
