@@ -13,6 +13,10 @@ export namespace UserSession {
     .object({
       id: z.string(),
       username: z.string(),
+      uid: z.number().optional(), // UNIX user ID
+      gid: z.number().optional(), // UNIX primary group ID
+      home: z.string().optional(), // Home directory
+      shell: z.string().optional(), // Login shell
       createdAt: z.number(),
       lastAccessTime: z.number(),
       userAgent: z.string().optional(),
@@ -29,13 +33,25 @@ export namespace UserSession {
 
   /**
    * Create a new session for a user.
+   *
+   * @param username - The username for the session
+   * @param maybeUserAgent - Optional User-Agent string from the client
+   * @param maybeUserInfo - Optional UNIX user info (uid, gid, home, shell)
    */
-  export function create(username: string, maybeUserAgent?: string): Info {
+  export function create(
+    username: string,
+    maybeUserAgent?: string,
+    maybeUserInfo?: { uid: number; gid: number; home: string; shell: string },
+  ): Info {
     const id = crypto.randomUUID()
     const now = Date.now()
     const session: Info = {
       id,
       username,
+      uid: maybeUserInfo?.uid,
+      gid: maybeUserInfo?.gid,
+      home: maybeUserInfo?.home,
+      shell: maybeUserInfo?.shell,
       createdAt: now,
       lastAccessTime: now,
       userAgent: maybeUserAgent,
