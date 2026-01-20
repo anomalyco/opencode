@@ -44,6 +44,7 @@
       "luxon": "3.6.1",
       "marked": "17.0.1",
       "marked-shiki": "1.2.1",
+      "@playwright/test": "1.51.0",
       "typescript": "5.8.2",
       "@typescript/native-preview": "7.0.0-dev.20251207.1",
       "zod": "4.1.8",

@@ -2,10 +2,10 @@ import fs from "fs/promises"
 import path from "path"
 import { Global } from "../global"
 import { Identifier } from "../id/id"
-import { lazy } from "../util/lazy"
 import { PermissionNext } from "../permission/next"
 import type { Agent } from "../agent/agent"
 import type { Provider } from "../provider/provider"
+import { Scheduler } from "../scheduler"
 
 export namespace Truncate {
   export const MAX_LINES = 2000
@@ -14,6 +14,7 @@ export namespace Truncate {
   export const DIR = path.join(Global.Path.data, "tool-output")
   export const GLOB = path.join(DIR, "*")
   const RETENTION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+  const HOUR_MS = 60 * 60 * 1000
 
   /**
    * Calculate max bytes for tool output based on model's context size.
@@ -64,6 +65,15 @@ export namespace Truncate {
     model?: Provider.Model
   }
 
+  export function init() {
+    Scheduler.register({
+      id: "tool.truncation.cleanup",
+      interval: HOUR_MS,
+      run: cleanup,
+      scope: "global",
+    })
+  }
+
   export async function cleanup() {
     const cutoff = Identifier.timestamp(Identifier.create("tool", false, Date.now() - RETENTION_MS))
     const glob = new Bun.Glob("tool_*")
@@ -73,8 +83,6 @@ export namespace Truncate {
       await fs.unlink(path.join(DIR, entry)).catch(() => {})
     }
   }
-
-  const init = lazy(cleanup)
 
   function hasTaskTool(agent?: Agent.Info): boolean {
     if (!agent?.permission) return false
@@ -124,7 +132,6 @@ export namespace Truncate {
     const unit = hitBytes ? "bytes" : "lines"
     const preview = out.join("\n")
 
-    await init()
     const id = Identifier.ascending("tool")
     const filepath = path.join(DIR, id)
     await Bun.write(Bun.file(filepath), text)
