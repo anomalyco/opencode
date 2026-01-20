@@ -384,6 +384,8 @@ export const dict = {
 
   "prompt.loading": "Loading prompt...",
   "terminal.loading": "Loading terminal...",
+  "terminal.title": "Terminal",
+  "terminal.title.numbered": "Terminal {{number}}",
 
   "common.closeTab": "Close tab",
   "common.dismiss": "Dismiss",

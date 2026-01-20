@@ -1172,7 +1172,18 @@ export default function Page() {
 
   createEffect(() => {
     if (!terminal.ready()) return
-    handoff.terminals = terminal.all().map((t) => t.title)
+    language.locale()
+
+    const label = (pty: LocalPTY) => {
+      const number = pty.titleNumber
+      if (Number.isFinite(number) && number > 0) {
+        return language.t("terminal.title.numbered", { number })
+      }
+      if (pty.title) return pty.title
+      return language.t("terminal.title")
+    }
+
+    handoff.terminals = terminal.all().map(label)
   })
 
   createEffect(() => {
@@ -1906,7 +1917,14 @@ export default function Page() {
                       <Show when={pty()}>
                         {(t) => (
                           <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
-                            {t().title}
+                            {(() => {
+                              const number = t().titleNumber
+                              if (Number.isFinite(number) && number > 0) {
+                                return language.t("terminal.title.numbered", { number })
+                              }
+                              if (t().title) return t().title
+                              return language.t("terminal.title")
+                            })()}
                           </div>
                         )}
                       </Show>
