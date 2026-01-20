@@ -124,13 +124,23 @@ export const SettingsKeybinds: Component = () => {
     const out = new Map<string, KeybindMeta>()
     out.set(PALETTE_ID, { title: "Command palette", group: "General" })
 
+    for (const opt of command.catalog) {
+      if (opt.id.startsWith("suggested.")) continue
+      out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
+    }
+
     for (const opt of command.options) {
       if (opt.id.startsWith("suggested.")) continue
+      out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
+    }
 
-      out.set(opt.id, {
-        title: opt.title,
-        group: groupFor(opt.id),
-      })
+    const keybinds = settings.current.keybinds as Record<string, string | undefined> | undefined
+    if (keybinds) {
+      for (const [id, value] of Object.entries(keybinds)) {
+        if (typeof value !== "string") continue
+        if (out.has(id)) continue
+        out.set(id, { title: id, group: groupFor(id) })
+      }
     }
 
     return out
@@ -181,11 +191,21 @@ export const SettingsKeybinds: Component = () => {
       add(sig, { id: PALETTE_ID, title: "Command palette" })
     }
 
-    for (const opt of command.options) {
-      if (opt.id.startsWith("suggested.")) continue
-      if (!opt.keybind) continue
-      for (const sig of signatures(opt.keybind)) {
-        add(sig, { id: opt.id, title: opt.title })
+    const valueFor = (id: string) => {
+      const custom = settings.keybinds.get(id)
+      if (typeof custom === "string") return custom
+
+      const live = command.options.find((x) => x.id === id)
+      if (live?.keybind) return live.keybind
+
+      const meta = command.catalog.find((x) => x.id === id)
+      return meta?.keybind
+    }
+
+    for (const id of list().keys()) {
+      if (id === PALETTE_ID) continue
+      for (const sig of signatures(valueFor(id))) {
+        add(sig, { id, title: title(id) })
       }
     }
 
