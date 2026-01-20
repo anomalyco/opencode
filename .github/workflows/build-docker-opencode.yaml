@@ -1,0 +1,124 @@
+name: 'build opencode Docker image'
+
+on:
+
+  workflow_dispatch:  # Allow manual triggering from GitHub UI
+
+  schedule:
+    - cron: '0 2,14 * * *' # runs at least twice every day: 2am and 2pm
+
+  push:
+    paths:
+      - 'Dockerfile'
+      - '.github/workflows/build-docker-opencode.yaml'
+      - '.hadolint.yaml'
+
+jobs:
+
+  build_docker_opencode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    env:
+      DOCKER_FILE: Dockerfile
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ghcr.io/${{ github.repository }}
+      OPENCODE_CONFIG: opencode.jsonc
+
+    steps:
+
+      - name: 'check environment'
+        run: |
+          docker --version
+          echo "npm version: $(npm --version)"
+          OPENCODE_VERSION=$(npm view opencode-ai version)
+          echo "opencode version: $OPENCODE_VERSION"
+          echo "OPENCODE_VERSION=$OPENCODE_VERSION" >> $GITHUB_ENV
+          echo "=== env vars ==="
+          printenv
+
+      - name: 'checkout git code'
+        uses: actions/checkout@v5
+
+      - name: 'validate config files'
+        run: |
+          # check Dockerfile
+          docker run --rm -i hadolint/hadolint < $DOCKER_FILE
+          # check opencode config if it exists
+          if [[ -f $OPENCODE_CONFIG ]]
+          then
+            pipx install check-jsonschema
+            check-jsonschema --verbose --schemafile https://opencode.ai/config.json $OPENCODE_CONFIG
+          fi
+
+      - name: 'login to GitHub Container Registry'
+        uses: docker/login-action@v3
+        with:
+            registry: ${{ env.REGISTRY }}
+            username: ${{ github.repository_owner }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value={{ date 'YYYY-MM-DD-HH-mm-ss' tz='Europe/Paris' }}
+            type=raw,latest
+            type=raw,opencode-${{ env.OPENCODE_VERSION }}
+            type=sha
+
+      - name: 'set up Docker Buildx'
+        uses: docker/setup-buildx-action@v3
+        env:
+          # to avoid unknown/unknown arch in container registry
+          BUILDX_NO_DEFAULT_ATTESTATIONS: 1
+        with:
+          provenance: false # Disable provenance to avoid unknown/unknown
+          sbom: false       # Disable sbom to avoid unknown/unknown
+
+      - name: 'build and push to Github Container Registry'
+        uses: docker/build-push-action@v6
+        with:
+          platforms: linux/amd64,linux/arm64
+          push: true
+          file: ${{env.DOCKER_FILE}}
+          tags:  |
+            ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: 'run built image to validate'
+        run: |
+          set -x
+          CONTAINER_NAME="opencode-vibe"
+          # start detached container
+          docker run --detach --name "$CONTAINER_NAME" "$IMAGE_NAME:latest"
+          # validate user in container
+          WHOAMI=$(docker exec "$CONTAINER_NAME" whoami)
+          echo "opencode container whoami: $WHOAMI"
+          if [[ "$WHOAMI" != "opencode" ]];
+          then
+            exit 1
+          fi
+          # run version check in container
+          wget --quiet -O /usr/local/bin/semver https://raw.githubusercontent.com/fsaintjacques/semver-tool/master/src/semver
+          chmod +x /usr/local/bin/semver
+          OC_VERSION=$(docker exec "$CONTAINER_NAME" npm view opencode-ai version)
+          echo "opencode version: $OC_VERSION"
+          SEMVER_COMPARE=$(semver compare "$OC_VERSION" "$OPENCODE_VERSION")
+          if [[ "$SEMVER_COMPARE" -lt 0 ]];
+          then
+            exit 1
+          fi
+          # invoke opencode with free OpenRouter model
+          docker exec "$CONTAINER_NAME" opencode run --log-level INFO --model 'opencode/glm-4.7-free' 'who are you?' >> opencode.log
+          echo "opencode container invocation: $(cat opencode.log)"
+          grep --ignore-case 'opencode' opencode.log
+          # explicit successful exit to kill container
+          exit
+

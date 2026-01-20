@@ -1,0 +1,74 @@
+
+# https://oneuptime.com/blog/post/2025-08-28-how-to-structure-logs-properly-in-opentelemetry/view
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1777
+  zpages:
+    expvar:
+      enabled: true
+    endpoint: 0.0.0.0:55679
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  filelog:
+    # default location of oopencode log files
+    include: [ "${env:HOME}/.local/share/opencode/log/*.log"]
+    operators:
+      - type: regex_parser
+        id: matching_regex
+        regex: '^(?P<sev>[A-Z]*) *(?P<time>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}) *(?P<msg>.*)$'
+        severity:
+          parse_from: attributes.sev
+      - type: regex_parser
+        id: catch_all
+        regex: '(?P<log>.*)'
+  # Collector for own metrics
+  prometheus:
+    config:
+      scrape_configs:
+      - job_name: 'otel-collector'
+        scrape_interval: 10s
+        static_configs:
+        - targets: ['0.0.0.0:8888']
+
+exporters:
+  # export to console
+  debug:
+    verbosity: detailed
+
+  # Export to OTEL backed
+  otlp/backend:
+    endpoint: "${env:OTEL_BACKEND_ENDPOINT}"
+    headers:
+      #"Authorization": "Bearer ${env:DASH0_TOKEN}"
+      "Authorization": "${env:OTEL_BACKEND_HEADER}"
+
+processors:
+  batch:
+
+service:
+  extensions: [health_check, pprof, zpages]
+  telemetry:
+    resource:
+      "service.name": "otelcol-own-telemetry"
+  pipelines:
+    # use 'debug' exporter to display Otel activity on local console
+    traces:
+      receivers: [otlp]
+      # exporters: [debug,otlp/backend]
+      exporters: [otlp/backend]
+    metrics:
+      receivers: [otlp,prometheus]
+      # exporters: [debug,otlp/backend]
+      exporters: [otlp/backend]
+    logs:
+      receivers: [otlp,filelog]
+      # exporters: [debug,otlp/backend]
+      exporters: [otlp/backend]

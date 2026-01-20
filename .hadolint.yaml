@@ -1,0 +1,3 @@
+# https://github.com/hadolint/hadolint
+ignored:
+  - DL3013 # warning: Pin versions in pip installs.`
