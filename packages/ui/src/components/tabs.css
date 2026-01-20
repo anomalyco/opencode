@@ -289,8 +289,8 @@
 
     &[data-variant="settings"] {
       [data-slot="tabs-list"] {
-        width: 180px;
-        min-width: 180px;
+        width: 200px;
+        min-width: 200px;
         padding: 12px;
         gap: 0;
         background-color: var(--background-base);
