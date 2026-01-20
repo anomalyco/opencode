@@ -255,6 +255,11 @@ export const dict = {
   "context.stats.sessionCreated": "创建时间",
   "context.stats.lastActivity": "最后活动",
 
+  "context.usage.tokens": "Token",
+  "context.usage.usage": "使用率",
+  "context.usage.cost": "成本",
+  "context.usage.clickToView": "点击查看上下文",
+
   "language.en": "英语",
   "language.zh": "中文",
 
@@ -340,6 +345,11 @@ export const dict = {
   "session.messages.loading": "正在加载消息...",
 
   "session.context.addToContext": "将 {{selection}} 添加到上下文",
+
+  "session.new.worktree.main": "主分支",
+  "session.new.worktree.mainWithBranch": "主分支 ({{branch}})",
+  "session.new.worktree.create": "创建新的 worktree",
+  "session.new.lastModified": "最后修改",
 
   "session.header.search.placeholder": "搜索 {{project}}",
 

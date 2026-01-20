@@ -9,8 +9,8 @@ This report documents the remaining user-facing strings in `packages/app/src` th
 ## Current State
 
 - The app uses `useLanguage().t("...")` with dictionaries in `packages/app/src/i18n/en.ts` and `packages/app/src/i18n/zh.ts`.
-- Recent progress (already translated): `packages/app/src/pages/home.tsx`, `packages/app/src/pages/layout.tsx`, `packages/app/src/pages/session.tsx`, `packages/app/src/components/prompt-input.tsx`, `packages/app/src/components/dialog-connect-provider.tsx`, `packages/app/src/components/session/session-header.tsx`, `packages/app/src/pages/error.tsx` (plus new keys added in both dictionaries).
-- Dictionary parity check: `en.ts` and `zh.ts` currently contain the same key set (354 keys each; no missing or extra keys).
+- Recent progress (already translated): `packages/app/src/pages/home.tsx`, `packages/app/src/pages/layout.tsx`, `packages/app/src/pages/session.tsx`, `packages/app/src/components/prompt-input.tsx`, `packages/app/src/components/dialog-connect-provider.tsx`, `packages/app/src/components/session/session-header.tsx`, `packages/app/src/pages/error.tsx`, `packages/app/src/components/session/session-new-view.tsx`, `packages/app/src/components/session-context-usage.tsx`, `packages/app/src/components/session/session-context-tab.tsx` (plus new keys added in both dictionaries).
+- Dictionary parity check: `en.ts` and `zh.ts` currently contain the same key set (362 keys each; no missing or extra keys).
 
 ## Methodology
 
@@ -76,32 +76,30 @@ Completed (2026-01-20):
 
 File: `packages/app/src/components/session/session-new-view.tsx`
 
-**Untranslated strings**
-- "New session"
-- "Main branch" / "Main branch ({branch})"
-- "Create new worktree"
-- "Last modified"
+Completed (2026-01-20):
+
+- Reused existing `command.session.new` for the heading.
+- Localized worktree labels via `session.new.worktree.*` (main branch, main branch w/ branch name, create worktree).
+- Localized "Last modified" via `session.new.lastModified` and used `language.locale()` for Luxon relative time.
 
 ### 6) Context Usage Tooltip
 
 File: `packages/app/src/components/session-context-usage.tsx`
 
-**Untranslated tooltip labels**
-- "Tokens", "Usage", "Cost"
-- "Click to view context"
+Completed (2026-01-20):
 
-**Locale formatting issue**
-- Uses `new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })`.
-- Recommendation: format using the active locale (e.g. `language.locale()`), or at least `navigator.language`.
+- Localized tooltip labels + CTA via `context.usage.*` keys.
+- Switched currency and number formatting to the active locale (`language.locale()`).
 
 ### 7) Session Context Tab (Formatting)
 
 File: `packages/app/src/components/session/session-context-tab.tsx`
 
-- Already uses many translation keys for labels (e.g. `context.breakdown.system`).
-- Still forces `Intl.NumberFormat("en-US", ...)` for currency.
-- Has some non-translated fallback symbols like "--" and "-" style output (e.g. "---" / "-" / "--" equivalent "--" is used as "—" in code).
-  - If you want fully localized punctuation, these should become keys as well.
+Completed (2026-01-20):
+
+- Switched currency formatting to the active locale (`language.locale()`).
+- Also used `language.locale()` for number/date formatting.
+- Note: "—" placeholders remain hardcoded; optional to localize.
 
 ### 8) LSP Indicator
 
@@ -211,18 +209,18 @@ This is only thrown in DEV and is more of a developer diagnostic. Optional to tr
 
 ## Prioritized Implementation Plan
 
-1. `packages/app/src/components/session/session-new-view.tsx`
-2. `packages/app/src/components/session-context-usage.tsx` + locale formatting improvements (also `packages/app/src/components/session/session-context-tab.tsx`)
-3. Small stragglers:
+1. Small stragglers:
    - `packages/app/src/components/session-lsp-indicator.tsx`
    - `packages/app/src/components/session/session-sortable-tab.tsx`
    - `packages/app/src/components/titlebar.tsx`
    - `packages/app/src/components/dialog-select-model.tsx`
+   - `packages/app/src/components/dialog-select-server.tsx` (optional URL placeholder)
+2. Context modules:
    - `packages/app/src/context/notification.tsx`
    - `packages/app/src/context/global-sync.tsx`
    - `packages/app/src/context/file.tsx` + `packages/app/src/context/local.tsx`
    - `packages/app/src/utils/prompt.ts`
-4. Decide on the terminal naming approach (`packages/app/src/context/terminal.tsx`).
+3. Decide on the terminal naming approach (`packages/app/src/context/terminal.tsx`).
 
 ## Suggested Key Naming Conventions
 
@@ -245,9 +243,6 @@ Pages:
 - (none)
 
 Components:
-- `packages/app/src/components/session/session-new-view.tsx`
-- `packages/app/src/components/session-context-usage.tsx`
-- `packages/app/src/components/session/session-context-tab.tsx` (formatting locale)
 - `packages/app/src/components/session-lsp-indicator.tsx`
 - `packages/app/src/components/session/session-sortable-tab.tsx`
 - `packages/app/src/components/titlebar.tsx`
