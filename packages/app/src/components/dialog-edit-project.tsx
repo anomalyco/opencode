@@ -22,7 +22,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
   const [store, setStore] = createStore({
     name: defaultName(),
     color: props.project.icon?.color || "pink",
-    iconUrl: props.project.icon?.url || "",
+    iconUrl: props.project.icon?.override || "",
     saving: false,
   })
 
@@ -74,7 +74,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
     await globalSDK.client.project.update({
       projectID: props.project.id,
       name,
-      icon: { color: store.color, url: store.iconUrl },
+      icon: { color: store.color, override: store.iconUrl },
     })
     setStore("saving", false)
     dialog.close()
@@ -82,7 +82,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
 
   return (
     <Dialog title="Edit project" class="w-full max-w-[480px] mx-auto">
-      <form onSubmit={handleSubmit} class="flex flex-col gap-6 p-6">
+      <form onSubmit={handleSubmit} class="flex flex-col gap-6 p-6 pt-0">
         <div class="flex flex-col gap-4">
           <TextField
             autofocus
@@ -123,6 +123,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                           fallback={store.name || defaultName()}
                           {...getAvatarColors(store.color)}
                           class="size-full"
+                          style={{ "font-size": "32px" }}
                         />
                       </div>
                     }

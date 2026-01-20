@@ -58,6 +58,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   const searchProps = () => (typeof props.search === "object" ? props.search : {})
 
+  const moved = (event: MouseEvent) => event.movementX !== 0 || event.movementY !== 0
+
   createEffect(() => {
     if (props.filter !== undefined) {
       onInput(props.filter)
@@ -131,7 +133,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     const index = selected ? all.indexOf(selected) : -1
     props.onKeyEvent?.(e, selected)
 
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !e.isComposing) {
       e.preventDefault()
       if (selected) handleSelect(selected, index)
     } else {
@@ -227,7 +229,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                         data-selected={item === props.current}
                         onClick={() => handleSelect(item, i())}
                         type="button"
-                        onMouseMove={() => {
+                        onMouseMove={(event) => {
+                          if (!moved(event)) return
                           setStore("mouseActive", true)
                           setActive(props.key(item))
                         }}
