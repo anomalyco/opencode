@@ -139,6 +139,7 @@ export const dict = {
   "common.save": "Save",
   "common.saving": "Saving...",
   "common.default": "Default",
+  "common.attachment": "attachment",
 
   "prompt.placeholder.shell": "Enter shell command...",
   "prompt.placeholder.normal": "Ask anything... \"{{example}}\"",
@@ -278,6 +279,8 @@ export const dict = {
   "toast.model.none.title": "No model selected",
   "toast.model.none.description": "Connect a provider to summarize this session",
 
+  "toast.file.loadFailed.title": "Failed to load file",
+
   "toast.session.share.copyFailed.title": "Failed to copy URL to clipboard",
   "toast.session.share.success.title": "Session shared",
   "toast.session.share.success.description": "Share URL copied to clipboard!",
@@ -288,6 +291,8 @@ export const dict = {
   "toast.session.unshare.success.description": "Session unshared successfully!",
   "toast.session.unshare.failed.title": "Failed to unshare session",
   "toast.session.unshare.failed.description": "An error occurred while unsharing the session",
+
+  "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
 
   "toast.update.title": "Update available",
   "toast.update.description": "A new version of OpenCode ({{version}}) is now available to install.",
@@ -304,6 +309,8 @@ export const dict = {
   "error.page.report.prefix": "Please report this error to the OpenCode team",
   "error.page.report.discord": "on Discord",
   "error.page.version": "Version: {{version}}",
+
+  "error.globalSync.connectFailed": "Could not connect to server. Is there a server running at `{{url}}`?",
 
   "error.chain.unknown": "Unknown error",
   "error.chain.causedBy": "Caused by:",
@@ -331,6 +338,10 @@ export const dict = {
   "notification.question.title": "Question",
   "notification.question.description": "{{sessionTitle}} in {{projectName}} has a question",
   "notification.action.goToSession": "Go to session",
+
+  "notification.session.responseReady.title": "Response ready",
+  "notification.session.error.title": "Session error",
+  "notification.session.error.fallbackDescription": "An error occurred",
 
   "home.recentProjects": "Recent projects",
   "home.empty.title": "No recent projects",
@@ -367,6 +378,9 @@ export const dict = {
   "session.share.action.view": "View",
   "session.share.copy.copied": "Copied",
   "session.share.copy.copyLink": "Copy link",
+
+  "lsp.tooltip.none": "No LSP servers",
+  "lsp.label.connected": "{{count}} LSP",
 
   "prompt.loading": "Loading prompt...",
   "terminal.loading": "Loading terminal...",

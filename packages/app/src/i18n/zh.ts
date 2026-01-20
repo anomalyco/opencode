@@ -138,6 +138,7 @@ export const dict = {
   "common.save": "保存",
   "common.saving": "保存中...",
   "common.default": "默认",
+  "common.attachment": "附件",
 
   "prompt.placeholder.shell": "输入 shell 命令...",
   "prompt.placeholder.normal": "随便问点什么... \"{{example}}\"",
@@ -277,6 +278,8 @@ export const dict = {
   "toast.model.none.title": "未选择模型",
   "toast.model.none.description": "请先连接提供商以总结此会话",
 
+  "toast.file.loadFailed.title": "加载文件失败",
+
   "toast.session.share.copyFailed.title": "无法复制链接到剪贴板",
   "toast.session.share.success.title": "会话已分享",
   "toast.session.share.success.description": "分享链接已复制到剪贴板",
@@ -287,6 +290,8 @@ export const dict = {
   "toast.session.unshare.success.description": "会话已成功取消分享",
   "toast.session.unshare.failed.title": "取消分享失败",
   "toast.session.unshare.failed.description": "取消分享会话时发生错误",
+
+  "toast.session.listFailed.title": "无法加载 {{project}} 的会话",
 
   "toast.update.title": "有可用更新",
   "toast.update.description": "OpenCode 有新版本 ({{version}}) 可安装。",
@@ -303,6 +308,8 @@ export const dict = {
   "error.page.report.prefix": "请将此错误报告给 OpenCode 团队",
   "error.page.report.discord": "在 Discord 上",
   "error.page.version": "版本: {{version}}",
+
+  "error.globalSync.connectFailed": "无法连接到服务器。是否有服务器正在 `{{url}}` 运行?",
 
   "error.chain.unknown": "未知错误",
   "error.chain.causedBy": "原因:",
@@ -328,6 +335,10 @@ export const dict = {
   "notification.question.title": "问题",
   "notification.question.description": "{{sessionTitle}}（{{projectName}}）有一个问题",
   "notification.action.goToSession": "前往会话",
+
+  "notification.session.responseReady.title": "回复已就绪",
+  "notification.session.error.title": "会话错误",
+  "notification.session.error.fallbackDescription": "发生错误",
 
   "home.recentProjects": "最近项目",
   "home.empty.title": "没有最近项目",
@@ -364,6 +375,9 @@ export const dict = {
   "session.share.action.view": "查看",
   "session.share.copy.copied": "已复制",
   "session.share.copy.copyLink": "复制链接",
+
+  "lsp.tooltip.none": "没有 LSP 服务器",
+  "lsp.label.connected": "{{count}} LSP",
 
   "prompt.loading": "正在加载提示...",
   "terminal.loading": "正在加载终端...",

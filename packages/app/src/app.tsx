@@ -44,15 +44,17 @@ export function AppBaseProviders(props: ParentProps) {
     <MetaProvider>
       <Font />
       <ThemeProvider>
-        <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
-          <DialogProvider>
-            <MarkedProvider>
-              <DiffComponentProvider component={Diff}>
-                <CodeComponentProvider component={Code}>{props.children}</CodeComponentProvider>
-              </DiffComponentProvider>
-            </MarkedProvider>
-          </DialogProvider>
-        </ErrorBoundary>
+        <LanguageProvider>
+          <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
+            <DialogProvider>
+              <MarkedProvider>
+                <DiffComponentProvider component={Diff}>
+                  <CodeComponentProvider component={Code}>{props.children}</CodeComponentProvider>
+                </DiffComponentProvider>
+              </MarkedProvider>
+            </DialogProvider>
+          </ErrorBoundary>
+        </LanguageProvider>
       </ThemeProvider>
     </MetaProvider>
   )
@@ -85,17 +87,15 @@ export function AppInterface(props: { defaultUrl?: string }) {
             <Router
               root={(props) => (
                 <SettingsProvider>
-                  <LanguageProvider>
-                    <PermissionProvider>
-                      <LayoutProvider>
-                        <NotificationProvider>
-                          <CommandProvider>
-                            <Layout>{props.children}</Layout>
-                          </CommandProvider>
-                        </NotificationProvider>
-                      </LayoutProvider>
-                    </PermissionProvider>
-                  </LanguageProvider>
+                  <PermissionProvider>
+                    <LayoutProvider>
+                      <NotificationProvider>
+                        <CommandProvider>
+                          <Layout>{props.children}</Layout>
+                        </CommandProvider>
+                      </NotificationProvider>
+                    </LayoutProvider>
+                  </PermissionProvider>
                 </SettingsProvider>
               )}
             >

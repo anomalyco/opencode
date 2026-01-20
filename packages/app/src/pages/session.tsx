@@ -597,7 +597,10 @@ export default function Page() {
         // Restore the prompt from the reverted message
         const parts = sync.data.part[message.id]
         if (parts) {
-          const restored = extractPromptFromParts(parts, { directory: sdk.directory })
+          const restored = extractPromptFromParts(parts, {
+            directory: sdk.directory,
+            attachmentName: language.t("common.attachment"),
+          })
           prompt.set(restored)
         }
         // Navigate to the message before the reverted one (which will be the new last visible message)
