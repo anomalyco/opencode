@@ -6,7 +6,7 @@
     min-width: 160px;
     height: 32px;
     justify-content: flex-end;
-    gap: 8px;
+    gap: 12px;
     background-color: transparent;
 
     [data-slot="select-select-trigger-value"] {
