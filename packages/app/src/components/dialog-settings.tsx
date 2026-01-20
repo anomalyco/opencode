@@ -16,15 +16,28 @@ export const DialogSettings: Component = () => {
     <Dialog size="large">
       <Tabs orientation="vertical" variant="settings" defaultValue="general" class="h-full settings-dialog">
         <Tabs.List>
-          <Tabs.SectionTitle>Desktop</Tabs.SectionTitle>
-          <Tabs.Trigger value="general">
-            <Icon name="settings-gear" />
-            General
-          </Tabs.Trigger>
-          <Tabs.Trigger value="shortcuts">
-            <Icon name="console" />
-            Shortcuts
-          </Tabs.Trigger>
+          <div
+            style={{
+              display: "flex",
+              "flex-direction": "column",
+              gap: "12px",
+              width: "100%",
+              "padding-top": "12px",
+              "padding-bottom": "12px",
+            }}
+          >
+            <Tabs.SectionTitle>Desktop</Tabs.SectionTitle>
+            <div style={{ display: "flex", "flex-direction": "column", gap: "6px", width: "100%" }}>
+              <Tabs.Trigger value="general">
+                <Icon name="settings-gear" />
+                General
+              </Tabs.Trigger>
+              <Tabs.Trigger value="shortcuts">
+                <Icon name="console" />
+                Shortcuts
+              </Tabs.Trigger>
+            </div>
+          </div>
           {/* <Tabs.SectionTitle>Server</Tabs.SectionTitle> */}
           {/* <Tabs.Trigger value="permissions"> */}
           {/*   <Icon name="checklist" /> */}
