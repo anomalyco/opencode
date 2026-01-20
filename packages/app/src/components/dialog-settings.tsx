@@ -33,7 +33,7 @@ export const DialogSettings: Component = () => {
                 General
               </Tabs.Trigger>
               <Tabs.Trigger value="shortcuts">
-                <Icon name="console" />
+                <Icon name="keyboard" />
                 Shortcuts
               </Tabs.Trigger>
             </div>
