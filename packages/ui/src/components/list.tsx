@@ -16,6 +16,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
   class?: string
   children: (item: T) => JSX.Element
   emptyMessage?: string
+  loadingMessage?: string
   onKeyEvent?: (event: KeyboardEvent, item: T | undefined) => void
   onMove?: (item: T | undefined) => void
   activeIcon?: IconProps["name"]
@@ -207,8 +208,10 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
           fallback={
             <div data-slot="list-empty-state">
               <div data-slot="list-message">
-                {props.emptyMessage ?? (grouped.loading ? "Loading" : "No results")} for{" "}
-                <span data-slot="list-filter">&quot;{filter()}&quot;</span>
+                {grouped.loading ? props.loadingMessage ?? "Loading" : props.emptyMessage ?? "No results"}
+                <Show when={!props.emptyMessage && !props.loadingMessage && !!filter()}>
+                  {" "}for <span data-slot="list-filter">&quot;{filter()}&quot;</span>
+                </Show>
               </div>
             </div>
           }
