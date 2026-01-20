@@ -9,8 +9,8 @@ This report documents the remaining user-facing strings in `packages/app/src` th
 ## Current State
 
 - The app uses `useLanguage().t("...")` with dictionaries in `packages/app/src/i18n/en.ts` and `packages/app/src/i18n/zh.ts`.
-- Recent progress (already translated): `packages/app/src/pages/home.tsx`, `packages/app/src/pages/layout.tsx`, `packages/app/src/pages/session.tsx`, `packages/app/src/components/prompt-input.tsx` (plus new keys added in both dictionaries).
-- Dictionary parity check: `en.ts` and `zh.ts` currently contain the same key set (285 keys each; no missing or extra keys).
+- Recent progress (already translated): `packages/app/src/pages/home.tsx`, `packages/app/src/pages/layout.tsx`, `packages/app/src/pages/session.tsx`, `packages/app/src/components/prompt-input.tsx`, `packages/app/src/components/dialog-connect-provider.tsx` (plus new keys added in both dictionaries).
+- Dictionary parity check: `en.ts` and `zh.ts` currently contain the same key set (314 keys each; no missing or extra keys).
 
 ## Methodology
 
@@ -71,24 +71,11 @@ Completed (2026-01-20):
 
 File: `packages/app/src/components/dialog-connect-provider.tsx`
 
-This flow is copy-heavy and user-facing.
+Completed (2026-01-20):
 
-**Representative untranslated strings**
-- Login method label: "API key"
-- Status text: "Authorization in progress...", "Waiting for authorization..."
-- Validation: "API key is required", "Authorization code is required", "Invalid authorization code"
-- Field labels/placeholders: "Confirmation code", placeholder "API key", placeholder "Authorization code"
-- Instructional text:
-  - "Visit this link ..."
-  - Provider-specific guidance and OpenCode Zen onboarding paragraphs
-- Buttons: "Submit"
-- Success toast:
-  - "{provider} connected"
-  - "{provider} models are now available to use."
-
-**Recommendation:**
-- Add a `provider.connect.*` namespace.
-- Consider adding shared common keys like `common.submit` if it is used elsewhere.
+- Localized all user-visible copy via `provider.connect.*` keys (titles, statuses, validations, instructions, OpenCode Zen onboarding).
+- Added `common.submit` and used it for both API + OAuth submit buttons.
+- Localized the success toast via `provider.connect.toast.connected.*`.
 
 ### 4) Session Header (Share/Publish UI)
 
@@ -250,12 +237,11 @@ This is only thrown in DEV and is more of a developer diagnostic. Optional to tr
 
 ## Prioritized Implementation Plan
 
-1. `packages/app/src/components/dialog-connect-provider.tsx`
-2. `packages/app/src/components/session/session-header.tsx`
-3. `packages/app/src/pages/error.tsx`
-4. `packages/app/src/components/session/session-new-view.tsx`
-5. `packages/app/src/components/session-context-usage.tsx` + locale formatting improvements (also `packages/app/src/components/session/session-context-tab.tsx`)
-6. Small stragglers:
+1. `packages/app/src/components/session/session-header.tsx`
+2. `packages/app/src/pages/error.tsx`
+3. `packages/app/src/components/session/session-new-view.tsx`
+4. `packages/app/src/components/session-context-usage.tsx` + locale formatting improvements (also `packages/app/src/components/session/session-context-tab.tsx`)
+5. Small stragglers:
    - `packages/app/src/components/session-lsp-indicator.tsx`
    - `packages/app/src/components/session/session-sortable-tab.tsx`
    - `packages/app/src/components/titlebar.tsx`
@@ -264,7 +250,7 @@ This is only thrown in DEV and is more of a developer diagnostic. Optional to tr
    - `packages/app/src/context/global-sync.tsx`
    - `packages/app/src/context/file.tsx` + `packages/app/src/context/local.tsx`
    - `packages/app/src/utils/prompt.ts`
-7. Decide on the terminal naming approach (`packages/app/src/context/terminal.tsx`).
+6. Decide on the terminal naming approach (`packages/app/src/context/terminal.tsx`).
 
 ## Suggested Key Naming Conventions
 
@@ -287,7 +273,6 @@ Pages:
 - `packages/app/src/pages/error.tsx`
 
 Components:
-- `packages/app/src/components/dialog-connect-provider.tsx`
 - `packages/app/src/components/session/session-header.tsx`
 - `packages/app/src/components/session/session-new-view.tsx`
 - `packages/app/src/components/session-context-usage.tsx`
