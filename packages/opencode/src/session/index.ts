@@ -476,13 +476,40 @@ export namespace Session {
       messageID: Identifier.schema("message"),
     }),
     async (input) => {
-      await SessionPrompt.command({
-        sessionID: input.sessionID,
-        messageID: input.messageID,
-        model: input.providerID + "/" + input.modelID,
-        command: Command.Default.INIT,
-        arguments: "",
-      })
+      // 获取配置中的 autoexec_prompt
+      const config = await Config.get();
+      const autoexecPrompts = config.autoexec_prompt || [];
+
+      // 如果存在 autoexec_prompt，则在初始化时执行它们
+      if (autoexecPrompts.length > 0) {
+        for (const promptText of autoexecPrompts) {
+          // 创建一个包含 autoexec prompt 的用户消息
+          await SessionPrompt.prompt({
+            sessionID: input.sessionID,
+            messageID: input.messageID,
+            model: {
+              providerID: input.providerID,
+              modelID: input.modelID,
+            },
+            parts: [
+              {
+                type: "text",
+                text: promptText,
+              }
+            ],
+            noReply: false, // 确保模型会对 autoexec prompt 做出回应
+          });
+        }
+      } else {
+        // 如果没有配置 autoexec_prompt，则执行原来的初始化命令
+        await SessionPrompt.command({
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+          model: input.providerID + "/" + input.modelID,
+          command: Command.Default.INIT,
+          arguments: "",
+        })
+      }
     },
   )
 }

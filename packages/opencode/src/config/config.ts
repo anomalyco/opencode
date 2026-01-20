@@ -1027,6 +1027,7 @@ export namespace Config {
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
+      autoexec_prompt: z.array(z.string()).optional().describe("Prompts to execute automatically at session start"),
       enterprise: z
         .object({
           url: z.string().optional().describe("Enterprise URL"),

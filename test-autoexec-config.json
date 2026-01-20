@@ -1,0 +1,8 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoexec_prompt": [
+    "if gh command ready then do not use git command",
+    "Please remember to use gh command instead of git command when available.",
+    "This is an auto-executed prompt to set the context for the conversation."
+  ]
+}
