@@ -6,6 +6,7 @@ import { Truncate } from "./truncation"
 
 export namespace Tool {
   interface Metadata {
+    truncated?: boolean
     [key: string]: any
   }
 

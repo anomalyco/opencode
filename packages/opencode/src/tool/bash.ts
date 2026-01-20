@@ -1,9 +1,12 @@
+import { Buffer } from "buffer"
 import z from "zod"
+import { appendFile } from "fs/promises"
+import fs from "fs/promises"
 import { spawn } from "child_process"
 import { Tool } from "./tool"
 import path from "path"
 import DESCRIPTION from "./bash.txt"
-import { Log } from "../util/log"
+import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
@@ -17,7 +20,8 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
 
-const MAX_METADATA_LENGTH = 30_000
+import { Log } from "../util/log"
+
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
 export const log = Log.create({ service: "bash-tool" })
@@ -71,9 +75,12 @@ export const BashTool = Tool.define("bash", async () => {
       description: z
         .string()
         .describe(
-          "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
+          "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working directory status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
         ),
     }),
+    formatValidationError(error: any): string {
+      return error.errors.map((e: any) => `${e.path.join(".")}: ${e.message}`).join("\n")
+    },
     async execute(params, ctx) {
       const cwd = params.workdir || Instance.directory
       if (params.timeout !== undefined && params.timeout < 0) {
@@ -154,6 +161,18 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
+      // Use Buffer for accumulation. When exceeding WINDOW_SIZE,
+      // switch to file streaming to avoid O(n²) memory growth.
+      const tmpId = Identifier.ascending("tool")
+      const tmpPath = path.join(Truncate.DIR, tmpId)
+      await fs.mkdir(Truncate.DIR, { recursive: true })
+      const WINDOW_SIZE = 50 * 1024
+      let output: Buffer | null = null
+      let outputSize = 0
+      let lineCount = 0
+      let truncated = false
+      let writer: ReturnType<Bun.BunFile["writer"]> | null = null
+
       const proc = spawn(params.command, {
         shell,
         cwd,
@@ -164,9 +183,6 @@ export const BashTool = Tool.define("bash", async () => {
         detached: process.platform !== "win32",
       })
 
-      let output = ""
-
-      // Initialize metadata with empty output
       ctx.metadata({
         metadata: {
           output: "",
@@ -175,14 +191,37 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const append = (chunk: Buffer) => {
-        output += chunk.toString()
-        ctx.metadata({
-          metadata: {
-            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
-            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
-            description: params.description,
-          },
-        })
+        const str = chunk.toString()
+        outputSize += str.length
+        lineCount += (str.match(/\n/g) || []).length
+
+        if (lineCount > Truncate.MAX_LINES || outputSize > WINDOW_SIZE) {
+          truncated = true
+          if (!writer) {
+            const tmpFile = Bun.file(tmpPath)
+            writer = tmpFile.writer()
+            if (output) {
+              writer.write(output)
+            }
+          }
+          writer.write(chunk)
+        } else {
+          if (output) {
+            output = Buffer.concat([output, chunk])
+          } else {
+            output = chunk
+          }
+        }
+
+        if (output) {
+          const preview = output.toString()
+          ctx.metadata({
+            metadata: {
+              output: preview,
+              description: params.description,
+            },
+          })
+        }
       }
 
       proc.stdout?.on("data", append)
@@ -194,14 +233,23 @@ export const BashTool = Tool.define("bash", async () => {
 
       const kill = () => Shell.killTree(proc, { exited: () => exited })
 
+      const cleanupFile = async () => {
+        if (!truncated) return
+        try {
+          await fs.unlink(tmpPath)
+        } catch {}
+      }
+
       if (ctx.abort.aborted) {
         aborted = true
         await kill()
+        await cleanupFile()
       }
 
       const abortHandler = () => {
         aborted = true
         void kill()
+        void cleanupFile()
       }
 
       ctx.abort.addEventListener("abort", abortHandler, { once: true })
@@ -211,24 +259,33 @@ export const BashTool = Tool.define("bash", async () => {
         void kill()
       }, timeout + 100)
 
-      await new Promise<void>((resolve, reject) => {
-        const cleanup = () => {
-          clearTimeout(timeoutTimer)
-          ctx.abort.removeEventListener("abort", abortHandler)
-        }
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const cleanup = () => {
+            clearTimeout(timeoutTimer)
+            ctx.abort.removeEventListener("abort", abortHandler)
+          }
 
-        proc.once("exit", () => {
-          exited = true
-          cleanup()
-          resolve()
-        })
+          proc.once("exit", () => {
+            exited = true
+            cleanup()
+            resolve()
+          })
 
-        proc.once("error", (error) => {
-          exited = true
-          cleanup()
-          reject(error)
+          proc.once("error", (error) => {
+            exited = true
+            cleanup()
+            reject(error)
+          })
         })
-      })
+      } catch (err) {
+        await cleanupFile()
+        throw err
+      }
+
+      if (truncated) {
+        await writer!.flush()
+      }
 
       const resultMetadata: string[] = []
 
@@ -240,18 +297,49 @@ export const BashTool = Tool.define("bash", async () => {
         resultMetadata.push("User aborted the command")
       }
 
-      if (resultMetadata.length > 0) {
-        output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
+      if (truncated) {
+        if (resultMetadata.length > 0) {
+          const metadataText = "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
+          await appendFile(tmpPath, metadataText)
+        }
+
+        const userPreview = output ? (output as Buffer).toString() : ""
+        const agentPreview = `${userPreview}\n\n...${outputSize - WINDOW_SIZE} bytes truncated...\n\nThe tool call succeeded but the output was truncated. Full output saved to: ${tmpPath}\nGrep to search the full content or Read with offset/limit to view specific sections.\nIf Task tool is available, delegate that to an explore agent.`
+
+        return {
+          title: params.description,
+          metadata: {
+            output: userPreview,
+            truncated,
+            exit: proc.exitCode,
+            description: params.description,
+            outputPath: tmpPath,
+          },
+          output: agentPreview,
+        }
       }
+
+      if (resultMetadata.length > 0) {
+        const metadataText = "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
+        if (output) {
+          output = Buffer.concat([output, Buffer.from(metadataText)])
+        } else {
+          output = Buffer.from(metadataText)
+        }
+      }
+
+      const outputStr = output ? (output as Buffer).toString() : ""
 
       return {
         title: params.description,
         metadata: {
-          output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+          output: outputStr,
+          truncated,
           exit: proc.exitCode,
           description: params.description,
+          outputPath: "",
         },
-        output,
+        output: outputStr,
       }
     },
   }

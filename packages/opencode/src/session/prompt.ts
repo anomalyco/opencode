@@ -1,6 +1,7 @@
+import { Buffer } from "buffer"
 import path from "path"
 import os from "os"
-import fs from "fs/promises"
+import fs, { appendFile } from "fs/promises"
 import z from "zod"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
@@ -1485,6 +1486,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const matchingInvocation = invocations[shellName] ?? invocations[""]
     const args = matchingInvocation?.args
 
+    const tmpId = Identifier.ascending("tool")
+    const tmpPath = path.join(Truncate.DIR, tmpId)
+    const WINDOW_SIZE = 50 * 1024
+    let output: Buffer | null = null
+    let outputSize = 0
+    let truncated = false
+    let writer: ReturnType<Bun.BunFile["writer"]> | null = null
+
     const proc = spawn(shell, args, {
       cwd: Instance.directory,
       detached: process.platform !== "win32",
@@ -1495,43 +1504,65 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       },
     })
 
-    let output = ""
+    const handleChunk = (chunk: Buffer) => {
+      const str = chunk.toString()
+      outputSize += str.length
 
-    proc.stdout?.on("data", (chunk) => {
-      output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
+      if (outputSize > WINDOW_SIZE) {
+        truncated = true
+        if (!writer) {
+          const tmpFile = Bun.file(tmpPath)
+          writer = tmpFile.writer()
+          if (output) {
+            writer.write(output)
+          }
         }
-        Session.updatePart(part)
+        writer.write(chunk)
+      } else {
+        if (output) {
+          output = Buffer.concat([output, chunk])
+        } else {
+          output = chunk
+        }
       }
-    })
 
-    proc.stderr?.on("data", (chunk) => {
-      output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
+      if (output) {
+        const preview = output.toString()
+        if (part.state.status === "running") {
+          part.state.metadata = {
+            output: preview,
+            description: "",
+          }
+          Session.updatePart(part)
         }
-        Session.updatePart(part)
       }
-    })
+    }
+
+    proc.stdout?.on("data", handleChunk)
+    proc.stderr?.on("data", handleChunk)
 
     let aborted = false
     let exited = false
 
     const kill = () => Shell.killTree(proc, { exited: () => exited })
 
+    const cleanupFile = async () => {
+      if (!truncated) return
+      try {
+        await fs.unlink(tmpPath)
+      } catch {}
+    }
+
     if (abort.aborted) {
       aborted = true
       await kill()
+      await cleanupFile()
     }
 
     const abortHandler = () => {
       aborted = true
       void kill()
+      void cleanupFile()
     }
 
     abort.addEventListener("abort", abortHandler, { once: true })
@@ -1544,25 +1575,58 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
     })
 
-    if (aborted) {
-      output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
+    if (truncated) {
+      await writer!.flush()
     }
+
     msg.time.completed = Date.now()
     await Session.updateMessage(msg)
+
     if (part.state.status === "running") {
-      part.state = {
-        status: "completed",
-        time: {
-          ...part.state.time,
-          end: Date.now(),
-        },
-        input: part.state.input,
-        title: "",
-        metadata: {
-          output,
-          description: "",
-        },
-        output,
+      if (aborted) {
+        const metadataText = "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
+        if (truncated) {
+          await appendFile(tmpPath, metadataText)
+        } else if (output) {
+          output = Buffer.concat([output, Buffer.from(metadataText)])
+        } else {
+          output = Buffer.from(metadataText)
+        }
+      }
+
+      if (truncated) {
+        const userPreview = output ? output.toString() : ""
+        const agentPreview = `${userPreview}\n\n...${outputSize - WINDOW_SIZE} bytes truncated...\n\nThe tool call succeeded but the output was truncated. Full output saved to: ${tmpPath}\nGrep to search the full content or Read with offset/limit to view specific sections.\nIf Task tool is available, delegate that to an explore agent.`
+        part.state = {
+          status: "completed",
+          time: {
+            ...part.state.time,
+            end: Date.now(),
+          },
+          input: part.state.input,
+          title: "",
+          metadata: {
+            output: userPreview,
+            description: "",
+            outputPath: tmpPath,
+          },
+          output: agentPreview,
+        }
+      } else {
+        part.state = {
+          status: "completed",
+          time: {
+            ...part.state.time,
+            end: Date.now(),
+          },
+          input: part.state.input,
+          title: "",
+          metadata: {
+            output: output ? output.toString("utf8") : "",
+            description: "",
+          },
+          output: output ? output.toString("utf8") : "",
+        }
       }
       await Session.updatePart(part)
     }
