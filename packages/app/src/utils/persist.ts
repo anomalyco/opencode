@@ -21,6 +21,7 @@ function quota(error: unknown) {
   if (error instanceof DOMException) {
     if (error.name === "QuotaExceededError") return true
     if (error.name === "NS_ERROR_DOM_QUOTA_REACHED") return true
+    if (error.name === "QUOTA_EXCEEDED_ERR") return true
     if (error.code === 22 || error.code === 1014) return true
     return false
   }
@@ -28,6 +29,14 @@ function quota(error: unknown) {
   if (!error || typeof error !== "object") return false
   const name = (error as { name?: string }).name
   if (name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED") return true
+  if (name && /quota/i.test(name)) return true
+
+  const code = (error as { code?: number }).code
+  if (code === 22 || code === 1014) return true
+
+  const message = (error as { message?: string }).message
+  if (typeof message !== "string") return false
+  if (/quota/i.test(message)) return true
   return false
 }
 
