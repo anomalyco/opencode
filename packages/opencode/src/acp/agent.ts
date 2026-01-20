@@ -696,6 +696,7 @@ export namespace ACP {
                   content: {
                     type: "text",
                     text: part.text,
+                    ...(part.synthetic && { annotations: { audience: ["assistant"] } }),
                   },
                 },
               })
@@ -968,14 +969,16 @@ export namespace ACP {
       const agent = session.modeId ?? (await AgentModule.defaultAgent())
 
       const parts: Array<
-        { type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }
+        { type: "text"; text: string; synthetic?: boolean } | { type: "file"; url: string; filename: string; mime: string }
       > = []
       for (const part of params.prompt) {
         switch (part.type) {
           case "text":
+            const hidden = part.annotations?.audience?.length === 1 && part.annotations.audience[0] === "assistant"
             parts.push({
               type: "text" as const,
               text: part.text,
+              ...(hidden && { synthetic: true }),
             })
             break
           case "image": {
