@@ -183,3 +183,76 @@ test("returns empty array when no skills exist", async () => {
     },
   })
 })
+
+test("validates skill name format", () => {
+  // Valid names
+  expect(Skill.NAME_REGEX.test("my-skill")).toBe(true)
+  expect(Skill.NAME_REGEX.test("skill")).toBe(true)
+  expect(Skill.NAME_REGEX.test("skill123")).toBe(true)
+  expect(Skill.NAME_REGEX.test("my-test-skill")).toBe(true)
+  expect(Skill.NAME_REGEX.test("a")).toBe(true)
+  expect(Skill.NAME_REGEX.test("a1b2c3")).toBe(true)
+
+  // Invalid names
+  expect(Skill.NAME_REGEX.test("-skill")).toBe(false) // starts with hyphen
+  expect(Skill.NAME_REGEX.test("skill-")).toBe(false) // ends with hyphen
+  expect(Skill.NAME_REGEX.test("my--skill")).toBe(false) // consecutive hyphens
+  expect(Skill.NAME_REGEX.test("My-Skill")).toBe(false) // uppercase
+  expect(Skill.NAME_REGEX.test("my_skill")).toBe(false) // underscore
+  expect(Skill.NAME_REGEX.test("my skill")).toBe(false) // space
+  expect(Skill.NAME_REGEX.test("")).toBe(false) // empty
+})
+
+test("skips skills with invalid name format", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "My_Invalid_Skill")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: My_Invalid_Skill
+description: A skill with invalid name format.
+---
+
+# Invalid Skill
+`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      expect(skills).toEqual([])
+    },
+  })
+})
+
+test("skips skills where name doesn't match directory", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "actual-dir-name")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: different-name
+description: A skill with mismatched name.
+---
+
+# Mismatched Skill
+`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      expect(skills).toEqual([])
+    },
+  })
+})

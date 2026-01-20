@@ -14,9 +14,25 @@ import { Session } from "@/session"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
+
+  /**
+   * Regex for skill name validation.
+   * - Lowercase alphanumeric with single hyphen separators
+   * - Cannot start or end with `-`
+   * - Cannot contain consecutive `--`
+   */
+  export const NAME_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/
+
   export const Info = z.object({
-    name: z.string(),
-    description: z.string(),
+    name: z
+      .string()
+      .min(1, "Skill name must be at least 1 character")
+      .max(64, "Skill name must be at most 64 characters")
+      .regex(NAME_REGEX, "Skill name must be lowercase alphanumeric with single hyphen separators (e.g., 'my-skill')"),
+    description: z
+      .string()
+      .min(1, "Skill description must be at least 1 character")
+      .max(1024, "Skill description must be at most 1024 characters"),
     location: z.string(),
   })
   export type Info = z.infer<typeof Info>
@@ -58,7 +74,24 @@ export namespace Skill {
       if (!md) return
 
       const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
-      if (!parsed.success) return
+      if (!parsed.success) {
+        log.error("invalid skill frontmatter", {
+          skill: match,
+          issues: parsed.error.issues.map((i) => i.message),
+        })
+        return
+      }
+
+      // Validate that skill name matches the directory name
+      const dirName = path.basename(path.dirname(match))
+      if (parsed.data.name !== dirName) {
+        log.error("skill name must match directory name", {
+          skill: match,
+          expected: dirName,
+          actual: parsed.data.name,
+        })
+        return
+      }
 
       // Warn on duplicate skill names
       if (skills[parsed.data.name]) {
