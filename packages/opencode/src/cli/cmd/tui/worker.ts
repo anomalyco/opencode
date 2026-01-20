@@ -23,13 +23,15 @@ await Log.init({
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
-    e: e instanceof Error ? e.message : e,
+    message: e instanceof Error ? e.message : String(e),
+    stack: e instanceof Error ? e.stack : undefined,
   })
 })
 
 process.on("uncaughtException", (e) => {
   Log.Default.error("exception", {
-    e: e instanceof Error ? e.message : e,
+    message: e instanceof Error ? e.message : String(e),
+    stack: e instanceof Error ? e.stack : undefined,
   })
 })
 
@@ -66,22 +68,39 @@ const startEventStream = (directory: string) => {
 
   ;(async () => {
     while (!signal.aborted) {
-      const events = await Promise.resolve(
-        sdk.event.subscribe(
-          {},
-          {
-            signal,
-          },
-        ),
-      ).catch(() => undefined)
+      let events: AsyncIterable<Event> | undefined
+      try {
+        // Attempt to subscribe to server-side events; log any error
+        events = await Promise.resolve(
+          sdk.event.subscribe({}, { signal }),
+        )
+      } catch (err) {
+        Log.Default.error("event subscribe failed", {
+          directory,
+          error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+        })
+        // Wait a bit before retrying
+        await Bun.sleep(500)
+        continue
+      }
 
       if (!events) {
+        Log.Default.debug("no events from subscribe, retrying", { directory })
         await Bun.sleep(250)
         continue
       }
 
-      for await (const event of events.stream) {
-        Rpc.emit("event", event as Event)
+      try {
+        for await (const event of (events as any).stream ?? events) {
+          Rpc.emit("event", event as Event)
+        }
+      } catch (err) {
+        Log.Default.error("error while reading event stream", {
+          directory,
+          error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+        })
       }
 
       if (!signal.aborted) {
@@ -89,8 +108,10 @@ const startEventStream = (directory: string) => {
       }
     }
   })().catch((error) => {
-    Log.Default.error("event stream error", {
-      error: error instanceof Error ? error.message : error,
+    Log.Default.error("event stream fatal", {
+      directory,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
     })
   })
 }
@@ -109,8 +130,30 @@ export const rpc = {
       headers,
       body: input.body,
     })
-    const response = await Server.App().fetch(request)
+
+    let response: Response
+    try {
+      response = await Server.App().fetch(request)
+    } catch (err) {
+      Log.Default.error("rpc.fetch network error", {
+        url: input.url,
+        method: input.method,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      })
+      throw err
+    }
+
     const body = await response.text()
+
+    if (!response.ok) {
+      Log.Default.error("rpc.fetch bad response", {
+        url: input.url,
+        status: response.status,
+        body: body.slice(0, 2000),
+      })
+    }
+
     return {
       status: response.status,
       headers: Object.fromEntries(response.headers.entries()),

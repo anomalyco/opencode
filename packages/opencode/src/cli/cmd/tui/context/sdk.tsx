@@ -89,6 +89,9 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       if (timer) clearTimeout(timer)
     })
 
-    return { client: sdk, event: emitter, url: props.url }
+    // Expose the custom fetch (or native fetch as fallback) for components that need raw HTTP calls
+    const sdkFetch = props.fetch ?? globalThis.fetch
+
+    return { client: sdk, event: emitter, url: props.url, fetch: sdkFetch }
   },
 })

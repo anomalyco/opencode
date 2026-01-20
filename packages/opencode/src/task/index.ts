@@ -67,38 +67,71 @@ export namespace TaskManager {
     if (s.initialized) return
     s.initialized = true
 
-    const persisted = await TaskPersistence.loadAll(Instance.directory)
-    log.info("loading persisted tasks", { count: persisted.length })
+    let persisted = await TaskPersistence.loadAll(Instance.directory)
+    log.info("loading persisted tasks", { count: persisted.length, directory: Instance.directory })
+
+    // Also try loading persisted tasks from the current process cwd as a fallback.
+    // This helps when a task was created or migrated while the server's Instance.directory
+    // differed from the process working directory used when launching the task.
+    try {
+      const cwd = process.cwd()
+      if (cwd && cwd !== Instance.directory) {
+        const cwdPersisted = await TaskPersistence.loadAll(cwd)
+        log.info("loading persisted tasks from cwd fallback", { count: cwdPersisted.length, cwd })
+        // Merge without duplicating IDs
+        for (const p of cwdPersisted) {
+          if (!persisted.find((x) => x.id === p.id)) persisted.push(p)
+        }
+      }
+    } catch (err) {
+      log.debug("failed to load persisted tasks from cwd fallback", { error: String(err) })
+    }
 
     for (const saved of persisted) {
-      const stillRunning = TaskPersistence.isProcessRunning(saved.pid)
+      try {
+        const stillRunning = TaskPersistence.isProcessRunning(saved.pid)
 
-      const task: ManagedTask = {
-        ...saved,
-        output: [],
-        process: undefined,
-      }
+        const task: ManagedTask = {
+          ...saved,
+          output: [],
+          process: undefined,
+        }
 
-      // If process is still running and task was marked as running, keep it
-      if (stillRunning && saved.status === "running" && saved.reconnectable) {
-        log.info("reconnected to running task", { taskId: saved.id, pid: saved.pid })
-        s.tasks.set(saved.id, task)
-        await Bus.publish(TaskEvent.Reconnected, {
-          id: saved.id,
-          stillRunning: true,
-        })
-      } else if (saved.status === "running") {
-        // Process died while we weren't watching - mark as failed
-        task.status = "failed"
-        await TaskPersistence.save(Instance.directory, task)
-        s.tasks.set(saved.id, task)
-        await Bus.publish(TaskEvent.Reconnected, {
-          id: saved.id,
-          stillRunning: false,
-        })
-      } else {
-        // Already completed/failed, just load it
-        s.tasks.set(saved.id, task)
+        // If process is still running and task was marked as running, keep it
+        if (stillRunning && saved.status === "running" && saved.reconnectable) {
+          log.info("reconnected to running task", { taskId: saved.id, pid: saved.pid })
+          s.tasks.set(saved.id, task)
+          try {
+            await Bus.publish(TaskEvent.Reconnected, {
+              id: saved.id,
+              stillRunning: true,
+            })
+          } catch (err) {
+            log.error("failed to publish reconnected event", { taskId: saved.id, error: String(err) })
+          }
+        } else if (saved.status === "running") {
+          // Process died while we weren't watching - mark as failed
+          task.status = "failed"
+          try {
+            await TaskPersistence.save(Instance.directory, task)
+          } catch (err) {
+            log.error("failed to save task state during init", { taskId: saved.id, error: String(err) })
+          }
+          s.tasks.set(saved.id, task)
+          try {
+            await Bus.publish(TaskEvent.Reconnected, {
+              id: saved.id,
+              stillRunning: false,
+            })
+          } catch (err) {
+            log.error("failed to publish reconnected event (dead)", { taskId: saved.id, error: String(err) })
+          }
+        } else {
+          // Already completed/failed, just load it
+          s.tasks.set(saved.id, task)
+        }
+      } catch (err) {
+        log.error("error while initializing persisted task", { id: saved.id, error: String(err) })
       }
     }
   }
@@ -121,13 +154,19 @@ export namespace TaskManager {
       workdir,
     })
 
-    const proc = spawn(opts.command, {
-      shell,
-      cwd: workdir,
-      env: { ...process.env },
-      stdio: ["pipe", "pipe", "pipe"],
-      detached: process.platform !== "win32",
-    })
+    let proc: ChildProcess
+    try {
+      proc = spawn(opts.command, {
+        shell,
+        cwd: workdir,
+        env: { ...process.env },
+        stdio: ["pipe", "pipe", "pipe"],
+        detached: process.platform !== "win32",
+      })
+    } catch (err) {
+      log.error("spawn failed", { taskId, command: opts.command, error: String(err) })
+      throw err
+    }
 
     const task: ManagedTask = {
       id: taskId,
@@ -146,22 +185,36 @@ export namespace TaskManager {
     state().tasks.set(taskId, task)
 
     // Save initial state
-    await TaskPersistence.save(directory, task)
+    try {
+      await TaskPersistence.save(directory, task)
+    } catch (err) {
+      log.error("failed to save initial task state", { taskId, error: String(err) })
+    }
 
     // Handle stdout - wrapped in Instance.provide for async context
     proc.stdout?.on("data", (chunk: Buffer) => {
       const data = chunk.toString()
       task.output.push(data)
+      log.debug("task stdout chunk", { taskId, len: data.length })
       // Fire and forget - don't await to avoid blocking process
       void Instance.provide({
         directory,
         fn: async () => {
-          await TaskPersistence.appendLog(directory, taskId, data)
-          await Bus.publish(TaskEvent.Output, {
-            id: taskId,
-            data,
-            isError: false,
-          })
+          try {
+            await TaskPersistence.appendLog(directory, taskId, data)
+          } catch (err) {
+            log.error("failed to append stdout to log", { taskId, error: String(err) })
+          }
+
+          try {
+            await Bus.publish(TaskEvent.Output, {
+              id: taskId,
+              data,
+              isError: false,
+            })
+          } catch (err) {
+            log.error("failed to publish stdout output event", { taskId, error: String(err) })
+          }
         },
       })
     })
@@ -170,16 +223,26 @@ export namespace TaskManager {
     proc.stderr?.on("data", (chunk: Buffer) => {
       const data = chunk.toString()
       task.output.push(data)
+      log.debug("task stderr chunk", { taskId, len: data.length })
       // Fire and forget - don't await to avoid blocking process
       void Instance.provide({
         directory,
         fn: async () => {
-          await TaskPersistence.appendLog(directory, taskId, data)
-          await Bus.publish(TaskEvent.Output, {
-            id: taskId,
-            data,
-            isError: true,
-          })
+          try {
+            await TaskPersistence.appendLog(directory, taskId, data)
+          } catch (err) {
+            log.error("failed to append stderr to log", { taskId, error: String(err) })
+          }
+
+          try {
+            await Bus.publish(TaskEvent.Output, {
+              id: taskId,
+              data,
+              isError: true,
+            })
+          } catch (err) {
+            log.error("failed to publish stderr output event", { taskId, error: String(err) })
+          }
         },
       })
     })
@@ -193,12 +256,21 @@ export namespace TaskManager {
       void Instance.provide({
         directory,
         fn: async () => {
-          await TaskPersistence.save(directory, task)
-          await Bus.publish(TaskEvent.Completed, {
-            id: taskId,
-            exitCode: code,
-            status: task.status,
-          })
+          try {
+            await TaskPersistence.save(directory, task)
+          } catch (err) {
+            log.error("failed to save task state on exit", { taskId, exitCode: code, error: String(err) })
+          }
+
+          try {
+            await Bus.publish(TaskEvent.Completed, {
+              id: taskId,
+              exitCode: code,
+              status: task.status,
+            })
+          } catch (err) {
+            log.error("failed to publish completed event", { taskId, exitCode: code, error: String(err) })
+          }
 
           log.info("background task completed", {
             taskId,
@@ -211,37 +283,51 @@ export namespace TaskManager {
 
     // Handle errors - wrapped in Instance.provide for async context
     proc.once("error", (err) => {
-      log.error("background task error", { taskId, error: err })
+      const errMsg = err instanceof Error ? `${err.message} ${err.stack ?? ""}` : String(err)
+      log.error("background task error", { taskId, error: errMsg })
       task.status = "failed"
       task.process = undefined
 
       void Instance.provide({
         directory,
         fn: async () => {
-          await TaskPersistence.save(directory, task)
-          await Bus.publish(TaskEvent.Completed, {
-            id: taskId,
-            exitCode: null,
-            status: "failed",
-          })
+          try {
+            await TaskPersistence.save(directory, task)
+          } catch (e) {
+            log.error("failed to save task state after error", { taskId, error: String(e) })
+          }
+
+          try {
+            await Bus.publish(TaskEvent.Completed, {
+              id: taskId,
+              exitCode: null,
+              status: "failed",
+            })
+          } catch (e) {
+            log.error("failed to publish completed event after error", { taskId, error: String(e) })
+          }
         },
       })
     })
 
     // Publish created event
-    await Bus.publish(TaskEvent.Created, {
-      info: {
-        id: task.id,
-        pid: task.pid,
-        command: task.command,
-        startTime: task.startTime,
-        status: task.status,
-        workdir: task.workdir,
-        description: task.description,
-        logFile: task.logFile,
-        reconnectable: task.reconnectable,
-      },
-    })
+    try {
+      await Bus.publish(TaskEvent.Created, {
+        info: {
+          id: task.id,
+          pid: task.pid,
+          command: task.command,
+          startTime: task.startTime,
+          status: task.status,
+          workdir: task.workdir,
+          description: task.description,
+          logFile: task.logFile,
+          reconnectable: task.reconnectable,
+        },
+      })
+    } catch (err) {
+      log.error("failed to publish created event", { taskId, error: String(err) })
+    }
 
     return {
       id: task.id,
@@ -258,9 +344,49 @@ export namespace TaskManager {
 
   /**
    * List all tasks
+   * @param directory Optional directory to search for tasks. If not provided, uses Instance.directory
    */
-  export async function list(): Promise<TaskInfo[]> {
+  export async function list(directory?: string): Promise<TaskInfo[]> {
     await init()
+
+    const targetDir = directory || Instance.directory
+    log.debug("list called", { directory, targetDir, instanceDir: Instance.directory })
+
+    // Ensure we pick up any tasks that were persisted on disk by another instance
+    // after init() ran (e.g. migrated foreground processes). This merges persisted
+    // tasks into the in-memory state if they're missing.
+    try {
+      const persisted = await TaskPersistence.loadAll(targetDir)
+      log.debug("loaded persisted tasks", { count: persisted.length })
+      const cwd = process.cwd()
+      if (cwd && cwd !== targetDir) {
+        const cwdPersisted = await TaskPersistence.loadAll(cwd)
+        for (const p of cwdPersisted) {
+          if (!persisted.find((x) => x.id === p.id)) persisted.push(p)
+        }
+      }
+      // Also check Instance.directory if different from targetDir
+      if (Instance.directory !== targetDir && Instance.directory !== cwd) {
+        const instancePersisted = await TaskPersistence.loadAll(Instance.directory)
+        for (const p of instancePersisted) {
+          if (!persisted.find((x) => x.id === p.id)) persisted.push(p)
+        }
+      }
+
+      for (const saved of persisted) {
+        if (!state().tasks.has(saved.id)) {
+          const task: ManagedTask = {
+            ...saved,
+            output: [],
+            process: undefined,
+          }
+          state().tasks.set(saved.id, task)
+        }
+      }
+    } catch (err) {
+      log.debug("failed to refresh tasks from disk during list", { error: String(err) })
+    }
+
     return Array.from(state().tasks.values()).map((t) => ({
       id: t.id,
       pid: t.pid,
@@ -362,8 +488,17 @@ export namespace TaskManager {
     task.status = "failed"
     task.process = undefined
 
-    await TaskPersistence.save(Instance.directory, task)
-    await Bus.publish(TaskEvent.Killed, { id: taskId })
+    try {
+      await TaskPersistence.save(Instance.directory, task)
+    } catch (err) {
+      log.error("failed to save task state after kill", { taskId, error: String(err) })
+    }
+
+    try {
+      await Bus.publish(TaskEvent.Killed, { id: taskId })
+    } catch (err) {
+      log.error("failed to publish killed event", { taskId, error: String(err) })
+    }
 
     return true
   }
@@ -424,7 +559,7 @@ export namespace TaskManager {
       log.debug("sent input to task", { taskId, dataLength: data.length })
       return true
     } catch (err) {
-      log.error("failed to send input to task", { taskId, error: err })
+      log.error("failed to send input to task", { taskId, error: String(err) })
       return false
     }
   }
@@ -473,5 +608,194 @@ export namespace TaskManager {
     await TaskPersistence.remove(Instance.directory, taskId)
     log.debug("removed task", { taskId })
     return true
+  }
+
+  /**
+   * Options for adopting an existing process as a background task
+   */
+  export interface AdoptTaskOptions {
+    process: ChildProcess
+    command: string
+    workdir?: string
+    description?: string
+    initialOutput?: string
+    startTime?: number
+  }
+
+  /**
+   * Adopt an existing running process as a background task
+   * This is used when migrating a foreground bash process to background
+   */
+  export async function adopt(opts: AdoptTaskOptions): Promise<TaskInfo> {
+    await init()
+
+    const taskId = generateTaskId()
+    const directory = Instance.directory
+    const workdir = opts.workdir || directory
+    const logFile = TaskPersistence.getLogFile(directory, taskId)
+    const startTime = opts.startTime ?? Date.now()
+
+    log.info("adopting process as background task", {
+      taskId,
+      pid: opts.process.pid,
+      command: opts.command,
+    })
+
+    const task: ManagedTask = {
+      id: taskId,
+      pid: opts.process.pid!,
+      command: opts.command,
+      startTime,
+      status: "running",
+      workdir,
+      description: opts.description,
+      logFile,
+      reconnectable: true,
+      process: opts.process,
+      output: opts.initialOutput ? [opts.initialOutput] : [],
+    }
+
+    state().tasks.set(taskId, task)
+
+    // Fire-and-forget: Write initial output to log file (non-blocking for faster migration)
+    if (opts.initialOutput) {
+      const initialOutput = opts.initialOutput
+      void (async () => {
+        try {
+          await TaskPersistence.appendLog(directory, taskId, initialOutput)
+        } catch (err) {
+          log.error("failed to write initial output", { taskId, error: String(err) })
+        }
+      })()
+    }
+
+    // Fire-and-forget: Save initial state (non-blocking for faster migration)
+    void (async () => {
+      try {
+        await TaskPersistence.save(directory, task)
+      } catch (err) {
+        log.error("failed to save initial task state", { taskId, error: String(err) })
+      }
+    })()
+
+    // Handle stdout
+    opts.process.stdout?.on("data", (chunk: Buffer) => {
+      const data = chunk.toString()
+      task.output.push(data)
+      void Instance.provide({
+        directory,
+        fn: async () => {
+          try {
+            await TaskPersistence.appendLog(directory, taskId, data)
+          } catch (err) {
+            log.error("failed to append stdout to log", { taskId, error: String(err) })
+          }
+          try {
+            await Bus.publish(TaskEvent.Output, { id: taskId, data, isError: false })
+          } catch (err) {
+            log.error("failed to publish stdout event", { taskId, error: String(err) })
+          }
+        },
+      })
+    })
+
+    // Handle stderr
+    opts.process.stderr?.on("data", (chunk: Buffer) => {
+      const data = chunk.toString()
+      task.output.push(data)
+      void Instance.provide({
+        directory,
+        fn: async () => {
+          try {
+            await TaskPersistence.appendLog(directory, taskId, data)
+          } catch (err) {
+            log.error("failed to append stderr to log", { taskId, error: String(err) })
+          }
+          try {
+            await Bus.publish(TaskEvent.Output, { id: taskId, data, isError: true })
+          } catch (err) {
+            log.error("failed to publish stderr event", { taskId, error: String(err) })
+          }
+        },
+      })
+    })
+
+    // Handle exit
+    opts.process.on("exit", (code) => {
+      task.exitCode = code ?? undefined
+      task.status = code === 0 ? "completed" : "failed"
+      task.process = undefined
+
+      void Instance.provide({
+        directory,
+        fn: async () => {
+          try {
+            await TaskPersistence.save(directory, task)
+          } catch (err) {
+            log.error("failed to save task state on exit", { taskId, error: String(err) })
+          }
+          try {
+            await Bus.publish(TaskEvent.Completed, { id: taskId, exitCode: code, status: task.status })
+          } catch (err) {
+            log.error("failed to publish completed event", { taskId, error: String(err) })
+          }
+          log.info("adopted task completed", { taskId, exitCode: code, status: task.status })
+        },
+      })
+    })
+
+    // Handle errors
+    opts.process.once("error", (err) => {
+      log.error("adopted task error", { taskId, error: String(err) })
+      task.status = "failed"
+      task.process = undefined
+
+      void Instance.provide({
+        directory,
+        fn: async () => {
+          try {
+            await TaskPersistence.save(directory, task)
+          } catch (e) {
+            log.error("failed to save task state after error", { taskId, error: String(e) })
+          }
+          try {
+            await Bus.publish(TaskEvent.Completed, { id: taskId, exitCode: null, status: "failed" })
+          } catch (e) {
+            log.error("failed to publish completed event after error", { taskId, error: String(e) })
+          }
+        },
+      })
+    })
+
+    // Publish created event
+    try {
+      await Bus.publish(TaskEvent.Created, {
+        info: {
+          id: task.id,
+          pid: task.pid,
+          command: task.command,
+          startTime: task.startTime,
+          status: task.status,
+          workdir: task.workdir,
+          description: task.description,
+          logFile: task.logFile,
+          reconnectable: task.reconnectable,
+        },
+      })
+    } catch (err) {
+      log.error("failed to publish created event", { taskId, error: String(err) })
+    }
+
+    return {
+      id: task.id,
+      pid: task.pid,
+      command: task.command,
+      startTime: task.startTime,
+      status: task.status,
+      workdir: task.workdir,
+      description: task.description,
+      logFile: task.logFile,
+      reconnectable: task.reconnectable,
+    }
   }
 }

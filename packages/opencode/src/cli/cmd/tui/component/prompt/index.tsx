@@ -949,6 +949,12 @@ export function Prompt(props: PromptProps) {
                       <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
                     </text>
                   </Show>
+                  <Show when={status().type !== "idle" && store.prompt.input.trim()}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text>
+                      <span style={{ fg: theme.accent, bold: true }}>will queue</span>
+                    </text>
+                  </Show>
                 </box>
               </Show>
             </box>

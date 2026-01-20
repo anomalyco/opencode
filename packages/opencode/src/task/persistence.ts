@@ -105,24 +105,67 @@ export namespace TaskPersistence {
    * Load all persisted tasks for a project
    */
   export async function loadAll(projectDir: string): Promise<PersistedTask[]> {
-    const dir = getTasksDir(projectDir)
-    if (!(await Filesystem.exists(dir))) {
-      return []
-    }
+    const seen = new Map<string, PersistedTask>()
 
-    const files = await fs.readdir(dir)
-    const tasks: PersistedTask[] = []
-
-    for (const file of files) {
-      if (!file.endsWith(".json")) continue
-      const taskId = file.replace(".json", "")
-      const task = await load(projectDir, taskId)
-      if (task) {
-        tasks.push(task)
+    // Helper to load tasks from a specific .opencode/tasks directory
+    const loadFromDir = async (tasksDir: string, baseDir: string) => {
+      try {
+        const exists = await Filesystem.exists(tasksDir)
+        if (!exists) return
+        const files = await fs.readdir(tasksDir)
+        for (const file of files) {
+          if (!file.endsWith(".json")) continue
+          const taskId = file.replace(".json", "")
+          try {
+            const content = await fs.readFile(path.join(tasksDir, file), "utf-8")
+            const parsed = JSON.parse(content) as PersistedTask
+            if (!seen.has(parsed.id)) seen.set(parsed.id, parsed)
+          } catch (err) {
+            log.debug("failed to load task file", { tasksDir, file, error: String(err) })
+          }
+        }
+      } catch (err) {
+        // ignore
       }
     }
 
-    return tasks
+    // 1) Load from the exact project directory
+    const dir = getTasksDir(projectDir)
+    await loadFromDir(dir, projectDir)
+
+    // 2) Also search for nested .opencode/tasks directories under projectDir (limited depth)
+    const maxDepth = 4
+    async function searchDir(current: string, depth: number) {
+      if (depth > maxDepth) return
+      let entries: string[]
+      try {
+        entries = await fs.readdir(current, { withFileTypes: true }).then((ents) => ents.map((e) => e.name))
+      } catch {
+        return
+      }
+      for (const name of entries) {
+        const full = path.join(current, name)
+        if (name === ".opencode") {
+          const tasksDir = path.join(full, "tasks")
+          await loadFromDir(tasksDir, current)
+          continue
+        }
+        // skip node_modules and .git for performance
+        if (name === "node_modules" || name === ".git") continue
+        try {
+          const stat = await fs.stat(full)
+          if (stat.isDirectory()) {
+            await searchDir(full, depth + 1)
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    await searchDir(projectDir, 0)
+
+    return Array.from(seen.values())
   }
 
   /**

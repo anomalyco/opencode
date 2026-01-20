@@ -18,6 +18,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
+import { DialogTasks } from "@tui/component/dialog-tasks"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -420,6 +421,15 @@ function App() {
         dialog.replace(() => <DialogStatus />)
       },
       category: "System",
+    },
+    {
+      title: "Background tasks",
+      value: "task.list",
+      // keybind: "task_list", // TODO: Enable once tsgo picks up the new keybind
+      category: "System",
+      onSelect: () => {
+        dialog.replace(() => <DialogTasks />)
+      },
     },
     {
       title: "Switch theme",

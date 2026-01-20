@@ -44,6 +44,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { registerForegroundProcess, unregisterForegroundProcess } from "@/tool/bash"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -660,17 +661,14 @@ export namespace SessionPrompt {
       agent: input.agent.name,
       metadata: async (val: { title?: string; metadata?: any }) => {
         const match = input.processor.partFromToolCall(options.toolCallId)
+        // Only update metadata when status is "running" (has title and metadata fields)
         if (match && match.state.status === "running") {
           await Session.updatePart({
             ...match,
             state: {
-              title: val.title,
+              ...match.state,
+              title: val.title ?? match.state.title,
               metadata: val.metadata,
-              status: "running",
-              input: args,
-              time: {
-                start: Date.now(),
-              },
             },
           })
         }
@@ -1484,27 +1482,81 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       },
     })
 
+    const startTime = Date.now()
+    const callID = part.callID
     let output = ""
+
+    // Initialize metadata with process info for UI controls
+    // Cast to ToolPart since we know it's a tool part with running status
+    const toolPart = part as MessageV2.ToolPart
+    if (toolPart.state.status === "running") {
+      toolPart.state.metadata = {
+        output: "",
+        description: "",
+        pid: proc.pid,
+        startTime,
+        callID,
+        running: true,
+      }
+      await Session.updatePart(toolPart)
+
+    }
+
+    // Track migration state
+    const migrationState = {
+      migrated: false,
+      taskId: null as string | null,
+      resolveWait: null as (() => void) | null,
+    }
+
+    // Register for [bg] and [kill] controls in UI
+    registerForegroundProcess(
+      {
+        callID,
+        sessionID: input.sessionID,
+        pid: proc.pid!,
+        command: input.command,
+        description: input.command,
+        workdir: Instance.directory,
+        startTime,
+        process: proc,
+        output: "",
+      },
+      (result) => {
+        // Called when process is migrated to background
+        migrationState.migrated = true
+        migrationState.taskId = result.taskId
+        if (migrationState.resolveWait) migrationState.resolveWait()
+      },
+    )
 
     proc.stdout?.on("data", (chunk) => {
       output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
+      if (toolPart.state.status === "running") {
+        toolPart.state.metadata = {
           output: output,
           description: "",
+          pid: proc.pid,
+          startTime,
+          callID,
+          running: true,
         }
-        Session.updatePart(part)
+        Session.updatePart(toolPart)
       }
     })
 
     proc.stderr?.on("data", (chunk) => {
       output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
+      if (toolPart.state.status === "running") {
+        toolPart.state.metadata = {
           output: output,
           description: "",
+          pid: proc.pid,
+          startTime,
+          callID,
+          running: true,
         }
-        Session.updatePart(part)
+        Session.updatePart(toolPart)
       }
     })
 
@@ -1526,12 +1578,55 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     abort.addEventListener("abort", abortHandler, { once: true })
 
     await new Promise<void>((resolve) => {
+      migrationState.resolveWait = resolve
       proc.on("close", () => {
         exited = true
         abort.removeEventListener("abort", abortHandler)
         resolve()
       })
     })
+
+    // Unregister from foreground processes (if not migrated, migration already removes it)
+    if (!migrationState.migrated) {
+      unregisterForegroundProcess(callID)
+    }
+
+    // Handle migration case - mark as completed with migration info
+    if (migrationState.migrated) {
+      // Clean up abort handler to prevent killing the migrated process
+      abort.removeEventListener("abort", abortHandler)
+
+      msg.time.completed = Date.now()
+      if (part.state.status === "running") {
+        part.state = {
+          status: "completed",
+          time: {
+            ...part.state.time,
+            end: Date.now(),
+          },
+          input: part.state.input,
+          title: "",
+          metadata: {
+            output: `Process migrated to background task: ${migrationState.taskId}`,
+            description: "",
+            running: false,
+            migrated: true,
+            taskId: migrationState.taskId,
+          },
+          output: `Process migrated to background task: ${migrationState.taskId}`,
+        }
+      }
+
+      // Fire-and-forget: Persist session state in background (non-blocking for faster UI response)
+      void (async () => {
+        await Session.updateMessage(msg)
+        if (part.state.status === "completed") {
+          await Session.updatePart(part)
+        }
+      })()
+
+      return { info: msg, parts: [part] }
+    }
 
     if (aborted) {
       output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
@@ -1550,6 +1645,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         metadata: {
           output,
           description: "",
+          running: false,
         },
         output,
       }

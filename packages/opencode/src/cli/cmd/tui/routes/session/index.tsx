@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   Show,
   Switch,
   useContext,
@@ -1328,7 +1329,11 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
 
   const toolprops = {
     get metadata() {
-      return props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
+      // Always return metadata if available (needed for running bash processes)
+      // ToolStatePending doesn't have metadata, only ToolStateRunning and ToolStateCompleted do
+      const state = props.part.state
+      if (state.status === "pending") return {}
+      return state.metadata ?? {}
     },
     get input() {
       return props.part.state.input ?? {}
@@ -1539,14 +1544,94 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
 function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
   const sync = useSync()
+  const sdk = useSDK()
+  const toast = useToast()
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
+  const [now, setNow] = createSignal(Date.now())
   const lines = createMemo(() => output().split("\n"))
   const overflow = createMemo(() => lines().length > 10)
   const limited = createMemo(() => {
     if (expanded() || !overflow()) return output()
     return [...lines().slice(0, 10), "…"].join("\n")
   })
+
+  // Hover states for buttons (to avoid TextBuffer destroyed errors)
+  const [bgHover, setBgHover] = createSignal(false)
+  const [killHover, setKillHover] = createSignal(false)
+
+  // Check if process is running (has metadata with running flag or status is running)
+  const isRunning = createMemo(() => {
+    const status = props.part.state.status
+    // Process is running if status is "running" or "pending" with running metadata
+    return props.metadata.running === true && (status === "pending" || status === "running")
+  })
+  const callID = createMemo(() => props.metadata.callID as string | undefined)
+  const startTime = createMemo(() => props.metadata.startTime as number | undefined)
+  const directory = () => sync.data.path.directory || process.cwd()
+
+  // Format elapsed time
+  const elapsed = createMemo(() => {
+    const st = startTime()
+    if (!st) return ""
+    const ms = now() - st
+    const seconds = Math.floor(ms / 1000)
+    if (seconds < 60) return `${seconds}s`
+    const minutes = Math.floor(seconds / 60)
+    if (minutes < 60) return `${minutes}m ${seconds % 60}s`
+    const hours = Math.floor(minutes / 60)
+    return `${hours}h ${minutes % 60}m`
+  })
+
+  // Update timer when running
+  createEffect(() => {
+    if (isRunning()) {
+      const interval = setInterval(() => setNow(Date.now()), 1000)
+      onCleanup(() => clearInterval(interval))
+    }
+  })
+
+  // Send to background handler
+  const sendToBackground = async () => {
+    const id = callID()
+    if (!id) return
+
+    try {
+      const response = await sdk.fetch(
+        `${sdk.url}/task/foreground/${id}/background?directory=${encodeURIComponent(directory())}`,
+        { method: "POST" },
+      )
+      const data = await response.json()
+      if (data.success) {
+        toast.show({ message: `Sent to background: ${data.taskId}`, variant: "info" })
+      } else {
+        toast.show({ message: data.error || "Failed to send to background", variant: "error" })
+      }
+    } catch (err) {
+      toast.show({ message: "Failed to send to background", variant: "error" })
+    }
+  }
+
+  // Kill process handler
+  const killProcess = async () => {
+    const id = callID()
+    if (!id) return
+
+    try {
+      const response = await sdk.fetch(
+        `${sdk.url}/task/foreground/${id}/kill?directory=${encodeURIComponent(directory())}`,
+        { method: "POST" },
+      )
+      const data = await response.json()
+      if (data.success) {
+        toast.show({ message: "Process killed", variant: "info" })
+      } else {
+        toast.show({ message: "Failed to kill process", variant: "error" })
+      }
+    } catch (err) {
+      toast.show({ message: "Failed to kill process", variant: "error" })
+    }
+  }
 
   const workdirDisplay = createMemo(() => {
     const workdir = props.input.workdir
@@ -1575,7 +1660,47 @@ function Bash(props: ToolProps<typeof BashTool>) {
 
   return (
     <Switch>
-      <Match when={props.metadata.output !== undefined}>
+      {/* Running process with controls */}
+      <Match when={isRunning()}>
+        <BlockTool
+          title={title()}
+          part={props.part}
+          onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+        >
+          <box gap={1}>
+            <box flexDirection="row" justifyContent="space-between" alignItems="center">
+              <text fg={theme.text}>$ {props.input.command}</text>
+              <box flexDirection="row" gap={2} alignItems="center">
+                <text fg={theme.primary}>{elapsed()}</text>
+                <text
+                  fg={bgHover() ? theme.text : theme.textMuted}
+                  onMouseUp={sendToBackground}
+                  onMouseOver={() => setBgHover(true)}
+                  onMouseOut={() => setBgHover(false)}
+                >
+                  [bg]
+                </text>
+                <text
+                  fg={killHover() ? theme.warning : theme.error}
+                  onMouseUp={killProcess}
+                  onMouseOver={() => setKillHover(true)}
+                  onMouseOut={() => setKillHover(false)}
+                >
+                  [kill]
+                </text>
+              </box>
+            </box>
+            <Show when={output()}>
+              <text fg={theme.text}>{limited()}</text>
+            </Show>
+            <Show when={overflow()}>
+              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+            </Show>
+          </box>
+        </BlockTool>
+      </Match>
+      {/* Completed process with output */}
+      <Match when={props.metadata.output !== undefined && !isRunning()}>
         <BlockTool
           title={title()}
           part={props.part}
@@ -1590,6 +1715,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
           </box>
         </BlockTool>
       </Match>
+      {/* Pending (no output yet) */}
       <Match when={true}>
         <InlineTool icon="$" pending="Writing command..." complete={props.input.command} part={props.part}>
           {props.input.command}
