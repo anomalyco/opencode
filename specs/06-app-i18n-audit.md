@@ -9,8 +9,8 @@ This report documents the remaining user-facing strings in `packages/app/src` th
 ## Current State
 
 - The app uses `useLanguage().t("...")` with dictionaries in `packages/app/src/i18n/en.ts` and `packages/app/src/i18n/zh.ts`.
-- Recent progress (already translated): `packages/app/src/pages/home.tsx`, `packages/app/src/pages/layout.tsx`, `packages/app/src/pages/session.tsx` (plus new keys added in both dictionaries).
-- Dictionary parity check: `en.ts` and `zh.ts` currently contain the same key set (242 keys each; no missing or extra keys).
+- Recent progress (already translated): `packages/app/src/pages/home.tsx`, `packages/app/src/pages/layout.tsx`, `packages/app/src/pages/session.tsx`, `packages/app/src/components/prompt-input.tsx` (plus new keys added in both dictionaries).
+- Dictionary parity check: `en.ts` and `zh.ts` currently contain the same key set (285 keys each; no missing or extra keys).
 
 ## Methodology
 
@@ -59,38 +59,13 @@ This is the largest remaining untranslated surface and is user-visible during ap
 
 File: `packages/app/src/components/prompt-input.tsx`
 
-This is the largest remaining i18n surface (placeholders, empty states, tooltips, toasts).
+Completed (2026-01-20):
 
-**Untranslated prompt examples**
-- `PLACEHOLDERS` array is English-only (e.g. "Fix broken tests", "Explain how authentication works", ...)
-- Note: the placeholder key `prompt.placeholder.normal` exists and interpolates `{{example}}`, but the examples are not localized.
-
-**Toast copy**
-- "Unsupported paste" / "Only images or PDFs can be pasted here."
-- "Select an agent and model" / "Choose an agent and model before sending a prompt."
-- Failure toasts:
-  - "Failed to create worktree"
-  - "Failed to create session"
-  - "Failed to send shell command"
-  - "Failed to send command"
-  - "Failed to send prompt"
-- Fallback return string: "Request failed" (you already have `common.requestFailed`)
-
-**Empty states / popovers / overlays**
-- "No matching results"
-- "No matching commands"
-- Drag/drop overlay: "Drop images or PDFs here"
-
-**Labels / badges / buttons**
-- Slash badge label: "custom"
-- File pill label: "active"
-- Action: "Include active file"
-- Send/Stop labels: "Send", "Stop" (and the "ESC" hint)
-- Tooltip: "Attach file"
-
-**Recommendation:**
-- Introduce a `prompt.*` namespace for UI strings and toast titles/descriptions.
-- Handle prompt examples as locale-specific arrays OR enumerated keys (e.g. `prompt.example.1`, `prompt.example.2`, ...).
+- Localized placeholder examples by replacing the hardcoded `PLACEHOLDERS` list with `prompt.example.*` keys.
+- Localized toast titles/descriptions via `prompt.toast.*` and reused `common.requestFailed` for fallback error text.
+- Localized popover empty states and drag/drop overlay copy (`prompt.popover.*`, `prompt.dropzone.label`).
+- Localized smaller labels (slash "custom" badge, attach button tooltip, Send/Stop tooltip labels).
+- Kept the `ESC` keycap itself untranslated (key label).
 
 ### 3) Provider Connection / Auth Flow
 
@@ -275,13 +250,12 @@ This is only thrown in DEV and is more of a developer diagnostic. Optional to tr
 
 ## Prioritized Implementation Plan
 
-1. `packages/app/src/components/prompt-input.tsx`
-2. `packages/app/src/components/dialog-connect-provider.tsx`
-3. `packages/app/src/components/session/session-header.tsx`
-4. `packages/app/src/pages/error.tsx`
-5. `packages/app/src/components/session/session-new-view.tsx`
-6. `packages/app/src/components/session-context-usage.tsx` + locale formatting improvements (also `packages/app/src/components/session/session-context-tab.tsx`)
-7. Small stragglers:
+1. `packages/app/src/components/dialog-connect-provider.tsx`
+2. `packages/app/src/components/session/session-header.tsx`
+3. `packages/app/src/pages/error.tsx`
+4. `packages/app/src/components/session/session-new-view.tsx`
+5. `packages/app/src/components/session-context-usage.tsx` + locale formatting improvements (also `packages/app/src/components/session/session-context-tab.tsx`)
+6. Small stragglers:
    - `packages/app/src/components/session-lsp-indicator.tsx`
    - `packages/app/src/components/session/session-sortable-tab.tsx`
    - `packages/app/src/components/titlebar.tsx`
@@ -290,7 +264,7 @@ This is only thrown in DEV and is more of a developer diagnostic. Optional to tr
    - `packages/app/src/context/global-sync.tsx`
    - `packages/app/src/context/file.tsx` + `packages/app/src/context/local.tsx`
    - `packages/app/src/utils/prompt.ts`
-8. Decide on the terminal naming approach (`packages/app/src/context/terminal.tsx`).
+7. Decide on the terminal naming approach (`packages/app/src/context/terminal.tsx`).
 
 ## Suggested Key Naming Conventions
 
@@ -313,7 +287,6 @@ Pages:
 - `packages/app/src/pages/error.tsx`
 
 Components:
-- `packages/app/src/components/prompt-input.tsx`
 - `packages/app/src/components/dialog-connect-provider.tsx`
 - `packages/app/src/components/session/session-header.tsx`
 - `packages/app/src/components/session/session-new-view.tsx`
