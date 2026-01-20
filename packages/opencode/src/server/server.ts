@@ -41,6 +41,9 @@ import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
 
+import { AuthRoutes } from "./routes/auth"
+import { getCookie } from "hono/cookie"
+
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
 
@@ -82,11 +85,44 @@ export namespace Server {
             status: 500,
           })
         })
-        .use((c, next) => {
+        .use(async (c, next) => {
           const password = Flag.OPENCODE_SERVER_PASSWORD
           if (!password) return next()
+          
+          // Allow access to auth routes and favicon
+          if (c.req.path.startsWith("/auth") || c.req.path === "/login" || c.req.path === "/favicon.ico")
+            return next()
+          
           const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-          return basicAuth({ username, password })(c, next)
+          
+          // Check for Basic Auth header
+          const authHeader = c.req.header("Authorization")
+          if (authHeader) {
+            return await basicAuth({ username, password })(c, next)
+          }
+          
+          // Check for Cookie
+          const authCookie = getCookie(c, "opencode_auth")
+          if (authCookie) {
+             // Validate cookie content (which is base64 user:pass)
+             try {
+                const credentials = atob(authCookie)
+                const [u, p] = credentials.split(":")
+                if (u === username && p === password) {
+                    return next()
+                }
+             } catch (e) {
+                // Invalid cookie, proceed to challenge
+             }
+          }
+          
+          // If browser request, redirect to login
+          const accept = c.req.header("Accept")
+          if (accept && accept.includes("text/html")) {
+             return c.redirect("/auth/login?redirect=" + encodeURIComponent(c.req.path))
+          }
+          
+          return c.json({ error: "Unauthorized" }, 401)
         })
         .use(async (c, next) => {
           const skipLogging = c.req.path === "/log"
@@ -162,6 +198,7 @@ export namespace Server {
         .route("/experimental", ExperimentalRoutes())
         .route("/session", SessionRoutes())
         .route("/permission", PermissionRoutes())
+        .route("/auth", AuthRoutes())
         .route("/question", QuestionRoutes())
         .route("/provider", ProviderRoutes())
         .route("/", FileRoutes())
