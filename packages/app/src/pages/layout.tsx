@@ -1998,6 +1998,17 @@ export default function Layout(props: ParentProps) {
       navigate(`/${base64Encode(created.directory)}/session`)
     }
 
+    command.register(() => [
+      {
+        id: "workspace.new",
+        title: "New workspace",
+        category: "Workspace",
+        keybind: "mod+shift+w",
+        disabled: !layout.sidebar.workspaces(project()?.worktree ?? "")(),
+        onSelect: createWorkspace,
+      },
+    ])
+
     const homedir = createMemo(() => sync.data.path.home)
 
     return (
@@ -2123,17 +2134,19 @@ export default function Layout(props: ParentProps) {
                     fallback={
                       <>
                         <div class="py-4 px-3">
-                          <Button
-                            size="large"
-                            icon="plus-small"
-                            class="w-full"
-                            onClick={() => {
-                              navigate(`/${base64Encode(p.worktree)}/session`)
-                              layout.mobileSidebar.hide()
-                            }}
-                          >
-                            New session
-                          </Button>
+                          <TooltipKeybind title="New session" keybind={command.keybind("session.new")} placement="top">
+                            <Button
+                              size="large"
+                              icon="plus-small"
+                              class="w-full"
+                              onClick={() => {
+                                navigate(`/${base64Encode(p.worktree)}/session`)
+                                layout.mobileSidebar.hide()
+                              }}
+                            >
+                              New session
+                            </Button>
+                          </TooltipKeybind>
                         </div>
                         <div class="flex-1 min-h-0">
                           <LocalWorkspace project={p} mobile={sidebarProps.mobile} />
@@ -2143,9 +2156,11 @@ export default function Layout(props: ParentProps) {
                   >
                     <>
                       <div class="py-4 px-3">
-                        <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
-                          New workspace
-                        </Button>
+                        <TooltipKeybind title="New workspace" keybind={command.keybind("workspace.new")} placement="top">
+                          <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
+                            New workspace
+                          </Button>
+                        </TooltipKeybind>
                       </div>
                       <div class="relative flex-1 min-h-0">
                         <DragDropProvider
