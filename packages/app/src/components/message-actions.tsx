@@ -95,7 +95,7 @@ export function MessageActionsMenu(props: MessageActionsProps) {
   return (
     <div data-slot="message-actions-menu">
       <DropdownMenu>
-        <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="ghost" />
+        <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="secondary" />
         <DropdownMenu.Portal>
           <DropdownMenu.Content>
             {menuItems().map((item) => (
