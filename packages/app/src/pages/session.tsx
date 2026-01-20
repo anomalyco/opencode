@@ -825,12 +825,8 @@ export default function Page() {
 
   const isWorking = createMemo(() => status().type !== "idle")
 
-  // Keep auto-scroll logic enabled even when the agent is idle so that:
-  // - new user messages scroll into view
-  // - manual scroll-away is tracked consistently
-  // We still force-scroll when the agent starts working (see effect below).
   const autoScroll = createAutoScroll({
-    working: () => true,
+    working: () => true
   })
 
   createEffect(
