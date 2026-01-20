@@ -266,6 +266,37 @@ You can also configure [local models](/docs/models#local). [Learn more](/docs/mo
 
 Some providers support additional configuration options beyond the generic `timeout` and `apiKey` settings.
 
+##### OpenAI-compatible (custom) providers
+
+If you're adding a custom provider or any OpenAI-compatible endpoint, set `npm` to `@ai-sdk/openai-compatible` and configure the API host via `options.baseURL` (sometimes called the host parameter).
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1",
+        "apiKey": "{env:MYPROVIDER_API_KEY}",
+        "headers": {
+          "X-Custom-Header": "value"
+        }
+      },
+      "models": {
+        "my-model-name": {}
+      }
+    }
+  }
+}
+```
+
+- `options.baseURL` - API host/base URL for the provider (typically the `/v1` root).
+- `options.apiKey` - Optional API key; omit if you use `/connect`.
+- `options.headers` - Optional custom headers.
+
+[Learn more about custom providers](/docs/providers#custom-provider).
+
 ##### Amazon Bedrock
 
 Amazon Bedrock supports AWS-specific configuration:
