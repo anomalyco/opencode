@@ -29,7 +29,7 @@ export const DialogSettings: Component = () => {
             <Tabs.SectionTitle>Desktop</Tabs.SectionTitle>
             <div style={{ display: "flex", "flex-direction": "column", gap: "6px", width: "100%" }}>
               <Tabs.Trigger value="general">
-                <Icon name="settings-gear" />
+                <Icon name="sliders" />
                 General
               </Tabs.Trigger>
               <Tabs.Trigger value="shortcuts">
