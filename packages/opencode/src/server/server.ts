@@ -69,9 +69,10 @@ export namespace Server {
   function buildApp(basePath: string) {
     const root = new Hono()
     const app = basePath ? root.basePath(basePath) : root
+    const router = app as Hono
     return (
       // TODO: Break server.ts into smaller route files to fix type inference
-      app
+      router
         .onError((err, c) => {
           log.error("failed", {
             error: err,
@@ -584,7 +585,7 @@ export namespace Server {
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
-      fetch: (req: Request, server: Server) => {
+      fetch: (req: Request) => {
         if (!_basePath) return app.fetch(req, server)
         const url = new URL(req.url)
         if (!url.pathname.startsWith(_basePath)) {
