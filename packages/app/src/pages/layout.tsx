@@ -76,6 +76,7 @@ export default function Layout(props: ParentProps) {
       activeWorkspace: undefined as string | undefined,
       workspaceOrder: {} as Record<string, string[]>,
       workspaceName: {} as Record<string, string>,
+      workspaceBranchName: {} as Record<string, Record<string, string>>,
       workspaceExpanded: {} as Record<string, boolean>,
     }),
   )
@@ -198,7 +199,10 @@ export default function Layout(props: ParentProps) {
           value={editorValue()}
           class={props.class}
           onInput={(event) => setEditor("value", event.currentTarget.value)}
-          onKeyDown={(event) => editorKeyDown(event, props.onSave)}
+          onKeyDown={(event) => {
+            event.stopPropagation()
+            editorKeyDown(event, props.onSave)
+          }}
           onBlur={() => closeEditor()}
           onPointerDown={stopPropagation}
           onClick={stopPropagation}
@@ -458,9 +462,27 @@ export default function Layout(props: ParentProps) {
     ),
   )
 
-  const workspaceName = (directory: string) => store.workspaceName[directory]
-  const workspaceLabel = (directory: string, branch?: string) =>
-    workspaceName(directory) ?? branch ?? getFilename(directory)
+  const workspaceKey = (directory: string) => directory.replace(/[\\/]+$/, "")
+
+  const workspaceName = (directory: string, projectId?: string, branch?: string) => {
+    const key = workspaceKey(directory)
+    const direct = store.workspaceName[key] ?? store.workspaceName[directory]
+    if (direct) return direct
+    if (!projectId) return
+    if (!branch) return
+    return store.workspaceBranchName[projectId]?.[branch]
+  }
+
+  const setWorkspaceName = (directory: string, next: string, projectId?: string, branch?: string) => {
+    const key = workspaceKey(directory)
+    setStore("workspaceName", (prev) => ({ ...(prev ?? {}), [key]: next }))
+    if (!projectId) return
+    if (!branch) return
+    setStore("workspaceBranchName", projectId, (prev) => ({ ...(prev ?? {}), [branch]: next }))
+  }
+
+  const workspaceLabel = (directory: string, branch?: string, projectId?: string) =>
+    workspaceName(directory, projectId, branch) ?? branch ?? getFilename(directory)
 
   const isWorkspaceEditing = () => editor.active.startsWith("workspace:")
 
@@ -885,10 +907,10 @@ export default function Layout(props: ParentProps) {
     })
   }
 
-  const renameWorkspace = (directory: string, next: string) => {
-    const current = workspaceName(directory) ?? getFilename(directory)
+  const renameWorkspace = (directory: string, next: string, projectId?: string, branch?: string) => {
+    const current = workspaceName(directory, projectId, branch) ?? branch ?? getFilename(directory)
     if (current === next) return
-    setStore("workspaceName", directory, next)
+    setWorkspaceName(directory, next, projectId, branch)
   }
 
   function closeProject(directory: string) {
@@ -1491,7 +1513,7 @@ export default function Layout(props: ParentProps) {
 
       const [workspaceStore] = globalSync.child(directory)
       const kind = directory === project.worktree ? "local" : "sandbox"
-      const name = workspaceLabel(directory, workspaceStore.vcs?.branch)
+      const name = workspaceLabel(directory, workspaceStore.vcs?.branch, project.id)
       return `${kind} : ${name}`
     })
 
@@ -1508,6 +1530,7 @@ export default function Layout(props: ParentProps) {
     const sortable = createSortable(props.directory)
     const [workspaceStore, setWorkspaceStore] = globalSync.child(props.directory)
     const [menuOpen, setMenuOpen] = createSignal(false)
+    const [pendingRename, setPendingRename] = createSignal(false)
     const slug = createMemo(() => base64Encode(props.directory))
     const sessions = createMemo(() =>
       workspaceStore.session
@@ -1517,8 +1540,9 @@ export default function Layout(props: ParentProps) {
     )
     const local = createMemo(() => props.directory === props.project.worktree)
     const workspaceValue = createMemo(() => {
-      const name = workspaceStore.vcs?.branch ?? getFilename(props.directory)
-      return workspaceName(props.directory) ?? name
+      const branch = workspaceStore.vcs?.branch
+      const name = branch ?? getFilename(props.directory)
+      return workspaceName(props.directory, props.project.id, branch) ?? name
     })
     const open = createMemo(() => store.workspaceExpanded[props.directory] ?? true)
     const loading = createMemo(() => open() && workspaceStore.status !== "complete" && sessions().length === 0)
@@ -1537,6 +1561,44 @@ export default function Layout(props: ParentProps) {
       if (editorOpen(`workspace:${props.directory}`)) closeEditor()
     }
 
+    const header = () => (
+      <div class="flex items-center gap-1 min-w-0 flex-1">
+        <div class="flex items-center justify-center shrink-0 size-6">
+          <Icon name="branch" size="small" />
+        </div>
+        <span class="text-14-medium text-text-base shrink-0">{local() ? "local" : "sandbox"} :</span>
+        <Show
+          when={!local()}
+          fallback={
+            <span class="text-14-medium text-text-base min-w-0 truncate">
+              {workspaceStore.vcs?.branch ?? getFilename(props.directory)}
+            </span>
+          }
+        >
+          <InlineEditor
+            id={`workspace:${props.directory}`}
+            value={workspaceValue}
+            onSave={(next) => {
+              const trimmed = next.trim()
+              if (!trimmed) return
+              renameWorkspace(props.directory, trimmed, props.project.id, workspaceStore.vcs?.branch)
+              setEditor("value", workspaceValue())
+            }}
+            class="text-14-medium text-text-base min-w-0 truncate"
+            displayClass="text-14-medium text-text-base min-w-0 truncate"
+            editing={workspaceEditActive()}
+            stopPropagation={false}
+            openOnDblClick={false}
+          />
+        </Show>
+        <Icon
+          name={open() ? "chevron-down" : "chevron-right"}
+          size="small"
+          class="shrink-0 text-icon-base opacity-0 transition-opacity group-hover/workspace:opacity-100 group-focus-within/workspace:opacity-100"
+        />
+      </div>
+    )
+
     return (
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
@@ -1544,43 +1606,18 @@ export default function Layout(props: ParentProps) {
           <div class="px-2 py-1">
             <div class="group/workspace relative">
               <div class="flex items-center gap-1">
-                <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover">
-                  <div class="flex items-center gap-1 min-w-0 flex-1">
-                    <div class="flex items-center justify-center shrink-0 size-6">
-                      <Icon name="branch" size="small" />
-                    </div>
-                    <span class="text-14-medium text-text-base shrink-0">{local() ? "local" : "sandbox"} :</span>
-                    <Show
-                      when={!local()}
-                      fallback={
-                        <span class="text-14-medium text-text-base min-w-0 truncate">
-                          {workspaceStore.vcs?.branch ?? getFilename(props.directory)}
-                        </span>
-                      }
-                    >
-                      <InlineEditor
-                        id={`workspace:${props.directory}`}
-                        value={workspaceValue}
-                        onSave={(next) => {
-                          const trimmed = next.trim()
-                          if (!trimmed) return
-                          renameWorkspace(props.directory, trimmed)
-                          setEditor("value", workspaceValue())
-                        }}
-                        class="text-14-medium text-text-base min-w-0 truncate"
-                        displayClass="text-14-medium text-text-base min-w-0 truncate"
-                        editing={workspaceEditActive()}
-                        stopPropagation={false}
-                        openOnDblClick={false}
-                      />
-                    </Show>
-                    <Icon
-                      name={open() ? "chevron-down" : "chevron-right"}
-                      size="small"
-                      class="shrink-0 text-icon-base opacity-0 transition-opacity group-hover/workspace:opacity-100 group-focus-within/workspace:opacity-100"
-                    />
+                <Show
+                  when={workspaceEditActive()}
+                  fallback={
+                    <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover">
+                      {header()}
+                    </Collapsible.Trigger>
+                  }
+                >
+                  <div class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md">
+                    {header()}
                   </div>
-                </Collapsible.Trigger>
+                </Show>
                 <div
                   class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-opacity"
                   classList={{
@@ -1595,21 +1632,37 @@ export default function Layout(props: ParentProps) {
                       <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="ghost" class="size-6 rounded-md" />
                     </Tooltip>
                     <DropdownMenu.Portal>
-                      <DropdownMenu.Content>
+                      <DropdownMenu.Content
+                        onCloseAutoFocus={(event) => {
+                          if (!pendingRename()) return
+                          event.preventDefault()
+                          setPendingRename(false)
+                          openEditor(`workspace:${props.directory}`, workspaceValue())
+                        }}
+                      >
                         <DropdownMenu.Item onSelect={() => navigate(`/${slug()}/session`)}>
                           <DropdownMenu.ItemLabel>New session</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           disabled={local()}
+                          onSelect={() => {
+                            setPendingRename(true)
+                            setMenuOpen(false)
+                          }}
+                        >
+                          <DropdownMenu.ItemLabel>Rename</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item
+                          disabled={local()}
                           onSelect={() => dialog.show(() => <DialogResetWorkspace directory={props.directory} />)}
                         >
-                          <DropdownMenu.ItemLabel>Reset workspace</DropdownMenu.ItemLabel>
+                          <DropdownMenu.ItemLabel>Reset</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           disabled={local()}
                           onSelect={() => dialog.show(() => <DialogDeleteWorkspace directory={props.directory} />)}
                         >
-                          <DropdownMenu.ItemLabel>Delete workspace</DropdownMenu.ItemLabel>
+                          <DropdownMenu.ItemLabel>Delete</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
@@ -1681,7 +1734,7 @@ export default function Layout(props: ParentProps) {
     const label = (directory: string) => {
       const [data] = globalSync.child(directory)
       const kind = directory === props.project.worktree ? "local" : "sandbox"
-      const name = workspaceLabel(directory, data.vcs?.branch)
+      const name = workspaceLabel(directory, data.vcs?.branch, props.project.id)
       return `${kind} : ${name}`
     }
 
