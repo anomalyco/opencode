@@ -342,20 +342,19 @@ export namespace Config {
       dot: true,
       symlink: true,
     })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse command ${item}`
-        const { Session } = await import("@/session")
-        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load command", { command: item, err })
-        return undefined
-      })
-      if (!md) continue
+      const md = await ConfigMarkdown.parse(item)
+      if (!md.data) continue
 
-      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
-      const file = rel(item, patterns) ?? path.basename(item)
-      const name = trim(file)
+      const name = (() => {
+        const patterns = ["/.opencode/command/", "/command/"]
+        const pattern = patterns.find((p) => item.includes(p))
+
+        if (pattern) {
+          const index = item.indexOf(pattern)
+          return item.slice(index + pattern.length, -3)
+        }
+        return path.basename(item, ".md")
+      })()
 
       const config = {
         name,
@@ -381,20 +380,23 @@ export namespace Config {
       dot: true,
       symlink: true,
     })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse agent ${item}`
-        const { Session } = await import("@/session")
-        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load agent", { agent: item, err })
-        return undefined
-      })
-      if (!md) continue
+      const md = await ConfigMarkdown.parse(item)
+      if (!md.data) continue
 
-      const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
-      const file = rel(item, patterns) ?? path.basename(item)
-      const agentName = trim(file)
+      // Extract relative path from agent folder for nested agents
+      let agentName = path.basename(item, ".md")
+      const agentFolderPath = item.includes("/.opencode/agent/")
+        ? item.split("/.opencode/agent/")[1]
+        : item.includes("/agent/")
+          ? item.split("/agent/")[1]
+          : agentName + ".md"
+
+      // If agent is in a subfolder, include folder path in name
+      if (agentFolderPath.includes("/")) {
+        const relativePath = agentFolderPath.replace(".md", "")
+        const pathParts = relativePath.split("/")
+        agentName = pathParts.slice(0, -1).join("/") + "/" + pathParts[pathParts.length - 1]
+      }
 
       const config = {
         name: agentName,
@@ -419,16 +421,8 @@ export namespace Config {
       dot: true,
       symlink: true,
     })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse mode ${item}`
-        const { Session } = await import("@/session")
-        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load mode", { mode: item, err })
-        return undefined
-      })
-      if (!md) continue
+      const md = await ConfigMarkdown.parse(item)
+      if (!md.data) continue
 
       const config = {
         name: path.basename(item, ".md"),
@@ -527,7 +521,9 @@ export namespace Config {
         .int()
         .positive()
         .optional()
-        .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
+        .describe(
+          "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
+        ),
     })
     .strict()
     .meta({
@@ -566,7 +562,9 @@ export namespace Config {
         .int()
         .positive()
         .optional()
-        .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
+        .describe(
+          "Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.",
+        ),
     })
     .strict()
     .meta({
@@ -679,8 +677,20 @@ export namespace Config {
       hidden: z
         .boolean()
         .optional()
-        .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
-      options: z.record(z.string(), z.any()).optional(),
+      .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
+    task_budget: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe(
+        "Maximum task calls this agent can make per session when delegating to other subagents. Set to 0 to explicitly disable, omit to use default (disabled).",
+      ),
+    callable_by_subagents: z
+      .boolean()
+      .optional()
+      .describe("Whether this agent can be called by other subagents (default: false)"),
+    options: z.record(z.string(), z.any()).optional(),
       color: z
         .union([
           z.string().regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format"),
@@ -709,6 +719,8 @@ export namespace Config {
         "top_p",
         "mode",
         "hidden",
+        "task_budget",
+        "callable_by_subagents",
         "color",
         "steps",
         "maxSteps",
@@ -766,23 +778,13 @@ export namespace Config {
       session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
       session_timeline: z.string().optional().default("<leader>g").describe("Show session timeline"),
       session_fork: z.string().optional().default("none").describe("Fork session from message"),
-      session_rename: z.string().optional().default("ctrl+r").describe("Rename session"),
-      session_delete: z.string().optional().default("ctrl+d").describe("Delete session"),
-      stash_delete: z.string().optional().default("ctrl+d").describe("Delete stash entry"),
-      model_provider_list: z.string().optional().default("ctrl+a").describe("Open provider list from model dialog"),
-      model_favorite_toggle: z.string().optional().default("ctrl+f").describe("Toggle model favorite status"),
+      session_rename: z.string().optional().default("none").describe("Rename session"),
       session_share: z.string().optional().default("none").describe("Share current session"),
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
       session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
-      messages_page_up: z.string().optional().default("pageup,ctrl+alt+b").describe("Scroll messages up by one page"),
-      messages_page_down: z
-        .string()
-        .optional()
-        .default("pagedown,ctrl+alt+f")
-        .describe("Scroll messages down by one page"),
-      messages_line_up: z.string().optional().default("ctrl+alt+y").describe("Scroll messages up by one line"),
-      messages_line_down: z.string().optional().default("ctrl+alt+e").describe("Scroll messages down by one line"),
+      messages_page_up: z.string().optional().default("pageup").describe("Scroll messages up by one page"),
+      messages_page_down: z.string().optional().default("pagedown").describe("Scroll messages down by one page"),
       messages_half_page_up: z.string().optional().default("ctrl+alt+u").describe("Scroll messages up by half page"),
       messages_half_page_down: z
         .string()
@@ -1056,7 +1058,7 @@ export namespace Config {
         })
         .catchall(Agent)
         .optional()
-        .describe("Agent configuration, see https://opencode.ai/docs/agents"),
+        .describe("Agent configuration, see https://opencode.ai/docs/agent"),
       provider: z
         .record(z.string(), Provider)
         .optional()

@@ -6,13 +6,13 @@ import { PermissionNext } from "../src/permission/next"
 import { tmpdir } from "./fixture/fixture"
 
 describe("task_budget configuration (caller)", () => {
-  test("task_budget is preserved in agent.options from config", async () => {
+  test("task_budget is preserved from config", async () => {
     await using tmp = await tmpdir({
       git: true,
       config: {
         agent: {
-          "principal-partner": {
-            description: "Orchestrator with high budget",
+          orchestrator: {
+            description: "Agent with high task budget",
             mode: "subagent",
             task_budget: 20,
           },
@@ -23,8 +23,8 @@ describe("task_budget configuration (caller)", () => {
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
-        const agentConfig = config.agent?.["principal-partner"]
-        expect(agentConfig?.options?.task_budget).toBe(20)
+        const agentConfig = config.agent?.["orchestrator"]
+        expect(agentConfig?.task_budget).toBe(20)
       },
     })
   })
@@ -47,7 +47,7 @@ describe("task_budget configuration (caller)", () => {
       fn: async () => {
         const config = await Config.get()
         const agentConfig = config.agent?.["disabled-agent"]
-        expect(agentConfig?.options?.task_budget).toBe(0)
+        expect(agentConfig?.task_budget).toBe(0)
       },
     })
   })
@@ -69,7 +69,7 @@ describe("task_budget configuration (caller)", () => {
       fn: async () => {
         const config = await Config.get()
         const agentConfig = config.agent?.["default-agent"]
-        expect(agentConfig?.options?.task_budget).toBeUndefined()
+        expect(agentConfig?.task_budget).toBeUndefined()
       },
     })
   })
@@ -81,8 +81,8 @@ describe("callable_by_subagents configuration (target)", () => {
       git: true,
       config: {
         agent: {
-          "assistant-sonnet": {
-            description: "Callable assistant",
+          "callable-worker": {
+            description: "Worker that can be called by other subagents",
             mode: "subagent",
             callable_by_subagents: true,
           },
@@ -93,8 +93,8 @@ describe("callable_by_subagents configuration (target)", () => {
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
-        const agentConfig = config.agent?.["assistant-sonnet"]
-        expect(agentConfig?.options?.callable_by_subagents).toBe(true)
+        const agentConfig = config.agent?.["callable-worker"]
+        expect(agentConfig?.callable_by_subagents).toBe(true)
       },
     })
   })
@@ -117,7 +117,7 @@ describe("callable_by_subagents configuration (target)", () => {
       fn: async () => {
         const config = await Config.get()
         const agentConfig = config.agent?.["private-agent"]
-        expect(agentConfig?.options?.callable_by_subagents).toBe(false)
+        expect(agentConfig?.callable_by_subagents).toBe(false)
       },
     })
   })
@@ -139,7 +139,7 @@ describe("callable_by_subagents configuration (target)", () => {
       fn: async () => {
         const config = await Config.get()
         const agentConfig = config.agent?.["default-agent"]
-        expect(agentConfig?.options?.callable_by_subagents).toBeUndefined()
+        expect(agentConfig?.callable_by_subagents).toBeUndefined()
       },
     })
   })
@@ -151,40 +151,40 @@ describe("two-dimensional delegation config", () => {
       git: true,
       config: {
         agent: {
-          "principal-partner": {
-            description: "Orchestrates complex workflows",
+          orchestrator: {
+            description: "Coordinates other subagents",
             mode: "subagent",
             task_budget: 20,
             callable_by_subagents: false,
             permission: {
               task: {
                 "*": "deny",
-                "assistant-sonnet": "allow",
-                "assistant-flash": "allow",
+                "worker-a": "allow",
+                "worker-b": "allow",
               },
             },
           },
-          "assistant-sonnet": {
-            description: "Thorough analysis",
+          "worker-a": {
+            description: "Worker with medium budget",
             mode: "subagent",
             task_budget: 3,
             callable_by_subagents: true,
             permission: {
               task: {
                 "*": "deny",
-                "assistant-flash": "allow",
+                "worker-b": "allow",
               },
             },
           },
-          "assistant-flash": {
-            description: "Fast analytical passes",
+          "worker-b": {
+            description: "Worker with minimal budget",
             mode: "subagent",
             task_budget: 1,
             callable_by_subagents: true,
             permission: {
               task: {
                 "*": "deny",
-                "assistant-sonnet": "allow",
+                "worker-a": "allow",
               },
             },
           },
@@ -196,26 +196,26 @@ describe("two-dimensional delegation config", () => {
       fn: async () => {
         const config = await Config.get()
 
-        // Principal-Partner: high budget, not callable
-        const partnerConfig = config.agent?.["principal-partner"]
-        expect(partnerConfig?.options?.task_budget).toBe(20)
-        expect(partnerConfig?.options?.callable_by_subagents).toBe(false)
+        // Orchestrator: high budget, not callable by others
+        const orchestratorConfig = config.agent?.["orchestrator"]
+        expect(orchestratorConfig?.task_budget).toBe(20)
+        expect(orchestratorConfig?.callable_by_subagents).toBe(false)
 
         // Verify permission rules
-        const partnerRuleset = PermissionNext.fromConfig(partnerConfig?.permission ?? {})
-        expect(PermissionNext.evaluate("task", "assistant-sonnet", partnerRuleset).action).toBe("allow")
-        expect(PermissionNext.evaluate("task", "assistant-flash", partnerRuleset).action).toBe("allow")
-        expect(PermissionNext.evaluate("task", "principal-partner", partnerRuleset).action).toBe("deny")
+        const orchestratorRuleset = PermissionNext.fromConfig(orchestratorConfig?.permission ?? {})
+        expect(PermissionNext.evaluate("task", "worker-a", orchestratorRuleset).action).toBe("allow")
+        expect(PermissionNext.evaluate("task", "worker-b", orchestratorRuleset).action).toBe("allow")
+        expect(PermissionNext.evaluate("task", "orchestrator", orchestratorRuleset).action).toBe("deny")
 
-        // Assistant-Sonnet: lower budget, callable
-        const sonnetConfig = config.agent?.["assistant-sonnet"]
-        expect(sonnetConfig?.options?.task_budget).toBe(3)
-        expect(sonnetConfig?.options?.callable_by_subagents).toBe(true)
+        // Worker-A: medium budget, callable by others
+        const workerAConfig = config.agent?.["worker-a"]
+        expect(workerAConfig?.task_budget).toBe(3)
+        expect(workerAConfig?.callable_by_subagents).toBe(true)
 
-        // Assistant-Flash: lowest budget, callable
-        const flashConfig = config.agent?.["assistant-flash"]
-        expect(flashConfig?.options?.task_budget).toBe(1)
-        expect(flashConfig?.options?.callable_by_subagents).toBe(true)
+        // Worker-B: minimal budget, callable by others
+        const workerBConfig = config.agent?.["worker-b"]
+        expect(workerBConfig?.task_budget).toBe(1)
+        expect(workerBConfig?.callable_by_subagents).toBe(true)
       },
     })
   })
@@ -241,8 +241,8 @@ describe("backwards compatibility", () => {
         const agentConfig = config.agent?.["legacy-agent"]
 
         // Both should be undefined/falsy = delegation disabled
-        const taskBudget = (agentConfig?.options?.task_budget as number) ?? 0
-        const callable = (agentConfig?.options?.callable_by_subagents as boolean) ?? false
+        const taskBudget = (agentConfig?.task_budget as number) ?? 0
+        const callable = (agentConfig?.callable_by_subagents as boolean) ?? false
 
         expect(taskBudget).toBe(0)
         expect(callable).toBe(false)
@@ -261,8 +261,8 @@ describe("backwards compatibility", () => {
         const generalAgent = await Agent.get("general")
 
         // Built-in agents should not have delegation configured
-        const taskBudget = (generalAgent?.options?.task_budget as number) ?? 0
-        const callable = (generalAgent?.options?.callable_by_subagents as boolean) ?? false
+        const taskBudget = generalAgent?.task_budget ?? 0
+        const callable = generalAgent?.callable_by_subagents ?? false
 
         expect(taskBudget).toBe(0)
         expect(callable).toBe(false)

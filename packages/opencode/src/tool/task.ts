@@ -79,9 +79,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const targetAgent = await Agent.get(params.subagent_type)
       if (!targetAgent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
-      // Check if target agent has task permission configured
-      const hasTaskPermission = targetAgent.permission.some((rule) => rule.permission === "task")
-
       // Get caller's session to check if this is a subagent calling
       const callerSession = await Session.get(ctx.sessionID)
       const isSubagent = callerSession.parentID !== undefined
@@ -92,11 +89,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       // Get config values:
       // - task_budget on CALLER: how many calls the caller can make per request
       // - callable_by_subagents on TARGET: whether target can be called by subagents
-      const callerTaskBudget = (callerAgentInfo?.options?.task_budget as number) ?? 0
-      const targetCallable = targetAgent.options?.callable_by_subagents === true
+      const callerTaskBudget = callerAgentInfo?.task_budget ?? 0
+      const targetCallable = targetAgent.callable_by_subagents === true
 
       // Get target's task_budget once (used for session permissions and tool availability)
-      const targetTaskBudget = (targetAgent.options?.task_budget as number) ?? 0
+      const targetTaskBudget = targetAgent.task_budget ?? 0
 
       // Check session ownership BEFORE incrementing budget (if task_id provided)
       // This prevents "wasting" budget on invalid session resume attempts
@@ -156,8 +153,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           { permission: "todoread", pattern: "*", action: "deny" },
         ]
 
-        // Deny task if: (1) target has no task_budget, OR (2) target has no task permission
-        if (targetTaskBudget <= 0 || !hasTaskPermission) {
+        // Only deny task if target agent has no task_budget (cannot delegate further)
+        if (targetTaskBudget <= 0) {
           sessionPermissions.push({ permission: "task", pattern: "*", action: "deny" })
         }
 
@@ -210,8 +207,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         tools: {
           todowrite: false,
           todoread: false,
-          // Disable task if: (1) target has no task_budget, OR (2) target has no task permission
-          ...(targetTaskBudget <= 0 || !hasTaskPermission ? { task: false } : {}),
+          // Only disable task if target agent has no task_budget (cannot delegate further)
+          ...(targetTaskBudget <= 0 ? { task: false } : {}),
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
         parts: promptParts,
