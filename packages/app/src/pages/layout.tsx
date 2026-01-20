@@ -1979,6 +1979,17 @@ export default function Layout(props: ParentProps) {
       navigate(`/${base64Encode(created.directory)}/session`)
     }
 
+    command.register(() => [
+      {
+        id: "workspace.new",
+        title: "New workspace",
+        category: "Workspace",
+        keybind: "mod+shift+w",
+        disabled: !layout.sidebar.workspaces(project()?.worktree ?? "")(),
+        onSelect: createWorkspace,
+      },
+    ])
+
     const homedir = createMemo(() => sync.data.path.home)
 
     return (
@@ -2126,11 +2137,11 @@ export default function Layout(props: ParentProps) {
                   >
                     <>
                       <div class="py-4 px-3">
-                        <Tooltip value="Create a new workspace" placement="top">
+                        <TooltipKeybind title="New workspace" keybind={command.keybind("workspace.new")} placement="top">
                           <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
                             New workspace
                           </Button>
-                        </Tooltip>
+                        </TooltipKeybind>
                       </div>
                       <div class="relative flex-1 min-h-0">
                         <DragDropProvider
