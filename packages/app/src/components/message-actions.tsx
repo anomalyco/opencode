@@ -38,19 +38,18 @@ export function MessageActions(props: ParentProps<MessageActionsProps>) {
     prompt.set(restored)
   }
 
-  const handleFork = async () => {
+  const handleFork = () => {
     const msgParts = parts()
     if (!msgParts.length) return
 
-    const result = await sdk.client.session.fork({ sessionID: props.sessionID, messageID: props.messageID })
-    if (!result.data?.id) return
-
     const restored = extractPromptFromParts(msgParts, { directory: sdk.directory })
 
-    navigate(`/${base64Encode(sdk.directory)}/session/${result.data.id}`)
-
-    requestAnimationFrame(() => {
-      prompt.set(restored)
+    sdk.client.session.fork({ sessionID: props.sessionID, messageID: props.messageID }).then((result) => {
+      if (!result.data?.id) return
+      navigate(`/${base64Encode(sdk.directory)}/session/${result.data.id}`)
+      setTimeout(() => {
+        prompt.set(restored)
+      }, 500)
     })
   }
 
@@ -91,7 +90,9 @@ export function MessageActions(props: ParentProps<MessageActionsProps>) {
       <ContextMenu.Trigger as="div" data-component="message-actions" class="group/message-actions relative">
         <div class="absolute top-2 right-2 opacity-0 group-hover/message-actions:opacity-100 transition-opacity z-10">
           <DropdownMenu>
-            <DropdownMenu.Trigger as={IconButton} icon="dots-horizontal" data-slot="message-actions-trigger" />
+            <span data-slot="message-actions-trigger">
+              <DropdownMenu.Trigger as={IconButton} icon="dot-grid" />
+            </span>
             <DropdownMenu.Portal>
               <DropdownMenu.Content>
                 {menuItems().map((item) => (

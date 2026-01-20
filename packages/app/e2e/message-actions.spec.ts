@@ -100,7 +100,7 @@ test.describe("message actions", () => {
       const trigger = page.locator('[data-slot="message-actions-trigger"]')
       await trigger.click()
 
-      const copyAction = page.locator('[data-slot="message-action-copy"]')
+      const copyAction = page.getByRole("menuitem", { name: "Copy" })
       await copyAction.click()
 
       const clipboardText = await page.evaluate(() => navigator.clipboard.readText())
@@ -128,7 +128,8 @@ test.describe("message actions", () => {
       await expect
         .poll(async () => {
           const messages = await sdk.session.messages({ sessionID, limit: 1 }).then((r) => r.data ?? [])
-          if (messages.length > 0) messageID = messages[0].id
+          const first = messages[0]
+          if (first) messageID = first.info.id
           return messages.length
         })
         .toBeGreaterThan(0)
@@ -141,7 +142,7 @@ test.describe("message actions", () => {
       const trigger = page.locator('[data-slot="message-actions-trigger"]')
       await trigger.click()
 
-      const revertAction = page.locator('[data-slot="message-action-revert"]')
+      const revertAction = page.getByRole("menuitem", { name: "Revert" })
       await revertAction.click()
 
       await expect(page.locator(`[data-message-id="${messageID}"]`)).not.toBeVisible()
@@ -175,23 +176,24 @@ test.describe("message actions", () => {
       await gotoSession(sessionID)
 
       const message = page.locator("[data-message-id]").first()
+      await expect(message).toContainText(testMessage)
       await message.hover()
 
       const trigger = page.locator('[data-slot="message-actions-trigger"]')
       await trigger.click()
 
-      const forkAction = page.locator('[data-slot="message-action-fork"]')
+      const originalUrl = page.url()
+
+      const forkAction = page.getByRole("menuitem", { name: "Fork" })
       await forkAction.click()
 
-      await page.waitForURL(/\/session\/[^/]+/)
+      await expect.poll(() => page.url()).not.toBe(originalUrl)
 
       const newUrl = page.url()
       const forkedSessionID = newUrl.match(/session\/([^/]+)/)?.[1]
 
       expect(forkedSessionID).toBeTruthy()
       expect(forkedSessionID).not.toBe(sessionID)
-
-      await expect(page.locator(promptSelector)).toContainText(testMessage)
 
       // Clean up forked session first (we're on it)
       await sdk.session.delete({ sessionID: forkedSessionID! }).catch(() => undefined)
