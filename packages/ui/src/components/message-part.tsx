@@ -363,7 +363,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   }
 
   return (
-    <div data-component="user-message" data-expanded={expanded()} data-can-expand={canExpand()}>
+    <div data-component="user-message" data-expanded={expanded()} data-can-expand={canExpand()} onClick={toggleExpanded}>
       <Show when={attachments().length > 0}>
         <div data-slot="user-message-attachments">
           <For each={attachments()}>
@@ -371,7 +371,8 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               <div
                 data-slot="user-message-attachment"
                 data-type={file.mime.startsWith("image/") ? "image" : "file"}
-                onClick={() => {
+                onClick={(event) => {
+                  event.stopPropagation()
                   if (file.mime.startsWith("image/") && file.url) {
                     openImagePreview(file.url, file.filename)
                   }
@@ -393,7 +394,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         </div>
       </Show>
       <Show when={text()}>
-        <div data-slot="user-message-text" ref={(el) => (textRef = el)} onClick={toggleExpanded}>
+        <div data-slot="user-message-text" ref={(el) => (textRef = el)}>
           <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
           <button
             data-slot="user-message-expand"

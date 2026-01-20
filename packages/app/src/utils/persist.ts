@@ -16,6 +16,9 @@ type PersistTarget = {
 
 const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "opencode.global.dat"
+const LOCAL_PREFIX = "opencode."
+const fallback = { disabled: false }
+const cache = new Map<string, string>()
 
 function quota(error: unknown) {
   if (error instanceof DOMException) {
@@ -40,10 +43,42 @@ function quota(error: unknown) {
   return false
 }
 
+type Evict = { key: string; size: number }
+
+function evict(storage: Storage, keep: string, value: string) {
+  const total = storage.length
+  const indexes = Array.from({ length: total }, (_, index) => index)
+  const items: Evict[] = []
+
+  for (const index of indexes) {
+    const name = storage.key(index)
+    if (!name) continue
+    if (!name.startsWith(LOCAL_PREFIX)) continue
+    if (name === keep) continue
+    const stored = storage.getItem(name)
+    items.push({ key: name, size: stored?.length ?? 0 })
+  }
+
+  items.sort((a, b) => b.size - a.size)
+
+  for (const item of items) {
+    storage.removeItem(item.key)
+
+    try {
+      storage.setItem(keep, value)
+      return true
+    } catch (error) {
+      if (!quota(error)) throw error
+    }
+  }
+
+  return false
+}
+
 function write(storage: Storage, key: string, value: string) {
   try {
     storage.setItem(key, value)
-    return
+    return true
   } catch (error) {
     if (!quota(error)) throw error
   }
@@ -51,9 +86,12 @@ function write(storage: Storage, key: string, value: string) {
   try {
     storage.removeItem(key)
     storage.setItem(key, value)
+    return true
   } catch (error) {
     if (!quota(error)) throw error
   }
+
+  return evict(storage, key, value)
 }
 
 function snapshot(value: unknown) {
@@ -108,17 +146,64 @@ function localStorageWithPrefix(prefix: string): SyncStorage {
   const base = `${prefix}:`
   const item = (key: string) => base + key
   return {
-    getItem: (key) => localStorage.getItem(item(key)),
-    setItem: (key, value) => write(localStorage, item(key), value),
-    removeItem: (key) => localStorage.removeItem(item(key)),
+    getItem: (key) => {
+      const name = item(key)
+      const cached = cache.get(name)
+      if (fallback.disabled && cached !== undefined) return cached
+
+      const stored = localStorage.getItem(name)
+      if (stored === null) return cached ?? null
+      cache.set(name, stored)
+      return stored
+    },
+    setItem: (key, value) => {
+      const name = item(key)
+      cache.set(name, value)
+      if (fallback.disabled) return
+      try {
+        if (write(localStorage, name, value)) return
+      } catch {
+        fallback.disabled = true
+        return
+      }
+      fallback.disabled = true
+    },
+    removeItem: (key) => {
+      const name = item(key)
+      cache.delete(name)
+      if (fallback.disabled) return
+      localStorage.removeItem(name)
+    },
   }
 }
 
 function localStorageDirect(): SyncStorage {
   return {
-    getItem: (key) => localStorage.getItem(key),
-    setItem: (key, value) => write(localStorage, key, value),
-    removeItem: (key) => localStorage.removeItem(key),
+    getItem: (key) => {
+      const cached = cache.get(key)
+      if (fallback.disabled && cached !== undefined) return cached
+
+      const stored = localStorage.getItem(key)
+      if (stored === null) return cached ?? null
+      cache.set(key, stored)
+      return stored
+    },
+    setItem: (key, value) => {
+      cache.set(key, value)
+      if (fallback.disabled) return
+      try {
+        if (write(localStorage, key, value)) return
+      } catch {
+        fallback.disabled = true
+        return
+      }
+      fallback.disabled = true
+    },
+    removeItem: (key) => {
+      cache.delete(key)
+      if (fallback.disabled) return
+      localStorage.removeItem(key)
+    },
   }
 }
 
