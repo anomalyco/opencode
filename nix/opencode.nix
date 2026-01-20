@@ -5,7 +5,6 @@
   bun,
   sysctl,
   makeBinaryWrapper,
-  models-dev,
   ripgrep,
   installShellFiles,
   versionCheckHook,
@@ -21,7 +20,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     bun
     installShellFiles
     makeBinaryWrapper
-    models-dev
     writableTmpDirAsHomeHook
   ];
 
@@ -33,9 +31,12 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     runHook postConfigure
   '';
 
-  env.MODELS_DEV_API_JSON = "${models-dev}/dist/_api.json";
+  
   env.OPENCODE_VERSION = finalAttrs.version;
   env.OPENCODE_CHANNEL = "local";
+
+  # dummy models-dev json - at runtime the latest is fetched from https://models.dev/
+  env.MODELS_DEV_API_JSON = "${../packages/opencode/test/tool/fixtures/models-api.json}";
 
   buildPhase = ''
     runHook preBuild
