@@ -38,7 +38,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
     }),
   )
 
-  sdk.event.on("pty.exited", (event) => {
+  const unsub = sdk.event.on("pty.exited", (event) => {
     const id = event.properties.id
     if (!store.all.some((x) => x.id === id)) return
     batch(() => {
@@ -52,6 +52,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
       }
     })
   })
+  onCleanup(unsub)
 
   return {
     ready,

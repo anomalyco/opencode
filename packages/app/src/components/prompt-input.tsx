@@ -1583,6 +1583,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onSelect={local.agent.set}
                     class="capitalize"
                     variant="ghost"
+                    triggerVariant="button"
                   />
                 </TooltipKeybind>
                 <Show
