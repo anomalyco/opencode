@@ -279,7 +279,7 @@ export const SettingsKeybinds: Component = () => {
   })
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
+    <div class="flex flex-col h-full overflow-y-auto no-scrollbar" style={{ padding: "0 40px 40px 40px" }}>
       <div
         class="sticky top-0 z-10"
         style={{
@@ -287,35 +287,32 @@ export const SettingsKeybinds: Component = () => {
             "linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha) calc(100% - 24px), transparent)",
         }}
       >
-        <div class="flex items-start justify-between gap-4 p-8 max-w-[720px]">
-          <div class="flex flex-col gap-1">
-            <h2 class="text-16-medium text-text-strong">Keyboard shortcuts</h2>
-            <p class="text-14-regular text-text-weak">Click a shortcut to edit. Press Esc to cancel.</p>
-          </div>
+        <div class="flex items-center justify-between gap-4 pt-6 pb-8 max-w-[720px]">
+          <h2 class="text-16-medium text-text-strong">Keyboard shortcuts</h2>
           <Button size="small" variant="secondary" onClick={resetAll} disabled={!hasOverrides()}>
             Reset to defaults
           </Button>
         </div>
       </div>
 
-      <div class="flex flex-col gap-6 p-8 pt-6 max-w-[720px]">
+      <div class="flex flex-col gap-8 max-w-[720px]">
         <For each={GROUPS}>
           {(group) => (
             <Show when={(grouped().get(group) ?? []).length > 0}>
-              <div class="flex flex-col gap-2">
-                <h3 class="text-14-medium text-text-strong">{group}</h3>
-                <div class="border border-border-weak-base rounded-lg overflow-hidden">
+              <div class="flex flex-col gap-1">
+                <h3 class="text-14-medium text-text-strong pb-2">{group}</h3>
+                <div class="bg-surface-raised-base px-4 rounded-lg">
                   <For each={grouped().get(group) ?? []}>
                     {(id) => (
-                      <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-border-weak-base last:border-none">
+                      <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
                         <span class="text-14-regular text-text-strong">{title(id)}</span>
                         <button
                           type="button"
                           classList={{
-                            "h-8 px-3 rounded-md text-12-regular border border-border-base": true,
+                            "h-8 px-3 rounded-md text-12-regular": true,
                             "bg-surface-base text-text-subtle hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active":
                               active() !== id,
-                            "bg-surface-raised-stronger-non-alpha text-text-strong": active() === id,
+                            "border border-border-weak-base bg-surface-inset-base text-text-weak": active() === id,
                           }}
                           onClick={() => start(id)}
                         >
