@@ -359,16 +359,88 @@ type ServerReadyData = { url: string; password: string | null }
 
 // Gate component that waits for the server to be ready
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
-  const [serverData] = createResource<ServerReadyData>(() => invoke("ensure_server_ready"))
+  const SERVER_GUARD_DELAY_MS = 60_000
+
+  const [serverData, { refetch }] = createResource<ServerReadyData>(() =>
+    invoke("ensure_server_ready"),
+  )
+  const [slow, setSlow] = createSignal(false)
+  const [timer, setTimer] = createSignal<ReturnType<typeof setTimeout> | null>(null)
+
+  const armGuard = () => {
+    const existing = timer()
+    if (existing) clearTimeout(existing)
+    setSlow(false)
+    setTimer(setTimeout(() => setSlow(true), SERVER_GUARD_DELAY_MS))
+  }
+
+  const retry = () => {
+    armGuard()
+    void refetch()
+  }
+
+  const restart = async () => {
+    armGuard()
+    await invoke("restart_sidecar").catch(() => undefined)
+    void refetch()
+  }
+
+  const guard = () => slow() || serverData.state === "errored"
+
+  onMount(() => {
+    armGuard()
+    onCleanup(() => {
+      const existing = timer()
+      if (existing) clearTimeout(existing)
+    })
+  })
 
   return (
     // Not using suspense as not all components are compatible with it (undefined refs)
     <Show
-      when={serverData.state !== "pending" && serverData()}
+      when={serverData.state === "ready" && serverData()}
       fallback={
-        <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-        </div>
+        <Show
+          when={guard()}
+          fallback={
+            <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
+              <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+            </div>
+          }
+        >
+          <div class="h-screen w-screen flex flex-col items-center justify-center gap-4 bg-background-base px-6 text-center">
+            <Splash class="w-12 h-16 opacity-50" />
+
+            <div class="max-w-md">
+              <div class="text-lg font-medium">Starting OpenCode Server</div>
+              <div class="mt-1 text-sm opacity-70">
+                This is taking longer than expected. You can keep waiting, retry, or restart the
+                local server.
+              </div>
+
+              <Show when={serverData.state === "errored" && serverData.error}>
+                <pre class="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-black/5 p-3 text-left text-xs">
+                  {String(serverData.error)}
+                </pre>
+              </Show>
+            </div>
+
+            <div class="flex flex-row items-center gap-2">
+              <button
+                class="rounded-md border border-black/10 bg-white px-3 py-2 text-sm"
+                onClick={retry}
+              >
+                Retry
+              </button>
+              <button
+                class="rounded-md bg-black px-3 py-2 text-sm text-white"
+                onClick={() => void restart()}
+              >
+                Restart Server
+              </button>
+            </div>
+          </div>
+        </Show>
       }
     >
       {(data) => props.children(data)}

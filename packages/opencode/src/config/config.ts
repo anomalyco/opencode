@@ -31,6 +31,7 @@ import { Event } from "../server/event"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
+  const installCache = new Set<string>()
 
   // Custom merge function that concatenates array fields instead of replacing them
   function mergeConfigConcatArrays(target: Info, source: Info): Info {
@@ -132,9 +133,14 @@ export namespace Config {
         }
       }
 
-      const exists = existsSync(path.join(dir, "node_modules"))
-      const installing = installDependencies(dir)
-      if (!exists) await installing
+      const key = path.resolve(dir)
+      if (!installCache.has(key)) {
+        const shouldInstall = await needsInstall(dir)
+        if (shouldInstall) {
+          await installDependencies(dir)
+        }
+        installCache.add(key)
+      }
 
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
@@ -197,8 +203,23 @@ export namespace Config {
 
   export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
+    const nodeModules = path.join(dir, "node_modules")
+    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
+    const pkgFile = Bun.file(pkg)
+    const pkgExists = await pkgFile.exists()
+    const hasModules = existsSync(nodeModules)
 
-    if (!(await Bun.file(pkg).exists())) {
+    if (pkgExists && hasModules) {
+      const parsed = await pkgFile.json().catch(() => null)
+      const deps = parsed?.dependencies
+      const depVersion = deps?.["@opencode-ai/plugin"]
+      const hasDependency = Boolean(depVersion)
+      const versionOk = targetVersion === "latest" || depVersion === targetVersion
+
+      if (hasDependency && versionOk) return
+    }
+
+    if (!pkgExists) {
       await Bun.write(pkg, "{}")
     }
 
@@ -206,16 +227,42 @@ export namespace Config {
     const hasGitIgnore = await Bun.file(gitignore).exists()
     if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
 
-    await BunProc.run(
-      ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION), "--exact"],
-      {
+    const parsed = await pkgFile.json().catch(() => ({ dependencies: {} }))
+    const dependencies = parsed?.dependencies ?? {}
+    const depVersion = dependencies["@opencode-ai/plugin"]
+    const needsAdd = !depVersion || (targetVersion !== "latest" && depVersion !== targetVersion)
+
+    if (needsAdd) {
+      await BunProc.run(["add", `@opencode-ai/plugin@${targetVersion}`, "--exact"], {
         cwd: dir,
-      },
-    ).catch(() => {})
+      }).catch(() => {})
+    }
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
+    if (!hasModules) {
+      await BunProc.run(["install"], { cwd: dir }).catch(() => {})
+    }
+  }
+
+  async function needsInstall(dir: string) {
+    const nodeModules = path.join(dir, "node_modules")
+    if (!existsSync(nodeModules)) return true
+
+    const pkg = path.join(dir, "package.json")
+    const pkgFile = Bun.file(pkg)
+    const pkgExists = await pkgFile.exists()
+    if (!pkgExists) return true
+
+    const parsed = await pkgFile.json().catch(() => null)
+    const dependencies = parsed?.dependencies ?? {}
+    const depVersion = dependencies["@opencode-ai/plugin"]
+    if (!depVersion) return true
+
+    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
+    if (targetVersion === "latest") return false
+    if (depVersion === targetVersion) return false
+    return true
   }
 
   function rel(item: string, patterns: string[]) {

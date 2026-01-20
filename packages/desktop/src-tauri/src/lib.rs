@@ -11,7 +11,10 @@ use job_object::*;
 use std::{
     collections::VecDeque,
     net::TcpListener,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewWindowBuilder};
@@ -34,7 +37,8 @@ struct ServerReadyData {
 #[derive(Clone)]
 struct ServerState {
     child: Arc<Mutex<Option<CommandChild>>>,
-    status: future::Shared<oneshot::Receiver<Result<ServerReadyData, String>>>,
+    status: Arc<Mutex<future::Shared<oneshot::Receiver<Result<ServerReadyData, String>>>>>,
+    rev: Arc<AtomicU64>,
 }
 
 impl ServerState {
@@ -44,12 +48,29 @@ impl ServerState {
     ) -> Self {
         Self {
             child: Arc::new(Mutex::new(child)),
-            status: status.shared(),
+            status: Arc::new(Mutex::new(status.shared())),
+            rev: Arc::new(AtomicU64::new(0)),
         }
     }
 
     pub fn set_child(&self, child: Option<CommandChild>) {
         *self.child.lock().unwrap() = child;
+    }
+
+    pub fn set_status(&self, status: oneshot::Receiver<Result<ServerReadyData, String>>) {
+        *self.status.lock().unwrap() = status.shared();
+    }
+
+    pub fn status(&self) -> future::Shared<oneshot::Receiver<Result<ServerReadyData, String>>> {
+        self.status.lock().unwrap().clone()
+    }
+
+    pub fn bump(&self) -> u64 {
+        self.rev.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    pub fn is_current(&self, rev: u64) -> bool {
+        self.rev.load(Ordering::SeqCst) == rev
     }
 }
 
@@ -93,11 +114,29 @@ async fn get_logs(app: AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 async fn ensure_server_ready(state: State<'_, ServerState>) -> Result<ServerReadyData, String> {
-    state
-        .status
-        .clone()
+    const SERVER_READY_TIMEOUT_SECS: u64 = 60;
+
+    tokio::time::timeout(Duration::from_secs(SERVER_READY_TIMEOUT_SECS), state.status())
         .await
+        .map_err(|_| {
+            "Server is taking longer than expected to start. You can retry or restart the local server."
+                .to_string()
+        })?
         .map_err(|_| "Failed to get server status".to_string())?
+}
+
+#[tauri::command]
+fn restart_sidecar(app: AppHandle) -> Result<(), String> {
+    kill_sidecar(app.clone());
+
+    let server_state = app.state::<ServerState>();
+    let (tx, rx) = oneshot::channel();
+    server_state.set_status(rx);
+
+    let rev = server_state.bump();
+    spawn_server_task(app, tx, rev);
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -197,6 +236,32 @@ fn spawn_sidecar(app: &AppHandle, port: u32, password: &str) -> CommandChild {
     child
 }
 
+fn spawn_server_task(
+    app: AppHandle,
+    tx: oneshot::Sender<Result<ServerReadyData, String>>,
+    rev: u64,
+) {
+    tauri::async_runtime::spawn(async move {
+        let mut custom_url = None;
+
+        if let Some(url) = get_default_server_url(app.clone()).ok().flatten() {
+            println!("Using desktop-specific custom URL: {url}");
+            custom_url = Some(url);
+        }
+
+        if custom_url.is_none()
+            && let Some(cli_config) = cli::get_config(&app).await
+            && let Some(url) = get_server_url_from_config(&cli_config)
+        {
+            println!("Using custom server URL from config: {url}");
+            custom_url = Some(url);
+        }
+
+        let res = setup_server_connection(&app, custom_url, rev).await;
+        let _ = tx.send(res);
+    });
+}
+
 async fn check_server_health(url: &str, password: Option<&str>) -> bool {
     let health_url = format!("{}/global/health", url.trim_end_matches('/'));
     let client = reqwest::Client::builder()
@@ -256,6 +321,7 @@ pub fn run() {
         .plugin(PinchZoomDisablePlugin)
         .invoke_handler(tauri::generate_handler![
             kill_sidecar,
+            restart_sidecar,
             install_cli,
             ensure_server_ready,
             get_default_server_url,
@@ -304,40 +370,8 @@ pub fn run() {
             app.manage(ServerState::new(None, rx));
 
             {
-                let app = app.clone();
-                tauri::async_runtime::spawn(async move {
-                    let mut custom_url = None;
-
-                    if let Some(url) = get_default_server_url(app.clone()).ok().flatten() {
-                        println!("Using desktop-specific custom URL: {url}");
-                        custom_url = Some(url);
-                    }
-
-                    if custom_url.is_none()
-                        && let Some(cli_config) = cli::get_config(&app).await
-                        && let Some(url) = get_server_url_from_config(&cli_config)
-                    {
-                        println!("Using custom server URL from config: {url}");
-                        custom_url = Some(url);
-                    }
-
-                    let res = match setup_server_connection(&app, custom_url).await {
-                        Ok((child, url)) => {
-                            #[cfg(windows)]
-                            if let Some(child) = &child {
-                                let job_state = app.state::<JobObjectState>();
-                                job_state.assign_pid(child.pid());
-                            }
-
-                            app.state::<ServerState>().set_child(child);
-
-                            Ok(url)
-                        }
-                        Err(e) => Err(e),
-                    };
-
-                    let _ = tx.send(res);
-                });
+                let rev = app.state::<ServerState>().bump();
+                spawn_server_task(app.clone(), tx, rev);
             }
 
             {
@@ -384,27 +418,44 @@ fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
 async fn setup_server_connection(
     app: &AppHandle,
     custom_url: Option<String>,
-) -> Result<(Option<CommandChild>, ServerReadyData), String> {
+    rev: u64,
+) -> Result<ServerReadyData, String> {
+    if !app.state::<ServerState>().is_current(rev) {
+        return Err("Server startup cancelled".to_string());
+    }
+
     if let Some(url) = custom_url {
         loop {
+            if !app.state::<ServerState>().is_current(rev) {
+                return Err("Server startup cancelled".to_string());
+            }
+
             if check_server_health(&url, None).await {
                 println!("Connected to custom server: {}", url);
-                return Ok((
-                    None,
-                    ServerReadyData {
-                        url: url.clone(),
-                        password: None,
-                    },
-                ));
+                return Ok(ServerReadyData {
+                    url: url.clone(),
+                    password: None,
+                });
             }
 
             const RETRY: &str = "Retry";
 
-            let res = app.dialog()
-              .message(format!("Could not connect to configured server:\n{}\n\nWould you like to retry or start a local server instead?", url))
-              .title("Connection Failed")
-              .buttons(MessageDialogButtons::OkCancelCustom(RETRY.to_string(), "Start Local".to_string()))
-              .blocking_show_with_result();
+            if !app.state::<ServerState>().is_current(rev) {
+                return Err("Server startup cancelled".to_string());
+            }
+
+            let res = app
+                .dialog()
+                .message(format!(
+                    "Could not connect to configured server:\n{}\n\nWould you like to retry or start a local server instead?",
+                    url
+                ))
+                .title("Connection Failed")
+                .buttons(MessageDialogButtons::OkCancelCustom(
+                    RETRY.to_string(),
+                    "Start Local".to_string(),
+                ))
+                .blocking_show_with_result();
 
             match res {
                 MessageDialogResult::Custom(name) if name == RETRY => {
@@ -423,24 +474,17 @@ async fn setup_server_connection(
     if !check_server_health(&local_url, None).await {
         let password = uuid::Uuid::new_v4().to_string();
 
-        match spawn_local_server(app, local_port, &password).await {
-            Ok(child) => Ok((
-                Some(child),
-                ServerReadyData {
-                    url: local_url,
-                    password: Some(password),
-                },
-            )),
-            Err(err) => Err(err),
-        }
-    } else {
-        Ok((
-            None,
-            ServerReadyData {
+        spawn_local_server(app, local_port, &password, rev)
+            .await
+            .map(|_| ServerReadyData {
                 url: local_url,
-                password: None,
-            },
-        ))
+                password: Some(password),
+            })
+    } else {
+        Ok(ServerReadyData {
+            url: local_url,
+            password: None,
+        })
     }
 }
 
@@ -448,24 +492,44 @@ async fn spawn_local_server(
     app: &AppHandle,
     port: u32,
     password: &str,
-) -> Result<CommandChild, String> {
+    rev: u64,
+) -> Result<(), String> {
+    if !app.state::<ServerState>().is_current(rev) {
+        return Err("Server startup cancelled".to_string());
+    }
+
     let child = spawn_sidecar(app, port, password);
+    #[cfg(windows)]
+    {
+        let pid = child.pid();
+        let job_state = app.state::<JobObjectState>();
+        job_state.assign_pid(pid);
+    }
+
+    app.state::<ServerState>().set_child(Some(child));
     let url = format!("http://127.0.0.1:{port}");
 
     let timestamp = Instant::now();
     loop {
+        if !app.state::<ServerState>().is_current(rev) {
+            kill_sidecar(app.clone());
+            break Err("Server startup cancelled".to_string());
+        }
+
         if timestamp.elapsed() > Duration::from_secs(30) {
-            break Err(format!(
+            let err = format!(
                 "Failed to spawn OpenCode Server. Logs:\n{}",
                 get_logs(app.clone()).await.unwrap()
-            ));
+            );
+            kill_sidecar(app.clone());
+            break Err(err);
         }
 
         tokio::time::sleep(Duration::from_millis(10)).await;
 
         if check_server_health(&url, Some(password)).await {
             println!("Server ready after {:?}", timestamp.elapsed());
-            break Ok(child);
+            break Ok(());
         }
     }
 }
