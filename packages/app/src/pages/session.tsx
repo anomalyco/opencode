@@ -168,6 +168,7 @@ export default function Page() {
   const prompt = usePrompt()
   const permission = usePermission()
   const [pendingMessage, setPendingMessage] = createSignal<string | undefined>(undefined)
+  const [pendingHash, setPendingHash] = createSignal<string | undefined>(undefined)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
@@ -1036,6 +1037,7 @@ export default function Page() {
   const applyHash = (behavior: ScrollBehavior) => {
     const hash = window.location.hash.slice(1)
     if (!hash) {
+      setPendingHash(undefined)
       autoScroll.forceScrollToBottom()
       return
     }
@@ -1044,21 +1046,25 @@ export default function Page() {
     if (match) {
       const msg = visibleUserMessages().find((m) => m.id === match[1])
       if (msg) {
+        setPendingHash(undefined)
         scrollToMessage(msg, behavior)
         return
       }
 
       // If we have a message hash but the message isn't loaded/rendered yet,
       // don't fall back to "bottom". We'll retry once messages arrive.
+      setPendingHash(match[1])
       return
     }
 
     const target = document.getElementById(hash)
     if (target) {
+      setPendingHash(undefined)
       scrollToElement(target, behavior)
       return
     }
 
+    setPendingHash(undefined)
     autoScroll.forceScrollToBottom()
   }
 
@@ -1116,20 +1122,14 @@ export default function Page() {
     visibleUserMessages().length
     store.turnStart
 
-    const targetId =
-      pendingMessage() ??
-      (() => {
-        const hash = window.location.hash.slice(1)
-        const match = hash.match(/^message-(.+)$/)
-        if (!match) return undefined
-        return match[1]
-      })()
+    const targetId = pendingMessage() ?? pendingHash()
     if (!targetId) return
     if (store.messageId === targetId) return
 
     const msg = visibleUserMessages().find((m) => m.id === targetId)
     if (!msg) return
     if (pendingMessage() === targetId) setPendingMessage(undefined)
+    if (pendingHash() === targetId) setPendingHash(undefined)
     requestAnimationFrame(() => scrollToMessage(msg, "auto"))
   })
 
