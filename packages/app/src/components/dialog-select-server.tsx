@@ -179,7 +179,7 @@ export function DialogSelectServer() {
                   type="text"
                   label={language.t("dialog.server.add.url")}
                   hideLabel
-                  placeholder="http://localhost:4096"
+                  placeholder={language.t("dialog.server.add.placeholder")}
                   value={store.url}
                   onChange={(v) => {
                     setStore("url", v)
