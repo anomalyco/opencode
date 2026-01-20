@@ -9,8 +9,8 @@ This report documents the remaining user-facing strings in `packages/app/src` th
 ## Current State
 
 - The app uses `useLanguage().t("...")` with dictionaries in `packages/app/src/i18n/en.ts` and `packages/app/src/i18n/zh.ts`.
-- Recent progress (already translated): `packages/app/src/pages/home.tsx`, `packages/app/src/pages/layout.tsx`, `packages/app/src/pages/session.tsx`, `packages/app/src/components/prompt-input.tsx`, `packages/app/src/components/dialog-connect-provider.tsx` (plus new keys added in both dictionaries).
-- Dictionary parity check: `en.ts` and `zh.ts` currently contain the same key set (314 keys each; no missing or extra keys).
+- Recent progress (already translated): `packages/app/src/pages/home.tsx`, `packages/app/src/pages/layout.tsx`, `packages/app/src/pages/session.tsx`, `packages/app/src/components/prompt-input.tsx`, `packages/app/src/components/dialog-connect-provider.tsx`, `packages/app/src/components/session/session-header.tsx`, `packages/app/src/pages/error.tsx` (plus new keys added in both dictionaries).
+- Dictionary parity check: `en.ts` and `zh.ts` currently contain the same key set (354 keys each; no missing or extra keys).
 
 ## Methodology
 
@@ -30,28 +30,11 @@ This report documents the remaining user-facing strings in `packages/app/src` th
 
 File: `packages/app/src/pages/error.tsx`
 
-This is the largest remaining untranslated surface and is user-visible during app failures.
+Completed (2026-01-20):
 
-**Page UI copy** (headings/buttons/labels):
-- "Something went wrong"
-- "An error occurred while loading the application."
-- Text field label: "Error Details"
-- Buttons: "Restart", "Checking...", "Check for updates", "Update to {version}"
-- Reporting help: "Please report this error..." and the link caption "on Discord"
-- Version display prefix: "Version: {platform.version}"
-
-**Error chain / formatting strings** (shown inside the details field):
-- "Unknown error"
-- "Caused by:"
-- "Status:", "Retryable:", "Response body:"
-- Generic API fallback: "API error"
-- Suggestion prefix: "Did you mean: ..."
-
-**Recommendation:**
-- Translate all framing/UI labels and action buttons.
-- Decide whether to translate highly technical diagnostics. A good compromise is:
-  - Translate the labels ("Caused by", "Unknown error", "Status")
-  - Keep raw messages from servers/providers as-is
+- Localized page UI copy via `error.page.*` keys (title, description, buttons, report text, version label).
+- Localized error chain framing and common init error templates via `error.chain.*` keys.
+- Kept raw server/provider error messages as-is when provided (only localizing labels and structure).
 
 ## Highest Priority: Components
 
@@ -81,20 +64,11 @@ Completed (2026-01-20):
 
 File: `packages/app/src/components/session/session-header.tsx`
 
-**Representative untranslated strings**
-- Search placeholder: "Search {projectName}"
-- Tooltips: "Toggle review", "Toggle terminal", "Share session"
-- Share/publish popover:
-  - "Publish on web"
-  - "This session is public on the web..."
-  - "Share session publicly on the web..."
-  - Button states: "Publishing..." / "Publish", "Unpublishing..." / "Unpublish"
-  - Buttons: "Share", "View"
-- Copy tooltip: "Copied" / "Copy link"
+Completed (2026-01-20):
 
-**Recommendation:**
-- Most of these should become `session.share.*` keys.
-- Reuse command keys where appropriate (e.g. `command.review.toggle`, `command.terminal.toggle`) instead of introducing new duplicates.
+- Localized search placeholder via `session.header.search.placeholder`.
+- Localized share/publish UI via `session.share.*` keys (popover title/description, button states, copy tooltip).
+- Reused existing command keys for toggle/share tooltips (`command.review.toggle`, `command.terminal.toggle`, `command.session.share`).
 
 ## Medium Priority: Components
 
@@ -237,11 +211,9 @@ This is only thrown in DEV and is more of a developer diagnostic. Optional to tr
 
 ## Prioritized Implementation Plan
 
-1. `packages/app/src/components/session/session-header.tsx`
-2. `packages/app/src/pages/error.tsx`
-3. `packages/app/src/components/session/session-new-view.tsx`
-4. `packages/app/src/components/session-context-usage.tsx` + locale formatting improvements (also `packages/app/src/components/session/session-context-tab.tsx`)
-5. Small stragglers:
+1. `packages/app/src/components/session/session-new-view.tsx`
+2. `packages/app/src/components/session-context-usage.tsx` + locale formatting improvements (also `packages/app/src/components/session/session-context-tab.tsx`)
+3. Small stragglers:
    - `packages/app/src/components/session-lsp-indicator.tsx`
    - `packages/app/src/components/session/session-sortable-tab.tsx`
    - `packages/app/src/components/titlebar.tsx`
@@ -250,7 +222,7 @@ This is only thrown in DEV and is more of a developer diagnostic. Optional to tr
    - `packages/app/src/context/global-sync.tsx`
    - `packages/app/src/context/file.tsx` + `packages/app/src/context/local.tsx`
    - `packages/app/src/utils/prompt.ts`
-6. Decide on the terminal naming approach (`packages/app/src/context/terminal.tsx`).
+4. Decide on the terminal naming approach (`packages/app/src/context/terminal.tsx`).
 
 ## Suggested Key Naming Conventions
 
@@ -270,10 +242,9 @@ Also reuse existing command keys for tooltip titles whenever possible (e.g. `com
 ## Appendix: Remaining Files At-a-Glance
 
 Pages:
-- `packages/app/src/pages/error.tsx`
+- (none)
 
 Components:
-- `packages/app/src/components/session/session-header.tsx`
 - `packages/app/src/components/session/session-new-view.tsx`
 - `packages/app/src/components/session-context-usage.tsx`
 - `packages/app/src/components/session/session-context-tab.tsx` (formatting locale)
