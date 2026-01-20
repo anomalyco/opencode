@@ -253,16 +253,17 @@ describe("tool.bash truncation", () => {
     })
   })
 
-  test("truncates output exceeding byte limit", async () => {
+  test("truncates output exceeding token limit", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
-        const byteCount = Truncate.MAX_BYTES + 10000
+        const tokenCount = Truncate.MAX_TOKENS + 1000
+        const byteCount = tokenCount * 4
         const result = await bash.execute(
           {
             command: `head -c ${byteCount} /dev/zero | tr '\\0' 'a'`,
-            description: "Generate bytes exceeding limit",
+            description: "Generate tokens exceeding limit",
           },
           ctx,
         )
