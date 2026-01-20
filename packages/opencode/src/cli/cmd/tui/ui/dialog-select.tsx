@@ -38,7 +38,7 @@ export interface DialogSelectOption<T = any> {
   disabled?: boolean
   bg?: RGBA
   gutter?: JSX.Element
-  onSelect?: (ctx: DialogContext, trigger?: "prompt") => void
+  onSelect?: (ctx: DialogContext) => void
 }
 
 export type DialogSelectRef<T> = {
@@ -157,26 +157,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const keybind = useKeybind()
   useKeyboard((evt) => {
-    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      move(-1)
-    }
-    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      move(1)
-    }
-    if (evt.name === "pageup") {
-      evt.preventDefault()
-      evt.stopPropagation()
-      move(-10)
-    }
-    if (evt.name === "pagedown") {
-      evt.preventDefault()
-      evt.stopPropagation()
-      move(10)
-    }
+    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
+    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
+    if (evt.name === "pageup") move(-10)
+    if (evt.name === "pagedown") move(10)
+    if (evt.name === "home") moveTo(0)
+    if (evt.name === "end") moveTo(flat().length - 1)
     if (evt.name === "return") {
       const option = selected()
       if (option) {
