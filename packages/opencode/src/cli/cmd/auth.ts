@@ -568,8 +568,10 @@ function findBrokerBinary(): string | null {
   const candidates = [
     // Development: relative to cwd (monorepo root)
     path.join(process.cwd(), "packages/opencode-broker/target/release/opencode-broker"),
-    // Development: relative to script location
-    path.join(path.dirname(process.argv[1] ?? ""), "../opencode-broker/target/release/opencode-broker"),
+    // Development: relative to packages/opencode (when run via bun run dev)
+    path.join(process.cwd(), "../opencode-broker/target/release/opencode-broker"),
+    // Development: relative to script location (src/cli/cmd -> ../../opencode-broker)
+    path.join(path.dirname(process.argv[1] ?? ""), "../../opencode-broker/target/release/opencode-broker"),
     // Installed location
     "/usr/local/bin/opencode-broker",
   ]
@@ -589,8 +591,10 @@ function findBrokerPackageDir(): string | null {
   const candidates = [
     // Development: relative to cwd (monorepo root)
     path.join(process.cwd(), "packages/opencode-broker"),
-    // Development: relative to script location
-    path.join(path.dirname(process.argv[1] ?? ""), "../opencode-broker"),
+    // Development: relative to packages/opencode (when run via bun run dev)
+    path.join(process.cwd(), "../opencode-broker"),
+    // Development: relative to script location (src/cli/cmd -> ../../opencode-broker)
+    path.join(path.dirname(process.argv[1] ?? ""), "../../opencode-broker"),
   ]
 
   for (const candidate of candidates) {

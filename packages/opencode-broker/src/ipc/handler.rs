@@ -7,7 +7,7 @@ use crate::auth::pam;
 use crate::auth::rate_limit::RateLimiter;
 use crate::auth::validation;
 use crate::config::BrokerConfig;
-use crate::ipc::protocol::{Method, Request, RequestParams, Response, PROTOCOL_VERSION};
+use crate::ipc::protocol::{Method, PROTOCOL_VERSION, Request, RequestParams, Response};
 use tracing::{debug, info, warn};
 
 /// Handle a single IPC request.
@@ -52,9 +52,7 @@ pub async fn handle_request(
             Response::success(&request.id)
         }
 
-        Method::Authenticate => {
-            handle_authenticate(request, config, rate_limiter).await
-        }
+        Method::Authenticate => handle_authenticate(request, config, rate_limiter).await,
     }
 }
 
@@ -175,7 +173,12 @@ mod tests {
         let response = handle_request(request, &config, &rate_limiter).await;
 
         assert!(!response.success);
-        assert!(response.error.unwrap().contains("unsupported protocol version"));
+        assert!(
+            response
+                .error
+                .unwrap()
+                .contains("unsupported protocol version")
+        );
     }
 
     #[tokio::test]
@@ -212,7 +215,12 @@ mod tests {
         let response2 = handle_request(request2, &config, &rate_limiter).await;
 
         assert!(!response2.success);
-        assert!(response2.error.unwrap().contains("too many authentication attempts"));
+        assert!(
+            response2
+                .error
+                .unwrap()
+                .contains("too many authentication attempts")
+        );
     }
 
     #[tokio::test]
