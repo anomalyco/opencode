@@ -51,15 +51,10 @@
 
       /* padding: 8px; */
       /* padding: 8px 8px 0 8px; */
-      border: 1px solid
-        light-dark(
-          color-mix(in oklch, var(--border-base) 30%, transparent),
-          color-mix(in oklch, var(--border-base) 50%, transparent)
-        );
       border-radius: var(--radius-xl);
       background: var(--surface-raised-stronger-non-alpha);
       background-clip: padding-box;
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow-lg-border-base);
 
       /* animation: contentHide 300ms ease-in forwards; */
       /**/
