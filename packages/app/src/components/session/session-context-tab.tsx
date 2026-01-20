@@ -61,8 +61,9 @@ export function SessionContextTab(props: SessionContextTabProps) {
   })
 
   const cost = createMemo(() => {
+    const locale = language.locale()
     const total = props.messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat(locale, {
       style: "currency",
       currency: "USD",
     }).format(total)
@@ -91,18 +92,18 @@ export function SessionContextTab(props: SessionContextTabProps) {
   const number = (value: number | null | undefined) => {
     if (value === undefined) return "—"
     if (value === null) return "—"
-    return value.toLocaleString()
+    return value.toLocaleString(language.locale())
   }
 
   const percent = (value: number | null | undefined) => {
     if (value === undefined) return "—"
     if (value === null) return "—"
-    return value.toString() + "%"
+    return value.toLocaleString(language.locale()) + "%"
   }
 
   const time = (value: number | undefined) => {
     if (!value) return "—"
-    return DateTime.fromMillis(value).toLocaleString(DateTime.DATETIME_MED)
+    return DateTime.fromMillis(value).setLocale(language.locale()).toLocaleString(DateTime.DATETIME_MED)
   }
 
   const providerLabel = createMemo(() => {
@@ -246,7 +247,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
     const count = counts()
     return [
       { label: language.t("context.stats.session"), value: props.info()?.title ?? params.id ?? "—" },
-      { label: language.t("context.stats.messages"), value: count.all.toLocaleString() },
+      { label: language.t("context.stats.messages"), value: count.all.toLocaleString(language.locale()) },
       { label: language.t("context.stats.provider"), value: providerLabel() },
       { label: language.t("context.stats.model"), value: modelLabel() },
       { label: language.t("context.stats.limit"), value: number(c?.limit) },
@@ -259,8 +260,8 @@ export function SessionContextTab(props: SessionContextTabProps) {
         label: language.t("context.stats.cacheTokens"),
         value: `${number(c?.cacheRead)} / ${number(c?.cacheWrite)}`,
       },
-      { label: language.t("context.stats.userMessages"), value: count.user.toLocaleString() },
-      { label: language.t("context.stats.assistantMessages"), value: count.assistant.toLocaleString() },
+      { label: language.t("context.stats.userMessages"), value: count.user.toLocaleString(language.locale()) },
+      { label: language.t("context.stats.assistantMessages"), value: count.assistant.toLocaleString(language.locale()) },
       { label: language.t("context.stats.totalCost"), value: cost() },
       { label: language.t("context.stats.sessionCreated"), value: time(props.info()?.time.created) },
       { label: language.t("context.stats.lastActivity"), value: time(c?.message.time.created) },
