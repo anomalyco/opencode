@@ -120,6 +120,17 @@ export default function Layout(props: ParentProps) {
   })
   const editorRef = { current: undefined as HTMLInputElement | undefined }
 
+  const autoselecting = createMemo(() => {
+    if (params.dir) return false
+    if (initialDir) return false
+    if (!autoselect()) return false
+    if (!pageReady()) return true
+    if (!layoutReady()) return true
+    const list = layout.projects.list()
+    if (list.length === 0) return false
+    return true
+  })
+
   const editorOpen = (id: string) => editor.active === id
   const editorValue = () => editor.value
 
@@ -2194,7 +2205,9 @@ export default function Layout(props: ParentProps) {
             "xl:border-l xl:rounded-tl-sm": !layout.sidebar.opened(),
           }}
         >
-          {props.children}
+          <Show when={!autoselecting()} fallback={<div class="size-full" />}>
+            {props.children}
+          </Show>
         </main>
       </div>
       <Toast.Region />
