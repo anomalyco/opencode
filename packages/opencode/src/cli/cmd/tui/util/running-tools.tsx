@@ -1,5 +1,5 @@
 import { createMemo, type Accessor } from "solid-js"
-import type { Part, ToolPart } from "@opencode-ai/sdk/v2"
+import type { Part, ToolPart, ToolStateRunning } from "@opencode-ai/sdk/v2"
 import { formatDuration } from "../../../../util/format"
 import { useTheme } from "../context/theme"
 import { extractToolCommand, RUNNING_THRESHOLD_MS, type RunningItem } from "./running-utils"
@@ -7,6 +7,12 @@ import { extractToolCommand, RUNNING_THRESHOLD_MS, type RunningItem } from "./ru
 type ToolsData = {
   message: Record<string, { id: string }[]>
   part: Record<string, Part[]>
+}
+
+type RunningToolPart = ToolPart & { state: ToolStateRunning }
+
+function isRunningTool(part: Part, now: number): part is RunningToolPart {
+  return part.type === "tool" && part.state.status === "running" && now - part.state.time.start >= RUNNING_THRESHOLD_MS
 }
 
 export function createRunningTools(
@@ -18,40 +24,24 @@ export function createRunningTools(
 
   return createMemo(() => {
     const now = tick()
-    const tools: { id: string; tool: string; input: Record<string, unknown>; startTime: number }[] = []
 
-    for (const message of messages()) {
-      const parts = data.part[message.id] ?? []
-      for (const part of parts) {
-        if (part.type === "tool") {
-          const toolPart = part as ToolPart
-          if (toolPart.state.status === "running") {
-            const startTime = toolPart.state.time.start
-            if (now - startTime >= RUNNING_THRESHOLD_MS) {
-              tools.push({
-                id: toolPart.id,
-                tool: toolPart.tool,
-                input: toolPart.state.input,
-                startTime,
-              })
-            }
-          }
-        }
-      }
-    }
+    const tools = messages()
+      .flatMap((msg) => data.part[msg.id] ?? [])
+      .filter((part): part is RunningToolPart => isRunningTool(part, now))
+      .map((part) => ({
+        id: part.id,
+        tool: part.tool,
+        input: part.state.input,
+        startTime: part.state.time.start,
+      }))
+      .sort((a, b) => a.startTime - b.startTime)
 
-    // Sort and number agents
-    const sorted = tools.sort((a, b) => a.startTime - b.startTime)
     let agentIndex = 0
-    return sorted.map((tool) => {
-      let label: string
-      if (tool.tool === "task") {
-        agentIndex++
-        const desc = (tool.input.description as string) || "..."
-        label = `agent${agentIndex}: ${desc}`
-      } else {
-        label = extractToolCommand(tool.tool, tool.input)
-      }
+    return tools.map((tool) => {
+      const label =
+        tool.tool === "task"
+          ? `agent${++agentIndex}: ${(tool.input.description as string) || "..."}`
+          : extractToolCommand(tool.tool, tool.input)
       return { id: tool.id, label, startTime: tool.startTime }
     })
   })
