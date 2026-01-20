@@ -6,7 +6,7 @@ import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
 import { Lock } from "../util/lock"
-import { PackageRegistry } from "../package-registry"
+import { SemVer } from "../util/semver"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
@@ -34,6 +34,15 @@ export namespace BunProc {
     const value = stdout.trim()
     if (!value) return null
     return value
+  }
+
+  export async function isOutdated(pkg: string, cachedVersion: string, cwd?: string): Promise<boolean> {
+    const latestVersion = await info(pkg, "version", cwd)
+    if (!latestVersion) {
+      log.warn("Failed to resolve latest version, using cached", { pkg, cachedVersion })
+      return false
+    }
+    return SemVer.compare(cachedVersion, latestVersion) < 0
   }
 
   export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
@@ -107,7 +116,7 @@ export namespace BunProc {
       }
 
       if (version === "latest") {
-        const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
+        const isOutdated = await BunProc.isOutdated(pkg, cachedVersion, Global.Path.cache)
         if (!isOutdated) return mod
         log.info("Cached version is outdated, proceeding with install", {
           pkg,

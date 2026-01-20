@@ -6,6 +6,8 @@ import path from "path"
 
 mock.module("../../src/bun/index", () => ({
   BunProc: {
+    info: async () => null,
+    isOutdated: async () => false,
     install: async (pkg: string, _version?: string) => {
       // Return package name without version for mocking
       const lastAtIndex = pkg.lastIndexOf("@")
