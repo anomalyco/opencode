@@ -9,9 +9,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Authentication
 
-- [ ] **AUTH-01**: User can log in with username and password via web form
-- [ ] **AUTH-02**: Credentials validated against system PAM (supports LDAP/Kerberos transparently)
-- [ ] **AUTH-03**: Authenticated session maps to real UNIX user (UID/GID)
+- [x] **AUTH-01**: User can log in with username and password via web form
+- [x] **AUTH-02**: Credentials validated against system PAM (supports LDAP/Kerberos transparently)
+- [x] **AUTH-03**: Authenticated session maps to real UNIX user (UID/GID)
 - [ ] **AUTH-04**: Commands and file operations execute under authenticated user's identity
 - [ ] **AUTH-05**: User can optionally enable 2FA via TOTP (PAM module integration)
 
@@ -82,9 +82,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | Phase 4 | Pending |
-| AUTH-02 | Phase 4 | Pending |
-| AUTH-03 | Phase 4 | Pending |
+| AUTH-01 | Phase 4 | Complete |
+| AUTH-02 | Phase 4 | Complete |
+| AUTH-03 | Phase 4 | Complete |
 | AUTH-04 | Phase 5 | Pending |
 | AUTH-05 | Phase 10 | Pending |
 | SESS-01 | Phase 2 | Complete |

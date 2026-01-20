@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Configuration Foundation** - Auth configuration schema and backward compatibility
 - [x] **Phase 2: Session Infrastructure** - Core session middleware, cookies, and expiration
 - [x] **Phase 3: Auth Broker Core** - Privileged helper for PAM authentication and IPC
-- [ ] **Phase 4: Authentication Flow** - Login endpoint with PAM validation and session-user mapping
+- [x] **Phase 4: Authentication Flow** - Login endpoint with PAM validation and session-user mapping
 - [ ] **Phase 5: User Process Execution** - Commands execute under authenticated user's UID
 - [ ] **Phase 6: Login UI** - Web login form with opencode styling
 - [ ] **Phase 7: Security Hardening** - CSRF, rate limiting, HTTPS detection
@@ -86,12 +86,11 @@ Plans:
   3. Successful login creates session mapped to UNIX UID/GID
   4. Failed login returns generic error (no user enumeration)
   5. Session contains user identity for subsequent requests
-**Plans**: 3 plans
+**Plans**: 2 plans
 
 Plans:
 - [x] 04-01-PLAN.md — User info lookup and session schema extension (getUserInfo, UNIX fields in UserSession)
-- [x] 04-02-PLAN.md — Login endpoint (POST /auth/login, broker integration)
-- [ ] 04-03-PLAN.md — Integration tests
+- [x] 04-02-PLAN.md — Login endpoint (POST /auth/login, GET /auth/status, broker integration)
 
 ### Phase 5: User Process Execution
 **Goal**: Commands and file operations execute under the authenticated user's UNIX identity
@@ -199,7 +198,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 1. Configuration Foundation | 3/3 | Complete | 2026-01-20 |
 | 2. Session Infrastructure | 2/2 | Complete | 2026-01-20 |
 | 3. Auth Broker Core | 6/6 | Complete | 2026-01-20 |
-| 4. Authentication Flow | 2/3 | In progress | - |
+| 4. Authentication Flow | 2/2 | Complete | 2026-01-20 |
 | 5. User Process Execution | 0/TBD | Not started | - |
 | 6. Login UI | 0/TBD | Not started | - |
 | 7. Security Hardening | 0/TBD | Not started | - |
