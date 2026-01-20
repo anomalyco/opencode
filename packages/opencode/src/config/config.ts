@@ -182,6 +182,20 @@ export namespace Config {
 
     result.plugin = deduplicatePlugins(result.plugin ?? [])
 
+    // Validate PAM service file exists when auth is enabled
+    if (result.auth?.enabled) {
+      const pamService = result.auth.pam?.service ?? "opencode"
+      const pamPath = `/etc/pam.d/${pamService}`
+      const pamExists = await Filesystem.exists(pamPath)
+      if (!pamExists) {
+        throw new PamServiceNotFoundError({
+          service: pamService,
+          path: pamPath,
+        })
+      }
+      log.info("PAM service file validated", { service: pamService, path: pamPath })
+    }
+
     return {
       config: result,
       directories,
