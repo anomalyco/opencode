@@ -51,10 +51,11 @@ Plans:
   2. User can log out and session is cleared both client-side and server-side
   3. Session expires after configured idle timeout
   4. Expired session redirects user to login
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
+- [ ] 02-01-PLAN.md — UserSession namespace with in-memory storage and CRUD operations
+- [ ] 02-02-PLAN.md — Auth middleware and routes (session validation, logout endpoints)
 
 ### Phase 3: Auth Broker Core
 **Goal**: Privileged auth broker handles PAM authentication via Unix socket IPC
@@ -188,8 +189,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Configuration Foundation | 3/3 | ✓ Complete | 2026-01-20 |
-| 2. Session Infrastructure | 0/TBD | Not started | - |
+| 1. Configuration Foundation | 3/3 | Complete | 2026-01-20 |
+| 2. Session Infrastructure | 0/2 | Not started | - |
 | 3. Auth Broker Core | 0/TBD | Not started | - |
 | 4. Authentication Flow | 0/TBD | Not started | - |
 | 5. User Process Execution | 0/TBD | Not started | - |
