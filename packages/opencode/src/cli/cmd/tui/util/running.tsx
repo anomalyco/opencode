@@ -1,63 +1,37 @@
-import { createSignal, createMemo, createEffect, onCleanup, type Accessor } from "solid-js"
+import { createSignal, createMemo, createEffect, onCleanup, Show, type Accessor } from "solid-js"
 import type { Message, Part, SessionStatus, ToolPart, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
-import { formatDuration } from "@/util/format"
+import { formatDuration } from "../../../../util/format"
+import { useTheme } from "../context/theme"
+import { extractToolCommand, RUNNING_THRESHOLD_MS, type RunningItem } from "./running-utils"
 
-const MAX_LEN = 40
-const RUNNING_THRESHOLD_MS = 2000
-
-export function extractToolCommand(tool: string, input: Record<string, unknown>): string {
-  let cmd = ""
-
-  switch (tool) {
-    case "bash":
-      cmd = (input.command as string) || "bash"
-      break
-    case "grep":
-      cmd = `rg "${input.pattern}"${input.path ? ` ${input.path}` : ""}`
-      break
-    case "glob":
-      cmd = `glob ${input.pattern}`
-      break
-    case "read":
-      cmd = `read ${(input.filePath as string)?.split("/").pop() || input.filePath}`
-      break
-    case "write":
-      cmd = `write ${(input.filePath as string)?.split("/").pop() || input.filePath}`
-      break
-    case "edit":
-      cmd = `edit ${(input.filePath as string)?.split("/").pop() || input.filePath}`
-      break
-    case "task":
-      cmd = `agent: ${(input.description as string) || "..."}`
-      break
-    case "webfetch":
-      cmd = `fetch ${input.url}`
-      break
-    default:
-      cmd = (input.title as string) || tool
-  }
-
-  return cmd.length > MAX_LEN ? cmd.slice(0, MAX_LEN - 3) + "..." : cmd
-}
-
-export type RunningTool = {
-  id: string
-  tool: string
-  input: Record<string, unknown>
-  command: string
-  startTime: number
-}
-
-export type InferenceStatus =
-  | { type: "sending"; startTime: number }
-  | { type: "pondering"; startTime: number }
-  | { type: "streaming"; startTime: number }
-  | { type: "retry"; message: string; remaining: number }
+// Re-export for convenience
+export type { RunningItem } from "./running-utils"
+export { extractToolCommand } from "./running-utils"
 
 type SyncData = {
   session_status: Record<string, SessionStatus>
   message: Record<string, Message[]>
   part: Record<string, Part[]>
+}
+
+export function RunningItemView(props: { item: RunningItem; now: number }) {
+  const { theme } = useTheme()
+  const elapsed = () => formatDuration(Math.floor((props.now - props.item.startTime) / 1000))
+
+  return (
+    <box flexDirection="row" gap={1}>
+      <text flexShrink={0} fg={theme.warning}>
+        ●
+      </text>
+      <text fg={theme.text} wrapMode="none">
+        {props.item.label}
+        <span style={{ fg: theme.textMuted }}> {elapsed()}</span>
+        <Show when={props.item.suffix}>
+          <span style={{ fg: theme.textMuted }}> ({props.item.suffix})</span>
+        </Show>
+      </text>
+    </box>
+  )
 }
 
 export function createRunningState(sessionID: Accessor<string>, data: SyncData) {
@@ -91,7 +65,7 @@ export function createRunningState(sessionID: Accessor<string>, data: SyncData) 
 
   const runningTools = createMemo(() => {
     const now = tick()
-    const tools: RunningTool[] = []
+    const tools: { id: string; tool: string; input: Record<string, unknown>; startTime: number }[] = []
 
     for (const message of messages()) {
       const parts = data.part[message.id] ?? []
@@ -105,7 +79,6 @@ export function createRunningState(sessionID: Accessor<string>, data: SyncData) 
                 id: toolPart.id,
                 tool: toolPart.tool,
                 input: toolPart.state.input,
-                command: "", // filled in below
                 startTime,
               })
             }
@@ -114,29 +87,22 @@ export function createRunningState(sessionID: Accessor<string>, data: SyncData) 
       }
     }
 
-    // Sort by start time and number agents
-    const sorted = tools.sort((a, b) => a.startTime - b.startTime)
-    let agentIndex = 0
-    for (const tool of sorted) {
-      if (tool.tool === "task") {
-        agentIndex++
-        const desc = (tool.input.description as string) || "..."
-        tool.command = `agent${agentIndex}: ${desc}`
-      } else {
-        tool.command = extractToolCommand(tool.tool, tool.input)
-      }
-    }
-    return sorted
+    return tools.sort((a, b) => a.startTime - b.startTime)
   })
 
-  const inferenceStatus = createMemo((): InferenceStatus | null => {
+  const inferenceStatus = createMemo((): RunningItem | null => {
     const now = tick()
     const status = sessionStatus()
 
     // Handle retry state
     if (status.type === "retry") {
       const remaining = Math.max(0, Math.ceil((status.next - now) / 1000))
-      return { type: "retry", message: status.message, remaining }
+      return {
+        id: "inference",
+        label: `Retrying in ${remaining}s`,
+        startTime: now,
+        suffix: status.message,
+      }
     }
 
     // Not busy = no inference happening
@@ -151,7 +117,7 @@ export function createRunningState(sessionID: Accessor<string>, data: SyncData) 
 
     // No messages or last is user message = sending request
     if (!lastMsg || lastMsg.role === "user") {
-      return { type: "sending", startTime }
+      return { id: "inference", label: "Sending...", startTime }
     }
 
     // Have assistant message - check parts
@@ -159,7 +125,7 @@ export function createRunningState(sessionID: Accessor<string>, data: SyncData) 
 
     // No parts yet = pondering (waiting for first token)
     if (parts.length === 0) {
-      return { type: "pondering", startTime }
+      return { id: "inference", label: "Pondering...", startTime }
     }
 
     // Check for active text/reasoning streaming (ignore tool parts)
@@ -172,22 +138,53 @@ export function createRunningState(sessionID: Accessor<string>, data: SyncData) 
       const isComplete = lastTextOrReasoning.time?.end !== undefined
 
       if (!hasContent) {
-        return { type: "pondering", startTime }
+        return { id: "inference", label: "Pondering...", startTime }
       }
 
       if (!isComplete) {
         const streamStartTime = lastTextOrReasoning.time?.start ?? startTime
-        return { type: "streaming", startTime: streamStartTime }
+        return { id: "inference", label: "Streaming...", startTime: streamStartTime }
       }
     }
 
     // Between tool calls or other intermediate state = pondering
     if (!lastMsg.time.completed) {
-      return { type: "pondering", startTime }
+      return { id: "inference", label: "Pondering...", startTime }
     }
 
     return null
   })
 
-  return { tick, runningTools, inferenceStatus }
+  const runningItems = createMemo((): RunningItem[] => {
+    const items: RunningItem[] = []
+
+    // Add inference status first (always on top)
+    const inference = inferenceStatus()
+    if (inference) {
+      items.push(inference)
+    }
+
+    // Add running tools with agent numbering
+    const tools = runningTools()
+    let agentIndex = 0
+    for (const tool of tools) {
+      let label: string
+      if (tool.tool === "task") {
+        agentIndex++
+        const desc = (tool.input.description as string) || "..."
+        label = `agent${agentIndex}: ${desc}`
+      } else {
+        label = extractToolCommand(tool.tool, tool.input)
+      }
+      items.push({
+        id: tool.id,
+        label,
+        startTime: tool.startTime,
+      })
+    }
+
+    return items
+  })
+
+  return { tick, runningItems }
 }

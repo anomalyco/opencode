@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { extractToolCommand } from "../../../src/cli/cmd/tui/util/running"
+import { extractToolCommand } from "../../../src/cli/cmd/tui/util/running-utils"
 
 describe("extractToolCommand", () => {
   test("extracts bash command", () => {

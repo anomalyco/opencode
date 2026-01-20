@@ -2,29 +2,16 @@ import { useSync } from "@tui/context/sync"
 import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
-import { formatDuration } from "@/util/format"
+import { Locale } from "@/util/locale"
+import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
+import { Global } from "@/global"
 import { Installation } from "@/installation"
+import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
-import { createRunningState } from "../../util/running"
-
-function RunningToolItem(props: { command: string; startTime: number; now: number }) {
-  const { theme } = useTheme()
-
-  return (
-    <box flexDirection="row" gap={1}>
-      <text flexShrink={0} fg={theme.warning}>
-        ●
-      </text>
-      <text fg={theme.text} wrapMode="none">
-        {props.command}
-        <span style={{ fg: theme.textMuted }}> {formatDuration(Math.floor((props.now - props.startTime) / 1000))}</span>
-      </text>
-    </box>
-  )
-}
+import { createRunningState, RunningItemView } from "../../util/running.tsx"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -34,7 +21,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
-  const { tick, runningTools, inferenceStatus } = createRunningState(() => props.sessionID, sync.data)
+  const { tick, runningItems } = createRunningState(() => props.sessionID, sync.data)
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
@@ -113,88 +100,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
-            <Show when={runningTools().length > 0 || inferenceStatus()}>
+            <Show when={runningItems().length > 0}>
               <box>
                 <text fg={theme.text}>
                   <b>Running</b>
                 </text>
-                <Show when={inferenceStatus()}>
-                  {(status) => (
-                    <Switch>
-                      <Match when={status().type === "sending"}>
-                        <box flexDirection="row" gap={1}>
-                          <text flexShrink={0} fg={theme.warning}>
-                            ●
-                          </text>
-                          <text fg={theme.text} wrapMode="none">
-                            Sending...
-                            <span style={{ fg: theme.textMuted }}>
-                              {" "}
-                              {formatDuration(
-                                Math.floor(
-                                  (tick() - (status() as { type: "sending"; startTime: number }).startTime) / 1000,
-                                ),
-                              )}
-                            </span>
-                          </text>
-                        </box>
-                      </Match>
-                      <Match when={status().type === "pondering"}>
-                        <box flexDirection="row" gap={1}>
-                          <text flexShrink={0} fg={theme.warning}>
-                            ●
-                          </text>
-                          <text fg={theme.text} wrapMode="none">
-                            Pondering...
-                            <span style={{ fg: theme.textMuted }}>
-                              {" "}
-                              {formatDuration(
-                                Math.floor(
-                                  (tick() - (status() as { type: "pondering"; startTime: number }).startTime) / 1000,
-                                ),
-                              )}
-                            </span>
-                          </text>
-                        </box>
-                      </Match>
-                      <Match when={status().type === "streaming"}>
-                        <box flexDirection="row" gap={1}>
-                          <text flexShrink={0} fg={theme.warning}>
-                            ●
-                          </text>
-                          <text fg={theme.text} wrapMode="none">
-                            Streaming...
-                            <span style={{ fg: theme.textMuted }}>
-                              {" "}
-                              {formatDuration(
-                                Math.floor(
-                                  (tick() - (status() as { type: "streaming"; startTime: number }).startTime) / 1000,
-                                ),
-                              )}
-                            </span>
-                          </text>
-                        </box>
-                      </Match>
-                      <Match when={status().type === "retry"}>
-                        <box flexDirection="row" gap={1}>
-                          <text flexShrink={0} fg={theme.warning}>
-                            ●
-                          </text>
-                          <text fg={theme.text} wrapMode="none">
-                            Retrying in {(status() as { type: "retry"; message: string; remaining: number }).remaining}s
-                            <span style={{ fg: theme.textMuted }}>
-                              {" "}
-                              ({(status() as { type: "retry"; message: string; remaining: number }).message})
-                            </span>
-                          </text>
-                        </box>
-                      </Match>
-                    </Switch>
-                  )}
-                </Show>
-                <For each={runningTools()}>
-                  {(item) => <RunningToolItem command={item.command} startTime={item.startTime} now={tick()} />}
-                </For>
+                <For each={runningItems()}>{(item) => <RunningItemView item={item} now={tick()} />}</For>
               </box>
             </Show>
             <Show when={mcpEntries().length > 0}>
