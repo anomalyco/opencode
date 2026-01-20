@@ -381,6 +381,8 @@ export const dict = {
 
   "prompt.loading": "正在加载提示...",
   "terminal.loading": "正在加载终端...",
+  "terminal.title": "终端",
+  "terminal.title.numbered": "终端 {{number}}",
 
   "common.closeTab": "关闭标签页",
   "common.dismiss": "忽略",

@@ -9,8 +9,8 @@ This report documents the remaining user-facing strings in `packages/app/src` th
 ## Current State
 
 - The app uses `useLanguage().t("...")` with dictionaries in `packages/app/src/i18n/en.ts` and `packages/app/src/i18n/zh.ts`.
-- Recent progress (already translated): `packages/app/src/pages/home.tsx`, `packages/app/src/pages/layout.tsx`, `packages/app/src/pages/session.tsx`, `packages/app/src/components/prompt-input.tsx`, `packages/app/src/components/dialog-connect-provider.tsx`, `packages/app/src/components/session/session-header.tsx`, `packages/app/src/pages/error.tsx`, `packages/app/src/components/session/session-new-view.tsx`, `packages/app/src/components/session-context-usage.tsx`, `packages/app/src/components/session/session-context-tab.tsx`, `packages/app/src/components/session-lsp-indicator.tsx`, `packages/app/src/components/session/session-sortable-tab.tsx`, `packages/app/src/components/titlebar.tsx`, `packages/app/src/components/dialog-select-model.tsx`, `packages/app/src/context/notification.tsx`, `packages/app/src/context/global-sync.tsx`, `packages/app/src/context/file.tsx`, `packages/app/src/context/local.tsx`, `packages/app/src/utils/prompt.ts` (plus new keys added in both dictionaries).
-- Dictionary parity check: `en.ts` and `zh.ts` currently contain the same key set (371 keys each; no missing or extra keys).
+- Recent progress (already translated): `packages/app/src/pages/home.tsx`, `packages/app/src/pages/layout.tsx`, `packages/app/src/pages/session.tsx`, `packages/app/src/components/prompt-input.tsx`, `packages/app/src/components/dialog-connect-provider.tsx`, `packages/app/src/components/session/session-header.tsx`, `packages/app/src/pages/error.tsx`, `packages/app/src/components/session/session-new-view.tsx`, `packages/app/src/components/session-context-usage.tsx`, `packages/app/src/components/session/session-context-tab.tsx`, `packages/app/src/components/session-lsp-indicator.tsx`, `packages/app/src/components/session/session-sortable-tab.tsx`, `packages/app/src/components/titlebar.tsx`, `packages/app/src/components/dialog-select-model.tsx`, `packages/app/src/context/notification.tsx`, `packages/app/src/context/global-sync.tsx`, `packages/app/src/context/file.tsx`, `packages/app/src/context/local.tsx`, `packages/app/src/utils/prompt.ts`, `packages/app/src/context/terminal.tsx`, `packages/app/src/components/session/session-sortable-terminal-tab.tsx` (plus new keys added in both dictionaries).
+- Dictionary parity check: `en.ts` and `zh.ts` currently contain the same key set (373 keys each; no missing or extra keys).
 
 ## Methodology
 
@@ -174,12 +174,10 @@ Completed (2026-01-20):
 
 File: `packages/app/src/context/terminal.tsx`
 
-- User-visible terminal titles are generated as "Terminal" and "Terminal N".
-- There is parsing logic `^Terminal (\d+)$` to compute the next number.
+Completed (2026-01-20):
 
-Recommendation:
-- Either keep these English intentionally (stable internal naming), OR
-- Change the data model to store a stable numeric `titleNumber` and render the localized display label separately.
+- Terminal display labels are now rendered from a stable numeric `titleNumber` and localized via `terminal.title.*`.
+- Added a one-time migration to backfill missing `titleNumber` by parsing the stored title string.
 
 ## Low Priority: Utils / Dev-Only Copy
 
@@ -201,9 +199,8 @@ This is only thrown in DEV and is more of a developer diagnostic. Optional to tr
 
 ## Prioritized Implementation Plan
 
-1. Decide on the terminal naming approach (`packages/app/src/context/terminal.tsx`).
-2. Optional: `packages/app/src/components/dialog-select-server.tsx` placeholder example URL.
-3. Optional: `packages/app/src/entry.tsx` dev-only root mount error.
+1. Optional: `packages/app/src/components/dialog-select-server.tsx` placeholder example URL.
+2. Optional: `packages/app/src/entry.tsx` dev-only root mount error.
 
 ## Suggested Key Naming Conventions
 
@@ -229,7 +226,7 @@ Components:
 - `packages/app/src/components/dialog-select-server.tsx` (optional URL placeholder)
 
 Context:
-- `packages/app/src/context/terminal.tsx` (naming)
+- (none)
 
 Utils:
 - `packages/app/src/entry.tsx` (dev-only)
