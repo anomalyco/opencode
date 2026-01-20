@@ -17,6 +17,8 @@ export const DialogSelectModelUnpaid: Component = () => {
   const local = useLocal()
   const dialog = useDialog()
   const providers = useProviders()
+  const isFree = (item: ReturnType<typeof local.model.list>[number]) =>
+    item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)
 
   let listRef: ListRef | undefined
   const handleKey = (e: KeyboardEvent) => {
@@ -41,7 +43,12 @@ export const DialogSelectModelUnpaid: Component = () => {
           current={local.model.current()}
           key={(x) => `${x.provider.id}:${x.id}`}
           itemWrapper={(item, node) => (
-            <Tooltip class="w-full" placement="right-start" gutter={12} value={<ModelTooltip model={item} />}>
+            <Tooltip
+              class="w-full"
+              placement="right-start"
+              gutter={12}
+              value={<ModelTooltip model={item} latest={item.latest} free={isFree(item)} />}
+            >
               {node}
             </Tooltip>
           )}
@@ -55,7 +62,9 @@ export const DialogSelectModelUnpaid: Component = () => {
           {(i) => (
             <div class="w-full flex items-center gap-x-2.5">
               <span>{i.name}</span>
-              <Tag>Free</Tag>
+              <Show when={isFree(i)}>
+                <Tag>Free</Tag>
+              </Show>
               <Show when={i.latest}>
                 <Tag>Latest</Tag>
               </Show>

@@ -25,6 +25,8 @@ const ModelList: Component<{
       .filter((m) => local.model.visible({ modelID: m.id, providerID: m.provider.id }))
       .filter((m) => (props.provider ? m.provider.id === props.provider : true)),
   )
+  const isFree = (item: ReturnType<typeof models>[number]) =>
+    item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)
 
   return (
     <List
@@ -47,7 +49,12 @@ const ModelList: Component<{
         return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
       }}
       itemWrapper={(item, node) => (
-        <Tooltip class="w-full" placement="right-start" gutter={12} value={<ModelTooltip model={item} />}>
+        <Tooltip
+          class="w-full"
+          placement="right-start"
+          gutter={12}
+          value={<ModelTooltip model={item} latest={item.latest} free={isFree(item)} />}
+        >
           {node}
         </Tooltip>
       )}
@@ -61,7 +68,7 @@ const ModelList: Component<{
       {(i) => (
         <div class="w-full flex items-center gap-x-2 text-13-regular">
           <span class="truncate">{i.name}</span>
-          <Show when={i.provider.id === "opencode" && (!i.cost || i.cost?.input === 0)}>
+          <Show when={isFree(i)}>
             <Tag>Free</Tag>
           </Show>
           <Show when={i.latest}>

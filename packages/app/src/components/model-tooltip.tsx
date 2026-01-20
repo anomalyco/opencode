@@ -1,21 +1,22 @@
 import { Show, type Component } from "solid-js"
 
+type InputKey = "text" | "image" | "audio" | "video" | "pdf"
+type InputMap = Record<InputKey, boolean>
+
 type ModelInfo = {
   id: string
   name: string
   provider: {
     name: string
   }
-  capabilities: {
+  capabilities?: {
     reasoning: boolean
-    input: {
-      text: boolean
-      audio: boolean
-      image: boolean
-      video: boolean
-      pdf: boolean
-    }
+    input: InputMap
   }
+  modalities?: {
+    input: Array<string>
+  }
+  reasoning?: boolean
   limit: {
     context: number
   }
@@ -33,15 +34,27 @@ function sourceName(model: ModelInfo) {
   return model.provider.name
 }
 
-export const ModelTooltip: Component<{ model: ModelInfo }> = (props) => {
-  const title = () => `${sourceName(props.model)} ${props.model.name}`
-  const inputs = () => {
-    const input = props.model.capabilities.input
-    const order: Array<keyof ModelInfo["capabilities"]["input"]> = ["text", "image", "audio", "video", "pdf"]
-    const entries = order.filter((key) => input[key])
-    return entries.length ? entries.join(", ") : undefined
+export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?: boolean }> = (props) => {
+  const title = () => {
+    const tags: Array<string> = []
+    if (props.latest) tags.push("Latest")
+    if (props.free) tags.push("Free")
+    const suffix = tags.length ? ` (${tags.join(", ")})` : ""
+    return `${sourceName(props.model)} ${props.model.name}${suffix}`
   }
-  const reasoning = () => (props.model.capabilities.reasoning ? "Allows reasoning" : "No reasoning")
+  const inputs = () => {
+    if (props.model.capabilities) {
+      const input = props.model.capabilities.input
+      const order: Array<InputKey> = ["text", "image", "audio", "video", "pdf"]
+      const entries = order.filter((key) => input[key])
+      return entries.length ? entries.join(", ") : undefined
+    }
+    return props.model.modalities?.input?.join(", ")
+  }
+  const reasoning = () => {
+    if (props.model.capabilities) return props.model.capabilities.reasoning ? "Allows reasoning" : "No reasoning"
+    return props.model.reasoning ? "Allows reasoning" : "No reasoning"
+  }
   const context = () => `Context limit ${props.model.limit.context.toLocaleString()}`
 
   return (
