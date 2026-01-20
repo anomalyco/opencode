@@ -142,8 +142,7 @@ export function formatKeybind(config: string): string {
       space: "Space",
     }
     const key = kb.key.toLowerCase()
-    const displayKey =
-      keys[key] ?? (key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1))
+    const displayKey = keys[key] ?? (key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1))
     parts.push(displayKey)
   }
 
