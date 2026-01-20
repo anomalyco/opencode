@@ -51,7 +51,7 @@
   overflow: hidden;
   border-radius: var(--radius-md);
   background-color: var(--surface-raised-stronger-non-alpha);
-  padding: 4px;
+  padding: 0;
   box-shadow: var(--shadow-xs-border);
   z-index: 60;
 
@@ -66,6 +66,7 @@
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
+    padding: 4px;
 
     &:focus {
       outline: none;
