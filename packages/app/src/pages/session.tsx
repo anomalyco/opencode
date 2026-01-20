@@ -1248,9 +1248,9 @@ export default function Page() {
                             </Show>
                           </Match>
                           <Match when={true}>
-                            <div class="px-4 pt-18 pb-6 flex flex-col items-center justify-center text-center gap-3">
-                              <Mark class="w-6 opacity-40" />
-                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet.</div>
+                            <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
+                              <Mark class="w-14 opacity-10" />
+                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet</div>
                             </div>
                           </Match>
                         </Switch>
@@ -1524,9 +1524,9 @@ export default function Page() {
                             </Show>
                           </Match>
                           <Match when={true}>
-                            <div class="px-6 pt-18 pb-6 flex flex-col items-center justify-center text-center gap-3">
-                              <Mark class="w-6 opacity-40" />
-                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet.</div>
+                            <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
+                              <Mark class="w-14 opacity-10" />
+                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet</div>
                             </div>
                           </Match>
                         </Switch>
