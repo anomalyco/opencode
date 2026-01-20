@@ -1605,6 +1605,22 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
+
+    if (command.skill) {
+      const skillPrompt = input.arguments
+        ? `Use the skill tool to load the "${input.command}" skill, then follow its instructions to handle: ${input.arguments}`
+        : `Use the skill tool to load the "${input.command}" skill and follow its instructions.`
+
+      return prompt({
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        model: input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID),
+        agent: input.agent ?? (await Agent.defaultAgent()),
+        parts: [{ type: "text", text: skillPrompt }],
+        variant: input.variant,
+      })
+    }
+
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
     const raw = input.arguments.match(argsRegex) ?? []
