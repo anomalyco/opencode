@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Secure remote access to your opencode instance from anywhere — authenticate once with your system credentials, work on your projects from any device.
-**Current focus:** Phase 3 (Auth Broker Core) - Plan 02 Complete
+**Current focus:** Phase 3 (Auth Broker Core) - Plan 05 Complete
 
 ## Current Position
 
 Phase: 3 of 11 (Auth Broker Core)
-Plan: 2 of 3 in current phase
+Plan: 5 of 6 in current phase
 Status: In progress
-Last activity: 2026-01-20 - Completed 03-02-PLAN.md
+Last activity: 2026-01-20 - Completed 03-05-PLAN.md
 
-Progress: [███░░░░░░░] ~32%
+Progress: [████░░░░░░] ~40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 4.3 min
-- Total execution time: 30 min
+- Total plans completed: 10
+- Average duration: 4.1 min
+- Total execution time: 41 min
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [███░░░░░░░] ~32%
 |-------|-------|-------|----------|
 | 1. Configuration Foundation | 3 | 12 min | 4 min |
 | 2. Session Infrastructure | 2 | 5 min | 2.5 min |
-| 3. Auth Broker Core | 2 | 13 min | 6.5 min |
+| 3. Auth Broker Core | 5 | 24 min | 4.8 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (2 min), 02-02 (3 min), 03-01 (8 min), 03-02 (5 min)
-- Trend: Stable, Rust work slightly longer than TypeScript
+- Last 5 plans: 03-01 (8 min), 03-02 (5 min), 03-03 (5 min), 03-04 (~3 min), 03-05 (3 min)
+- Trend: Stable, TypeScript plans faster than Rust
 
 *Updated after each plan completion*
 
@@ -59,6 +59,8 @@ Recent decisions affecting current work:
 | 03-01 | nonstick instead of pam-client | pam-client fails on macOS due to OpenPAM compatibility |
 | 03-01 | Password redaction: Debug + skip_serializing | Two-layer protection against password logging |
 | 03-02 | AllNumeric check before InvalidFirstChar | More specific error messages for numeric usernames |
+| 03-05 | existsSync check before createConnection | Bun throws sync error unlike Node.js async error event |
+| 03-05 | Settled flag pattern | Prevent double-resolve/reject in promise-based socket code |
 
 ### Pending Todos
 
@@ -76,7 +78,7 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-20
-Stopped at: Completed 03-02-PLAN.md (Auth components)
+Stopped at: Completed 03-05-PLAN.md (Broker client)
 Resume file: None
 
 ## Phase 3 Progress
@@ -84,4 +86,7 @@ Resume file: None
 **Auth Broker Core - In Progress:**
 - [x] Plan 01: Project init, IPC protocol, config loading (15 tests)
 - [x] Plan 02: PAM wrapper, rate limiter, username validation (29 new tests)
-- [ ] Plan 03: Unix socket server and request handler
+- [x] Plan 03: Unix socket server and request handler
+- [ ] Plan 04: Integration testing
+- [x] Plan 05: TypeScript broker client (12 tests)
+- [ ] Plan 06: Final integration
