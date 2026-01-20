@@ -123,6 +123,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                           fallback={store.name || defaultName()}
                           {...getAvatarColors(store.color)}
                           class="size-full"
+                          style={{ "font-size": "32px" }}
                         />
                       </div>
                     }

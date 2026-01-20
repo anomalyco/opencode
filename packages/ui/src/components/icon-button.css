@@ -125,11 +125,6 @@
     /* padding: 0 8px 0 6px; */
     gap: 8px;
 
-    [data-slot="icon-svg"] {
-      height: 16px;
-      width: 16px;
-    }
-
     /* text-12-medium */
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);

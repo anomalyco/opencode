@@ -152,7 +152,6 @@ export default function Layout(props: ParentProps) {
   const openEditor = (id: string, value: string) => {
     if (!id) return
     setEditor({ active: id, value })
-    queueMicrotask(() => editorRef.current?.focus())
   }
 
   const closeEditor = () => setEditor({ active: "", value: "" })
@@ -221,6 +220,7 @@ export default function Layout(props: ParentProps) {
         <InlineInput
           ref={(el) => {
             editorRef.current = el
+            requestAnimationFrame(() => el.focus())
           }}
           value={editorValue()}
           class={props.class}
@@ -830,6 +830,13 @@ export default function Layout(props: ParentProps) {
         title: "Switch server",
         category: "Server",
         onSelect: () => openServer(),
+      },
+      {
+        id: "settings.open",
+        title: "Open settings",
+        category: "Settings",
+        keybind: "mod+comma",
+        onSelect: () => openSettings(),
       },
       {
         id: "session.previous",
@@ -1491,7 +1498,7 @@ export default function Layout(props: ParentProps) {
             </Tooltip>
           }
         >
-          <HoverCard openDelay={150} closeDelay={100} placement="right-start" gutter={28} trigger={item}>
+          <HoverCard openDelay={1000} closeDelay={0} placement="right-start" gutter={28} trigger={item}>
             <Show when={hoverReady()} fallback={<div class="text-12-regular text-text-weak">Loading messages…</div>}>
               <MessageNav
                 messages={hoverMessages() ?? []}
@@ -1841,6 +1848,7 @@ export default function Layout(props: ParentProps) {
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
         <HoverCard
+          open={open()}
           openDelay={0}
           closeDelay={0}
           placement="right-start"
@@ -1893,20 +1901,22 @@ export default function Layout(props: ParentProps) {
                 </For>
               </Show>
             </div>
-            <Show when={!selected()}>
-              <div class="px-2 py-2 border-t border-border-weak-base">
-                <Button
-                  variant="ghost"
-                  class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
-                  onClick={() => {
-                    layout.sidebar.open()
-                    navigateToProject(props.project.worktree)
-                  }}
-                >
-                  View all sessions
-                </Button>
-              </div>
-            </Show>
+            <div class="px-2 py-2 border-t border-border-weak-base">
+              <Button
+                variant="ghost"
+                class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
+                onClick={() => {
+                  if (selected()) {
+                    setOpen(false)
+                    return
+                  }
+                  layout.sidebar.open()
+                  navigateToProject(props.project.worktree)
+                }}
+              >
+                View all sessions
+              </Button>
+            </div>
           </div>
         </HoverCard>
       </div>
@@ -2049,9 +2059,13 @@ export default function Layout(props: ParentProps) {
             </DragDropProvider>
           </div>
           <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
-            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Settings">
+            <TooltipKeybind
+              placement={sidebarProps.mobile ? "bottom" : "right"}
+              title="Settings"
+              keybind={command.keybind("settings.open")}
+            >
               <IconButton icon="settings-gear" variant="ghost" size="large" onClick={openSettings} />
-            </Tooltip>
+            </TooltipKeybind>
             <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Help">
               <IconButton
                 icon="help"
