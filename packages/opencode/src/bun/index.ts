@@ -84,7 +84,7 @@ export namespace BunProc {
       }
 
       if (version === "latest") {
-        const isOutdated = await Npm.isOutdated(pkg, cachedVersion)
+        const isOutdated = await Npm.isOutdated(pkg, cachedVersion, Global.Path.cache)
         if (!isOutdated) return mod
         log.info("Cached version is outdated, proceeding with install", {
           pkg,
