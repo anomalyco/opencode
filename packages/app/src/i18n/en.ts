@@ -95,12 +95,47 @@ export const dict = {
 
   "dialog.provider.viewAll": "View all providers",
 
+  "provider.connect.title": "Connect {{provider}}",
+  "provider.connect.title.anthropicProMax": "Login with Claude Pro/Max",
+  "provider.connect.selectMethod": "Select login method for {{provider}}.",
+  "provider.connect.method.apiKey": "API key",
+  "provider.connect.status.inProgress": "Authorization in progress...",
+  "provider.connect.status.waiting": "Waiting for authorization...",
+  "provider.connect.status.failed": "Authorization failed: {{error}}",
+  "provider.connect.apiKey.description":
+    "Enter your {{provider}} API key to connect your account and use {{provider}} models in OpenCode.",
+  "provider.connect.apiKey.label": "{{provider}} API key",
+  "provider.connect.apiKey.placeholder": "API key",
+  "provider.connect.apiKey.required": "API key is required",
+  "provider.connect.opencodeZen.line1":
+    "OpenCode Zen gives you access to a curated set of reliable optimized models for coding agents.",
+  "provider.connect.opencodeZen.line2":
+    "With a single API key you'll get access to models such as Claude, GPT, Gemini, GLM and more.",
+  "provider.connect.opencodeZen.visit.prefix": "Visit ",
+  "provider.connect.opencodeZen.visit.suffix": " to collect your API key.",
+  "provider.connect.oauth.code.visit.prefix": "Visit ",
+  "provider.connect.oauth.code.visit.link": "this link",
+  "provider.connect.oauth.code.visit.suffix":
+    " to collect your authorization code to connect your account and use {{provider}} models in OpenCode.",
+  "provider.connect.oauth.code.label": "{{method}} authorization code",
+  "provider.connect.oauth.code.placeholder": "Authorization code",
+  "provider.connect.oauth.code.required": "Authorization code is required",
+  "provider.connect.oauth.code.invalid": "Invalid authorization code",
+  "provider.connect.oauth.auto.visit.prefix": "Visit ",
+  "provider.connect.oauth.auto.visit.link": "this link",
+  "provider.connect.oauth.auto.visit.suffix":
+    " and enter the code below to connect your account and use {{provider}} models in OpenCode.",
+  "provider.connect.oauth.auto.confirmationCode": "Confirmation code",
+  "provider.connect.toast.connected.title": "{{provider}} connected",
+  "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
+
   "model.tag.free": "Free",
   "model.tag.latest": "Latest",
 
   "common.search.placeholder": "Search",
   "common.loading": "Loading",
   "common.cancel": "Cancel",
+  "common.submit": "Submit",
   "common.save": "Save",
   "common.saving": "Saving...",
   "common.default": "Default",
