@@ -1841,6 +1841,7 @@ export default function Layout(props: ParentProps) {
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
         <HoverCard
+          open={open()}
           openDelay={0}
           closeDelay={0}
           placement="right-start"
@@ -1893,20 +1894,22 @@ export default function Layout(props: ParentProps) {
                 </For>
               </Show>
             </div>
-            <Show when={!selected()}>
-              <div class="px-2 py-2 border-t border-border-weak-base">
-                <Button
-                  variant="ghost"
-                  class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
-                  onClick={() => {
-                    layout.sidebar.open()
-                    navigateToProject(props.project.worktree)
-                  }}
-                >
-                  View all sessions
-                </Button>
-              </div>
-            </Show>
+            <div class="px-2 py-2 border-t border-border-weak-base">
+              <Button
+                variant="ghost"
+                class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
+                onClick={() => {
+                  if (selected()) {
+                    setOpen(false)
+                    return
+                  }
+                  layout.sidebar.open()
+                  navigateToProject(props.project.worktree)
+                }}
+              >
+                View all sessions
+              </Button>
+            </div>
           </div>
         </HoverCard>
       </div>
