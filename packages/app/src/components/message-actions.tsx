@@ -87,25 +87,28 @@ export function MessageActions(props: ParentProps<MessageActionsProps>) {
 
   return (
     <ContextMenu>
-      <ContextMenu.Trigger as="div" data-component="message-actions" class="group/message-actions relative">
-        <div class="absolute top-2 right-2 opacity-0 group-hover/message-actions:opacity-100 transition-opacity z-10">
-          <DropdownMenu>
-            <span data-slot="message-actions-trigger">
-              <DropdownMenu.Trigger as={IconButton} icon="dot-grid" />
-            </span>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content>
-                {menuItems().map((item) => (
-                  <DropdownMenu.Item onSelect={item.onClick} data-slot={item.dataSlot}>
-                    <DropdownMenu.ItemLabel>{item.label}</DropdownMenu.ItemLabel>
-                    <DropdownMenu.ItemDescription>{item.description}</DropdownMenu.ItemDescription>
-                  </DropdownMenu.Item>
-                ))}
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu>
+      <ContextMenu.Trigger as="div" data-component="message-actions" class="group/message-actions">
+        <div class="relative">
+          {props.children}
+          <div
+            data-slot="message-actions-trigger"
+            class="absolute top-1 right-1 opacity-0 group-hover/message-actions:opacity-100 transition-opacity"
+          >
+            <DropdownMenu>
+              <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="ghost" />
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content>
+                  {menuItems().map((item) => (
+                    <DropdownMenu.Item onSelect={item.onClick} data-slot={item.dataSlot}>
+                      <DropdownMenu.ItemLabel>{item.label}</DropdownMenu.ItemLabel>
+                      <DropdownMenu.ItemDescription>{item.description}</DropdownMenu.ItemDescription>
+                    </DropdownMenu.Item>
+                  ))}
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu>
+          </div>
         </div>
-        {props.children}
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content data-component="context-menu-content">
