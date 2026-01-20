@@ -987,7 +987,7 @@ ToolRegistry.register({
               <div data-slot="message-part-title">Edit</div>
               <div data-slot="message-part-path">
                 <Show when={props.input.filePath?.includes("/")}>
-                  <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
+                  <span data-slot="message-part-directory">&lrm;{getDirectory(props.input.filePath!)}</span>
                 </Show>
                 <span data-slot="message-part-filename">{getFilename(props.input.filePath ?? "")}</span>
               </div>
@@ -1036,7 +1036,7 @@ ToolRegistry.register({
               <div data-slot="message-part-title">Write</div>
               <div data-slot="message-part-path">
                 <Show when={props.input.filePath?.includes("/")}>
-                  <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
+                  <span data-slot="message-part-directory">&lrm;{getDirectory(props.input.filePath!)}</span>
                 </Show>
                 <span data-slot="message-part-filename">{getFilename(props.input.filePath ?? "")}</span>
               </div>

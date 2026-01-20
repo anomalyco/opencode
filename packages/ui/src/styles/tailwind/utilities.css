@@ -14,7 +14,6 @@
   white-space: nowrap;
   direction: rtl;
   text-align: left;
-  unicode-bidi: plaintext;
 }
 
 @utility fade-up-text {
