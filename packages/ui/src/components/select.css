@@ -1,11 +1,12 @@
 [data-component="select"] {
   [data-slot="select-select-trigger"] {
-    padding: 6px 12px;
+    padding: 6px 6px 6px 12px;
     box-shadow: none;
     border-radius: 6px;
     min-width: 160px;
     height: 32px;
     justify-content: flex-end;
+    gap: 8px;
 
     [data-slot="select-select-trigger-value"] {
       overflow: hidden;
@@ -15,12 +16,14 @@
     }
     [data-slot="select-select-trigger-icon"] {
       width: 16px;
-      height: 16px;
+      height: 20px;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
       color: var(--text-weak);
+      background-color: var(--surface-raised-base);
+      border-radius: 4px;
       transition: transform 0.1s ease-in-out;
     }
 
