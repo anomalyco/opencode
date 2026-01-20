@@ -1743,7 +1743,6 @@ export class Permission extends HeyApiClient {
       permissionID: string
       directory?: string
       response?: "once" | "always" | "reject" | "interject"
-      interjection?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1756,7 +1755,6 @@ export class Permission extends HeyApiClient {
             { in: "path", key: "permissionID" },
             { in: "query", key: "directory" },
             { in: "body", key: "response" },
-            { in: "body", key: "interjection" },
           ],
         },
       ],
@@ -1783,7 +1781,6 @@ export class Permission extends HeyApiClient {
       requestID: string
       directory?: string
       reply?: "once" | "always" | "reject" | "interject"
-      interjection?: string
       message?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -1796,7 +1793,6 @@ export class Permission extends HeyApiClient {
             { in: "path", key: "requestID" },
             { in: "query", key: "directory" },
             { in: "body", key: "reply" },
-            { in: "body", key: "interjection" },
             { in: "body", key: "message" },
           ],
         },
