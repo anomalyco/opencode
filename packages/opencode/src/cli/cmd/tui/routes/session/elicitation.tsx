@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, For, onMount, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
@@ -26,6 +26,7 @@ export function ElicitationPrompt(props: { request: Elicitation.Request }) {
     values: {} as Record<string, string | number | boolean | string[]>,
     editing: false,
     selectedOption: 0, // For enum/multiselect navigation
+    validationError: null as string | null,
   })
 
   let textarea: TextareaRenderable | undefined
@@ -48,17 +49,23 @@ export function ElicitationPrompt(props: { request: Elicitation.Request }) {
   }
 
   // Initialize on mount
-  if (fields().length > 0) {
-    initDefaults()
-  }
+  onMount(() => {
+    if (fields().length > 0) {
+      initDefaults()
+    }
+  })
 
   async function submit() {
+    // Clear previous validation error
+    setStore("validationError", null)
+
     // Validate required fields
     for (const field of fields()) {
       if (field.required) {
         const value = store.values[field.key]
         if (value === undefined || value === "" || (Array.isArray(value) && value.length === 0)) {
-          // TODO: Show validation error
+          setStore("validationError", `Required field "${field.title}" is missing`)
+          setStore("selectedField", fields().indexOf(field))
           return
         }
       }
@@ -214,6 +221,13 @@ export function ElicitationPrompt(props: { request: Elicitation.Request }) {
         <box paddingLeft={1}>
           <text fg={theme.text}>{props.request.message}</text>
         </box>
+
+        {/* Validation Error */}
+        <Show when={store.validationError}>
+          <box paddingLeft={1}>
+            <text fg={theme.error}>{store.validationError}</text>
+          </box>
+        </Show>
 
         {/* Form Fields */}
         <Show when={fields().length > 0}>

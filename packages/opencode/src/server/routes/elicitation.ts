@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { HTTPException } from "hono/http-exception"
 import { describeRoute, validator } from "hono-openapi"
 import { resolver } from "hono-openapi"
 import { Elicitation } from "../../mcp/elicitation"
@@ -63,7 +64,10 @@ export const ElicitationRoutes = lazy(() =>
       async (c) => {
         const { id } = c.req.valid("param")
         const { content } = c.req.valid("json")
-        await Elicitation.reply(id, content)
+        const found = await Elicitation.reply(id, content)
+        if (!found) {
+          throw new HTTPException(404, { message: `Elicitation not found: ${id}` })
+        }
         return c.json(true)
       },
     )
@@ -100,7 +104,10 @@ export const ElicitationRoutes = lazy(() =>
       async (c) => {
         const { id } = c.req.valid("param")
         const { action } = c.req.valid("json")
-        await Elicitation.reject(id, action)
+        const found = await Elicitation.reject(id, action)
+        if (!found) {
+          throw new HTTPException(404, { message: `Elicitation not found: ${id}` })
+        }
         return c.json(true)
       },
     ),

@@ -166,20 +166,17 @@ export namespace Elicitation {
       throw new Error("Only form mode elicitations are supported")
     }
 
-    const formParams = params as {
-      message: string
-      requestedSchema: {
-        type: "object"
-        properties: Record<string, unknown>
-        required?: string[]
-      }
+    const schemaResult = RequestedSchema.safeParse(params.requestedSchema)
+    if (!schemaResult.success) {
+      log.warn("invalid elicitation schema", { error: schemaResult.error })
+      throw new Error("Invalid elicitation schema: " + schemaResult.error.message)
     }
 
     const info: Request = {
       id,
       serverName,
-      message: formParams.message,
-      requestedSchema: formParams.requestedSchema as RequestedSchema,
+      message: params.message,
+      requestedSchema: schemaResult.data,
     }
 
     return new Promise<ElicitResult>((resolve, reject) => {
@@ -205,12 +202,12 @@ export namespace Elicitation {
   /**
    * Submit user's response to an elicitation (accept with content).
    */
-  export async function reply(id: string, content: Content): Promise<void> {
+  export async function reply(id: string, content: Content): Promise<boolean> {
     const s = await state()
     const existing = s.pending[id]
     if (!existing) {
       log.warn("reply for unknown elicitation", { id })
-      return
+      return false
     }
     delete s.pending[id]
 
@@ -227,17 +224,18 @@ export namespace Elicitation {
       action: "accept",
       content,
     })
+    return true
   }
 
   /**
    * Reject/decline/cancel an elicitation.
    */
-  export async function reject(id: string, action: "decline" | "cancel" = "cancel"): Promise<void> {
+  export async function reject(id: string, action: "decline" | "cancel" = "cancel"): Promise<boolean> {
     const s = await state()
     const existing = s.pending[id]
     if (!existing) {
       log.warn("reject for unknown elicitation", { id })
-      return
+      return false
     }
     delete s.pending[id]
 
@@ -252,6 +250,7 @@ export namespace Elicitation {
     existing.resolve({
       action,
     })
+    return true
   }
 
   /**
