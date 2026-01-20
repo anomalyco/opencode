@@ -37,24 +37,19 @@ test("can send a prompt and receive a reply", async ({ page, sdk, gotoSession })
       .poll(
         async () => {
           const messages = await sdk.session.messages({ sessionID, limit: 50 }).then((r) => r.data ?? [])
-          const assistant = messages
-            .slice()
-            .reverse()
-            .find((m) => m.info.role === "assistant")
-
-          return (
-            assistant?.parts
-              .filter((p) => p.type === "text")
-              .map((p) => p.text)
-              .join("\n") ?? ""
-          )
+          return messages
+            .filter((m) => m.info.role === "assistant")
+            .flatMap((m) => m.parts)
+            .filter((p) => p.type === "text")
+            .map((p) => p.text)
+            .join("\n")
         },
         { timeout: 90_000 },
       )
 
       .toContain(token)
 
-    const reply = page.locator('[data-component="text-part"]').filter({ hasText: token }).first()
+    const reply = page.locator('[data-slot="session-turn-summary-section"]').filter({ hasText: token }).first()
     await expect(reply).toBeVisible({ timeout: 90_000 })
   } finally {
     page.off("pageerror", onPageError)
