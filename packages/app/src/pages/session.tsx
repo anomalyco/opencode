@@ -1247,7 +1247,7 @@ export default function Page() {
                                     sessionID={params.id!}
                                     messageID={message.id}
                                     lastUserMessageID={lastUserMessage()?.id}
-                                    stepsExpanded={store.expanded[message.id] ?? false}
+                                    stepsExpanded={store.expanded[message.id] ?? true}
                                     onStepsExpandedToggle={() =>
                                       setStore("expanded", message.id, (open: boolean | undefined) => !open)
                                     }

@@ -925,6 +925,7 @@ ToolRegistry.register({
     return (
       <BasicTool
         {...props}
+        defaultOpen
         icon="console"
         trigger={{
           title: "Shell",
