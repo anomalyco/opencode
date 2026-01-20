@@ -341,6 +341,29 @@ export function Autocomplete(props: {
       )
   })
 
+  const mcpServers = createMemo(() => {
+    const mcps = Object.entries(sync.data.mcp)
+    return mcps.map(
+      ([name, status]): AutocompleteOption => ({
+        display: "@mcp/" + name,
+        description: status.status === "connected" ? "Connected" : status.status,
+        onSelect: () => {
+          const input = props.input()
+          const currentCursorOffset = input.cursorOffset
+          const text = "@mcp/" + name + " "
+
+          input.cursorOffset = store.index
+          const startCursor = input.logicalCursor
+          input.cursorOffset = currentCursorOffset
+          const endCursor = input.logicalCursor
+
+          input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+          input.insertText(text)
+        },
+      }),
+    )
+  })
+
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...command.slashes()]
 
@@ -372,9 +395,12 @@ export function Autocomplete(props: {
     const filesValue = files()
     const agentsValue = agents()
     const commandsValue = commands()
+    const mcpServersValue = mcpServers()
 
     const mixed: AutocompleteOption[] =
-      store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
+      store.visible === "@"
+        ? [...agentsValue, ...mcpServersValue, ...(filesValue || []), ...mcpResources()]
+        : [...commandsValue]
 
     const currentFilter = filter()
 

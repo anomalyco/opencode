@@ -19,6 +19,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+  const ephemeralMcps = createMemo(() => sync.data.ephemeral_mcp[props.sessionID] ?? [])
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
@@ -120,40 +121,46 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </box>
                 <Show when={mcpEntries().length <= 2 || expanded.mcp}>
                   <For each={mcpEntries()}>
-                    {([key, item]) => (
-                      <box flexDirection="row" gap={1}>
-                        <text
-                          flexShrink={0}
-                          style={{
-                            fg: (
-                              {
-                                connected: theme.success,
-                                failed: theme.error,
-                                disabled: theme.textMuted,
-                                needs_auth: theme.warning,
-                                needs_client_registration: theme.error,
-                              } as Record<string, typeof theme.success>
-                            )[item.status],
-                          }}
-                        >
-                          •
-                        </text>
-                        <text fg={theme.text} wrapMode="word">
-                          {key}{" "}
-                          <span style={{ fg: theme.textMuted }}>
-                            <Switch fallback={item.status}>
-                              <Match when={item.status === "connected"}>Connected</Match>
-                              <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
-                              <Match when={item.status === "disabled"}>Disabled</Match>
-                              <Match when={(item.status as string) === "needs_auth"}>Needs auth</Match>
-                              <Match when={(item.status as string) === "needs_client_registration"}>
-                                Needs client ID
-                              </Match>
-                            </Switch>
-                          </span>
-                        </text>
-                      </box>
-                    )}
+                    {([key, item]) => {
+                      const isEphemeral = createMemo(() => ephemeralMcps().includes(key))
+                      return (
+                        <box flexDirection="row" gap={1}>
+                          <text
+                            flexShrink={0}
+                            style={{
+                              fg: isEphemeral()
+                                ? theme.warning
+                                : (
+                                    {
+                                      connected: theme.success,
+                                      failed: theme.error,
+                                      disabled: theme.textMuted,
+                                      needs_auth: theme.warning,
+                                      needs_client_registration: theme.error,
+                                    } as Record<string, typeof theme.success>
+                                  )[item.status],
+                            }}
+                          >
+                            •
+                          </text>
+                          <text fg={theme.text} wrapMode="word">
+                            {key}{" "}
+                            <span style={{ fg: theme.textMuted }}>
+                              <Switch fallback={item.status}>
+                                <Match when={item.status === "connected" && isEphemeral()}>Ephemeral</Match>
+                                <Match when={item.status === "connected"}>Connected</Match>
+                                <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
+                                <Match when={item.status === "disabled"}>Disabled</Match>
+                                <Match when={(item.status as string) === "needs_auth"}>Needs auth</Match>
+                                <Match when={(item.status as string) === "needs_client_registration"}>
+                                  Needs client ID
+                                </Match>
+                              </Switch>
+                            </span>
+                          </text>
+                        </box>
+                      )
+                    }}
                   </For>
                 </Show>
               </box>

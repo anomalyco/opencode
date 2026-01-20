@@ -70,6 +70,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp_resource: {
         [key: string]: McpResource
       }
+      ephemeral_mcp: {
+        [sessionID: string]: string[]
+      }
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
       path: Path
@@ -97,6 +100,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       lsp: [],
       mcp: {},
       mcp_resource: {},
+      ephemeral_mcp: {},
       formatter: [],
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
@@ -320,6 +324,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "vcs.branch.updated": {
           setStore("vcs", { branch: event.properties.branch })
+          break
+        }
+
+        case "session.ephemeral_mcp": {
+          setStore("ephemeral_mcp", event.properties.sessionID, event.properties.servers)
           break
         }
       }

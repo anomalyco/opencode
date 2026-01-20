@@ -35,6 +35,8 @@ import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
+import { Config } from "../config/config"
+import { EphemeralMcp } from "./ephemeral-mcp"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
@@ -255,6 +257,109 @@ export namespace SessionPrompt {
     return
   }
 
+  function parseEphemeralMcpMentions(text: string): string[] {
+    const pattern = /@mcp\/([a-z0-9_-]+)/gi
+    const matches = text.matchAll(pattern)
+    const servers = new Set<string>()
+    for (const match of matches) {
+      servers.add(match[1].toLowerCase())
+    }
+    return Array.from(servers)
+  }
+
+  async function connectEphemeralMcps(sessionID: string): Promise<{
+    connected: string[]
+    available: string[]
+  }> {
+    const messages = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+    const lastUser = messages.findLast((m) => m.info.role === "user")
+    if (!lastUser) return { connected: [], available: [] }
+
+    const textParts = lastUser.parts.filter((p) => p.type === "text")
+    const allText = textParts.map((p) => p.text).join(" ")
+    const mcpServers = parseEphemeralMcpMentions(allText)
+    if (mcpServers.length === 0) return { connected: [], available: [] }
+
+    const cfg = await Config.get()
+    const mcpConfig = cfg.mcp ?? {}
+    const connected: string[] = []
+    const available: string[] = []
+    const status = await MCP.status()
+
+    for (const serverName of mcpServers) {
+      const config = mcpConfig[serverName]
+      if (!config) {
+        log.warn("ephemeral mcp not found in config", { serverName })
+        continue
+      }
+
+      const isMcpConfigured = (entry: typeof config): entry is Config.Mcp =>
+        typeof entry === "object" && entry !== null && "type" in entry
+
+      if (!isMcpConfigured(config)) {
+        log.warn("ephemeral mcp config invalid", { serverName })
+        continue
+      }
+
+      if (status[serverName]?.status === "connected") {
+        available.push(serverName)
+        continue
+      }
+
+      const result = await MCP.add(serverName, { ...config, enabled: true })
+      if (result.status[serverName]?.status !== "connected") {
+        continue
+      }
+
+      connected.push(serverName)
+      available.push(serverName)
+      log.info("ephemeral mcp connected", { serverName })
+    }
+
+    EphemeralMcp.set(sessionID, connected)
+    return { connected, available }
+  }
+
+  async function disconnectEphemeralMcps(servers: string[]): Promise<void> {
+    for (const serverName of servers) {
+      await MCP.disconnect(serverName)
+      log.info("ephemeral mcp disconnected", { serverName })
+    }
+  }
+
+  function injectEphemeralMcpReminder(messages: MessageV2.WithParts[], servers: string[]) {
+    if (servers.length === 0) return
+    const lastUser = messages.findLast((m) => m.info.role === "user")
+    if (!lastUser) return
+    lastUser.parts.push({
+      id: Identifier.ascending("part"),
+      messageID: lastUser.info.id,
+      sessionID: lastUser.info.sessionID,
+      type: "text",
+      text: `<system-reminder>Use MCP tools from: ${servers.join(", ")} for this request. Prefer them when relevant.</system-reminder>`,
+      synthetic: true,
+    })
+  }
+
+  function sanitizeMcpName(name: string) {
+    return name.replace(/[^a-zA-Z0-9_-]/g, "_")
+  }
+
+  function filterMcpTools(tools: Record<string, AITool>, servers: string[]) {
+    if (servers.length === 0) return { tools, forced: false }
+    const prefixes = new Set(servers.map((server) => sanitizeMcpName(server) + "_"))
+    const filtered = Object.fromEntries(
+      Object.entries(tools).filter(([name]) => {
+        for (const prefix of prefixes) {
+          if (name.startsWith(prefix)) return true
+        }
+        return false
+      }),
+    ) as Record<string, AITool>
+    if (Object.keys(filtered).length === 0) return { tools, forced: false }
+    return { tools: filtered, forced: true }
+  }
+
   export const loop = fn(Identifier.schema("session"), async (sessionID) => {
     const abort = start(sessionID)
     if (!abort) {
@@ -268,6 +373,11 @@ export namespace SessionPrompt {
 
     let step = 0
     const session = await Session.get(sessionID)
+    const { connected: ephemeralMcps, available: ephemeralAvailable } = await connectEphemeralMcps(sessionID)
+    using _cleanup = defer(async () => {
+      await disconnectEphemeralMcps(ephemeralMcps)
+      EphemeralMcp.clear(sessionID)
+    })
     while (true) {
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
@@ -560,6 +670,7 @@ export namespace SessionPrompt {
         processor,
         bypassAgentCheck,
       })
+      const forced = filterMcpTools(tools, ephemeralAvailable)
 
       if (step === 1) {
         SessionSummary.summarize({
@@ -569,6 +680,7 @@ export namespace SessionPrompt {
       }
 
       const sessionMessages = clone(msgs)
+      injectEphemeralMcpReminder(sessionMessages, ephemeralAvailable)
 
       // Ephemerally wrap queued user messages with a reminder to stay on track
       if (step > 1 && lastFinished) {
@@ -591,6 +703,7 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
+      const requireMcpTool = forced.forced && step === 1
       const result = await processor.process({
         user: lastUser,
         agent,
@@ -608,8 +721,9 @@ export namespace SessionPrompt {
               ]
             : []),
         ],
-        tools,
+        tools: forced.tools,
         model,
+        toolChoice: requireMcpTool ? "required" : undefined,
       })
       if (result === "stop") break
       if (result === "compact") {
