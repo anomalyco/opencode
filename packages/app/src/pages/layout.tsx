@@ -152,7 +152,6 @@ export default function Layout(props: ParentProps) {
   const openEditor = (id: string, value: string) => {
     if (!id) return
     setEditor({ active: id, value })
-    queueMicrotask(() => editorRef.current?.focus())
   }
 
   const closeEditor = () => setEditor({ active: "", value: "" })
@@ -221,6 +220,7 @@ export default function Layout(props: ParentProps) {
         <InlineInput
           ref={(el) => {
             editorRef.current = el
+            requestAnimationFrame(() => el.focus())
           }}
           value={editorValue()}
           class={props.class}
