@@ -20,6 +20,7 @@ import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
 import { existsSync } from "fs"
 import { Bus } from "@/bus"
+import { AuthConfig } from "./auth"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -1074,6 +1075,7 @@ export namespace Config {
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
         .optional(),
+      auth: AuthConfig.optional().describe("Authentication configuration for multi-user access"),
     })
     .strict()
     .meta({
@@ -1235,6 +1237,14 @@ export namespace Config {
       path: z.string(),
       issues: z.custom<z.core.$ZodIssue[]>().optional(),
       message: z.string().optional(),
+    }),
+  )
+
+  export const PamServiceNotFoundError = NamedError.create(
+    "PamServiceNotFoundError",
+    z.object({
+      service: z.string(),
+      path: z.string(),
     }),
   )
 
