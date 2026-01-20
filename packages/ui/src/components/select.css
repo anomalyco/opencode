@@ -46,7 +46,7 @@
 }
 
 [data-component="select-content"] {
-  min-width: 4rem;
+  min-width: 180px;
   max-width: 23rem;
   overflow: hidden;
   border-radius: var(--radius-md);
