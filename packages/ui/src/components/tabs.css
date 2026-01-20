@@ -346,7 +346,7 @@
           }
 
           &:hover:not(:disabled) {
-            background-color: var(--surface-raised-base);
+            background-color: var(--surface-raised-base-active);
           }
         }
       }
