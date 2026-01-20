@@ -6,8 +6,8 @@ export namespace UI {
   const LOGO = [
     [`                    `, `             ▄     `],
     [`█▀▀█ █▀▀█ █▀▀█ █▀▀▄ `, `█▀▀▀ █▀▀█ █▀▀█ █▀▀█`],
-    [`█░░█ █░░█ █▀▀▀ █░░█ `, `█░░░ █░░█ █░░█ █▀▀▀`],
-    [`▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ `, `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`],
+    [`█░░█ █░░█ █^^^ █░░█ `, `█░░░ █░░█ █░░█ █^^^`],
+    [`▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀ `, `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`],
   ]
 
   export const CancelledError = NamedError.create("UICancelledError", z.void())
@@ -47,13 +47,25 @@ export namespace UI {
   }
 
   export function logo(pad?: string) {
+    const leftReset = "\x1b[0m\x1B[38;5;244m";
+    const rightReset = "\x1b[0m";
     const result = []
     for (const row of LOGO) {
       if (pad) result.push(pad)
-      result.push(Bun.color("gray", "ansi"))
-      result.push(row[0])
-      result.push("\x1b[0m")
-      result.push(row[1])
+      result.push(leftReset)
+
+      let left = row[0]
+      left = left.replace(/░/g, `\x1b[30m█${leftReset}`)
+      left = left.replace(/\^/g, `\x1b[40m▀${leftReset}`)
+      left = left.replace(/_/g, "\x1b[48;5;240m ")
+      left = left.replace(/~/g, `\x1b[30m▀${leftReset}`)
+      result.push(left)
+
+      result.push(rightReset)
+      let right = row[1]
+      right = right.replace(/\^/g, `\x1b[48;5;239m▀${rightReset}`)
+
+      result.push(right);
       result.push(EOL)
     }
     return result.join("").trimEnd()
