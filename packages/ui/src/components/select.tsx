@@ -144,7 +144,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
           }}
         </Kobalte.Value>
         <Kobalte.Icon data-slot="select-select-trigger-icon">
-          <Icon name="chevron-down" size="small" />
+          <Icon name="selector" size="small" />
         </Kobalte.Icon>
       </Kobalte.Trigger>
       <Kobalte.Portal>
