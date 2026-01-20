@@ -269,7 +269,9 @@ export namespace SessionPrompt {
     let step = 0
     const session = await Session.get(sessionID)
     while (true) {
-      SessionStatus.set(sessionID, { type: "sending" })
+      if (SessionStatus.get(sessionID).type === "idle") {
+        SessionStatus.set(sessionID, { type: "sending" })
+      }
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))

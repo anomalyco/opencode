@@ -1,4 +1,5 @@
-import { createMemo, type Accessor } from "solid-js"
+import { createMemo, createEffect, type Accessor } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
 import type { Part, ToolPart, ToolStateRunning } from "@opencode-ai/sdk/v2"
 import { formatDuration } from "../../../../util/format"
 import { useTheme } from "../context/theme"
@@ -11,8 +12,23 @@ type ToolsData = {
 
 type RunningToolPart = ToolPart & { state: ToolStateRunning }
 
+function hasStartedWork(part: RunningToolPart): boolean {
+  if (part.tool !== "task") return true
+  const metadata = part.state.metadata as { summary?: unknown[] } | undefined
+  return !!metadata?.summary?.length
+}
+
 function isRunningTool(part: Part, now: number): part is RunningToolPart {
-  return part.type === "tool" && part.state.status === "running" && now - part.state.time.start >= RUNNING_THRESHOLD_MS
+  if (part.type !== "tool" || part.state.status !== "running") return false
+  const running = part as RunningToolPart
+  if (!hasStartedWork(running)) return false
+  return now - running.state.time.start >= RUNNING_THRESHOLD_MS
+}
+
+function getLabel(part: RunningToolPart, agentIndex: number): string {
+  return part.tool === "task"
+    ? `agent${agentIndex}: ${(part.state.input.description as string) || "..."}`
+    : extractToolCommand(part.tool, part.state.input)
 }
 
 export function createRunningTools(
@@ -20,31 +36,27 @@ export function createRunningTools(
   data: ToolsData,
   tick: Accessor<number>,
 ): Accessor<RunningItem[]> {
+  const [items, setItems] = createStore<RunningItem[]>([])
   const messages = createMemo(() => data.message[sessionID()] ?? [])
 
-  return createMemo(() => {
+  createEffect(() => {
     const now = tick()
 
-    const tools = messages()
+    const running = messages()
       .flatMap((msg) => data.part[msg.id] ?? [])
       .filter((part): part is RunningToolPart => isRunningTool(part, now))
-      .map((part) => ({
-        id: part.id,
-        tool: part.tool,
-        input: part.state.input,
-        startTime: part.state.time.start,
-      }))
-      .sort((a, b) => a.startTime - b.startTime)
+      .sort((a, b) => a.state.time.start - b.state.time.start)
 
-    let agentIndex = 0
-    return tools.map((tool) => {
-      const label =
-        tool.tool === "task"
-          ? `agent${++agentIndex}: ${(tool.input.description as string) || "..."}`
-          : extractToolCommand(tool.tool, tool.input)
-      return { id: tool.id, label, startTime: tool.startTime }
-    })
+    const newItems = running.map((part, i) => ({
+      id: part.id,
+      label: getLabel(part, i + 1),
+      startTime: part.state.time.start,
+    }))
+
+    setItems(reconcile(newItems, { key: "id" }))
   })
+
+  return () => items
 }
 
 export function ToolItemView(props: { item: RunningItem; now: number }) {

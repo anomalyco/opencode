@@ -101,7 +101,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
             <Show when={tools().length > 0 || llmStatus()}>
-              <box>
+              <box flexDirection="column">
                 <text fg={theme.text}>
                   <b>Running</b>
                 </text>

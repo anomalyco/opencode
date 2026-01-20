@@ -1,5 +1,5 @@
 const MAX_LEN = 40
-export const RUNNING_THRESHOLD_MS = 2000
+export const RUNNING_THRESHOLD_MS = 1000
 
 export type RunningItem = {
   id: string

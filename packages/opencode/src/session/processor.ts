@@ -98,7 +98,6 @@ export namespace SessionProcessor {
                     if (value.providerMetadata) part.metadata = value.providerMetadata
                     await Session.updatePart(part)
                     delete reasoningMap[value.id]
-                    SessionStatus.set(input.sessionID, { type: "sending" })
                   }
                   break
 
@@ -324,7 +323,6 @@ export namespace SessionProcessor {
                     }
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
                     await Session.updatePart(currentText)
-                    SessionStatus.set(input.sessionID, { type: "sending" })
                   }
                   currentText = undefined
                   break
