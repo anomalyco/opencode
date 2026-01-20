@@ -89,7 +89,7 @@ export default function Home() {
               <strong>Shareable links</strong> Share a link to any sessions for reference or to debug
             </li>
             <li>
-              <strong>Claude Pro</strong> Log in with Anthropic to use your Claude Pro or Max account
+              <strong>GitHub Copilot</strong> Log in with GitHub to use your Copilot account
             </li>
             <li>
               <strong>ChatGPT Plus/Pro</strong> Log in with OpenAI to use your ChatGPT Plus or Pro account
