@@ -9313,6 +9313,10 @@
             "description": "Theme name to use for the interface",
             "type": "string"
           },
+          "shell": {
+            "description": "Shell to use for command execution",
+            "type": "string"
+          },
           "keybinds": {
             "$ref": "#/components/schemas/KeybindsConfig"
           },

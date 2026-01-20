@@ -95,7 +95,7 @@ export namespace Pty {
 
   export async function create(input: CreateInput) {
     const id = Identifier.create("pty", false)
-    const command = input.command || Shell.preferred()
+    const command = input.command || (await Shell.preferred())
     const args = input.args || []
     if (command.endsWith("sh")) {
       args.push("-l")

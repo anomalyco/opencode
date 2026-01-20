@@ -1,7 +1,8 @@
 import { Flag } from "@/flag/flag"
-import { lazy } from "@/util/lazy"
 import path from "path"
 import { spawn, type ChildProcess } from "child_process"
+import { Config } from "@/config/config"
+import { Plugin } from "@/plugin"
 
 const SIGKILL_TIMEOUT_MS = 200
 
@@ -53,15 +54,27 @@ export namespace Shell {
     return "/bin/sh"
   }
 
-  export const preferred = lazy(() => {
-    const s = process.env.SHELL
-    if (s) return s
-    return fallback()
-  })
+  async function fromConfigOrPlugin() {
+    const config = await Config.get().catch(() => undefined)
+    if (config?.shell) return config.shell
 
-  export const acceptable = lazy(() => {
+    const result = { shell: "" }
+    await Plugin.trigger("shell.resolve", { platform: process.platform }, result)
+    return result.shell || undefined
+  }
+
+  export async function preferred() {
+    const override = await fromConfigOrPlugin()
+    if (override) return override
+    return process.env.SHELL || fallback()
+  }
+
+  export async function acceptable() {
+    const override = await fromConfigOrPlugin()
+    if (override) return override
+
     const s = process.env.SHELL
     if (s && !BLACKLIST.has(process.platform === "win32" ? path.win32.basename(s) : path.basename(s))) return s
     return fallback()
-  })
+  }
 }

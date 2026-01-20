@@ -1586,6 +1586,10 @@ export type Config = {
    * Theme name to use for the interface
    */
   theme?: string
+  /**
+   * Shell to use for command execution
+   */
+  shell?: string
   keybinds?: KeybindsConfig
   logLevel?: LogLevel
   /**
