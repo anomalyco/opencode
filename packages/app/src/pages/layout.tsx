@@ -832,6 +832,13 @@ export default function Layout(props: ParentProps) {
         onSelect: () => openServer(),
       },
       {
+        id: "settings.open",
+        title: "Open settings",
+        category: "Settings",
+        keybind: "mod+comma",
+        onSelect: () => openSettings(),
+      },
+      {
         id: "session.previous",
         title: "Previous session",
         category: "Session",
@@ -2052,9 +2059,13 @@ export default function Layout(props: ParentProps) {
             </DragDropProvider>
           </div>
           <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
-            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Settings">
+            <TooltipKeybind
+              placement={sidebarProps.mobile ? "bottom" : "right"}
+              title="Settings"
+              keybind={command.keybind("settings.open")}
+            >
               <IconButton icon="settings-gear" variant="ghost" size="large" onClick={openSettings} />
-            </Tooltip>
+            </TooltipKeybind>
             <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Help">
               <IconButton
                 icon="help"
