@@ -162,34 +162,32 @@ export namespace Ripgrep {
           })
       }
       if (config.extension === "zip") {
-        if (config.extension === "zip") {
-          const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])))
-          const entries = await zipFileReader.getEntries()
-          let rgEntry: any
-          for (const entry of entries) {
-            if (entry.filename.endsWith("rg.exe")) {
-              rgEntry = entry
-              break
-            }
+        const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])))
+        const entries = await zipFileReader.getEntries()
+        let rgEntry: any
+        for (const entry of entries) {
+          if (entry.filename.endsWith("rg.exe")) {
+            rgEntry = entry
+            break
           }
-
-          if (!rgEntry) {
-            throw new ExtractionFailedError({
-              filepath: archivePath,
-              stderr: "rg.exe not found in zip archive",
-            })
-          }
-
-          const rgBlob = await rgEntry.getData(new BlobWriter())
-          if (!rgBlob) {
-            throw new ExtractionFailedError({
-              filepath: archivePath,
-              stderr: "Failed to extract rg.exe from zip archive",
-            })
-          }
-          await Bun.write(filepath, await rgBlob.arrayBuffer())
-          await zipFileReader.close()
         }
+
+        if (!rgEntry) {
+          throw new ExtractionFailedError({
+            filepath: archivePath,
+            stderr: "rg.exe not found in zip archive",
+          })
+        }
+
+        const rgBlob = await rgEntry.getData(new BlobWriter())
+        if (!rgBlob) {
+          throw new ExtractionFailedError({
+            filepath: archivePath,
+            stderr: "Failed to extract rg.exe from zip archive",
+          })
+        }
+        await Bun.write(filepath, await rgBlob.arrayBuffer())
+        await zipFileReader.close()
       }
       await fs.unlink(archivePath)
       if (!platformKey.endsWith("-win32")) await fs.chmod(filepath, 0o755)

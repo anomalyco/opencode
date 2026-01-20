@@ -1,4 +1,5 @@
 // @refresh reload
+import "./webview-zoom"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
@@ -12,8 +13,8 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
-import { Logo } from "@opencode-ai/ui/logo"
-import { createSignal, Show, Accessor, JSX, createResource } from "solid-js"
+import { Splash } from "@opencode-ai/ui/logo"
+import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
 
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
@@ -26,10 +27,26 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   )
 }
 
+// Floating UI can call getComputedStyle with non-elements (e.g., null refs, virtual elements).
+// This happens on all platforms (WebView2 on Windows, WKWebView on macOS), not just Windows.
+const originalGetComputedStyle = window.getComputedStyle
+window.getComputedStyle = ((elt: Element, pseudoElt?: string | null) => {
+  if (!(elt instanceof Element)) {
+    // Fall back to a safe element when a non-element is passed.
+    return originalGetComputedStyle(document.documentElement, pseudoElt ?? undefined)
+  }
+  return originalGetComputedStyle(elt, pseudoElt ?? undefined)
+}) as typeof window.getComputedStyle
+
 let update: Update | null = null
 
 const createPlatform = (password: Accessor<string | null>): Platform => ({
   platform: "desktop",
+  os: (() => {
+    const type = ostype()
+    if (type === "macos" || type === "windows" || type === "linux") return type
+    return undefined
+  })(),
   version: pkg.version,
 
   async openDirectoryPickerDialog(opts) {
@@ -237,7 +254,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
       .then(() => {
         const notification = new Notification(title, {
           body: description ?? "",
-          icon: "https://opencode.ai/favicon-96x96.png",
+          icon: "https://opencode.ai/favicon-96x96-v2.png",
         })
         notification.onclick = () => {
           const win = getCurrentWindow()
@@ -287,21 +304,28 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
 createMenu()
 
-// Stops mousewheel events from reaching Tauri's pinch-to-zoom handler
-root?.addEventListener("mousewheel", (e) => {
-  e.stopPropagation()
-})
-
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
   const platform = createPlatform(() => serverPassword())
 
+  function handleClick(e: MouseEvent) {
+    const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
+    if (link?.href) {
+      e.preventDefault()
+      platform.openLink(link.href)
+    }
+  }
+
+  onMount(() => {
+    document.addEventListener("click", handleClick)
+    onCleanup(() => {
+      document.removeEventListener("click", handleClick)
+    })
+  })
+
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
-        {ostype() === "macos" && (
-          <div class="mx-px bg-background-base border-b border-border-weak-base h-8" data-tauri-drag-region />
-        )}
         <ServerGate>
           {(data) => {
             setServerPassword(data().password)
@@ -328,8 +352,7 @@ function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.
       when={serverData.state !== "pending" && serverData()}
       fallback={
         <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-          <Logo class="w-xl opacity-12 animate-pulse" />
-          <div class="mt-8 text-14-regular text-text-weak">Initializing...</div>
+          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
         </div>
       }
     >

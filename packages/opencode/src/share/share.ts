@@ -11,6 +11,7 @@ export namespace Share {
   const pending = new Map<string, any>()
 
   export async function sync(key: string, content: any) {
+    if (disabled) return
     const [root, ...splits] = key.split("/")
     if (root !== "session") return
     const [sub, sessionID] = splits
@@ -69,7 +70,10 @@ export namespace Share {
     process.env["OPENCODE_API"] ??
     (Installation.isPreview() || Installation.isLocal() ? "https://api.dev.opencode.ai" : "https://api.opencode.ai")
 
+  const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
+
   export async function create(sessionID: string) {
+    if (disabled) return { url: "", secret: "" }
     return fetch(`${URL}/share_create`, {
       method: "POST",
       body: JSON.stringify({ sessionID: sessionID }),
@@ -79,6 +83,7 @@ export namespace Share {
   }
 
   export async function remove(sessionID: string, secret: string) {
+    if (disabled) return {}
     return fetch(`${URL}/share_delete`, {
       method: "POST",
       body: JSON.stringify({ sessionID, secret }),

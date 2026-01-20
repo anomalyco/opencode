@@ -10,6 +10,7 @@ import {
   onCleanup,
   type JSX,
 } from "solid-js"
+import stripAnsi from "strip-ansi"
 import { Dynamic } from "solid-js/web"
 import {
   AgentPart,
@@ -45,6 +46,7 @@ import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 
 interface Diagnostic {
   range: {
@@ -232,6 +234,12 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         title: "Write",
         subtitle: input.filePath ? getFilename(input.filePath) : undefined,
       }
+    case "apply_patch":
+      return {
+        icon: "code-lines",
+        title: "Patch",
+        subtitle: input.files?.length ? `${input.files.length} file${input.files.length > 1 ? "s" : ""}` : undefined,
+      }
     case "todowrite":
       return {
         icon: "checklist",
@@ -290,12 +298,34 @@ export function AssistantMessageDisplay(props: { message: AssistantMessage; part
 export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
   const dialog = useDialog()
   const [copied, setCopied] = createSignal(false)
+  const [expanded, setExpanded] = createSignal(false)
+  const [canExpand, setCanExpand] = createSignal(false)
+  let textRef: HTMLDivElement | undefined
+
+  const updateCanExpand = () => {
+    const el = textRef
+    if (!el) return
+    if (expanded()) return
+    setCanExpand(el.scrollHeight > el.clientHeight + 2)
+  }
+
+  createResizeObserver(
+    () => textRef,
+    () => {
+      updateCanExpand()
+    },
+  )
 
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
   )
 
   const text = createMemo(() => textPart()?.text || "")
+
+  createEffect(() => {
+    text()
+    updateCanExpand()
+  })
 
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 
@@ -328,7 +358,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   }
 
   return (
-    <div data-component="user-message">
+    <div data-component="user-message" data-expanded={expanded()} data-can-expand={canExpand()}>
       <Show when={attachments().length > 0}>
         <div data-slot="user-message-attachments">
           <For each={attachments()}>
@@ -358,8 +388,16 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         </div>
       </Show>
       <Show when={text()}>
-        <div data-slot="user-message-text">
+        <div data-slot="user-message-text" ref={(el) => (textRef = el)}>
           <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+          <button
+            data-slot="user-message-expand"
+            type="button"
+            aria-label={expanded() ? "Collapse message" : "Expand message"}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            <Icon name="chevron-down" size="small" />
+          </button>
           <div data-slot="user-message-copy-wrapper">
             <Tooltip value={copied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
               <IconButton icon={copied() ? "check" : "copy"} variant="secondary" onClick={handleCopy} />
@@ -926,7 +964,7 @@ ToolRegistry.register({
       >
         <div data-component="tool-output" data-scrollable>
           <Markdown
-            text={`\`\`\`command\n$ ${props.input.command ?? props.metadata.command ?? ""}${props.output ? "\n\n" + props.output : ""}\n\`\`\``}
+            text={`\`\`\`command\n$ ${props.input.command ?? props.metadata.command ?? ""}${props.output || props.metadata.output ? "\n\n" + stripAnsi(props.output || props.metadata.output) : ""}\n\`\`\``}
           />
         </div>
       </BasicTool>
@@ -1021,6 +1059,94 @@ ToolRegistry.register({
           </div>
         </Show>
         <DiagnosticsDisplay diagnostics={diagnostics()} />
+      </BasicTool>
+    )
+  },
+})
+
+interface ApplyPatchFile {
+  filePath: string
+  relativePath: string
+  type: "add" | "update" | "delete" | "move"
+  diff: string
+  before: string
+  after: string
+  additions: number
+  deletions: number
+  movePath?: string
+}
+
+ToolRegistry.register({
+  name: "apply_patch",
+  render(props) {
+    const diffComponent = useDiffComponent()
+    const files = createMemo(() => (props.metadata.files ?? []) as ApplyPatchFile[])
+
+    const subtitle = createMemo(() => {
+      const count = files().length
+      if (count === 0) return ""
+      return `${count} file${count > 1 ? "s" : ""}`
+    })
+
+    return (
+      <BasicTool
+        {...props}
+        icon="code-lines"
+        trigger={{
+          title: "Patch",
+          subtitle: subtitle(),
+        }}
+      >
+        <Show when={files().length > 0}>
+          <div data-component="apply-patch-files">
+            <For each={files()}>
+              {(file) => (
+                <div data-component="apply-patch-file">
+                  <div data-slot="apply-patch-file-header">
+                    <Switch>
+                      <Match when={file.type === "delete"}>
+                        <span data-slot="apply-patch-file-action" data-type="delete">
+                          Deleted
+                        </span>
+                      </Match>
+                      <Match when={file.type === "add"}>
+                        <span data-slot="apply-patch-file-action" data-type="add">
+                          Created
+                        </span>
+                      </Match>
+                      <Match when={file.type === "move"}>
+                        <span data-slot="apply-patch-file-action" data-type="move">
+                          Moved
+                        </span>
+                      </Match>
+                      <Match when={file.type === "update"}>
+                        <span data-slot="apply-patch-file-action" data-type="update">
+                          Patched
+                        </span>
+                      </Match>
+                    </Switch>
+                    <span data-slot="apply-patch-file-path">{file.relativePath}</span>
+                    <Show when={file.type !== "delete"}>
+                      <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
+                    </Show>
+                    <Show when={file.type === "delete"}>
+                      <span data-slot="apply-patch-deletion-count">-{file.deletions}</span>
+                    </Show>
+                  </div>
+                  <Show when={file.type !== "delete"}>
+                    <div data-component="apply-patch-file-diff">
+                      <Dynamic
+                        component={diffComponent}
+                        before={{ name: file.filePath, contents: file.before }}
+                        after={{ name: file.filePath, contents: file.after }}
+                      />
+                    </div>
+                  </Show>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
       </BasicTool>
     )
   },

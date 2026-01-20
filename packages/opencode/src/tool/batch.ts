@@ -33,11 +33,11 @@ export const BatchTool = Tool.define("batch", async () => {
       const { Session } = await import("../session")
       const { Identifier } = await import("../id/id")
 
-      const toolCalls = params.tool_calls.slice(0, 10)
-      const discardedCalls = params.tool_calls.slice(10)
+      const toolCalls = params.tool_calls.slice(0, 25)
+      const discardedCalls = params.tool_calls.slice(25)
 
       const { ToolRegistry } = await import("./registry")
-      const availableTools = await ToolRegistry.tools("")
+      const availableTools = await ToolRegistry.tools({ modelID: "", providerID: "" })
       const toolMap = new Map(availableTools.map((t) => [t.id, t]))
 
       const executeCall = async (call: (typeof toolCalls)[0]) => {
@@ -139,14 +139,14 @@ export const BatchTool = Tool.define("batch", async () => {
           state: {
             status: "error",
             input: call.parameters,
-            error: "Maximum of 10 tools allowed in batch",
+            error: "Maximum of 25 tools allowed in batch",
             time: { start: now, end: now },
           },
         })
         results.push({
           success: false as const,
           tool: call.tool,
-          error: new Error("Maximum of 10 tools allowed in batch"),
+          error: new Error("Maximum of 25 tools allowed in batch"),
         })
       }
 
