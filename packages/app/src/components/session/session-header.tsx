@@ -244,79 +244,79 @@ export function SessionHeader() {
                 }}
                 aria-hidden={!showShare()}
               >
-                  <Popover
-                    title="Publish on web"
-                    description={
-                      shareUrl()
-                        ? "This session is public on the web. It is accessible to anyone with the link."
-                        : "Share session publicly on the web. It will be accessible to anyone with the link."
-                    }
-                    trigger={
-                      <Tooltip class="shrink-0" value="Share session">
-                        <Button
-                          variant="secondary"
-                          classList={{ "rounded-r-none": shareUrl() !== undefined }}
-                          style={{ scale: 1 }}
-                        >
-                          Share
-                        </Button>
-                      </Tooltip>
-                    }
-                  >
-                    <div class="flex flex-col gap-2">
-                      <Show
-                        when={shareUrl()}
-                        fallback={
-                          <div class="flex">
-                            <Button
-                              size="large"
-                              variant="primary"
-                              class="w-1/2"
-                              onClick={shareSession}
-                              disabled={state.share}
-                            >
-                              {state.share ? "Publishing..." : "Publish"}
-                            </Button>
-                          </div>
-                        }
-                      >
-                        <div class="flex flex-col gap-2 w-72">
-                          <TextField value={shareUrl() ?? ""} readOnly copyable class="w-full" />
-                          <div class="grid grid-cols-2 gap-2">
-                            <Button
-                              size="large"
-                              variant="secondary"
-                              class="w-full shadow-none border border-border-weak-base"
-                              onClick={unshareSession}
-                              disabled={state.unshare}
-                            >
-                              {state.unshare ? "Unpublishing..." : "Unpublish"}
-                            </Button>
-                            <Button
-                              size="large"
-                              variant="primary"
-                              class="w-full"
-                              onClick={viewShare}
-                              disabled={state.unshare}
-                            >
-                              View
-                            </Button>
-                          </div>
-                        </div>
-                      </Show>
-                    </div>
-                  </Popover>
-                  <Show when={shareUrl()} fallback={<div class="size-6" aria-hidden="true" />}>
-                    <Tooltip value={state.copied ? "Copied" : "Copy link"} placement="top" gutter={8}>
-                      <IconButton
-                        icon={state.copied ? "check" : "copy"}
+                <Popover
+                  title="Publish on web"
+                  description={
+                    shareUrl()
+                      ? "This session is public on the web. It is accessible to anyone with the link."
+                      : "Share session publicly on the web. It will be accessible to anyone with the link."
+                  }
+                  trigger={
+                    <Tooltip class="shrink-0" value="Share session">
+                      <Button
                         variant="secondary"
-                        class="rounded-l-none"
-                        onClick={copyLink}
-                        disabled={state.unshare}
-                      />
+                        classList={{ "rounded-r-none": shareUrl() !== undefined }}
+                        style={{ scale: 1 }}
+                      >
+                        Share
+                      </Button>
                     </Tooltip>
-                  </Show>
+                  }
+                >
+                  <div class="flex flex-col gap-2">
+                    <Show
+                      when={shareUrl()}
+                      fallback={
+                        <div class="flex">
+                          <Button
+                            size="large"
+                            variant="primary"
+                            class="w-1/2"
+                            onClick={shareSession}
+                            disabled={state.share}
+                          >
+                            {state.share ? "Publishing..." : "Publish"}
+                          </Button>
+                        </div>
+                      }
+                    >
+                      <div class="flex flex-col gap-2 w-72">
+                        <TextField value={shareUrl() ?? ""} readOnly copyable class="w-full" />
+                        <div class="grid grid-cols-2 gap-2">
+                          <Button
+                            size="large"
+                            variant="secondary"
+                            class="w-full shadow-none border border-border-weak-base"
+                            onClick={unshareSession}
+                            disabled={state.unshare}
+                          >
+                            {state.unshare ? "Unpublishing..." : "Unpublish"}
+                          </Button>
+                          <Button
+                            size="large"
+                            variant="primary"
+                            class="w-full"
+                            onClick={viewShare}
+                            disabled={state.unshare}
+                          >
+                            View
+                          </Button>
+                        </div>
+                      </div>
+                    </Show>
+                  </div>
+                </Popover>
+                <Show when={shareUrl()} fallback={<div class="size-6" aria-hidden="true" />}>
+                  <Tooltip value={state.copied ? "Copied" : "Copy link"} placement="top" gutter={8}>
+                    <IconButton
+                      icon={state.copied ? "check" : "copy"}
+                      variant="secondary"
+                      class="rounded-l-none"
+                      onClick={copyLink}
+                      disabled={state.unshare}
+                    />
+                  </Tooltip>
+                </Show>
               </div>
             </div>
           </Portal>

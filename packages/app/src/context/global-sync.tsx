@@ -242,40 +242,40 @@ function createGlobalSync() {
       const [store, setStore] = ensureChild(directory)
       const cache = vcsCache.get(directory)
       if (!cache) return
-    const sdk = createOpencodeClient({
-      baseUrl: globalSDK.url,
-      fetch: platform.fetch,
-      directory,
-      throwOnError: true,
-    })
+      const sdk = createOpencodeClient({
+        baseUrl: globalSDK.url,
+        fetch: platform.fetch,
+        directory,
+        throwOnError: true,
+      })
 
-    setStore("status", "loading")
+      setStore("status", "loading")
 
-    createEffect(() => {
-      if (!cache.ready()) return
-      const cached = cache.store.value
-      if (!cached?.branch) return
-      setStore("vcs", (value) => value ?? cached)
-    })
+      createEffect(() => {
+        if (!cache.ready()) return
+        const cached = cache.store.value
+        if (!cached?.branch) return
+        setStore("vcs", (value) => value ?? cached)
+      })
 
-    const blockingRequests = {
-      project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
-      provider: () =>
-        sdk.provider.list().then((x) => {
-          const data = x.data!
-          setStore("provider", {
-            ...data,
-            all: data.all.map((provider) => ({
-              ...provider,
-              models: Object.fromEntries(
-                Object.entries(provider.models).filter(([, info]) => info.status !== "deprecated"),
-              ),
-            })),
-          })
-        }),
-      agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
-      config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
-    }
+      const blockingRequests = {
+        project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
+        provider: () =>
+          sdk.provider.list().then((x) => {
+            const data = x.data!
+            setStore("provider", {
+              ...data,
+              all: data.all.map((provider) => ({
+                ...provider,
+                models: Object.fromEntries(
+                  Object.entries(provider.models).filter(([, info]) => info.status !== "deprecated"),
+                ),
+              })),
+            })
+          }),
+        agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
+        config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
+      }
 
       try {
         await Promise.all(Object.values(blockingRequests).map((p) => retry(p)))
