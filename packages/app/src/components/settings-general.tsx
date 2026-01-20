@@ -40,7 +40,6 @@ export const SettingsGeneral: Component = () => {
       <div class="sticky top-0 z-10 bg-background-base border-b border-border-weak-base">
         <div class="flex flex-col gap-1 p-8 max-w-[720px]">
           <h2 class="text-16-medium text-text-strong">General</h2>
-          <p class="text-14-regular text-text-weak">Appearance, notifications, and sound preferences.</p>
         </div>
       </div>
 
