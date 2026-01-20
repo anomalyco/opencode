@@ -18,6 +18,7 @@ import type {
   ProviderAuthMethod,
   VcsInfo,
 } from "@opencode-ai/sdk/v2"
+import type { Elicitation } from "@/mcp/elicitation"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@opencode-ai/util/binary"
@@ -45,6 +46,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       question: {
         [sessionID: string]: QuestionRequest[]
+      }
+      elicitation: {
+        [id: string]: Elicitation.Request
       }
       config: Config
       session: Session[]
@@ -85,6 +89,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       agent: [],
       permission: {},
       question: {},
+      elicitation: {},
       command: [],
       provider: [],
       provider_default: {},
@@ -320,6 +325,24 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "vcs.branch.updated": {
           setStore("vcs", { branch: event.properties.branch })
+          break
+        }
+
+        case "mcp.elicitation.requested": {
+          const request = event.properties
+          setStore("elicitation", request.id, request)
+          break
+        }
+
+        case "mcp.elicitation.completed":
+        case "mcp.elicitation.rejected": {
+          const { id } = event.properties
+          setStore(
+            "elicitation",
+            produce((draft) => {
+              delete draft[id]
+            }),
+          )
           break
         }
       }

@@ -642,6 +642,98 @@ export type EventFileWatcherUpdated = {
   }
 }
 
+export type ElicitationRequest = {
+  id: string
+  serverName: string
+  message: string
+  requestedSchema: {
+    type: "object"
+    properties: {
+      [key: string]:
+        | {
+            type: "string"
+            title?: string
+            description?: string
+            minLength?: number
+            maxLength?: number
+            format?: "email" | "uri" | "date" | "date-time"
+            default?: string
+            enum?: Array<string>
+            enumNames?: Array<string>
+            oneOf?: Array<{
+              const: string
+              title: string
+            }>
+          }
+        | {
+            type: "number"
+            title?: string
+            description?: string
+            minimum?: number
+            maximum?: number
+            default?: number
+          }
+        | {
+            type: "integer"
+            title?: string
+            description?: string
+            minimum?: number
+            maximum?: number
+            default?: number
+          }
+        | {
+            type: "boolean"
+            title?: string
+            description?: string
+            default?: boolean
+          }
+        | {
+            type: "array"
+            title?: string
+            description?: string
+            minItems?: number
+            maxItems?: number
+            items: {
+              type?: "string"
+              enum?: Array<string>
+              anyOf?: Array<{
+                const: string
+                title: string
+              }>
+            }
+            default?: Array<string>
+          }
+    }
+    required?: Array<string>
+  }
+}
+
+export type EventMcpElicitationRequested = {
+  type: "mcp.elicitation.requested"
+  properties: ElicitationRequest
+}
+
+export type EventMcpElicitationCompleted = {
+  type: "mcp.elicitation.completed"
+  properties: {
+    id: string
+    serverName: string
+    action: "accept" | "decline" | "cancel"
+    content?: {
+      [key: string]: string | number | boolean | Array<string>
+    }
+  }
+}
+
+export type EventMcpElicitationRejected = {
+  type: "mcp.elicitation.rejected"
+  properties: {
+    id: string
+    serverName: string
+    action: "decline" | "cancel"
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -882,6 +974,9 @@ export type Event =
   | EventSessionCompacted
   | EventTodoUpdated
   | EventFileWatcherUpdated
+  | EventMcpElicitationRequested
+  | EventMcpElicitationCompleted
+  | EventMcpElicitationRejected
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
@@ -4346,6 +4441,96 @@ export type McpDisconnectResponses = {
 }
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
+
+export type McpElicitationListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/elicitation"
+}
+
+export type McpElicitationListResponses = {
+  /**
+   * List of pending elicitations
+   */
+  200: Array<ElicitationRequest>
+}
+
+export type McpElicitationListResponse = McpElicitationListResponses[keyof McpElicitationListResponses]
+
+export type McpElicitationReplyData = {
+  body?: {
+    content: {
+      [key: string]: string | number | boolean | Array<string>
+    }
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/elicitation/{id}/reply"
+}
+
+export type McpElicitationReplyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type McpElicitationReplyError = McpElicitationReplyErrors[keyof McpElicitationReplyErrors]
+
+export type McpElicitationReplyResponses = {
+  /**
+   * Elicitation answered successfully
+   */
+  200: boolean
+}
+
+export type McpElicitationReplyResponse = McpElicitationReplyResponses[keyof McpElicitationReplyResponses]
+
+export type McpElicitationRejectData = {
+  body?: {
+    action: "decline" | "cancel"
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/elicitation/{id}/reject"
+}
+
+export type McpElicitationRejectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type McpElicitationRejectError = McpElicitationRejectErrors[keyof McpElicitationRejectErrors]
+
+export type McpElicitationRejectResponses = {
+  /**
+   * Elicitation rejected successfully
+   */
+  200: boolean
+}
+
+export type McpElicitationRejectResponse = McpElicitationRejectResponses[keyof McpElicitationRejectResponses]
 
 export type TuiAppendPromptData = {
   body?: {

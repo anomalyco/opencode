@@ -8,7 +8,9 @@ import {
   CallToolResultSchema,
   type Tool as MCPToolDef,
   ToolListChangedNotificationSchema,
+  ElicitRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js"
+import { Elicitation } from "./elicitation"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
@@ -113,6 +115,14 @@ export namespace MCP {
     client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
       log.info("tools list changed notification received", { server: serverName })
       Bus.publish(ToolsChanged, { server: serverName })
+    })
+  }
+
+  // Register elicitation request handler for MCP client
+  function registerElicitationHandler(client: MCPClient, serverName: string) {
+    client.setRequestHandler(ElicitRequestSchema, async (request, extra) => {
+      log.info("elicitation request received", { server: serverName })
+      return Elicitation.handle(serverName, request, extra.signal)
     })
   }
 
@@ -346,12 +356,22 @@ export namespace MCP {
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       for (const { name, transport } of transports) {
         try {
-          const client = new Client({
-            name: "opencode",
-            version: Installation.VERSION,
-          })
+          const client = new Client(
+            {
+              name: "opencode",
+              version: Installation.VERSION,
+            },
+            {
+              capabilities: {
+                elicitation: {
+                  form: { applyDefaults: true },
+                },
+              },
+            },
+          )
           await withTimeout(client.connect(transport), connectTimeout)
           registerNotificationHandlers(client, key)
+          registerElicitationHandler(client, key)
           mcpClient = client
           log.info("connected", { key, transport: name })
           status = { status: "connected" }
@@ -422,12 +442,22 @@ export namespace MCP {
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       try {
-        const client = new Client({
-          name: "opencode",
-          version: Installation.VERSION,
-        })
+        const client = new Client(
+          {
+            name: "opencode",
+            version: Installation.VERSION,
+          },
+          {
+            capabilities: {
+              elicitation: {
+                form: { applyDefaults: true },
+              },
+            },
+          },
+        )
         await withTimeout(client.connect(transport), connectTimeout)
         registerNotificationHandlers(client, key)
+        registerElicitationHandler(client, key)
         mcpClient = client
         status = {
           status: "connected",
@@ -756,10 +786,19 @@ export namespace MCP {
 
     // Try to connect - this will trigger the OAuth flow
     try {
-      const client = new Client({
-        name: "opencode",
-        version: Installation.VERSION,
-      })
+      const client = new Client(
+        {
+          name: "opencode",
+          version: Installation.VERSION,
+        },
+        {
+          capabilities: {
+            elicitation: {
+              form: { applyDefaults: true },
+            },
+          },
+        },
+      )
       await client.connect(transport)
       // If we get here, we're already authenticated
       return { authorizationUrl: "" }
