@@ -87,9 +87,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-03 | Phase 4 | Pending |
 | AUTH-04 | Phase 5 | Pending |
 | AUTH-05 | Phase 10 | Pending |
-| SESS-01 | Phase 2 | Pending |
-| SESS-02 | Phase 2 | Pending |
-| SESS-03 | Phase 2 | Pending |
+| SESS-01 | Phase 2 | Complete |
+| SESS-02 | Phase 2 | Complete |
+| SESS-03 | Phase 2 | Complete |
 | SESS-04 | Phase 8 | Pending |
 | SEC-01 | Phase 7 | Pending |
 | SEC-02 | Phase 7 | Pending |

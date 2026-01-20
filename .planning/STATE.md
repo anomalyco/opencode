@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Secure remote access to your opencode instance from anywhere — authenticate once with your system credentials, work on your projects from any device.
-**Current focus:** Phase 2 - Session Infrastructure (Plan 2 complete)
+**Current focus:** Phase 2 Complete - Ready for Phase 3 (Auth Broker Core)
 
 ## Current Position
 
-Phase: 2 of 11 (Session Infrastructure)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-01-20 - Completed 02-02-PLAN.md
+Phase: 2 of 11 (Session Infrastructure) - COMPLETE
+Plan: 2 of 2 in current phase - COMPLETE
+Status: Phase complete
+Last activity: 2026-01-20 - Completed Phase 2
 
-Progress: [████░░░░░░] ~15%
+Progress: [██░░░░░░░░] ~18%
 
 ## Performance Metrics
 
@@ -72,9 +72,11 @@ Last session: 2026-01-20
 Stopped at: Completed 02-02-PLAN.md (Auth middleware and routes)
 Resume file: None
 
-## Phase 2 Progress
+## Phase 2 Completion Summary
 
-**Session Infrastructure:**
-- [x] 02-01: UserSession namespace with CRUD operations
-- [x] 02-02: Auth middleware and routes
-- [ ] 02-03: Session middleware (final plan in phase)
+**Session Infrastructure is complete:**
+- UserSession namespace with in-memory CRUD and Zod schema (18 tests)
+- Auth middleware with session validation, idle timeout, sliding expiration
+- Auth routes: POST /logout, POST /logout/all, GET /session
+- Server integration with middleware chain
+- Backward compatible - auth skipped when disabled in config

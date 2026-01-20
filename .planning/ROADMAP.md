@@ -13,7 +13,7 @@ This roadmap delivers PAM-based system authentication for opencode's web interfa
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Configuration Foundation** - Auth configuration schema and backward compatibility
-- [ ] **Phase 2: Session Infrastructure** - Core session middleware, cookies, and expiration
+- [x] **Phase 2: Session Infrastructure** - Core session middleware, cookies, and expiration
 - [ ] **Phase 3: Auth Broker Core** - Privileged helper for PAM authentication and IPC
 - [ ] **Phase 4: Authentication Flow** - Login endpoint with PAM validation and session-user mapping
 - [ ] **Phase 5: User Process Execution** - Commands execute under authenticated user's UID
@@ -54,8 +54,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — UserSession namespace with in-memory storage and CRUD operations
-- [ ] 02-02-PLAN.md — Auth middleware and routes (session validation, logout endpoints)
+- [x] 02-01-PLAN.md — UserSession namespace with in-memory storage and CRUD operations
+- [x] 02-02-PLAN.md — Auth middleware and routes (session validation, logout endpoints)
 
 ### Phase 3: Auth Broker Core
 **Goal**: Privileged auth broker handles PAM authentication via Unix socket IPC
@@ -190,7 +190,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Configuration Foundation | 3/3 | Complete | 2026-01-20 |
-| 2. Session Infrastructure | 0/2 | Not started | - |
+| 2. Session Infrastructure | 2/2 | Complete | 2026-01-20 |
 | 3. Auth Broker Core | 0/TBD | Not started | - |
 | 4. Authentication Flow | 0/TBD | Not started | - |
 | 5. User Process Execution | 0/TBD | Not started | - |
