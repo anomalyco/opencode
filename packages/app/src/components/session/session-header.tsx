@@ -306,7 +306,7 @@ export function SessionHeader() {
                     </Show>
                   </div>
                 </Popover>
-                <Show when={shareUrl()} fallback={<div class="size-6" aria-hidden="true" />}>
+                <Show when={shareUrl()}>
                   <Tooltip value={state.copied ? "Copied" : "Copy link"} placement="top" gutter={8}>
                     <IconButton
                       icon={state.copied ? "check" : "copy"}
