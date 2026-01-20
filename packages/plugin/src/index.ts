@@ -187,6 +187,7 @@ export interface Hooks {
       title: string
       output: string
       metadata: any
+      attachments?: Array<{ mime: string; url: string }>
     },
   ) => Promise<void>
   "experimental.chat.messages.transform"?: (

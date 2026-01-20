@@ -59,7 +59,7 @@ export const add = tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args) {
-    return args.a + args.b
+    return String(args.a + args.b)
   },
 })
 
@@ -70,7 +70,7 @@ export const multiply = tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args) {
-    return args.a * args.b
+    return String(args.a * args.b)
   },
 })
 ```
@@ -125,6 +125,50 @@ export default tool({
   },
 })
 ```
+
+---
+
+### Returning images
+
+Custom tools can return images alongside text. This is useful for tools that capture screenshots, generate charts, or process visual data. The LLM will be able to see and analyze the returned images.
+
+Instead of returning a string, return an object with a `content` array:
+
+```ts title=".opencode/tools/screenshot.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Capture and return a screenshot",
+  args: {
+    url: tool.schema.string().describe("URL to screenshot"),
+  },
+  async execute(args) {
+    // Fetch image and convert to base64
+    const response = await fetch(`https://screenshot-api.example.com?url=${args.url}`)
+    const buffer = await response.arrayBuffer()
+    const base64 = Buffer.from(buffer).toString("base64")
+
+    return {
+      content: [
+        { type: "text", text: `Screenshot of ${args.url}` },
+        { type: "image", mimeType: "image/png", data: base64 },
+      ],
+    }
+  },
+})
+```
+
+**Supported image formats:** PNG, JPEG, GIF, WebP
+
+**Limits:**
+
+- Maximum 10 images per tool response
+- Maximum ~5MB per image (decoded size)
+- Images exceeding limits are silently dropped
+
+:::note
+The `data` field must contain raw base64-encoded image data (not a data URL). Keep images reasonably sized to avoid excessive token usage. Consider resizing large images before returning them.
+:::
 
 ---
 

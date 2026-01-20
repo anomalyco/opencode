@@ -27,6 +27,7 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
 import { ApplyPatchTool } from "./apply_patch"
+import { isRichToolResult, normalizeToolContent } from "./content"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -68,11 +69,31 @@ export namespace ToolRegistry {
         description: def.description,
         execute: async (args, ctx) => {
           const result = await def.execute(args as any, ctx)
+
+          // Handle rich content (with images)
+          if (isRichToolResult(result)) {
+            const normalized = normalizeToolContent(result.content, ctx.sessionID, ctx.messageID)
+            const out = await Truncate.output(normalized.output, {}, initCtx?.agent)
+
+            return {
+              title: "",
+              output: out.content,
+              metadata: { truncated: out.truncated, ...(out.truncated && { outputPath: out.outputPath }) },
+              attachments: normalized.attachments.length ? normalized.attachments : undefined,
+              // Do not pass content if truncated to prevent bypass
+              ...(out.truncated ? {} : { content: result.content }),
+            }
+          }
+
+          // Plain string result (backwards compatible)
+          if (typeof result !== "string") {
+            throw new Error(`Tool "${id}" returned invalid type. Expected string or { content: [...] }`)
+          }
           const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
             title: "",
-            output: out.truncated ? out.content : result,
-            metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
+            output: out.content,
+            metadata: { truncated: out.truncated, ...(out.truncated && { outputPath: out.outputPath }) },
           }
         },
       }),

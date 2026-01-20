@@ -3,6 +3,7 @@ import type { MessageV2 } from "../session/message-v2"
 import type { Agent } from "../agent/agent"
 import type { PermissionNext } from "../permission/next"
 import { Truncate } from "./truncation"
+import type { ToolContentPart } from "./content"
 
 export namespace Tool {
   interface Metadata {
@@ -36,6 +37,7 @@ export namespace Tool {
         metadata: M
         output: string
         attachments?: MessageV2.FilePart[]
+        content?: ToolContentPart[]
       }>
       formatValidationError?(error: z.ZodError): string
     }>

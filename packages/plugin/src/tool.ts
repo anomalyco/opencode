@@ -16,10 +16,14 @@ type AskInput = {
   metadata: { [key: string]: any }
 }
 
+export type ToolContentPart = { type: "text"; text: string } | { type: "image"; mimeType: string; data: string }
+
+export type ToolResult = string | { content: ToolContentPart[] }
+
 export function tool<Args extends z.ZodRawShape>(input: {
   description: string
   args: Args
-  execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<string>
+  execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<ToolResult>
 }) {
   return input
 }
