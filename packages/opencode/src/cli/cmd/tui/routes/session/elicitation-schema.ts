@@ -21,10 +21,9 @@ export interface FormField {
 }
 
 export function schemaToFields(schema: Elicitation.RequestedSchema): FormField[] {
-  const fields: FormField[] = []
   const required = new Set(schema.required ?? [])
 
-  for (const [key, prop] of Object.entries(schema.properties)) {
+  return Object.entries(schema.properties).map(([key, prop]) => {
     const field: FormField = {
       key,
       type: "string",
@@ -66,8 +65,6 @@ export function schemaToFields(schema: Elicitation.RequestedSchema): FormField[]
       }
     }
 
-    fields.push(field)
-  }
-
-  return fields
+    return field
+  })
 }

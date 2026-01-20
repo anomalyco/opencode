@@ -92,13 +92,9 @@ export function ElicitationPrompt(props: { request: Elicitation.Request }) {
     const current = (store.values[key] as string[]) ?? []
     const index = current.indexOf(option)
     if (index === -1) {
-      setValue(key, [...current, option])
-    } else {
-      setValue(
-        key,
-        current.filter((v) => v !== option),
-      )
+      return setValue(key, [...current, option])
     }
+    setValue(key, current.filter((v) => v !== option))
   }
 
   useKeyboard((evt) => {
