@@ -16,6 +16,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "1"
 nix = { version = "0.29", features = ["process", "signal", "user"] }
+futures = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 sd-notify = "0.4"
