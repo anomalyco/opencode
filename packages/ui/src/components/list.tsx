@@ -10,6 +10,7 @@ export interface ListSearchProps {
   autofocus?: boolean
   hideIcon?: boolean
   class?: string
+  action?: JSX.Element
 }
 
 export interface ListProps<T> extends FilteredListProps<T> {
@@ -57,6 +58,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   const { filter, grouped, flat, active, setActive, onKeyDown, onInput } = useFilteredList<T>(props)
 
   const searchProps = () => (typeof props.search === "object" ? props.search : {})
+  const searchAction = () => searchProps().action
 
   const moved = (event: MouseEvent) => event.movementX !== 0 || event.movementY !== 0
 
@@ -196,6 +198,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
               autocapitalize="off"
             />
           </div>
+          {searchAction()}
           <Show when={internalFilter()}>
             <IconButton icon="circle-x" variant="ghost" onClick={() => setInternalFilter("")} />
           </Show>
