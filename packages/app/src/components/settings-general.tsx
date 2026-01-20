@@ -100,6 +100,7 @@ export const SettingsGeneral: Component = () => {
                 onSelect={(option) => option && settings.appearance.setFont(option.value)}
                 variant="secondary"
                 size="small"
+                triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()) }}
               >
                 {(option) => <span style={{ "font-family": monoFontFamily(option?.value) }}>{option?.label}</span>}
               </Select>

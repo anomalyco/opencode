@@ -16,6 +16,7 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   children?: (item: T | undefined) => JSX.Element
+  triggerStyle?: JSX.CSSProperties
 }
 
 export function Select<T>(props: SelectProps<T> & ButtonProps) {
@@ -32,6 +33,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
     "onHighlight",
     "onOpenChange",
     "children",
+    "triggerStyle",
   ])
 
   const state = {
@@ -127,6 +129,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
         as={Button}
         size={props.size}
         variant={props.variant}
+        style={local.triggerStyle}
         classList={{
           ...(local.classList ?? {}),
           [local.class ?? ""]: !!local.class,
