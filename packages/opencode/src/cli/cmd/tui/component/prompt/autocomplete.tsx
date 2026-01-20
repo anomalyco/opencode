@@ -343,7 +343,7 @@ export function Autocomplete(props: {
 
   const mcpServers = createMemo(() => {
     const mcps = Object.entries(sync.data.mcp)
-    return mcps.map(
+    const options = mcps.map(
       ([name, status]): AutocompleteOption => ({
         display: "@mcp/" + name,
         description: status.status === "connected" ? "Connected" : status.status,
@@ -362,6 +362,13 @@ export function Autocomplete(props: {
         },
       }),
     )
+
+    const max = firstBy(options, [(x) => x.display.length, "desc"])?.display.length
+    if (!max) return options
+    return options.map((item) => ({
+      ...item,
+      display: item.display.padEnd(max + 2),
+    }))
   })
 
   const commands = createMemo((): AutocompleteOption[] => {
