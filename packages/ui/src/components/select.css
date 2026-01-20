@@ -41,6 +41,34 @@
       box-shadow: none;
     }
   }
+
+  &[data-trigger-style="button"] {
+    [data-slot="select-select-trigger"] {
+      padding: 0 6px;
+      min-width: auto;
+      height: 24px;
+      justify-content: center;
+      gap: 6px;
+
+      [data-slot="select-select-trigger-icon"] {
+        width: auto;
+        height: auto;
+        background-color: transparent;
+        border-radius: 0;
+      }
+
+      &[data-slot="select-select-trigger"]:hover:not(:disabled) {
+        background-color: var(--surface-raised-base-hover);
+        box-shadow: none;
+      }
+
+      &[data-slot="select-select-trigger"][data-expanded],
+      &[data-slot="select-select-trigger"][data-expanded]:hover:not(:disabled) {
+        background-color: var(--surface-raised-base-active);
+        box-shadow: none;
+      }
+    }
+  }
 }
 
 [data-component="select-content"] {
