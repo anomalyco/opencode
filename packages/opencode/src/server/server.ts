@@ -29,7 +29,6 @@ import { FileRoutes } from "./routes/file"
 import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
-import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { Storage } from "../storage/storage"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
@@ -40,6 +39,7 @@ import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
+import { normalizeBasePath } from "../cli/network"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -49,9 +49,14 @@ export namespace Server {
 
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
+  let _basePath = ""
 
   export function url(): URL {
-    return _url ?? new URL("http://localhost:4096")
+    const baseUrl = _url ?? new URL("http://localhost:4096")
+    if (!_basePath) return baseUrl
+    const result = new URL(baseUrl.toString())
+    result.pathname = _basePath
+    return result
   }
 
   export const Event = {
@@ -59,9 +64,12 @@ export namespace Server {
     Disposed: BusEvent.define("global.disposed", z.object({})),
   }
 
-  const app = new Hono()
-  export const App: () => Hono = lazy(
-    () =>
+  export const App = (basePath = ""): Hono => buildApp(normalizeBasePath(basePath))
+
+  function buildApp(basePath: string) {
+    const root = new Hono()
+    const app = basePath ? root.basePath(basePath) : root
+    return (
       // TODO: Break server.ts into smaller route files to fix type inference
       app
         .onError((err, c) => {
@@ -503,25 +511,53 @@ export namespace Server {
           },
         )
         .all("/*", async (c) => {
-          const path = c.req.path
-          const response = await proxy(`https://app.opencode.ai${path}`, {
+          const rawPath = c.req.path
+          const requestPath =
+            basePath && (rawPath === basePath || rawPath.startsWith(basePath + "/"))
+              ? rawPath.slice(basePath.length) || "/"
+              : rawPath
+
+          // Fallback to proxying from app.opencode.ai
+          const response = await proxy(`https://app.opencode.ai${requestPath}`, {
             ...c.req,
             headers: {
               ...c.req.raw.headers,
               host: "app.opencode.ai",
             },
           })
-          response.headers.set(
-            "Content-Security-Policy",
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'",
-          )
+          const contentType = response.headers.get("content-type") ?? ""
+          const hasBody = response.status !== 204 && response.status !== 304
+          if (basePath && hasBody && contentType.includes("text/html")) {
+            let html = await response.text()
+            const nonce = globalThis.crypto.randomUUID().replace(/-/g, "")
+            const script = `<script nonce="${nonce}">window.__OPENCODE_BASE_PATH__=${JSON.stringify(basePath)};</script>`
+            let modifiedHtml = html.replace(/<head([^>]*)>/i, `<head$1>${script}`)
+            if (modifiedHtml === html) {
+              modifiedHtml = `${script}${html}`
+            }
+            const headers = new Headers(response.headers)
+            headers.set("Content-Security-Policy", buildCsp(nonce))
+            return new Response(modifiedHtml, { status: response.status, headers })
+          }
+          if (basePath && hasBody && contentType.includes("javascript")) {
+            const js = await response.text()
+            const rewritten = js.replace(
+              "S(B7,{root:",
+              "S(B7,{base:window.__OPENCODE_BASE_PATH__||void 0,root:",
+            )
+            const headers = new Headers(response.headers)
+            headers.set("Content-Security-Policy", buildCsp())
+            return new Response(rewritten, { status: response.status, headers })
+          }
+          response.headers.set("Content-Security-Policy", buildCsp())
           return response
-        }) as unknown as Hono,
-  )
+        }) as unknown as Hono
+    )
+  }
 
   export async function openapi() {
     // Cast to break excessive type recursion from long route chains
-    const result = await generateSpecs(App() as Hono, {
+    const result = await generateSpecs(App(_basePath) as Hono, {
       documentation: {
         info: {
           title: "opencode",
@@ -534,13 +570,29 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+  export function listen(opts: {
+    port: number
+    hostname: string
+    mdns?: boolean
+    cors?: string[]
+    basePath?: string
+  }) {
     _corsWhitelist = opts.cors ?? []
+    _basePath = normalizeBasePath(opts.basePath)
 
+    const app = App(_basePath)
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
-      fetch: App().fetch,
+      fetch: (req: Request, server: Server) => {
+        if (!_basePath) return app.fetch(req, server)
+        const url = new URL(req.url)
+        if (!url.pathname.startsWith(_basePath)) {
+          url.pathname = _basePath + (url.pathname.startsWith("/") ? url.pathname : `/${url.pathname}`)
+          req = new Request(url, req)
+        }
+        return app.fetch(req, server)
+      },
       websocket: websocket,
     } as const
     const tryServe = (port: number) => {
@@ -575,4 +627,10 @@ export namespace Server {
 
     return server
   }
+
+  function buildCsp(nonce?: string) {
+    const scriptSrc = nonce ? `'self' 'nonce-${nonce}'` : "'self'"
+    return `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'`
+  }
+
 }
