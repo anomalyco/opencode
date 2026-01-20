@@ -582,28 +582,30 @@ export namespace Server {
     _basePath = normalizeBasePath(opts.basePath)
 
     const app = App(_basePath)
-    const args = {
+    const fetch: Bun.ServeOptions["fetch"] = (req) => {
+      if (!_basePath) return app.fetch(req)
+      const url = new URL(req.url)
+      if (!url.pathname.startsWith(_basePath)) {
+        url.pathname = _basePath + (url.pathname.startsWith("/") ? url.pathname : `/${url.pathname}`)
+        req = new Request(url, req)
+      }
+      return app.fetch(req)
+    }
+    const args: Omit<Bun.ServeOptions, "port"> = {
       hostname: opts.hostname,
       idleTimeout: 0,
-      fetch: (req: Request) => {
-        if (!_basePath) return app.fetch(req, server)
-        const url = new URL(req.url)
-        if (!url.pathname.startsWith(_basePath)) {
-          url.pathname = _basePath + (url.pathname.startsWith("/") ? url.pathname : `/${url.pathname}`)
-          req = new Request(url, req)
-        }
-        return app.fetch(req, server)
-      },
+      fetch,
       websocket: websocket,
-    } as const
-    const tryServe = (port: number) => {
+    }
+    const tryServe = (port: number): Bun.Server | undefined => {
       try {
         return Bun.serve({ ...args, port })
       } catch {
         return undefined
       }
     }
-    const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
+    const server: Bun.Server | undefined =
+      opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
     _url = server.url
