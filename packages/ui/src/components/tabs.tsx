@@ -1,9 +1,9 @@
 import { Tabs as Kobalte } from "@kobalte/core/tabs"
 import { Show, splitProps, type JSX } from "solid-js"
-import type { ComponentProps, ParentProps } from "solid-js"
+import type { ComponentProps, ParentProps, Component } from "solid-js"
 
 export interface TabsProps extends ComponentProps<typeof Kobalte> {
-  variant?: "normal" | "alt"
+  variant?: "normal" | "alt" | "settings"
   orientation?: "horizontal" | "vertical"
 }
 export interface TabsListProps extends ComponentProps<typeof Kobalte.List> {}
@@ -106,8 +106,13 @@ function TabsContent(props: ParentProps<TabsContentProps>) {
   )
 }
 
+const TabsSectionTitle: Component<ParentProps> = (props) => {
+  return <div data-slot="tabs-section-title">{props.children}</div>
+}
+
 export const Tabs = Object.assign(TabsRoot, {
   List: TabsList,
   Trigger: TabsTrigger,
   Content: TabsContent,
+  SectionTitle: TabsSectionTitle,
 })

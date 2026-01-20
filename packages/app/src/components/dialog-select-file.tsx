@@ -34,7 +34,14 @@ export function DialogSelectFile() {
   const view = createMemo(() => layout.view(sessionKey()))
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const [grouped, setGrouped] = createSignal(false)
-  const common = ["session.new", "session.previous", "session.next", "terminal.toggle", "review.toggle"]
+  const common = [
+    "session.new",
+    "workspace.new",
+    "session.previous",
+    "session.next",
+    "terminal.toggle",
+    "review.toggle",
+  ]
   const limit = 5
 
   const allowed = createMemo(() =>
@@ -149,7 +156,7 @@ export function DialogSelectFile() {
           <Show
             when={item.type === "command"}
             fallback={
-              <div class="w-full flex items-center justify-between rounded-md">
+              <div class="w-full flex items-center justify-between rounded-md pl-1">
                 <div class="flex items-center gap-x-3 grow min-w-0">
                   <FileIcon node={{ path: item.path ?? "", type: "file" }} class="shrink-0 size-4" />
                   <div class="flex items-center text-14-regular">
