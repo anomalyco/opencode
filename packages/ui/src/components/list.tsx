@@ -133,7 +133,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     const index = selected ? all.indexOf(selected) : -1
     props.onKeyEvent?.(e, selected)
 
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !e.isComposing) {
       e.preventDefault()
       if (selected) handleSelect(selected, index)
     } else {
