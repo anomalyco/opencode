@@ -47,7 +47,10 @@ export function SessionHeader() {
   }
 
   return (
-    <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex" data-tauri-drag-region>
+    <header
+      class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex relative z-20"
+      data-tauri-drag-region
+    >
       <button
         type="button"
         class="xl:hidden w-12 shrink-0 flex items-center justify-center border-r border-border-weak-base hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active transition-colors"
@@ -87,6 +90,9 @@ export function SessionHeader() {
               class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
               variant="ghost"
             />
+            <span data-e2e="session-count" class="text-12-regular text-text-weaker">
+              {sessions().length} sessions
+            </span>
           </div>
           <Show when={currentSession()}>
             <TooltipKeybind class="hidden xl:block" title="New session" keybind={command.keybind("session.new")}>

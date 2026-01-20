@@ -14,6 +14,7 @@ export namespace Plugin {
   const BUILTIN = ["opencode-copilot-auth@0.0.9", "opencode-anthropic-auth@0.0.5"]
 
   const state = Instance.state(async () => {
+    const start = performance.now()
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
       // @ts-ignore - fetch type incompatibility
@@ -33,19 +34,29 @@ export namespace Plugin {
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
       plugins.push(...BUILTIN)
     }
-    for (let plugin of plugins) {
-      log.info("loading plugin", { path: plugin })
-      if (!plugin.startsWith("file://")) {
+
+    // Install all plugins (Lock in BunProc.install handles concurrency)
+    const installed = await Promise.all(
+      plugins.map(async (plugin) => {
+        if (plugin.startsWith("file://")) return plugin
         const lastAtIndex = plugin.lastIndexOf("@")
         const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
         const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
-        plugin = await BunProc.install(pkg, version).catch((err) => {
+        const installStart = performance.now()
+        const result = await BunProc.install(pkg, version).catch((err) => {
           if (builtin) return ""
           throw err
         })
-        if (!plugin) continue
-      }
+        log.info("plugin install", { pkg, duration: `${(performance.now() - installStart).toFixed(0)}ms` })
+        return result
+      }),
+    )
+
+    // Load all installed plugins
+    for (const plugin of installed) {
+      if (!plugin) continue
+      log.info("loading plugin", { path: plugin })
       const mod = await import(plugin)
       for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
         const init = await fn(input)
@@ -53,6 +64,7 @@ export namespace Plugin {
       }
     }
 
+    log.info("plugins loaded", { count: hooks.length, duration: `${(performance.now() - start).toFixed(0)}ms` })
     return {
       hooks,
       input,

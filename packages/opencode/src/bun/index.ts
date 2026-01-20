@@ -71,7 +71,22 @@ export namespace BunProc {
       await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
       return result
     })
+
+    // Fast path: if version matches in package.json, skip install
     if (parsed.dependencies[pkg] === version) return mod
+
+    // Additional fast path: for pinned versions, check if package exists in node_modules
+    if (version !== "latest") {
+      const installedPkgJson = Bun.file(path.join(mod, "package.json"))
+      const installedPkg = await installedPkgJson.json().catch(() => null)
+      if (installedPkg?.version === version) {
+        // Package exists with correct version, update package.json and skip install
+        parsed.dependencies[pkg] = version
+        await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
+        log.info("package already installed, skipping", { pkg, version })
+        return mod
+      }
+    }
 
     const proxied = !!(
       process.env.HTTP_PROXY ||

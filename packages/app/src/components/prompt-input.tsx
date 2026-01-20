@@ -1761,7 +1761,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </div>
           <div class="flex items-center gap-3 absolute right-2 bottom-2">
             <input
-              ref={fileInputRef}
+              ref={(el) => (fileInputRef = el)}
               type="file"
               accept={ACCEPTED_IMAGE_TYPES.join(",")}
               class="hidden"

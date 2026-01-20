@@ -63,6 +63,7 @@
     "@actions/artifact": "5.0.1",
     "@tsconfig/bun": "catalog:",
     "husky": "9.1.7",
+    "playwright": "1.57.0",
     "prettier": "3.6.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",

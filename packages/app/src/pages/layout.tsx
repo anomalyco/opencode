@@ -518,6 +518,14 @@ export default function Layout(props: ParentProps) {
     requestAnimationFrame(() => scrollToSession(id))
   })
 
+  // Auto-open project when navigating via URL
+  createEffect(() => {
+    if (!params.dir) return
+    const directory = base64Decode(params.dir)
+    if (!directory) return
+    untrack(() => layout.projects.open(directory))
+  })
+
   createEffect(() => {
     if (isLargeViewport()) {
       const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48

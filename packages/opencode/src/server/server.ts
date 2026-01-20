@@ -114,6 +114,7 @@ export namespace Server {
 
             if (input.startsWith("http://localhost:")) return input
             if (input.startsWith("http://127.0.0.1:")) return input
+            if (input.startsWith("http://0.0.0.0:")) return input
             if (input === "tauri://localhost" || input === "http://tauri.localhost") return input
 
             // *.opencode.ai (https only, adjust if needed)
@@ -124,10 +125,46 @@ export namespace Server {
               return input
             }
 
+            // Allow requests from the same origin on common dev ports (Vite dev server)
+            // This enables the launcher workflow where the app runs on :3000 and API on :5050
+            const url = new URL(input)
+            if (url.port === "3000" || url.port === "5173") {
+              return input
+            }
+
             return
           },
         }),
       )
+      .get("/launcher", async (c) => {
+        const file = Bun.file(import.meta.dirname + "/static/launcher.html")
+        return c.html(await file.text())
+      })
+      .get("/launcher/browse", async (c) => {
+        const path = c.req.query("path") || "/"
+        try {
+          const entries = await Array.fromAsync(new Bun.Glob("*").scan({ cwd: path, onlyFiles: false }))
+          const items = await Promise.all(
+            entries.map(async (name) => {
+              const fullPath = path === "/" ? "/" + name : path + "/" + name
+              const file = Bun.file(fullPath)
+              const stat = await file.stat().catch(() => null)
+              const isDir = stat ? stat.isDirectory() : false
+              return { name, path: fullPath, type: isDir ? "directory" : "file" }
+            }),
+          )
+          const sorted = items
+            .filter((i) => !i.name.startsWith("."))
+            .sort((a, b) => {
+              if (a.type === "directory" && b.type !== "directory") return -1
+              if (a.type !== "directory" && b.type === "directory") return 1
+              return a.name.localeCompare(b.name)
+            })
+          return c.json(sorted)
+        } catch (err) {
+          return c.json({ error: "Cannot read directory" }, 400)
+        }
+      })
       .get(
         "/global/health",
         describeRoute({
@@ -702,7 +739,10 @@ export namespace Server {
           },
         }),
         async (c) => {
+          const directory = c.req.query("directory") || c.req.header("x-opencode-directory")
+          log.info("session.list", { directory, projectID: Instance.project.id })
           const sessions = await Array.fromAsync(Session.list())
+          log.info("session.list result", { count: sessions.length, directory })
           pipe(
             await Array.fromAsync(Session.list()),
             filter((s) => !s.time.archived),
@@ -2769,11 +2809,14 @@ export namespace Server {
       )
       .all("/*", async (c) => {
         const path = c.req.path
-        const response = await proxy(`https://app.opencode.ai${path}`, {
+        // Use local Vite dev server if DEV_APP=true, otherwise use production
+        const appHost = process.env.DEV_APP === "true" ? "http://localhost:3000" : "https://app.opencode.ai"
+        const hostHeader = process.env.DEV_APP === "true" ? "localhost" : "app.opencode.ai"
+        const response = await proxy(`${appHost}${path}`, {
           ...c.req,
           headers: {
             ...c.req.raw.headers,
-            host: "app.opencode.ai",
+            host: hostHeader,
           },
         })
         return response

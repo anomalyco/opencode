@@ -23,7 +23,7 @@ import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { useGlobalSDK } from "./global-sdk"
 import { ErrorPage, type InitError } from "../pages/error"
-import { batch, createContext, useContext, onMount, type ParentProps, Switch, Match } from "solid-js"
+import { batch, createContext, useContext, onMount, onCleanup, type ParentProps, Switch, Match } from "solid-js"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 
@@ -110,8 +110,13 @@ function createGlobalSync() {
 
   async function loadSessions(directory: string) {
     const [store, setStore] = child(directory)
-    globalSDK.client.session
-      .list({ directory })
+    const sdk = createOpencodeClient({
+      baseUrl: globalSDK.url,
+      directory,
+      throwOnError: true,
+    })
+    sdk.session
+      .list()
       .then((x) => {
         const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000
         const nonArchived = (x.data ?? [])
@@ -406,10 +411,11 @@ function createGlobalSync() {
   })
 
   async function bootstrap() {
-    const health = await globalSDK.client.global
-      .health()
-      .then((x) => x.data)
-      .catch(() => undefined)
+    const health = await retry(() => globalSDK.client.global.health().then((x) => x.data), {
+      attempts: 3,
+      delay: 1000,
+      retryIf: () => true,
+    }).catch(() => undefined)
     if (!health?.healthy) {
       setGlobalStore(
         "error",
@@ -460,6 +466,17 @@ function createGlobalSync() {
 
   onMount(() => {
     bootstrap()
+
+    // Re-check connection when page becomes visible (handles Android app switch)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && globalStore.error) {
+        // Clear error and retry bootstrap when returning to the app
+        setGlobalStore("error", undefined)
+        bootstrap()
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    onCleanup(() => document.removeEventListener("visibilitychange", handleVisibilityChange))
   })
 
   return {

@@ -33,9 +33,23 @@ declare global {
   }
 }
 
+const PERSISTED_URL_KEY = "opencode-server-url"
+
 const defaultServerUrl = iife(() => {
+  // Check URL param first - if provided, persist it for future reloads
   const param = new URLSearchParams(document.location.search).get("url")
-  if (param) return param
+  if (param) {
+    try {
+      localStorage.setItem(PERSISTED_URL_KEY, param)
+    } catch {}
+    return param
+  }
+
+  // Check for previously persisted URL (survives page refresh)
+  try {
+    const persisted = localStorage.getItem(PERSISTED_URL_KEY)
+    if (persisted) return persisted
+  } catch {}
 
   if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
   if (window.__OPENCODE__) return `http://127.0.0.1:${window.__OPENCODE__.port}`

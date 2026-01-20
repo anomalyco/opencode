@@ -13,6 +13,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const globalSync = useGlobalSync()
     const sdk = useSDK()
     const [store, setStore] = globalSync.child(sdk.directory)
+
     const absolute = (path: string) => (store.path.directory + "/" + path).replace("//", "/")
 
     return {
