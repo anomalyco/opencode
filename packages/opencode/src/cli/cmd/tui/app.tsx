@@ -295,6 +295,10 @@ function App() {
       keybind: "session_list",
       category: "Session",
       suggested: sync.data.session.length > 0,
+      slash: {
+        name: "sessions",
+        aliases: ["resume", "continue"],
+      },
       onSelect: () => {
         dialog.replace(() => <DialogSessionList />)
       },
@@ -305,6 +309,10 @@ function App() {
       value: "session.new",
       keybind: "session_new",
       category: "Session",
+      slash: {
+        name: "new",
+        aliases: ["clear"],
+      },
       onSelect: () => {
         const current = promptRef.current
         // Don't require focus - if there's any text, preserve it
@@ -322,26 +330,29 @@ function App() {
       keybind: "model_list",
       suggested: true,
       category: "Agent",
+      slash: {
+        name: "models",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogModel />)
       },
     },
     {
       title: "Model cycle",
-      disabled: true,
       value: "model.cycle_recent",
       keybind: "model_cycle_recent",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycle(1)
       },
     },
     {
       title: "Model cycle reverse",
-      disabled: true,
       value: "model.cycle_recent_reverse",
       keybind: "model_cycle_recent_reverse",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycle(-1)
       },
@@ -351,6 +362,7 @@ function App() {
       value: "model.cycle_favorite",
       keybind: "model_cycle_favorite",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycleFavorite(1)
       },
@@ -360,6 +372,7 @@ function App() {
       value: "model.cycle_favorite_reverse",
       keybind: "model_cycle_favorite_reverse",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycleFavorite(-1)
       },
@@ -369,6 +382,9 @@ function App() {
       value: "agent.list",
       keybind: "agent_list",
       category: "Agent",
+      slash: {
+        name: "agents",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogAgent />)
       },
@@ -377,6 +393,9 @@ function App() {
       title: "Toggle MCPs",
       value: "mcp.list",
       category: "Agent",
+      slash: {
+        name: "mcps",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogMcp />)
       },
@@ -386,7 +405,7 @@ function App() {
       value: "agent.cycle",
       keybind: "agent_cycle",
       category: "Agent",
-      disabled: true,
+      hidden: true,
       onSelect: () => {
         local.agent.move(1)
       },
@@ -396,6 +415,7 @@ function App() {
       value: "variant.cycle",
       keybind: "variant_cycle",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.variant.cycle()
       },
@@ -405,7 +425,7 @@ function App() {
       value: "agent.cycle.reverse",
       keybind: "agent_cycle_reverse",
       category: "Agent",
-      disabled: true,
+      hidden: true,
       onSelect: () => {
         local.agent.move(-1)
       },
@@ -414,6 +434,9 @@ function App() {
       title: "Connect provider",
       value: "provider.connect",
       suggested: !connected(),
+      slash: {
+        name: "connect",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogProviderList />)
       },
@@ -423,6 +446,9 @@ function App() {
       title: "View status",
       keybind: "status_view",
       value: "opencode.status",
+      slash: {
+        name: "status",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogStatus />)
       },
@@ -432,6 +458,9 @@ function App() {
       title: "Switch theme",
       value: "theme.switch",
       keybind: "theme_list",
+      slash: {
+        name: "themes",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogThemeList />)
       },
@@ -449,6 +478,9 @@ function App() {
     {
       title: "Help",
       value: "help.show",
+      slash: {
+        name: "help",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogHelp />)
       },
@@ -475,6 +507,10 @@ function App() {
     {
       title: "Exit the app",
       value: "app.exit",
+      slash: {
+        name: "exit",
+        aliases: ["quit", "q"],
+      },
       onSelect: () => exit(),
       category: "System",
     },
@@ -515,6 +551,7 @@ function App() {
       value: "terminal.suspend",
       keybind: "terminal_suspend",
       category: "System",
+      hidden: true,
       onSelect: () => {
         process.once("SIGCONT", () => {
           renderer.resume()
