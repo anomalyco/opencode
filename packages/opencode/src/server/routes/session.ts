@@ -56,7 +56,13 @@ export const SessionRoutes = lazy(() =>
         const term = query.search?.toLowerCase()
         const sessions: Session.Info[] = []
         for await (const session of Session.list()) {
-          if (query.directory !== undefined && session.directory !== query.directory) continue
+          const normalizedSessionDir = Filesystem.normalize(session.directory)
+          if (
+            normalizedQueryDir !== undefined &&
+            normalizedSessionDir !== normalizedQueryDir &&
+            !Filesystem.contains(normalizedQueryDir, normalizedSessionDir)
+          )
+            continue
           if (query.roots && session.parentID) continue
           if (query.start !== undefined && session.time.updated < query.start) continue
           if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
