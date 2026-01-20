@@ -8,8 +8,6 @@ import { readableStreamToText } from "bun"
 import { Lock } from "../util/lock"
 import { PackageRegistry } from "./registry"
 
-export { PackageRegistry as BunRegistry } from "./registry"
-
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
 
