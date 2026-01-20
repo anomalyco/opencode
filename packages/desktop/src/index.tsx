@@ -1,4 +1,5 @@
 // @refresh reload
+import "./webview-zoom"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
@@ -93,6 +94,21 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     const storeCache = new Map<string, Promise<StoreLike>>()
     const apiCache = new Map<string, AsyncStorage & { flush: () => Promise<void> }>()
     const memoryCache = new Map<string, StoreLike>()
+
+    const flushAll = async () => {
+      const apis = Array.from(apiCache.values())
+      await Promise.all(apis.map((api) => api.flush().catch(() => undefined)))
+    }
+
+    if ("addEventListener" in globalThis) {
+      const handleVisibility = () => {
+        if (document.visibilityState !== "hidden") return
+        void flushAll()
+      }
+
+      window.addEventListener("pagehide", () => void flushAll())
+      document.addEventListener("visibilitychange", handleVisibility)
+    }
 
     const createMemoryStore = () => {
       const data = new Map<string, string>()
@@ -253,7 +269,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
       .then(() => {
         const notification = new Notification(title, {
           body: description ?? "",
-          icon: "https://opencode.ai/favicon-96x96.png",
+          icon: "https://opencode.ai/favicon-96x96-v2.png",
         })
         notification.onclick = () => {
           const win = getCurrentWindow()
@@ -302,11 +318,6 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 })
 
 createMenu()
-
-// Stops mousewheel events from reaching Tauri's pinch-to-zoom handler
-root?.addEventListener("mousewheel", (e) => {
-  e.stopPropagation()
-})
 
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)

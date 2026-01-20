@@ -44,6 +44,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { Truncate } from "@/tool/truncation"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -801,10 +802,17 @@ export namespace SessionPrompt {
           }
         }
 
+        const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
+        const metadata = {
+          ...(result.metadata ?? {}),
+          truncated: truncated.truncated,
+          ...(truncated.truncated && { outputPath: truncated.outputPath }),
+        }
+
         return {
           title: "",
-          metadata: result.metadata ?? {},
-          output: textParts.join("\n\n"),
+          metadata,
+          output: truncated.content,
           attachments,
           content: result.content, // directly return content to preserve ordering when outputting to model
         }
@@ -1619,7 +1627,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       if (position === last) return args.slice(argIndex).join(" ")
       return args[argIndex]
     })
+    const usesArgumentsPlaceholder = templateCommand.includes("$ARGUMENTS")
     let template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
+
+    // If command doesn't explicitly handle arguments (no $N or $ARGUMENTS placeholders)
+    // but user provided arguments, append them to the template
+    if (placeholders.length === 0 && !usesArgumentsPlaceholder && input.arguments.trim()) {
+      template = template + "\n\n" + input.arguments
+    }
 
     const shell = ConfigMarkdown.shell(template)
     if (shell.length > 0) {

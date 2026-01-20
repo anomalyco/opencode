@@ -357,6 +357,11 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const toggleExpanded = () => {
+    if (!canExpand()) return
+    setExpanded((value) => !value)
+  }
+
   return (
     <div data-component="user-message" data-expanded={expanded()} data-can-expand={canExpand()}>
       <Show when={attachments().length > 0}>
@@ -388,19 +393,29 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         </div>
       </Show>
       <Show when={text()}>
-        <div data-slot="user-message-text" ref={(el) => (textRef = el)}>
+        <div data-slot="user-message-text" ref={(el) => (textRef = el)} onClick={toggleExpanded}>
           <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
           <button
             data-slot="user-message-expand"
             type="button"
             aria-label={expanded() ? "Collapse message" : "Expand message"}
-            onClick={() => setExpanded((v) => !v)}
+            onClick={(event) => {
+              event.stopPropagation()
+              toggleExpanded()
+            }}
           >
             <Icon name="chevron-down" size="small" />
           </button>
           <div data-slot="user-message-copy-wrapper">
             <Tooltip value={copied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
-              <IconButton icon={copied() ? "check" : "copy"} variant="secondary" onClick={handleCopy} />
+              <IconButton
+                icon={copied() ? "check" : "copy"}
+                variant="secondary"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  handleCopy()
+                }}
+              />
             </Tooltip>
           </div>
         </div>
@@ -977,6 +992,7 @@ ToolRegistry.register({
   render(props) {
     const diffComponent = useDiffComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
+    const filename = () => getFilename(props.input.filePath ?? "")
     return (
       <BasicTool
         {...props}
@@ -984,13 +1000,12 @@ ToolRegistry.register({
         trigger={
           <div data-component="edit-trigger">
             <div data-slot="message-part-title-area">
-              <div data-slot="message-part-title">Edit</div>
-              <div data-slot="message-part-path">
-                <Show when={props.input.filePath?.includes("/")}>
+              <div data-slot="message-part-title">Edit {filename()}</div>
+              <Show when={props.input.filePath?.includes("/")}>
+                <div data-slot="message-part-path">
                   <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
-                </Show>
-                <span data-slot="message-part-filename">{getFilename(props.input.filePath ?? "")}</span>
-              </div>
+                </div>
+              </Show>
             </div>
             <div data-slot="message-part-actions">
               <Show when={props.metadata.filediff}>
@@ -1026,6 +1041,7 @@ ToolRegistry.register({
   render(props) {
     const codeComponent = useCodeComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
+    const filename = () => getFilename(props.input.filePath ?? "")
     return (
       <BasicTool
         {...props}
@@ -1033,13 +1049,12 @@ ToolRegistry.register({
         trigger={
           <div data-component="write-trigger">
             <div data-slot="message-part-title-area">
-              <div data-slot="message-part-title">Write</div>
-              <div data-slot="message-part-path">
-                <Show when={props.input.filePath?.includes("/")}>
+              <div data-slot="message-part-title">Write {filename()}</div>
+              <Show when={props.input.filePath?.includes("/")}>
+                <div data-slot="message-part-path">
                   <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
-                </Show>
-                <span data-slot="message-part-filename">{getFilename(props.input.filePath ?? "")}</span>
-              </div>
+                </div>
+              </Show>
             </div>
             <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
           </div>
