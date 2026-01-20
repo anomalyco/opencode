@@ -1,5 +1,6 @@
 import { TextAttributes, RGBA } from "@opentui/core"
-import { For, type JSX } from "solid-js"
+import { For, Show, createMemo, type JSX } from "solid-js"
+import { useTerminalDimensions } from "@opentui/solid"
 import { useTheme, tint } from "@tui/context/theme"
 
 // Shadow markers (rendered chars in parens):
@@ -12,8 +13,14 @@ const LOGO_LEFT = [`                   `, `█▀▀█ █▀▀█ █▀▀�
 
 const LOGO_RIGHT = [`             ▄     `, `█▀▀▀ █▀▀█ █▀▀█ █▀▀█`, `█___ █__█ █__█ █^^^`, `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`]
 
+// 19 (LOGO_LEFT) + 1 (gap) + 19 (LOGO_RIGHT) + 3 (padding) = 42
+const LOGO_MIN_WIDTH = 42
+
 export function Logo() {
   const { theme } = useTheme()
+  const dimensions = useTerminalDimensions()
+
+  const showLogo = createMemo(() => dimensions().width >= LOGO_MIN_WIDTH)
 
   const renderLine = (line: string, fg: RGBA, bold: boolean): JSX.Element[] => {
     const shadow = tint(theme.background, fg, 0.25)
@@ -74,15 +81,17 @@ export function Logo() {
   }
 
   return (
-    <box>
-      <For each={LOGO_LEFT}>
-        {(line, index) => (
-          <box flexDirection="row" gap={1}>
-            <box flexDirection="row">{renderLine(line, theme.textMuted, false)}</box>
-            <box flexDirection="row">{renderLine(LOGO_RIGHT[index()], theme.text, true)}</box>
-          </box>
-        )}
-      </For>
-    </box>
+    <Show when={showLogo()}>
+      <box>
+        <For each={LOGO_LEFT}>
+          {(line, index) => (
+            <box flexDirection="row" gap={1}>
+              <box flexDirection="row">{renderLine(line, theme.textMuted, false)}</box>
+              <box flexDirection="row">{renderLine(LOGO_RIGHT[index()], theme.text, true)}</box>
+            </box>
+          )}
+        </For>
+      </box>
+    </Show>
   )
 }

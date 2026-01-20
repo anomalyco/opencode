@@ -1,5 +1,6 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createMemo, Match, onMount, Show, Switch } from "solid-js"
+import { useTerminalDimensions } from "@opentui/solid"
 import { useTheme } from "@tui/context/theme"
 import { useKeybind } from "@tui/context/keybind"
 import { Logo } from "../component/logo"
@@ -18,6 +19,9 @@ import { useCommandDialog } from "../component/dialog-command"
 // TODO: what is the best way to do this?
 let once = false
 
+const MIN_HEIGHT_FOR_LOGO = 20
+const MIN_HEIGHT_FOR_TIPS = 16
+
 export function Home() {
   const sync = useSync()
   const kv = useKV()
@@ -25,6 +29,8 @@ export function Home() {
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const command = useCommandDialog()
+  const dimensions = useTerminalDimensions()
+  const isCompact = createMemo(() => dimensions().height < MIN_HEIGHT_FOR_LOGO)
   const mcp = createMemo(() => Object.keys(sync.data.mcp).length > 0)
   const mcpError = createMemo(() => {
     return Object.values(sync.data.mcp).some((x) => x.status === "failed")
@@ -37,8 +43,8 @@ export function Home() {
   const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
   const tipsHidden = createMemo(() => kv.get("tips_hidden", false))
   const showTips = createMemo(() => {
-    // Don't show tips for first-time users
     if (isFirstTimeUser()) return false
+    if (dimensions().height < MIN_HEIGHT_FOR_TIPS) return false
     return !tipsHidden()
   })
 
@@ -94,9 +100,13 @@ export function Home() {
   return (
     <>
       <box flexGrow={1} justifyContent="center" alignItems="center" paddingLeft={2} paddingRight={2} gap={1}>
-        <box height={3} />
-        <Logo />
-        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1}>
+        <Show when={!isCompact()}>
+          <box height={3} />
+        </Show>
+        <Show when={!isCompact()}>
+          <Logo />
+        </Show>
+        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={isCompact() ? 0 : 1}>
           <Prompt
             ref={(r) => {
               prompt = r
@@ -105,11 +115,11 @@ export function Home() {
             hint={Hint}
           />
         </box>
-        <box height={3} width="100%" maxWidth={75} alignItems="center" paddingTop={2}>
-          <Show when={showTips()}>
+        <Show when={showTips()}>
+          <box height={3} width="100%" maxWidth={75} alignItems="center" paddingTop={2}>
             <Tips />
-          </Show>
-        </box>
+          </box>
+        </Show>
         <Toast />
       </box>
       <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
