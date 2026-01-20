@@ -228,9 +228,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
           when={flat().length > 0}
           fallback={
             <div data-slot="list-empty-state">
-              <div data-slot="list-message">
-                {emptyMessage()}
-              </div>
+              <div data-slot="list-message">{emptyMessage()}</div>
             </div>
           }
         >

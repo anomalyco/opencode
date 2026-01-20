@@ -144,7 +144,7 @@ export const dict = {
   "common.attachment": "attachment",
 
   "prompt.placeholder.shell": "Enter shell command...",
-  "prompt.placeholder.normal": "Ask anything... \"{{example}}\"",
+  "prompt.placeholder.normal": 'Ask anything... "{{example}}"',
   "prompt.mode.shell": "Shell",
   "prompt.mode.shell.exit": "esc to exit",
 
@@ -219,7 +219,8 @@ export const dict = {
   "dialog.server.add.checking": "Checking...",
   "dialog.server.add.button": "Add",
   "dialog.server.default.title": "Default server",
-  "dialog.server.default.description": "Connect to this server on app launch instead of starting a local server. Requires restart.",
+  "dialog.server.default.description":
+    "Connect to this server on app launch instead of starting a local server. Requires restart.",
   "dialog.server.default.none": "No server selected",
   "dialog.server.default.set": "Set current server as default",
   "dialog.server.default.clear": "Clear",
@@ -233,7 +234,7 @@ export const dict = {
   "dialog.project.edit.color": "Color",
 
   "context.breakdown.title": "Context Breakdown",
-  "context.breakdown.note": "Approximate breakdown of input tokens. \"Other\" includes tool definitions and overhead.",
+  "context.breakdown.note": 'Approximate breakdown of input tokens. "Other" includes tool definitions and overhead.',
   "context.breakdown.system": "System",
   "context.breakdown.user": "User",
   "context.breakdown.assistant": "Assistant",
@@ -327,14 +328,14 @@ export const dict = {
   "error.chain.didYouMean": "Did you mean: {{suggestions}}",
   "error.chain.modelNotFound": "Model not found: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Check your config (opencode.json) provider/model names",
-  "error.chain.mcpFailed":
-    "MCP server \"{{name}}\" failed. Note, OpenCode does not support MCP authentication yet.",
+  "error.chain.mcpFailed": 'MCP server "{{name}}" failed. Note, OpenCode does not support MCP authentication yet.',
   "error.chain.providerAuthFailed": "Provider authentication failed ({{provider}}): {{message}}",
-  "error.chain.providerInitFailed": "Failed to initialize provider \"{{provider}}\". Check credentials and configuration.",
+  "error.chain.providerInitFailed":
+    'Failed to initialize provider "{{provider}}". Check credentials and configuration.',
   "error.chain.configJsonInvalid": "Config file at {{path}} is not valid JSON(C)",
   "error.chain.configJsonInvalidWithMessage": "Config file at {{path}} is not valid JSON(C): {{message}}",
   "error.chain.configDirectoryTypo":
-    "Directory \"{{dir}}\" in {{path}} is not valid. Rename the directory to \"{{suggestion}}\" or remove it. This is a common typo.",
+    'Directory "{{dir}}" in {{path}} is not valid. Rename the directory to "{{suggestion}}" or remove it. This is a common typo.',
   "error.chain.configFrontmatterError": "Failed to parse frontmatter in {{path}}:\n{{message}}",
   "error.chain.configInvalid": "Config file at {{path}} is invalid",
   "error.chain.configInvalidWithMessage": "Config file at {{path}} is invalid: {{message}}",
@@ -374,8 +375,10 @@ export const dict = {
   "session.header.search.placeholder": "Search {{project}}",
 
   "session.share.popover.title": "Publish on web",
-  "session.share.popover.description.shared": "This session is public on the web. It is accessible to anyone with the link.",
-  "session.share.popover.description.unshared": "Share session publicly on the web. It will be accessible to anyone with the link.",
+  "session.share.popover.description.shared":
+    "This session is public on the web. It is accessible to anyone with the link.",
+  "session.share.popover.description.unshared":
+    "Share session publicly on the web. It will be accessible to anyone with the link.",
   "session.share.action.share": "Share",
   "session.share.action.publish": "Publish",
   "session.share.action.publishing": "Publishing...",
@@ -433,7 +436,8 @@ export const dict = {
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
 
   "settings.general.notifications.agent.title": "Agent",
-  "settings.general.notifications.agent.description": "Show system notification when the agent is complete or needs attention",
+  "settings.general.notifications.agent.description":
+    "Show system notification when the agent is complete or needs attention",
   "settings.general.notifications.permissions.title": "Permissions",
   "settings.general.notifications.permissions.description": "Show system notification when a permission is required",
   "settings.general.notifications.errors.title": "Errors",
@@ -530,10 +534,10 @@ export const dict = {
   "workspace.status.clean": "No unmerged changes detected.",
   "workspace.status.dirty": "Unmerged changes detected in this workspace.",
   "workspace.delete.title": "Delete workspace",
-  "workspace.delete.confirm": "Delete workspace \"{{name}}\"?",
+  "workspace.delete.confirm": 'Delete workspace "{{name}}"?',
   "workspace.delete.button": "Delete workspace",
   "workspace.reset.title": "Reset workspace",
-  "workspace.reset.confirm": "Reset workspace \"{{name}}\"?",
+  "workspace.reset.confirm": 'Reset workspace "{{name}}"?',
   "workspace.reset.button": "Reset workspace",
   "workspace.reset.archived.none": "No active sessions will be archived.",
   "workspace.reset.archived.one": "1 session will be archived.",

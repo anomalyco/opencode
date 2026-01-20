@@ -78,9 +78,10 @@ function formatInitError(error: InitError, t: Translator): string {
         suggestions?: string[]
       }
 
-      const suggestionsLine = Array.isArray(suggestions) && suggestions.length
-        ? [t("error.chain.didYouMean", { suggestions: suggestions.join(", ") })]
-        : []
+      const suggestionsLine =
+        Array.isArray(suggestions) && suggestions.length
+          ? [t("error.chain.didYouMean", { suggestions: suggestions.join(", ") })]
+          : []
 
       return [
         t("error.chain.modelNotFound", { provider: providerID, model: modelID }),
@@ -253,7 +254,9 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
               when={store.version}
               fallback={
                 <Button size="large" variant="ghost" onClick={checkForUpdates} disabled={store.checking}>
-                  {store.checking ? language.t("error.page.action.checking") : language.t("error.page.action.checkUpdates")}
+                  {store.checking
+                    ? language.t("error.page.action.checking")
+                    : language.t("error.page.action.checkUpdates")}
                 </Button>
               }
             >

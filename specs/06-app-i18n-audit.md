@@ -163,6 +163,7 @@ Completed (2026-01-20):
 ### 15) File Load Failure Toast (Duplicate)
 
 Files:
+
 - `packages/app/src/context/file.tsx`
 - `packages/app/src/context/local.tsx`
 
@@ -220,13 +221,17 @@ Also reuse existing command keys for tooltip titles whenever possible (e.g. `com
 ## Appendix: Remaining Files At-a-Glance
 
 Pages:
+
 - (none)
 
 Components:
+
 - (none)
 
 Context:
+
 - (none)
 
 Utils:
+
 - (none)

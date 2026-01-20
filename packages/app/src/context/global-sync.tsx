@@ -658,10 +658,7 @@ function createGlobalSync() {
       .then((x) => x.data)
       .catch(() => undefined)
     if (!health?.healthy) {
-      setGlobalStore(
-        "error",
-        new Error(language.t("error.globalSync.connectFailed", { url: globalSDK.url })),
-      )
+      setGlobalStore("error", new Error(language.t("error.globalSync.connectFailed", { url: globalSDK.url })))
       return
     }
 

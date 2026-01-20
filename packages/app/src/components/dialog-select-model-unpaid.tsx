@@ -62,9 +62,9 @@ export const DialogSelectModelUnpaid: Component = () => {
       </div>
       <div class="px-1.5 pb-1.5">
         <div class="w-full rounded-sm border border-border-weak-base bg-surface-raised-base">
-            <div class="w-full flex flex-col items-start gap-4 px-1.5 pt-4 pb-4">
+          <div class="w-full flex flex-col items-start gap-4 px-1.5 pt-4 pb-4">
             <div class="px-2 text-14-medium text-text-base">{language.t("dialog.model.unpaid.addMore.title")}</div>
-              <div class="w-full">
+            <div class="w-full">
               <List
                 class="w-full px-0"
                 key={(x) => x?.id}

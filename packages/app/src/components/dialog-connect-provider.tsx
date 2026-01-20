@@ -236,8 +236,12 @@ export function DialogConnectProvider(props: { provider: string }) {
                     <Switch>
                       <Match when={provider().id === "opencode"}>
                         <div class="flex flex-col gap-4">
-                          <div class="text-14-regular text-text-base">{language.t("provider.connect.opencodeZen.line1")}</div>
-                          <div class="text-14-regular text-text-base">{language.t("provider.connect.opencodeZen.line2")}</div>
+                          <div class="text-14-regular text-text-base">
+                            {language.t("provider.connect.opencodeZen.line1")}
+                          </div>
+                          <div class="text-14-regular text-text-base">
+                            {language.t("provider.connect.opencodeZen.line2")}
+                          </div>
                           <div class="text-14-regular text-text-base">
                             {language.t("provider.connect.opencodeZen.visit.prefix")}
                             <Link href="https://opencode.ai/zen" tabIndex={-1}>
@@ -317,7 +321,9 @@ export function DialogConnectProvider(props: { provider: string }) {
                       <div class="flex flex-col gap-6">
                         <div class="text-14-regular text-text-base">
                           {language.t("provider.connect.oauth.code.visit.prefix")}
-                          <Link href={store.authorization!.url}>{language.t("provider.connect.oauth.code.visit.link")}</Link>
+                          <Link href={store.authorization!.url}>
+                            {language.t("provider.connect.oauth.code.visit.link")}
+                          </Link>
                           {language.t("provider.connect.oauth.code.visit.suffix", { provider: provider().name })}
                         </div>
                         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
@@ -367,7 +373,9 @@ export function DialogConnectProvider(props: { provider: string }) {
                       <div class="flex flex-col gap-6">
                         <div class="text-14-regular text-text-base">
                           {language.t("provider.connect.oauth.auto.visit.prefix")}
-                          <Link href={store.authorization!.url}>{language.t("provider.connect.oauth.auto.visit.link")}</Link>
+                          <Link href={store.authorization!.url}>
+                            {language.t("provider.connect.oauth.auto.visit.link")}
+                          </Link>
                           {language.t("provider.connect.oauth.auto.visit.suffix", { provider: provider().name })}
                         </div>
                         <TextField

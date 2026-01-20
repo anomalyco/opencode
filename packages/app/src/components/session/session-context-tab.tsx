@@ -261,7 +261,10 @@ export function SessionContextTab(props: SessionContextTabProps) {
         value: `${number(c?.cacheRead)} / ${number(c?.cacheWrite)}`,
       },
       { label: language.t("context.stats.userMessages"), value: count.user.toLocaleString(language.locale()) },
-      { label: language.t("context.stats.assistantMessages"), value: count.assistant.toLocaleString(language.locale()) },
+      {
+        label: language.t("context.stats.assistantMessages"),
+        value: count.assistant.toLocaleString(language.locale()),
+      },
       { label: language.t("context.stats.totalCost"), value: cost() },
       { label: language.t("context.stats.sessionCreated"), value: time(props.info()?.time.created) },
       { label: language.t("context.stats.lastActivity"), value: time(c?.message.time.created) },
@@ -402,9 +405,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
                 )}
               </For>
             </div>
-            <div class="hidden text-11-regular text-text-weaker">
-              {language.t("context.breakdown.note")}
-            </div>
+            <div class="hidden text-11-regular text-text-weaker">{language.t("context.breakdown.note")}</div>
           </div>
         </Show>
 

@@ -76,13 +76,13 @@ export default function Home() {
       </Button>
       <Switch>
         <Match when={sync.data.project.length > 0}>
-            <div class="mt-20 w-full flex flex-col gap-4">
-              <div class="flex gap-2 items-center justify-between pl-3">
-                <div class="text-14-medium text-text-strong">{language.t("home.recentProjects")}</div>
-                <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
-                  {language.t("command.project.open")}
-                </Button>
-              </div>
+          <div class="mt-20 w-full flex flex-col gap-4">
+            <div class="flex gap-2 items-center justify-between pl-3">
+              <div class="text-14-medium text-text-strong">{language.t("home.recentProjects")}</div>
+              <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
+                {language.t("command.project.open")}
+              </Button>
+            </div>
             <ul class="flex flex-col gap-2">
               <For
                 each={sync.data.project

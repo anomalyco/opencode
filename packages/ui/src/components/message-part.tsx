@@ -417,7 +417,11 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
             <Icon name="chevron-down" size="small" />
           </button>
           <div data-slot="user-message-copy-wrapper">
-            <Tooltip value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top" gutter={8}>
+            <Tooltip
+              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              placement="top"
+              gutter={8}
+            >
               <IconButton
                 icon={copied() ? "check" : "copy"}
                 variant="secondary"

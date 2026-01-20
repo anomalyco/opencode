@@ -19,7 +19,7 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   })()
 
   const key = "error.dev.rootNotFound" as const
-  const message = locale === "zh" ? zh[key] ?? en[key] : en[key]
+  const message = locale === "zh" ? (zh[key] ?? en[key]) : en[key]
   throw new Error(message)
 }
 

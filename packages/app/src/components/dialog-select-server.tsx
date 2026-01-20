@@ -200,9 +200,7 @@ export function DialogSelectServer() {
           <div class="mt-6 px-3 flex flex-col gap-1.5">
             <div class="px-3">
               <h3 class="text-14-regular text-text-weak">{language.t("dialog.server.default.title")}</h3>
-              <p class="text-12-regular text-text-weak mt-1">
-                {language.t("dialog.server.default.description")}
-              </p>
+              <p class="text-12-regular text-text-weak mt-1">{language.t("dialog.server.default.description")}</p>
             </div>
             <div class="flex items-center gap-2 px-3 py-2">
               <Show
@@ -210,7 +208,9 @@ export function DialogSelectServer() {
                 fallback={
                   <Show
                     when={server.url}
-                    fallback={<span class="text-14-regular text-text-weak">{language.t("dialog.server.default.none")}</span>}
+                    fallback={
+                      <span class="text-14-regular text-text-weak">{language.t("dialog.server.default.none")}</span>
+                    }
                   >
                     <Button
                       variant="secondary"

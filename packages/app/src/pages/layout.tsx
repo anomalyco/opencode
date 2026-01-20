@@ -1909,9 +1909,9 @@ export default function Layout(props: ParentProps) {
           trigger={trigger}
           onOpenChange={setOpen}
         >
-            <div class="-m-3 p-2 flex flex-col w-72">
-              <div class="px-4 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
-              <div class="px-4 pb-2 text-12-medium text-text-weak">{language.t("sidebar.project.recentSessions")}</div>
+          <div class="-m-3 p-2 flex flex-col w-72">
+            <div class="px-4 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
+            <div class="px-4 pb-2 text-12-medium text-text-weak">{language.t("sidebar.project.recentSessions")}</div>
             <div class="px-2 pb-2 flex flex-col gap-2">
               <Show
                 when={workspaceEnabled()}
@@ -2177,22 +2177,22 @@ export default function Layout(props: ParentProps) {
                           class="shrink-0 size-6 rounded-md opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100 data-[expanded]:bg-surface-base-active"
                         />
                         <DropdownMenu.Portal>
-                            <DropdownMenu.Content class="mt-1">
-                              <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
+                          <DropdownMenu.Content class="mt-1">
+                            <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
                               <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces(p.worktree)}>
-                                <DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces(p.worktree)}>
+                              <DropdownMenu.ItemLabel>
                                 {layout.sidebar.workspaces(p.worktree)()
                                   ? language.t("sidebar.workspaces.disable")
                                   : language.t("sidebar.workspaces.enable")}
-                                </DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Separator />
-                              <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
+                              </DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator />
+                            <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
                               <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
-                              </DropdownMenu.Item>
-                            </DropdownMenu.Content>
+                            </DropdownMenu.Item>
+                          </DropdownMenu.Content>
                         </DropdownMenu.Portal>
                       </DropdownMenu>
                     </div>

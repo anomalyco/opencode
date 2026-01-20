@@ -673,14 +673,14 @@ export default function Page() {
     },
     ...(sync.data.config.share !== "disabled"
       ? [
-           {
-             id: "session.share",
-             title: language.t("command.session.share"),
-             description: language.t("command.session.share.description"),
-             category: language.t("command.category.session"),
-             slash: "share",
-             disabled: !params.id || !!info()?.share?.url,
-             onSelect: async () => {
+          {
+            id: "session.share",
+            title: language.t("command.session.share"),
+            description: language.t("command.session.share.description"),
+            category: language.t("command.category.session"),
+            slash: "share",
+            disabled: !params.id || !!info()?.share?.url,
+            onSelect: async () => {
               if (!params.id) return
               await sdk.client.session
                 .share({ sessionID: params.id })
@@ -708,14 +708,14 @@ export default function Page() {
                 )
             },
           },
-           {
-             id: "session.unshare",
-             title: language.t("command.session.unshare"),
-             description: language.t("command.session.unshare.description"),
-             category: language.t("command.category.session"),
-             slash: "unshare",
-             disabled: !params.id || !info()?.share?.url,
-             onSelect: async () => {
+          {
+            id: "session.unshare",
+            title: language.t("command.session.unshare"),
+            description: language.t("command.session.unshare.description"),
+            category: language.t("command.category.session"),
+            slash: "unshare",
+            disabled: !params.id || !info()?.share?.url,
+            onSelect: async () => {
               if (!params.id) return
               await sdk.client.session
                 .unshare({ sessionID: params.id })
@@ -1262,7 +1262,9 @@ export default function Page() {
                             <Show
                               when={diffsReady()}
                               fallback={
-                                <div class="px-4 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
+                                <div class="px-4 py-4 text-text-weak">
+                                  {language.t("session.review.loadingChanges")}
+                                </div>
                               }
                             >
                               <SessionReviewTab
@@ -1283,13 +1285,15 @@ export default function Page() {
                             </Show>
                           </Match>
                           <Match when={true}>
-                              <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                                <Mark class="w-14 opacity-10" />
-                               <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+                            <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
+                              <Mark class="w-14 opacity-10" />
+                              <div class="text-14-regular text-text-weak max-w-56">
+                                {language.t("session.review.empty")}
                               </div>
-                            </Match>
-                          </Switch>
-                        </div>
+                            </div>
+                          </Match>
+                        </Switch>
+                      </div>
                     }
                   >
                     <div class="relative w-full h-full min-w-0">
@@ -1502,11 +1506,11 @@ export default function Page() {
                           <Show when={diffs()}>
                             <DiffChanges changes={diffs()} variant="bars" />
                           </Show>
-                            <div class="flex items-center gap-1.5">
-                              <div>{language.t("session.tab.review")}</div>
-                              <Show when={info()?.summary?.files}>
-                                <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
-                                  {info()?.summary?.files ?? 0}
+                          <div class="flex items-center gap-1.5">
+                            <div>{language.t("session.tab.review")}</div>
+                            <Show when={info()?.summary?.files}>
+                              <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
+                                {info()?.summary?.files ?? 0}
                               </div>
                             </Show>
                           </div>
@@ -1558,7 +1562,9 @@ export default function Page() {
                             <Show
                               when={diffsReady()}
                               fallback={
-                                <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
+                                <div class="px-6 py-4 text-text-weak">
+                                  {language.t("session.review.loadingChanges")}
+                                </div>
                               }
                             >
                               <SessionReviewTab
@@ -1575,13 +1581,15 @@ export default function Page() {
                             </Show>
                           </Match>
                           <Match when={true}>
-                              <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                                <Mark class="w-14 opacity-10" />
-                               <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+                            <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
+                              <Mark class="w-14 opacity-10" />
+                              <div class="text-14-regular text-text-weak max-w-56">
+                                {language.t("session.review.empty")}
                               </div>
-                            </Match>
-                          </Switch>
-                        </div>
+                            </div>
+                          </Match>
+                        </Switch>
+                      </div>
                     </Show>
                   </Tabs.Content>
                 </Show>
@@ -1871,13 +1879,15 @@ export default function Page() {
                       </div>
                     )}
                   </For>
-                <div class="flex-1" />
-                <div class="text-text-weak pr-2">{language.t("common.loading")}...</div>
+                  <div class="flex-1" />
+                  <div class="text-text-weak pr-2">{language.t("common.loading")}...</div>
+                </div>
+                <div class="flex-1 flex items-center justify-center text-text-weak">
+                  {language.t("terminal.loading")}
+                </div>
               </div>
-              <div class="flex-1 flex items-center justify-center text-text-weak">{language.t("terminal.loading")}</div>
-            </div>
-          }
-        >
+            }
+          >
             <DragDropProvider
               onDragStart={handleTerminalDragStart}
               onDragEnd={handleTerminalDragEnd}

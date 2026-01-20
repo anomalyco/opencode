@@ -183,7 +183,10 @@ export function SessionHeader() {
                   }}
                   aria-hidden={!showReview()}
                 >
-                  <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
+                  <TooltipKeybind
+                    title={language.t("command.review.toggle")}
+                    keybind={command.keybind("review.toggle")}
+                  >
                     <Button
                       variant="ghost"
                       class="group/review-toggle size-6 p-0"

@@ -27,7 +27,7 @@ Why this is the best long-term shape:
 
 ### Proposed Architecture
 
-1) **UI provides an i18n context (no persistence)**
+1. **UI provides an i18n context (no persistence)**
 
 - Add `packages/ui/src/context/i18n.tsx`:
   - Exports `I18nProvider` and `useI18n()`.
@@ -36,14 +36,14 @@ Why this is the best long-term shape:
     - `locale()` accessor for locale-sensitive formatting (Luxon/Intl).
   - Context should have a safe default (English) so UI components can render even if a consumer forgets the provider.
 
-2) **UI owns UI strings (dictionaries live in UI)**
+2. **UI owns UI strings (dictionaries live in UI)**
 
 - Add `packages/ui/src/i18n/en.ts` and `packages/ui/src/i18n/zh.ts`.
 - Export them from `@opencode-ai/ui` via `packages/ui/package.json` exports (e.g. `"./i18n/*": "./src/i18n/*.ts"`).
 - Use a clear namespace prefix for all UI keys to avoid collisions:
   - Recommended: `ui.*` (e.g. `ui.sessionReview.title`).
 
-3) **Consumers merge dictionaries and provide `t`/`locale` once**
+3. **Consumers merge dictionaries and provide `t`/`locale` once**
 
 - `packages/app/`:
   - Keep `packages/app/src/context/language.tsx` as the source of truth for locale selection/persistence.

@@ -15,13 +15,11 @@ export const SettingsGeneral: Component = () => {
     Object.entries(theme.themes()).map(([id, def]) => ({ id, name: def.name ?? id })),
   )
 
-  const colorSchemeOptions = createMemo(
-    (): { value: ColorScheme; label: string }[] => [
-      { value: "system", label: language.t("theme.scheme.system") },
-      { value: "light", label: language.t("theme.scheme.light") },
-      { value: "dark", label: language.t("theme.scheme.dark") },
-    ],
-  )
+  const colorSchemeOptions = createMemo((): { value: ColorScheme; label: string }[] => [
+    { value: "system", label: language.t("theme.scheme.system") },
+    { value: "light", label: language.t("theme.scheme.light") },
+    { value: "dark", label: language.t("theme.scheme.dark") },
+  ])
 
   const languageOptions = createMemo(() =>
     language.locales.map((locale) => ({
@@ -107,7 +105,7 @@ export const SettingsGeneral: Component = () => {
               title={language.t("settings.general.row.theme.title")}
               description={
                 <>
-                  {language.t("settings.general.row.theme.description")} {" "}
+                  {language.t("settings.general.row.theme.description")}{" "}
                   <a href="#" class="text-text-interactive-base">
                     {language.t("common.learnMore")}
                   </a>
