@@ -143,6 +143,11 @@
     width: min(calc(100vw - 32px), 800px);
     height: min(calc(100vh - 32px), 600px);
   }
+
+  &[data-size="x-large"] [data-slot="dialog-container"] {
+    width: min(calc(100vw - 32px), 960px);
+    height: min(calc(100vh - 32px), 600px);
+  }
 }
 
 @keyframes overlayShow {

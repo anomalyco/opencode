@@ -13,7 +13,7 @@ import { SettingsMcp } from "./settings-mcp"
 
 export const DialogSettings: Component = () => {
   return (
-    <Dialog size="large">
+    <Dialog size="x-large">
       <Tabs orientation="vertical" variant="settings" defaultValue="general" class="h-full settings-dialog">
         <Tabs.List>
           <div
