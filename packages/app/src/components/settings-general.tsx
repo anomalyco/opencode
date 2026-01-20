@@ -113,6 +113,7 @@ export const SettingsGeneral: Component = () => {
                 size="small"
                 triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()), "min-width": "180px" }}
               >
+                {/* @ts-expect-error */}
                 {(option) => <span style={{ "font-family": monoFontFamily(option?.value) }}>{option?.label}</span>}
               </Select>
             </SettingsRow>
