@@ -2,7 +2,7 @@ import { Component, createMemo, type JSX } from "solid-js"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
-import { useSettings } from "@/context/settings"
+import { useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 
 export const SettingsGeneral: Component = () => {
@@ -100,7 +100,9 @@ export const SettingsGeneral: Component = () => {
                 onSelect={(option) => option && settings.appearance.setFont(option.value)}
                 variant="secondary"
                 size="small"
-              />
+              >
+                {(option) => <span style={{ "font-family": monoFontFamily(option?.value) }}>{option?.label}</span>}
+              </Select>
             </SettingsRow>
           </div>
         </div>
