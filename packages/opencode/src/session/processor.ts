@@ -101,6 +101,12 @@ export namespace SessionProcessor {
                   break
 
                 case "tool-input-start":
+                  if (currentText && currentText.text && currentText.time) {
+                    currentText.text = currentText.text.trimEnd()
+                    currentText.time.end = Date.now()
+                    await Session.updatePart(currentText)
+                    currentText = undefined
+                  }
                   const part = await Session.updatePart({
                     id: toolcalls[value.id]?.id ?? Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
@@ -291,15 +297,26 @@ export namespace SessionProcessor {
                   break
 
                 case "text-delta":
-                  if (currentText) {
-                    currentText.text += value.text
-                    if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                    if (currentText.text)
-                      await Session.updatePart({
-                        part: currentText,
-                        delta: value.text,
-                      })
+                  if (!currentText) {
+                    currentText = {
+                      id: Identifier.ascending("part"),
+                      messageID: input.assistantMessage.id,
+                      sessionID: input.assistantMessage.sessionID,
+                      type: "text",
+                      text: "",
+                      time: {
+                        start: Date.now(),
+                      },
+                      metadata: value.providerMetadata,
+                    }
                   }
+                  currentText.text += value.text
+                  if (value.providerMetadata) currentText.metadata = value.providerMetadata
+                  if (currentText.text)
+                    await Session.updatePart({
+                      part: currentText,
+                      delta: value.text,
+                    })
                   break
 
                 case "text-end":

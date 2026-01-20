@@ -192,7 +192,14 @@ export namespace LLM {
       temperature: params.temperature,
       topP: params.topP,
       topK: params.topK,
-      providerOptions: ProviderTransform.providerOptions(input.model, params.options),
+      providerOptions: ProviderTransform.providerOptions(input.model, {
+        ...params.options,
+        ...(input.model.providerID === "claude-code" ||
+        input.model.api.npm === "@opencode/claude-code" ||
+        input.model.id.includes("claude-code")
+          ? { sessionID: input.sessionID }
+          : {}),
+      }),
       activeTools: Object.keys(tools).filter((x) => x !== "invalid" && x !== "_noop"),
       tools,
       maxOutputTokens,

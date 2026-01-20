@@ -13,6 +13,9 @@ import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
+import { PermissionNext } from "@/permission/next"
+import { Question } from "@/question/index"
+import { Identifier } from "@/id/id"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -25,6 +28,7 @@ import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
+import { createClaudeCode } from "./sdk/claude-code/src"
 import { createXai } from "@ai-sdk/xai"
 import { createMistral } from "@ai-sdk/mistral"
 import { createGroq } from "@ai-sdk/groq"
@@ -76,6 +80,7 @@ export namespace Provider {
     "@gitlab/gitlab-ai-provider": createGitLab,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    "@opencode/claude-code": createClaudeCode,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
@@ -504,6 +509,136 @@ export namespace Provider {
         },
       }
     },
+    "claude-code": async () => {
+      let cliPath = Env.get("CLAUDE_CLI_PATH")
+      let cliAvailable = false
+
+      if (!cliPath) {
+        try {
+          const whichResult = Bun.spawnSync(["which", "claude"], { timeout: 5000 })
+          if (whichResult.exitCode === 0) {
+            cliPath = whichResult.stdout.toString().trim()
+          }
+        } catch {}
+      }
+
+      if (!cliPath) {
+        cliPath = "claude"
+      }
+
+      try {
+        const result = Bun.spawnSync([cliPath, "--version"], { timeout: 5000 })
+        cliAvailable = result.exitCode === 0
+      } catch {
+        cliAvailable = false
+      }
+
+      return {
+        autoload: cliAvailable,
+        async getModel(sdk: any, modelID: string) {
+          return sdk.languageModel(modelID)
+        },
+        options: {
+          cliPath,
+          skipPermissions: false,
+          // Enable OpenCode's permission handling for permission-requiring tools
+          handleToolsInOpenCode: true,
+          permissionHandler: async (
+            request: { id: string; type: string; tool?: string; path?: string; command?: string; description?: string },
+            sessionID?: string,
+          ) => {
+            if (!sessionID) {
+              log.warn("claude-code permission request without sessionID, auto-approving", { requestId: request.id })
+              return true
+            }
+
+            const permission = mapClaudePermissionType(request.type, request.tool)
+            const patterns = getPermissionPatterns(request)
+
+            try {
+              await PermissionNext.ask({
+                id: Identifier.ascending("permission"),
+                sessionID: sessionID as `session_${string}`,
+                permission,
+                patterns,
+                metadata: {
+                  tool: request.tool ?? "claude-code",
+                  command: request.command,
+                  path: request.path,
+                  description: request.description,
+                },
+                always: patterns,
+                ruleset: [],
+              })
+              return true
+            } catch (e) {
+              if (e instanceof PermissionNext.RejectedError || e instanceof PermissionNext.DeniedError) {
+                return false
+              }
+              if (e instanceof PermissionNext.CorrectedError) {
+                return false
+              }
+              throw e
+            }
+          },
+          questionHandler: async (
+            input: { question: string; options?: any[]; custom?: boolean; multiple?: boolean },
+            sessionID?: string,
+          ) => {
+            if (!sessionID) return ""
+            try {
+              const answers = await Question.ask({
+                sessionID: sessionID as any,
+                questions: [
+                  {
+                    question: input.question,
+                    header: "Question",
+                    options: input.options ?? [],
+                    custom: input.custom ?? true,
+                    multiple: input.multiple,
+                  },
+                ],
+              })
+              const ans = answers[0]
+              if (!ans) return ""
+              if (Array.isArray(ans)) return ans.join(",")
+              return ans
+            } catch {
+              return ""
+            }
+          },
+        },
+      }
+    },
+  }
+
+  function mapClaudePermissionType(type: string, tool?: string): string {
+    if (tool) {
+      const toolLower = tool.toLowerCase()
+      if (toolLower.includes("read") || toolLower.includes("view")) return "read"
+      if (toolLower.includes("write") || toolLower.includes("edit") || toolLower.includes("patch")) return "edit"
+      if (toolLower.includes("bash") || toolLower.includes("command") || toolLower.includes("exec")) return "bash"
+    }
+
+    switch (type) {
+      case "file_read":
+        return "read"
+      case "file_write":
+      case "file_edit":
+        return "edit"
+      case "bash":
+      case "command":
+      case "execute":
+        return "bash"
+      default:
+        return "bash"
+    }
+  }
+
+  function getPermissionPatterns(request: { path?: string; command?: string }): string[] {
+    if (request.path) return [request.path]
+    if (request.command) return [request.command]
+    return ["*"]
   }
 
   export const Model = z
@@ -711,6 +846,16 @@ export namespace Provider {
           providerID: "github-copilot-enterprise",
         })),
       }
+    }
+
+    // Add Claude Code provider for local CLI usage
+    database["claude-code"] = {
+      id: "claude-code",
+      name: "Claude Code CLI",
+      source: "custom",
+      env: [],
+      options: {},
+      models: {},
     }
 
     function mergeProvider(providerID: string, provider: Partial<Info>) {
@@ -963,6 +1108,13 @@ export namespace Provider {
       })
       const s = await state()
       const provider = s.providers[model.providerID]
+      if (!provider) {
+        log.error("Provider not found in providers map", {
+          providerID: model.providerID,
+          availableProviders: Object.keys(s.providers),
+        })
+        throw new Error(`Provider not found: ${model.providerID}`)
+      }
       const options = { ...provider.options }
 
       if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
@@ -1027,14 +1179,34 @@ export namespace Provider {
       const bundledKey =
         model.providerID === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : model.api.npm
       const bundledFn = BUNDLED_PROVIDERS[bundledKey]
+      log.info("getSDK bundled lookup", {
+        providerID: model.providerID,
+        bundledKey,
+        hasBundledFn: !!bundledFn,
+        availableBundled: Object.keys(BUNDLED_PROVIDERS),
+      })
       if (bundledFn) {
-        log.info("using bundled provider", { providerID: model.providerID, pkg: bundledKey })
-        const loaded = bundledFn({
-          name: model.providerID,
-          ...options,
+        log.info("using bundled provider", {
+          providerID: model.providerID,
+          pkg: bundledKey,
+          options: JSON.stringify(options),
         })
-        s.sdk.set(key, loaded)
-        return loaded as SDK
+        try {
+          const loaded = bundledFn({
+            name: model.providerID,
+            ...options,
+          })
+          log.info("bundled provider loaded successfully", { providerID: model.providerID })
+          s.sdk.set(key, loaded)
+          return loaded as SDK
+        } catch (bundledError) {
+          log.error("bundled provider failed to load", {
+            providerID: model.providerID,
+            error: bundledError instanceof Error ? bundledError.message : String(bundledError),
+            stack: bundledError instanceof Error ? bundledError.stack : undefined,
+          })
+          throw bundledError
+        }
       }
 
       let installedPath: string
