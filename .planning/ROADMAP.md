@@ -66,10 +66,15 @@ Plans:
   2. Web server communicates with broker via Unix socket
   3. Broker can authenticate credentials against PAM
   4. Broker returns success/failure without exposing PAM internals to web process
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
-- [ ] 03-01: TBD
+- [ ] 03-01-PLAN.md — Rust project foundation (Cargo.toml, IPC protocol types, config loading)
+- [ ] 03-02-PLAN.md — Authentication core (PAM wrapper, rate limiting, username validation)
+- [ ] 03-03-PLAN.md — IPC server (Unix socket server, request handler, daemon main)
+- [ ] 03-04-PLAN.md — Platform integration (systemd, launchd, PAM service files)
+- [ ] 03-05-PLAN.md — TypeScript client (broker client class for web server)
+- [ ] 03-06-PLAN.md — Setup command (CLI commands, build integration)
 
 ### Phase 4: Authentication Flow
 **Goal**: Users can log in with UNIX credentials and receive a session mapped to their account
@@ -191,7 +196,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 |-------|----------------|--------|-----------|
 | 1. Configuration Foundation | 3/3 | Complete | 2026-01-20 |
 | 2. Session Infrastructure | 2/2 | Complete | 2026-01-20 |
-| 3. Auth Broker Core | 0/TBD | Not started | - |
+| 3. Auth Broker Core | 0/6 | Planned | - |
 | 4. Authentication Flow | 0/TBD | Not started | - |
 | 5. User Process Execution | 0/TBD | Not started | - |
 | 6. Login UI | 0/TBD | Not started | - |
