@@ -357,6 +357,11 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const toggleExpanded = () => {
+    if (!canExpand()) return
+    setExpanded((value) => !value)
+  }
+
   return (
     <div data-component="user-message" data-expanded={expanded()} data-can-expand={canExpand()}>
       <Show when={attachments().length > 0}>
@@ -388,19 +393,29 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         </div>
       </Show>
       <Show when={text()}>
-        <div data-slot="user-message-text" ref={(el) => (textRef = el)}>
+        <div data-slot="user-message-text" ref={(el) => (textRef = el)} onClick={toggleExpanded}>
           <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
           <button
             data-slot="user-message-expand"
             type="button"
             aria-label={expanded() ? "Collapse message" : "Expand message"}
-            onClick={() => setExpanded((v) => !v)}
+            onClick={(event) => {
+              event.stopPropagation()
+              toggleExpanded()
+            }}
           >
             <Icon name="chevron-down" size="small" />
           </button>
           <div data-slot="user-message-copy-wrapper">
             <Tooltip value={copied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
-              <IconButton icon={copied() ? "check" : "copy"} variant="secondary" onClick={handleCopy} />
+              <IconButton
+                icon={copied() ? "check" : "copy"}
+                variant="secondary"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  handleCopy()
+                }}
+              />
             </Tooltip>
           </div>
         </div>
