@@ -211,6 +211,7 @@ export const dict = {
   "dialog.server.empty": "暂无服务器",
   "dialog.server.add.title": "添加服务器",
   "dialog.server.add.url": "服务器 URL",
+  "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "无法连接到服务器",
   "dialog.server.add.checking": "检查中...",
   "dialog.server.add.button": "添加",
@@ -308,6 +309,8 @@ export const dict = {
   "error.page.report.prefix": "请将此错误报告给 OpenCode 团队",
   "error.page.report.discord": "在 Discord 上",
   "error.page.version": "版本: {{version}}",
+
+  "error.dev.rootNotFound": "未找到根元素。你是不是忘了把它添加到 index.html? 或者 id 属性拼写错了?",
 
   "error.globalSync.connectFailed": "无法连接到服务器。是否有服务器正在 `{{url}}` 运行?",
 

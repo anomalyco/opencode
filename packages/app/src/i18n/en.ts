@@ -212,6 +212,7 @@ export const dict = {
   "dialog.server.empty": "No servers yet",
   "dialog.server.add.title": "Add a server",
   "dialog.server.add.url": "Server URL",
+  "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "Could not connect to server",
   "dialog.server.add.checking": "Checking...",
   "dialog.server.add.button": "Add",
@@ -309,6 +310,9 @@ export const dict = {
   "error.page.report.prefix": "Please report this error to the OpenCode team",
   "error.page.report.discord": "on Discord",
   "error.page.version": "Version: {{version}}",
+
+  "error.dev.rootNotFound":
+    "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
 
   "error.globalSync.connectFailed": "Could not connect to server. Is there a server running at `{{url}}`?",
 

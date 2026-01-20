@@ -137,9 +137,9 @@ Completed (2026-01-20):
 
 File: `packages/app/src/components/dialog-select-server.tsx`
 
-- Placeholder: `http://localhost:4096`
+Completed (2026-01-20):
 
-This is an example URL; you may choose to keep it as-is even after translating surrounding labels.
+- Moved the placeholder example URL behind `dialog.server.add.placeholder` (value unchanged).
 
 ## Medium Priority: Context Modules
 
@@ -193,14 +193,14 @@ Completed (2026-01-20):
 
 File: `packages/app/src/entry.tsx`
 
-- Dev-only error string: "Root element not found..."
+Completed (2026-01-20):
 
-This is only thrown in DEV and is more of a developer diagnostic. Optional to translate.
+- Localized the DEV-only root mount error via `error.dev.rootNotFound`.
+- Selected locale using `navigator.languages` to match the app’s default detection.
 
 ## Prioritized Implementation Plan
 
-1. Optional: `packages/app/src/components/dialog-select-server.tsx` placeholder example URL.
-2. Optional: `packages/app/src/entry.tsx` dev-only root mount error.
+No remaining work in `packages/app/` as of 2026-01-20.
 
 ## Suggested Key Naming Conventions
 
@@ -223,10 +223,10 @@ Pages:
 - (none)
 
 Components:
-- `packages/app/src/components/dialog-select-server.tsx` (optional URL placeholder)
+- (none)
 
 Context:
 - (none)
 
 Utils:
-- `packages/app/src/entry.tsx` (dev-only)
+- (none)
