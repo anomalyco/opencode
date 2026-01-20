@@ -80,9 +80,10 @@
     position: relative;
     display: flex;
     align-items: center;
-    padding: 0 6px 0 6px;
+    padding: 2px 8px;
     gap: 12px;
-    border-radius: var(--radius-sm);
+    border-radius: 4px;
+    cursor: default;
 
     /* text-12-medium */
     font-family: var(--font-family-sans);
