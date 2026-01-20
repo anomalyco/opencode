@@ -6,6 +6,7 @@ import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { useDiffComponent } from "../context/diff"
+import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -32,6 +33,7 @@ export interface SessionReviewProps {
 }
 
 export const SessionReview = (props: SessionReviewProps) => {
+  const i18n = useI18n()
   const diffComponent = useDiffComponent()
   const [store, setStore] = createStore({
     open: props.diffs.length > 10 ? [] : props.diffs.map((d) => d.file),
@@ -68,21 +70,23 @@ export const SessionReview = (props: SessionReviewProps) => {
           [props.classes?.header ?? ""]: !!props.classes?.header,
         }}
       >
-        <div data-slot="session-review-title">Session changes</div>
+        <div data-slot="session-review-title">{i18n.t("ui.sessionReview.title")}</div>
         <div data-slot="session-review-actions">
           <Show when={props.onDiffStyleChange}>
             <RadioGroup
               options={["unified", "split"] as const}
               current={diffStyle()}
               value={(style) => style}
-              label={(style) => (style === "unified" ? "Unified" : "Split")}
+              label={(style) =>
+                i18n.t(style === "unified" ? "ui.sessionReview.diffStyle.unified" : "ui.sessionReview.diffStyle.split")
+              }
               onSelect={(style) => style && props.onDiffStyleChange?.(style)}
             />
           </Show>
           <Button size="normal" icon="chevron-grabber-vertical" onClick={handleExpandOrCollapseAll}>
             <Switch>
-              <Match when={open().length > 0}>Collapse all</Match>
-              <Match when={true}>Expand all</Match>
+              <Match when={open().length > 0}>{i18n.t("ui.sessionReview.collapseAll")}</Match>
+              <Match when={true}>{i18n.t("ui.sessionReview.expandAll")}</Match>
             </Switch>
           </Button>
           {props.actions}

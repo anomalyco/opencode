@@ -5,10 +5,12 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
+import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
+import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
 
 export type Locale = "en" | "zh"
 
-type RawDictionary = typeof en
+type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
 
 const LOCALES: readonly Locale[] = ["en", "zh"]
@@ -43,10 +45,10 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       setStore("locale", current)
     })
 
-    const base = i18n.flatten(en)
+    const base = i18n.flatten({ ...en, ...uiEn })
     const dict = createMemo<Dictionary>(() => {
       if (locale() === "en") return base
-      return { ...base, ...i18n.flatten(zh) }
+      return { ...base, ...i18n.flatten({ ...zh, ...uiZh }) }
     })
 
     const t = i18n.translator(dict, i18n.resolveTemplate)

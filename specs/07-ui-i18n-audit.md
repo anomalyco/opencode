@@ -122,12 +122,12 @@ Examples (non-exhaustive):
 
 ## Prioritized Implementation Plan
 
-1. Add `@opencode-ai/ui` i18n context (`packages/ui/src/context/i18n.tsx`) + export it.
-2. Add UI dictionaries (`packages/ui/src/i18n/en.ts`, `packages/ui/src/i18n/zh.ts`) + export them.
-3. Wire `I18nProvider` into:
+1. Completed (2026-01-20): Add `@opencode-ai/ui` i18n context (`packages/ui/src/context/i18n.tsx`) + export it.
+2. Completed (2026-01-20): Add UI dictionaries (`packages/ui/src/i18n/en.ts`, `packages/ui/src/i18n/zh.ts`) + export them.
+3. Completed (2026-01-20): Wire `I18nProvider` into:
    - `packages/app/src/app.tsx`
-   - `packages/enterprise/src/routes/share/[shareID].tsx`
-4. Convert `packages/ui/src/components/session-review.tsx` and `packages/ui/src/components/session-turn.tsx` to use `useI18n().t(...)`.
+   - `packages/enterprise/src/app.tsx`
+4. Completed (2026-01-20): Convert `packages/ui/src/components/session-review.tsx` and `packages/ui/src/components/session-turn.tsx` to use `useI18n().t(...)`.
 5. Convert `packages/ui/src/components/message-part.tsx`.
 6. Do a full `packages/ui/src/components` + `packages/ui/src/context` audit for additional hardcoded copy.
 
