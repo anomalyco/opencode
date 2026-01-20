@@ -199,7 +199,6 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           changedFiles.push(change.filePath)
           break
       }
-
     }
 
     // Publish file change events
