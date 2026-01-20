@@ -7,6 +7,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
 import { createRequire } from "module"
 import { Lock } from "../util/lock"
+import { Npm } from "../npm"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
@@ -61,6 +62,7 @@ export namespace BunProc {
     }),
   )
 
+
   export async function install(pkg: string, version = "latest") {
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
@@ -75,7 +77,24 @@ export namespace BunProc {
     const dependencies = parsed.dependencies ?? {}
     if (!parsed.dependencies) parsed.dependencies = dependencies
     const modExists = await Filesystem.exists(mod)
-    if (dependencies[pkg] === version && modExists) return mod
+    const cachedVersion = dependencies[pkg]
+    const isLatestVersion = version === "latest"
+    
+    if (!isLatestVersion) {
+      const versionMatch = cachedVersion === version
+      const shouldUseCache = versionMatch && modExists
+      if (shouldUseCache) {
+        return mod
+      }
+    } else {
+      if (modExists && cachedVersion) {
+        const isOutdated = await Npm.isOutdated(pkg, cachedVersion)
+        if (!isOutdated) {
+          return mod
+        }
+        log.info("Cached version is outdated or registry check failed, proceeding with install", { pkg, cachedVersion })
+      }
+    }
 
     const proxied = !!(
       process.env.HTTP_PROXY ||

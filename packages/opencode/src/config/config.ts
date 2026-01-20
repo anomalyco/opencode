@@ -28,6 +28,7 @@ import { existsSync } from "fs"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
+import { Npm } from "../npm"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -214,9 +215,21 @@ export namespace Config {
       const deps = parsed?.dependencies
       const depVersion = deps?.["@opencode-ai/plugin"]
       const hasDependency = Boolean(depVersion)
-      const versionOk = targetVersion === "latest" || depVersion === targetVersion
-
-      if (hasDependency && versionOk) return
+      
+      if (hasDependency) {
+        if (targetVersion === "latest") {
+          const isOutdated = await Npm.isOutdated("@opencode-ai/plugin", depVersion)
+          if (!isOutdated) {
+            return
+          }
+          log.info("Cached version is outdated or registry check failed, proceeding with install", {
+            pkg: "@opencode-ai/plugin",
+            cachedVersion: depVersion,
+          })
+        } else if (depVersion === targetVersion) {
+          return
+        }
+      }
     }
 
     if (!pkgExists) {
@@ -230,7 +243,18 @@ export namespace Config {
     const parsed = await pkgFile.json().catch(() => ({ dependencies: {} }))
     const dependencies = parsed?.dependencies ?? {}
     const depVersion = dependencies["@opencode-ai/plugin"]
-    const needsAdd = !depVersion || (targetVersion !== "latest" && depVersion !== targetVersion)
+    
+    let needsAdd = !depVersion
+    if (depVersion) {
+      if (targetVersion === "latest") {
+        const isOutdated = await Npm.isOutdated("@opencode-ai/plugin", depVersion)
+        if (isOutdated) {
+          needsAdd = true
+        }
+      } else if (depVersion !== targetVersion) {
+        needsAdd = true
+      }
+    }
 
     if (needsAdd) {
       await BunProc.run(["add", `@opencode-ai/plugin@${targetVersion}`, "--exact"], {
@@ -240,7 +264,8 @@ export namespace Config {
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    if (!hasModules) {
+    const hasModulesAfterAdd = existsSync(nodeModules)
+    if (!hasModulesAfterAdd) {
       await BunProc.run(["install"], { cwd: dir }).catch(() => {})
     }
   }
@@ -260,7 +285,14 @@ export namespace Config {
     if (!depVersion) return true
 
     const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
-    if (targetVersion === "latest") return false
+    
+    if (targetVersion === "latest") {
+      // Check registry to see if cached version is outdated
+      const isOutdated = await Npm.isOutdated("@opencode-ai/plugin", depVersion)
+      return isOutdated
+    }
+    
+    // For specific versions, check if version matches
     if (depVersion === targetVersion) return false
     return true
   }
