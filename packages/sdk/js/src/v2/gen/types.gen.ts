@@ -519,13 +519,19 @@ export type SessionStatus =
       type: "idle"
     }
   | {
+      type: "sending"
+    }
+  | {
+      type: "reasoning"
+    }
+  | {
+      type: "streaming"
+    }
+  | {
       type: "retry"
       attempt: number
       message: string
       next: number
-    }
-  | {
-      type: "busy"
     }
 
 export type EventSessionStatus = {

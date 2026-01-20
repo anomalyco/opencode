@@ -14,25 +14,29 @@ type SyncData = {
   part: Record<string, Part[]>
 }
 
+const ACTIVE_STATUSES = new Set(["sending", "reasoning", "streaming", "retry"])
+
+function isActive(status: SessionStatus): boolean {
+  return ACTIVE_STATUSES.has(status.type)
+}
+
 export function createRunningState(sessionID: Accessor<string>, data: SyncData) {
   const [tick, setTick] = createSignal(Date.now())
   const [thinkingStartTime, setThinkingStartTime] = createSignal<number | null>(null)
 
   const sessionStatus = createMemo(() => data.session_status?.[sessionID()] ?? { type: "idle" as const })
 
-  // Only tick when session is busy or retrying
+  // Only tick when session is active
   createEffect(() => {
-    const status = sessionStatus()
-    if (status.type === "busy" || status.type === "retry") {
+    if (isActive(sessionStatus())) {
       const interval = setInterval(() => setTick(Date.now()), 1000)
       onCleanup(() => clearInterval(interval))
     }
   })
 
-  // Track when thinking started
+  // Track when activity started
   createEffect(() => {
-    const status = sessionStatus()
-    if (status.type === "busy") {
+    if (isActive(sessionStatus())) {
       if (thinkingStartTime() === null) setThinkingStartTime(Date.now())
     } else {
       setThinkingStartTime(null)

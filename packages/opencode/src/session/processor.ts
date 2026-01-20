@@ -56,13 +56,14 @@ export namespace SessionProcessor {
               input.abort.throwIfAborted()
               switch (value.type) {
                 case "start":
-                  SessionStatus.set(input.sessionID, { type: "busy" })
+                  SessionStatus.set(input.sessionID, { type: "sending" })
                   break
 
                 case "reasoning-start":
                   if (value.id in reasoningMap) {
                     continue
                   }
+                  SessionStatus.set(input.sessionID, { type: "reasoning" })
                   reasoningMap[value.id] = {
                     id: Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
@@ -97,6 +98,7 @@ export namespace SessionProcessor {
                     if (value.providerMetadata) part.metadata = value.providerMetadata
                     await Session.updatePart(part)
                     delete reasoningMap[value.id]
+                    SessionStatus.set(input.sessionID, { type: "sending" })
                   }
                   break
 
@@ -277,6 +279,7 @@ export namespace SessionProcessor {
                   break
 
                 case "text-start":
+                  SessionStatus.set(input.sessionID, { type: "streaming" })
                   currentText = {
                     id: Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
@@ -321,6 +324,7 @@ export namespace SessionProcessor {
                     }
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
                     await Session.updatePart(currentText)
+                    SessionStatus.set(input.sessionID, { type: "sending" })
                   }
                   currentText = undefined
                   break
