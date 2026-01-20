@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Secure remote access to your opencode instance from anywhere — authenticate once with your system credentials, work on your projects from any device.
-**Current focus:** Phase 3 (Auth Broker Core) - Plan 03 Complete
+**Current focus:** Phase 3 (Auth Broker Core) - Plan 04 Complete
 
 ## Current Position
 
 Phase: 3 of 11 (Auth Broker Core)
-Plan: 5 of 6 in current phase (03-01, 03-02, 03-03, 03-05 complete)
+Plan: 6 of 6 in current phase (03-01, 03-02, 03-03, 03-04, 03-05 complete)
 Status: In progress
-Last activity: 2026-01-20 - Completed 03-03-PLAN.md
+Last activity: 2026-01-20 - Completed 03-04-PLAN.md
 
-Progress: [████░░░░░░] ~40%
+Progress: [████░░░░░░] ~42%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
-- Average duration: 4.0 min
-- Total execution time: 40 min
+- Total plans completed: 11
+- Average duration: 3.8 min
+- Total execution time: 42 min
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [████░░░░░░] ~40%
 |-------|-------|-------|----------|
 | 1. Configuration Foundation | 3 | 12 min | 4 min |
 | 2. Session Infrastructure | 2 | 5 min | 2.5 min |
-| 3. Auth Broker Core | 5 | 23 min | 4.6 min |
+| 3. Auth Broker Core | 6 | 25 min | 4.2 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-01 (8 min), 03-02 (5 min), 03-03 (4 min), 03-04 (~3 min), 03-05 (3 min)
-- Trend: Stable, TypeScript plans faster than Rust
+- Last 5 plans: 03-02 (5 min), 03-03 (4 min), 03-04 (2 min), 03-05 (3 min), 03-04 (2 min)
+- Trend: Stable, config-only plans fastest
 
 *Updated after each plan completion*
 
@@ -64,6 +64,8 @@ Recent decisions affecting current work:
 | 03-03 | Auth flow: validate -> rate limit -> PAM | Fail fast on brute force before hitting PAM |
 | 03-05 | existsSync check before createConnection | Bun throws sync error unlike Node.js async error event |
 | 03-05 | Settled flag pattern | Prevent double-resolve/reject in promise-based socket code |
+| 03-04 | systemd Type=notify | Broker signals readiness via sd_notify |
+| 03-04 | Separate PAM configs per platform | Linux pam_unix, macOS pam_opendirectory |
 
 ### Pending Todos
 
@@ -81,7 +83,7 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-20
-Stopped at: Completed 03-03-PLAN.md (Unix socket server and request handler)
+Stopped at: Completed 03-04-PLAN.md (Service files and platform module)
 Resume file: None
 
 ## Phase 3 Progress
@@ -90,6 +92,6 @@ Resume file: None
 - [x] Plan 01: Project init, IPC protocol, config loading (15 tests)
 - [x] Plan 02: PAM wrapper, rate limiter, username validation (29 new tests)
 - [x] Plan 03: Unix socket server and request handler (8 new tests)
-- [ ] Plan 04: Integration testing
+- [x] Plan 04: Service files and platform module
 - [x] Plan 05: TypeScript broker client (12 tests)
 - [ ] Plan 06: Final integration
