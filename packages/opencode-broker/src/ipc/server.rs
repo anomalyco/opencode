@@ -81,11 +81,11 @@ impl Server {
         }
 
         // Create parent directory if it doesn't exist
-        if let Some(parent) = self.socket_path.parent() {
-            if !parent.exists() {
-                info!(path = %parent.display(), "creating socket directory");
-                fs::create_dir_all(parent).map_err(ServerError::DirectoryError)?;
-            }
+        if let Some(parent) = self.socket_path.parent()
+            && !parent.exists()
+        {
+            info!(path = %parent.display(), "creating socket directory");
+            fs::create_dir_all(parent).map_err(ServerError::DirectoryError)?;
         }
 
         // Bind the Unix socket
