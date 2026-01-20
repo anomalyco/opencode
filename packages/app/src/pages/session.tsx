@@ -7,6 +7,7 @@ import { selectionFromLines, useFile, type SelectedLineRange } from "@/context/f
 import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
 import { SessionContextUsage } from "@/components/session-context-usage"
+import { MessageActions } from "@/components/message-actions"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -1359,29 +1360,31 @@ export default function Page() {
                               }
 
                               return (
-                                <div
-                                  id={anchor(message.id)}
-                                  data-message-id={message.id}
-                                  classList={{
-                                    "min-w-0 w-full max-w-full": true,
-                                    "md:max-w-200": !showTabs(),
-                                  }}
-                                >
-                                  <SessionTurn
-                                    sessionID={params.id!}
-                                    messageID={message.id}
-                                    lastUserMessageID={lastUserMessage()?.id}
-                                    stepsExpanded={store.expanded[message.id] ?? false}
-                                    onStepsExpandedToggle={() =>
-                                      setStore("expanded", message.id, (open: boolean | undefined) => !open)
-                                    }
-                                    classes={{
-                                      root: "min-w-0 w-full relative",
-                                      content: "flex flex-col justify-between !overflow-visible",
-                                      container: "w-full px-4 md:px-6",
+                                <MessageActions sessionID={params.id!} messageID={message.id}>
+                                  <div
+                                    id={anchor(message.id)}
+                                    data-message-id={message.id}
+                                    classList={{
+                                      "min-w-0 w-full max-w-full": true,
+                                      "md:max-w-200": !showTabs(),
                                     }}
-                                  />
-                                </div>
+                                  >
+                                    <SessionTurn
+                                      sessionID={params.id!}
+                                      messageID={message.id}
+                                      lastUserMessageID={lastUserMessage()?.id}
+                                      stepsExpanded={store.expanded[message.id] ?? false}
+                                      onStepsExpandedToggle={() =>
+                                        setStore("expanded", message.id, (open: boolean | undefined) => !open)
+                                      }
+                                      classes={{
+                                        root: "min-w-0 w-full relative",
+                                        content: "flex flex-col justify-between !overflow-visible",
+                                        container: "w-full px-4 md:px-6",
+                                      }}
+                                    />
+                                  </div>
+                                </MessageActions>
                               )
                             }}
                           </For>
