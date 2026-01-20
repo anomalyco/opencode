@@ -1,7 +1,9 @@
-import { createMemo, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
+import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useSettings } from "@/context/settings"
+import { Persist, persisted } from "@/utils/persist"
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
@@ -42,6 +44,14 @@ export interface CommandOption {
   disabled?: boolean
   onSelect?: (source?: "palette" | "keybind" | "slash") => void
   onHighlight?: () => (() => void) | void
+}
+
+export type CommandCatalogItem = {
+  title: string
+  description?: string
+  category?: string
+  keybind?: KeybindConfig
+  slash?: string
 }
 
 export function parseKeybind(config: string): Keybind[] {
@@ -148,6 +158,11 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
     const [suspendCount, setSuspendCount] = createSignal(0)
 
+    const [catalog, setCatalog, _, catalogReady] = persisted(
+      Persist.global("command.catalog.v1"),
+      createStore<Record<string, CommandCatalogItem>>({}),
+    )
+
     const bind = (id: string, def: KeybindConfig | undefined) => {
       const custom = settings.keybinds.get(actionId(id))
       const config = custom ?? def
@@ -155,7 +170,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       return config
     }
 
-    const options = createMemo(() => {
+    const registered = createMemo(() => {
       const seen = new Set<string>()
       const all: CommandOption[] = []
 
@@ -167,7 +182,28 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         }
       }
 
-      const resolved = all.map((opt) => ({
+      return all
+    })
+
+    createEffect(() => {
+      if (!catalogReady()) return
+
+      for (const opt of registered()) {
+        const id = actionId(opt.id)
+        setCatalog(id, {
+          title: opt.title,
+          description: opt.description,
+          category: opt.category,
+          keybind: opt.keybind,
+          slash: opt.slash,
+        })
+      }
+    })
+
+    const catalogOptions = createMemo(() => Object.entries(catalog).map(([id, meta]) => ({ id, ...meta })))
+
+    const options = createMemo(() => {
+      const resolved = registered().map((opt) => ({
         ...opt,
         keybind: bind(opt.id, opt.keybind),
       }))
@@ -246,15 +282,23 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
           return formatKeybind(settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND)
         }
 
-        const option = options().find((x) => x.id === id || x.id === SUGGESTED_PREFIX + id)
-        if (!option?.keybind) return ""
-        return formatKeybind(option.keybind)
+        const base = actionId(id)
+        const option = options().find((x) => actionId(x.id) === base)
+        if (option?.keybind) return formatKeybind(option.keybind)
+
+        const meta = catalog[base]
+        const config = bind(base, meta?.keybind)
+        if (!config) return ""
+        return formatKeybind(config)
       },
       show: showPalette,
       keybinds(enabled: boolean) {
         setSuspendCount((count) => count + (enabled ? -1 : 1))
       },
       suspended,
+      get catalog() {
+        return catalogOptions()
+      },
       get options() {
         return options()
       },

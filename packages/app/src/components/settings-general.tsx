@@ -77,7 +77,15 @@ export const SettingsGeneral: Component = () => {
               current={themeOptions().find((o) => o.id === theme.themeId())}
               value={(o) => o.id}
               label={(o) => o.name}
-              onSelect={(option) => option && theme.setTheme(option.id)}
+              onSelect={(option) => {
+                if (!option) return
+                theme.setTheme(option.id)
+              }}
+              onHighlight={(option) => {
+                if (!option) return
+                theme.previewTheme(option.id)
+                return () => theme.cancelPreview()
+              }}
               variant="secondary"
               size="small"
             />
@@ -135,6 +143,10 @@ export const SettingsGeneral: Component = () => {
               current={soundOptions.find((o) => o.id === settings.sounds.agent())}
               value={(o) => o.id}
               label={(o) => o.label}
+              onHighlight={(option) => {
+                if (!option) return
+                playSound(option.src)
+              }}
               onSelect={(option) => {
                 if (!option) return
                 settings.sounds.setAgent(option.id)
@@ -151,6 +163,10 @@ export const SettingsGeneral: Component = () => {
               current={soundOptions.find((o) => o.id === settings.sounds.permissions())}
               value={(o) => o.id}
               label={(o) => o.label}
+              onHighlight={(option) => {
+                if (!option) return
+                playSound(option.src)
+              }}
               onSelect={(option) => {
                 if (!option) return
                 settings.sounds.setPermissions(option.id)
@@ -167,6 +183,10 @@ export const SettingsGeneral: Component = () => {
               current={soundOptions.find((o) => o.id === settings.sounds.errors())}
               value={(o) => o.id}
               label={(o) => o.label}
+              onHighlight={(option) => {
+                if (!option) return
+                playSound(option.src)
+              }}
               onSelect={(option) => {
                 if (!option) return
                 settings.sounds.setErrors(option.id)
