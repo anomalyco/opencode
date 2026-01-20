@@ -300,18 +300,18 @@ export default function Layout(props: ParentProps) {
         toastId = showToast({
           persistent: true,
           icon: "download",
-          title: "Update available",
-          description: `A new version of OpenCode (${version}) is now available to install.`,
+          title: language.t("toast.update.title"),
+          description: language.t("toast.update.description", { version: version ?? "" }),
           actions: [
             {
-              label: "Install and restart",
+              label: language.t("toast.update.action.installRestart"),
               onClick: async () => {
                 await platform.update!()
                 await platform.restart!()
               },
             },
             {
-              label: "Not yet",
+              label: language.t("toast.update.action.notYet"),
               onClick: "dismiss",
             },
           ],
@@ -325,27 +325,17 @@ export default function Layout(props: ParentProps) {
   })
 
   onMount(() => {
-    const alerts = {
-      "permission.asked": {
-        title: "Permission required",
-        icon: "checklist" as const,
-        description: (sessionTitle: string, projectName: string) =>
-          `${sessionTitle} in ${projectName} needs permission`,
-      },
-      "question.asked": {
-        title: "Question",
-        icon: "bubble-5" as const,
-        description: (sessionTitle: string, projectName: string) => `${sessionTitle} in ${projectName} has a question`,
-      },
-    }
-
     const toastBySession = new Map<string, number>()
     const alertedAtBySession = new Map<string, number>()
     const cooldownMs = 5000
 
     const unsub = globalSDK.event.listen((e) => {
       if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked") return
-      const config = alerts[e.details.type]
+      const title =
+        e.details.type === "permission.asked"
+          ? language.t("notification.permission.title")
+          : language.t("notification.question.title")
+      const icon = e.details.type === "permission.asked" ? ("checklist" as const) : ("bubble-5" as const)
       const directory = e.name
       const props = e.details.properties
       if (e.details.type === "permission.asked" && permission.autoResponds(e.details.properties, directory)) return
@@ -354,9 +344,12 @@ export default function Layout(props: ParentProps) {
       const session = store.session.find((s) => s.id === props.sessionID)
       const sessionKey = `${directory}:${props.sessionID}`
 
-      const sessionTitle = session?.title ?? "New session"
+      const sessionTitle = session?.title ?? language.t("command.session.new")
       const projectName = getFilename(directory)
-      const description = config.description(sessionTitle, projectName)
+      const description =
+        e.details.type === "permission.asked"
+          ? language.t("notification.permission.description", { sessionTitle, projectName })
+          : language.t("notification.question.description", { sessionTitle, projectName })
       const href = `/${base64Encode(directory)}/session/${props.sessionID}`
 
       const now = Date.now()
@@ -367,13 +360,13 @@ export default function Layout(props: ParentProps) {
       if (e.details.type === "permission.asked") {
         playSound(soundSrc(settings.sounds.permissions()))
         if (settings.notifications.permissions()) {
-          void platform.notify(config.title, description, href)
+          void platform.notify(title, description, href)
         }
       }
 
       if (e.details.type === "question.asked") {
         if (settings.notifications.agent()) {
-          void platform.notify(config.title, description, href)
+          void platform.notify(title, description, href)
         }
       }
 
@@ -387,16 +380,16 @@ export default function Layout(props: ParentProps) {
 
       const toastId = showToast({
         persistent: true,
-        icon: config.icon,
-        title: config.title,
+        icon,
+        title,
         description,
         actions: [
           {
-            label: "Go to session",
+            label: language.t("notification.action.goToSession"),
             onClick: () => navigate(href),
           },
           {
-            label: "Dismiss",
+            label: language.t("common.dismiss"),
             onClick: "dismiss",
           },
         ],
@@ -1024,7 +1017,7 @@ export default function Layout(props: ParentProps) {
 
     if (platform.openDirectoryPickerDialog && server.isLocal()) {
       const result = await platform.openDirectoryPickerDialog?.({
-        title: "Open project",
+        title: language.t("command.project.open"),
         multiple: true,
       })
       resolve(result)
@@ -1042,7 +1035,7 @@ export default function Layout(props: ParentProps) {
       if (data?.message) return data.message
     }
     if (err instanceof Error) return err.message
-    return "Request failed"
+    return language.t("common.requestFailed")
   }
 
   const deleteWorkspace = async (directory: string) => {
@@ -1057,7 +1050,7 @@ export default function Layout(props: ParentProps) {
       .then((x) => x.data)
       .catch((err) => {
         showToast({
-          title: "Failed to delete workspace",
+          title: language.t("workspace.delete.failed.title"),
           description: errorMessage(err),
         })
         return false
@@ -1079,8 +1072,14 @@ export default function Layout(props: ParentProps) {
     const current = currentProject()
     if (!current) return
     if (directory === current.worktree) return
-
     setBusy(directory, true)
+
+    const progress = showToast({
+      persistent: true,
+      title: language.t("workspace.resetting.title"),
+      description: language.t("workspace.resetting.description"),
+    })
+    const dismiss = () => toaster.dismiss(progress)
 
     const sessions = await globalSDK.client.session
       .list({ directory })
@@ -1092,7 +1091,7 @@ export default function Layout(props: ParentProps) {
       .then((x) => x.data)
       .catch((err) => {
         showToast({
-          title: "Failed to reset workspace",
+          title: language.t("workspace.reset.failed.title"),
           description: errorMessage(err),
         })
         return false
@@ -1100,6 +1099,7 @@ export default function Layout(props: ParentProps) {
 
     if (!result) {
       setBusy(directory, false)
+      dismiss()
       return
     }
 
@@ -1121,14 +1121,15 @@ export default function Layout(props: ParentProps) {
     await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
 
     setBusy(directory, false)
+    dismiss()
 
     const href = `/${base64Encode(directory)}/session`
     navigate(href)
     layout.mobileSidebar.hide()
 
     showToast({
-      title: "Workspace reset",
-      description: "Workspace now matches the default branch.",
+      title: language.t("workspace.reset.success.title"),
+      description: language.t("workspace.reset.success.description"),
     })
   }
 
@@ -1164,25 +1165,27 @@ export default function Layout(props: ParentProps) {
     }
 
     const description = () => {
-      if (data.status === "loading") return "Checking for unmerged changes..."
-      if (data.status === "error") return "Unable to verify git status."
-      if (!data.dirty) return "No unmerged changes detected."
-      return "Unmerged changes detected in this workspace."
+      if (data.status === "loading") return language.t("workspace.status.checking")
+      if (data.status === "error") return language.t("workspace.status.error")
+      if (!data.dirty) return language.t("workspace.status.clean")
+      return language.t("workspace.status.dirty")
     }
 
     return (
-      <Dialog title="Delete workspace" fit>
+      <Dialog title={language.t("workspace.delete.title")} fit>
         <div class="flex flex-col gap-4 px-2.5 pb-3">
           <div class="flex flex-col gap-1">
-            <span class="text-14-regular text-text-strong">Delete workspace "{name()}"?</span>
+            <span class="text-14-regular text-text-strong">
+              {language.t("workspace.delete.confirm", { name: name() })}
+            </span>
             <span class="text-12-regular text-text-weak">{description()}</span>
           </div>
           <div class="flex justify-end gap-2">
             <Button variant="ghost" size="large" onClick={() => dialog.close()}>
-              Cancel
+              {language.t("common.cancel")}
             </Button>
             <Button variant="primary" size="large" disabled={data.status === "loading"} onClick={handleDelete}>
-              Delete workspace
+              {language.t("workspace.delete.button")}
             </Button>
           </div>
         </div>
@@ -1235,34 +1238,36 @@ export default function Layout(props: ParentProps) {
     const archivedCount = () => state.sessions.length
 
     const description = () => {
-      if (state.status === "loading") return "Checking for unmerged changes..."
-      if (state.status === "error") return "Unable to verify git status."
-      if (!state.dirty) return "No unmerged changes detected."
-      return "Unmerged changes detected in this workspace."
+      if (state.status === "loading") return language.t("workspace.status.checking")
+      if (state.status === "error") return language.t("workspace.status.error")
+      if (!state.dirty) return language.t("workspace.status.clean")
+      return language.t("workspace.status.dirty")
     }
 
     const archivedLabel = () => {
       const count = archivedCount()
-      if (count === 0) return "No active sessions will be archived."
-      const label = count === 1 ? "1 session" : `${count} sessions`
-      return `${label} will be archived.`
+      if (count === 0) return language.t("workspace.reset.archived.none")
+      if (count === 1) return language.t("workspace.reset.archived.one")
+      return language.t("workspace.reset.archived.many", { count })
     }
 
     return (
-      <Dialog title="Reset workspace" fit>
+      <Dialog title={language.t("workspace.reset.title")} fit>
         <div class="flex flex-col gap-4 px-2.5 pb-3">
           <div class="flex flex-col gap-1">
-            <span class="text-14-regular text-text-strong">Reset workspace "{name()}"?</span>
+            <span class="text-14-regular text-text-strong">
+              {language.t("workspace.reset.confirm", { name: name() })}
+            </span>
             <span class="text-12-regular text-text-weak">
-              {description()} {archivedLabel()} This will reset the workspace to match the default branch.
+              {description()} {archivedLabel()} {language.t("workspace.reset.note")}
             </span>
           </div>
           <div class="flex justify-end gap-2">
             <Button variant="ghost" size="large" onClick={() => dialog.close()}>
-              Cancel
+              {language.t("common.cancel")}
             </Button>
             <Button variant="primary" size="large" disabled={state.status === "loading"} onClick={handleReset}>
-              Reset workspace
+              {language.t("workspace.reset.button")}
             </Button>
           </div>
         </div>
@@ -1536,7 +1541,10 @@ export default function Layout(props: ParentProps) {
           }
         >
           <HoverCard openDelay={1000} closeDelay={0} placement="right-start" gutter={28} trigger={item}>
-            <Show when={hoverReady()} fallback={<div class="text-12-regular text-text-weak">Loading messages…</div>}>
+            <Show
+              when={hoverReady()}
+              fallback={<div class="text-12-regular text-text-weak">{language.t("session.messages.loading")}</div>}
+            >
               <MessageNav
                 messages={hoverMessages() ?? []}
                 current={undefined}
@@ -1561,7 +1569,7 @@ export default function Layout(props: ParentProps) {
         >
           <TooltipKeybind
             placement={props.mobile ? "bottom" : "right"}
-            title="Archive session"
+            title={language.t("command.session.archive")}
             keybind={command.keybind("session.archive")}
             gutter={8}
           >
@@ -1604,7 +1612,8 @@ export default function Layout(props: ParentProps) {
       if (!directory) return
 
       const [workspaceStore] = globalSync.child(directory)
-      const kind = directory === project.worktree ? "local" : "sandbox"
+      const kind =
+        directory === project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
       const name = workspaceLabel(directory, workspaceStore.vcs?.branch, project.id)
       return `${kind} : ${name}`
     })
@@ -1671,7 +1680,9 @@ export default function Layout(props: ParentProps) {
             <Spinner class="size-[15px]" />
           </Show>
         </div>
-        <span class="text-14-medium text-text-base shrink-0">{local() ? "local" : "sandbox"} :</span>
+        <span class="text-14-medium text-text-base shrink-0">
+          {local() ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")} :
+        </span>
         <Show
           when={!local()}
           fallback={
@@ -1737,7 +1748,7 @@ export default function Layout(props: ParentProps) {
                   }}
                 >
                   <DropdownMenu open={menuOpen()} onOpenChange={setMenuOpen}>
-                    <Tooltip value="More options" placement="top">
+                    <Tooltip value={language.t("common.moreOptions")} placement="top">
                       <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="ghost" class="size-6 rounded-md" />
                     </Tooltip>
                     <DropdownMenu.Portal>
@@ -1750,7 +1761,7 @@ export default function Layout(props: ParentProps) {
                         }}
                       >
                         <DropdownMenu.Item onSelect={() => navigate(`/${slug()}/session`)}>
-                          <DropdownMenu.ItemLabel>New session</DropdownMenu.ItemLabel>
+                          <DropdownMenu.ItemLabel>{language.t("command.session.new")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           disabled={local()}
@@ -1759,24 +1770,28 @@ export default function Layout(props: ParentProps) {
                             setMenuOpen(false)
                           }}
                         >
-                          <DropdownMenu.ItemLabel>Rename</DropdownMenu.ItemLabel>
+                          <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           disabled={local() || busy()}
                           onSelect={() => dialog.show(() => <DialogResetWorkspace directory={props.directory} />)}
                         >
-                          <DropdownMenu.ItemLabel>Reset</DropdownMenu.ItemLabel>
+                          <DropdownMenu.ItemLabel>{language.t("common.reset")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           disabled={local() || busy()}
                           onSelect={() => dialog.show(() => <DialogDeleteWorkspace directory={props.directory} />)}
                         >
-                          <DropdownMenu.ItemLabel>Delete</DropdownMenu.ItemLabel>
+                          <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
                   </DropdownMenu>
-                  <TooltipKeybind placement="right" title="New session" keybind={command.keybind("session.new")}>
+                  <TooltipKeybind
+                    placement="right"
+                    title={language.t("command.session.new")}
+                    keybind={command.keybind("session.new")}
+                  >
                     <IconButton
                       icon="plus-small"
                       variant="ghost"
@@ -1799,7 +1814,7 @@ export default function Layout(props: ParentProps) {
                 icon="edit"
                 class="hidden _flex w-full text-left justify-start text-text-base rounded-md px-3"
               >
-                New session
+                {language.t("command.session.new")}
               </Button>
               <Show when={loading()}>
                 <SessionSkeleton />
@@ -1818,7 +1833,7 @@ export default function Layout(props: ParentProps) {
                       ;(e.currentTarget as HTMLButtonElement).blur()
                     }}
                   >
-                    Load more
+                    {language.t("common.loadMore")}
                   </Button>
                 </div>
               </Show>
@@ -1842,7 +1857,8 @@ export default function Layout(props: ParentProps) {
 
     const label = (directory: string) => {
       const [data] = globalSync.child(directory)
-      const kind = directory === props.project.worktree ? "local" : "sandbox"
+      const kind =
+        directory === props.project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
       const name = workspaceLabel(directory, data.vcs?.branch, props.project.id)
       return `${kind} : ${name}`
     }
@@ -1893,9 +1909,9 @@ export default function Layout(props: ParentProps) {
           trigger={trigger}
           onOpenChange={setOpen}
         >
-          <div class="-m-3 p-2 flex flex-col w-72">
-            <div class="px-4 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
-            <div class="px-4 pb-2 text-12-medium text-text-weak">Recent sessions</div>
+            <div class="-m-3 p-2 flex flex-col w-72">
+              <div class="px-4 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
+              <div class="px-4 pb-2 text-12-medium text-text-weak">{language.t("sidebar.project.recentSessions")}</div>
             <div class="px-2 pb-2 flex flex-col gap-2">
               <Show
                 when={workspaceEnabled()}
@@ -1951,7 +1967,7 @@ export default function Layout(props: ParentProps) {
                   navigateToProject(props.project.worktree)
                 }}
               >
-                View all sessions
+                {language.t("sidebar.project.viewAllSessions")}
               </Button>
             </div>
           </div>
@@ -2002,7 +2018,7 @@ export default function Layout(props: ParentProps) {
                   ;(e.currentTarget as HTMLButtonElement).blur()
                 }}
               >
-                Load more
+                {language.t("common.loadMore")}
               </Button>
             </div>
           </Show>
@@ -2033,7 +2049,7 @@ export default function Layout(props: ParentProps) {
         .then((x) => x.data)
         .catch((err) => {
           showToast({
-            title: "Failed to create workspace",
+            title: language.t("workspace.create.failed.title"),
             description: errorMessage(err),
           })
           return undefined
@@ -2080,7 +2096,7 @@ export default function Layout(props: ParentProps) {
                   placement={sidebarProps.mobile ? "bottom" : "right"}
                   value={
                     <div class="flex items-center gap-2">
-                      <span>Open project</span>
+                      <span>{language.t("command.project.open")}</span>
                       <Show when={!sidebarProps.mobile}>
                         <span class="text-icon-base text-12-medium">{command.keybind("project.open")}</span>
                       </Show>
@@ -2098,12 +2114,12 @@ export default function Layout(props: ParentProps) {
           <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
             <TooltipKeybind
               placement={sidebarProps.mobile ? "bottom" : "right"}
-              title="Settings"
+              title={language.t("sidebar.settings")}
               keybind={command.keybind("settings.open")}
             >
               <IconButton icon="settings-gear" variant="ghost" size="large" onClick={openSettings} />
             </TooltipKeybind>
-            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Help">
+            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value={language.t("sidebar.help")}>
               <IconButton
                 icon="help"
                 variant="ghost"
@@ -2161,20 +2177,22 @@ export default function Layout(props: ParentProps) {
                           class="shrink-0 size-6 rounded-md opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100 data-[expanded]:bg-surface-base-active"
                         />
                         <DropdownMenu.Portal>
-                          <DropdownMenu.Content class="mt-1">
-                            <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
-                              <DropdownMenu.ItemLabel>Edit</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces(p.worktree)}>
-                              <DropdownMenu.ItemLabel>
-                                {layout.sidebar.workspaces(p.worktree)() ? "Disable workspaces" : "Enable workspaces"}
-                              </DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Separator />
-                            <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
-                              <DropdownMenu.ItemLabel>Close</DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                          </DropdownMenu.Content>
+                            <DropdownMenu.Content class="mt-1">
+                              <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
+                              <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces(p.worktree)}>
+                                <DropdownMenu.ItemLabel>
+                                {layout.sidebar.workspaces(p.worktree)()
+                                  ? language.t("sidebar.workspaces.disable")
+                                  : language.t("sidebar.workspaces.enable")}
+                                </DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Separator />
+                              <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
+                              <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
+                            </DropdownMenu.Content>
                         </DropdownMenu.Portal>
                       </DropdownMenu>
                     </div>
@@ -2185,7 +2203,11 @@ export default function Layout(props: ParentProps) {
                     fallback={
                       <>
                         <div class="py-4 px-3">
-                          <TooltipKeybind title="New session" keybind={command.keybind("session.new")} placement="top">
+                          <TooltipKeybind
+                            title={language.t("command.session.new")}
+                            keybind={command.keybind("session.new")}
+                            placement="top"
+                          >
                             <Button
                               size="large"
                               icon="plus-small"
@@ -2195,7 +2217,7 @@ export default function Layout(props: ParentProps) {
                                 layout.mobileSidebar.hide()
                               }}
                             >
-                              New session
+                              {language.t("command.session.new")}
                             </Button>
                           </TooltipKeybind>
                         </div>
@@ -2208,12 +2230,12 @@ export default function Layout(props: ParentProps) {
                     <>
                       <div class="py-4 px-3">
                         <TooltipKeybind
-                          title="New workspace"
+                          title={language.t("workspace.new")}
                           keybind={command.keybind("workspace.new")}
                           placement="top"
                         >
                           <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
-                            New workspace
+                            {language.t("workspace.new")}
                           </Button>
                         </TooltipKeybind>
                       </div>
@@ -2255,9 +2277,9 @@ export default function Layout(props: ParentProps) {
               <div class="shrink-0 px-2 py-3 border-t border-border-weak-base">
                 <div class="rounded-md bg-background-base shadow-xs-border-base">
                   <div class="p-3 flex flex-col gap-2">
-                    <div class="text-12-medium text-text-strong">Getting started</div>
-                    <div class="text-text-base">OpenCode includes free models so you can start immediately.</div>
-                    <div class="text-text-base">Connect any provider to use models, inc. Claude, GPT, Gemini etc.</div>
+                    <div class="text-12-medium text-text-strong">{language.t("sidebar.gettingStarted.title")}</div>
+                    <div class="text-text-base">{language.t("sidebar.gettingStarted.line1")}</div>
+                    <div class="text-text-base">{language.t("sidebar.gettingStarted.line2")}</div>
                   </div>
                   <Button
                     class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-md rounded-t-none shadow-none border-t border-border-weak-base px-3"
@@ -2265,7 +2287,7 @@ export default function Layout(props: ParentProps) {
                     icon="plus"
                     onClick={connectProvider}
                   >
-                    Connect provider
+                    {language.t("command.provider.connect")}
                   </Button>
                 </div>
               </div>

@@ -1205,7 +1205,7 @@ export default function Page() {
                 classes={{ button: "w-full" }}
                 onClick={() => setStore("mobileTab", "session")}
               >
-                Session
+                {language.t("session.tab.session")}
               </Tabs.Trigger>
               <Tabs.Trigger
                 value="review"
@@ -1214,8 +1214,10 @@ export default function Page() {
                 onClick={() => setStore("mobileTab", "review")}
               >
                 <Switch>
-                  <Match when={hasReview()}>{reviewCount()} Files Changed</Match>
-                  <Match when={true}>Review</Match>
+                  <Match when={hasReview()}>
+                    {language.t("session.review.filesChanged", { count: reviewCount() })}
+                  </Match>
+                  <Match when={true}>{language.t("session.tab.review")}</Match>
                 </Switch>
               </Tabs.Trigger>
             </Tabs.List>
@@ -1245,7 +1247,9 @@ export default function Page() {
                           <Match when={hasReview()}>
                             <Show
                               when={diffsReady()}
-                              fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
+                              fallback={
+                                <div class="px-4 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
+                              }
                             >
                               <SessionReviewTab
                                 diffs={diffs}
@@ -1265,13 +1269,13 @@ export default function Page() {
                             </Show>
                           </Match>
                           <Match when={true}>
-                            <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                              <Mark class="w-14 opacity-10" />
-                              <div class="text-14-regular text-text-weak max-w-56">No changes in this session yet</div>
-                            </div>
-                          </Match>
-                        </Switch>
-                      </div>
+                              <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
+                                <Mark class="w-14 opacity-10" />
+                               <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+                              </div>
+                            </Match>
+                          </Switch>
+                        </div>
                     }
                   >
                     <div class="relative w-full h-full min-w-0">
@@ -1334,7 +1338,7 @@ export default function Page() {
                                 class="text-12-medium opacity-50"
                                 onClick={() => setStore("turnStart", 0)}
                               >
-                                Render earlier messages
+                                {language.t("session.messages.renderEarlier")}
                               </Button>
                             </div>
                           </Show>
@@ -1352,7 +1356,9 @@ export default function Page() {
                                   sync.session.history.loadMore(id)
                                 }}
                               >
-                                {historyLoading() ? "Loading earlier messages..." : "Load earlier messages"}
+                                {historyLoading()
+                                  ? language.t("session.messages.loadingEarlier")
+                                  : language.t("session.messages.loadEarlier")}
                               </Button>
                             </div>
                           </Show>
@@ -1436,7 +1442,7 @@ export default function Page() {
                 when={prompt.ready()}
                 fallback={
                   <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                    {handoff.prompt || "Loading prompt..."}
+                    {handoff.prompt || language.t("prompt.loading")}
                   </div>
                 }
               >
@@ -1482,11 +1488,11 @@ export default function Page() {
                           <Show when={diffs()}>
                             <DiffChanges changes={diffs()} variant="bars" />
                           </Show>
-                          <div class="flex items-center gap-1.5">
-                            <div>Review</div>
-                            <Show when={info()?.summary?.files}>
-                              <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
-                                {info()?.summary?.files ?? 0}
+                            <div class="flex items-center gap-1.5">
+                              <div>{language.t("session.tab.review")}</div>
+                              <Show when={info()?.summary?.files}>
+                                <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
+                                  {info()?.summary?.files ?? 0}
                               </div>
                             </Show>
                           </div>
@@ -1497,7 +1503,7 @@ export default function Page() {
                       <Tabs.Trigger
                         value="context"
                         closeButton={
-                          <Tooltip value="Close tab" placement="bottom">
+                          <Tooltip value={language.t("common.closeTab")} placement="bottom">
                             <IconButton icon="close" variant="ghost" onClick={() => tabs().close("context")} />
                           </Tooltip>
                         }
@@ -1506,7 +1512,7 @@ export default function Page() {
                       >
                         <div class="flex items-center gap-2">
                           <SessionContextUsage variant="indicator" />
-                          <div>Context</div>
+                          <div>{language.t("session.tab.context")}</div>
                         </div>
                       </Tabs.Trigger>
                     </Show>
@@ -1515,7 +1521,7 @@ export default function Page() {
                     </SortableProvider>
                     <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
                       <TooltipKeybind
-                        title="Open file"
+                        title={language.t("command.file.open")}
                         keybind={command.keybind("file.open")}
                         class="flex items-center"
                       >
@@ -1537,7 +1543,9 @@ export default function Page() {
                           <Match when={hasReview()}>
                             <Show
                               when={diffsReady()}
-                              fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
+                              fallback={
+                                <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
+                              }
                             >
                               <SessionReviewTab
                                 diffs={diffs}
@@ -1553,13 +1561,13 @@ export default function Page() {
                             </Show>
                           </Match>
                           <Match when={true}>
-                            <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                              <Mark class="w-14 opacity-10" />
-                              <div class="text-14-regular text-text-weak max-w-56">No changes in this session yet</div>
-                            </div>
-                          </Match>
-                        </Switch>
-                      </div>
+                              <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
+                                <Mark class="w-14 opacity-10" />
+                               <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+                              </div>
+                            </Match>
+                          </Switch>
+                        </div>
                     </Show>
                   </Tabs.Content>
                 </Show>
@@ -1735,7 +1743,9 @@ export default function Page() {
                                   }}
                                 >
                                   <Icon name="plus-small" size="small" />
-                                  <span>Add {selectionLabel()} to context</span>
+                                  <span>
+                                    {language.t("session.context.addToContext", { selection: selectionLabel() ?? "" })}
+                                  </span>
                                 </button>
                               </div>
                             )}
@@ -1792,7 +1802,7 @@ export default function Page() {
                               />
                             </Match>
                             <Match when={state()?.loading}>
-                              <div class="px-6 py-4 text-text-weak">Loading...</div>
+                              <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
                             </Match>
                             <Match when={state()?.error}>
                               {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
@@ -1847,13 +1857,13 @@ export default function Page() {
                       </div>
                     )}
                   </For>
-                  <div class="flex-1" />
-                  <div class="text-text-weak pr-2">Loading...</div>
-                </div>
-                <div class="flex-1 flex items-center justify-center text-text-weak">Loading terminal...</div>
+                <div class="flex-1" />
+                <div class="text-text-weak pr-2">{language.t("common.loading")}...</div>
               </div>
-            }
-          >
+              <div class="flex-1 flex items-center justify-center text-text-weak">{language.t("terminal.loading")}</div>
+            </div>
+          }
+        >
             <DragDropProvider
               onDragStart={handleTerminalDragStart}
               onDragEnd={handleTerminalDragEnd}
@@ -1869,7 +1879,7 @@ export default function Page() {
                   </SortableProvider>
                   <div class="h-full flex items-center justify-center">
                     <TooltipKeybind
-                      title="New terminal"
+                      title={language.t("command.terminal.new")}
                       keybind={command.keybind("terminal.new")}
                       class="flex items-center"
                     >
