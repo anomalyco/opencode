@@ -113,11 +113,22 @@
 
 [data-component="reasoning-part"] {
   width: 100%;
-  opacity: 0.5;
+  color: var(--text-base);
+  opacity: 0.8;
+  line-height: var(--line-height-large);
 
   [data-component="markdown"] {
     margin-top: 24px;
     font-style: italic !important;
+
+    p:has(strong) {
+      margin-top: 24px;
+      margin-bottom: 0;
+
+      &:first-child {
+        margin-top: 0;
+      }
+    }
   }
 }
 
