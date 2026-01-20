@@ -5,10 +5,8 @@
   &::after {
     content: "";
     position: absolute;
-    background-color: var(--color-border-strong-base);
     opacity: 0;
     transition: opacity 0.15s ease-in-out;
-    border-radius: 2px;
   }
 
   &:hover::after,

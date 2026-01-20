@@ -118,9 +118,15 @@
         outline: none;
       }
     }
+  }
 
-    &:focus-visible {
-      outline: none;
+  &[data-fit] {
+    [data-slot="dialog-container"] {
+      height: auto;
+
+      [data-slot="dialog-content"] {
+        min-height: 0;
+      }
     }
   }
 }
