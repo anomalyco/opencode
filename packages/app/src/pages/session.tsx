@@ -826,7 +826,7 @@ export default function Page() {
   const isWorking = createMemo(() => status().type !== "idle")
 
   const autoScroll = createAutoScroll({
-    working: () => true
+    working: () => true,
   })
 
   createEffect(
