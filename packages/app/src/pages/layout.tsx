@@ -802,6 +802,26 @@ export default function Layout(props: ParentProps) {
       },
     ]
 
+    if (platform.platform === "desktop") {
+      const shortcuts = layout.projects
+        .list()
+        .slice(0, 9)
+        .map((project, index) => {
+          const slot = index + 1
+          const name = project.name || getFilename(project.worktree)
+          return {
+            id: `project.switch.${project.worktree}`,
+            title: `Switch to ${name}`,
+            description: `Project ${slot}`,
+            category: "Project",
+            keybind: `mod+${slot}`,
+            onSelect: () => navigateToProject(project.worktree),
+          }
+        })
+
+      commands.push(...shortcuts)
+    }
+
     for (const [id, definition] of availableThemeEntries()) {
       commands.push({
         id: `theme.set.${id}`,
