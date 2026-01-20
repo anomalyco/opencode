@@ -1,0 +1,8 @@
+Replace text previously selected by the select-text tool. Providing full lines, including the whitespace prefixes and trailing newline, to the replace parameter is recommended to ensure proper formatting when used with replace-selection.
+
+Usage:
+- This tool requires that select-text has been called first to establish the selection
+- The replace parameter should contain the new content to replace the selection with
+- Providing full lines with whitespace prefixes (tabs/spaces) and trailing newlines is recommended to ensure proper formatting
+- Only one selection can be active at a time, and this tool replaces that selection
+- After replacement, the selection is cleared and a new select-text call is needed for additional replacements

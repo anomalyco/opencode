@@ -1,0 +1,11 @@
+Select text in the workspace in preparation for replacement with replace-selection. Uses a searchStart and optionally searchEnd. Only one selection is active at a time in the entire workspace. The select-text will select full lines of code around the searchStart and searchEnd. The next call to replace-selection tool will replace the selected text with the new content.
+
+Usage:
+- The filename parameter is the name of the file to search in
+- The searchStart parameter is the exact start string to find and select. Selection is inclusive of searchStart
+- The searchEnd parameter is optional. If not provided, only the text containing searchStart is selected
+- When using searchEnd, you must specify the selection behavior. For example:
+  - Use true to match a closing bracket of the searchStart code block
+  - Use false to match, but not include the start of the next code block
+- Only one selection can be active at a time across the entire workspace
+- The selection process will expand to include full lines of code around the search strings

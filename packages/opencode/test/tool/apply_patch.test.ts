@@ -12,6 +12,7 @@ const baseCtx = {
   agent: "build",
   abort: AbortSignal.any([]),
   metadata: () => {},
+  getConversation: async () => [],
 }
 
 type AskInput = {

@@ -162,5 +162,8 @@ async function createToolContext(agent: Agent.Info) {
         }
       }
     },
+    async getConversation() {
+      return await Session.messages({ sessionID: session.id })
+    },
   }
 }

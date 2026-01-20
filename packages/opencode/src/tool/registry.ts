@@ -11,6 +11,8 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { SelectTextTool } from "./select-text"
+import { ReplaceSelectionTool } from "./replace-selection"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
@@ -102,6 +104,8 @@ export namespace ToolRegistry {
       GrepTool,
       EditTool,
       WriteTool,
+      SelectTextTool,
+      ReplaceSelectionTool,
       TaskTool,
       WebFetchTool,
       TodoWriteTool,

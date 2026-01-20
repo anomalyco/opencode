@@ -14,6 +14,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   metadata: () => {},
   ask: async () => {},
+  getConversation: async () => [],
 }
 
 const projectRoot = path.join(__dirname, "../..")
