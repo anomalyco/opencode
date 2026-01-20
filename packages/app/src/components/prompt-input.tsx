@@ -255,7 +255,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   createEffect(() => {
     params.id
-    editorRef.focus()
     if (params.id) return
     const interval = setInterval(() => {
       setStore("placeholder", (prev) => (prev + 1) % PLACEHOLDERS.length)
