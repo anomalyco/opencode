@@ -469,7 +469,7 @@ export default function Page() {
       title: "New terminal",
       description: "Create a new terminal tab",
       category: "Terminal",
-      keybind: "ctrl+shift+`",
+      keybind: "ctrl+alt+t",
       onSelect: () => terminal.new(),
     },
     {

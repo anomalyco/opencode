@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0px;
+  gap: 8px;
   align-self: stretch;
 
   [data-slot="accordion-item"] {
@@ -10,7 +10,6 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0px;
     align-self: stretch;
     overflow: clip;
 
@@ -34,6 +33,7 @@
 
         background-color: var(--surface-base);
         border: 1px solid var(--border-weak-base);
+        border-radius: var(--radius-md);
         overflow: clip;
         color: var(--text-strong);
         transition: background-color 0.15s ease;
@@ -59,12 +59,9 @@
     }
 
     &[data-expanded] {
-      margin-top: 8px;
-      margin-bottom: 8px;
-
       [data-slot="accordion-trigger"] {
-        border-top-left-radius: var(--radius-md);
-        border-top-right-radius: var(--radius-md);
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
       }
 
       [data-slot="accordion-content"] {
@@ -73,68 +70,11 @@
         border-bottom-left-radius: var(--radius-md);
         border-bottom-right-radius: var(--radius-md);
       }
-
-      & + [data-slot="accordion-item"] {
-        margin-top: 8px;
-
-        [data-slot="accordion-trigger"] {
-          border-top-left-radius: var(--radius-md);
-          border-top-right-radius: var(--radius-md);
-        }
-      }
-    }
-
-    &:has(+ [data-slot="accordion-item"][data-expanded]) {
-      margin-bottom: 8px;
-
-      &[data-closed] {
-        border-bottom-left-radius: var(--radius-md);
-        border-bottom-right-radius: var(--radius-md);
-
-        [data-slot="accordion-trigger"] {
-          border-bottom-left-radius: var(--radius-md);
-          border-bottom-right-radius: var(--radius-md);
-        }
-      }
-    }
-
-    &[data-closed] + &[data-closed] {
-      [data-slot="accordion-trigger"] {
-        border-top: none;
-      }
-    }
-
-    &:first-child {
-      margin-top: 0px;
-
-      &[data-closed] {
-        [data-slot="accordion-trigger"] {
-          border-top-left-radius: var(--radius-md);
-          border-top-right-radius: var(--radius-md);
-        }
-      }
-    }
-
-    &:last-child {
-      margin-bottom: 0px;
-
-      &[data-closed] {
-        [data-slot="accordion-trigger"] {
-          border-bottom-left-radius: var(--radius-md);
-          border-bottom-right-radius: var(--radius-md);
-        }
-      }
     }
 
     [data-slot="accordion-content"] {
       overflow: hidden;
       width: 100%;
-
-      /* animation: slideUp 250ms cubic-bezier(0.87, 0, 0.13, 1); */
-      /**/
-      /* &[data-expanded] { */
-      /*   animation: slideDown 250ms cubic-bezier(0.87, 0, 0.13, 1); */
-      /* } */
     }
   }
 }

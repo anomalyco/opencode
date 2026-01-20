@@ -992,6 +992,7 @@ ToolRegistry.register({
   render(props) {
     const diffComponent = useDiffComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
+    const filename = () => getFilename(props.input.filePath ?? "")
     return (
       <BasicTool
         {...props}
@@ -999,13 +1000,12 @@ ToolRegistry.register({
         trigger={
           <div data-component="edit-trigger">
             <div data-slot="message-part-title-area">
-              <div data-slot="message-part-title">Edit</div>
-              <div data-slot="message-part-path">
-                <Show when={props.input.filePath?.includes("/")}>
+              <div data-slot="message-part-title">Edit {filename()}</div>
+              <Show when={props.input.filePath?.includes("/")}>
+                <div data-slot="message-part-path">
                   <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
-                </Show>
-                <span data-slot="message-part-filename">{getFilename(props.input.filePath ?? "")}</span>
-              </div>
+                </div>
+              </Show>
             </div>
             <div data-slot="message-part-actions">
               <Show when={props.metadata.filediff}>
@@ -1041,6 +1041,7 @@ ToolRegistry.register({
   render(props) {
     const codeComponent = useCodeComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
+    const filename = () => getFilename(props.input.filePath ?? "")
     return (
       <BasicTool
         {...props}
@@ -1048,13 +1049,12 @@ ToolRegistry.register({
         trigger={
           <div data-component="write-trigger">
             <div data-slot="message-part-title-area">
-              <div data-slot="message-part-title">Write</div>
-              <div data-slot="message-part-path">
-                <Show when={props.input.filePath?.includes("/")}>
+              <div data-slot="message-part-title">Write {filename()}</div>
+              <Show when={props.input.filePath?.includes("/")}>
+                <div data-slot="message-part-path">
                   <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
-                </Show>
-                <span data-slot="message-part-filename">{getFilename(props.input.filePath ?? "")}</span>
-              </div>
+                </div>
+              </Show>
             </div>
             <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
           </div>

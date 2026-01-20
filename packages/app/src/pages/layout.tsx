@@ -122,6 +122,17 @@ export default function Layout(props: ParentProps) {
     active: "" as string,
     value: "",
   })
+  const [busyWorkspaces, setBusyWorkspaces] = createSignal<Set<string>>(new Set())
+  const setBusy = (directory: string, value: boolean) => {
+    const key = workspaceKey(directory)
+    setBusyWorkspaces((prev) => {
+      const next = new Set(prev)
+      if (value) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }
+  const isBusy = (directory: string) => busyWorkspaces().has(workspaceKey(directory))
   const editorRef = { current: undefined as HTMLInputElement | undefined }
 
   const autoselecting = createMemo(() => {
@@ -995,6 +1006,8 @@ export default function Layout(props: ParentProps) {
     if (!current) return
     if (directory === current.worktree) return
 
+    setBusy(directory, true)
+
     const result = await globalSDK.client.worktree
       .remove({ directory: current.worktree, worktreeRemoveInput: { directory } })
       .then((x) => x.data)
@@ -1005,6 +1018,8 @@ export default function Layout(props: ParentProps) {
         })
         return false
       })
+
+    setBusy(directory, false)
 
     if (!result) return
 
@@ -1021,12 +1036,7 @@ export default function Layout(props: ParentProps) {
     if (!current) return
     if (directory === current.worktree) return
 
-    const progress = showToast({
-      persistent: true,
-      title: "Resetting workspace",
-      description: "This may take a minute.",
-    })
-    const dismiss = () => toaster.dismiss(progress)
+    setBusy(directory, true)
 
     const sessions = await globalSDK.client.session
       .list({ directory })
@@ -1037,7 +1047,6 @@ export default function Layout(props: ParentProps) {
       .reset({ directory: current.worktree, worktreeResetInput: { directory } })
       .then((x) => x.data)
       .catch((err) => {
-        dismiss()
         showToast({
           title: "Failed to reset workspace",
           description: errorMessage(err),
@@ -1046,7 +1055,7 @@ export default function Layout(props: ParentProps) {
       })
 
     if (!result) {
-      dismiss()
+      setBusy(directory, false)
       return
     }
 
@@ -1066,7 +1075,8 @@ export default function Layout(props: ParentProps) {
     )
 
     await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
-    dismiss()
+
+    setBusy(directory, false)
 
     const href = `/${base64Encode(directory)}/session`
     navigate(href)
@@ -1590,6 +1600,7 @@ export default function Layout(props: ParentProps) {
     const boot = createMemo(() => open() || active())
     const loading = createMemo(() => open() && workspaceStore.status !== "complete" && sessions().length === 0)
     const hasMore = createMemo(() => local() && workspaceStore.sessionTotal > workspaceStore.session.length)
+    const busy = createMemo(() => isBusy(props.directory))
     const loadMore = async () => {
       if (!local()) return
       setWorkspaceStore("limit", (limit) => limit + 5)
@@ -1612,7 +1623,9 @@ export default function Layout(props: ParentProps) {
     const header = () => (
       <div class="flex items-center gap-1 min-w-0 flex-1">
         <div class="flex items-center justify-center shrink-0 size-6">
-          <Icon name="branch" size="small" />
+          <Show when={busy()} fallback={<Icon name="branch" size="small" />}>
+            <Spinner class="size-[15px]" />
+          </Show>
         </div>
         <span class="text-14-medium text-text-base shrink-0">{local() ? "local" : "sandbox"} :</span>
         <Show
@@ -1648,8 +1661,14 @@ export default function Layout(props: ParentProps) {
     )
 
     return (
-      // @ts-ignore
-      <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
+      <div
+        // @ts-ignore
+        use:sortable
+        classList={{
+          "opacity-30": sortable.isActiveDraggable,
+          "opacity-50 pointer-events-none": busy(),
+        }}
+      >
         <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
           <div class="px-2 py-1">
             <div class="group/workspace relative">
@@ -1699,13 +1718,13 @@ export default function Layout(props: ParentProps) {
                           <DropdownMenu.ItemLabel>Rename</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
-                          disabled={local()}
+                          disabled={local() || busy()}
                           onSelect={() => dialog.show(() => <DialogResetWorkspace directory={props.directory} />)}
                         >
                           <DropdownMenu.ItemLabel>Reset</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
-                          disabled={local()}
+                          disabled={local() || busy()}
                           onSelect={() => dialog.show(() => <DialogDeleteWorkspace directory={props.directory} />)}
                         >
                           <DropdownMenu.ItemLabel>Delete</DropdownMenu.ItemLabel>
@@ -1979,6 +1998,17 @@ export default function Layout(props: ParentProps) {
       navigate(`/${base64Encode(created.directory)}/session`)
     }
 
+    command.register(() => [
+      {
+        id: "workspace.new",
+        title: "New workspace",
+        category: "Workspace",
+        keybind: "mod+shift+w",
+        disabled: !layout.sidebar.workspaces(project()?.worktree ?? "")(),
+        onSelect: createWorkspace,
+      },
+    ])
+
     const homedir = createMemo(() => sync.data.path.home)
 
     return (
@@ -2104,17 +2134,19 @@ export default function Layout(props: ParentProps) {
                     fallback={
                       <>
                         <div class="py-4 px-3">
-                          <Button
-                            size="large"
-                            icon="plus-small"
-                            class="w-full"
-                            onClick={() => {
-                              navigate(`/${base64Encode(p.worktree)}/session`)
-                              layout.mobileSidebar.hide()
-                            }}
-                          >
-                            New session
-                          </Button>
+                          <TooltipKeybind title="New session" keybind={command.keybind("session.new")} placement="top">
+                            <Button
+                              size="large"
+                              icon="plus-small"
+                              class="w-full"
+                              onClick={() => {
+                                navigate(`/${base64Encode(p.worktree)}/session`)
+                                layout.mobileSidebar.hide()
+                              }}
+                            >
+                              New session
+                            </Button>
+                          </TooltipKeybind>
                         </div>
                         <div class="flex-1 min-h-0">
                           <LocalWorkspace project={p} mobile={sidebarProps.mobile} />
@@ -2124,9 +2156,15 @@ export default function Layout(props: ParentProps) {
                   >
                     <>
                       <div class="py-4 px-3">
-                        <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
-                          New workspace
-                        </Button>
+                        <TooltipKeybind
+                          title="New workspace"
+                          keybind={command.keybind("workspace.new")}
+                          placement="top"
+                        >
+                          <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
+                            New workspace
+                          </Button>
+                        </TooltipKeybind>
                       </div>
                       <div class="relative flex-1 min-h-0">
                         <DragDropProvider
