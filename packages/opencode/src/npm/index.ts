@@ -4,41 +4,49 @@ export namespace Npm {
   const log = Log.create({ service: "npm" })
 
   export async function getLatestVersion(pkg: string): Promise<string | null> {
-    try {
-      const encodedPkg = pkg.replace("/", "%2F")
-      const registryUrl = `https://registry.npmjs.org/${encodedPkg}/latest`
-      const response = await fetch(registryUrl, {
-        headers: { Accept: "application/json" },
-      })
-      if (!response.ok) {
-        log.warn("Failed to fetch latest version from registry", { pkg, status: response.status })
-        return null
-      }
-      const data = (await response.json()) as { version?: string }
-      return data.version ?? null
-    } catch (error) {
-      log.warn("Error fetching latest version from registry", { pkg, error })
+    const encoded = pkg.replace("/", "%2F")
+    const url = `https://registry.npmjs.org/${encoded}/latest`
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+      },
+    }).catch(() => null)
+
+    if (!response) {
+      log.warn("Failed to fetch latest version from registry", { pkg })
       return null
     }
+
+    if (!response.ok) {
+      log.warn("Failed to fetch latest version from registry", { pkg, status: response.status })
+      return null
+    }
+
+    const data = (await response.json().catch(() => null)) as { version?: string } | null
+    if (!data?.version) return null
+    return data.version
   }
 
-  export function compareVersions(v1: string, v2: string): number {
-    const parts1 = v1.split(".").map((x) => parseInt(x, 10) || 0)
-    const parts2 = v2.split(".").map((x) => parseInt(x, 10) || 0)
-    const maxLen = Math.max(parts1.length, parts2.length)
-    for (let i = 0; i < maxLen; i++) {
-      const a = parts1[i] ?? 0
-      const b = parts2[i] ?? 0
-      if (a < b) return -1
-      if (a > b) return 1
+  export function compareVersions(left: string, right: string): number {
+    const leftParts = left.split(".").map((part) => parseInt(part, 10) || 0)
+    const rightParts = right.split(".").map((part) => parseInt(part, 10) || 0)
+    const length = Math.max(leftParts.length, rightParts.length)
+
+    for (let i = 0; i < length; i++) {
+      const leftValue = leftParts[i] ?? 0
+      const rightValue = rightParts[i] ?? 0
+      if (leftValue < rightValue) return -1
+      if (leftValue > rightValue) return 1
     }
+
     return 0
   }
 
   export async function isOutdated(pkg: string, cachedVersion: string): Promise<boolean> {
     const latestVersion = await getLatestVersion(pkg)
     if (!latestVersion) {
-      return true
+      log.warn("Failed to resolve latest version, using cached", { pkg, cachedVersion })
+      return false
     }
     return compareVersions(cachedVersion, latestVersion) < 0
   }

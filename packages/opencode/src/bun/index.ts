@@ -62,7 +62,6 @@ export namespace BunProc {
     }),
   )
 
-
   export async function install(pkg: string, version = "latest") {
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
@@ -78,21 +77,19 @@ export namespace BunProc {
     if (!parsed.dependencies) parsed.dependencies = dependencies
     const modExists = await Filesystem.exists(mod)
     const cachedVersion = dependencies[pkg]
-    const isLatestVersion = version === "latest"
-    
-    if (!isLatestVersion) {
-      const versionMatch = cachedVersion === version
-      const shouldUseCache = versionMatch && modExists
-      if (shouldUseCache) {
-        return mod
+
+    if (modExists && cachedVersion) {
+      if (version !== "latest") {
+        if (cachedVersion === version) return mod
       }
-    } else {
-      if (modExists && cachedVersion) {
+
+      if (version === "latest") {
         const isOutdated = await Npm.isOutdated(pkg, cachedVersion)
-        if (!isOutdated) {
-          return mod
-        }
-        log.info("Cached version is outdated or registry check failed, proceeding with install", { pkg, cachedVersion })
+        if (!isOutdated) return mod
+        log.info("Cached version is outdated, proceeding with install", {
+          pkg,
+          cachedVersion,
+        })
       }
     }
 

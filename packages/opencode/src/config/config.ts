@@ -32,7 +32,6 @@ import { Npm } from "../npm"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
-  const installCache = new Set<string>()
 
   // Custom merge function that concatenates array fields instead of replacing them
   function mergeConfigConcatArrays(target: Info, source: Info): Info {
@@ -134,13 +133,9 @@ export namespace Config {
         }
       }
 
-      const key = path.resolve(dir)
-      if (!installCache.has(key)) {
-        const shouldInstall = await needsInstall(dir)
-        if (shouldInstall) {
-          await installDependencies(dir)
-        }
-        installCache.add(key)
+      const shouldInstall = await needsInstall(dir)
+      if (shouldInstall) {
+        await installDependencies(dir)
       }
 
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
@@ -204,35 +199,9 @@ export namespace Config {
 
   export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
-    const nodeModules = path.join(dir, "node_modules")
     const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
-    const pkgFile = Bun.file(pkg)
-    const pkgExists = await pkgFile.exists()
-    const hasModules = existsSync(nodeModules)
 
-    if (pkgExists && hasModules) {
-      const parsed = await pkgFile.json().catch(() => null)
-      const deps = parsed?.dependencies
-      const depVersion = deps?.["@opencode-ai/plugin"]
-      const hasDependency = Boolean(depVersion)
-      
-      if (hasDependency) {
-        if (targetVersion === "latest") {
-          const isOutdated = await Npm.isOutdated("@opencode-ai/plugin", depVersion)
-          if (!isOutdated) {
-            return
-          }
-          log.info("Cached version is outdated or registry check failed, proceeding with install", {
-            pkg: "@opencode-ai/plugin",
-            cachedVersion: depVersion,
-          })
-        } else if (depVersion === targetVersion) {
-          return
-        }
-      }
-    }
-
-    if (!pkgExists) {
+    if (!(await Bun.file(pkg).exists())) {
       await Bun.write(pkg, "{}")
     }
 
@@ -240,34 +209,13 @@ export namespace Config {
     const hasGitIgnore = await Bun.file(gitignore).exists()
     if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
 
-    const parsed = await pkgFile.json().catch(() => ({ dependencies: {} }))
-    const dependencies = parsed?.dependencies ?? {}
-    const depVersion = dependencies["@opencode-ai/plugin"]
-    
-    let needsAdd = !depVersion
-    if (depVersion) {
-      if (targetVersion === "latest") {
-        const isOutdated = await Npm.isOutdated("@opencode-ai/plugin", depVersion)
-        if (isOutdated) {
-          needsAdd = true
-        }
-      } else if (depVersion !== targetVersion) {
-        needsAdd = true
-      }
-    }
-
-    if (needsAdd) {
-      await BunProc.run(["add", `@opencode-ai/plugin@${targetVersion}`, "--exact"], {
-        cwd: dir,
-      }).catch(() => {})
-    }
+    await BunProc.run(["add", `@opencode-ai/plugin@${targetVersion}`, "--exact"], {
+      cwd: dir,
+    }).catch(() => {})
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    const hasModulesAfterAdd = existsSync(nodeModules)
-    if (!hasModulesAfterAdd) {
-      await BunProc.run(["install"], { cwd: dir }).catch(() => {})
-    }
+    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
   }
 
   async function needsInstall(dir: string) {
@@ -285,14 +233,15 @@ export namespace Config {
     if (!depVersion) return true
 
     const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
-    
     if (targetVersion === "latest") {
-      // Check registry to see if cached version is outdated
       const isOutdated = await Npm.isOutdated("@opencode-ai/plugin", depVersion)
-      return isOutdated
+      if (!isOutdated) return false
+      log.info("Cached version is outdated, proceeding with install", {
+        pkg: "@opencode-ai/plugin",
+        cachedVersion: depVersion,
+      })
+      return true
     }
-    
-    // For specific versions, check if version matches
     if (depVersion === targetVersion) return false
     return true
   }
