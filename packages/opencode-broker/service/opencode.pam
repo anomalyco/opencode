@@ -1,0 +1,9 @@
+# PAM configuration for OpenCode authentication
+# Install to /etc/pam.d/opencode
+
+# Standard UNIX authentication
+auth       required     pam_unix.so
+account    required     pam_unix.so
+
+# Optional: Enable TOTP 2FA (uncomment when pam_google_authenticator is installed)
+# auth       required     pam_google_authenticator.so

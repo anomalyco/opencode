@@ -1,0 +1,6 @@
+# PAM configuration for OpenCode authentication (macOS)
+# Install to /etc/pam.d/opencode
+
+# macOS Open Directory authentication
+auth       required     pam_opendirectory.so
+account    required     pam_opendirectory.so
