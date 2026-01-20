@@ -324,7 +324,7 @@
         [data-slot="tabs-trigger"] {
           border: none;
           padding: 0 8px;
-          gap: 8px;
+          gap: 12px;
           justify-content: flex-start;
           width: 100%;
         }
