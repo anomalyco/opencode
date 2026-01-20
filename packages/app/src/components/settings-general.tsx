@@ -2,22 +2,33 @@ import { Component, createMemo, type JSX } from "solid-js"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
+import { useLanguage } from "@/context/language"
 import { useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 
 export const SettingsGeneral: Component = () => {
   const theme = useTheme()
+  const language = useLanguage()
   const settings = useSettings()
 
   const themeOptions = createMemo(() =>
     Object.entries(theme.themes()).map(([id, def]) => ({ id, name: def.name ?? id })),
   )
 
-  const colorSchemeOptions: { value: ColorScheme; label: string }[] = [
-    { value: "system", label: "System setting" },
-    { value: "light", label: "Light" },
-    { value: "dark", label: "Dark" },
-  ]
+  const colorSchemeOptions = createMemo(
+    (): { value: ColorScheme; label: string }[] => [
+      { value: "system", label: language.t("theme.scheme.system") },
+      { value: "light", label: language.t("theme.scheme.light") },
+      { value: "dark", label: language.t("theme.scheme.dark") },
+    ],
+  )
+
+  const languageOptions = createMemo(() =>
+    language.locales.map((locale) => ({
+      value: locale,
+      label: language.label(locale),
+    })),
+  )
 
   const fontOptions = [
     { value: "ibm-plex-mono", label: "IBM Plex Mono" },
@@ -45,20 +56,39 @@ export const SettingsGeneral: Component = () => {
         }}
       >
         <div class="flex flex-col gap-1 pt-6 pb-8">
-          <h2 class="text-16-medium text-text-strong">General</h2>
+          <h2 class="text-16-medium text-text-strong">{language.t("settings.tab.general")}</h2>
         </div>
       </div>
 
       <div class="flex flex-col gap-8 w-full">
         {/* Appearance Section */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">Appearance</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.appearance")}</h3>
 
           <div class="bg-surface-raised-base px-4 rounded-lg">
-            <SettingsRow title="Appearance" description="Customise how OpenCode looks on your device">
+            <SettingsRow
+              title={language.t("settings.general.row.language.title")}
+              description={language.t("settings.general.row.language.description")}
+            >
               <Select
-                options={colorSchemeOptions}
-                current={colorSchemeOptions.find((o) => o.value === theme.colorScheme())}
+                options={languageOptions()}
+                current={languageOptions().find((o) => o.value === language.locale())}
+                value={(o) => o.value}
+                label={(o) => o.label}
+                onSelect={(option) => option && language.setLocale(option.value)}
+                variant="secondary"
+                size="small"
+                triggerVariant="settings"
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              title={language.t("settings.general.row.appearance.title")}
+              description={language.t("settings.general.row.appearance.description")}
+            >
+              <Select
+                options={colorSchemeOptions()}
+                current={colorSchemeOptions().find((o) => o.value === theme.colorScheme())}
                 value={(o) => o.value}
                 label={(o) => o.label}
                 onSelect={(option) => option && theme.setColorScheme(option.value)}
@@ -74,12 +104,12 @@ export const SettingsGeneral: Component = () => {
             </SettingsRow>
 
             <SettingsRow
-              title="Theme"
+              title={language.t("settings.general.row.theme.title")}
               description={
                 <>
-                  Customise how OpenCode is themed.{" "}
+                  {language.t("settings.general.row.theme.description")} {" "}
                   <a href="#" class="text-text-interactive-base">
-                    Learn more
+                    {language.t("common.learnMore")}
                   </a>
                 </>
               }
@@ -104,7 +134,10 @@ export const SettingsGeneral: Component = () => {
               />
             </SettingsRow>
 
-            <SettingsRow title="Font" description="Customise the mono font used in code blocks">
+            <SettingsRow
+              title={language.t("settings.general.row.font.title")}
+              description={language.t("settings.general.row.font.description")}
+            >
               <Select
                 options={fontOptions}
                 current={fontOptions.find((o) => o.value === settings.appearance.font())}
@@ -124,12 +157,12 @@ export const SettingsGeneral: Component = () => {
 
         {/* System notifications Section */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">System notifications</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.notifications")}</h3>
 
           <div class="bg-surface-raised-base px-4 rounded-lg">
             <SettingsRow
-              title="Agent"
-              description="Show system notification when the agent is complete or needs attention"
+              title={language.t("settings.general.notifications.agent.title")}
+              description={language.t("settings.general.notifications.agent.description")}
             >
               <Switch
                 checked={settings.notifications.agent()}
@@ -137,14 +170,20 @@ export const SettingsGeneral: Component = () => {
               />
             </SettingsRow>
 
-            <SettingsRow title="Permissions" description="Show system notification when a permission is required">
+            <SettingsRow
+              title={language.t("settings.general.notifications.permissions.title")}
+              description={language.t("settings.general.notifications.permissions.description")}
+            >
               <Switch
                 checked={settings.notifications.permissions()}
                 onChange={(checked) => settings.notifications.setPermissions(checked)}
               />
             </SettingsRow>
 
-            <SettingsRow title="Errors" description="Show system notification when an error occurs">
+            <SettingsRow
+              title={language.t("settings.general.notifications.errors.title")}
+              description={language.t("settings.general.notifications.errors.description")}
+            >
               <Switch
                 checked={settings.notifications.errors()}
                 onChange={(checked) => settings.notifications.setErrors(checked)}
@@ -155,10 +194,13 @@ export const SettingsGeneral: Component = () => {
 
         {/* Sound effects Section */}
         <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">Sound effects</h3>
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.sounds")}</h3>
 
           <div class="bg-surface-raised-base px-4 rounded-lg">
-            <SettingsRow title="Agent" description="Play sound when the agent is complete or needs attention">
+            <SettingsRow
+              title={language.t("settings.general.sounds.agent.title")}
+              description={language.t("settings.general.sounds.agent.description")}
+            >
               <Select
                 options={soundOptions}
                 current={soundOptions.find((o) => o.id === settings.sounds.agent())}
@@ -179,7 +221,10 @@ export const SettingsGeneral: Component = () => {
               />
             </SettingsRow>
 
-            <SettingsRow title="Permissions" description="Play sound when a permission is required">
+            <SettingsRow
+              title={language.t("settings.general.sounds.permissions.title")}
+              description={language.t("settings.general.sounds.permissions.description")}
+            >
               <Select
                 options={soundOptions}
                 current={soundOptions.find((o) => o.id === settings.sounds.permissions())}
@@ -200,7 +245,10 @@ export const SettingsGeneral: Component = () => {
               />
             </SettingsRow>
 
-            <SettingsRow title="Errors" description="Play sound when an error occurs">
+            <SettingsRow
+              title={language.t("settings.general.sounds.errors.title")}
+              description={language.t("settings.general.sounds.errors.description")}
+            >
               <Select
                 options={soundOptions}
                 current={soundOptions.find((o) => o.id === settings.sounds.errors())}
