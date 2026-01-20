@@ -1,4 +1,5 @@
 // @refresh reload
+import "./webview-zoom"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
@@ -302,11 +303,6 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 })
 
 createMenu()
-
-// Stops mousewheel events from reaching Tauri's pinch-to-zoom handler
-root?.addEventListener("mousewheel", (e) => {
-  e.stopPropagation()
-})
 
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
