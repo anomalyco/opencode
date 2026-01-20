@@ -3,7 +3,7 @@ import { dict as en } from "../i18n/en"
 
 export type UiI18nKey = keyof typeof en
 
-export type UiI18nParams = Record<string, string | number | boolean | null | undefined>
+export type UiI18nParams = Record<string, string | number | boolean>
 
 export type UiI18n = {
   locale: Accessor<string>
@@ -15,8 +15,7 @@ function resolveTemplate(text: string, params?: UiI18nParams) {
   return text.replace(/{{\s*([^}]+?)\s*}}/g, (_, rawKey) => {
     const key = String(rawKey)
     const value = params[key]
-    if (value === undefined || value === null) return ""
-    return String(value)
+    return value === undefined ? "" : String(value)
   })
 }
 
