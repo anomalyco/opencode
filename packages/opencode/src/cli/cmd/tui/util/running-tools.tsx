@@ -3,7 +3,7 @@ import { createStore, reconcile } from "solid-js/store"
 import type { Part, ToolPart, ToolStateRunning } from "@opencode-ai/sdk/v2"
 import { formatDuration } from "../../../../util/format"
 import { useTheme } from "../context/theme"
-import { extractToolCommand, RUNNING_THRESHOLD_MS, type RunningItem } from "./running-utils"
+import { extractToolCommand, RUNNING_THRESHOLD_MS, str, type RunningItem, type TaskMetadata } from "./running-utils"
 
 type ToolsData = {
   message: Record<string, { id: string }[]>
@@ -12,22 +12,22 @@ type ToolsData = {
 
 type RunningToolPart = ToolPart & { state: ToolStateRunning }
 
-function hasStartedWork(part: RunningToolPart): boolean {
+function hasRunningSubtasks(part: RunningToolPart): boolean {
   if (part.tool !== "task") return true
-  const metadata = part.state.metadata as { summary?: unknown[] } | undefined
-  return !!metadata?.summary?.length
+  const metadata = part.state.metadata as TaskMetadata | undefined
+  return metadata?.summary?.some((t) => t.state?.status === "running") ?? false
 }
 
 function isRunningTool(part: Part, now: number): part is RunningToolPart {
   if (part.type !== "tool" || part.state.status !== "running") return false
   const running = part as RunningToolPart
-  if (!hasStartedWork(running)) return false
+  if (!hasRunningSubtasks(running)) return false
   return now - running.state.time.start >= RUNNING_THRESHOLD_MS
 }
 
 function getLabel(part: RunningToolPart, agentIndex: number): string {
   return part.tool === "task"
-    ? `agent${agentIndex}: ${(part.state.input.description as string) || "..."}`
+    ? `agent${agentIndex}: ${str(part.state.input.description) || "..."}`
     : extractToolCommand(part.tool, part.state.input)
 }
 

@@ -8,18 +8,28 @@ export type RunningItem = {
   suffix?: string
 }
 
+// Task tool metadata types (for subagent tracking)
+export type TaskSummaryItem = { state?: { status?: string } }
+export type TaskMetadata = { summary?: TaskSummaryItem[] }
+
+// Helper to safely coerce unknown to string
+export function str(value: unknown): string {
+  return typeof value === "string" ? value : ""
+}
+
 function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max - 3) + "..." : str
 }
 
 function basename(filepath: unknown): string {
-  return (filepath as string)?.split("/").pop() || (filepath as string) || ""
+  const path = str(filepath)
+  return path.split("/").pop() || path
 }
 
 // Overrides for tools that need custom formatting
 const TOOL_OVERRIDES: Record<string, (input: Record<string, unknown>) => string> = {
   grep: (input) => `rg "${input.pattern}"${input.path ? ` ${input.path}` : ""}`,
-  task: (input) => `agent: ${(input.description as string) || "..."}`,
+  task: (input) => `agent: ${str(input.description) || "..."}`,
 }
 
 export function extractToolCommand(tool: string, input: Record<string, unknown>): string {
@@ -28,11 +38,11 @@ export function extractToolCommand(tool: string, input: Record<string, unknown>)
   if (override) return truncate(override(input), MAX_LEN)
 
   // Pattern-based fallback for common input fields
-  if (input.command) return truncate(input.command as string, MAX_LEN)
+  if (input.command) return truncate(str(input.command), MAX_LEN)
   if (input.filePath) return truncate(`${tool} ${basename(input.filePath)}`, MAX_LEN)
   if (input.pattern) return truncate(`${tool} ${input.pattern}`, MAX_LEN)
   if (input.url) return truncate(`${tool} ${input.url}`, MAX_LEN)
-  if (input.title) return truncate(input.title as string, MAX_LEN)
+  if (input.title) return truncate(str(input.title), MAX_LEN)
   if (input.description) return truncate(`${tool}: ${input.description}`, MAX_LEN)
 
   return tool

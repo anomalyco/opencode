@@ -14,7 +14,7 @@ type SyncData = {
   part: Record<string, Part[]>
 }
 
-const ACTIVE_STATUSES = new Set(["sending", "reasoning", "streaming", "retry"])
+const ACTIVE_STATUSES = new Set(["sending", "planning", "reasoning", "streaming", "waiting", "retry"])
 
 function isActive(status: SessionStatus): boolean {
   return ACTIVE_STATUSES.has(status.type)

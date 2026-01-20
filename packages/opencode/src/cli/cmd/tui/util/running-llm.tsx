@@ -10,8 +10,10 @@ type LLMData = {
 
 const STATUS_LABELS: Record<string, string> = {
   sending: "Sending...",
+  planning: "Planning...",
   reasoning: "Reasoning...",
   streaming: "Streaming...",
+  waiting: "Waiting...",
 }
 
 export function createLLMStatus(

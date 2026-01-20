@@ -13,10 +13,16 @@ export namespace SessionStatus {
         type: z.literal("sending"),
       }),
       z.object({
+        type: z.literal("planning"),
+      }),
+      z.object({
         type: z.literal("reasoning"),
       }),
       z.object({
         type: z.literal("streaming"),
+      }),
+      z.object({
+        type: z.literal("waiting"),
       }),
       z.object({
         type: z.literal("retry"),

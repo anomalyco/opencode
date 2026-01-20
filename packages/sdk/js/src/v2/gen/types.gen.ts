@@ -522,10 +522,16 @@ export type SessionStatus =
       type: "sending"
     }
   | {
+      type: "planning"
+    }
+  | {
       type: "reasoning"
     }
   | {
       type: "streaming"
+    }
+  | {
+      type: "waiting"
     }
   | {
       type: "retry"
