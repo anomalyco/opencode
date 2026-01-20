@@ -51,7 +51,7 @@
   overflow: hidden;
   border-radius: var(--radius-md);
   background-color: var(--surface-raised-stronger-non-alpha);
-  padding: 2px;
+  padding: 4px;
   box-shadow: var(--shadow-xs-border);
   z-index: 60;
 
