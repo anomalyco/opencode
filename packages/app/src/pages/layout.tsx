@@ -2104,7 +2104,7 @@ export default function Layout(props: ParentProps) {
                     fallback={
                       <>
                         <div class="py-4 px-3">
-                          <Tooltip value="Create a new session" placement="top">
+                          <TooltipKeybind title="New session" keybind={command.keybind("session.new")} placement="top">
                             <Button
                               size="large"
                               icon="plus-small"
@@ -2116,7 +2116,7 @@ export default function Layout(props: ParentProps) {
                             >
                               New session
                             </Button>
-                          </Tooltip>
+                          </TooltipKeybind>
                         </div>
                         <div class="flex-1 min-h-0">
                           <LocalWorkspace project={p} mobile={sidebarProps.mobile} />
