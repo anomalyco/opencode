@@ -10,206 +10,18 @@ on:
       - "bun.lock"
       - "package.json"
       - "packages/*/package.json"
+      - "flake.lock"
       - ".github/workflows/update-nix-hashes.yml"
   pull_request:
     paths:
       - "bun.lock"
       - "package.json"
       - "packages/*/package.json"
+      - "flake.lock"
       - ".github/workflows/update-nix-hashes.yml"
 
 jobs:
-  update-flake:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    env:
-      TITLE: flake.lock
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
-          ref: ${{ github.head_ref || github.ref_name }}
-          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-
-      - name: Setup Nix
-        uses: nixbuild/nix-quick-install-action@v34
-
-      - name: Configure git
-        run: |
-          git config --global user.email "action@github.com"
-          git config --global user.name "Github Action"
-
-      - name: Update ${{ env.TITLE }}
-        run: |
-          set -euo pipefail
-          echo "Updating $TITLE..."
-          nix flake update
-          echo "$TITLE updated successfully"
-
-      - name: Commit ${{ env.TITLE }} changes
-        env:
-          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: |
-          set -euo pipefail
-
-          echo "Checking for changes in tracked files..."
-
-          summarize() {
-            local status="$1"
-            {
-              echo "### Nix $TITLE"
-              echo ""
-              echo "- ref: ${GITHUB_REF_NAME}"
-              echo "- status: ${status}"
-            } >> "$GITHUB_STEP_SUMMARY"
-            if [ -n "${GITHUB_SERVER_URL:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_RUN_ID:-}" ]; then
-              echo "- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"
-            fi
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-          }
-          FILES=(flake.lock flake.nix)
-          STATUS="$(git status --short -- "${FILES[@]}" || true)"
-          if [ -z "$STATUS" ]; then
-            echo "No changes detected."
-            summarize "no changes"
-            exit 0
-          fi
-
-          echo "Changes detected:"
-          echo "$STATUS"
-          echo "Staging files..."
-          git add "${FILES[@]}"
-          echo "Committing changes..."
-          git commit -m "Update $TITLE"
-          echo "Changes committed"
-
-          BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
-          echo "Pulling latest from branch: $BRANCH"
-          git pull --rebase --autostash origin "$BRANCH"
-          echo "Pushing changes to branch: $BRANCH"
-          git push origin HEAD:"$BRANCH"
-          echo "Changes pushed successfully"
-
-          summarize "committed $(git rev-parse --short HEAD)"
-
-  compute-node-modules-hash:
-    needs: update-flake
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - system: x86_64-linux
-            host: blacksmith-4vcpu-ubuntu-2404
-          - system: aarch64-linux
-            host: blacksmith-4vcpu-ubuntu-2404-arm
-          - system: x86_64-darwin
-            host: macos-15-intel
-          - system: aarch64-darwin
-            host: macos-latest
-    runs-on: ${{ matrix.host }}
-    env:
-      SYSTEM: ${{ matrix.system }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
-          ref: ${{ github.head_ref || github.ref_name }}
-          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-
-      - name: Setup Nix
-        uses: nixbuild/nix-quick-install-action@v34
-
-      - name: Compute node_modules hash
-        run: |
-          set -euo pipefail
-
-          DUMMY="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-          HASH_FILE="nix/hashes.json"
-          OUTPUT_FILE="hash-${SYSTEM}.txt"
-
-          export NIX_KEEP_OUTPUTS=1
-          export NIX_KEEP_DERIVATIONS=1
-
-          BUILD_LOG=$(mktemp)
-          TMP_JSON=$(mktemp)
-          trap 'rm -f "$BUILD_LOG" "$TMP_JSON"' EXIT
-
-          if [ ! -f "$HASH_FILE" ]; then
-            mkdir -p "$(dirname "$HASH_FILE")"
-            echo '{"nodeModules":{}}' > "$HASH_FILE"
-          fi
-
-          # Set dummy hash to force nix to rebuild and reveal correct hash
-          jq --arg system "$SYSTEM" --arg value "$DUMMY" \
-            '.nodeModules = (.nodeModules // {}) | .nodeModules[$system] = $value' "$HASH_FILE" > "$TMP_JSON"
-          mv "$TMP_JSON" "$HASH_FILE"
-
-          MODULES_ATTR=".#packages.${SYSTEM}.default.node_modules"
-          DRV_PATH="$(nix eval --raw "${MODULES_ATTR}.drvPath")"
-
-          echo "Building node_modules for ${SYSTEM} to discover correct hash..."
-          echo "Attempting to realize derivation: ${DRV_PATH}"
-          REALISE_OUT=$(nix-store --realise "$DRV_PATH" --keep-failed 2>&1 | tee "$BUILD_LOG" || true)
-
-          BUILD_PATH=$(echo "$REALISE_OUT" | grep "^/nix/store/" | head -n1 || true)
-          CORRECT_HASH=""
-
-          if [ -n "$BUILD_PATH" ] && [ -d "$BUILD_PATH" ]; then
-            echo "Realized node_modules output: $BUILD_PATH"
-            CORRECT_HASH=$(nix hash path --sri "$BUILD_PATH" 2>/dev/null || true)
-          fi
-
-          # Try to extract hash from build log
-          if [ -z "$CORRECT_HASH" ]; then
-            CORRECT_HASH="$(grep -E 'got:\s+sha256-[A-Za-z0-9+/=]+' "$BUILD_LOG" | awk '{print $2}' | head -n1 || true)"
-          fi
-
-          if [ -z "$CORRECT_HASH" ]; then
-            CORRECT_HASH="$(grep -A2 'hash mismatch' "$BUILD_LOG" | grep 'got:' | awk '{print $2}' | sed 's/sha256:/sha256-/' || true)"
-          fi
-
-          # Try to hash from kept failed build directory
-          if [ -z "$CORRECT_HASH" ]; then
-            KEPT_DIR=$(grep -oE "build directory.*'[^']+'" "$BUILD_LOG" | grep -oE "'/[^']+'" | tr -d "'" | head -n1 || true)
-            if [ -z "$KEPT_DIR" ]; then
-              KEPT_DIR=$(grep -oE '/nix/var/nix/builds/[^ ]+' "$BUILD_LOG" | head -n1 || true)
-            fi
-
-            if [ -n "$KEPT_DIR" ] && [ -d "$KEPT_DIR" ]; then
-              HASH_PATH="$KEPT_DIR"
-              [ -d "$KEPT_DIR/build" ] && HASH_PATH="$KEPT_DIR/build"
-
-              if [ -d "$HASH_PATH/node_modules" ]; then
-                CORRECT_HASH=$(nix hash path --sri "$HASH_PATH" 2>/dev/null || true)
-              fi
-            fi
-          fi
-
-          if [ -z "$CORRECT_HASH" ]; then
-            echo "Failed to determine correct node_modules hash for ${SYSTEM}."
-            cat "$BUILD_LOG"
-            exit 1
-          fi
-
-          echo "$CORRECT_HASH" > "$OUTPUT_FILE"
-          echo "Hash for ${SYSTEM}: $CORRECT_HASH"
-
-      - name: Upload hash artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: hash-${{ matrix.system }}
-          path: hash-${{ matrix.system }}.txt
-          retention-days: 1
-
-  commit-node-modules-hashes:
-    needs: compute-node-modules-hash
+  update-node-modules-hashes:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
@@ -224,6 +36,9 @@ jobs:
           ref: ${{ github.head_ref || github.ref_name }}
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
+      - name: Setup Nix
+        uses: nixbuild/nix-quick-install-action@v34
+
       - name: Configure git
         run: |
           git config --global user.email "action@github.com"
@@ -236,54 +51,47 @@ jobs:
           BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
           git pull --rebase --autostash origin "$BRANCH"
 
-      - name: Download all hash artifacts
-        uses: actions/download-artifact@v7
-        with:
-          pattern: hash-*
-          merge-multiple: true
-
-      - name: Merge hashes into hashes.json
+      - name: Compute all node_modules hashes
         run: |
           set -euo pipefail
 
           HASH_FILE="nix/hashes.json"
+          SYSTEMS="x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin"
 
           if [ ! -f "$HASH_FILE" ]; then
             mkdir -p "$(dirname "$HASH_FILE")"
             echo '{"nodeModules":{}}' > "$HASH_FILE"
           fi
 
-          echo "Merging hashes into ${HASH_FILE}..."
+          for SYSTEM in $SYSTEMS; do
+            echo "Computing hash for ${SYSTEM}..."
+            BUILD_LOG=$(mktemp)
+            trap 'rm -f "$BUILD_LOG"' EXIT
 
-          shopt -s nullglob
-          files=(hash-*.txt)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No hash files found, nothing to update"
-            exit 0
-          fi
+            # The updater derivations use fakeHash, so they will fail and reveal the correct hash
+            UPDATER_ATTR=".#packages.x86_64-linux.${SYSTEM}_node_modules"
 
-          EXPECTED_SYSTEMS="x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin"
-          for sys in $EXPECTED_SYSTEMS; do
-            if [ ! -f "hash-${sys}.txt" ]; then
-              echo "WARNING: Missing hash file for $sys"
+            nix build "$UPDATER_ATTR" --no-link 2>&1 | tee "$BUILD_LOG" || true
+
+            CORRECT_HASH="$(grep -E 'got:\s+sha256-[A-Za-z0-9+/=]+' "$BUILD_LOG" | awk '{print $2}' | head -n1 || true)"
+
+            if [ -z "$CORRECT_HASH" ]; then
+              CORRECT_HASH="$(grep -A2 'hash mismatch' "$BUILD_LOG" | grep 'got:' | awk '{print $2}' | sed 's/sha256:/sha256-/' || true)"
             fi
-          done
 
-          for f in "${files[@]}"; do
-            system="${f#hash-}"
-            system="${system%.txt}"
-            hash=$(cat "$f")
-            if [ -z "$hash" ]; then
-              echo "WARNING: Empty hash for $system, skipping"
-              continue
+            if [ -z "$CORRECT_HASH" ]; then
+              echo "Failed to determine correct node_modules hash for ${SYSTEM}."
+              cat "$BUILD_LOG"
+              exit 1
             fi
-            echo "  $system: $hash"
-            jq --arg sys "$system" --arg h "$hash" \
-              '.nodeModules = (.nodeModules // {}) | .nodeModules[$sys] = $h' "$HASH_FILE" > "${HASH_FILE}.tmp"
+
+            echo "  ${SYSTEM}: ${CORRECT_HASH}"
+            jq --arg sys "$SYSTEM" --arg h "$CORRECT_HASH" \
+              '.nodeModules[$sys] = $h' "$HASH_FILE" > "${HASH_FILE}.tmp"
             mv "${HASH_FILE}.tmp" "$HASH_FILE"
           done
 
-          echo "All hashes merged:"
+          echo "All hashes computed:"
           cat "$HASH_FILE"
 
       - name: Commit ${{ env.TITLE }} changes
@@ -320,7 +128,7 @@ jobs:
           echo "Changes detected:"
           echo "$STATUS"
           git add "${FILES[@]}"
-          git commit -m "Update $TITLE"
+          git commit -m "chore: update nix node_modules hashes"
 
           BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
           git pull --rebase --autostash origin "$BRANCH"

@@ -1,15 +1,17 @@
-import { createMemo, createResource, Show } from "solid-js"
+import { createEffect, createMemo, onCleanup, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
 // import { useServer } from "@/context/server"
 // import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { usePlatform } from "@/context/platform"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getFilename } from "@opencode-ai/util/path"
 import { base64Decode } from "@opencode-ai/util/encode"
-import { iife } from "@opencode-ai/util/iife"
+
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Button } from "@opencode-ai/ui/button"
@@ -26,6 +28,7 @@ export function SessionHeader() {
   // const server = useServer()
   // const dialog = useDialog()
   const sync = useSync()
+  const platform = usePlatform()
 
   const projectDirectory = createMemo(() => base64Decode(params.dir ?? ""))
   const project = createMemo(() => {
@@ -42,8 +45,82 @@ export function SessionHeader() {
 
   const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
+  const showReview = createMemo(() => !!currentSession()?.summary?.files)
+  const showShare = createMemo(() => shareEnabled() && !!currentSession())
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey()))
+
+  const [state, setState] = createStore({
+    share: false,
+    unshare: false,
+    copied: false,
+    timer: undefined as number | undefined,
+  })
+  const shareUrl = createMemo(() => currentSession()?.share?.url)
+
+  createEffect(() => {
+    const url = shareUrl()
+    if (url) return
+    if (state.timer) window.clearTimeout(state.timer)
+    setState({ copied: false, timer: undefined })
+  })
+
+  onCleanup(() => {
+    if (state.timer) window.clearTimeout(state.timer)
+  })
+
+  function shareSession() {
+    const session = currentSession()
+    if (!session || state.share) return
+    setState("share", true)
+    globalSDK.client.session
+      .share({ sessionID: session.id, directory: projectDirectory() })
+      .catch((error) => {
+        console.error("Failed to share session", error)
+      })
+      .finally(() => {
+        setState("share", false)
+      })
+  }
+
+  function unshareSession() {
+    const session = currentSession()
+    if (!session || state.unshare) return
+    setState("unshare", true)
+    globalSDK.client.session
+      .unshare({ sessionID: session.id, directory: projectDirectory() })
+      .catch((error) => {
+        console.error("Failed to unshare session", error)
+      })
+      .finally(() => {
+        setState("unshare", false)
+      })
+  }
+
+  function copyLink() {
+    const url = shareUrl()
+    if (!url) return
+    navigator.clipboard
+      .writeText(url)
+      .then(() => {
+        if (state.timer) window.clearTimeout(state.timer)
+        setState("copied", true)
+        const timer = window.setTimeout(() => {
+          setState("copied", false)
+          setState("timer", undefined)
+        }, 3000)
+        setState("timer", timer)
+      })
+      .catch((error) => {
+        console.error("Failed to copy share link", error)
+      })
+  }
+
+  function viewShare() {
+    const url = shareUrl()
+    if (!url) return
+    platform.openLink(url)
+  }
 
   const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
   const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
@@ -58,14 +135,14 @@ export function SessionHeader() {
               class="hidden md:flex w-[320px] p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
               onClick={() => command.trigger("file.open")}
             >
-              <div class="flex items-center gap-2">
-                <Icon name="magnifying-glass" size="normal" class="icon-base" />
-                <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate h-3.5 flex items-center overflow-visible">
+              <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
+                <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
+                <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate h-4.5 flex items-center">
                   Search {name()}
                 </span>
               </div>
 
-              <Show when={hotkey()}>{(keybind) => <Keybind>{keybind()}</Keybind>}</Show>
+              <Show when={hotkey()}>{(keybind) => <Keybind class="shrink-0">{keybind()}</Keybind>}</Show>
             </button>
           </Portal>
         )}
@@ -97,12 +174,14 @@ export function SessionHeader() {
               {/*   <SessionMcpIndicator /> */}
               {/* </div> */}
               <div class="flex items-center gap-1">
-                <Show when={currentSession()?.summary?.files}>
-                  <TooltipKeybind
-                    class="hidden md:block shrink-0"
-                    title="Toggle review"
-                    keybind={command.keybind("review.toggle")}
-                  >
+                <div
+                  class="hidden md:block shrink-0"
+                  classList={{
+                    "opacity-0 pointer-events-none": !showReview(),
+                  }}
+                  aria-hidden={!showReview()}
+                >
+                  <TooltipKeybind title="Toggle review" keybind={command.keybind("review.toggle")}>
                     <Button
                       variant="ghost"
                       class="group/review-toggle size-6 p-0"
@@ -127,7 +206,7 @@ export function SessionHeader() {
                       </div>
                     </Button>
                   </TooltipKeybind>
-                </Show>
+                </div>
                 <TooltipKeybind
                   class="hidden md:block shrink-0"
                   title="Toggle terminal"
@@ -158,42 +237,87 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <Show when={shareEnabled() && currentSession()}>
+              <div
+                class="flex items-center"
+                classList={{
+                  "opacity-0 pointer-events-none": !showShare(),
+                }}
+                aria-hidden={!showShare()}
+              >
                 <Popover
-                  title="Share session"
+                  title="Publish on web"
+                  description={
+                    shareUrl()
+                      ? "This session is public on the web. It is accessible to anyone with the link."
+                      : "Share session publicly on the web. It will be accessible to anyone with the link."
+                  }
                   trigger={
                     <Tooltip class="shrink-0" value="Share session">
-                      <IconButton icon="share" variant="ghost" class="" />
+                      <Button
+                        variant="secondary"
+                        classList={{ "rounded-r-none": shareUrl() !== undefined }}
+                        style={{ scale: 1 }}
+                      >
+                        Share
+                      </Button>
                     </Tooltip>
                   }
                 >
-                  {iife(() => {
-                    const [url] = createResource(
-                      () => currentSession(),
-                      async (session) => {
-                        if (!session) return
-                        let shareURL = session.share?.url
-                        if (!shareURL) {
-                          shareURL = await globalSDK.client.session
-                            .share({ sessionID: session.id, directory: projectDirectory() })
-                            .then((r) => r.data?.share?.url)
-                            .catch((e) => {
-                              console.error("Failed to share session", e)
-                              return undefined
-                            })
-                        }
-                        return shareURL
-                      },
-                      { initialValue: "" },
-                    )
-                    return (
-                      <Show when={url.latest}>
-                        {(shareUrl) => <TextField value={shareUrl()} readOnly copyable class="w-72" />}
-                      </Show>
-                    )
-                  })}
+                  <div class="flex flex-col gap-2">
+                    <Show
+                      when={shareUrl()}
+                      fallback={
+                        <div class="flex">
+                          <Button
+                            size="large"
+                            variant="primary"
+                            class="w-1/2"
+                            onClick={shareSession}
+                            disabled={state.share}
+                          >
+                            {state.share ? "Publishing..." : "Publish"}
+                          </Button>
+                        </div>
+                      }
+                    >
+                      <div class="flex flex-col gap-2 w-72">
+                        <TextField value={shareUrl() ?? ""} readOnly copyable class="w-full" />
+                        <div class="grid grid-cols-2 gap-2">
+                          <Button
+                            size="large"
+                            variant="secondary"
+                            class="w-full shadow-none border border-border-weak-base"
+                            onClick={unshareSession}
+                            disabled={state.unshare}
+                          >
+                            {state.unshare ? "Unpublishing..." : "Unpublish"}
+                          </Button>
+                          <Button
+                            size="large"
+                            variant="primary"
+                            class="w-full"
+                            onClick={viewShare}
+                            disabled={state.unshare}
+                          >
+                            View
+                          </Button>
+                        </div>
+                      </div>
+                    </Show>
+                  </div>
                 </Popover>
-              </Show>
+                <Show when={shareUrl()} fallback={<div class="size-6" aria-hidden="true" />}>
+                  <Tooltip value={state.copied ? "Copied" : "Copy link"} placement="top" gutter={8}>
+                    <IconButton
+                      icon={state.copied ? "check" : "copy"}
+                      variant="secondary"
+                      class="rounded-l-none"
+                      onClick={copyLink}
+                      disabled={state.unshare}
+                    />
+                  </Tooltip>
+                </Show>
+              </div>
             </div>
           </Portal>
         )}

@@ -55,11 +55,6 @@ export namespace Server {
     return _url ?? new URL("http://localhost:4096")
   }
 
-  export const Event = {
-    Connected: BusEvent.define("server.connected", z.object({})),
-    Disposed: BusEvent.define("global.disposed", z.object({})),
-  }
-
   const app = new Hono()
   export const App: () => Hono = lazy(
     () =>
@@ -564,7 +559,7 @@ export namespace Server {
       opts.hostname !== "localhost" &&
       opts.hostname !== "::1"
     if (shouldPublishMDNS) {
-      MDNS.publish(server.port!, `opencode-${server.port!}`)
+      MDNS.publish(server.port!)
     } else if (opts.mdns) {
       log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
     }
