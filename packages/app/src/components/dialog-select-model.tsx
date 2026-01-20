@@ -38,8 +38,6 @@ const ModelList: Component<{
       sortBy={(a, b) => a.name.localeCompare(b.name)}
       groupBy={(x) => x.provider.name}
       sortGroupsBy={(a, b) => {
-        if (a.category === "Recent" && b.category !== "Recent") return -1
-        if (b.category === "Recent" && a.category !== "Recent") return 1
         const aProvider = a.items[0].provider.id
         const bProvider = b.items[0].provider.id
         if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1

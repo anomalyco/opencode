@@ -9,8 +9,8 @@ This report documents the remaining user-facing strings in `packages/app/src` th
 ## Current State
 
 - The app uses `useLanguage().t("...")` with dictionaries in `packages/app/src/i18n/en.ts` and `packages/app/src/i18n/zh.ts`.
-- Recent progress (already translated): `packages/app/src/pages/home.tsx`, `packages/app/src/pages/layout.tsx`, `packages/app/src/pages/session.tsx`, `packages/app/src/components/prompt-input.tsx`, `packages/app/src/components/dialog-connect-provider.tsx`, `packages/app/src/components/session/session-header.tsx`, `packages/app/src/pages/error.tsx`, `packages/app/src/components/session/session-new-view.tsx`, `packages/app/src/components/session-context-usage.tsx`, `packages/app/src/components/session/session-context-tab.tsx` (plus new keys added in both dictionaries).
-- Dictionary parity check: `en.ts` and `zh.ts` currently contain the same key set (362 keys each; no missing or extra keys).
+- Recent progress (already translated): `packages/app/src/pages/home.tsx`, `packages/app/src/pages/layout.tsx`, `packages/app/src/pages/session.tsx`, `packages/app/src/components/prompt-input.tsx`, `packages/app/src/components/dialog-connect-provider.tsx`, `packages/app/src/components/session/session-header.tsx`, `packages/app/src/pages/error.tsx`, `packages/app/src/components/session/session-new-view.tsx`, `packages/app/src/components/session-context-usage.tsx`, `packages/app/src/components/session/session-context-tab.tsx`, `packages/app/src/components/session-lsp-indicator.tsx`, `packages/app/src/components/session/session-sortable-tab.tsx`, `packages/app/src/components/titlebar.tsx`, `packages/app/src/components/dialog-select-model.tsx`, `packages/app/src/context/notification.tsx`, `packages/app/src/context/global-sync.tsx`, `packages/app/src/context/file.tsx`, `packages/app/src/context/local.tsx`, `packages/app/src/utils/prompt.ts` (plus new keys added in both dictionaries).
+- Dictionary parity check: `en.ts` and `zh.ts` currently contain the same key set (371 keys each; no missing or extra keys).
 
 ## Methodology
 
@@ -105,36 +105,33 @@ Completed (2026-01-20):
 
 File: `packages/app/src/components/session-lsp-indicator.tsx`
 
-**Untranslated strings**
-- Tooltip: "No LSP servers"
-- Label suffix: "{connected} LSP" (acronym likely fine; the framing text should be localized)
+Completed (2026-01-20):
+
+- Localized tooltip/label framing via `lsp.*` keys (kept the acronym itself).
 
 ### 9) Session Tab Close Tooltip
 
 File: `packages/app/src/components/session/session-sortable-tab.tsx`
 
-**Untranslated strings**
-- Tooltip: "Close tab"
+Completed (2026-01-20):
 
-Note: you already have `common.closeTab`.
+- Reused `common.closeTab` for the close tooltip.
 
 ### 10) Titlebar Tooltip
 
 File: `packages/app/src/components/titlebar.tsx`
 
-**Untranslated strings**
-- "Toggle sidebar"
+Completed (2026-01-20):
 
-Note: can likely reuse `command.sidebar.toggle`.
+- Reused `command.sidebar.toggle` for the tooltip title.
 
 ### 11) Model Selection "Recent" Group
 
 File: `packages/app/src/components/dialog-select-model.tsx`
 
-**Untranslated / fragile string**
-- Hardcoded category name comparisons against "Recent".
+Completed (2026-01-20):
 
-Recommendation: introduce a key (e.g. `model.group.recent`) and ensure both the grouping label and the comparator use the localized label, or replace the comparator with an internal enum.
+- Removed the unused hardcoded "Recent" group comparisons to avoid locale-coupled sorting.
 
 ### 12) Select Server Dialog Placeholder (Optional)
 
@@ -150,22 +147,18 @@ This is an example URL; you may choose to keep it as-is even after translating s
 
 File: `packages/app/src/context/notification.tsx`
 
-**Untranslated notification titles / fallback copy**
-- "Response ready"
-- "Session error"
-- Fallback description: "An error occurred"
+Completed (2026-01-20):
 
-Recommendation: `notification.session.*` namespace (separate from the permission/question notifications already added).
+- Localized OS notification titles/fallback copy via `notification.session.*` keys.
 
 ### 14) Global Sync (Bootstrap Errors + Toast)
 
 File: `packages/app/src/context/global-sync.tsx`
 
-**Untranslated toast title**
-- `Failed to load sessions for ${project}`
+Completed (2026-01-20):
 
-**Untranslated fatal init error**
-- `Could not connect to server. Is there a server running at \`${globalSDK.url}\`?`
+- Localized the sessions list failure toast via `toast.session.listFailed.title`.
+- Localized the bootstrap connection error via `error.globalSync.connectFailed`.
 
 ### 15) File Load Failure Toast (Duplicate)
 
@@ -173,10 +166,9 @@ Files:
 - `packages/app/src/context/file.tsx`
 - `packages/app/src/context/local.tsx`
 
-**Untranslated toast title**
-- "Failed to load file"
+Completed (2026-01-20):
 
-Recommendation: create one shared key (e.g. `toast.file.loadFailed.title`) and reuse it in both contexts.
+- Introduced `toast.file.loadFailed.title` and reused it in both contexts.
 
 ### 16) Terminal Naming (Tricky)
 
@@ -195,9 +187,9 @@ Recommendation:
 
 File: `packages/app/src/utils/prompt.ts`
 
-- Default filename fallback: "attachment"
+Completed (2026-01-20):
 
-Recommendation: `common.attachment` or `prompt.attachment.defaultFilename`.
+- Added `common.attachment` and plumbed it into `extractPromptFromParts(...)` as `opts.attachmentName`.
 
 ### 18) Dev-only Root Mount Error
 
@@ -209,18 +201,9 @@ This is only thrown in DEV and is more of a developer diagnostic. Optional to tr
 
 ## Prioritized Implementation Plan
 
-1. Small stragglers:
-   - `packages/app/src/components/session-lsp-indicator.tsx`
-   - `packages/app/src/components/session/session-sortable-tab.tsx`
-   - `packages/app/src/components/titlebar.tsx`
-   - `packages/app/src/components/dialog-select-model.tsx`
-   - `packages/app/src/components/dialog-select-server.tsx` (optional URL placeholder)
-2. Context modules:
-   - `packages/app/src/context/notification.tsx`
-   - `packages/app/src/context/global-sync.tsx`
-   - `packages/app/src/context/file.tsx` + `packages/app/src/context/local.tsx`
-   - `packages/app/src/utils/prompt.ts`
-3. Decide on the terminal naming approach (`packages/app/src/context/terminal.tsx`).
+1. Decide on the terminal naming approach (`packages/app/src/context/terminal.tsx`).
+2. Optional: `packages/app/src/components/dialog-select-server.tsx` placeholder example URL.
+3. Optional: `packages/app/src/entry.tsx` dev-only root mount error.
 
 ## Suggested Key Naming Conventions
 
@@ -243,19 +226,10 @@ Pages:
 - (none)
 
 Components:
-- `packages/app/src/components/session-lsp-indicator.tsx`
-- `packages/app/src/components/session/session-sortable-tab.tsx`
-- `packages/app/src/components/titlebar.tsx`
-- `packages/app/src/components/dialog-select-model.tsx`
 - `packages/app/src/components/dialog-select-server.tsx` (optional URL placeholder)
 
 Context:
-- `packages/app/src/context/notification.tsx`
-- `packages/app/src/context/global-sync.tsx`
-- `packages/app/src/context/file.tsx`
-- `packages/app/src/context/local.tsx`
 - `packages/app/src/context/terminal.tsx` (naming)
 
 Utils:
-- `packages/app/src/utils/prompt.ts`
 - `packages/app/src/entry.tsx` (dev-only)

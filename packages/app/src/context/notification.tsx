@@ -4,6 +4,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSDK } from "./global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { usePlatform } from "@/context/platform"
+import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { Binary } from "@opencode-ai/util/binary"
 import { base64Encode } from "@opencode-ai/util/encode"
@@ -47,6 +48,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const globalSync = useGlobalSync()
     const platform = usePlatform()
     const settings = useSettings()
+    const language = useLanguage()
 
     const [store, setStore, _, ready] = persisted(
       Persist.global("notification", ["notification.v1"]),
@@ -94,9 +96,8 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
           const href = `/${base64Encode(directory)}/session/${sessionID}`
           if (settings.notifications.agent()) {
-            void platform.notify("Response ready", session?.title ?? sessionID, href)
+            void platform.notify(language.t("notification.session.responseReady.title"), session?.title ?? sessionID, href)
           }
-
           break
         }
         case "session.error": {
@@ -115,13 +116,12 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
             session: sessionID ?? "global",
             error,
           })
-
-          const description = session?.title ?? (typeof error === "string" ? error : "An error occurred")
+          const description =
+            session?.title ?? (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
           const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
           if (settings.notifications.errors()) {
-            void platform.notify("Session error", description, href)
+            void platform.notify(language.t("notification.session.error.title"), description, href)
           }
-
           break
         }
       }
