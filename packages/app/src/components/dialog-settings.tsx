@@ -2,6 +2,7 @@ import { Component } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
+import { useLanguage } from "@/context/language"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsPermissions } from "./settings-permissions"
@@ -12,6 +13,8 @@ import { SettingsCommands } from "./settings-commands"
 import { SettingsMcp } from "./settings-mcp"
 
 export const DialogSettings: Component = () => {
+  const language = useLanguage()
+
   return (
     <Dialog size="x-large">
       <Tabs orientation="vertical" variant="settings" defaultValue="general" class="h-full settings-dialog">
@@ -26,15 +29,15 @@ export const DialogSettings: Component = () => {
               "padding-bottom": "12px",
             }}
           >
-            <Tabs.SectionTitle>Desktop</Tabs.SectionTitle>
+            <Tabs.SectionTitle>{language.t("settings.section.desktop")}</Tabs.SectionTitle>
             <div style={{ display: "flex", "flex-direction": "column", gap: "6px", width: "100%" }}>
               <Tabs.Trigger value="general">
                 <Icon name="sliders" />
-                General
+                {language.t("settings.tab.general")}
               </Tabs.Trigger>
               <Tabs.Trigger value="shortcuts">
                 <Icon name="keyboard" />
-                Shortcuts
+                {language.t("settings.tab.shortcuts")}
               </Tabs.Trigger>
             </div>
           </div>
