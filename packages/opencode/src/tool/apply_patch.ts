@@ -12,13 +12,14 @@ import { assertExternalDirectory } from "./external-directory"
 import { trimDiff } from "./edit"
 import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
+import DESCRIPTION from "./apply_patch.txt"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
 })
 
 export const ApplyPatchTool = Tool.define("apply_patch", {
-  description: "Use the `apply_patch` tool to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.",
+  description: DESCRIPTION,
   parameters: PatchParams,
   async execute(params, ctx) {
     if (!params.patchText) {
