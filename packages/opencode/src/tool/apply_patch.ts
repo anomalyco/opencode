@@ -2,7 +2,6 @@ import z from "zod"
 import * as path from "path"
 import * as fs from "fs/promises"
 import { Tool } from "./tool"
-import { FileTime } from "../file/time"
 import { Bus } from "../bus"
 import { FileWatcher } from "../file/watcher"
 import { Instance } from "../project/instance"
@@ -12,13 +11,14 @@ import { assertExternalDirectory } from "./external-directory"
 import { trimDiff } from "./edit"
 import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
+import DESCRIPTION from "./apply_patch.txt"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
 })
 
 export const ApplyPatchTool = Tool.define("apply_patch", {
-  description: "Use the `apply_patch` tool to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.",
+  description: DESCRIPTION,
   parameters: PatchParams,
   async execute(params, ctx) {
     if (!params.patchText) {
@@ -95,8 +95,6 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             throw new Error(`apply_patch verification failed: Failed to read file to update: ${filePath}`)
           }
 
-          // Read file and update time tracking (like edit tool does)
-          await FileTime.assert(ctx.sessionID, filePath)
           const oldContent = await fs.readFile(filePath, "utf-8")
           let newContent = oldContent
 
@@ -200,12 +198,6 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           await fs.unlink(change.filePath)
           changedFiles.push(change.filePath)
           break
-      }
-
-      // Update file time tracking
-      FileTime.read(ctx.sessionID, change.filePath)
-      if (change.movePath) {
-        FileTime.read(ctx.sessionID, change.movePath)
       }
     }
 

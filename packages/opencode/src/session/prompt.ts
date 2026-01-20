@@ -44,6 +44,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { Truncate } from "@/tool/truncation"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -801,10 +802,17 @@ export namespace SessionPrompt {
           }
         }
 
+        const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
+        const metadata = {
+          ...(result.metadata ?? {}),
+          truncated: truncated.truncated,
+          ...(truncated.truncated && { outputPath: truncated.outputPath }),
+        }
+
         return {
           title: "",
-          metadata: result.metadata ?? {},
-          output: textParts.join("\n\n"),
+          metadata,
+          output: truncated.content,
           attachments,
           content: result.content, // directly return content to preserve ordering when outputting to model
         }
@@ -1701,6 +1709,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         ? Provider.parseModel(input.model)
         : await lastModel(input.sessionID)
       : taskModel
+
+    await Plugin.trigger(
+      "command.execute.before",
+      {
+        command: input.command,
+        sessionID: input.sessionID,
+        arguments: input.arguments,
+      },
+      { parts },
+    )
 
     const result = (await prompt({
       sessionID: input.sessionID,

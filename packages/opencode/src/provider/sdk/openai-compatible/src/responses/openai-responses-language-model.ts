@@ -815,13 +815,19 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
     // flag that checks if there have been client-side tool calls (not executed by openai)
     let hasFunctionCall = false
 
+    // Track reasoning by output_index instead of item_id
+    // GitHub Copilot rotates encrypted item IDs on every event
     const activeReasoning: Record<
-      string,
+      number,
       {
+        canonicalId: string // the item.id from output_item.added
         encryptedContent?: string | null
         summaryParts: number[]
       }
     > = {}
+
+    // Track current active reasoning output_index for correlating summary events
+    let currentReasoningOutputIndex: number | null = null
 
     // Track a stable text part id for the current assistant message.
     // Copilot may change item_id across text deltas; normalize to one id.
@@ -933,10 +939,12 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                   },
                 })
               } else if (isResponseOutputItemAddedReasoningChunk(value)) {
-                activeReasoning[value.item.id] = {
+                activeReasoning[value.output_index] = {
+                  canonicalId: value.item.id,
                   encryptedContent: value.item.encrypted_content,
                   summaryParts: [0],
                 }
+                currentReasoningOutputIndex = value.output_index
 
                 controller.enqueue({
                   type: "reasoning-start",
@@ -1091,22 +1099,25 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                   currentTextId = null
                 }
               } else if (isResponseOutputItemDoneReasoningChunk(value)) {
-                const activeReasoningPart = activeReasoning[value.item.id]
+                const activeReasoningPart = activeReasoning[value.output_index]
                 if (activeReasoningPart) {
                   for (const summaryIndex of activeReasoningPart.summaryParts) {
                     controller.enqueue({
                       type: "reasoning-end",
-                      id: `${value.item.id}:${summaryIndex}`,
+                      id: `${activeReasoningPart.canonicalId}:${summaryIndex}`,
                       providerMetadata: {
                         openai: {
-                          itemId: value.item.id,
+                          itemId: activeReasoningPart.canonicalId,
                           reasoningEncryptedContent: value.item.encrypted_content ?? null,
                         },
                       },
                     })
                   }
+                  delete activeReasoning[value.output_index]
+                  if (currentReasoningOutputIndex === value.output_index) {
+                    currentReasoningOutputIndex = null
+                  }
                 }
-                delete activeReasoning[value.item.id]
               }
             } else if (isResponseFunctionCallArgumentsDeltaChunk(value)) {
               const toolCall = ongoingToolCalls[value.output_index]
@@ -1198,32 +1209,40 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                 logprobs.push(value.logprobs)
               }
             } else if (isResponseReasoningSummaryPartAddedChunk(value)) {
+              const activeItem =
+                currentReasoningOutputIndex !== null ? activeReasoning[currentReasoningOutputIndex] : null
+
               // the first reasoning start is pushed in isResponseOutputItemAddedReasoningChunk.
-              if (value.summary_index > 0) {
-                activeReasoning[value.item_id]?.summaryParts.push(value.summary_index)
+              if (activeItem && value.summary_index > 0) {
+                activeItem.summaryParts.push(value.summary_index)
 
                 controller.enqueue({
                   type: "reasoning-start",
-                  id: `${value.item_id}:${value.summary_index}`,
+                  id: `${activeItem.canonicalId}:${value.summary_index}`,
                   providerMetadata: {
                     openai: {
-                      itemId: value.item_id,
-                      reasoningEncryptedContent: activeReasoning[value.item_id]?.encryptedContent ?? null,
+                      itemId: activeItem.canonicalId,
+                      reasoningEncryptedContent: activeItem.encryptedContent ?? null,
                     },
                   },
                 })
               }
             } else if (isResponseReasoningSummaryTextDeltaChunk(value)) {
-              controller.enqueue({
-                type: "reasoning-delta",
-                id: `${value.item_id}:${value.summary_index}`,
-                delta: value.delta,
-                providerMetadata: {
-                  openai: {
-                    itemId: value.item_id,
+              const activeItem =
+                currentReasoningOutputIndex !== null ? activeReasoning[currentReasoningOutputIndex] : null
+
+              if (activeItem) {
+                controller.enqueue({
+                  type: "reasoning-delta",
+                  id: `${activeItem.canonicalId}:${value.summary_index}`,
+                  delta: value.delta,
+                  providerMetadata: {
+                    openai: {
+                      itemId: activeItem.canonicalId,
+                    },
                   },
-                },
-              })
+                })
+              }
             } else if (isResponseFinishedChunk(value)) {
               finishReason = mapOpenAIResponseFinishReason({
                 finishReason: value.response.incomplete_details?.reason,
