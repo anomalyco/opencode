@@ -2156,7 +2156,11 @@ export default function Layout(props: ParentProps) {
                   >
                     <>
                       <div class="py-4 px-3">
-                        <TooltipKeybind title="New workspace" keybind={command.keybind("workspace.new")} placement="top">
+                        <TooltipKeybind
+                          title="New workspace"
+                          keybind={command.keybind("workspace.new")}
+                          placement="top"
+                        >
                           <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
                             New workspace
                           </Button>

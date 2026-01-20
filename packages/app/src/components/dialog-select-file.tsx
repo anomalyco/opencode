@@ -34,7 +34,14 @@ export function DialogSelectFile() {
   const view = createMemo(() => layout.view(sessionKey()))
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const [grouped, setGrouped] = createSignal(false)
-  const common = ["session.new", "workspace.new", "session.previous", "session.next", "terminal.toggle", "review.toggle"]
+  const common = [
+    "session.new",
+    "workspace.new",
+    "session.previous",
+    "session.next",
+    "terminal.toggle",
+    "review.toggle",
+  ]
   const limit = 5
 
   const allowed = createMemo(() =>
