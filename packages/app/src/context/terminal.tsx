@@ -38,6 +38,22 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
     }),
   )
 
+  const unsub = sdk.event.on("pty.exited", (event) => {
+    const id = event.properties.id
+    if (!store.all.some((x) => x.id === id)) return
+    batch(() => {
+      setStore(
+        "all",
+        store.all.filter((x) => x.id !== id),
+      )
+      if (store.active === id) {
+        const remaining = store.all.filter((x) => x.id !== id)
+        setStore("active", remaining[0]?.id)
+      }
+    })
+  })
+  onCleanup(unsub)
+
   return {
     ready,
     all: createMemo(() => Object.values(store.all)),

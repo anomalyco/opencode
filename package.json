@@ -28,6 +28,7 @@
       "@kobalte/core": "0.13.11",
       "@types/luxon": "3.7.1",
       "@types/node": "22.13.9",
+      "@types/semver": "7.7.1",
       "@tsconfig/node22": "22.0.2",
       "@tsconfig/bun": "1.0.9",
       "@cloudflare/workers-types": "4.20251008.0",
@@ -66,6 +67,7 @@
     "@tsconfig/bun": "catalog:",
     "husky": "9.1.7",
     "prettier": "3.6.2",
+    "semver": "^7.6.0",
     "sst": "3.17.23",
     "turbo": "2.5.6"
   },

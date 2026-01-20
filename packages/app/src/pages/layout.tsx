@@ -122,6 +122,17 @@ export default function Layout(props: ParentProps) {
     active: "" as string,
     value: "",
   })
+  const [busyWorkspaces, setBusyWorkspaces] = createSignal<Set<string>>(new Set())
+  const setBusy = (directory: string, value: boolean) => {
+    const key = workspaceKey(directory)
+    setBusyWorkspaces((prev) => {
+      const next = new Set(prev)
+      if (value) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }
+  const isBusy = (directory: string) => busyWorkspaces().has(workspaceKey(directory))
   const editorRef = { current: undefined as HTMLInputElement | undefined }
 
   const autoselecting = createMemo(() => {
@@ -141,7 +152,6 @@ export default function Layout(props: ParentProps) {
   const openEditor = (id: string, value: string) => {
     if (!id) return
     setEditor({ active: id, value })
-    queueMicrotask(() => editorRef.current?.focus())
   }
 
   const closeEditor = () => setEditor({ active: "", value: "" })
@@ -210,6 +220,7 @@ export default function Layout(props: ParentProps) {
         <InlineInput
           ref={(el) => {
             editorRef.current = el
+            requestAnimationFrame(() => el.focus())
           }}
           value={editorValue()}
           class={props.class}
@@ -563,9 +574,13 @@ export default function Layout(props: ParentProps) {
     if (!project) return [] as Session[]
     if (workspaceSetting()) {
       const dirs = workspaceIds(project)
+      const activeDir = params.dir ? base64Decode(params.dir) : ""
       const result: Session[] = []
       for (const dir of dirs) {
-        const [dirStore] = globalSync.child(dir)
+        const expanded = store.workspaceExpanded[dir] ?? dir === project.worktree
+        const active = dir === activeDir
+        if (!expanded && !active) continue
+        const [dirStore] = globalSync.child(dir, { bootstrap: true })
         const dirSessions = dirStore.session
           .filter((session) => session.directory === dirStore.path.directory)
           .filter((session) => !session.parentID && !session.time?.archived)
@@ -817,6 +832,13 @@ export default function Layout(props: ParentProps) {
         onSelect: () => openServer(),
       },
       {
+        id: "settings.open",
+        title: "Open settings",
+        category: "Settings",
+        keybind: "mod+comma",
+        onSelect: () => openSettings(),
+      },
+      {
         id: "session.previous",
         title: "Previous session",
         category: "Session",
@@ -991,6 +1013,8 @@ export default function Layout(props: ParentProps) {
     if (!current) return
     if (directory === current.worktree) return
 
+    setBusy(directory, true)
+
     const result = await globalSDK.client.worktree
       .remove({ directory: current.worktree, worktreeRemoveInput: { directory } })
       .then((x) => x.data)
@@ -1001,6 +1025,8 @@ export default function Layout(props: ParentProps) {
         })
         return false
       })
+
+    setBusy(directory, false)
 
     if (!result) return
 
@@ -1017,12 +1043,7 @@ export default function Layout(props: ParentProps) {
     if (!current) return
     if (directory === current.worktree) return
 
-    const progress = showToast({
-      persistent: true,
-      title: "Resetting workspace",
-      description: "This may take a minute.",
-    })
-    const dismiss = () => toaster.dismiss(progress)
+    setBusy(directory, true)
 
     const sessions = await globalSDK.client.session
       .list({ directory })
@@ -1033,7 +1054,6 @@ export default function Layout(props: ParentProps) {
       .reset({ directory: current.worktree, worktreeResetInput: { directory } })
       .then((x) => x.data)
       .catch((err) => {
-        dismiss()
         showToast({
           title: "Failed to reset workspace",
           description: errorMessage(err),
@@ -1042,7 +1062,7 @@ export default function Layout(props: ParentProps) {
       })
 
     if (!result) {
-      dismiss()
+      setBusy(directory, false)
       return
     }
 
@@ -1062,7 +1082,8 @@ export default function Layout(props: ParentProps) {
     )
 
     await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
-    dismiss()
+
+    setBusy(directory, false)
 
     const href = `/${base64Encode(directory)}/session`
     navigate(href)
@@ -1238,8 +1259,12 @@ export default function Layout(props: ParentProps) {
     if (!project) return
 
     if (workspaceSetting()) {
+      const activeDir = params.dir ? base64Decode(params.dir) : ""
       const dirs = [project.worktree, ...(project.sandboxes ?? [])]
       for (const directory of dirs) {
+        const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
+        const active = directory === activeDir
+        if (!expanded && !active) continue
         globalSync.project.loadSessions(directory)
       }
       return
@@ -1473,7 +1498,7 @@ export default function Layout(props: ParentProps) {
             </Tooltip>
           }
         >
-          <HoverCard openDelay={150} closeDelay={100} placement="right-start" gutter={28} trigger={item}>
+          <HoverCard openDelay={1000} closeDelay={0} placement="right-start" gutter={28} trigger={item}>
             <Show when={hoverReady()} fallback={<div class="text-12-regular text-text-weak">Loading messages…</div>}>
               <MessageNav
                 messages={hoverMessages() ?? []}
@@ -1558,7 +1583,7 @@ export default function Layout(props: ParentProps) {
 
   const SortableWorkspace = (props: { directory: string; project: LocalProject; mobile?: boolean }): JSX.Element => {
     const sortable = createSortable(props.directory)
-    const [workspaceStore, setWorkspaceStore] = globalSync.child(props.directory)
+    const [workspaceStore, setWorkspaceStore] = globalSync.child(props.directory, { bootstrap: false })
     const [menuOpen, setMenuOpen] = createSignal(false)
     const [pendingRename, setPendingRename] = createSignal(false)
     const slug = createMemo(() => base64Encode(props.directory))
@@ -1569,14 +1594,20 @@ export default function Layout(props: ParentProps) {
         .toSorted(sortSessions),
     )
     const local = createMemo(() => props.directory === props.project.worktree)
+    const active = createMemo(() => {
+      const current = params.dir ? base64Decode(params.dir) : ""
+      return current === props.directory
+    })
     const workspaceValue = createMemo(() => {
       const branch = workspaceStore.vcs?.branch
       const name = branch ?? getFilename(props.directory)
       return workspaceName(props.directory, props.project.id, branch) ?? name
     })
-    const open = createMemo(() => store.workspaceExpanded[props.directory] ?? true)
+    const open = createMemo(() => store.workspaceExpanded[props.directory] ?? local())
+    const boot = createMemo(() => open() || active())
     const loading = createMemo(() => open() && workspaceStore.status !== "complete" && sessions().length === 0)
     const hasMore = createMemo(() => local() && workspaceStore.sessionTotal > workspaceStore.session.length)
+    const busy = createMemo(() => isBusy(props.directory))
     const loadMore = async () => {
       if (!local()) return
       setWorkspaceStore("limit", (limit) => limit + 5)
@@ -1591,10 +1622,17 @@ export default function Layout(props: ParentProps) {
       if (editorOpen(`workspace:${props.directory}`)) closeEditor()
     }
 
+    createEffect(() => {
+      if (!boot()) return
+      globalSync.child(props.directory, { bootstrap: true })
+    })
+
     const header = () => (
       <div class="flex items-center gap-1 min-w-0 flex-1">
         <div class="flex items-center justify-center shrink-0 size-6">
-          <Icon name="branch" size="small" />
+          <Show when={busy()} fallback={<Icon name="branch" size="small" />}>
+            <Spinner class="size-[15px]" />
+          </Show>
         </div>
         <span class="text-14-medium text-text-base shrink-0">{local() ? "local" : "sandbox"} :</span>
         <Show
@@ -1630,8 +1668,14 @@ export default function Layout(props: ParentProps) {
     )
 
     return (
-      // @ts-ignore
-      <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
+      <div
+        // @ts-ignore
+        use:sortable
+        classList={{
+          "opacity-30": sortable.isActiveDraggable,
+          "opacity-50 pointer-events-none": busy(),
+        }}
+      >
         <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
           <div class="px-2 py-1">
             <div class="group/workspace relative">
@@ -1681,13 +1725,13 @@ export default function Layout(props: ParentProps) {
                           <DropdownMenu.ItemLabel>Rename</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
-                          disabled={local()}
+                          disabled={local() || busy()}
                           onSelect={() => dialog.show(() => <DialogResetWorkspace directory={props.directory} />)}
                         >
                           <DropdownMenu.ItemLabel>Reset</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
-                          disabled={local()}
+                          disabled={local() || busy()}
                           onSelect={() => dialog.show(() => <DialogDeleteWorkspace directory={props.directory} />)}
                         >
                           <DropdownMenu.ItemLabel>Delete</DropdownMenu.ItemLabel>
@@ -1804,6 +1848,7 @@ export default function Layout(props: ParentProps) {
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
         <HoverCard
+          open={open()}
           openDelay={0}
           closeDelay={0}
           placement="right-start"
@@ -1856,20 +1901,22 @@ export default function Layout(props: ParentProps) {
                 </For>
               </Show>
             </div>
-            <Show when={!selected()}>
-              <div class="px-2 py-2 border-t border-border-weak-base">
-                <Button
-                  variant="ghost"
-                  class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
-                  onClick={() => {
-                    layout.sidebar.open()
-                    navigateToProject(props.project.worktree)
-                  }}
-                >
-                  View all sessions
-                </Button>
-              </div>
-            </Show>
+            <div class="px-2 py-2 border-t border-border-weak-base">
+              <Button
+                variant="ghost"
+                class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
+                onClick={() => {
+                  if (selected()) {
+                    setOpen(false)
+                    return
+                  }
+                  layout.sidebar.open()
+                  navigateToProject(props.project.worktree)
+                }}
+              >
+                View all sessions
+              </Button>
+            </div>
           </div>
         </HoverCard>
       </div>
@@ -1961,6 +2008,17 @@ export default function Layout(props: ParentProps) {
       navigate(`/${base64Encode(created.directory)}/session`)
     }
 
+    command.register(() => [
+      {
+        id: "workspace.new",
+        title: "New workspace",
+        category: "Workspace",
+        keybind: "mod+shift+w",
+        disabled: !layout.sidebar.workspaces(project()?.worktree ?? "")(),
+        onSelect: createWorkspace,
+      },
+    ])
+
     const homedir = createMemo(() => sync.data.path.home)
 
     return (
@@ -2001,9 +2059,13 @@ export default function Layout(props: ParentProps) {
             </DragDropProvider>
           </div>
           <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
-            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Settings">
+            <TooltipKeybind
+              placement={sidebarProps.mobile ? "bottom" : "right"}
+              title="Settings"
+              keybind={command.keybind("settings.open")}
+            >
               <IconButton icon="settings-gear" variant="ghost" size="large" onClick={openSettings} />
-            </Tooltip>
+            </TooltipKeybind>
             <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Help">
               <IconButton
                 icon="help"
@@ -2086,17 +2148,19 @@ export default function Layout(props: ParentProps) {
                     fallback={
                       <>
                         <div class="py-4 px-3">
-                          <Button
-                            size="large"
-                            icon="plus-small"
-                            class="w-full"
-                            onClick={() => {
-                              navigate(`/${base64Encode(p.worktree)}/session`)
-                              layout.mobileSidebar.hide()
-                            }}
-                          >
-                            New session
-                          </Button>
+                          <TooltipKeybind title="New session" keybind={command.keybind("session.new")} placement="top">
+                            <Button
+                              size="large"
+                              icon="plus-small"
+                              class="w-full"
+                              onClick={() => {
+                                navigate(`/${base64Encode(p.worktree)}/session`)
+                                layout.mobileSidebar.hide()
+                              }}
+                            >
+                              New session
+                            </Button>
+                          </TooltipKeybind>
                         </div>
                         <div class="flex-1 min-h-0">
                           <LocalWorkspace project={p} mobile={sidebarProps.mobile} />
@@ -2106,9 +2170,15 @@ export default function Layout(props: ParentProps) {
                   >
                     <>
                       <div class="py-4 px-3">
-                        <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
-                          New workspace
-                        </Button>
+                        <TooltipKeybind
+                          title="New workspace"
+                          keybind={command.keybind("workspace.new")}
+                          placement="top"
+                        >
+                          <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
+                            New workspace
+                          </Button>
+                        </TooltipKeybind>
                       </div>
                       <div class="relative flex-1 min-h-0">
                         <DragDropProvider

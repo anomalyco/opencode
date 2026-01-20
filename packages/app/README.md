@@ -31,18 +31,20 @@ Your app is ready to be deployed!
 
 ## E2E Testing
 
-The Playwright runner expects the app already running at `http://localhost:3000`.
+Playwright starts the Vite dev server automatically via `webServer`, and UI tests need an opencode backend (defaults to `localhost:4096`).
+Use the local runner to create a temp sandbox, seed data, and run the tests.
 
 ```bash
-bun add -D @playwright/test
 bunx playwright install
-bun run test:e2e
+bun run test:e2e:local
+bun run test:e2e:local -- --grep "settings"
 ```
 
 Environment options:
 
-- `PLAYWRIGHT_BASE_URL` (default: `http://localhost:3000`)
-- `PLAYWRIGHT_PORT` (default: `3000`)
+- `PLAYWRIGHT_SERVER_HOST` / `PLAYWRIGHT_SERVER_PORT` (backend address, default: `localhost:4096`)
+- `PLAYWRIGHT_PORT` (Vite dev server port, default: `3000`)
+- `PLAYWRIGHT_BASE_URL` (override base URL, default: `http://localhost:<PLAYWRIGHT_PORT>`)
 
 ## Deployment
 

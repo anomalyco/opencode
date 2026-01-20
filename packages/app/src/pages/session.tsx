@@ -168,6 +168,7 @@ export default function Page() {
   const prompt = usePrompt()
   const permission = usePermission()
   const [pendingMessage, setPendingMessage] = createSignal<string | undefined>(undefined)
+  const [pendingHash, setPendingHash] = createSignal<string | undefined>(undefined)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
@@ -387,6 +388,19 @@ export default function Page() {
 
   createEffect(
     on(
+      () => terminal.all().length,
+      (count, prevCount) => {
+        if (prevCount !== undefined && prevCount > 0 && count === 0) {
+          if (view().terminal.opened()) {
+            view().terminal.toggle()
+          }
+        }
+      },
+    ),
+  )
+
+  createEffect(
+    on(
       () => visibleUserMessages().at(-1)?.id,
       (lastId, prevLastId) => {
         if (lastId && prevLastId && lastId > prevLastId) {
@@ -456,7 +470,7 @@ export default function Page() {
       title: "New terminal",
       description: "Create a new terminal tab",
       category: "Terminal",
-      keybind: "ctrl+shift+`",
+      keybind: "ctrl+alt+t",
       onSelect: () => terminal.new(),
     },
     {
@@ -827,13 +841,27 @@ export default function Page() {
 
   const autoScroll = createAutoScroll({
     working: () => true,
+    overflowAnchor: "auto",
   })
+
+  // When the user returns to the bottom, treat the active message as "latest".
+  createEffect(
+    on(
+      autoScroll.userScrolled,
+      (scrolled) => {
+        if (scrolled) return
+        setStore("messageId", undefined)
+      },
+      { defer: true },
+    ),
+  )
 
   createEffect(
     on(
       isWorking,
       (working, prev) => {
         if (!working || prev) return
+        if (autoScroll.userScrolled()) return
         autoScroll.forceScrollToBottom()
       },
       { defer: true },
@@ -977,63 +1005,39 @@ export default function Page() {
 
     const a = el.getBoundingClientRect()
     const b = root.getBoundingClientRect()
-    const top = a.top - b.top + root.scrollTop
-    root.scrollTo({ top, behavior })
+    const offset = (info()?.title ? 40 : 0) + 12
+    const top = a.top - b.top + root.scrollTop - offset
+    root.scrollTo({ top: top > 0 ? top : 0, behavior })
     return true
   }
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
+    // Navigating to a specific message should always pause auto-follow.
+    autoScroll.pause()
     setActiveMessage(message)
+    updateHash(message.id)
 
     const msgs = visibleUserMessages()
     const index = msgs.findIndex((m) => m.id === message.id)
     if (index !== -1 && index < store.turnStart) {
       setStore("turnStart", index)
       scheduleTurnBackfill()
-
-      requestAnimationFrame(() => {
-        const el = document.getElementById(anchor(message.id))
-        if (!el) {
-          requestAnimationFrame(() => {
-            const next = document.getElementById(anchor(message.id))
-            if (!next) return
-            scrollToElement(next, behavior)
-          })
-          return
-        }
-        scrollToElement(el, behavior)
-      })
-
-      updateHash(message.id)
-      return
     }
 
-    const el = document.getElementById(anchor(message.id))
-    if (!el) {
-      updateHash(message.id)
-      requestAnimationFrame(() => {
-        const next = document.getElementById(anchor(message.id))
-        if (!next) return
-        if (!scrollToElement(next, behavior)) return
-      })
-      return
+    const id = anchor(message.id)
+    const attempt = (tries: number) => {
+      const el = document.getElementById(id)
+      if (el && scrollToElement(el, behavior)) return
+      if (tries >= 8) return
+      requestAnimationFrame(() => attempt(tries + 1))
     }
-    if (scrollToElement(el, behavior)) {
-      updateHash(message.id)
-      return
-    }
-
-    requestAnimationFrame(() => {
-      const next = document.getElementById(anchor(message.id))
-      if (!next) return
-      if (!scrollToElement(next, behavior)) return
-    })
-    updateHash(message.id)
+    attempt(0)
   }
 
   const applyHash = (behavior: ScrollBehavior) => {
     const hash = window.location.hash.slice(1)
     if (!hash) {
+      setPendingHash(undefined)
       autoScroll.forceScrollToBottom()
       return
     }
@@ -1042,21 +1046,25 @@ export default function Page() {
     if (match) {
       const msg = visibleUserMessages().find((m) => m.id === match[1])
       if (msg) {
+        setPendingHash(undefined)
         scrollToMessage(msg, behavior)
         return
       }
 
       // If we have a message hash but the message isn't loaded/rendered yet,
       // don't fall back to "bottom". We'll retry once messages arrive.
+      setPendingHash(match[1])
       return
     }
 
     const target = document.getElementById(hash)
     if (target) {
+      setPendingHash(undefined)
       scrollToElement(target, behavior)
       return
     }
 
+    setPendingHash(undefined)
     autoScroll.forceScrollToBottom()
   }
 
@@ -1114,20 +1122,14 @@ export default function Page() {
     visibleUserMessages().length
     store.turnStart
 
-    const targetId =
-      pendingMessage() ??
-      (() => {
-        const hash = window.location.hash.slice(1)
-        const match = hash.match(/^message-(.+)$/)
-        if (!match) return undefined
-        return match[1]
-      })()
+    const targetId = pendingMessage() ?? pendingHash()
     if (!targetId) return
     if (store.messageId === targetId) return
 
     const msg = visibleUserMessages().find((m) => m.id === targetId)
     if (!msg) return
     if (pendingMessage() === targetId) setPendingMessage(undefined)
+    if (pendingHash() === targetId) setPendingHash(undefined)
     requestAnimationFrame(() => scrollToMessage(msg, "auto"))
   })
 
@@ -1262,7 +1264,7 @@ export default function Page() {
                           <Match when={true}>
                             <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
                               <Mark class="w-14 opacity-10" />
-                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet</div>
+                              <div class="text-14-regular text-text-weak max-w-56">No changes in this session yet</div>
                             </div>
                           </Match>
                         </Switch>
@@ -1270,13 +1272,29 @@ export default function Page() {
                     }
                   >
                     <div class="relative w-full h-full min-w-0">
+                      <Show when={autoScroll.userScrolled()}>
+                        <div class="absolute right-4 md:right-6 bottom-[calc(var(--prompt-height,8rem)+16px)] z-[60] pointer-events-none">
+                          <Button
+                            variant="secondary"
+                            size="small"
+                            icon="chevron-down"
+                            class="pointer-events-auto shadow-sm"
+                            onClick={() => {
+                              setStore("messageId", undefined)
+                              autoScroll.forceScrollToBottom()
+                              window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
+                            }}
+                          >
+                            Jump to latest
+                          </Button>
+                        </div>
+                      </Show>
                       <div
                         ref={setScrollRef}
                         onScroll={(e) => {
                           autoScroll.handleScroll()
-                          if (isDesktop()) scheduleScrollSpy(e.currentTarget)
+                          if (isDesktop() && autoScroll.userScrolled()) scheduleScrollSpy(e.currentTarget)
                         }}
-                        onClick={autoScroll.handleInteraction}
                         class="relative min-w-0 w-full h-full overflow-y-auto no-scrollbar"
                         style={{ "--session-title-height": info()?.title ? "40px" : "0px" }}
                       >
@@ -1534,7 +1552,7 @@ export default function Page() {
                           <Match when={true}>
                             <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
                               <Mark class="w-14 opacity-10" />
-                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet</div>
+                              <div class="text-14-regular text-text-weak max-w-56">No changes in this session yet</div>
                             </div>
                           </Match>
                         </Switch>

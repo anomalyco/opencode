@@ -379,6 +379,7 @@ export function SessionTurn(
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
+    overflowAnchor: "auto",
   })
 
   createResizeObserver(
