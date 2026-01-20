@@ -37,7 +37,7 @@ export const SettingsGeneral: Component = () => {
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
-      <div class="sticky top-0 z-10 bg-background-base border-b border-border-weak-base">
+      <div class="sticky top-0 z-10">
         <div class="flex flex-col gap-1 p-8 max-w-[720px]">
           <h2 class="text-16-medium text-text-strong">General</h2>
         </div>
