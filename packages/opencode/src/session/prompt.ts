@@ -1627,7 +1627,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       if (position === last) return args.slice(argIndex).join(" ")
       return args[argIndex]
     })
+    const usesArgumentsPlaceholder = templateCommand.includes("$ARGUMENTS")
     let template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
+
+    // If command doesn't explicitly handle arguments (no $N or $ARGUMENTS placeholders)
+    // but user provided arguments, append them to the template
+    if (placeholders.length === 0 && !usesArgumentsPlaceholder && input.arguments.trim()) {
+      template = template + "\n\n" + input.arguments
+    }
 
     const shell = ConfigMarkdown.shell(template)
     if (shell.length > 0) {
