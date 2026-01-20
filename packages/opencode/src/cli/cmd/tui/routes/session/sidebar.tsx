@@ -12,6 +12,10 @@ import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
 
+const SIDEBAR_WIDTH = 42
+const SIDEBAR_PADDING = 2 + 2 + 1 // left + right + inner scrollbox
+const SIDEBAR_CONTENT_WIDTH = SIDEBAR_WIDTH - SIDEBAR_PADDING
+
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
@@ -72,7 +76,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     <Show when={session()}>
       <box
         backgroundColor={theme.backgroundPanel}
-        width={42}
+        width={SIDEBAR_WIDTH}
         height="100%"
         paddingTop={1}
         paddingBottom={1}
@@ -238,10 +242,14 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <Show when={diff().length <= 2 || expanded.diff}>
                   <For each={diff() || []}>
                     {(item) => {
+                      const stats = [item.additions && `+${item.additions}`, item.deletions && `-${item.deletions}`]
+                        .filter(Boolean)
+                        .join(" ")
+                      const fileWidth = SIDEBAR_CONTENT_WIDTH - 2 - stats.length
                       return (
                         <box flexDirection="row" gap={1} justifyContent="space-between">
                           <text fg={theme.textMuted} wrapMode="none">
-                            {item.file}
+                            {Locale.truncateMiddle(item.file, fileWidth)}
                           </text>
                           <box flexDirection="row" gap={1} flexShrink={0}>
                             <Show when={item.additions}>
