@@ -840,13 +840,27 @@ export default function Page() {
 
   const autoScroll = createAutoScroll({
     working: () => true,
+    overflowAnchor: "auto",
   })
+
+  // When the user returns to the bottom, treat the active message as "latest".
+  createEffect(
+    on(
+      autoScroll.userScrolled,
+      (scrolled) => {
+        if (scrolled) return
+        setStore("messageId", undefined)
+      },
+      { defer: true },
+    ),
+  )
 
   createEffect(
     on(
       isWorking,
       (working, prev) => {
         if (!working || prev) return
+        if (autoScroll.userScrolled()) return
         autoScroll.forceScrollToBottom()
       },
       { defer: true },
@@ -990,58 +1004,33 @@ export default function Page() {
 
     const a = el.getBoundingClientRect()
     const b = root.getBoundingClientRect()
-    const top = a.top - b.top + root.scrollTop
-    root.scrollTo({ top, behavior })
+    const offset = (info()?.title ? 40 : 0) + 12
+    const top = a.top - b.top + root.scrollTop - offset
+    root.scrollTo({ top: top > 0 ? top : 0, behavior })
     return true
   }
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
+    // Navigating to a specific message should always pause auto-follow.
+    autoScroll.pause()
     setActiveMessage(message)
+    updateHash(message.id)
 
     const msgs = visibleUserMessages()
     const index = msgs.findIndex((m) => m.id === message.id)
     if (index !== -1 && index < store.turnStart) {
       setStore("turnStart", index)
       scheduleTurnBackfill()
-
-      requestAnimationFrame(() => {
-        const el = document.getElementById(anchor(message.id))
-        if (!el) {
-          requestAnimationFrame(() => {
-            const next = document.getElementById(anchor(message.id))
-            if (!next) return
-            scrollToElement(next, behavior)
-          })
-          return
-        }
-        scrollToElement(el, behavior)
-      })
-
-      updateHash(message.id)
-      return
     }
 
-    const el = document.getElementById(anchor(message.id))
-    if (!el) {
-      updateHash(message.id)
-      requestAnimationFrame(() => {
-        const next = document.getElementById(anchor(message.id))
-        if (!next) return
-        if (!scrollToElement(next, behavior)) return
-      })
-      return
+    const id = anchor(message.id)
+    const attempt = (tries: number) => {
+      const el = document.getElementById(id)
+      if (el && scrollToElement(el, behavior)) return
+      if (tries >= 8) return
+      requestAnimationFrame(() => attempt(tries + 1))
     }
-    if (scrollToElement(el, behavior)) {
-      updateHash(message.id)
-      return
-    }
-
-    requestAnimationFrame(() => {
-      const next = document.getElementById(anchor(message.id))
-      if (!next) return
-      if (!scrollToElement(next, behavior)) return
-    })
-    updateHash(message.id)
+    attempt(0)
   }
 
   const applyHash = (behavior: ScrollBehavior) => {
@@ -1283,13 +1272,29 @@ export default function Page() {
                     }
                   >
                     <div class="relative w-full h-full min-w-0">
+                      <Show when={autoScroll.userScrolled()}>
+                        <div class="absolute right-4 md:right-6 bottom-[calc(var(--prompt-height,8rem)+16px)] z-[60] pointer-events-none">
+                          <Button
+                            variant="secondary"
+                            size="small"
+                            icon="chevron-down"
+                            class="pointer-events-auto shadow-sm"
+                            onClick={() => {
+                              setStore("messageId", undefined)
+                              autoScroll.forceScrollToBottom()
+                              window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
+                            }}
+                          >
+                            Jump to latest
+                          </Button>
+                        </div>
+                      </Show>
                       <div
                         ref={setScrollRef}
                         onScroll={(e) => {
                           autoScroll.handleScroll()
-                          if (isDesktop()) scheduleScrollSpy(e.currentTarget)
+                          if (isDesktop() && autoScroll.userScrolled()) scheduleScrollSpy(e.currentTarget)
                         }}
-                        onClick={autoScroll.handleInteraction}
                         class="relative min-w-0 w-full h-full overflow-y-auto no-scrollbar"
                         style={{ "--session-title-height": info()?.title ? "40px" : "0px" }}
                       >

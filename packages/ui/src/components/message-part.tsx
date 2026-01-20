@@ -817,6 +817,7 @@ ToolRegistry.register({
 
     const autoScroll = createAutoScroll({
       working: () => true,
+      overflowAnchor: "auto",
     })
 
     const childSessionId = () => props.metadata.sessionId as string | undefined
