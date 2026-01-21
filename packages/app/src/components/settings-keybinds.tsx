@@ -1,6 +1,10 @@
 import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
+import fuzzysort from "fuzzysort"
 import { formatKeybind, parseKeybind, useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
@@ -108,6 +112,7 @@ export const SettingsKeybinds: Component = () => {
   const settings = useSettings()
 
   const [active, setActive] = createSignal<string | null>(null)
+  const [filter, setFilter] = createSignal("")
 
   const stop = () => {
     if (!active()) return
@@ -195,6 +200,45 @@ export const SettingsKeybinds: Component = () => {
     }
 
     return out
+  })
+
+  const filtered = createMemo(() => {
+    const query = filter().toLowerCase().trim()
+    if (!query) return grouped()
+
+    const map = list()
+    const out = new Map<KeybindGroup, string[]>()
+
+    for (const group of GROUPS) out.set(group, [])
+
+    const items = Array.from(map.entries()).map(([id, meta]) => ({
+      id,
+      title: meta.title,
+      group: meta.group,
+      keybind: command.keybind(id) || "",
+    }))
+
+    const results = fuzzysort.go(query, items, {
+      keys: ["title", "keybind"],
+      threshold: -10000,
+    })
+
+    for (const result of results) {
+      const item = result.obj
+      const ids = out.get(item.group)
+      if (!ids) continue
+      ids.push(item.id)
+    }
+
+    return out
+  })
+
+  const hasResults = createMemo(() => {
+    for (const group of GROUPS) {
+      const ids = filtered().get(group) ?? []
+      if (ids.length > 0) return true
+    }
+    return false
   })
 
   const used = createMemo(() => {
@@ -313,22 +357,43 @@ export const SettingsKeybinds: Component = () => {
             "linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha) calc(100% - 24px), transparent)",
         }}
       >
-        <div class="flex items-center justify-between gap-4 pt-6 pb-8 max-w-[720px]">
-          <h2 class="text-16-medium text-text-strong">{language.t("settings.shortcuts.title")}</h2>
-          <Button size="small" variant="secondary" onClick={resetAll} disabled={!hasOverrides()}>
-            {language.t("settings.shortcuts.reset.button")}
-          </Button>
+        <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
+          <div class="flex items-center justify-between gap-4">
+            <h2 class="text-16-medium text-text-strong">{language.t("settings.shortcuts.title")}</h2>
+            <Button size="small" variant="secondary" onClick={resetAll} disabled={!hasOverrides()}>
+              {language.t("settings.shortcuts.reset.button")}
+            </Button>
+          </div>
+
+          <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-base">
+            <Icon name="magnifying-glass" class="text-icon-weak-base flex-shrink-0" />
+            <TextField
+              variant="ghost"
+              type="text"
+              value={filter()}
+              onChange={setFilter}
+              placeholder={language.t("settings.shortcuts.search.placeholder")}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+              class="flex-1"
+            />
+            <Show when={filter()}>
+              <IconButton icon="circle-x" variant="ghost" onClick={() => setFilter("")} />
+            </Show>
+          </div>
         </div>
       </div>
 
       <div class="flex flex-col gap-8 max-w-[720px]">
         <For each={GROUPS}>
           {(group) => (
-            <Show when={(grouped().get(group) ?? []).length > 0}>
+            <Show when={(filtered().get(group) ?? []).length > 0}>
               <div class="flex flex-col gap-1">
                 <h3 class="text-14-medium text-text-strong pb-2">{language.t(groupKey[group])}</h3>
                 <div class="bg-surface-raised-base px-4 rounded-lg">
-                  <For each={grouped().get(group) ?? []}>
+                  <For each={filtered().get(group) ?? []}>
                     {(id) => (
                       <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
                         <span class="text-14-regular text-text-strong">{title(id)}</span>
@@ -357,6 +422,17 @@ export const SettingsKeybinds: Component = () => {
             </Show>
           )}
         </For>
+
+        <Show when={filter() && !hasResults()}>
+          <div class="flex flex-col items-center justify-center py-12 text-center">
+            <span class="text-14-regular text-text-weak">
+              {language.t("settings.shortcuts.search.empty")}
+            </span>
+            <Show when={filter()}>
+              <span class="text-14-regular text-text-strong mt-1">"{filter()}"</span>
+            </Show>
+          </div>
+        </Show>
       </div>
     </div>
   )

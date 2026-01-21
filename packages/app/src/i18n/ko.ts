@@ -465,6 +465,8 @@ export const dict = {
   "settings.shortcuts.conflict.description": "{{keybind}}은(는) 이미 {{titles}}에 할당되어 있습니다.",
   "settings.shortcuts.unassigned": "할당되지 않음",
   "settings.shortcuts.pressKeys": "키 누르기",
+  "settings.shortcuts.search.placeholder": "단축키 검색",
+  "settings.shortcuts.search.empty": "단축키를 찾을 수 없습니다",
 
   "settings.shortcuts.group.general": "일반",
   "settings.shortcuts.group.session": "세션",

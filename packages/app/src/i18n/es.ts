@@ -469,6 +469,8 @@ export const dict = {
   "settings.shortcuts.conflict.description": "{{keybind}} ya está asignado a {{titles}}.",
   "settings.shortcuts.unassigned": "Sin asignar",
   "settings.shortcuts.pressKeys": "Presiona teclas",
+  "settings.shortcuts.search.placeholder": "Buscar atajos",
+  "settings.shortcuts.search.empty": "No se encontraron atajos",
 
   "settings.shortcuts.group.general": "General",
   "settings.shortcuts.group.session": "Sesión",

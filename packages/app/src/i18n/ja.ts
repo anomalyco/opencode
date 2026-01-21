@@ -464,6 +464,8 @@ export const dict = {
   "settings.shortcuts.conflict.description": "{{keybind}} は既に {{titles}} に割り当てられています。",
   "settings.shortcuts.unassigned": "未割り当て",
   "settings.shortcuts.pressKeys": "キーを押してください",
+  "settings.shortcuts.search.placeholder": "ショートカットを検索",
+  "settings.shortcuts.search.empty": "ショートカットが見つかりません",
 
   "settings.shortcuts.group.general": "一般",
   "settings.shortcuts.group.session": "セッション",
