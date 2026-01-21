@@ -22,7 +22,11 @@ export const PlanExitTool = Tool.define("plan_exit", {
   parameters: z.object({}),
   async execute(_params, ctx) {
     const session = await Session.get(ctx.sessionID)
-    const plan = path.relative(Instance.worktree, Session.plan(session))
+    const absolutePlanPath = Session.plan(session)
+    const plan = path.relative(Instance.worktree, absolutePlanPath)
+    const planContent = await Bun.file(absolutePlanPath)
+      .text()
+      .catch(() => "")
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
       questions: [
@@ -36,6 +40,11 @@ export const PlanExitTool = Tool.define("plan_exit", {
           ],
         },
       ],
+      metadata: {
+        planPath: absolutePlanPath,
+        planRelativePath: plan,
+        planContent,
+      },
       tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
     })
 

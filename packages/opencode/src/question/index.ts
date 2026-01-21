@@ -36,6 +36,7 @@ export namespace Question {
       id: Identifier.schema("question"),
       sessionID: Identifier.schema("session"),
       questions: z.array(Info).describe("Questions to ask"),
+      metadata: z.record(z.string(), z.any()).optional().describe("Additional metadata for plugins"),
       tool: z
         .object({
           messageID: z.string(),
@@ -97,6 +98,7 @@ export namespace Question {
   export async function ask(input: {
     sessionID: string
     questions: Info[]
+    metadata?: Record<string, unknown>
     tool?: { messageID: string; callID: string }
   }): Promise<Answer[]> {
     const s = await state()
@@ -109,6 +111,7 @@ export namespace Question {
         id,
         sessionID: input.sessionID,
         questions: input.questions,
+        metadata: input.metadata,
         tool: input.tool,
       }
       s.pending[id] = {

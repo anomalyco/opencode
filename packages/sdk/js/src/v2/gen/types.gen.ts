@@ -584,6 +584,12 @@ export type QuestionRequest = {
    * Questions to ask
    */
   questions: Array<QuestionInfo>
+  /**
+   * Additional metadata for plugins
+   */
+  metadata?: {
+    [key: string]: unknown
+  }
   tool?: {
     messageID: string
     callID: string
