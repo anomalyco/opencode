@@ -9,6 +9,7 @@ import { Storage } from "../storage/storage"
 import { Bus } from "../bus"
 import { SessionPrompt } from "./prompt"
 import { Plan } from "./plan"
+import { SessionSummary } from "./summary"
 
 export namespace SessionRevert {
   const log = Log.create({ service: "session.revert" })
@@ -82,8 +83,20 @@ export namespace SessionRevert {
       }
       // If no planPatches, plan wasn't modified after revert point - keep as-is
 
+      const rangeMessages = all.filter((msg) => msg.info.id >= revert!.messageID)
+      const diffs = await SessionSummary.computeDiff({ messages: rangeMessages })
+      await Storage.write(["session_diff", input.sessionID], diffs)
+      Bus.publish(Session.Event.Diff, {
+        sessionID: input.sessionID,
+        diff: diffs,
+      })
       return Session.update(input.sessionID, (draft) => {
         draft.revert = revert
+        draft.summary = {
+          additions: diffs.reduce((sum, x) => sum + x.additions, 0),
+          deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
+          files: diffs.length,
+        }
       })
     }
     return session

@@ -309,6 +309,7 @@ export class Project extends HeyApiClient {
       name?: string
       icon?: {
         url?: string
+        override?: string
         color?: string
       }
     },

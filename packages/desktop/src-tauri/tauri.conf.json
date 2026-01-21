@@ -19,7 +19,7 @@
         "url": "/",
         "decorations": true,
         "dragDropEnabled": false,
-        "zoomHotkeysEnabled": true,
+        "zoomHotkeysEnabled": false,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "trafficLightPosition": { "x": 12.0, "y": 18.0 }

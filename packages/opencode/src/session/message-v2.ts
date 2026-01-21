@@ -11,6 +11,7 @@ import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
 import { type SystemError } from "bun"
+import type { Provider } from "@/provider/provider"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -441,7 +442,11 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function toModelMessage(input: WithParts[], options?: { tools?: Record<string, unknown> }): ModelMessage[] {
+  export function toModelMessages(
+    input: WithParts[],
+    model: Provider.Model,
+    options?: { tools?: Record<string, unknown> },
+  ): ModelMessage[] {
     const result: UIMessage[] = []
 
     for (const msg of input) {
@@ -485,6 +490,8 @@ export namespace MessageV2 {
       }
 
       if (msg.info.role === "assistant") {
+        const differentModel = `${model.providerID}/${model.api.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
+
         if (
           msg.info.error &&
           !(
@@ -504,7 +511,7 @@ export namespace MessageV2 {
             assistantMessage.parts.push({
               type: "text",
               text: part.text,
-              providerMetadata: part.metadata,
+              ...(differentModel ? {} : { providerMetadata: part.metadata }),
             })
           if (part.type === "step-start")
             assistantMessage.parts.push({
@@ -547,7 +554,7 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
-                callProviderMetadata: part.metadata,
+                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
             }
             if (part.state.status === "error")
@@ -557,7 +564,7 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: part.state.error,
-                callProviderMetadata: part.metadata,
+                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
             // Handle pending/running tool calls to prevent dangling tool_use blocks
             // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
@@ -568,14 +575,14 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: "[Tool execution was interrupted]",
-                callProviderMetadata: part.metadata,
+                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
           }
           if (part.type === "reasoning") {
             assistantMessage.parts.push({
               type: "reasoning",
               text: part.text,
-              providerMetadata: part.metadata,
+              ...(differentModel ? {} : { providerMetadata: part.metadata }),
             })
           }
         }

@@ -231,6 +231,9 @@
                       "url": {
                         "type": "string"
                       },
+                      "override": {
+                        "type": "string"
+                      },
                       "color": {
                         "type": "string"
                       }
@@ -6033,6 +6036,9 @@
               "url": {
                 "type": "string"
               },
+              "override": {
+                "type": "string"
+              },
               "color": {
                 "type": "string"
               }
@@ -6090,6 +6096,34 @@
               }
             },
             "required": ["directory"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.server.connected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "server.connected"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.global.disposed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "global.disposed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
           }
         },
         "required": ["type", "properties"]
@@ -8531,34 +8565,6 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.global.disposed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "global.disposed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {}
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.server.connected": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "server.connected"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {}
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "Event": {
         "anyOf": [
           {
@@ -8572,6 +8578,12 @@
           },
           {
             "$ref": "#/components/schemas/Event.server.instance.disposed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.server.connected"
+          },
+          {
+            "$ref": "#/components/schemas/Event.global.disposed"
           },
           {
             "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
@@ -8692,12 +8704,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.pty.deleted"
-          },
-          {
-            "$ref": "#/components/schemas/Event.global.disposed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.server.connected"
           }
         ]
       },
