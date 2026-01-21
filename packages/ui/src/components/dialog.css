@@ -25,7 +25,7 @@
     position: relative;
     z-index: 50;
     width: min(calc(100vw - 16px), 640px);
-    height: min(calc(100vh - 16px), 512px);
+    height: min(calc(100vh - 16px), 700px);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -41,13 +41,6 @@
       max-height: 100%;
       min-height: 280px;
       overflow: auto;
-
-      /* Hide scrollbar */
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-      &::-webkit-scrollbar {
-        display: none;
-      }
 
       /* padding: 8px; */
       /* padding: 8px 8px 0 8px; */

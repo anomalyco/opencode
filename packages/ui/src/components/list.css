@@ -118,11 +118,7 @@
     animation: scroll;
     animation-timeline: --scroll;
     scroll-timeline: --scroll y;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    &::-webkit-scrollbar {
-      display: none;
-    }
+    padding-bottom: 20px;
 
     [data-slot="list-empty-state"] {
       display: flex;

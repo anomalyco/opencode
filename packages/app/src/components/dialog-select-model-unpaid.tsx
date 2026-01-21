@@ -84,7 +84,7 @@ export const DialogSelectModelUnpaid: Component = () => {
             <div class="px-2 text-14-medium text-text-base">{language.t("dialog.model.unpaid.addMore.title")}</div>
             <div class="w-full">
               <List
-                class="w-full px-0"
+                class="w-full px-0 model-selector-with-scrollbar"
                 key={(x) => x?.id}
                 items={providers.popular}
                 activeIcon="plus-small"

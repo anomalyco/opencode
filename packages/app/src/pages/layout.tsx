@@ -2011,7 +2011,7 @@ export default function Layout(props: ParentProps) {
         ref={(el) => {
           if (!props.mobile) scrollContainerRef = el
         }}
-        class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar"
+        class="size-full flex flex-col py-2 overflow-y-auto"
         style={{ "overflow-anchor": "none" }}
       >
         <nav class="flex flex-col gap-1 px-2">
@@ -2100,7 +2100,7 @@ export default function Layout(props: ParentProps) {
             >
               <DragDropSensors />
               <ConstrainDragXAxis />
-              <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-2 overflow-y-auto no-scrollbar">
+              <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-2 overflow-y-auto">
                 <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
                   <For each={layout.projects.list()}>
                     {(project) => <SortableProject project={project} mobile={sidebarProps.mobile} />}
@@ -2280,7 +2280,7 @@ export default function Layout(props: ParentProps) {
                             ref={(el) => {
                               if (!sidebarProps.mobile) scrollContainerRef = el
                             }}
-                            class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar"
+                            class="size-full flex flex-col py-2 gap-4 overflow-y-auto"
                             style={{ "overflow-anchor": "none" }}
                           >
                             <SortableProvider ids={workspaces()}>

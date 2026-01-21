@@ -1,0 +1,33 @@
+/* Show scrollbar for provider selector */
+.provider-selector-with-scrollbar [data-slot="dialog-content"] {
+  scrollbar-width: thin !important;
+  -ms-overflow-style: auto !important;
+  &::-webkit-scrollbar {
+    display: block !important;
+  }
+}
+
+.provider-selector-with-scrollbar [data-slot="list-scroll"] {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--surface-base) var(--border-base) !important;
+}
+
+.provider-selector-with-scrollbar [data-slot="list-scroll"]::-webkit-scrollbar {
+  width: 8px !important;
+  display: block !important;
+}
+
+.provider-selector-with-scrollbar [data-slot="list-scroll"]::-webkit-scrollbar-track {
+  background: var(--surface-base) !important;
+}
+
+.provider-selector-with-scrollbar [data-slot="list-scroll"]::-webkit-scrollbar-thumb {
+  background: var(--border-base) !important;
+  border-radius: 4px !important;
+}
+
+.provider-selector-with-scrollbar [data-slot="list-scroll"]::-webkit-scrollbar-thumb:hover {
+  background: var(--text-weak) !important;
+}
