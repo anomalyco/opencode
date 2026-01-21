@@ -147,6 +147,9 @@ export namespace Pty {
       log.info("session exited", { id, exitCode })
       session.info.status = "exited"
       Bus.publish(Event.Exited, { id, exitCode })
+      for (const ws of session.subscribers) {
+        ws.close()
+      }
       state().delete(id)
     })
     Bus.publish(Event.Created, { info })

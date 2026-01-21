@@ -1,16 +1,20 @@
 import { createEffect, createMemo, Show } from "solid-js"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { Button } from "@opencode-ai/ui/button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { useTheme } from "@opencode-ai/ui/theme"
 
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
+import { useLanguage } from "@/context/language"
 
 export function Titlebar() {
   const layout = useLayout()
   const platform = usePlatform()
   const command = useCommand()
+  const language = useLanguage()
   const theme = useTheme()
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
@@ -93,22 +97,28 @@ export function Titlebar() {
         <TooltipKeybind
           class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0"}
           placement="bottom"
-          title="Toggle sidebar"
+          title={language.t("command.sidebar.toggle")}
           keybind={command.keybind("sidebar.toggle")}
         >
-          <IconButton
-            icon={layout.sidebar.opened() ? "layout-left" : "layout-right"}
-            variant="ghost"
-            class="size-8 rounded-md"
-            onClick={layout.sidebar.toggle}
-          />
+          <Button variant="ghost" class="group/sidebar-toggle size-6 p-0" onClick={layout.sidebar.toggle}>
+            <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+              <Icon
+                size="small"
+                name={layout.sidebar.opened() ? "layout-left-full" : "layout-left"}
+                class="group-hover/sidebar-toggle:hidden"
+              />
+              <Icon size="small" name="layout-left-partial" class="hidden group-hover/sidebar-toggle:inline-block" />
+              <Icon
+                size="small"
+                name={layout.sidebar.opened() ? "layout-left" : "layout-left-full"}
+                class="hidden group-active/sidebar-toggle:inline-block"
+              />
+            </div>
+          </Button>
         </TooltipKeybind>
         <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
         <div class="flex-1 h-full" data-tauri-drag-region />
-        <div id="opencode-titlebar-right" class="flex items-center gap-3 shrink-0" />
-        <Show when={reserve()}>
-          <div class="w-[120px] h-full shrink-0" data-tauri-drag-region />
-        </Show>
+        <div id="opencode-titlebar-right" class="flex items-center gap-3 shrink-0 flex-1 justify-end" />
       </div>
       <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div id="opencode-titlebar-center" class="pointer-events-auto" />
