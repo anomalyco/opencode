@@ -97,6 +97,13 @@ const OAUTH_MULTI_ACCOUNT_SUPPORT: Record<string, { supported: boolean; note?: s
   vercel: { supported: false, note: "API key only" },
 }
 
+interface BrowserSessionStatus {
+  recordId: string
+  isConfigured: boolean
+  hasProfile: boolean
+  lastRefresh?: string
+}
+
 // Provider detail view - shows accounts, usage, switch functionality
 function ProviderDetailView(props: { providerID: string; providerName: string; onBack: () => void }) {
   const globalSDK = useGlobalSDK()
@@ -105,17 +112,95 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
   const [switching, setSwitching] = createSignal<string | null>(null)
   const [deleting, setDeleting] = createSignal<string | null>(null)
   const [confirmDelete, setConfirmDelete] = createSignal<string | null>(null)
+  const [browserSessions, setBrowserSessions] = createSignal<Record<string, BrowserSessionStatus>>({})
+  const [settingUpBrowser, setSettingUpBrowser] = createSignal<string | null>(null)
+  const [refreshingBrowser, setRefreshingBrowser] = createSignal<string | null>(null)
+  const [removingBrowser, setRemovingBrowser] = createSignal<string | null>(null)
+
+  const doFetch = platform.fetch ?? fetch
 
   const [usage, { refetch }] = createResource(async () => {
     const result = await globalSDK.client.auth.usage({})
     const data = result.data as AuthUsageData
+    // Also load browser sessions
+    loadBrowserSessions()
     return data[props.providerID]
   })
+
+  // Load browser sessions for all accounts
+  const loadBrowserSessions = async () => {
+    try {
+      const result = await doFetch(`${globalSDK.url}/provider/auth/browser/sessions`)
+      if (result.ok) {
+        const sessions = (await result.json()) as BrowserSessionStatus[]
+        const map: Record<string, BrowserSessionStatus> = {}
+        for (const session of sessions) {
+          map[session.recordId] = session
+        }
+        setBrowserSessions(map)
+      }
+    } catch {
+      // Ignore errors
+    }
+  }
+
+  const setupBrowserSession = async (recordId: string) => {
+    setSettingUpBrowser(recordId)
+    try {
+      const result = await doFetch(`${globalSDK.url}/provider/auth/browser/sessions/${recordId}/setup`, {
+        method: "POST",
+      })
+      if (result.ok) {
+        await loadBrowserSessions()
+      }
+    } finally {
+      setSettingUpBrowser(null)
+    }
+  }
+
+  const refreshBrowserSession = async (recordId: string) => {
+    setRefreshingBrowser(recordId)
+    try {
+      const result = await doFetch(`${globalSDK.url}/provider/auth/browser/sessions/${recordId}/refresh`, {
+        method: "POST",
+      })
+      if (result.ok) {
+        await refetch()
+        await loadBrowserSessions()
+      }
+    } finally {
+      setRefreshingBrowser(null)
+    }
+  }
+
+  const removeBrowserSession = async (recordId: string) => {
+    setRemovingBrowser(recordId)
+    try {
+      await doFetch(`${globalSDK.url}/provider/auth/browser/sessions/${recordId}`, {
+        method: "DELETE",
+      })
+      await loadBrowserSessions()
+    } finally {
+      setRemovingBrowser(null)
+    }
+  }
+
+  const formatTimeAgo = (dateStr: string): string => {
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    if (diffMins < 1) return "just now"
+    if (diffMins < 60) return `${diffMins}m ago`
+    const diffHours = Math.floor(diffMins / 60)
+    if (diffHours < 24) return `${diffHours}h ago`
+    const diffDays = Math.floor(diffHours / 24)
+    return `${diffDays}d ago`
+  }
 
   const switchAccount = async (recordID: string) => {
     setSwitching(recordID)
     try {
-      const doFetch = platform.fetch ?? fetch
       const response = await doFetch(`${globalSDK.url}/auth/active`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -134,7 +219,6 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
   const deleteAccount = async (recordID: string) => {
     setDeleting(recordID)
     try {
-      const doFetch = platform.fetch ?? fetch
       const response = await doFetch(`${globalSDK.url}/auth/account`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
@@ -325,6 +409,88 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
                 </For>
               </div>
             </div>
+
+            {/* Auto-Relogin Section - only for Anthropic */}
+            <Show when={isAnthropic}>
+              <div class="p-4 rounded-lg border border-border-weak-base bg-fill-ghost-base">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center gap-2">
+                    <Icon name="sliders" class="size-4 text-icon-muted" />
+                    <span class="text-13-medium text-text-strong">Auto-Relogin</span>
+                  </div>
+                  <span class="text-10-medium text-text-muted">Experimental</span>
+                </div>
+                <p class="text-11-regular text-text-muted mb-3">
+                  Configure browser sessions for automatic token refresh when tokens expire overnight.
+                </p>
+
+                <div class="flex flex-col gap-2">
+                  <For each={data().accounts}>
+                    {(account, index) => {
+                      const session = () => browserSessions()[account.id]
+                      const isSettingUp = () => settingUpBrowser() === account.id
+                      const isRefreshing = () => refreshingBrowser() === account.id
+                      const isRemoving = () => removingBrowser() === account.id
+
+                      return (
+                        <div class="flex items-center justify-between p-2 rounded bg-surface-base">
+                          <div class="flex items-center gap-2">
+                            <span class="text-12-medium text-text-base">Account {index() + 1}</span>
+                            <Show
+                              when={session()?.isConfigured}
+                              fallback={<span class="text-10-medium text-text-muted">Not configured</span>}
+                            >
+                              <span class="text-10-medium text-fill-success-base">Enabled</span>
+                              <Show when={session()?.lastRefresh}>
+                                <span class="text-10-medium text-text-muted">
+                                  (refreshed {formatTimeAgo(session()!.lastRefresh!)})
+                                </span>
+                              </Show>
+                            </Show>
+                          </div>
+                          <div class="flex items-center gap-2">
+                            <Show
+                              when={session()?.isConfigured}
+                              fallback={
+                                <button
+                                  type="button"
+                                  onClick={() => setupBrowserSession(account.id)}
+                                  disabled={isSettingUp()}
+                                  class="text-11-medium text-text-interactive-base hover:text-text-interactive-strong transition-colors disabled:opacity-50"
+                                >
+                                  {isSettingUp() ? "Setting up..." : "Setup"}
+                                </button>
+                              }
+                            >
+                              <button
+                                type="button"
+                                onClick={() => refreshBrowserSession(account.id)}
+                                disabled={isRefreshing()}
+                                class="text-11-medium text-text-interactive-base hover:text-text-interactive-strong transition-colors disabled:opacity-50"
+                              >
+                                {isRefreshing() ? "..." : "Test"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeBrowserSession(account.id)}
+                                disabled={isRemoving()}
+                                class="text-11-medium text-fill-danger-base hover:text-fill-danger-strong transition-colors disabled:opacity-50"
+                              >
+                                {isRemoving() ? "..." : "Remove"}
+                              </button>
+                            </Show>
+                          </div>
+                        </div>
+                      )
+                    }}
+                  </For>
+                </div>
+
+                <p class="text-10-regular text-text-weak mt-3">
+                  Setup opens a browser window where you log in to claude.ai. Sessions are stored locally.
+                </p>
+              </div>
+            </Show>
 
             {/* Add Account Button */}
             <button
