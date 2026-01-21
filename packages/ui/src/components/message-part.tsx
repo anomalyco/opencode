@@ -1025,7 +1025,8 @@ ToolRegistry.register({
           <div data-component="edit-trigger">
             <div data-slot="message-part-title-area">
               <div data-slot="message-part-title">
-                {i18n.t("ui.messagePart.title.edit")} {filename()}
+                <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.edit")}</span>
+                <span data-slot="message-part-title-filename">{filename()}</span>
               </div>
               <Show when={props.input.filePath?.includes("/")}>
                 <div data-slot="message-part-path">
@@ -1077,7 +1078,8 @@ ToolRegistry.register({
           <div data-component="write-trigger">
             <div data-slot="message-part-title-area">
               <div data-slot="message-part-title">
-                {i18n.t("ui.messagePart.title.write")} {filename()}
+                <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.write")}</span>
+                <span data-slot="message-part-title-filename">{filename()}</span>
               </div>
               <Show when={props.input.filePath?.includes("/")}>
                 <div data-slot="message-part-path">
