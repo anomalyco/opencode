@@ -18,6 +18,19 @@ export const ServeCommand = cmd({
     const server = Server.listen(opts)
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
 
+    const shutdown = async (signal: string) => {
+      console.log(`Received ${signal}, shutting down...`)
+      await server.stop()
+      process.exit(0)
+    }
+
+    process.on("SIGINT", () => shutdown("SIGINT"))
+    process.on("SIGTERM", () => shutdown("SIGTERM"))
+    // SIGBREAK is Windows-specific (Ctrl+Break)
+    if (process.platform === "win32") {
+      process.on("SIGBREAK", () => shutdown("SIGBREAK"))
+    }
+
     await new Promise(() => {})
     await server.stop()
   },
