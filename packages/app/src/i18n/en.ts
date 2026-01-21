@@ -422,7 +422,8 @@ export const dict = {
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
   "terminal.connectionLost.title": "Connection Lost",
-  "terminal.connectionLost.description": "The terminal connection was interrupted. This can happen when the server restarts.",
+  "terminal.connectionLost.description":
+    "The terminal connection was interrupted. This can happen when the server restarts.",
 
   "common.closeTab": "Close tab",
   "common.dismiss": "Dismiss",
@@ -475,8 +476,8 @@ export const dict = {
   "font.option.robotoMono": "Roboto Mono",
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
-  "sound.option.staplebops01": "Boopy",
-  "sound.option.staplebops02": "Beepy",
+  "sound.option.staplebops01": "Staplebops 01",
+  "sound.option.staplebops02": "Staplebops 02",
   "sound.option.staplebops03": "Staplebops 03",
   "sound.option.staplebops04": "Staplebops 04",
   "sound.option.staplebops05": "Staplebops 05",
@@ -484,7 +485,7 @@ export const dict = {
   "sound.option.staplebops07": "Staplebops 07",
   "sound.option.nope01": "Nope 01",
   "sound.option.nope02": "Nope 02",
-  "sound.option.nope03": "Oopsie",
+  "sound.option.nope03": "Nope 03",
   "sound.option.nope04": "Nope 04",
   "sound.option.nope05": "Nope 05",
 
