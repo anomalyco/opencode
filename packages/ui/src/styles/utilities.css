@@ -12,16 +12,16 @@
   /* } */
 
   ::-webkit-scrollbar-track {
-    background: var(--theme-background-panel);
+    background: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
-    background-color: var(--theme-border-subtle);
+    background-color: var(--surface-float-base);
     border-radius: var(--radius-md);
   }
 
   * {
-    scrollbar-color: var(--theme-border-subtle) var(--theme-background-panel);
+    scrollbar-color: var(--surface-float-base) transparent;
   }
 }
 

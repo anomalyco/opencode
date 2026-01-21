@@ -28,11 +28,12 @@ export function FormatError(input: unknown) {
     return `Directory "${input.data.dir}" in ${input.data.path} is not valid. Rename the directory to "${input.data.suggestion}" or remove it. This is a common typo.`
   }
   if (ConfigMarkdown.FrontmatterError.isInstance(input)) {
-    return `Failed to parse frontmatter in ${input.data.path}:\n${input.data.message}`
+    return input.data.message
   }
   if (Config.InvalidError.isInstance(input))
     return [
-      `Config file at ${input.data.path} is invalid` + (input.data.message ? `: ${input.data.message}` : ""),
+      `Configuration is invalid${input.data.path && input.data.path !== "config" ? ` at ${input.data.path}` : ""}` +
+        (input.data.message ? `: ${input.data.message}` : ""),
       ...(input.data.issues?.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")) ?? []),
     ].join("\n")
 
@@ -46,9 +47,10 @@ export function FormatUnknownError(input: unknown): string {
 
   if (typeof input === "object" && input !== null) {
     try {
-      const json = JSON.stringify(input, null, 2)
-      if (json && json !== "{}") return json
-    } catch {}
+      return JSON.stringify(input, null, 2)
+    } catch {
+      return "Unexpected error (unserializable)"
+    }
   }
 
   return String(input)

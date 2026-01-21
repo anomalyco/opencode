@@ -16,7 +16,6 @@ import { iife } from "@opencode-ai/util/iife"
 import { Binary } from "@opencode-ai/util/binary"
 import { NamedError } from "@opencode-ai/util/error"
 import { DateTime } from "luxon"
-import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { createStore } from "solid-js/store"
 import z from "zod"
 import NotFound from "../[...404]"
@@ -25,7 +24,7 @@ import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/diffs/
 import { Diff as SSRDiff } from "@opencode-ai/ui/diff-ssr"
 import { clientOnly } from "@solidjs/start"
 import { type IconName } from "@opencode-ai/ui/icons/provider"
-import { Meta } from "@solidjs/meta"
+import { Meta, Title } from "@solidjs/meta"
 import { Base64 } from "js-base64"
 
 const ClientOnlyDiff = clientOnly(() => import("@opencode-ai/ui/diff").then((m) => ({ default: m.Diff })))
@@ -33,7 +32,7 @@ const ClientOnlyCode = clientOnly(() => import("@opencode-ai/ui/code").then((m) 
 const ClientOnlyWorkerPoolProvider = clientOnly(() =>
   import("@opencode-ai/ui/pierre/worker").then((m) => ({
     default: (props: { children: any }) => (
-      <WorkerPoolProvider pool={m.workerPool}>{props.children}</WorkerPoolProvider>
+      <WorkerPoolProvider pools={m.getWorkerPools()}>{props.children}</WorkerPoolProvider>
     ),
   })),
 )
@@ -162,11 +161,20 @@ export default function () {
 
   return (
     <ErrorBoundary
-      fallback={(e) => {
+      fallback={(error) => {
+        if (SessionDataMissingError.isInstance(error)) {
+          return <NotFound />
+        }
+        console.error(error)
+        const details = error instanceof Error ? (error.stack ?? error.message) : String(error)
         return (
-          <Show when={e.message === "SessionDataMissingError"}>
-            <NotFound />
-          </Show>
+          <div class="min-h-screen w-full bg-background-base text-text-base flex flex-col items-center justify-center gap-4 p-6 text-center">
+            <p class="text-16-medium">Unable to render this share.</p>
+            <p class="text-14-regular text-text-weaker">Check the console for more details.</p>
+            <pre class="text-12-mono text-left whitespace-pre-wrap break-words w-full max-w-200 bg-background-stronger rounded-md p-4">
+              {details}
+            </pre>
+          </div>
         )
       }}
     >
@@ -202,6 +210,9 @@ export default function () {
 
           return (
             <>
+              <Show when={info().title}>
+                <Title>{info().title} | OpenCode</Title>
+              </Show>
               <Meta name="description" content="opencode - The AI coding agent built for the terminal." />
               <Meta property="og:image" content={ogImage()} />
               <Meta name="twitter:image" content={ogImage()} />
@@ -212,6 +223,7 @@ export default function () {
                       {iife(() => {
                         const [store, setStore] = createStore({
                           messageId: undefined as string | undefined,
+                          expandedSteps: {} as Record<string, boolean>,
                         })
                         const messages = createMemo(() =>
                           data().sessionID
@@ -253,20 +265,22 @@ export default function () {
 
                         const title = () => (
                           <div class="flex flex-col gap-4">
-                            <div class="h-8 flex gap-4 items-center justify-start self-stretch">
-                              <div class="pl-[2.5px] pr-2 flex items-center gap-1.75 bg-surface-strong shadow-xs-border-base">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:gap-4 sm:items-center sm:h-8 justify-start self-stretch">
+                              <div class="pl-[2.5px] pr-2 flex items-center gap-1.75 bg-surface-strong shadow-xs-border-base w-fit">
                                 <Mark class="shrink-0 w-3 my-0.5" />
                                 <div class="text-12-mono text-text-base">v{info().version}</div>
                               </div>
-                              <div class="flex gap-2 items-center">
-                                <ProviderIcon
-                                  id={provider() as IconName}
-                                  class="size-3.5 shrink-0 text-icon-strong-base"
-                                />
-                                <div class="text-12-regular text-text-base">{model()?.name ?? modelID()}</div>
-                              </div>
-                              <div class="text-12-regular text-text-weaker">
-                                {DateTime.fromMillis(info().time.created).toFormat("dd MMM yyyy, HH:mm")}
+                              <div class="flex gap-4 items-center">
+                                <div class="flex gap-2 items-center">
+                                  <ProviderIcon
+                                    id={provider() as IconName}
+                                    class="size-3.5 shrink-0 text-icon-strong-base"
+                                  />
+                                  <div class="text-12-regular text-text-base">{model()?.name ?? modelID()}</div>
+                                </div>
+                                <div class="text-12-regular text-text-weaker">
+                                  {DateTime.fromMillis(info().time.created).toFormat("dd MMM yyyy, HH:mm")}
+                                </div>
                               </div>
                             </div>
                             <div class="text-left text-16-medium text-text-strong">{info().title}</div>
@@ -281,11 +295,13 @@ export default function () {
                                 {(message) => (
                                   <SessionTurn
                                     sessionID={data().sessionID}
+                                    sessionTitle={info().title}
                                     messageID={message.id}
+                                    stepsExpanded={store.expandedSteps[message.id] ?? false}
+                                    onStepsExpandedToggle={() => setStore("expandedSteps", message.id, (v) => !v)}
                                     classes={{
                                       root: "min-w-0 w-full relative",
-                                      content:
-                                        "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
+                                      content: "flex flex-col justify-between !overflow-visible",
                                       container: "px-4",
                                     }}
                                   />
@@ -311,7 +327,7 @@ export default function () {
                               <div class="flex gap-3 items-center">
                                 <IconButton
                                   as={"a"}
-                                  href="https://github.com/sst/opencode"
+                                  href="https://github.com/anomalyco/opencode"
                                   target="_blank"
                                   icon="github"
                                   variant="ghost"
@@ -336,39 +352,30 @@ export default function () {
                                 <div
                                   classList={{
                                     "@container relative shrink-0 pt-14 flex flex-col gap-10 min-h-0 w-full": true,
-                                    "mx-auto max-w-200": !wide(),
                                   }}
                                 >
                                   <div
                                     classList={{
-                                      "w-full flex justify-start items-start min-w-0": true,
-                                      "max-w-200 mx-auto px-6": wide(),
-                                      "pr-6 pl-18": !wide() && messages().length > 1,
-                                      "px-6": !wide() && messages().length === 1,
+                                      "w-full flex justify-start items-start min-w-0 px-6": true,
                                     }}
                                   >
                                     {title()}
                                   </div>
                                   <div class="flex items-start justify-start h-full min-h-0">
-                                    <SessionMessageRail
-                                      messages={messages()}
-                                      current={activeMessage()}
-                                      onMessageSelect={setActiveMessage}
-                                      wide={wide()}
-                                    />
                                     <SessionTurn
                                       sessionID={data().sessionID}
                                       messageID={store.messageId ?? firstUserMessage()!.id!}
+                                      stepsExpanded={
+                                        store.expandedSteps[store.messageId ?? firstUserMessage()!.id!] ?? false
+                                      }
+                                      onStepsExpandedToggle={() => {
+                                        const id = store.messageId ?? firstUserMessage()!.id!
+                                        setStore("expandedSteps", id, (v) => !v)
+                                      }}
                                       classes={{
                                         root: "grow",
                                         content: "flex flex-col justify-between",
-                                        container:
-                                          "w-full pb-20 " +
-                                          (wide()
-                                            ? "max-w-200 mx-auto px-6"
-                                            : messages().length > 1
-                                              ? "pr-6 pl-18"
-                                              : "px-6"),
+                                        container: "w-full pb-20 px-6",
                                       }}
                                     >
                                       <div

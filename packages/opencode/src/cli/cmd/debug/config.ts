@@ -5,6 +5,7 @@ import { cmd } from "../cmd"
 
 export const ConfigCommand = cmd({
   command: "config",
+  describe: "show resolved configuration",
   builder: (yargs) => yargs,
   async handler() {
     await bootstrap(process.cwd(), async () => {

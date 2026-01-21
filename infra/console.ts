@@ -76,6 +76,7 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
     "checkout.session.completed",
     "checkout.session.expired",
     "charge.refunded",
+    "invoice.payment_succeeded",
     "customer.created",
     "customer.deleted",
     "customer.updated",
@@ -97,14 +98,32 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
   ],
 })
 
+const zenProduct = new stripe.Product("ZenBlack", {
+  name: "OpenCode Black",
+})
+const zenPrice = new stripe.Price("ZenBlackPrice", {
+  product: zenProduct.id,
+  unitAmount: 20000,
+  currency: "usd",
+  recurring: {
+    interval: "month",
+    intervalCount: 1,
+  },
+})
+
 const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS1"),
   new sst.Secret("ZEN_MODELS2"),
   new sst.Secret("ZEN_MODELS3"),
   new sst.Secret("ZEN_MODELS4"),
   new sst.Secret("ZEN_MODELS5"),
+  new sst.Secret("ZEN_MODELS6"),
+  new sst.Secret("ZEN_MODELS7"),
+  new sst.Secret("ZEN_MODELS8"),
 ]
+const ZEN_BLACK = new sst.Secret("ZEN_BLACK")
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
+const STRIPE_PUBLISHABLE_KEY = new sst.Secret("STRIPE_PUBLISHABLE_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
   properties: { value: auth.url.apply((url) => url!) },
 })
@@ -118,6 +137,7 @@ const gatewayKv = new sst.cloudflare.Kv("GatewayKv")
 ////////////////
 
 const bucket = new sst.cloudflare.Bucket("ZenData")
+const bucketNew = new sst.cloudflare.Bucket("ZenDataNew")
 
 const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")
 const AWS_SES_SECRET_ACCESS_KEY = new sst.Secret("AWS_SES_SECRET_ACCESS_KEY")
@@ -136,6 +156,7 @@ new sst.cloudflare.x.SolidStart("Console", {
   path: "packages/console/app",
   link: [
     bucket,
+    bucketNew,
     database,
     AUTH_API_URL,
     STRIPE_WEBHOOK_SECRET,
@@ -143,6 +164,8 @@ new sst.cloudflare.x.SolidStart("Console", {
     EMAILOCTOPUS_API_KEY,
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,
+    ZEN_BLACK,
+    new sst.Secret("ZEN_SESSION_SECRET"),
     ...ZEN_MODELS,
     ...($dev
       ? [
@@ -156,6 +179,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     //VITE_DOCS_URL: web.url.apply((url) => url!),
     //VITE_API_URL: gateway.url.apply((url) => url!),
     VITE_AUTH_URL: auth.url.apply((url) => url!),
+    VITE_STRIPE_PUBLISHABLE_KEY: STRIPE_PUBLISHABLE_KEY.value,
   },
   transform: {
     server: {

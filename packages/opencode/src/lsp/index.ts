@@ -261,23 +261,36 @@ export namespace LSP {
     return result
   }
 
+  export async function hasClients(file: string) {
+    const s = await state()
+    const extension = path.parse(file).ext || file
+    for (const server of Object.values(s.servers)) {
+      if (server.extensions.length && !server.extensions.includes(extension)) continue
+      const root = await server.root(file)
+      if (!root) continue
+      if (s.broken.has(root + server.id)) continue
+      return true
+    }
+    return false
+  }
+
   export async function touchFile(input: string, waitForDiagnostics?: boolean) {
     log.info("touching file", { file: input })
     const clients = await getClients(input)
-    await run(async (client) => {
-      if (!clients.includes(client)) return
-      const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
-      await client.notify.open({ path: input })
-
-      return wait
-    }).catch((err) => {
+    await Promise.all(
+      clients.map(async (client) => {
+        const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
+        await client.notify.open({ path: input })
+        return wait
+      }),
+    ).catch((err) => {
       log.error("failed to touch file", { err, file: input })
     })
   }
 
   export async function diagnostics() {
     const results: Record<string, LSPClient.Diagnostic[]> = {}
-    for (const result of await run(async (client) => client.diagnostics)) {
+    for (const result of await runAll(async (client) => client.diagnostics)) {
       for (const [path, diagnostics] of result.entries()) {
         const arr = results[path] || []
         arr.push(...diagnostics)
@@ -288,16 +301,18 @@ export namespace LSP {
   }
 
   export async function hover(input: { file: string; line: number; character: number }) {
-    return run((client) => {
-      return client.connection.sendRequest("textDocument/hover", {
-        textDocument: {
-          uri: pathToFileURL(input.file).href,
-        },
-        position: {
-          line: input.line,
-          character: input.character,
-        },
-      })
+    return run(input.file, (client) => {
+      return client.connection
+        .sendRequest("textDocument/hover", {
+          textDocument: {
+            uri: pathToFileURL(input.file).href,
+          },
+          position: {
+            line: input.line,
+            character: input.character,
+          },
+        })
+        .catch(() => null)
     })
   }
 
@@ -342,7 +357,7 @@ export namespace LSP {
   ]
 
   export async function workspaceSymbol(query: string) {
-    return run((client) =>
+    return runAll((client) =>
       client.connection
         .sendRequest("workspace/symbol", {
           query,
@@ -354,7 +369,8 @@ export namespace LSP {
   }
 
   export async function documentSymbol(uri: string) {
-    return run((client) =>
+    const file = new URL(uri).pathname
+    return run(file, (client) =>
       client.connection
         .sendRequest("textDocument/documentSymbol", {
           textDocument: {
@@ -367,8 +383,85 @@ export namespace LSP {
       .then((result) => result.filter(Boolean))
   }
 
-  async function run<T>(input: (client: LSPClient.Info) => Promise<T>): Promise<T[]> {
+  export async function definition(input: { file: string; line: number; character: number }) {
+    return run(input.file, (client) =>
+      client.connection
+        .sendRequest("textDocument/definition", {
+          textDocument: { uri: pathToFileURL(input.file).href },
+          position: { line: input.line, character: input.character },
+        })
+        .catch(() => null),
+    ).then((result) => result.flat().filter(Boolean))
+  }
+
+  export async function references(input: { file: string; line: number; character: number }) {
+    return run(input.file, (client) =>
+      client.connection
+        .sendRequest("textDocument/references", {
+          textDocument: { uri: pathToFileURL(input.file).href },
+          position: { line: input.line, character: input.character },
+          context: { includeDeclaration: true },
+        })
+        .catch(() => []),
+    ).then((result) => result.flat().filter(Boolean))
+  }
+
+  export async function implementation(input: { file: string; line: number; character: number }) {
+    return run(input.file, (client) =>
+      client.connection
+        .sendRequest("textDocument/implementation", {
+          textDocument: { uri: pathToFileURL(input.file).href },
+          position: { line: input.line, character: input.character },
+        })
+        .catch(() => null),
+    ).then((result) => result.flat().filter(Boolean))
+  }
+
+  export async function prepareCallHierarchy(input: { file: string; line: number; character: number }) {
+    return run(input.file, (client) =>
+      client.connection
+        .sendRequest("textDocument/prepareCallHierarchy", {
+          textDocument: { uri: pathToFileURL(input.file).href },
+          position: { line: input.line, character: input.character },
+        })
+        .catch(() => []),
+    ).then((result) => result.flat().filter(Boolean))
+  }
+
+  export async function incomingCalls(input: { file: string; line: number; character: number }) {
+    return run(input.file, async (client) => {
+      const items = (await client.connection
+        .sendRequest("textDocument/prepareCallHierarchy", {
+          textDocument: { uri: pathToFileURL(input.file).href },
+          position: { line: input.line, character: input.character },
+        })
+        .catch(() => [])) as any[]
+      if (!items?.length) return []
+      return client.connection.sendRequest("callHierarchy/incomingCalls", { item: items[0] }).catch(() => [])
+    }).then((result) => result.flat().filter(Boolean))
+  }
+
+  export async function outgoingCalls(input: { file: string; line: number; character: number }) {
+    return run(input.file, async (client) => {
+      const items = (await client.connection
+        .sendRequest("textDocument/prepareCallHierarchy", {
+          textDocument: { uri: pathToFileURL(input.file).href },
+          position: { line: input.line, character: input.character },
+        })
+        .catch(() => [])) as any[]
+      if (!items?.length) return []
+      return client.connection.sendRequest("callHierarchy/outgoingCalls", { item: items[0] }).catch(() => [])
+    }).then((result) => result.flat().filter(Boolean))
+  }
+
+  async function runAll<T>(input: (client: LSPClient.Info) => Promise<T>): Promise<T[]> {
     const clients = await state().then((x) => x.clients)
+    const tasks = clients.map((x) => input(x))
+    return Promise.all(tasks)
+  }
+
+  async function run<T>(file: string, input: (client: LSPClient.Info) => Promise<T>): Promise<T[]> {
+    const clients = await getClients(file)
     const tasks = clients.map((x) => input(x))
     return Promise.all(tasks)
   }

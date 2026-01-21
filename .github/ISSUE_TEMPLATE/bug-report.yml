@@ -12,6 +12,14 @@ body:
       required: true
 
   - type: input
+    id: plugins
+    attributes:
+      label: Plugins
+      description: What plugins are you using?
+    validations:
+      required: false
+
+  - type: input
     id: opencode-version
     attributes:
       label: OpenCode version

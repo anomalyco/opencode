@@ -1,9 +1,10 @@
 import { Tabs as Kobalte } from "@kobalte/core/tabs"
 import { Show, splitProps, type JSX } from "solid-js"
-import type { ComponentProps, ParentProps } from "solid-js"
+import type { ComponentProps, ParentProps, Component } from "solid-js"
 
 export interface TabsProps extends ComponentProps<typeof Kobalte> {
-  variant?: "normal" | "alt"
+  variant?: "normal" | "alt" | "settings"
+  orientation?: "horizontal" | "vertical"
 }
 export interface TabsListProps extends ComponentProps<typeof Kobalte.List> {}
 export interface TabsTriggerProps extends ComponentProps<typeof Kobalte.Trigger> {
@@ -12,16 +13,19 @@ export interface TabsTriggerProps extends ComponentProps<typeof Kobalte.Trigger>
   }
   hideCloseButton?: boolean
   closeButton?: JSX.Element
+  onMiddleClick?: () => void
 }
 export interface TabsContentProps extends ComponentProps<typeof Kobalte.Content> {}
 
 function TabsRoot(props: TabsProps) {
-  const [split, rest] = splitProps(props, ["class", "classList", "variant"])
+  const [split, rest] = splitProps(props, ["class", "classList", "variant", "orientation"])
   return (
     <Kobalte
       {...rest}
+      orientation={split.orientation}
       data-component="tabs"
       data-variant={split.variant || "normal"}
+      data-orientation={split.orientation || "horizontal"}
       classList={{
         ...(split.classList ?? {}),
         [split.class ?? ""]: !!split.class,
@@ -52,6 +56,7 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
     "children",
     "closeButton",
     "hideCloseButton",
+    "onMiddleClick",
   ])
   return (
     <div
@@ -59,6 +64,12 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
       classList={{
         ...(split.classList ?? {}),
         [split.class ?? ""]: !!split.class,
+      }}
+      onAuxClick={(e) => {
+        if (e.button === 1 && split.onMiddleClick) {
+          e.preventDefault()
+          split.onMiddleClick()
+        }
       }}
     >
       <Kobalte.Trigger
@@ -95,8 +106,13 @@ function TabsContent(props: ParentProps<TabsContentProps>) {
   )
 }
 
+const TabsSectionTitle: Component<ParentProps> = (props) => {
+  return <div data-slot="tabs-section-title">{props.children}</div>
+}
+
 export const Tabs = Object.assign(TabsRoot, {
   List: TabsList,
   Trigger: TabsTrigger,
   Content: TabsContent,
+  SectionTitle: TabsSectionTitle,
 })

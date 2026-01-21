@@ -1,0 +1,31 @@
+@import "@opencode-ai/ui/styles/tailwind";
+
+:root {
+  a {
+    cursor: default;
+  }
+}
+
+[data-component="markdown"] ul {
+  list-style: disc outside;
+  padding-left: 1.5rem;
+}
+
+[data-component="markdown"] ol {
+  list-style: decimal outside;
+  padding-left: 1.5rem;
+}
+
+[data-component="markdown"] li > p:first-child {
+  display: inline;
+  margin: 0;
+}
+
+[data-component="markdown"] li > p + p {
+  display: block;
+  margin-top: 0.5rem;
+}
+
+*[data-tauri-drag-region] {
+  app-region: drag;
+}

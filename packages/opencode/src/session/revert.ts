@@ -9,6 +9,7 @@ import { Storage } from "../storage/storage"
 import { Bus } from "../bus"
 import { SessionPrompt } from "./prompt"
 import { FileTime } from "../file/time"
+import { SessionSummary } from "./summary"
 
 export namespace SessionRevert {
   const log = Log.create({ service: "session.revert" })
@@ -64,8 +65,20 @@ export namespace SessionRevert {
         }
       }
       if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
+      const rangeMessages = all.filter((msg) => msg.info.id >= revert!.messageID)
+      const diffs = await SessionSummary.computeDiff({ messages: rangeMessages })
+      await Storage.write(["session_diff", input.sessionID], diffs)
+      Bus.publish(Session.Event.Diff, {
+        sessionID: input.sessionID,
+        diff: diffs,
+      })
       return Session.update(input.sessionID, (draft) => {
         draft.revert = revert
+        draft.summary = {
+          additions: diffs.reduce((sum, x) => sum + x.additions, 0),
+          deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
+          files: diffs.length,
+        }
       })
     }
     return session

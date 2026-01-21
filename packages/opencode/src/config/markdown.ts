@@ -14,8 +14,60 @@ export namespace ConfigMarkdown {
     return Array.from(template.matchAll(SHELL_REGEX))
   }
 
+  export function preprocessFrontmatter(content: string): string {
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
+    if (!match) return content
+
+    const frontmatter = match[1]
+    const lines = frontmatter.split("\n")
+    const result: string[] = []
+
+    for (const line of lines) {
+      // skip comments and empty lines
+      if (line.trim().startsWith("#") || line.trim() === "") {
+        result.push(line)
+        continue
+      }
+
+      // skip lines that are continuations (indented)
+      if (line.match(/^\s+/)) {
+        result.push(line)
+        continue
+      }
+
+      // match key: value pattern
+      const kvMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/)
+      if (!kvMatch) {
+        result.push(line)
+        continue
+      }
+
+      const key = kvMatch[1]
+      const value = kvMatch[2].trim()
+
+      // skip if value is empty, already quoted, or uses block scalar
+      if (value === "" || value === ">" || value === "|" || value.startsWith('"') || value.startsWith("'")) {
+        result.push(line)
+        continue
+      }
+
+      // if value contains a colon, convert to block scalar
+      if (value.includes(":")) {
+        result.push(`${key}: |`)
+        result.push(`  ${value}`)
+        continue
+      }
+
+      result.push(line)
+    }
+
+    const processed = result.join("\n")
+    return content.replace(frontmatter, () => processed)
+  }
+
   export async function parse(filePath: string) {
-    const template = await Bun.file(filePath).text()
+    const raw = await Bun.file(filePath).text()
+    const template = preprocessFrontmatter(raw)
 
     try {
       const md = matter(template)
@@ -24,7 +76,7 @@ export namespace ConfigMarkdown {
       throw new FrontmatterError(
         {
           path: filePath,
-          message: `Failed to parse YAML frontmatter: ${err instanceof Error ? err.message : String(err)}`,
+          message: `${filePath}: Failed to parse YAML frontmatter: ${err instanceof Error ? err.message : String(err)}`,
         },
         { cause: err },
       )

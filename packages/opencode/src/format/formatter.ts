@@ -96,7 +96,7 @@ export const oxfmt: Info = {
 
 export const biome: Info = {
   name: "biome",
-  command: [BunProc.which(), "x", "@biomejs/biome", "format", "--write", "$FILE"],
+  command: [BunProc.which(), "x", "@biomejs/biome", "check", "--write", "$FILE"],
   environment: {
     BUN_BE_BUN: "1",
   },
@@ -226,7 +226,7 @@ export const rlang: Info = {
 }
 
 export const uvformat: Info = {
-  name: "uv format",
+  name: "uv",
   command: ["uv", "format", "--", "$FILE"],
   extensions: [".py", ".pyi"],
   async enabled() {
@@ -311,5 +311,47 @@ export const gleam: Info = {
   extensions: [".gleam"],
   async enabled() {
     return Bun.which("gleam") !== null
+  },
+}
+
+export const shfmt: Info = {
+  name: "shfmt",
+  command: ["shfmt", "-w", "$FILE"],
+  extensions: [".sh", ".bash"],
+  async enabled() {
+    return Bun.which("shfmt") !== null
+  },
+}
+
+export const nixfmt: Info = {
+  name: "nixfmt",
+  command: ["nixfmt", "$FILE"],
+  extensions: [".nix"],
+  async enabled() {
+    return Bun.which("nixfmt") !== null
+  },
+}
+
+export const rustfmt: Info = {
+  name: "rustfmt",
+  command: ["rustfmt", "$FILE"],
+  extensions: [".rs"],
+  async enabled() {
+    return Bun.which("rustfmt") !== null
+  },
+}
+
+export const pint: Info = {
+  name: "pint",
+  command: ["./vendor/bin/pint", "$FILE"],
+  extensions: [".php"],
+  async enabled() {
+    const items = await Filesystem.findUp("composer.json", Instance.directory, Instance.worktree)
+    for (const item of items) {
+      const json = await Bun.file(item).json()
+      if (json.require?.["laravel/pint"]) return true
+      if (json["require-dev"]?.["laravel/pint"]) return true
+    }
+    return false
   },
 }

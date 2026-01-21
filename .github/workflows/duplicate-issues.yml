@@ -28,8 +28,8 @@ jobs:
           OPENCODE_PERMISSION: |
             {
               "bash": {
-                "gh issue*": "allow",
-                "*": "deny"
+                "*": "deny",
+                "gh issue*": "allow"
               },
               "webfetch": "deny"
             }

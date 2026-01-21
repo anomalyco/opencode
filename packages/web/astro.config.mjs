@@ -32,11 +32,39 @@ export default defineConfig({
     solidJs(),
     starlight({
       title: "OpenCode",
+      favicon: "/favicon-v2.svg",
+      head: [
+        {
+          tag: "link",
+          attrs: {
+            rel: "icon",
+            href: "/favicon-v2.ico",
+            sizes: "32x32",
+          },
+        },
+        {
+          tag: "link",
+          attrs: {
+            rel: "icon",
+            type: "image/png",
+            href: "/favicon-96x96-v2.png",
+            sizes: "96x96",
+          },
+        },
+        {
+          tag: "link",
+          attrs: {
+            rel: "apple-touch-icon",
+            href: "/apple-touch-icon-v2.png",
+            sizes: "180x180",
+          },
+        },
+      ],
       lastUpdated: true,
       expressiveCode: { themes: ["github-light", "github-dark"] },
       social: [
         { icon: "github", label: "GitHub", href: config.github },
-        { icon: "discord", label: "Dscord", href: config.discord },
+        { icon: "discord", label: "Discord", href: config.discord },
       ],
       editLink: {
         baseUrl: `${config.github}/edit/dev/packages/web/`,
@@ -60,7 +88,7 @@ export default defineConfig({
         "1-0",
         {
           label: "Usage",
-          items: ["tui", "cli", "ide", "zen", "share", "github", "gitlab"],
+          items: ["tui", "cli", "web", "ide", "zen", "share", "github", "gitlab"],
         },
 
         {
@@ -78,6 +106,7 @@ export default defineConfig({
             "lsp",
             "mcp-servers",
             "acp",
+            "skills",
             "custom-tools",
           ],
         },

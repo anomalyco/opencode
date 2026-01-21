@@ -19,17 +19,23 @@ export function createDataDumper(sessionId: string, requestId: string, projectId
       if (!data.modelName) return
 
       const timestamp = new Date().toISOString().replace(/[^0-9]/g, "")
+      const year = timestamp.substring(0, 4)
+      const month = timestamp.substring(4, 6)
+      const day = timestamp.substring(6, 8)
+      const hour = timestamp.substring(8, 10)
+      const minute = timestamp.substring(10, 12)
+      const second = timestamp.substring(12, 14)
 
       waitUntil(
-        Resource.ZenData.put(
-          `data/${data.modelName}/${sessionId}/${requestId}.json`,
+        Resource.ZenDataNew.put(
+          `data/${data.modelName}/${year}/${month}/${day}/${hour}/${minute}/${second}/${requestId}.json`,
           JSON.stringify({ timestamp, ...data }),
         ),
       )
 
       waitUntil(
-        Resource.ZenData.put(
-          `meta/${data.modelName}/${timestamp}/${requestId}.json`,
+        Resource.ZenDataNew.put(
+          `meta/${data.modelName}/${sessionId}/${requestId}.json`,
           JSON.stringify({ timestamp, ...metadata }),
         ),
       )

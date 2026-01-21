@@ -9,9 +9,13 @@ import path from "path"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
+import { withTimeout } from "@/util/timeout"
 import type ParcelWatcher from "@parcel/watcher"
 import { $ } from "bun"
 import { Flag } from "@/flag/flag"
+import { readdir } from "fs/promises"
+
+const SUBSCRIBE_TIMEOUT_MS = 10_000
 
 declare const OPENCODE_LIBC: string | undefined
 
@@ -28,11 +32,16 @@ export namespace FileWatcher {
     ),
   }
 
-  const watcher = lazy(() => {
-    const binding = require(
-      `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${OPENCODE_LIBC || "glibc"}` : ""}`,
-    )
-    return createWrapper(binding) as typeof import("@parcel/watcher")
+  const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
+    try {
+      const binding = require(
+        `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${OPENCODE_LIBC || "glibc"}` : ""}`,
+      )
+      return createWrapper(binding) as typeof import("@parcel/watcher")
+    } catch (error) {
+      log.error("failed to load watcher binding", { error })
+      return
+    }
   })
 
   const state = Instance.state(
@@ -50,6 +59,10 @@ export namespace FileWatcher {
         return {}
       }
       log.info("watcher backend", { platform: process.platform, backend })
+
+      const w = watcher()
+      if (!w) return {}
+
       const subscribe: ParcelWatcher.SubscribeCallback = (err, evts) => {
         if (err) return
         for (const evt of evts) {
@@ -63,12 +76,16 @@ export namespace FileWatcher {
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
       if (Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
-        subs.push(
-          await watcher().subscribe(Instance.directory, subscribe, {
-            ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
-            backend,
-          }),
-        )
+        const pending = w.subscribe(Instance.directory, subscribe, {
+          ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
+          backend,
+        })
+        const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
+          log.error("failed to subscribe to Instance.directory", { error: err })
+          pending.then((s) => s.unsubscribe()).catch(() => {})
+          return undefined
+        })
+        if (sub) subs.push(sub)
       }
 
       const vcsDir = await $`git rev-parse --git-dir`
@@ -77,13 +94,20 @@ export namespace FileWatcher {
         .cwd(Instance.worktree)
         .text()
         .then((x) => path.resolve(Instance.worktree, x.trim()))
+        .catch(() => undefined)
       if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
-        subs.push(
-          await watcher().subscribe(vcsDir, subscribe, {
-            ignore: ["hooks", "info", "logs", "objects", "refs", "worktrees", "modules", "lfs"],
-            backend,
-          }),
-        )
+        const gitDirContents = await readdir(vcsDir).catch(() => [])
+        const ignoreList = gitDirContents.filter((entry) => entry !== "HEAD")
+        const pending = w.subscribe(vcsDir, subscribe, {
+          ignore: ignoreList,
+          backend,
+        })
+        const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
+          log.error("failed to subscribe to vcsDir", { error: err })
+          pending.then((s) => s.unsubscribe()).catch(() => {})
+          return undefined
+        })
+        if (sub) subs.push(sub)
       }
 
       return { subs }

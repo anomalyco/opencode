@@ -1,6 +1,6 @@
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { query, action, useParams, createAsync, useAction } from "@solidjs/router"
-import { For, Show } from "solid-js"
+import { For, Match, Show, Switch } from "solid-js"
 import { withActor } from "~/context/auth.withActor"
 import { formatDateUTC, formatDateForTable } from "../../common"
 import styles from "./payment-section.module.css"
@@ -77,6 +77,8 @@ export function PaymentSection() {
               <For each={payments()!}>
                 {(payment) => {
                   const date = new Date(payment.timeCreated)
+                  const amount =
+                    payment.enrichment?.type === "subscription" && payment.enrichment.couponID ? 0 : payment.amount
                   return (
                     <tr>
                       <td data-slot="payment-date" title={formatDateUTC(date)}>
@@ -84,20 +86,28 @@ export function PaymentSection() {
                       </td>
                       <td data-slot="payment-id">{payment.id}</td>
                       <td data-slot="payment-amount" data-refunded={!!payment.timeRefunded}>
-                        ${((payment.amount ?? 0) / 100000000).toFixed(2)}
+                        ${((amount ?? 0) / 100000000).toFixed(2)}
+                        <Switch>
+                          <Match when={payment.enrichment?.type === "credit"}> (credit)</Match>
+                          <Match when={payment.enrichment?.type === "subscription"}> (subscription)</Match>
+                        </Switch>
                       </td>
                       <td data-slot="payment-receipt">
-                        <button
-                          onClick={async () => {
-                            const receiptUrl = await downloadReceiptAction(params.id!, payment.paymentID!)
-                            if (receiptUrl) {
-                              window.open(receiptUrl, "_blank")
-                            }
-                          }}
-                          data-slot="receipt-button"
-                        >
-                          View
-                        </button>
+                        {payment.paymentID ? (
+                          <button
+                            onClick={async () => {
+                              const receiptUrl = await downloadReceiptAction(params.id!, payment.paymentID!)
+                              if (receiptUrl) {
+                                window.open(receiptUrl, "_blank")
+                              }
+                            }}
+                            data-slot="receipt-button"
+                          >
+                            View
+                          </button>
+                        ) : (
+                          <span>-</span>
+                        )}
                       </td>
                     </tr>
                   )

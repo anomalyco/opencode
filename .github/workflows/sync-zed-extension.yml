@@ -2,8 +2,8 @@ name: "sync-zed-extension"
 
 on:
   workflow_dispatch:
-  # release:
-  #   types: [published]
+  release:
+    types: [published]
 
 jobs:
   zed:
@@ -31,4 +31,5 @@ jobs:
         run: |
           ./script/sync-zed.ts ${{ steps.get_tag.outputs.tag }}
         env:
-          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
+          ZED_EXTENSIONS_PAT: ${{ secrets.ZED_EXTENSIONS_PAT }}
+          ZED_PR_PAT: ${{ secrets.ZED_PR_PAT }}
