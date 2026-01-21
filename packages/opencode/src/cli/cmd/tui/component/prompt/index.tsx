@@ -482,14 +482,12 @@ export function Prompt(props: PromptProps) {
         end = part.source.text.end
         virtualText = part.source.text.value
         styleId = fileStyleId
-      }
-      if (part.type === "agent" && part.source) {
+      } else if (part.type === "agent" && part.source) {
         start = part.source.start
         end = part.source.end
         virtualText = part.source.value
         styleId = agentStyleId
-      }
-      if (part.type === "text" && part.source?.text) {
+      } else if (part.type === "text" && part.source?.text) {
         start = part.source.text.start
         end = part.source.text.end
         virtualText = part.source.text.value
