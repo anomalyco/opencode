@@ -269,6 +269,7 @@ export const dict = {
   "language.zh": "中文",
   "language.ko": "韩语",
   "language.de": "德语",
+  "language.es": "西班牙语",
 
   "toast.language.title": "语言",
   "toast.language.description": "已切换到{{language}}",
