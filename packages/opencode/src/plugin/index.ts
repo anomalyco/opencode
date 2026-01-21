@@ -28,12 +28,11 @@ export namespace Plugin {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
       directory: Instance.directory,
-      // @ts-ignore - fetch type incompatibility
-      fetch: async (input, init) => {
+      fetch: (async (input, init) => {
         const request = new Request(input, init)
         if (authHeader) request.headers.set("Authorization", authHeader)
         return Server.App().fetch(request)
-      },
+      }) as typeof fetch,
     })
     const config = await Config.get()
     const hooks: Hooks[] = []
