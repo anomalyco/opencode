@@ -162,9 +162,9 @@ export const dict = {
   "common.default": "Domyślny",
   "common.attachment": "załącznik",
 
-  "prompt.placeholder.shell": "Wpisz polecenie powłoki...",
+  "prompt.placeholder.shell": "Wpisz polecenie terminala...",
   "prompt.placeholder.normal": 'Zapytaj o cokolwiek... "{{example}}"',
-  "prompt.mode.shell": "Powłoka",
+  "prompt.mode.shell": "Terminal",
   "prompt.mode.shell.exit": "esc aby wyjść",
 
   "prompt.example.1": "Napraw TODO w bazie kodu",
@@ -354,7 +354,8 @@ export const dict = {
   "error.chain.didYouMean": "Czy miałeś na myśli: {{suggestions}}",
   "error.chain.modelNotFound": "Model nie znaleziony: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Sprawdź swoją konfigurację (opencode.json) nazwy dostawców/modeli",
-  "error.chain.mcpFailed": 'Serwer MCP "{{name}}" nie powiódł się. Uwaga, OpenCode nie obsługuje jeszcze uwierzytelniania MCP.',
+  "error.chain.mcpFailed":
+    'Serwer MCP "{{name}}" nie powiódł się. Uwaga, OpenCode nie obsługuje jeszcze uwierzytelniania MCP.',
   "error.chain.providerAuthFailed": "Uwierzytelnianie dostawcy nie powiodło się ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Nie udało się zainicjować dostawcy "{{provider}}". Sprawdź poświadczenia i konfigurację.',
@@ -527,7 +528,8 @@ export const dict = {
   "settings.general.notifications.agent.description":
     "Pokaż powiadomienie systemowe, gdy agent zakończy pracę lub wymaga uwagi",
   "settings.general.notifications.permissions.title": "Uprawnienia",
-  "settings.general.notifications.permissions.description": "Pokaż powiadomienie systemowe, gdy wymagane jest uprawnienie",
+  "settings.general.notifications.permissions.description":
+    "Pokaż powiadomienie systemowe, gdy wymagane jest uprawnienie",
   "settings.general.notifications.errors.title": "Błędy",
   "settings.general.notifications.errors.description": "Pokaż powiadomienie systemowe, gdy wystąpi błąd",
 
@@ -606,8 +608,8 @@ export const dict = {
   "settings.permissions.tool.codesearch.description": "Przeszukiwanie kodu w sieci",
   "settings.permissions.tool.external_directory.title": "Katalog zewnętrzny",
   "settings.permissions.tool.external_directory.description": "Dostęp do plików poza katalogiem projektu",
-  "settings.permissions.tool.doom_loop.title": "Pętla zagłady",
-  "settings.permissions.tool.doom_loop.description": "Wykrywanie powtarzających się wywołań narzędzi z identycznym wejściem",
+  "settings.permissions.tool.doom_loop.title": "Zapętlenie",
+  "settings.permissions.tool.doom_loop.description": "Wykrywanie powtarzających się wywołań narzędzi (doom loop)",
 
   "workspace.new": "Nowa przestrzeń robocza",
   "workspace.type.local": "lokalna",
