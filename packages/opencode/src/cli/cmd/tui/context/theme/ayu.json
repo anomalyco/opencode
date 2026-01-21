@@ -35,6 +35,7 @@
     "info": "darkTag",
     "text": "darkFg",
     "textMuted": "darkFgMuted",
+    "selectedListItemText": "darkBg",
     "background": "darkBg",
     "backgroundPanel": "darkPanel",
     "backgroundElement": "darkBgAlt",
