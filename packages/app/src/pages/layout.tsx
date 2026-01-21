@@ -1543,8 +1543,8 @@ export default function Layout(props: ParentProps) {
           }
         >
           <HoverCard
-            openDelay={150}
-            closeDelay={100}
+            openDelay={1000}
+            closeDelay={0}
             placement="right"
             gutter={28}
             trigger={item}
