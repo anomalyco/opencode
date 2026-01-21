@@ -1872,6 +1872,50 @@ The `limit` fields allow OpenCode to understand how much context you have left. 
 
 ---
 
+##### Multimodal Support
+
+To enable vision, audio, or other input modalities for your custom provider models, add the `modalities` property:
+
+```json title="opencode.json" {12-15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My AI Provider",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1"
+      },
+      "models": {
+        "my-vision-model": {
+          "name": "My Vision Model",
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Supported modalities:
+- **Input**: `text`, `audio`, `image`, `video`, `pdf`
+- **Output**: `text`, `audio`, `image`, `video`, `pdf`
+
+Without the `modalities` configuration, OpenCode will reject non-text inputs with an error. This allows you to:
+- Enable image input for vision models
+- Support PDF document uploads
+- Enable audio inputs for speech models
+- Mix multiple input types for multimodal models
+
+:::tip
+Only specify modalities your model actually supports. OpenCode uses this to validate inputs before sending requests to your provider.
+:::
+
+---
+
 ## Troubleshooting
 
 If you are having trouble with configuring a provider, check the following:
