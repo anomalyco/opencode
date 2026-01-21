@@ -477,7 +477,7 @@ export namespace MessageV2 {
       }
 
       if (msg.info.role === "assistant") {
-        const differentModel = `${model.providerID}/${model.api.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
+        const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
 
         if (
           msg.info.error &&

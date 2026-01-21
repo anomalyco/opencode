@@ -1231,11 +1231,15 @@ export default function Page() {
     language.locale()
 
     const label = (pty: LocalPTY) => {
+      const title = pty.title
       const number = pty.titleNumber
-      if (Number.isFinite(number) && number > 0) {
-        return language.t("terminal.title.numbered", { number })
-      }
-      if (pty.title) return pty.title
+      const match = title.match(/^Terminal (\d+)$/)
+      const parsed = match ? Number(match[1]) : undefined
+      const isDefaultTitle = Number.isFinite(number) && number > 0 && Number.isFinite(parsed) && parsed === number
+
+      if (title && !isDefaultTitle) return title
+      if (Number.isFinite(number) && number > 0) return language.t("terminal.title.numbered", { number })
+      if (title) return title
       return language.t("terminal.title")
     }
 
@@ -1366,7 +1370,7 @@ export default function Page() {
                               window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
                             }}
                           >
-                            Jump to latest
+                            {language.t("session.messages.jumpToLatest")}
                           </Button>
                         </div>
                       </Show>
@@ -2002,7 +2006,12 @@ export default function Page() {
                           <Terminal
                             pty={pty}
                             onCleanup={(data) => terminal.update({ ...data, id: pty.id })}
+                            onConnect={() => {
+                              terminal.update({ id: pty.id, error: false })
+                              setDismissed(false)
+                            }}
                             onConnectError={() => {
+                              setDismissed(false)
                               terminal.update({ id: pty.id, error: true })
                             }}
                           />
@@ -2017,9 +2026,9 @@ export default function Page() {
                                 style={{ color: "rgba(239, 68, 68, 0.8)" }}
                               />
                               <div class="text-center" style={{ color: "rgba(255, 255, 255, 0.7)" }}>
-                                <div class="text-14-semibold mb-1">Connection Lost</div>
+                                <div class="text-14-semibold mb-1">{language.t("terminal.connectionLost.title")}</div>
                                 <div class="text-12-regular" style={{ color: "rgba(255, 255, 255, 0.5)" }}>
-                                  The terminal connection was interrupted. This can happen when the server restarts.
+                                  {language.t("terminal.connectionLost.description")}
                                 </div>
                               </div>
                               <button
@@ -2037,7 +2046,7 @@ export default function Page() {
                                 }
                                 onClick={() => setDismissed(true)}
                               >
-                                Dismiss
+                                {language.t("common.dismiss")}
                               </button>
                             </div>
                           </Show>
@@ -2056,11 +2065,17 @@ export default function Page() {
                         {(t) => (
                           <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
                             {(() => {
+                              const title = t().title
                               const number = t().titleNumber
-                              if (Number.isFinite(number) && number > 0) {
+                              const match = title.match(/^Terminal (\d+)$/)
+                              const parsed = match ? Number(match[1]) : undefined
+                              const isDefaultTitle =
+                                Number.isFinite(number) && number > 0 && Number.isFinite(parsed) && parsed === number
+
+                              if (title && !isDefaultTitle) return title
+                              if (Number.isFinite(number) && number > 0)
                                 return language.t("terminal.title.numbered", { number })
-                              }
-                              if (t().title) return t().title
+                              if (title) return title
                               return language.t("terminal.title")
                             })()}
                           </div>

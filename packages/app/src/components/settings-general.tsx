@@ -29,18 +29,19 @@ export const SettingsGeneral: Component = () => {
   )
 
   const fontOptions = [
-    { value: "ibm-plex-mono", label: "IBM Plex Mono" },
-    { value: "cascadia-code", label: "Cascadia Code" },
-    { value: "fira-code", label: "Fira Code" },
-    { value: "hack", label: "Hack" },
-    { value: "inconsolata", label: "Inconsolata" },
-    { value: "intel-one-mono", label: "Intel One Mono" },
-    { value: "jetbrains-mono", label: "JetBrains Mono" },
-    { value: "meslo-lgs", label: "Meslo LGS" },
-    { value: "roboto-mono", label: "Roboto Mono" },
-    { value: "source-code-pro", label: "Source Code Pro" },
-    { value: "ubuntu-mono", label: "Ubuntu Mono" },
-  ]
+    { value: "ibm-plex-mono", label: "font.option.ibmPlexMono" },
+    { value: "cascadia-code", label: "font.option.cascadiaCode" },
+    { value: "fira-code", label: "font.option.firaCode" },
+    { value: "hack", label: "font.option.hack" },
+    { value: "inconsolata", label: "font.option.inconsolata" },
+    { value: "intel-one-mono", label: "font.option.intelOneMono" },
+    { value: "jetbrains-mono", label: "font.option.jetbrainsMono" },
+    { value: "meslo-lgs", label: "font.option.mesloLgs" },
+    { value: "roboto-mono", label: "font.option.robotoMono" },
+    { value: "source-code-pro", label: "font.option.sourceCodePro" },
+    { value: "ubuntu-mono", label: "font.option.ubuntuMono" },
+  ] as const
+  const fontOptionsList = [...fontOptions]
 
   const soundOptions = [...SOUND_OPTIONS]
 
@@ -137,17 +138,21 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.row.font.description")}
             >
               <Select
-                options={fontOptions}
-                current={fontOptions.find((o) => o.value === settings.appearance.font())}
+                options={fontOptionsList}
+                current={fontOptionsList.find((o) => o.value === settings.appearance.font())}
                 value={(o) => o.value}
-                label={(o) => o.label}
+                label={(o) => language.t(o.label)}
                 onSelect={(option) => option && settings.appearance.setFont(option.value)}
                 variant="secondary"
                 size="small"
                 triggerVariant="settings"
                 triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()), "min-width": "180px" }}
               >
-                {(option) => <span style={{ "font-family": monoFontFamily(option?.value) }}>{option?.label}</span>}
+                {(option) => (
+                  <span style={{ "font-family": monoFontFamily(option?.value) }}>
+                    {option ? language.t(option.label) : ""}
+                  </span>
+                )}
               </Select>
             </SettingsRow>
           </div>
@@ -203,7 +208,7 @@ export const SettingsGeneral: Component = () => {
                 options={soundOptions}
                 current={soundOptions.find((o) => o.id === settings.sounds.agent())}
                 value={(o) => o.id}
-                label={(o) => o.label}
+                label={(o) => language.t(o.label)}
                 onHighlight={(option) => {
                   if (!option) return
                   playSound(option.src)
@@ -227,7 +232,7 @@ export const SettingsGeneral: Component = () => {
                 options={soundOptions}
                 current={soundOptions.find((o) => o.id === settings.sounds.permissions())}
                 value={(o) => o.id}
-                label={(o) => o.label}
+                label={(o) => language.t(o.label)}
                 onHighlight={(option) => {
                   if (!option) return
                   playSound(option.src)
@@ -251,7 +256,7 @@ export const SettingsGeneral: Component = () => {
                 options={soundOptions}
                 current={soundOptions.find((o) => o.id === settings.sounds.errors())}
                 value={(o) => o.id}
-                label={(o) => o.label}
+                label={(o) => language.t(o.label)}
                 onHighlight={(option) => {
                   if (!option) return
                   playSound(option.src)

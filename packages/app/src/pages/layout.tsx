@@ -138,6 +138,8 @@ export default function Layout(props: ParentProps) {
   const isBusy = (directory: string) => busyWorkspaces().has(workspaceKey(directory))
   const editorRef = { current: undefined as HTMLInputElement | undefined }
 
+  const [hoverSession, setHoverSession] = createSignal<string | undefined>()
+
   const autoselecting = createMemo(() => {
     if (params.dir) return false
     if (initialDir) return false
@@ -847,8 +849,8 @@ export default function Layout(props: ParentProps) {
       },
       {
         id: "settings.open",
-        title: "Open settings",
-        category: "Settings",
+        title: language.t("command.settings.open"),
+        category: language.t("command.category.settings"),
         keybind: "mod+comma",
         onSelect: () => openSettings(),
       },
@@ -1540,7 +1542,15 @@ export default function Layout(props: ParentProps) {
             </Tooltip>
           }
         >
-          <HoverCard openDelay={1000} closeDelay={0} placement="right-start" gutter={28} trigger={item}>
+          <HoverCard
+            openDelay={1000}
+            closeDelay={0}
+            placement="right"
+            gutter={28}
+            trigger={item}
+            open={hoverSession() === props.session.id}
+            onOpenChange={(open) => setHoverSession(open ? props.session.id : undefined)}
+          >
             <Show
               when={hoverReady()}
               fallback={<div class="text-12-regular text-text-weak">{language.t("session.messages.loading")}</div>}
@@ -1577,7 +1587,7 @@ export default function Layout(props: ParentProps) {
               icon="archive"
               variant="ghost"
               onClick={() => archiveSession(props.session)}
-              aria-label="Archive session"
+              aria-label={language.t("command.session.archive")}
             />
           </TooltipKeybind>
         </div>
@@ -1759,7 +1769,7 @@ export default function Layout(props: ParentProps) {
                         icon="dot-grid"
                         variant="ghost"
                         class="size-6 rounded-md"
-                        aria-label="More options"
+                        aria-label={language.t("common.moreOptions")}
                       />
                     </Tooltip>
                     <DropdownMenu.Portal>
@@ -1808,7 +1818,7 @@ export default function Layout(props: ParentProps) {
                       variant="ghost"
                       class="size-6 rounded-md"
                       onClick={() => navigate(`/${slug()}/session`)}
-                      aria-label="New session"
+                      aria-label={language.t("command.session.new")}
                     />
                   </TooltipKeybind>
                 </div>
@@ -1921,7 +1931,10 @@ export default function Layout(props: ParentProps) {
           placement="right-start"
           gutter={6}
           trigger={trigger}
-          onOpenChange={setOpen}
+          onOpenChange={(value) => {
+            setOpen(value)
+            if (value) setHoverSession(undefined)
+          }}
         >
           <div class="-m-3 p-2 flex flex-col w-72">
             <div class="px-4 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
@@ -2122,7 +2135,7 @@ export default function Layout(props: ParentProps) {
                     variant="ghost"
                     size="large"
                     onClick={chooseProject}
-                    aria-label="Open project"
+                    aria-label={language.t("command.project.open")}
                   />
                 </Tooltip>
               </div>
@@ -2142,7 +2155,7 @@ export default function Layout(props: ParentProps) {
                 variant="ghost"
                 size="large"
                 onClick={openSettings}
-                aria-label="Settings"
+                aria-label={language.t("sidebar.settings")}
               />
             </TooltipKeybind>
             <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value={language.t("sidebar.help")}>
@@ -2151,7 +2164,7 @@ export default function Layout(props: ParentProps) {
                 variant="ghost"
                 size="large"
                 onClick={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-                aria-label="Help"
+                aria-label={language.t("sidebar.help")}
               />
             </Tooltip>
           </div>
@@ -2202,7 +2215,7 @@ export default function Layout(props: ParentProps) {
                           icon="dot-grid"
                           variant="ghost"
                           class="shrink-0 size-6 rounded-md opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100 data-[expanded]:bg-surface-base-active"
-                          aria-label="Project options"
+                          aria-label={language.t("common.moreOptions")}
                         />
                         <DropdownMenu.Portal>
                           <DropdownMenu.Content class="mt-1">

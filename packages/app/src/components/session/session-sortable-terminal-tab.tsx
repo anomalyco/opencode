@@ -18,12 +18,22 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
   const [menuPosition, setMenuPosition] = createSignal({ x: 0, y: 0 })
   const [blurEnabled, setBlurEnabled] = createSignal(false)
 
+  const isDefaultTitle = () => {
+    const number = props.terminal.titleNumber
+    if (!Number.isFinite(number) || number <= 0) return false
+    const match = props.terminal.title.match(/^Terminal (\d+)$/)
+    if (!match) return false
+    const parsed = Number(match[1])
+    if (!Number.isFinite(parsed) || parsed <= 0) return false
+    return parsed === number
+  }
+
   const label = () => {
     language.locale()
+    if (props.terminal.title && !isDefaultTitle()) return props.terminal.title
+
     const number = props.terminal.titleNumber
-    if (Number.isFinite(number) && number > 0) {
-      return language.t("terminal.title.numbered", { number })
-    }
+    if (Number.isFinite(number) && number > 0) return language.t("terminal.title.numbered", { number })
     if (props.terminal.title) return props.terminal.title
     return language.t("terminal.title")
   }
@@ -102,14 +112,25 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
   }
 
   return (
-    // @ts-ignore
-    <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
+    <div
+      // @ts-ignore
+      use:sortable
+      class="outline-none focus:outline-none focus-visible:outline-none"
+      classList={{
+        "h-full": true,
+        "opacity-0": sortable.isActiveDraggable,
+      }}
+    >
       <div class="relative h-full">
         <Tabs.Trigger
           value={props.terminal.id}
           onClick={focus}
           onMouseDown={(e) => e.preventDefault()}
           onContextMenu={menu}
+          class="!shadow-none"
+          classes={{
+            button: "border-0 outline-none focus:outline-none focus-visible:outline-none !shadow-none !ring-0",
+          }}
           closeButton={
             <IconButton
               icon="close"
@@ -150,11 +171,11 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
             >
               <DropdownMenu.Item onSelect={edit}>
                 <Icon name="edit" class="w-4 h-4 mr-2" />
-                Rename
+                {language.t("common.rename")}
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={close}>
                 <Icon name="close" class="w-4 h-4 mr-2" />
-                Close
+                {language.t("common.close")}
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>

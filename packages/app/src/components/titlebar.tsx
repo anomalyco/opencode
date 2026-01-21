@@ -94,7 +94,7 @@ export function Titlebar() {
               variant="ghost"
               class="size-8 rounded-md"
               onClick={layout.mobileSidebar.toggle}
-              aria-label="Toggle menu"
+              aria-label={language.t("sidebar.menu.toggle")}
             />
           </div>
         </Show>
@@ -105,7 +105,7 @@ export function Titlebar() {
               variant="ghost"
               class="size-8 rounded-md"
               onClick={layout.mobileSidebar.toggle}
-              aria-label="Toggle menu"
+              aria-label={language.t("sidebar.menu.toggle")}
             />
           </div>
         </Show>
@@ -119,7 +119,7 @@ export function Titlebar() {
             variant="ghost"
             class="group/sidebar-toggle size-6 p-0"
             onClick={layout.sidebar.toggle}
-            aria-label="Toggle sidebar"
+            aria-label={language.t("command.sidebar.toggle")}
             aria-expanded={layout.sidebar.opened()}
           >
             <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
