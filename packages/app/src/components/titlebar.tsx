@@ -18,6 +18,7 @@ export function Titlebar() {
   const theme = useTheme()
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
+  const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
   const reserve = createMemo(
     () => platform.platform === "desktop" && (platform.os === "windows" || platform.os === "linux"),
   )
@@ -75,13 +76,15 @@ export function Titlebar() {
   }
 
   return (
-    <header class="h-10 shrink-0 bg-background-base flex items-center relative">
+    <header class="h-10 shrink-0 bg-background-base flex items-center relative" data-tauri-drag-region>
       <div
         classList={{
-          "flex items-center w-full min-w-0 pr-2": true,
+          "flex items-center w-full min-w-0": true,
           "pl-2": !mac(),
+          "pr-2": !windows(),
         }}
         onMouseDown={drag}
+        data-tauri-drag-region
       >
         <Show when={mac()}>
           <div class="w-[72px] h-full shrink-0" data-tauri-drag-region />
@@ -116,9 +119,16 @@ export function Titlebar() {
             </div>
           </Button>
         </TooltipKeybind>
-        <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
+        <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" data-tauri-drag-region />
         <div class="flex-1 h-full" data-tauri-drag-region />
-        <div id="opencode-titlebar-right" class="flex items-center gap-3 shrink-0 flex-1 justify-end" />
+        <div
+          id="opencode-titlebar-right"
+          class="flex items-center gap-3 shrink-0 flex-1 justify-end"
+          data-tauri-drag-region
+        />
+        <Show when={windows()}>
+          <div data-tauri-decorum-tb class="flex flex-row" />
+        </Show>
       </div>
       <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div id="opencode-titlebar-center" class="pointer-events-auto" />
