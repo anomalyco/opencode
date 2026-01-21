@@ -71,15 +71,32 @@ Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
   - `packages/desktop`: The native desktop app, built with Tauri (wraps `packages/app`)
   - `packages/plugin`: Source for `@opencode-ai/plugin`
 
+### Running the API Server
+
+To start the OpenCode API server (required for local web app development):
+
+```bash
+bun run --cwd packages/opencode dev:server
+```
+
+This starts the headless server on port 4096 by default. You can specify a different port:
+
+```bash
+bun run --cwd packages/opencode dev:server --port 8080
+```
+
 ### Running the Web App
 
-To test UI changes during development, run the web app:
+To test UI changes during development:
+
+1. **First, start the OpenCode server** (see [Running the API Server](#running-the-api-server) section above)
+2. **Then run the web app:**
 
 ```bash
 bun run --cwd packages/app dev
 ```
 
-This starts a local dev server at http://localhost:5173 (or similar port shown in output). Most UI changes can be tested here.
+This starts a local dev server at http://localhost:5173 (or similar port shown in output). Most UI changes can be tested here, but the server must be running for full functionality.
 
 ### Running the Desktop App
 
