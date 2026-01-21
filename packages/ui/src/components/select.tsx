@@ -17,7 +17,7 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
   classList?: ComponentProps<"div">["classList"]
   children?: (item: T | undefined) => JSX.Element
   triggerStyle?: JSX.CSSProperties
-  triggerVariant?: "default" | "button"
+  triggerVariant?: "settings"
 }
 
 export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">) {
@@ -84,7 +84,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
       {...others}
       data-component="select"
       data-trigger-style={local.triggerVariant}
-      placement="bottom-end"
+      placement={local.triggerVariant === "settings" ? "bottom-end" : "bottom-start"}
       gutter={4}
       value={local.current}
       options={grouped()}
@@ -148,7 +148,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
           }}
         </Kobalte.Value>
         <Kobalte.Icon data-slot="select-select-trigger-icon">
-          <Icon name={local.triggerVariant === "button" ? "chevron-down" : "selector"} size="small" />
+          <Icon name={local.triggerVariant === "settings" ? "selector" : "chevron-down"} size="small" />
         </Kobalte.Icon>
       </Kobalte.Trigger>
       <Kobalte.Portal>
@@ -158,6 +158,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
             [local.class ?? ""]: !!local.class,
           }}
           data-component="select-content"
+          data-trigger-style={local.triggerVariant}
         >
           <Kobalte.Listbox data-slot="select-select-content-list" />
         </Kobalte.Content>

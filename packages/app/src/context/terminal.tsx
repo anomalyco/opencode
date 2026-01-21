@@ -1,6 +1,6 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createMemo, createRoot, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
 import { Persist, persisted } from "@/utils/persist"
@@ -28,6 +28,14 @@ type TerminalCacheEntry = {
 function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, session?: string) {
   const legacy = session ? [`${dir}/terminal/${session}.v1`, `${dir}/terminal.v1`] : [`${dir}/terminal.v1`]
 
+  const numberFromTitle = (title: string) => {
+    const match = title.match(/^Terminal (\d+)$/)
+    if (!match) return
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) return
+    return value
+  }
+
   const [store, setStore, _, ready] = persisted(
     Persist.workspace(dir, "terminal", legacy),
     createStore<{
@@ -54,24 +62,36 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
   })
   onCleanup(unsub)
 
+  const meta = { migrated: false }
+
+  createEffect(() => {
+    if (!ready()) return
+    if (meta.migrated) return
+    meta.migrated = true
+
+    setStore("all", (all) => {
+      const next = all.map((pty) => {
+        const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
+        if (direct !== undefined) return pty
+        const parsed = numberFromTitle(pty.title)
+        if (parsed === undefined) return pty
+        return { ...pty, titleNumber: parsed }
+      })
+      if (next.every((pty, index) => pty === all[index])) return all
+      return next
+    })
+  })
+
   return {
     ready,
     all: createMemo(() => Object.values(store.all)),
     active: createMemo(() => store.active),
     new() {
-      const parse = (title: string) => {
-        const match = title.match(/^Terminal (\d+)$/)
-        if (!match) return
-        const value = Number(match[1])
-        if (!Number.isFinite(value) || value <= 0) return
-        return value
-      }
-
       const existingTitleNumbers = new Set(
         store.all.flatMap((pty) => {
           const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
           if (direct !== undefined) return [direct]
-          const parsed = parse(pty.title)
+          const parsed = numberFromTitle(pty.title)
           if (parsed === undefined) return []
           return [parsed]
         }),
