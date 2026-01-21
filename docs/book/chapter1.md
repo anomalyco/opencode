@@ -34,13 +34,13 @@ OpenCode 采用 **客户端/服务器架构**，这一设计带来了独特的�
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                      C/S 架构模型                         │
+│                      C/S 架构模型                        │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
-│   ┌─────────────┐         ┌─────────────┐              │
-│   │   CLI/TUI   │         │   Web UI    │              │
-│   │  (yargs)    │         │   (Solid)   │              │
-│   └──────┬──────┘         └──────┬──────┘              │
+│   ┌─────────────┐         ┌─────────────┐               │
+│   │   CLI/TUI   │         │   Web UI    │               │
+│   │  (yargs)    │         │   (Solid)   │               │
+│   └──────┬──────┘         └──────┬──────┘               │
 │          │                       │                      │
 │          └───────────┬───────────┘                      │
 │                      │                                  │
@@ -80,7 +80,7 @@ OpenCode 采用 **客户端/服务器架构**，这一设计带来了独特的�
 // packages/opencode/src/provider/provider.ts
 // 支持 20+ AI Provider 的统一抽象
 
-const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
+const BUNDLED_PROVIDERS: Record<string, (options: any) => <SDK> = {
   "@ai-sdk/amazon-bedrock": createAmazonBedrock,
   "@ai-sdk/anthropic": createAnthropic,
   "@ai-sdk/azure": createAzure,
