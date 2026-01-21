@@ -55,8 +55,7 @@ jobs:
           # PRs with activity today (updated today)
           gh pr list --repo ${{ github.repository }} --state open --search \"updated:${TODAY}\" --json number,title,author,labels,createdAt,updatedAt,reviewDecision,isDraft,additions,deletions --limit 100
 
-          # PRs merged today
-          gh pr list --repo ${{ github.repository }} --state merged --search \"merged:${TODAY}\" --json number,title,author,mergedAt --limit 50
+
 
           STEP 2: For high-activity PRs, check comment counts
           For promising PRs, run:
@@ -95,9 +94,6 @@ jobs:
 
           **Quick Wins**
           [Small PRs ready to merge]
-
-          **Merged Today**
-          [What shipped]
           ===DISCORD_END===
 
           STEP 5: Format for Discord
