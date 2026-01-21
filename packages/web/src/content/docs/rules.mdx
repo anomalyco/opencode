@@ -3,7 +3,7 @@ title: Rules
 description: Set custom instructions for opencode.
 ---
 
-You can provide custom instructions to opencode by creating an `AGENTS.md` file. This is similar to `CLAUDE.md` or Cursor's rules. It contains instructions that will be included in the LLM's context to customize its behavior for your specific project.
+You can provide custom instructions to opencode by creating an `AGENTS.md` file. This is similar to Cursor's rules. It contains instructions that will be included in the LLM's context to customize its behavior for your specific project.
 
 ---
 
@@ -58,7 +58,7 @@ opencode also supports reading the `AGENTS.md` file from multiple locations. And
 
 ### Project
 
-The ones we have seen above, where the `AGENTS.md` is placed in the project root, are project-specific rules. These only apply when you are working in this directory or its sub-directories.
+Place an `AGENTS.md` in your project root for project-specific rules. These only apply when you are working in this directory or its sub-directories.
 
 ### Global
 
@@ -66,16 +66,33 @@ You can also have global rules in a `~/.config/opencode/AGENTS.md` file. This ge
 
 Since this isn't committed to Git or shared with your team, we recommend using this to specify any personal rules that the LLM should follow.
 
+### Claude Code Compatibility
+
+For users migrating from Claude Code, OpenCode supports Claude Code's file conventions as fallbacks:
+
+- **Project rules**: `CLAUDE.md` in your project directory (used if no `AGENTS.md` exists)
+- **Global rules**: `~/.claude/CLAUDE.md` (used if no `~/.config/opencode/AGENTS.md` exists)
+- **Skills**: `~/.claude/skills/` — see [Agent Skills](/docs/skills/) for details
+
+To disable Claude Code compatibility, set one of these environment variables:
+
+```bash
+export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+```
+
 ---
 
 ## Precedence
 
-So when opencode starts, it looks for:
+When opencode starts, it looks for rule files in this order:
 
-1. **Local files** by traversing up from the current directory
-2. **Global file** by checking `~/.config/opencode/AGENTS.md`
+1. **Local files** by traversing up from the current directory (`AGENTS.md`, `CLAUDE.md`, or `CONTEXT.md`)
+2. **Global file** at `~/.config/opencode/AGENTS.md`
+3. **Claude Code file** at `~/.claude/CLAUDE.md` (unless disabled)
 
-If you have both global and project-specific rules, opencode will combine them together.
+The first matching file wins in each category. For example, if you have both `AGENTS.md` and `CLAUDE.md`, only `AGENTS.md` is used. Similarly, `~/.config/opencode/AGENTS.md` takes precedence over `~/.claude/CLAUDE.md`.
 
 ---
 

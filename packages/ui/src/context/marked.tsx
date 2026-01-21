@@ -383,7 +383,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
         renderer: {
           link({ href, title, text }) {
             const titleAttr = title ? ` title="${title}"` : ""
-            return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`
+            return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
           },
         },
       },

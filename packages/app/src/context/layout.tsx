@@ -33,8 +33,6 @@ type SessionTabs = {
 type SessionView = {
   scroll: Record<string, SessionScroll>
   reviewOpen?: string[]
-  terminalOpened?: boolean
-  reviewPanelOpened?: boolean
 }
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
@@ -47,18 +45,42 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const globalSdk = useGlobalSDK()
     const globalSync = useGlobalSync()
     const server = useServer()
+
+    const isRecord = (value: unknown): value is Record<string, unknown> =>
+      typeof value === "object" && value !== null && !Array.isArray(value)
+
+    const migrate = (value: unknown) => {
+      if (!isRecord(value)) return value
+      const sidebar = value.sidebar
+      if (!isRecord(sidebar)) return value
+      if (typeof sidebar.workspaces !== "boolean") return value
+      return {
+        ...value,
+        sidebar: {
+          ...sidebar,
+          workspaces: {},
+          workspacesDefault: sidebar.workspaces,
+        },
+      }
+    }
+
+    const target = Persist.global("layout", ["layout.v6"])
     const [store, setStore, _, ready] = persisted(
-      Persist.global("layout", ["layout.v6"]),
+      { ...target, migrate },
       createStore({
         sidebar: {
           opened: false,
-          width: 280,
+          width: 344,
+          workspaces: {} as Record<string, boolean>,
+          workspacesDefault: false,
         },
         terminal: {
           height: 280,
+          opened: false,
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
+          panelOpened: true,
         },
         session: {
           width: 600,
@@ -150,7 +172,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const current = store.sessionView[sessionKey]
         const keep = meta.active ?? sessionKey
         if (!current) {
-          setStore("sessionView", sessionKey, { scroll: next, terminalOpened: false, reviewPanelOpened: true })
+          setStore("sessionView", sessionKey, { scroll: next })
           prune(keep)
           return
         }
@@ -186,10 +208,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       })
     })
 
-    const usedColors = new Set<AvatarColorKey>()
+    const [colors, setColors] = createStore<Record<string, AvatarColorKey>>({})
 
-    function pickAvailableColor(): AvatarColorKey {
-      const available = AVATAR_COLOR_KEYS.filter((c) => !usedColors.has(c))
+    function pickAvailableColor(used: Set<string>): AvatarColorKey {
+      const available = AVATAR_COLOR_KEYS.filter((c) => !used.has(c))
       if (available.length === 0) return AVATAR_COLOR_KEYS[Math.floor(Math.random() * AVATAR_COLOR_KEYS.length)]
       return available[Math.floor(Math.random() * available.length)]
     }
@@ -200,24 +222,15 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const metadata = projectID
         ? globalSync.data.project.find((x) => x.id === projectID)
         : globalSync.data.project.find((x) => x.worktree === project.worktree)
-      return [
-        {
-          ...(metadata ?? {}),
-          ...project,
-          icon: { url: metadata?.icon?.url, color: metadata?.icon?.color },
+      return {
+        ...(metadata ?? {}),
+        ...project,
+        icon: {
+          url: metadata?.icon?.url,
+          override: metadata?.icon?.override,
+          color: metadata?.icon?.color,
         },
-      ]
-    }
-
-    function colorize(project: LocalProject) {
-      if (project.icon?.color) return project
-      const color = pickAvailableColor()
-      usedColors.add(color)
-      project.icon = { ...project.icon, color }
-      if (project.id) {
-        globalSdk.client.project.update({ projectID: project.id, icon: { color } })
       }
-      return project
     }
 
     const roots = createMemo(() => {
@@ -255,8 +268,37 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       })
     })
 
-    const enriched = createMemo(() => server.projects.list().flatMap(enrich))
-    const list = createMemo(() => enriched().flatMap(colorize))
+    const enriched = createMemo(() => server.projects.list().map(enrich))
+    const list = createMemo(() => {
+      const projects = enriched()
+      return projects.map((project) => {
+        const color = project.icon?.color ?? colors[project.worktree]
+        if (!color) return project
+        const icon = project.icon ? { ...project.icon, color } : { color }
+        return { ...project, icon }
+      })
+    })
+
+    createEffect(() => {
+      const projects = enriched()
+      if (projects.length === 0) return
+
+      const used = new Set<string>()
+      for (const project of projects) {
+        const color = project.icon?.color ?? colors[project.worktree]
+        if (color) used.add(color)
+      }
+
+      for (const project of projects) {
+        if (project.icon?.color) continue
+        if (colors[project.worktree]) continue
+        const color = pickAvailableColor(used)
+        used.add(color)
+        setColors(project.worktree, color)
+        if (!project.id) continue
+        void globalSdk.client.project.update({ projectID: project.id, icon: { color } })
+      }
+    })
 
     onMount(() => {
       Promise.all(
@@ -304,6 +346,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         resize(width: number) {
           setStore("sidebar", "width", width)
         },
+        workspaces(directory: string) {
+          return createMemo(() => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false)
+        },
+        setWorkspaces(directory: string, value: boolean) {
+          setStore("sidebar", "workspaces", directory, value)
+        },
+        toggleWorkspaces(directory: string) {
+          const current = store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
+          setStore("sidebar", "workspaces", directory, !current)
+        },
       },
       terminal: {
         height: createMemo(() => store.terminal.height),
@@ -347,31 +399,31 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         touch(sessionKey)
         scroll.seed(sessionKey)
         const s = createMemo(() => store.sessionView[sessionKey] ?? { scroll: {} })
-        const terminalOpened = createMemo(() => s().terminalOpened ?? false)
-        const reviewPanelOpened = createMemo(() => s().reviewPanelOpened ?? true)
+        const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
+        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
 
         function setTerminalOpened(next: boolean) {
-          const current = store.sessionView[sessionKey]
+          const current = store.terminal
           if (!current) {
-            setStore("sessionView", sessionKey, { scroll: {}, terminalOpened: next, reviewPanelOpened: true })
+            setStore("terminal", { height: 280, opened: next })
             return
           }
 
-          const value = current.terminalOpened ?? false
+          const value = current.opened ?? false
           if (value === next) return
-          setStore("sessionView", sessionKey, "terminalOpened", next)
+          setStore("terminal", "opened", next)
         }
 
         function setReviewPanelOpened(next: boolean) {
-          const current = store.sessionView[sessionKey]
+          const current = store.review
           if (!current) {
-            setStore("sessionView", sessionKey, { scroll: {}, terminalOpened: false, reviewPanelOpened: next })
+            setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
             return
           }
 
-          const value = current.reviewPanelOpened ?? true
+          const value = current.panelOpened ?? true
           if (value === next) return
-          setStore("sessionView", sessionKey, "reviewPanelOpened", next)
+          setStore("review", "panelOpened", next)
         }
 
         return {
@@ -412,8 +464,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               if (!current) {
                 setStore("sessionView", sessionKey, {
                   scroll: {},
-                  terminalOpened: false,
-                  reviewPanelOpened: true,
                   reviewOpen: open,
                 })
                 return

@@ -59,7 +59,7 @@ export const WriteTool = Tool.define("write", {
       const suffix =
         errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
       if (file === normalizedFilepath) {
-        output += `\n\nLSP errors detected in this file:\n<diagnostics file="${filepath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+        output += `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${filepath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
         continue
       }
       if (projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue

@@ -14,7 +14,9 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewUrl, WebviewWindow};
+use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewWindowBuilder};
+#[cfg(windows)]
+use tauri_plugin_decorum::WebviewWindowExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_store::StoreExt;
@@ -156,6 +158,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32, password: &str) -> CommandChild {
     println!("spawning sidecar on port {port}");
 
     let (mut rx, child) = cli::create_command(app, format!("serve --port {port}").as_str())
+        .env("OPENCODE_SERVER_USERNAME", "opencode")
         .env("OPENCODE_SERVER_PASSWORD", password)
         .spawn()
         .expect("Failed to spawn opencode");
@@ -197,17 +200,37 @@ fn spawn_sidecar(app: &AppHandle, port: u32, password: &str) -> CommandChild {
     child
 }
 
-async fn check_server_health(url: &str, password: Option<&str>) -> bool {
-    let health_url = format!("{}/health", url.trim_end_matches('/'));
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(3))
-        .build();
+fn url_is_localhost(url: &reqwest::Url) -> bool {
+    url.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("localhost")
+            || host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback())
+    })
+}
 
-    let Ok(client) = client else {
+async fn check_server_health(url: &str, password: Option<&str>) -> bool {
+    let Ok(url) = reqwest::Url::parse(url) else {
         return false;
     };
 
-    let mut req = client.get(&health_url);
+    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(3));
+
+    if url_is_localhost(&url) {
+        // Some environments set proxy variables (HTTP_PROXY/HTTPS_PROXY/ALL_PROXY) without
+        // excluding loopback. reqwest respects these by default, which can prevent the desktop
+        // app from reaching its own local sidecar server.
+        builder = builder.no_proxy();
+    };
+
+    let Ok(client) = builder.build() else {
+        return false;
+    };
+    let Ok(health_url) = url.join("/global/health") else {
+        return false;
+    };
+
+    let mut req = client.get(health_url);
 
     if let Some(password) = password {
         req = req.basic_auth("opencode", Some(password));
@@ -223,6 +246,11 @@ async fn check_server_health(url: &str, password: Option<&str>) -> bool {
 pub fn run() {
     let updater_enabled = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
 
+    #[cfg(all(target_os = "macos", not(debug_assertions)))]
+    let _ = std::process::Command::new("killall")
+        .arg("opencode-cli")
+        .output();
+
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // Focus existing window when another instance is launched
@@ -232,7 +260,14 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        - tauri_plugin_window_state::StateFlags::DECORATIONS,
+                )
+                .build(),
+        )
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
@@ -242,6 +277,7 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(PinchZoomDisablePlugin)
+        .plugin(tauri_plugin_decorum::init())
         .invoke_handler(tauri::generate_handler![
             kill_sidecar,
             install_cli,
@@ -263,29 +299,36 @@ pub fn run() {
                 .map(|m| m.size().to_logical(m.scale_factor()))
                 .unwrap_or(LogicalSize::new(1920, 1080));
 
-            #[allow(unused_mut)]
-            let mut window_builder =
-                WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
-                    .title("OpenCode")
-                    .inner_size(size.width as f64, size.height as f64)
-                    .decorations(true)
-                    .zoom_hotkeys_enabled(true)
-                    .disable_drag_drop_handler()
-                    .initialization_script(format!(
-                        r#"
+            let config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|w| w.label == "main")
+                .expect("main window config missing");
+
+            let window_builder = WebviewWindowBuilder::from_config(&app, config)
+                .expect("Failed to create window builder from config")
+                .inner_size(size.width as f64, size.height as f64)
+                .initialization_script(format!(
+                    r#"
                       window.__OPENCODE__ ??= {{}};
                       window.__OPENCODE__.updaterEnabled = {updater_enabled};
                     "#
-                    ));
+                ));
 
             #[cfg(target_os = "macos")]
-            {
-                window_builder = window_builder
-                    .title_bar_style(tauri::TitleBarStyle::Overlay)
-                    .hidden_title(true);
-            }
+            let window_builder = window_builder
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true);
 
-            window_builder.build().expect("Failed to create window");
+            #[cfg(windows)]
+            let window_builder = window_builder.decorations(false);
+
+            let window = window_builder.build().expect("Failed to create window");
+
+            #[cfg(windows)]
+            let _ = window.create_overlay_titlebar();
 
             let (tx, rx) = oneshot::channel();
             app.manage(ServerState::new(None, rx));
@@ -441,7 +484,7 @@ async fn spawn_local_server(
 
     let timestamp = Instant::now();
     loop {
-        if timestamp.elapsed() > Duration::from_secs(7) {
+        if timestamp.elapsed() > Duration::from_secs(30) {
             break Err(format!(
                 "Failed to spawn OpenCode Server. Logs:\n{}",
                 get_logs(app.clone()).await.unwrap()

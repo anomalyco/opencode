@@ -55,8 +55,9 @@ if (identifier.startsWith("wrk_")) {
       ),
   )
 
-  // Get all payments for these workspaces
-  await Promise.all(users.map((u: { workspaceID: string }) => printWorkspace(u.workspaceID)))
+  for (const user of users) {
+    await printWorkspace(user.workspaceID)
+  }
 }
 
 async function printWorkspace(workspaceID: string) {
@@ -113,8 +114,13 @@ async function printWorkspace(workspaceID: string) {
       .select({
         balance: BillingTable.balance,
         customerID: BillingTable.customerID,
+        reload: BillingTable.reload,
         subscriptionID: BillingTable.subscriptionID,
-        subscriptionCouponID: BillingTable.subscriptionCouponID,
+        subscription: {
+          plan: BillingTable.subscriptionPlan,
+          booked: BillingTable.timeSubscriptionBooked,
+          enrichment: BillingTable.subscription,
+        },
       })
       .from(BillingTable)
       .where(eq(BillingTable.workspaceID, workspace.id))
@@ -123,6 +129,16 @@ async function printWorkspace(workspaceID: string) {
           rows.map((row) => ({
             ...row,
             balance: `$${(row.balance / 100000000).toFixed(2)}`,
+            subscription: row.subscriptionID
+              ? [
+                  `Black ${row.subscription.enrichment!.plan}`,
+                  row.subscription.enrichment!.seats > 1 ? `X ${row.subscription.enrichment!.seats} seats` : "",
+                  row.subscription.enrichment!.coupon ? `(coupon: ${row.subscription.enrichment!.coupon})` : "",
+                  `(ref: ${row.subscriptionID})`,
+                ].join(" ")
+              : row.subscription.booked
+                ? `Waitlist ${row.subscription.plan} plan`
+                : undefined,
           }))[0],
       ),
   )
@@ -133,6 +149,7 @@ async function printWorkspace(workspaceID: string) {
         amount: PaymentTable.amount,
         paymentID: PaymentTable.paymentID,
         invoiceID: PaymentTable.invoiceID,
+        customerID: PaymentTable.customerID,
         timeCreated: PaymentTable.timeCreated,
         timeRefunded: PaymentTable.timeRefunded,
       })
