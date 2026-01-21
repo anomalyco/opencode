@@ -30,7 +30,6 @@ const ModelList: Component<{
       .filter((m) => (props.provider ? m.provider.id === props.provider : true)),
   )
 
-
   return (
     <List
       class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${props.class ?? ""}`}
@@ -54,7 +53,13 @@ const ModelList: Component<{
           class="w-full"
           placement="right-start"
           gutter={12}
-          value={<ModelTooltip model={item} latest={item.latest} free={item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)} />}
+          value={
+            <ModelTooltip
+              model={item}
+              latest={item.latest}
+              free={item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)}
+            />
+          }
         >
           {node}
         </Tooltip>

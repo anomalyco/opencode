@@ -47,7 +47,13 @@ export const DialogSelectModelUnpaid: Component = () => {
               class="w-full"
               placement="right-start"
               gutter={12}
-              value={<ModelTooltip model={item} latest={item.latest} free={item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)} />}
+              value={
+                <ModelTooltip
+                  model={item}
+                  latest={item.latest}
+                  free={item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)}
+                />
+              }
             >
               {node}
             </Tooltip>
