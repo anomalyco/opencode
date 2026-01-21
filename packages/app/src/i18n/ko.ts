@@ -17,6 +17,7 @@ export const dict = {
   "command.category.mcp": "MCP",
   "command.category.agent": "에이전트",
   "command.category.permissions": "권한",
+  "command.category.workspace": "작업 공간",
 
   "theme.scheme.system": "시스템",
   "theme.scheme.light": "라이트",
