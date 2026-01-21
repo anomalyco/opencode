@@ -70,22 +70,22 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         {(ctx) => (
           <>
             <div class="flex items-center gap-2">
-              <span class="text-text-strong">{ctx().tokens}</span>
-              <span class="text-text-base">{language.t("context.usage.tokens")}</span>
+              <span class="text-text-invert-strong">{ctx().tokens}</span>
+              <span class="text-text-invert-base">{language.t("context.usage.tokens")}</span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="text-text-strong">{ctx().percentage ?? 0}%</span>
-              <span class="text-text-base">{language.t("context.usage.usage")}</span>
+              <span class="text-text-invert-strong">{ctx().percentage ?? 0}%</span>
+              <span class="text-text-invert-base">{language.t("context.usage.usage")}</span>
             </div>
           </>
         )}
       </Show>
       <div class="flex items-center gap-2">
-        <span class="text-text-strong">{cost()}</span>
-        <span class="text-text-base">{language.t("context.usage.cost")}</span>
+        <span class="text-text-invert-strong">{cost()}</span>
+        <span class="text-text-invert-base">{language.t("context.usage.cost")}</span>
       </div>
       <Show when={variant() === "button"}>
-        <div class="text-11-regular text-text-base mt-1">{language.t("context.usage.clickToView")}</div>
+        <div class="text-11-regular text-text-invert-base mt-1">{language.t("context.usage.clickToView")}</div>
       </Show>
     </div>
   )
