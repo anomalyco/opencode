@@ -305,16 +305,22 @@ export function DialogConnectProvider(props: { provider: string }) {
                       }
 
                       setFormStore("error", undefined)
-                      const { error } = await globalSDK.client.provider.oauth.callback({
-                        providerID: props.provider,
-                        method: store.methodIndex,
-                        code,
-                      })
-                      if (!error) {
+                      const result = await globalSDK.client.provider.oauth
+                        .callback({
+                          providerID: props.provider,
+                          method: store.methodIndex,
+                          code,
+                        })
+                        .then((value) =>
+                          value.error ? { ok: false as const, error: value.error } : { ok: true as const },
+                        )
+                        .catch((error) => ({ ok: false as const, error }))
+                      if (result.ok) {
                         await complete()
                         return
                       }
-                      setFormStore("error", language.t("provider.connect.oauth.code.invalid"))
+                      const message = result.error instanceof Error ? result.error.message : String(result.error)
+                      setFormStore("error", message || language.t("provider.connect.oauth.code.invalid"))
                     }
 
                     return (
@@ -357,13 +363,19 @@ export function DialogConnectProvider(props: { provider: string }) {
                     })
 
                     onMount(async () => {
-                      const result = await globalSDK.client.provider.oauth.callback({
-                        providerID: props.provider,
-                        method: store.methodIndex,
-                      })
-                      if (result.error) {
-                        // TODO: show error
-                        dialog.close()
+                      const result = await globalSDK.client.provider.oauth
+                        .callback({
+                          providerID: props.provider,
+                          method: store.methodIndex,
+                        })
+                        .then((value) =>
+                          value.error ? { ok: false as const, error: value.error } : { ok: true as const },
+                        )
+                        .catch((error) => ({ ok: false as const, error }))
+                      if (!result.ok) {
+                        const message = result.error instanceof Error ? result.error.message : String(result.error)
+                        setStore("state", "error")
+                        setStore("error", message)
                         return
                       }
                       await complete()
