@@ -13,6 +13,7 @@ export const dict = {
   "command.category.mcp": "MCP",
   "command.category.agent": "エージェント",
   "command.category.permissions": "権限",
+  "command.category.workspace": "ワークスペース",
 
   "theme.scheme.system": "システム",
   "theme.scheme.light": "ライト",
@@ -463,6 +464,8 @@ export const dict = {
   "settings.shortcuts.conflict.description": "{{keybind}} は既に {{titles}} に割り当てられています。",
   "settings.shortcuts.unassigned": "未割り当て",
   "settings.shortcuts.pressKeys": "キーを押してください",
+  "settings.shortcuts.search.placeholder": "ショートカットを検索",
+  "settings.shortcuts.search.empty": "ショートカットが見つかりません",
 
   "settings.shortcuts.group.general": "一般",
   "settings.shortcuts.group.session": "セッション",

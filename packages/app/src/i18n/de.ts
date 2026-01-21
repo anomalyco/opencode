@@ -17,6 +17,7 @@ export const dict = {
   "command.category.mcp": "MCP",
   "command.category.agent": "Agent",
   "command.category.permissions": "Berechtigungen",
+  "command.category.workspace": "Arbeitsbereich",
 
   "theme.scheme.system": "System",
   "theme.scheme.light": "Hell",
@@ -474,6 +475,8 @@ export const dict = {
   "settings.shortcuts.conflict.description": "{{keybind}} ist bereits {{titles}} zugewiesen.",
   "settings.shortcuts.unassigned": "Nicht zugewiesen",
   "settings.shortcuts.pressKeys": "Tasten drücken",
+  "settings.shortcuts.search.placeholder": "Tastenkürzel suchen",
+  "settings.shortcuts.search.empty": "Keine Tastenkürzel gefunden",
 
   "settings.shortcuts.group.general": "Allgemein",
   "settings.shortcuts.group.session": "Sitzung",

@@ -13,6 +13,7 @@ export const dict = {
   "command.category.mcp": "MCP",
   "command.category.agent": "Agent",
   "command.category.permissions": "Tilladelser",
+  "command.category.workspace": "Arbejdsområde",
 
   "theme.scheme.system": "System",
   "theme.scheme.light": "Lys",
@@ -465,6 +466,8 @@ export const dict = {
   "settings.shortcuts.conflict.description": "{{keybind}} er allerede tildelt til {{titles}}.",
   "settings.shortcuts.unassigned": "Ikke tildelt",
   "settings.shortcuts.pressKeys": "Tryk på taster",
+  "settings.shortcuts.search.placeholder": "Søg genveje",
+  "settings.shortcuts.search.empty": "Ingen genveje fundet",
 
   "settings.shortcuts.group.general": "Generelt",
   "settings.shortcuts.group.session": "Session",
