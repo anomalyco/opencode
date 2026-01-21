@@ -635,6 +635,28 @@ export namespace Auth {
       })
     }
 
+    export async function updateRecord(
+      providerID: string,
+      recordID: string,
+      namespace: string,
+      tokens: { access: string; refresh: string; expires: number },
+    ): Promise<boolean> {
+      return updateStore((store) => {
+        const provider = store.providers[providerID]
+        if (!provider || provider.type !== "oauth") return { value: false, changed: false }
+
+        const record = findOAuthRecord(provider, recordID)
+        if (!record || record.namespace !== namespace) return { value: false, changed: false }
+
+        record.access = tokens.access
+        record.refresh = tokens.refresh
+        record.expires = tokens.expires
+        record.updatedAt = Date.now()
+
+        return { value: true, changed: true }
+      })
+    }
+
     export async function removeRecord(
       providerID: string,
       recordID: string,

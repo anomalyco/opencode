@@ -1,6 +1,9 @@
 import { Auth } from "./index"
 import { withOAuthRecord } from "./context"
 import { CredentialManager } from "./credential-manager"
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "rotating-fetch" })
 
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 30_000
 const DEFAULT_AUTH_FAILURE_COOLDOWN_MS = 5 * 60_000
@@ -98,6 +101,71 @@ function isAuthExpiredStatus(status: number): boolean {
   return status === 401 || status === 403
 }
 
+/**
+ * Attempt to refresh tokens via browser session.
+ * Returns true if successful and tokens were updated.
+ */
+async function attemptBrowserRelogin(providerID: string, recordID: string, namespace: string): Promise<boolean> {
+  try {
+    const { AuthBrowser } = await import("./browser")
+
+    const session = await AuthBrowser.status(recordID)
+    if (!session.isConfigured) {
+      log.info("no browser session configured for auto-relogin", { providerID, recordID })
+      return false
+    }
+
+    log.info("attempting auto-relogin via browser session", { providerID, recordID })
+
+    // Show toast notification
+    const { Bus } = await import("../bus")
+    const { TuiEvent } = await import("../cli/cmd/tui/event")
+    await Bus.publish(TuiEvent.ToastShow, {
+      title: "Auto-Relogin",
+      message: "Token expired. Attempting automatic refresh...",
+      variant: "info",
+      duration: 5000,
+    }).catch(() => {})
+
+    const tokens = await AuthBrowser.refresh(recordID)
+
+    // Update the auth store with new tokens
+    await Auth.OAuthPool.updateRecord(providerID, recordID, namespace, {
+      access: tokens.access,
+      refresh: tokens.refresh,
+      expires: tokens.expires,
+    })
+
+    log.info("auto-relogin successful", { providerID, recordID })
+
+    await Bus.publish(TuiEvent.ToastShow, {
+      title: "Auto-Relogin",
+      message: "Token refreshed successfully!",
+      variant: "success",
+      duration: 3000,
+    }).catch(() => {})
+
+    return true
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    log.warn("auto-relogin failed", { providerID, recordID, error: message })
+
+    // Show failure toast
+    try {
+      const { Bus } = await import("../bus")
+      const { TuiEvent } = await import("../cli/cmd/tui/event")
+      await Bus.publish(TuiEvent.ToastShow, {
+        title: "Auto-Relogin Failed",
+        message: "Please run 'opencode auth browser setup' to re-authenticate.",
+        variant: "error",
+        duration: 10000,
+      }).catch(() => {})
+    } catch {}
+
+    return false
+  }
+}
+
 export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any) => Promise<Response>>(
   fetchFn: TFetch,
   opts: {
@@ -178,6 +246,29 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
             return await withOAuthRecord(opts.providerID, nextID, () => fetchFn(attemptInput, init))
           } catch (e) {
             lastError = e
+
+            // Check if this is a token refresh failure - attempt auto-relogin (only once per account)
+            const errorMessage = e instanceof Error ? e.message : String(e)
+            if (
+              errorMessage.includes("Token refresh failed") &&
+              opts.providerID === "anthropic" &&
+              !refreshed.has(nextID) // Prevent infinite relogin attempts
+            ) {
+              refreshed.add(nextID) // Mark as attempted
+
+              log.info("token refresh failed, attempting auto-relogin", {
+                providerID: opts.providerID,
+                recordID: nextID,
+              })
+
+              const reloginSuccess = await attemptBrowserRelogin(opts.providerID, nextID, namespace)
+              if (reloginSuccess) {
+                log.info("auto-relogin successful, retrying request", { providerID: opts.providerID, recordID: nextID })
+                // Retry with same account after successful relogin
+                continue
+              }
+            }
+
             await Auth.OAuthPool.recordOutcome({
               providerID: opts.providerID,
               recordID: nextID,

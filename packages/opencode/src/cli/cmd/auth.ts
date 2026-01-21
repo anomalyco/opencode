@@ -303,6 +303,7 @@ export const AuthCommand = cmd({
       .command(AuthListCommand)
       .command(AuthUsageCommand)
       .command(AuthSwitchCommand)
+      .command(AuthBrowserCommand)
       .demandCommand(),
   async handler() {},
 })
@@ -585,3 +586,152 @@ export const AuthLogoutCommand = cmd({
     prompts.outro("Logout successful")
   },
 })
+
+export const AuthBrowserCommand = cmd({
+  command: "browser <action>",
+  describe: "manage browser sessions for auto-relogin",
+  builder: (yargs) =>
+    yargs.positional("action", {
+      describe: "action to perform",
+      choices: ["setup", "status", "remove"] as const,
+      type: "string",
+    }),
+  async handler(args) {
+    const { AuthBrowser } = await import("../../auth/browser")
+
+    UI.empty()
+
+    if (args.action === "status") {
+      prompts.intro("Browser Sessions")
+
+      const accounts = await Auth.OAuthPool.list("anthropic", "default")
+      if (accounts.length === 0) {
+        prompts.log.info("No Anthropic OAuth accounts configured")
+        prompts.outro("Done")
+        return
+      }
+
+      for (const account of accounts) {
+        const session = await AuthBrowser.status(account.id)
+        const status = session.isConfigured ? UI.Style.TEXT_SUCCESS + "Active" : UI.Style.TEXT_DIM + "Not configured"
+        const lastRefresh = session.lastRefresh ? ` (last refresh: ${formatTimeAgo(session.lastRefresh)})` : ""
+        const error = session.lastError ? UI.Style.TEXT_DANGER + ` Error: ${session.lastError}` : ""
+
+        prompts.log.info(`${account.label || account.id}: ${status}${lastRefresh}${error}${UI.Style.TEXT_NORMAL}`)
+      }
+
+      prompts.outro("Done")
+      return
+    }
+
+    if (args.action === "setup") {
+      prompts.intro("Setup Browser Session")
+
+      const accounts = await Auth.OAuthPool.list("anthropic", "default")
+      if (accounts.length === 0) {
+        prompts.log.error("No Anthropic OAuth accounts found. Please login first with 'opencode auth login'")
+        prompts.outro("Done")
+        return
+      }
+
+      let recordID: string
+      if (accounts.length === 1) {
+        recordID = accounts[0].id
+        prompts.log.info(`Setting up browser session for: ${accounts[0].label || accounts[0].id}`)
+      } else {
+        const selected = await prompts.select({
+          message: "Select account to configure",
+          options: accounts.map((a) => ({
+            label: a.label || a.id,
+            value: a.id,
+          })),
+        })
+        if (prompts.isCancel(selected)) throw new UI.CancelledError()
+        recordID = selected
+      }
+
+      const spinner = prompts.spinner()
+      spinner.start("Preparing browser automation...")
+
+      try {
+        let browserOpened = false
+        const tokens = await AuthBrowser.setup(recordID, (msg) => {
+          // Update spinner with progress messages (e.g., during playwright installation)
+          if (msg.includes("complete") || msg.includes("Opening")) {
+            spinner.stop(msg)
+            if (!browserOpened) {
+              browserOpened = true
+              prompts.log.info("Browser window opened - Please log in to claude.ai")
+              prompts.log.warn("Do NOT close the browser window until login is complete!")
+              spinner.start("Waiting for login...")
+            }
+          } else {
+            spinner.message(msg)
+          }
+        })
+
+        spinner.stop("Login successful!")
+
+        // Update the auth store with new tokens
+        await Auth.OAuthPool.updateRecord("anthropic", recordID, "default", {
+          access: tokens.access,
+          refresh: tokens.refresh,
+          expires: tokens.expires,
+        })
+
+        prompts.log.success("Browser session configured successfully!")
+        prompts.log.success("Auto-relogin is now enabled for this account")
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        spinner.stop(`Setup failed: ${message}`, 1)
+      }
+
+      prompts.outro("Done")
+      return
+    }
+
+    if (args.action === "remove") {
+      prompts.intro("Remove Browser Session")
+
+      const sessions = await AuthBrowser.listAll()
+      const configured = sessions.filter((s) => s.isConfigured)
+
+      if (configured.length === 0) {
+        prompts.log.info("No browser sessions configured")
+        prompts.outro("Done")
+        return
+      }
+
+      const accounts = await Auth.OAuthPool.list("anthropic", "default")
+      const accountMap = new Map(accounts.map((a) => [a.id, a]))
+
+      const selected = await prompts.select({
+        message: "Select session to remove",
+        options: configured.map((s) => {
+          const account = accountMap.get(s.recordId)
+          return {
+            label: account?.label || s.recordId,
+            value: s.recordId,
+          }
+        }),
+      })
+      if (prompts.isCancel(selected)) throw new UI.CancelledError()
+
+      await AuthBrowser.remove(selected)
+      prompts.log.success("Browser session removed")
+      prompts.outro("Done")
+      return
+    }
+
+    prompts.log.error(`Unknown action: ${args.action}`)
+  },
+})
+
+function formatTimeAgo(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000)
+
+  if (seconds < 60) return "just now"
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
+  return `${Math.floor(seconds / 86400)}d ago`
+}

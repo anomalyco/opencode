@@ -5,10 +5,11 @@ import { Config } from "../../config/config"
 import { Provider } from "../../provider/provider"
 import { ModelsDev } from "../../provider/models"
 import { ProviderAuth } from "../../provider/auth"
-import { Auth } from "../../auth"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { AuthBrowser, type BrowserSessionStatus } from "../../auth/browser"
+import { Auth } from "../../auth"
 
 export const ProviderRoutes = lazy(() =>
   new Hono()
@@ -163,111 +164,239 @@ export const ProviderRoutes = lazy(() =>
         return c.json(true)
       },
     )
+    // Browser session routes for auto-relogin
     .get(
-      "/auth/usage",
+      "/browser/sessions",
       describeRoute({
-        summary: "Get auth usage",
-        description: "Get rate limit and usage information for authenticated providers.",
-        operationId: "auth.usage",
+        summary: "List browser sessions",
+        description: "Get status of all browser sessions configured for auto-relogin.",
+        operationId: "provider.browser.sessions",
         responses: {
           200: {
-            description: "Usage information per provider and account",
+            description: "List of browser sessions",
             content: {
               "application/json": {
-                schema: resolver(z.any().meta({ ref: "AuthUsage" })),
+                schema: resolver(
+                  z.array(
+                    z.object({
+                      recordId: z.string(),
+                      enabled: z.boolean(),
+                      profilePath: z.string(),
+                      lastRefresh: z.number().optional(),
+                      lastError: z.string().optional(),
+                      isConfigured: z.boolean(),
+                      label: z.string().optional(),
+                    }),
+                  ),
+                ),
               },
             },
           },
-          ...errors(400),
         },
       }),
       async (c) => {
-        const all = await Auth.all()
-        const result: Record<
-          string,
-          {
-            accounts: Awaited<ReturnType<typeof Auth.OAuthPool.getUsage>>
-            anthropicUsage?: Awaited<ReturnType<typeof Auth.OAuthPool.fetchAnthropicUsage>>
-          }
-        > = {}
+        const sessions = await AuthBrowser.listAll()
+        const accounts = await Auth.OAuthPool.list("anthropic", "default")
+        const accountMap = new Map(accounts.map((a) => [a.id, a]))
 
-        for (const [providerID, info] of Object.entries(all)) {
-          if (info.type === "oauth") {
-            const accounts = await Auth.OAuthPool.getUsage(providerID)
-            const anthropicUsage = await Auth.OAuthPool.fetchAnthropicUsage(providerID)
-            result[providerID] = { accounts, anthropicUsage: anthropicUsage ?? undefined }
-          }
-        }
+        const result = sessions.map((s) => ({
+          ...s,
+          label: accountMap.get(s.recordId)?.label,
+        }))
 
         return c.json(result)
       },
     )
-    .post(
-      "/auth/active",
+    .get(
+      "/browser/sessions/:recordId",
       describeRoute({
-        summary: "Set active OAuth account",
-        description: "Switch the active OAuth account for a provider.",
-        operationId: "auth.setActive",
+        summary: "Get browser session status",
+        description: "Get status of a specific browser session.",
+        operationId: "provider.browser.session.status",
         responses: {
           200: {
-            description: "Active account switched",
+            description: "Browser session status",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    recordId: z.string(),
+                    enabled: z.boolean(),
+                    profilePath: z.string(),
+                    lastRefresh: z.number().optional(),
+                    lastError: z.string().optional(),
+                    isConfigured: z.boolean(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          recordId: z.string().meta({ description: "OAuth record ID" }),
+        }),
+      ),
+      async (c) => {
+        const { recordId } = c.req.valid("param")
+        const session = await AuthBrowser.status(recordId)
+        return c.json(session)
+      },
+    )
+    .post(
+      "/browser/sessions/:recordId/setup",
+      describeRoute({
+        summary: "Setup browser session",
+        description:
+          "Start browser session setup. Opens a visible browser for user to log in. Returns tokens on success.",
+        operationId: "provider.browser.session.setup",
+        responses: {
+          200: {
+            description: "Browser session setup successful",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    success: z.boolean(),
+                    message: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 500),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          recordId: z.string().meta({ description: "OAuth record ID" }),
+        }),
+      ),
+      async (c) => {
+        const { recordId } = c.req.valid("param")
+
+        // Verify the account exists
+        const accounts = await Auth.OAuthPool.list("anthropic", "default")
+        const account = accounts.find((a) => a.id === recordId)
+        if (!account) {
+          return c.json({ success: false, message: "Account not found" }, 400)
+        }
+
+        try {
+          const tokens = await AuthBrowser.setup(recordId)
+
+          // Update the auth store with new tokens
+          await Auth.OAuthPool.updateRecord("anthropic", recordId, "default", {
+            access: tokens.access,
+            refresh: tokens.refresh,
+            expires: tokens.expires,
+          })
+
+          return c.json({
+            success: true,
+            message: "Browser session configured successfully",
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          return c.json({ success: false, message }, 500)
+        }
+      },
+    )
+    .post(
+      "/browser/sessions/:recordId/refresh",
+      describeRoute({
+        summary: "Refresh tokens via browser session",
+        description: "Attempt to refresh OAuth tokens using the existing browser session (headless).",
+        operationId: "provider.browser.session.refresh",
+        responses: {
+          200: {
+            description: "Token refresh result",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    success: z.boolean(),
+                    message: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 500),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          recordId: z.string().meta({ description: "OAuth record ID" }),
+        }),
+      ),
+      async (c) => {
+        const { recordId } = c.req.valid("param")
+
+        const session = await AuthBrowser.status(recordId)
+        if (!session.isConfigured) {
+          return c.json({ success: false, message: "Browser session not configured" }, 400)
+        }
+
+        try {
+          const tokens = await AuthBrowser.refresh(recordId)
+
+          // Update the auth store with new tokens
+          await Auth.OAuthPool.updateRecord("anthropic", recordId, "default", {
+            access: tokens.access,
+            refresh: tokens.refresh,
+            expires: tokens.expires,
+          })
+
+          return c.json({
+            success: true,
+            message: "Tokens refreshed successfully",
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          return c.json({ success: false, message }, 500)
+        }
+      },
+    )
+    .delete(
+      "/browser/sessions/:recordId",
+      describeRoute({
+        summary: "Remove browser session",
+        description: "Remove a browser session and its stored profile data.",
+        operationId: "provider.browser.session.remove",
+        responses: {
+          200: {
+            description: "Browser session removed",
             content: {
               "application/json": {
                 schema: resolver(z.boolean()),
               },
             },
           },
-          ...errors(400),
+          ...errors(400, 500),
         },
       }),
       validator(
-        "json",
+        "param",
         z.object({
-          providerID: z.string(),
-          recordID: z.string(),
-          namespace: z.string().optional(),
+          recordId: z.string().meta({ description: "OAuth record ID" }),
         }),
       ),
       async (c) => {
-        const { providerID, recordID, namespace } = c.req.valid("json")
-        await Auth.OAuthPool.setActive(providerID, recordID, namespace ?? "default")
-        return c.json(true)
-      },
-    )
-    .delete(
-      "/auth/account",
-      describeRoute({
-        summary: "Delete OAuth account",
-        description: "Remove an OAuth account from a provider.",
-        operationId: "auth.deleteAccount",
-        responses: {
-          200: {
-            description: "Account deleted",
-            content: {
-              "application/json": {
-                schema: resolver(
-                  z.object({
-                    success: z.boolean(),
-                    remaining: z.number(),
-                  }),
-                ),
-              },
-            },
-          },
-          ...errors(400),
-        },
-      }),
-      validator(
-        "json",
-        z.object({
-          providerID: z.string(),
-          recordID: z.string(),
-        }),
-      ),
-      async (c) => {
-        const { providerID, recordID } = c.req.valid("json")
-        const result = await Auth.OAuthPool.removeRecord(providerID, recordID)
-        return c.json({ success: result.removed, remaining: result.remaining })
+        const { recordId } = c.req.valid("param")
+
+        try {
+          await AuthBrowser.remove(recordId)
+          return c.json(true)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          return c.json({ error: message }, 500)
+        }
       },
     ),
 )
