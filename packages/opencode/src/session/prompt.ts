@@ -1598,6 +1598,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
   const placeholderRegex = /\$(\d+)/g
   const quoteTrimRegex = /^["']|["']$/g
+
+  // Marker for escape processing
+  const DOLLAR_MARKER = "\x00DLR\x00"
+
+  export function processEscapes(template: string): { processed: string; restore: (s: string) => string } {
+    const processed = template.replaceAll("\\$", DOLLAR_MARKER)
+    const restore = (s: string) => s.replaceAll(DOLLAR_MARKER, "$")
+    return { processed, restore }
+  }
   /**
    * Regular expression to match @ file references in text
    * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
@@ -1614,7 +1623,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const templateCommand = await command.template
 
-    const placeholders = templateCommand.match(placeholderRegex) ?? []
+    // Process escapes before substitution
+    const { processed, restore } = processEscapes(templateCommand)
+
+    const placeholders = processed.match(placeholderRegex) ?? []
     let last = 0
     for (const item of placeholders) {
       const value = Number(item.slice(1))
@@ -1622,15 +1634,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }
 
     // Let the final placeholder swallow any extra arguments so prompts read naturally
-    const withArgs = templateCommand.replaceAll(placeholderRegex, (_, index) => {
+    const withArgs = processed.replaceAll(placeholderRegex, (_, index) => {
       const position = Number(index)
       const argIndex = position - 1
       if (argIndex >= args.length) return ""
       if (position === last) return args.slice(argIndex).join(" ")
       return args[argIndex]
     })
-    const usesArgumentsPlaceholder = templateCommand.includes("$ARGUMENTS")
-    let template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
+    const usesArgumentsPlaceholder = processed.includes("$ARGUMENTS")
+    let template = restore(withArgs.replaceAll("$ARGUMENTS", input.arguments))
 
     // If command doesn't explicitly handle arguments (no $N or $ARGUMENTS placeholders)
     // but user provided arguments, append them to the template

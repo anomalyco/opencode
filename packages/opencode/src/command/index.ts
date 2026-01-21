@@ -42,11 +42,13 @@ export namespace Command {
 
   export function hints(template: string): string[] {
     const result: string[] = []
-    const numbered = template.match(/\$\d+/g)
+    // Remove escaped placeholders before detection
+    const processed = template.replaceAll("\\$", "\x00")
+    const numbered = processed.match(/\$\d+/g)
     if (numbered) {
       for (const match of [...new Set(numbered)].sort()) result.push(match)
     }
-    if (template.includes("$ARGUMENTS")) result.push("$ARGUMENTS")
+    if (processed.includes("$ARGUMENTS")) result.push("$ARGUMENTS")
     return result
   }
 

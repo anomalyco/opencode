@@ -161,6 +161,15 @@ This replaces:
 
 ---
 
+### Escaping placeholders
+
+To include literal `$1`, `$ARGUMENTS`, etc. in your template without substitution, escape the `$` with a backslash:
+
+- `\$1` → literal `$1`
+- `\$ARGUMENTS` → literal `$ARGUMENTS`
+
+---
+
 ### Shell output
 
 Use _!`command`_ to inject [bash command](/docs/tui#bash-commands) output into your prompt.
