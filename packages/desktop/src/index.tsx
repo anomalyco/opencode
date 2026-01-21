@@ -318,7 +318,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   },
 })
 
-createMenu()
+createMenu().catch(err => {
+  console.error("Failed to create menu:", err)
+  // Don't crash the app if menu creation fails
+})
 
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)

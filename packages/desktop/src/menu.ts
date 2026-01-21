@@ -7,79 +7,103 @@ import { runUpdater, UPDATER_ENABLED } from "./updater"
 import { installCli } from "./cli"
 
 export async function createMenu() {
-  if (ostype() !== "macos") return
+  const isMacOS = ostype() === "macos"
+  
+  // Main app menu for all platforms
+  const appMenuItems = [
+    await PredefinedMenuItem.new({
+      item: { About: null },
+    }),
+  ]
+  
+  // Add updater and CLI items for all platforms
+  if (UPDATER_ENABLED) {
+    appMenuItems.push(
+      await MenuItem.new({
+        action: () => runUpdater({ alertOnFail: true }),
+        text: "Check For Updates...",
+      })
+    )
+  }
+  
+  appMenuItems.push(
+    await MenuItem.new({
+      action: () => installCli().catch(err => {
+        console.error("CLI installation failed:", err)
+        // Show user feedback
+        if (typeof window !== 'undefined') {
+          alert("CLI installation failed. Check console for details.")
+        }
+      }),
+      text: "Install CLI...",
+    }),
+    await MenuItem.new({
+      action: () => window.location.reload(),
+      text: "Reload Webview",
+    }),
+    await MenuItem.new({
+      action: async () => {
+        try {
+          await invoke("kill_sidecar").catch(() => undefined)
+          await relaunch().catch(() => undefined)
+        } catch (err) {
+          console.error("Restart failed:", err)
+          if (typeof window !== 'undefined') {
+            alert("Restart failed. Check console for details.")
+          }
+        }
+      },
+      text: "Restart",
+    })
+  )
+  
+  // macOS-specific menu items
+  if (isMacOS) {
+    appMenuItems.push(
+      await PredefinedMenuItem.new({
+        item: "Separator",
+      }),
+      await PredefinedMenuItem.new({
+        item: "Hide",
+      }),
+      await PredefinedMenuItem.new({
+        item: "HideOthers",
+      }),
+      await PredefinedMenuItem.new({
+        item: "ShowAll",
+      }),
+      await PredefinedMenuItem.new({
+        item: "Separator",
+      }),
+      await PredefinedMenuItem.new({
+        item: "Quit",
+      })
+    )
+  } else {
+    // Windows/Linux quit option
+    appMenuItems.push(
+      await PredefinedMenuItem.new({
+        item: "Separator",
+      }),
+      await MenuItem.new({
+        action: () => {
+          if (typeof window !== 'undefined') {
+            window.close()
+          }
+        },
+        text: "Exit",
+      })
+    )
+  }
 
   const menu = await Menu.new({
     items: [
+      // App menu (File on Windows/Linux, OpenCode on macOS)
       await Submenu.new({
-        text: "OpenCode",
-        items: [
-          await PredefinedMenuItem.new({
-            item: { About: null },
-          }),
-          await MenuItem.new({
-            enabled: UPDATER_ENABLED,
-            action: () => runUpdater({ alertOnFail: true }),
-            text: "Check For Updates...",
-          }),
-          await MenuItem.new({
-            action: () => installCli(),
-            text: "Install CLI...",
-          }),
-          await MenuItem.new({
-            action: async () => window.location.reload(),
-            text: "Reload Webview",
-          }),
-          await MenuItem.new({
-            action: async () => {
-              await invoke("kill_sidecar").catch(() => undefined)
-              await relaunch().catch(() => undefined)
-            },
-            text: "Restart",
-          }),
-          await PredefinedMenuItem.new({
-            item: "Separator",
-          }),
-          await PredefinedMenuItem.new({
-            item: "Hide",
-          }),
-          await PredefinedMenuItem.new({
-            item: "HideOthers",
-          }),
-          await PredefinedMenuItem.new({
-            item: "ShowAll",
-          }),
-          await PredefinedMenuItem.new({
-            item: "Separator",
-          }),
-          await PredefinedMenuItem.new({
-            item: "Quit",
-          }),
-        ].filter(Boolean),
+        text: isMacOS ? "OpenCode" : "File",
+        items: appMenuItems.filter(Boolean),
       }),
-      // await Submenu.new({
-      //   text: "File",
-      //   items: [
-      //     await MenuItem.new({
-      //       enabled: false,
-      //       text: "Open Project...",
-      //     }),
-      //     await PredefinedMenuItem.new({
-      //       item: "Separator"
-      //     }),
-      //     await MenuItem.new({
-      //       enabled: false,
-      //       text: "New Session",
-      //     }),
-      //     await PredefinedMenuItem.new({
-      //       item: "Separator"
-      //     }),
-      //     await MenuItem.new({
-      //       enabled: false,
-      //       text: "Close Project",
-      //     })
-      //   ]
-      // }),
+      // Edit menu for all platforms
       await Submenu.new({
         text: "Edit",
         items: [
@@ -108,5 +132,11 @@ export async function createMenu() {
       }),
     ],
   })
-  menu.setAsAppMenu()
+  
+  if (isMacOS) {
+    menu.setAsAppMenu()
+  } else {
+    // Set as window menu for Windows/Linux
+    menu.setAsWindowMenu()
+  }
 }

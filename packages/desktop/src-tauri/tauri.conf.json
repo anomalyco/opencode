@@ -5,9 +5,9 @@
   "mainBinaryName": "OpenCode",
   "version": "../package.json",
   "build": {
-    "beforeDevCommand": "bun run dev",
+    "beforeDevCommand": "~/.bun/bin/bun run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run build",
+    "beforeBuildCommand": "~/.bun/bin/bun run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -20,9 +20,13 @@
         "decorations": true,
         "dragDropEnabled": false,
         "zoomHotkeysEnabled": false,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true,
-        "trafficLightPosition": { "x": 12.0, "y": 18.0 }
+        "titleBarStyle": "Visible",
+        "hiddenTitle": false,
+        "trafficLightPosition": { "x": 12.0, "y": 18.0 },
+        "minWidth": 800,
+        "minHeight": 600,
+        "width": 1200,
+        "height": 800
       }
     ],
     "withGlobalTauri": true,
