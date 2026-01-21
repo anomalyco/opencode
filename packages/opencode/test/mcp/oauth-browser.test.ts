@@ -207,20 +207,20 @@ test("BrowserOpenFailed event is NOT published when open() succeeds", async () =
         events.push(evt.properties)
       })
 
-     // Run authenticate with a timeout to avoid waiting forever for the callback
-     const authPromise = MCP.authenticate("test-oauth-server-3").catch(() => undefined)
+      // Run authenticate with a timeout to avoid waiting forever for the callback
+      const authPromise = MCP.authenticate("test-oauth-server-2").catch(() => undefined)
 
-     // Wait until open() is called (Config.get() can be slow in tests)
-     await waitFor(() => openCalledWith !== undefined, 3000)
+      // Wait until open() is called (Config.get() can be slow in tests)
+      await waitFor(() => openCalledWith !== undefined, 3000)
 
-     // See note in the previous test: give authenticate() time to move past
-     // the 500ms open() error-detection window.
-     await new Promise((resolve) => setTimeout(resolve, 600))
+      // See note in the previous test: give authenticate() time to move past
+      // the 500ms open() error-detection window.
+      await new Promise((resolve) => setTimeout(resolve, 600))
 
-     // Stop the callback server and cancel any pending auth
-     await McpOAuthCallback.stop()
+      // Stop the callback server and cancel any pending auth
+      await McpOAuthCallback.stop()
 
-     await authPromise
+      await authPromise
 
       unsubscribe()
 
@@ -257,7 +257,7 @@ test("open() is called with the authorization URL", async () => {
       openCalledWith = undefined
 
       // Run authenticate with a timeout to avoid waiting forever for the callback
-      const authPromise = MCP.authenticate("test-oauth-server-2").catch(() => undefined)
+      const authPromise = MCP.authenticate("test-oauth-server-3").catch(() => undefined)
 
       // Wait until open() is called (Config.get() can be slow in tests)
       await waitFor(() => openCalledWith !== undefined, 3000)
