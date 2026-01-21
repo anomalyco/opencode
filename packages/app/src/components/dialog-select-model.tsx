@@ -8,8 +8,10 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tag } from "@opencode-ai/ui/tag"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogManageModels } from "./dialog-manage-models"
+import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 
 const ModelList: Component<{
@@ -27,6 +29,7 @@ const ModelList: Component<{
       .filter((m) => local.model.visible({ modelID: m.id, providerID: m.provider.id }))
       .filter((m) => (props.provider ? m.provider.id === props.provider : true)),
   )
+
 
   return (
     <List
@@ -46,6 +49,16 @@ const ModelList: Component<{
         if (!popularProviders.includes(aProvider) && popularProviders.includes(bProvider)) return 1
         return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
       }}
+      itemWrapper={(item, node) => (
+        <Tooltip
+          class="w-full"
+          placement="right-start"
+          gutter={12}
+          value={<ModelTooltip model={item} latest={item.latest} free={item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)} />}
+        >
+          {node}
+        </Tooltip>
+      )}
       onSelect={(x) => {
         local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
           recent: true,
