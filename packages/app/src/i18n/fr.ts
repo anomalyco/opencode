@@ -273,6 +273,7 @@ export const dict = {
   "language.de": "Allemand",
   "language.es": "Espagnol",
   "language.fr": "Français",
+  "language.ja": "Japonais",
 
   "toast.language.title": "Langue",
   "toast.language.description": "Passé à {{language}}",
