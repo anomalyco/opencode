@@ -11,6 +11,7 @@ export interface ListSearchProps {
   autofocus?: boolean
   hideIcon?: boolean
   class?: string
+  action?: JSX.Element
 }
 
 export interface ListProps<T> extends FilteredListProps<T> {
@@ -60,6 +61,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   const { filter, grouped, flat, active, setActive, onKeyDown, onInput } = useFilteredList<T>(props)
 
   const searchProps = () => (typeof props.search === "object" ? props.search : {})
+  const searchAction = () => searchProps().action
 
   const moved = (event: MouseEvent) => event.movementX !== 0 || event.movementY !== 0
 
@@ -198,29 +200,32 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   return (
     <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
       <Show when={!!props.search}>
-        <div data-slot="list-search" classList={{ [searchProps().class ?? ""]: !!searchProps().class }}>
-          <div data-slot="list-search-container">
-            <Show when={!searchProps().hideIcon}>
-              <Icon name="magnifying-glass" />
+        <div data-slot="list-search-wrapper">
+          <div data-slot="list-search" classList={{ [searchProps().class ?? ""]: !!searchProps().class }}>
+            <div data-slot="list-search-container">
+              <Show when={!searchProps().hideIcon}>
+                <Icon name="magnifying-glass" />
+              </Show>
+              <TextField
+                autofocus={searchProps().autofocus}
+                variant="ghost"
+                data-slot="list-search-input"
+                type="text"
+                value={internalFilter()}
+                onChange={setInternalFilter}
+                onKeyDown={handleKey}
+                placeholder={searchProps().placeholder}
+                spellcheck={false}
+                autocorrect="off"
+                autocomplete="off"
+                autocapitalize="off"
+              />
+            </div>
+            <Show when={internalFilter()}>
+              <IconButton icon="circle-x" variant="ghost" onClick={() => setInternalFilter("")} />
             </Show>
-            <TextField
-              autofocus={searchProps().autofocus}
-              variant="ghost"
-              data-slot="list-search-input"
-              type="text"
-              value={internalFilter()}
-              onChange={setInternalFilter}
-              onKeyDown={handleKey}
-              placeholder={searchProps().placeholder}
-              spellcheck={false}
-              autocorrect="off"
-              autocomplete="off"
-              autocapitalize="off"
-            />
           </div>
-          <Show when={internalFilter()}>
-            <IconButton icon="circle-x" variant="ghost" onClick={() => setInternalFilter("")} />
-          </Show>
+          {searchAction()}
         </div>
       </Show>
       <div ref={setScrollRef} data-slot="list-scroll">
