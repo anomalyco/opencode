@@ -32,13 +32,13 @@ export default defineConfig({
     solidJs(),
     starlight({
       title: "OpenCode",
-      favicon: "/favicon-v2.svg",
+      favicon: "/favicon-v3.svg",
       head: [
         {
           tag: "link",
           attrs: {
             rel: "icon",
-            href: "/favicon-v2.ico",
+            href: "/favicon-v3.ico",
             sizes: "32x32",
           },
         },
@@ -47,7 +47,7 @@ export default defineConfig({
           attrs: {
             rel: "icon",
             type: "image/png",
-            href: "/favicon-96x96-v2.png",
+            href: "/favicon-96x96-v3.png",
             sizes: "96x96",
           },
         },
@@ -55,7 +55,7 @@ export default defineConfig({
           tag: "link",
           attrs: {
             rel: "apple-touch-icon",
-            href: "/apple-touch-icon-v2.png",
+            href: "/apple-touch-icon-v3.png",
             sizes: "180x180",
           },
         },

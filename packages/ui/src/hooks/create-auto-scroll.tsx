@@ -13,8 +13,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let scroll: HTMLElement | undefined
   let settling = false
   let settleTimer: ReturnType<typeof setTimeout> | undefined
+  let autoTimer: ReturnType<typeof setTimeout> | undefined
   let cleanup: (() => void) | undefined
   let resizeFrame: number | undefined
+  let auto: { top: number; time: number } | undefined
 
   const threshold = () => options.bottomThreshold ?? 10
 
@@ -29,10 +31,46 @@ export function createAutoScroll(options: AutoScrollOptions) {
     return el.scrollHeight - el.clientHeight - el.scrollTop
   }
 
+  // Browsers can dispatch scroll events asynchronously. If new content arrives
+  // between us calling `scrollTo()` and the subsequent `scroll` event firing,
+  // the handler can see a non-zero `distanceFromBottom` and incorrectly assume
+  // the user scrolled.
+  const markAuto = (el: HTMLElement) => {
+    auto = {
+      top: Math.max(0, el.scrollHeight - el.clientHeight),
+      time: Date.now(),
+    }
+
+    if (autoTimer) clearTimeout(autoTimer)
+    autoTimer = setTimeout(() => {
+      auto = undefined
+      autoTimer = undefined
+    }, 250)
+  }
+
+  const isAuto = (el: HTMLElement) => {
+    const a = auto
+    if (!a) return false
+
+    if (Date.now() - a.time > 250) {
+      auto = undefined
+      return false
+    }
+
+    return Math.abs(el.scrollTop - a.top) < 2
+  }
+
   const scrollToBottomNow = (behavior: ScrollBehavior) => {
     const el = scroll
     if (!el) return
-    el.scrollTo({ top: el.scrollHeight, behavior })
+    markAuto(el)
+    if (behavior === "smooth") {
+      el.scrollTo({ top: el.scrollHeight, behavior })
+      return
+    }
+
+    // `scrollTop` assignment bypasses any CSS `scroll-behavior: smooth`.
+    el.scrollTop = el.scrollHeight
   }
 
   const scrollToBottom = (force: boolean) => {
@@ -76,6 +114,12 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
     if (distanceFromBottom(el) < threshold()) {
       if (store.userScrolled) setStore("userScrolled", false)
+      return
+    }
+
+    // Ignore scroll events triggered by our own scrollToBottom calls.
+    if (!store.userScrolled && isAuto(el)) {
+      scrollToBottom(false)
       return
     }
 
@@ -145,6 +189,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   onCleanup(() => {
     if (settleTimer) clearTimeout(settleTimer)
+    if (autoTimer) clearTimeout(autoTimer)
     if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
     if (cleanup) cleanup()
   })
