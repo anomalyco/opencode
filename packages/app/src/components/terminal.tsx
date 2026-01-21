@@ -234,7 +234,11 @@ export const Terminal = (props: TerminalProps) => {
       }
     })
     t.onKey((key) => {
-      if (key.key == "Enter") {
+      const isNumpadEnter =
+        key.key === "NumpadEnter" ||
+        key.domEvent?.code === "NumpadEnter" ||
+        (key.domEvent?.key === "Enter" && key.domEvent?.location === KeyboardEvent.DOM_KEY_LOCATION_NUMPAD)
+      if (key.key === "Enter" || isNumpadEnter) {
         props.onSubmit?.()
       }
     })
