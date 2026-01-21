@@ -1231,11 +1231,15 @@ export default function Page() {
     language.locale()
 
     const label = (pty: LocalPTY) => {
+      const title = pty.title
       const number = pty.titleNumber
-      if (Number.isFinite(number) && number > 0) {
-        return language.t("terminal.title.numbered", { number })
-      }
-      if (pty.title) return pty.title
+      const match = title.match(/^Terminal (\d+)$/)
+      const parsed = match ? Number(match[1]) : undefined
+      const isDefaultTitle = Number.isFinite(number) && number > 0 && Number.isFinite(parsed) && parsed === number
+
+      if (title && !isDefaultTitle) return title
+      if (Number.isFinite(number) && number > 0) return language.t("terminal.title.numbered", { number })
+      if (title) return title
       return language.t("terminal.title")
     }
 
@@ -2002,7 +2006,12 @@ export default function Page() {
                           <Terminal
                             pty={pty}
                             onCleanup={(data) => terminal.update({ ...data, id: pty.id })}
+                            onConnect={() => {
+                              terminal.update({ id: pty.id, error: false })
+                              setDismissed(false)
+                            }}
                             onConnectError={() => {
+                              setDismissed(false)
                               terminal.update({ id: pty.id, error: true })
                             }}
                           />
@@ -2056,11 +2065,17 @@ export default function Page() {
                         {(t) => (
                           <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
                             {(() => {
+                              const title = t().title
                               const number = t().titleNumber
-                              if (Number.isFinite(number) && number > 0) {
+                              const match = title.match(/^Terminal (\d+)$/)
+                              const parsed = match ? Number(match[1]) : undefined
+                              const isDefaultTitle =
+                                Number.isFinite(number) && number > 0 && Number.isFinite(parsed) && parsed === number
+
+                              if (title && !isDefaultTitle) return title
+                              if (Number.isFinite(number) && number > 0)
                                 return language.t("terminal.title.numbered", { number })
-                              }
-                              if (t().title) return t().title
+                              if (title) return title
                               return language.t("terminal.title")
                             })()}
                           </div>

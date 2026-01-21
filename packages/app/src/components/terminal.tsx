@@ -10,6 +10,7 @@ export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   onSubmit?: () => void
   onCleanup?: (pty: LocalPTY) => void
+  onConnect?: () => void
   onConnectError?: (error: unknown) => void
 }
 
@@ -40,7 +41,7 @@ export const Terminal = (props: TerminalProps) => {
   const settings = useSettings()
   const theme = useTheme()
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnectError"])
+  const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnect", "onConnectError"])
   let ws: WebSocket | undefined
   let term: Term | undefined
   let ghostty: Ghostty
@@ -241,6 +242,7 @@ export const Terminal = (props: TerminalProps) => {
     // console.log("Scroll position:", ydisp)
     // })
     socket.addEventListener("open", () => {
+      local.onConnect?.()
       sdk.client.pty
         .update({
           ptyID: local.pty.id,
@@ -255,10 +257,12 @@ export const Terminal = (props: TerminalProps) => {
       t.write(event.data)
     })
     socket.addEventListener("error", (error) => {
+      if (disposed) return
       console.error("WebSocket error:", error)
       local.onConnectError?.(error)
     })
     socket.addEventListener("close", (event) => {
+      if (disposed) return
       // Normal closure (code 1000) means PTY process exited - server event handles cleanup
       // For other codes (network issues, server restart), trigger error handler
       if (event.code !== 1000) {
@@ -268,6 +272,7 @@ export const Terminal = (props: TerminalProps) => {
   })
 
   onCleanup(() => {
+    disposed = true
     if (handleResize) {
       window.removeEventListener("resize", handleResize)
     }
