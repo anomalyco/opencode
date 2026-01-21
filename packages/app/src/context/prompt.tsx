@@ -43,6 +43,7 @@ export type FileContextItem = {
   path: string
   selection?: FileSelection
   comment?: string
+  commentID?: string
   preview?: string
 }
 
@@ -139,6 +140,11 @@ function createPromptSession(dir: string, id: string | undefined) {
     const start = item.selection?.startLine
     const end = item.selection?.endLine
     const key = `${item.type}:${item.path}:${start}:${end}`
+
+    if (item.commentID) {
+      return `${key}:c=${item.commentID}`
+    }
+
     const comment = item.comment?.trim()
     if (!comment) return key
     const digest = checksum(comment) ?? comment

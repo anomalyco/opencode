@@ -6,6 +6,7 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
   after: FileContents
   annotations?: DiffLineAnnotation<T>[]
   selectedLines?: SelectedLineRange | null
+  commentedLines?: SelectedLineRange[]
   onRendered?: () => void
   class?: string
   classList?: ComponentProps<"div">["classList"]
@@ -40,6 +41,15 @@ const unsafeCSS = `
 
 [data-diffs] ::selection {
   background-color: var(--diffs-bg-selection-text);
+}
+
+[data-diffs] [data-comment-selected] {
+  background-color: var(--diffs-bg-selection);
+}
+
+[data-diffs] [data-comment-selected] [data-column-number] {
+  background-color: var(--diffs-bg-selection-number);
+  color: var(--diffs-selection-number-fg);
 }
 
 [data-diffs-header],

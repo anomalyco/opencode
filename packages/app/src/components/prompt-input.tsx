@@ -30,6 +30,7 @@ import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
+import { useComments } from "@/context/comments"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -115,6 +116,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const files = useFile()
   const prompt = usePrompt()
   const layout = useLayout()
+  const comments = useComments()
   const params = useParams()
   const dialog = useDialog()
   const providers = useProviders()
@@ -158,6 +160,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
+  const view = createMemo(() => layout.view(sessionKey()))
   const activeFile = createMemo(() => {
     const tab = tabs().active()
     if (!tab) return
@@ -1555,7 +1558,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               {(item) => {
                 const preview = createMemo(() => selectionPreview(item.path, item.selection, item.preview))
                 return (
-                  <div class="shrink-0 flex flex-col gap-1 rounded-md bg-surface-base border border-border-base px-2 py-1 max-w-[320px]">
+                  <div
+                    classList={{
+                      "shrink-0 flex flex-col gap-1 rounded-md bg-surface-base border border-border-base px-2 py-1 max-w-[320px]": true,
+                      "cursor-pointer hover:bg-surface-raised-base-hover": !!item.commentID,
+                    }}
+                    onClick={() => {
+                      if (!item.commentID) return
+                      comments.setFocus({ file: item.path, id: item.commentID })
+                      view().reviewPanel.open()
+                      tabs().open("review")
+                    }}
+                  >
                     <div class="flex items-center gap-1.5">
                       <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
                       <div class="flex items-center text-11-regular min-w-0">
@@ -1576,7 +1590,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         icon="close"
                         variant="ghost"
                         class="h-5 w-5"
-                        onClick={() => prompt.context.remove(item.key)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          prompt.context.remove(item.key)
+                        }}
                         aria-label={language.t("prompt.context.removeFile")}
                       />
                     </div>

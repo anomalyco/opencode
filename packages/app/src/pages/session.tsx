@@ -51,6 +51,7 @@ import { UserMessage } from "@opencode-ai/sdk/v2"
 import type { FileDiff } from "@opencode-ai/sdk/v2/client"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
+import { useComments, type LineComment } from "@/context/comments"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
@@ -82,6 +83,9 @@ interface SessionReviewTabProps {
   onDiffStyleChange?: (style: DiffStyle) => void
   onViewFile?: (file: string) => void
   onLineComment?: (comment: { file: string; selection: SelectedLineRange; comment: string; preview?: string }) => void
+  comments?: LineComment[]
+  focusedComment?: { file: string; id: string } | null
+  onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
   classes?: {
     root?: string
     header?: string
@@ -168,6 +172,9 @@ function SessionReviewTab(props: SessionReviewTabProps) {
       onViewFile={props.onViewFile}
       readFile={readFile}
       onLineComment={props.onLineComment}
+      comments={props.comments}
+      focusedComment={props.focusedComment}
+      onFocusedCommentChange={props.onFocusedCommentChange}
     />
   )
 }
@@ -187,6 +194,7 @@ export default function Page() {
   const navigate = useNavigate()
   const sdk = useSDK()
   const prompt = usePrompt()
+  const comments = useComments()
   const permission = usePermission()
   const [pendingMessage, setPendingMessage] = createSignal<string | undefined>(undefined)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
@@ -513,11 +521,17 @@ export default function Page() {
   }) => {
     const selection = selectionFromLines(input.selection)
     const preview = input.preview ?? selectionPreview(input.file, selection)
+    const saved = comments.add({
+      file: input.file,
+      selection: input.selection,
+      comment: input.comment,
+    })
     prompt.context.add({
       type: "file",
       path: input.file,
       selection,
       comment: input.comment,
+      commentID: saved.id,
       preview,
     })
   }
@@ -1433,6 +1447,9 @@ export default function Page() {
                                 view={view}
                                 diffStyle="unified"
                                 onLineComment={addCommentToContext}
+                                comments={comments.all()}
+                                focusedComment={comments.focus()}
+                                onFocusedCommentChange={comments.setFocus}
                                 onViewFile={(path) => {
                                   const value = file.tab(path)
                                   tabs().open(value)
@@ -1749,6 +1766,9 @@ export default function Page() {
                                 diffStyle={layout.review.diffStyle()}
                                 onDiffStyleChange={layout.review.setDiffStyle}
                                 onLineComment={addCommentToContext}
+                                comments={comments.all()}
+                                focusedComment={comments.focus()}
+                                onFocusedCommentChange={comments.setFocus}
                                 onViewFile={(path) => {
                                   const value = file.tab(path)
                                   tabs().open(value)

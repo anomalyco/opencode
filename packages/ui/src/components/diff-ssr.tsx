@@ -1,4 +1,4 @@
-import { DIFFS_TAG_NAME, FileDiff } from "@pierre/diffs"
+import { DIFFS_TAG_NAME, FileDiff, type SelectedLineRange } from "@pierre/diffs"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { createEffect, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { Dynamic, isServer } from "solid-js/web"
@@ -19,11 +19,49 @@ export function Diff<T>(props: SSRDiffProps<T>) {
     "classList",
     "annotations",
     "selectedLines",
+    "commentedLines",
   ])
   const workerPool = useWorkerPool(props.diffStyle)
 
   let fileDiffInstance: FileDiff<T> | undefined
   const cleanupFunctions: Array<() => void> = []
+
+  const getRoot = () => fileDiffRef?.shadowRoot ?? undefined
+
+  const findSide = (element: HTMLElement): "additions" | "deletions" => {
+    const code = element.closest("[data-code]")
+    if (!(code instanceof HTMLElement)) return "additions"
+    if (code.hasAttribute("data-deletions")) return "deletions"
+    return "additions"
+  }
+
+  const applyCommentedLines = (ranges: SelectedLineRange[]) => {
+    const root = getRoot()
+    if (!root) return
+
+    const existing = Array.from(root.querySelectorAll("[data-comment-selected]"))
+    for (const node of existing) {
+      if (!(node instanceof HTMLElement)) continue
+      node.removeAttribute("data-comment-selected")
+    }
+
+    for (const range of ranges) {
+      const start = Math.max(1, Math.min(range.start, range.end))
+      const end = Math.max(range.start, range.end)
+
+      for (let line = start; line <= end; line++) {
+        const expectedSide =
+          line === end ? (range.endSide ?? range.side) : line === start ? range.side : (range.side ?? range.endSide)
+
+        const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"], [data-alt-line="${line}"]`))
+        for (const node of nodes) {
+          if (!(node instanceof HTMLElement)) continue
+          if (expectedSide && findSide(node) !== expectedSide) continue
+          node.setAttribute("data-comment-selected", "")
+        }
+      }
+    }
+  }
 
   onMount(() => {
     if (isServer || !props.preloadedDiff) return
@@ -53,6 +91,11 @@ export function Diff<T>(props: SSRDiffProps<T>) {
 
     createEffect(() => {
       fileDiffInstance?.setSelectedLines(local.selectedLines ?? null)
+    })
+
+    createEffect(() => {
+      const ranges = local.commentedLines ?? []
+      requestAnimationFrame(() => applyCommentedLines(ranges))
     })
 
     // Hydrate annotation slots with interactive SolidJS components
