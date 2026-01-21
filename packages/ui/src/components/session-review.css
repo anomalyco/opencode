@@ -195,4 +195,103 @@
     font-size: var(--font-size-small);
     color: var(--text-weak);
   }
+
+  [data-slot="session-review-diff-wrapper"] {
+    position: relative;
+  }
+
+  [data-slot="session-review-comment-anchor"] {
+    position: absolute;
+    right: 12px;
+    z-index: 30;
+  }
+
+  [data-slot="session-review-comment-button"] {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-base);
+    border: 1px solid color-mix(in oklch, var(--icon-info-active) 60%, transparent);
+    color: var(--icon-info-active);
+    box-shadow: var(--shadow-xs-border);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--surface-raised-base-hover);
+      border-color: var(--icon-info-active);
+    }
+
+    &:focus {
+      outline: none;
+    }
+
+    &:focus-visible {
+      box-shadow: var(--shadow-xs-border-focus);
+    }
+  }
+
+  [data-slot="session-review-comment-hover"] {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 320px;
+  }
+
+  [data-slot="session-review-comment-hover-label"],
+  [data-slot="session-review-comment-popover-label"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-strong);
+  }
+
+  [data-slot="session-review-comment-hover-text"],
+  [data-slot="session-review-comment-popover-text"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-regular);
+    color: var(--text-base);
+    white-space: pre-wrap;
+  }
+
+  [data-slot="session-review-comment-preview"] {
+    margin: 0;
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-base);
+    border: 1px solid color-mix(in oklch, var(--border-base) 55%, transparent);
+    color: var(--text-base);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-small);
+    line-height: 1.4;
+    white-space: pre-wrap;
+  }
+
+  [data-slot="session-review-comment-textarea"] {
+    width: 320px;
+    max-width: calc(100vw - 48px);
+    resize: vertical;
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-base);
+    border: 1px solid color-mix(in oklch, var(--border-base) 55%, transparent);
+    color: var(--text-strong);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    line-height: 1.4;
+
+    &:focus {
+      outline: none;
+      box-shadow: var(--shadow-xs-border-focus);
+    }
+  }
+
+  [data-slot="session-review-comment-actions"] {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
 }

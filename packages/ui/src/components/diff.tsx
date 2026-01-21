@@ -63,6 +63,7 @@ export function Diff<T>(props: DiffProps<T>) {
     "classList",
     "annotations",
     "selectedLines",
+    "commentedLines",
     "onRendered",
   ])
 
@@ -82,6 +83,7 @@ export function Diff<T>(props: DiffProps<T>) {
 
   let instance: FileDiff<T> | undefined
   const [current, setCurrent] = createSignal<FileDiff<T> | undefined>(undefined)
+  const [rendered, setRendered] = createSignal(0)
 
   const getRoot = () => {
     const host = container.querySelector("diffs-container")
@@ -170,6 +172,39 @@ export function Diff<T>(props: DiffProps<T>) {
     })
 
     observer.observe(container, { childList: true, subtree: true })
+  }
+
+  const applyCommentedLines = (ranges: SelectedLineRange[]) => {
+    const root = getRoot()
+    if (!root) return
+
+    const existing = Array.from(root.querySelectorAll("[data-comment-selected]"))
+    for (const node of existing) {
+      if (!(node instanceof HTMLElement)) continue
+      node.removeAttribute("data-comment-selected")
+    }
+
+    for (const range of ranges) {
+      const start = Math.max(1, Math.min(range.start, range.end))
+      const end = Math.max(range.start, range.end)
+
+      for (let line = start; line <= end; line++) {
+        const expectedSide =
+          line === end ? (range.endSide ?? range.side) : line === start ? range.side : (range.side ?? range.endSide)
+
+        const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"], [data-alt-line="${line}"]`))
+        for (const node of nodes) {
+          if (!(node instanceof HTMLElement)) continue
+
+          if (expectedSide) {
+            const side = findSide(node)
+            if (side && side !== expectedSide) continue
+          }
+
+          node.setAttribute("data-comment-selected", "")
+        }
+      }
+    }
   }
 
   const setSelectedLines = (range: SelectedLineRange | null) => {
@@ -379,7 +414,14 @@ export function Diff<T>(props: DiffProps<T>) {
       containerWrapper: container,
     })
 
+    setRendered((value) => value + 1)
     notifyRendered()
+  })
+
+  createEffect(() => {
+    rendered()
+    const ranges = local.commentedLines ?? []
+    requestAnimationFrame(() => applyCommentedLines(ranges))
   })
 
   createEffect(() => {

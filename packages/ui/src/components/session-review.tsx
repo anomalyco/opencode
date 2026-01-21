@@ -1,23 +1,39 @@
 import { Accordion } from "./accordion"
 import { Button } from "./button"
+import { HoverCard } from "./hover-card"
+import { Popover } from "./popover"
 import { RadioGroup } from "./radio-group"
 import { DiffChanges } from "./diff-changes"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
-import { useCodeComponent } from "../context/code"
 import { useDiffComponent } from "../context/diff"
 import { useI18n } from "../context/i18n"
-import { checksum } from "@opencode-ai/util/encode"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
-import { type DiffLineAnnotation, type SelectedLineRange } from "@pierre/diffs"
+import { type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
 
 export type SessionReviewDiffStyle = "unified" | "split"
+
+export type SessionReviewComment = {
+  id: string
+  file: string
+  selection: SelectedLineRange
+  comment: string
+}
+
+export type SessionReviewLineComment = {
+  file: string
+  selection: SelectedLineRange
+  comment: string
+  preview?: string
+}
+
+export type SessionReviewFocus = { file: string; id: string }
 
 export interface SessionReviewProps {
   split?: boolean
@@ -25,6 +41,9 @@ export interface SessionReviewProps {
   onDiffStyleChange?: (diffStyle: SessionReviewDiffStyle) => void
   onDiffRendered?: () => void
   onLineComment?: (comment: SessionReviewLineComment) => void
+  comments?: SessionReviewComment[]
+  focusedComment?: SessionReviewFocus | null
+  onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
   open?: string[]
   onOpenChange?: (open: string[]) => void
   scrollRef?: (el: HTMLDivElement) => void
@@ -105,29 +124,43 @@ type SessionReviewSelection = {
   range: SelectedLineRange
 }
 
-type SessionReviewLineComment = {
-  file: string
-  selection: SelectedLineRange
-  comment: string
-  preview?: string
+function findSide(element: HTMLElement): "additions" | "deletions" {
+  const code = element.closest("[data-code]")
+  if (!(code instanceof HTMLElement)) return "additions"
+  if (code.hasAttribute("data-deletions")) return "deletions"
+  return "additions"
 }
 
-type CommentAnnotationMeta = {
-  file: string
-  selection: SelectedLineRange
-  label: string
-  preview?: string
+function findMarker(root: ShadowRoot, range: SelectedLineRange) {
+  const line = Math.max(range.start, range.end)
+  const side = range.endSide ?? range.side
+  const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"], [data-alt-line="${line}"]`)).filter(
+    (node): node is HTMLElement => node instanceof HTMLElement,
+  )
+  if (nodes.length === 0) return
+  if (!side) return nodes[0]
+
+  const match = nodes.find((node) => findSide(node) === side)
+  return match ?? nodes[0]
+}
+
+function markerTop(wrapper: HTMLElement, marker: HTMLElement) {
+  const wrapperRect = wrapper.getBoundingClientRect()
+  const rect = marker.getBoundingClientRect()
+  return rect.top - wrapperRect.top + Math.max(0, (rect.height - 20) / 2)
 }
 
 export const SessionReview = (props: SessionReviewProps) => {
   const i18n = useI18n()
   const diffComponent = useDiffComponent()
-  const codeComponent = useCodeComponent()
+  const anchors = new Map<string, HTMLElement>()
   const [store, setStore] = createStore({
     open: props.diffs.length > 10 ? [] : props.diffs.map((d) => d.file),
   })
+
   const [selection, setSelection] = createSignal<SessionReviewSelection | null>(null)
   const [commenting, setCommenting] = createSignal<SessionReviewSelection | null>(null)
+  const [opened, setOpened] = createSignal<SessionReviewFocus | null>(null)
 
   const open = () => props.open ?? store.open
   const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
@@ -150,9 +183,6 @@ export const SessionReview = (props: SessionReviewProps) => {
     return `lines ${start}-${end}`
   }
 
-  const isRangeEqual = (a: SelectedLineRange, b: SelectedLineRange) =>
-    a.start === b.start && a.end === b.end && a.side === b.side && a.endSide === b.endSide
-
   const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
 
   const selectionPreview = (diff: FileDiff, range: SelectedLineRange) => {
@@ -167,88 +197,26 @@ export const SessionReview = (props: SessionReviewProps) => {
     return lines.slice(0, 2).join("\n")
   }
 
-  const renderAnnotation = (annotation: DiffLineAnnotation<CommentAnnotationMeta>) => {
-    if (!props.onLineComment) return undefined
-    const meta = annotation.metadata
-    if (!meta) return undefined
+  createEffect(() => {
+    const focus = props.focusedComment
+    if (!focus) return
 
-    const wrapper = document.createElement("div")
-    wrapper.className = "relative"
+    setOpened(focus)
 
-    const card = document.createElement("div")
-    card.className =
-      "min-w-[240px] max-w-[320px] flex flex-col gap-2 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha p-2 shadow-md"
+    const comment = (props.comments ?? []).find((c) => c.file === focus.file && c.id === focus.id)
+    if (comment) setSelection({ file: comment.file, range: comment.selection })
 
-    const textarea = document.createElement("textarea")
-    textarea.rows = 3
-    textarea.placeholder = "Add a comment"
-    textarea.className =
-      "w-full resize-none rounded-md border border-border-base bg-surface-base px-2 py-1 text-12-regular text-text-strong placeholder:text-text-subtle"
-
-    const footer = document.createElement("div")
-    footer.className = "flex items-center justify-between gap-2 text-11-regular text-text-weak"
-
-    const label = document.createElement("span")
-    label.textContent = `Commenting on ${meta.label}`
-
-    const actions = document.createElement("div")
-    actions.className = "flex items-center gap-2"
-
-    const cancel = document.createElement("button")
-    cancel.type = "button"
-    cancel.textContent = "Cancel"
-    cancel.className = "text-11-regular text-text-weak hover:text-text-strong"
-
-    const submit = document.createElement("button")
-    submit.type = "button"
-    submit.textContent = "Comment"
-    submit.className =
-      "rounded-md border border-border-base bg-surface-base px-2 py-1 text-12-regular text-text-strong hover:bg-surface-raised-base-hover"
-
-    const updateState = () => {
-      const active = textarea.value.trim().length > 0
-      submit.disabled = !active
-      submit.classList.toggle("opacity-50", !active)
-      submit.classList.toggle("cursor-not-allowed", !active)
+    const current = open()
+    if (!current.includes(focus.file)) {
+      handleChange([...current, focus.file])
     }
 
-    updateState()
-    textarea.addEventListener("input", updateState)
-    textarea.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter") return
-      if (event.shiftKey) return
-      event.preventDefault()
-      submit.click()
-    })
-    cancel.addEventListener("click", () => {
-      setSelection(null)
-      setCommenting(null)
-    })
-    submit.addEventListener("click", () => {
-      const value = textarea.value.trim()
-      if (!value) return
-      props.onLineComment?.({
-        file: meta.file,
-        selection: meta.selection,
-        comment: value,
-        preview: meta.preview,
-      })
-      setSelection(null)
-      setCommenting(null)
+    requestAnimationFrame(() => {
+      anchors.get(focus.file)?.scrollIntoView({ block: "center" })
     })
 
-    actions.appendChild(cancel)
-    actions.appendChild(submit)
-    footer.appendChild(label)
-    footer.appendChild(actions)
-    card.appendChild(textarea)
-    card.appendChild(footer)
-    wrapper.appendChild(card)
-
-    requestAnimationFrame(() => textarea.focus())
-
-    return wrapper
-  }
+    requestAnimationFrame(() => props.onFocusedCommentChange?.(null))
+  })
 
   return (
     <div
@@ -298,6 +266,12 @@ export const SessionReview = (props: SessionReviewProps) => {
         <Accordion multiple value={open()} onChange={handleChange}>
           <For each={props.diffs}>
             {(diff) => {
+              let wrapper: HTMLDivElement | undefined
+              let textarea: HTMLTextAreaElement | undefined
+
+              const comments = createMemo(() => (props.comments ?? []).filter((c) => c.file === diff.file))
+              const commentedLines = createMemo(() => comments().map((c) => c.selection))
+
               const beforeText = () => (typeof diff.before === "string" ? diff.before : "")
               const afterText = () => (typeof diff.after === "string" ? diff.after : "")
 
@@ -321,27 +295,70 @@ export const SessionReview = (props: SessionReviewProps) => {
                 return current.range
               })
 
-              const commentingLines = createMemo(() => {
+              const draftRange = createMemo(() => {
                 const current = commenting()
                 if (!current || current.file !== diff.file) return null
                 return current.range
               })
 
-              const annotations = createMemo<DiffLineAnnotation<CommentAnnotationMeta>[]>(() => {
-                const range = commentingLines()
-                if (!range) return []
-                return [
-                  {
-                    lineNumber: Math.max(range.start, range.end),
-                    side: selectionSide(range),
-                    metadata: {
-                      file: diff.file,
-                      selection: range,
-                      label: selectionLabel(range),
-                      preview: selectionPreview(diff, range),
-                    },
-                  },
-                ]
+              const [draft, setDraft] = createSignal("")
+              const [positions, setPositions] = createSignal<Record<string, number>>({})
+              const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
+
+              const getRoot = () => {
+                const el = wrapper
+                if (!el) return
+
+                const host = el.querySelector("diffs-container")
+                if (!(host instanceof HTMLElement)) return
+                return host.shadowRoot ?? undefined
+              }
+
+              const updateAnchors = () => {
+                const el = wrapper
+                if (!el) return
+
+                const root = getRoot()
+                if (!root) return
+
+                const next: Record<string, number> = {}
+                for (const item of comments()) {
+                  const marker = findMarker(root, item.selection)
+                  if (!marker) continue
+                  next[item.id] = markerTop(el, marker)
+                }
+                setPositions(next)
+
+                const range = draftRange()
+                if (!range) {
+                  setDraftTop(undefined)
+                  return
+                }
+
+                const marker = findMarker(root, range)
+                if (!marker) {
+                  setDraftTop(undefined)
+                  return
+                }
+
+                setDraftTop(markerTop(el, marker))
+              }
+
+              const scheduleAnchors = () => {
+                requestAnimationFrame(updateAnchors)
+              }
+
+              createEffect(() => {
+                comments()
+                scheduleAnchors()
+              })
+
+              createEffect(() => {
+                const range = draftRange()
+                if (!range) return
+                setDraft("")
+                scheduleAnchors()
+                requestAnimationFrame(() => textarea?.focus())
               })
 
               createEffect(() => {
@@ -395,31 +412,15 @@ export const SessionReview = (props: SessionReviewProps) => {
                   })
               })
 
-              const fileForCode = () => {
-                const contents = afterText() || beforeText()
-                return {
-                  name: diff.file,
-                  contents,
-                  cacheKey: checksum(contents),
-                }
-              }
-
               const handleLineSelected = (range: SelectedLineRange | null) => {
                 if (!props.onLineComment) return
 
                 if (!range) {
                   setSelection(null)
-                  setCommenting(null)
                   return
                 }
 
                 setSelection({ file: diff.file, range })
-
-                const current = commenting()
-                if (!current) return
-                if (current.file !== diff.file) return
-                if (isRangeEqual(current.range, range)) return
-                setCommenting(null)
               }
 
               const handleLineSelectionEnd = (range: SelectedLineRange | null) => {
@@ -432,6 +433,17 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                 setSelection({ file: diff.file, range })
                 setCommenting({ file: diff.file, range })
+              }
+
+              const openComment = (comment: SessionReviewComment) => {
+                setOpened({ file: comment.file, id: comment.id })
+                setSelection({ file: comment.file, range: comment.selection })
+              }
+
+              const isCommentOpen = (comment: SessionReviewComment) => {
+                const current = opened()
+                if (!current) return false
+                return current.file === comment.file && current.id === comment.id
               }
 
               return (
@@ -526,32 +538,167 @@ export const SessionReview = (props: SessionReviewProps) => {
                           </Show>
                         </div>
                       </Match>
-                      <Match when={isAdded() || isDeleted()}>
-                        <div data-slot="session-review-file-container">
-                          <Dynamic component={codeComponent} file={fileForCode()} overflow="scroll" />
-                        </div>
-                      </Match>
                       <Match when={true}>
-                        <Dynamic
-                          component={diffComponent}
-                          preloadedDiff={diff.preloaded}
-                          diffStyle={diffStyle()}
-                          onRendered={props.onDiffRendered}
-                          enableLineSelection={props.onLineComment != null}
-                          onLineSelected={handleLineSelected}
-                          onLineSelectionEnd={handleLineSelectionEnd}
-                          selectedLines={selectedLines()}
-                          annotations={annotations()}
-                          renderAnnotation={renderAnnotation}
-                          before={{
-                            name: diff.file!,
-                            contents: beforeText(),
+                        <div
+                          data-slot="session-review-diff-wrapper"
+                          ref={(el) => {
+                            wrapper = el
+                            anchors.set(diff.file, el)
+                            scheduleAnchors()
                           }}
-                          after={{
-                            name: diff.file!,
-                            contents: afterText(),
-                          }}
-                        />
+                        >
+                          <Dynamic
+                            component={diffComponent}
+                            preloadedDiff={diff.preloaded}
+                            diffStyle={diffStyle()}
+                            onRendered={() => {
+                              props.onDiffRendered?.()
+                              scheduleAnchors()
+                            }}
+                            enableLineSelection={props.onLineComment != null}
+                            onLineSelected={handleLineSelected}
+                            onLineSelectionEnd={handleLineSelectionEnd}
+                            selectedLines={selectedLines()}
+                            commentedLines={commentedLines()}
+                            before={{
+                              name: diff.file!,
+                              contents: beforeText(),
+                            }}
+                            after={{
+                              name: diff.file!,
+                              contents: afterText(),
+                            }}
+                          />
+
+                          <For each={comments()}>
+                            {(comment) => (
+                              <div
+                                data-slot="session-review-comment-anchor"
+                                style={{
+                                  top: `${positions()[comment.id] ?? 0}px`,
+                                  opacity: positions()[comment.id] === undefined ? 0 : 1,
+                                  "pointer-events": positions()[comment.id] === undefined ? "none" : "auto",
+                                }}
+                              >
+                                <Popover
+                                  open={isCommentOpen(comment)}
+                                  onOpenChange={(open) => {
+                                    if (open) {
+                                      openComment(comment)
+                                      return
+                                    }
+                                    if (!isCommentOpen(comment)) return
+                                    setOpened(null)
+                                  }}
+                                  trigger={
+                                    <HoverCard
+                                      trigger={
+                                        <button
+                                          type="button"
+                                          data-slot="session-review-comment-button"
+                                          onMouseEnter={() =>
+                                            setSelection({ file: comment.file, range: comment.selection })
+                                          }
+                                        >
+                                          <Icon name="speech-bubble" size="small" />
+                                        </button>
+                                      }
+                                    >
+                                      <div data-slot="session-review-comment-hover">
+                                        <div data-slot="session-review-comment-hover-label">
+                                          {getFilename(comment.file)}:{selectionLabel(comment.selection)}
+                                        </div>
+                                        <div data-slot="session-review-comment-hover-text">{comment.comment}</div>
+                                      </div>
+                                    </HoverCard>
+                                  }
+                                >
+                                  <div data-slot="session-review-comment-popover">
+                                    <div data-slot="session-review-comment-popover-label">
+                                      {getFilename(comment.file)}:{selectionLabel(comment.selection)}
+                                    </div>
+                                    <div data-slot="session-review-comment-popover-text">{comment.comment}</div>
+                                    <Show when={selectionPreview(diff, comment.selection)}>
+                                      {(preview) => <pre data-slot="session-review-comment-preview">{preview()}</pre>}
+                                    </Show>
+                                  </div>
+                                </Popover>
+                              </div>
+                            )}
+                          </For>
+
+                          <Show when={draftRange()}>
+                            {(range) => (
+                              <Show when={draftTop() !== undefined}>
+                                <div data-slot="session-review-comment-anchor" style={{ top: `${draftTop() ?? 0}px` }}>
+                                  <Popover
+                                    open={true}
+                                    onOpenChange={(open) => {
+                                      if (open) return
+                                      setCommenting(null)
+                                    }}
+                                    trigger={
+                                      <button type="button" data-slot="session-review-comment-button">
+                                        <Icon name="speech-bubble" size="small" />
+                                      </button>
+                                    }
+                                  >
+                                    <div data-slot="session-review-comment-popover">
+                                      <div data-slot="session-review-comment-popover-label">
+                                        Commenting on {getFilename(diff.file)}:{selectionLabel(range())}
+                                      </div>
+                                      <textarea
+                                        ref={textarea}
+                                        data-slot="session-review-comment-textarea"
+                                        rows={3}
+                                        placeholder="Add a comment"
+                                        value={draft()}
+                                        onInput={(e) => setDraft(e.currentTarget.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key !== "Enter") return
+                                          if (e.shiftKey) return
+                                          e.preventDefault()
+                                          const value = draft().trim()
+                                          if (!value) return
+                                          props.onLineComment?.({
+                                            file: diff.file,
+                                            selection: range(),
+                                            comment: value,
+                                            preview: selectionPreview(diff, range()),
+                                          })
+                                          setCommenting(null)
+                                        }}
+                                      />
+                                      <div data-slot="session-review-comment-actions">
+                                        <Button size="small" variant="ghost" onClick={() => setCommenting(null)}>
+                                          Cancel
+                                        </Button>
+                                        <Button
+                                          size="small"
+                                          variant="secondary"
+                                          disabled={draft().trim().length === 0}
+                                          onClick={() => {
+                                            const value = draft().trim()
+                                            if (!value) return
+                                            props.onLineComment?.({
+                                              file: diff.file,
+                                              selection: range(),
+                                              comment: value,
+                                              preview: selectionPreview(diff, range()),
+                                            })
+                                            setCommenting(null)
+                                          }}
+                                        >
+                                          Comment
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </Popover>
+                                </div>
+                              </Show>
+                            )}
+                          </Show>
+                        </div>
                       </Match>
                     </Switch>
                   </Accordion.Content>
