@@ -271,7 +271,8 @@ export const dict = {
   "context.usage.clickToView": "컨텍스트를 보려면 클릭",
 
   "language.en": "영어",
-  "language.zh": "중국어",
+  "language.zh": "중국어 (간체)",
+  "language.zht": "중국어 (번체)",
   "language.ko": "한국어",
   "language.de": "독일어",
   "language.es": "스페인어",
