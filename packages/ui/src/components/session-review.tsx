@@ -10,10 +10,11 @@ import { useDiffComponent } from "../context/diff"
 import { useI18n } from "../context/i18n"
 import { checksum } from "@opencode-ai/util/encode"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { createEffect, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
+import { type DiffLineAnnotation, type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
 
 export type SessionReviewDiffStyle = "unified" | "split"
@@ -23,6 +24,7 @@ export interface SessionReviewProps {
   diffStyle?: SessionReviewDiffStyle
   onDiffStyleChange?: (diffStyle: SessionReviewDiffStyle) => void
   onDiffRendered?: () => void
+  onLineComment?: (comment: SessionReviewLineComment) => void
   open?: string[]
   onOpenChange?: (open: string[]) => void
   scrollRef?: (el: HTMLDivElement) => void
@@ -98,6 +100,25 @@ function dataUrlFromValue(value: unknown): string | undefined {
   return `data:${mime};base64,${content}`
 }
 
+type SessionReviewSelection = {
+  file: string
+  range: SelectedLineRange
+}
+
+type SessionReviewLineComment = {
+  file: string
+  selection: SelectedLineRange
+  comment: string
+  preview?: string
+}
+
+type CommentAnnotationMeta = {
+  file: string
+  selection: SelectedLineRange
+  label: string
+  preview?: string
+}
+
 export const SessionReview = (props: SessionReviewProps) => {
   const i18n = useI18n()
   const diffComponent = useDiffComponent()
@@ -105,6 +126,8 @@ export const SessionReview = (props: SessionReviewProps) => {
   const [store, setStore] = createStore({
     open: props.diffs.length > 10 ? [] : props.diffs.map((d) => d.file),
   })
+  const [selection, setSelection] = createSignal<SessionReviewSelection | null>(null)
+  const [commenting, setCommenting] = createSignal<SessionReviewSelection | null>(null)
 
   const open = () => props.open ?? store.open
   const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
@@ -118,6 +141,113 @@ export const SessionReview = (props: SessionReviewProps) => {
   const handleExpandOrCollapseAll = () => {
     const next = open().length > 0 ? [] : props.diffs.map((d) => d.file)
     handleChange(next)
+  }
+
+  const selectionLabel = (range: SelectedLineRange) => {
+    const start = Math.min(range.start, range.end)
+    const end = Math.max(range.start, range.end)
+    if (start === end) return `line ${start}`
+    return `lines ${start}-${end}`
+  }
+
+  const isRangeEqual = (a: SelectedLineRange, b: SelectedLineRange) =>
+    a.start === b.start && a.end === b.end && a.side === b.side && a.endSide === b.endSide
+
+  const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
+
+  const selectionPreview = (diff: FileDiff, range: SelectedLineRange) => {
+    const side = selectionSide(range)
+    const contents = side === "deletions" ? diff.before : diff.after
+    if (typeof contents !== "string" || contents.length === 0) return undefined
+
+    const start = Math.max(1, Math.min(range.start, range.end))
+    const end = Math.max(range.start, range.end)
+    const lines = contents.split("\n").slice(start - 1, end)
+    if (lines.length === 0) return undefined
+    return lines.slice(0, 2).join("\n")
+  }
+
+  const renderAnnotation = (annotation: DiffLineAnnotation<CommentAnnotationMeta>) => {
+    if (!props.onLineComment) return undefined
+    const meta = annotation.metadata
+    if (!meta) return undefined
+
+    const wrapper = document.createElement("div")
+    wrapper.className = "relative"
+
+    const card = document.createElement("div")
+    card.className =
+      "min-w-[240px] max-w-[320px] flex flex-col gap-2 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha p-2 shadow-md"
+
+    const textarea = document.createElement("textarea")
+    textarea.rows = 3
+    textarea.placeholder = "Add a comment"
+    textarea.className =
+      "w-full resize-none rounded-md border border-border-base bg-surface-base px-2 py-1 text-12-regular text-text-strong placeholder:text-text-subtle"
+
+    const footer = document.createElement("div")
+    footer.className = "flex items-center justify-between gap-2 text-11-regular text-text-weak"
+
+    const label = document.createElement("span")
+    label.textContent = `Commenting on ${meta.label}`
+
+    const actions = document.createElement("div")
+    actions.className = "flex items-center gap-2"
+
+    const cancel = document.createElement("button")
+    cancel.type = "button"
+    cancel.textContent = "Cancel"
+    cancel.className = "text-11-regular text-text-weak hover:text-text-strong"
+
+    const submit = document.createElement("button")
+    submit.type = "button"
+    submit.textContent = "Comment"
+    submit.className =
+      "rounded-md border border-border-base bg-surface-base px-2 py-1 text-12-regular text-text-strong hover:bg-surface-raised-base-hover"
+
+    const updateState = () => {
+      const active = textarea.value.trim().length > 0
+      submit.disabled = !active
+      submit.classList.toggle("opacity-50", !active)
+      submit.classList.toggle("cursor-not-allowed", !active)
+    }
+
+    updateState()
+    textarea.addEventListener("input", updateState)
+    textarea.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return
+      if (event.shiftKey) return
+      event.preventDefault()
+      submit.click()
+    })
+    cancel.addEventListener("click", () => {
+      setSelection(null)
+      setCommenting(null)
+    })
+    submit.addEventListener("click", () => {
+      const value = textarea.value.trim()
+      if (!value) return
+      props.onLineComment?.({
+        file: meta.file,
+        selection: meta.selection,
+        comment: value,
+        preview: meta.preview,
+      })
+      setSelection(null)
+      setCommenting(null)
+    })
+
+    actions.appendChild(cancel)
+    actions.appendChild(submit)
+    footer.appendChild(label)
+    footer.appendChild(actions)
+    card.appendChild(textarea)
+    card.appendChild(footer)
+    wrapper.appendChild(card)
+
+    requestAnimationFrame(() => textarea.focus())
+
+    return wrapper
   }
 
   return (
@@ -185,6 +315,35 @@ export const SessionReview = (props: SessionReviewProps) => {
               const [audioStatus, setAudioStatus] = createSignal<"idle" | "loading" | "error">("idle")
               const [audioMime, setAudioMime] = createSignal<string | undefined>(undefined)
 
+              const selectedLines = createMemo(() => {
+                const current = selection()
+                if (!current || current.file !== diff.file) return null
+                return current.range
+              })
+
+              const commentingLines = createMemo(() => {
+                const current = commenting()
+                if (!current || current.file !== diff.file) return null
+                return current.range
+              })
+
+              const annotations = createMemo<DiffLineAnnotation<CommentAnnotationMeta>[]>(() => {
+                const range = commentingLines()
+                if (!range) return []
+                return [
+                  {
+                    lineNumber: Math.max(range.start, range.end),
+                    side: selectionSide(range),
+                    metadata: {
+                      file: diff.file,
+                      selection: range,
+                      label: selectionLabel(range),
+                      preview: selectionPreview(diff, range),
+                    },
+                  },
+                ]
+              })
+
               createEffect(() => {
                 if (!open().includes(diff.file)) return
                 if (!isImage()) return
@@ -243,6 +402,36 @@ export const SessionReview = (props: SessionReviewProps) => {
                   contents,
                   cacheKey: checksum(contents),
                 }
+              }
+
+              const handleLineSelected = (range: SelectedLineRange | null) => {
+                if (!props.onLineComment) return
+
+                if (!range) {
+                  setSelection(null)
+                  setCommenting(null)
+                  return
+                }
+
+                setSelection({ file: diff.file, range })
+
+                const current = commenting()
+                if (!current) return
+                if (current.file !== diff.file) return
+                if (isRangeEqual(current.range, range)) return
+                setCommenting(null)
+              }
+
+              const handleLineSelectionEnd = (range: SelectedLineRange | null) => {
+                if (!props.onLineComment) return
+
+                if (!range) {
+                  setCommenting(null)
+                  return
+                }
+
+                setSelection({ file: diff.file, range })
+                setCommenting({ file: diff.file, range })
               }
 
               return (
@@ -348,6 +537,12 @@ export const SessionReview = (props: SessionReviewProps) => {
                           preloadedDiff={diff.preloaded}
                           diffStyle={diffStyle()}
                           onRendered={props.onDiffRendered}
+                          enableLineSelection={props.onLineComment != null}
+                          onLineSelected={handleLineSelected}
+                          onLineSelectionEnd={handleLineSelectionEnd}
+                          selectedLines={selectedLines()}
+                          annotations={annotations()}
+                          renderAnnotation={renderAnnotation}
                           before={{
                             name: diff.file!,
                             contents: beforeText(),

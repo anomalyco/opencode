@@ -1,10 +1,11 @@
-import { DiffLineAnnotation, FileContents, FileDiffOptions } from "@pierre/diffs"
+import { DiffLineAnnotation, FileContents, FileDiffOptions, type SelectedLineRange } from "@pierre/diffs"
 import { ComponentProps } from "solid-js"
 
 export type DiffProps<T = {}> = FileDiffOptions<T> & {
   before: FileContents
   after: FileContents
   annotations?: DiffLineAnnotation<T>[]
+  selectedLines?: SelectedLineRange | null
   onRendered?: () => void
   class?: string
   classList?: ComponentProps<"div">["classList"]
