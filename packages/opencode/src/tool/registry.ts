@@ -143,6 +143,11 @@ export namespace ToolRegistry {
           if (t.id === "apply_patch") return usePatch
           if (t.id === "edit" || t.id === "write") return !usePatch
 
+          // omit todo tools for openai models
+          if (t.id === "todoread" || t.id === "todowrite") {
+            if (model.modelID.includes("gpt-")) return false
+          }
+
           return true
         })
         .map(async (t) => {
