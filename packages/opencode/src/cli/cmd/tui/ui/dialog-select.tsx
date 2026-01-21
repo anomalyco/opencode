@@ -81,10 +81,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     on(
       () => props.selected,
       (selected) => {
-        if (!selected) {
-          setSelectedApplied(false)
-          return
-        }
         setSelectedApplied(false)
       },
     ),
