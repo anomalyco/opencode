@@ -12,6 +12,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
+import { shouldClearSlashCommand } from "./autocomplete-util"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -471,7 +472,7 @@ export function Autocomplete(props: {
 
   function hide() {
     const text = props.input().plainText
-    if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
+    if (shouldClearSlashCommand(store.visible, text)) {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
       // Sync the prompt store immediately since onContentChange is async
