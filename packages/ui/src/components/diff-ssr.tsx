@@ -1,6 +1,6 @@
 import { DIFFS_TAG_NAME, FileDiff } from "@pierre/diffs"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
-import { onCleanup, onMount, Show, splitProps } from "solid-js"
+import { createEffect, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { Dynamic, isServer } from "solid-js/web"
 import { createDefaultOptions, styleVariables, type DiffProps } from "../pierre"
 import { useWorkerPool } from "../context/worker-pool"
@@ -12,7 +12,14 @@ export type SSRDiffProps<T = {}> = DiffProps<T> & {
 export function Diff<T>(props: SSRDiffProps<T>) {
   let container!: HTMLDivElement
   let fileDiffRef!: HTMLElement
-  const [local, others] = splitProps(props, ["before", "after", "class", "classList", "annotations"])
+  const [local, others] = splitProps(props, [
+    "before",
+    "after",
+    "class",
+    "classList",
+    "annotations",
+    "selectedLines",
+  ])
   const workerPool = useWorkerPool(props.diffStyle)
 
   let fileDiffInstance: FileDiff<T> | undefined
@@ -36,6 +43,16 @@ export function Diff<T>(props: SSRDiffProps<T>) {
       lineAnnotations: local.annotations,
       fileContainer: fileDiffRef,
       containerWrapper: container,
+    })
+
+    fileDiffInstance.setSelectedLines(local.selectedLines ?? null)
+
+    createEffect(() => {
+      fileDiffInstance?.setLineAnnotations(local.annotations ?? [])
+    })
+
+    createEffect(() => {
+      fileDiffInstance?.setSelectedLines(local.selectedLines ?? null)
     })
 
     // Hydrate annotation slots with interactive SolidJS components

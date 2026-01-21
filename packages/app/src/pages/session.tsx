@@ -81,6 +81,7 @@ interface SessionReviewTabProps {
   diffStyle: DiffStyle
   onDiffStyleChange?: (style: DiffStyle) => void
   onViewFile?: (file: string) => void
+  onLineComment?: (comment: { file: string; selection: SelectedLineRange; comment: string; preview?: string }) => void
   classes?: {
     root?: string
     header?: string
@@ -166,6 +167,7 @@ function SessionReviewTab(props: SessionReviewTabProps) {
       onDiffStyleChange={props.onDiffStyleChange}
       onViewFile={props.onViewFile}
       readFile={readFile}
+      onLineComment={props.onLineComment}
     />
   )
 }
@@ -488,8 +490,36 @@ export default function Page() {
     setStore("expanded", id, status().type !== "idle")
   })
 
+  const selectionPreview = (path: string, selection: FileSelection) => {
+    const content = file.get(path)?.content?.content
+    if (!content) return undefined
+    const start = Math.max(1, Math.min(selection.startLine, selection.endLine))
+    const end = Math.max(selection.startLine, selection.endLine)
+    const lines = content.split("\n").slice(start - 1, end)
+    if (lines.length === 0) return undefined
+    return lines.slice(0, 2).join("\n")
+  }
+
   const addSelectionToContext = (path: string, selection: FileSelection) => {
-    prompt.context.add({ type: "file", path, selection })
+    const preview = selectionPreview(path, selection)
+    prompt.context.add({ type: "file", path, selection, preview })
+  }
+
+  const addCommentToContext = (input: {
+    file: string
+    selection: SelectedLineRange
+    comment: string
+    preview?: string
+  }) => {
+    const selection = selectionFromLines(input.selection)
+    const preview = input.preview ?? selectionPreview(input.file, selection)
+    prompt.context.add({
+      type: "file",
+      path: input.file,
+      selection,
+      comment: input.comment,
+      preview,
+    })
   }
 
   command.register(() => [
@@ -1402,6 +1432,7 @@ export default function Page() {
                                 diffs={diffs}
                                 view={view}
                                 diffStyle="unified"
+                                onLineComment={addCommentToContext}
                                 onViewFile={(path) => {
                                   const value = file.tab(path)
                                   tabs().open(value)
@@ -1717,6 +1748,7 @@ export default function Page() {
                                 view={view}
                                 diffStyle={layout.review.diffStyle()}
                                 onDiffStyleChange={layout.review.setDiffStyle}
+                                onLineComment={addCommentToContext}
                                 onViewFile={(path) => {
                                   const value = file.tab(path)
                                   tabs().open(value)

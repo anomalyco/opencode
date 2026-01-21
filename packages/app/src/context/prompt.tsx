@@ -4,6 +4,7 @@ import { batch, createMemo, createRoot, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
+import { checksum } from "@opencode-ai/util/encode"
 
 interface PartBase {
   content: string
@@ -41,6 +42,8 @@ export type FileContextItem = {
   type: "file"
   path: string
   selection?: FileSelection
+  comment?: string
+  preview?: string
 }
 
 export type ContextItem = FileContextItem
@@ -135,7 +138,11 @@ function createPromptSession(dir: string, id: string | undefined) {
     if (item.type !== "file") return item.type
     const start = item.selection?.startLine
     const end = item.selection?.endLine
-    return `${item.type}:${item.path}:${start}:${end}`
+    const key = `${item.type}:${item.path}:${start}:${end}`
+    const comment = item.comment?.trim()
+    if (!comment) return key
+    const digest = checksum(comment) ?? comment
+    return `${key}:c=${digest.slice(0, 8)}`
   }
 
   return {
