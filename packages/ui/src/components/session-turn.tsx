@@ -620,7 +620,7 @@ export function SessionTurn(
                                         <div data-slot="session-turn-file-path">
                                           <Show when={diff.file.includes("/")}>
                                             <span data-slot="session-turn-directory">
-                                              {getDirectory(diff.file)}&lrm;
+                                              {`\u202A${getDirectory(diff.file)}\u202C`}
                                             </span>
                                           </Show>
                                           <span data-slot="session-turn-filename">{getFilename(diff.file)}</span>

@@ -109,7 +109,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                         <FileIcon node={{ path: diff.file, type: "file" }} />
                         <div data-slot="session-review-file-name-container">
                           <Show when={diff.file.includes("/")}>
-                            <span data-slot="session-review-directory">{getDirectory(diff.file)}&lrm;</span>
+                            <span data-slot="session-review-directory">{`\u202A${getDirectory(diff.file)}\u202C`}</span>
                           </Show>
                           <span data-slot="session-review-filename">{getFilename(diff.file)}</span>
                           <Show when={props.onViewFile}>

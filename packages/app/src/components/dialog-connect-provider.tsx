@@ -33,7 +33,7 @@ export function DialogConnectProvider(props: { provider: string }) {
       globalSync.data.provider_auth[props.provider] ?? [
         {
           type: "api",
-          label: "API key",
+          label: language.t("provider.connect.method.apiKey"),
         },
       ],
   )
@@ -245,7 +245,7 @@ export function DialogConnectProvider(props: { provider: string }) {
                           <div class="text-14-regular text-text-base">
                             {language.t("provider.connect.opencodeZen.visit.prefix")}
                             <Link href="https://opencode.ai/zen" tabIndex={-1}>
-                              opencode.ai/zen
+                              {language.t("provider.connect.opencodeZen.visit.link")}
                             </Link>
                             {language.t("provider.connect.opencodeZen.visit.suffix")}
                           </div>

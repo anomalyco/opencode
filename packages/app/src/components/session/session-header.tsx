@@ -194,18 +194,18 @@ export function SessionHeader() {
                     >
                       <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                         <Icon
-                          name={view().reviewPanel.opened() ? "layout-right" : "layout-left"}
                           size="small"
+                          name={view().reviewPanel.opened() ? "layout-right-full" : "layout-right"}
                           class="group-hover/review-toggle:hidden"
                         />
                         <Icon
-                          name={view().reviewPanel.opened() ? "layout-right-partial" : "layout-left-partial"}
                           size="small"
+                          name="layout-right-partial"
                           class="hidden group-hover/review-toggle:inline-block"
                         />
                         <Icon
-                          name={view().reviewPanel.opened() ? "layout-right-full" : "layout-left-full"}
                           size="small"
+                          name={view().reviewPanel.opened() ? "layout-right" : "layout-right-full"}
                           class="hidden group-active/review-toggle:inline-block"
                         />
                       </div>
@@ -219,7 +219,7 @@ export function SessionHeader() {
                 >
                   <Button
                     variant="ghost"
-                    class="group/terminal-toggle size-6 p-0"
+                    class="group/terminal-toggle size-8 rounded-md"
                     onClick={() => view().terminal.toggle()}
                   >
                     <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">

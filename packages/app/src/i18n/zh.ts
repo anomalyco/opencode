@@ -17,6 +17,7 @@ export const dict = {
   "command.category.mcp": "MCP",
   "command.category.agent": "智能体",
   "command.category.permissions": "权限",
+  "command.category.workspace": "工作区",
 
   "theme.scheme.system": "系统",
   "theme.scheme.light": "浅色",
@@ -267,6 +268,12 @@ export const dict = {
 
   "language.en": "英语",
   "language.zh": "中文",
+  "language.ko": "韩语",
+  "language.de": "德语",
+  "language.es": "西班牙语",
+  "language.fr": "法语",
+  "language.ja": "日语",
+  "language.da": "丹麦语",
 
   "toast.language.title": "语言",
   "toast.language.description": "已切换到{{language}}",
@@ -452,6 +459,8 @@ export const dict = {
   "settings.shortcuts.conflict.description": "{{keybind}} 已分配给 {{titles}}。",
   "settings.shortcuts.unassigned": "未设置",
   "settings.shortcuts.pressKeys": "按下按键",
+  "settings.shortcuts.search.placeholder": "搜索快捷键",
+  "settings.shortcuts.search.empty": "未找到快捷键",
 
   "settings.shortcuts.group.general": "通用",
   "settings.shortcuts.group.session": "会话",

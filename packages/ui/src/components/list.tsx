@@ -11,6 +11,7 @@ export interface ListSearchProps {
   autofocus?: boolean
   hideIcon?: boolean
   class?: string
+  action?: JSX.Element
 }
 
 export interface ListProps<T> extends FilteredListProps<T> {
@@ -23,6 +24,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
   activeIcon?: IconProps["name"]
   filter?: string
   search?: ListSearchProps | boolean
+  itemWrapper?: (item: T, node: JSX.Element) => JSX.Element
 }
 
 export interface ListRef {
@@ -60,6 +62,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   const { filter, grouped, flat, active, setActive, onKeyDown, onInput } = useFilteredList<T>(props)
 
   const searchProps = () => (typeof props.search === "object" ? props.search : {})
+  const searchAction = () => searchProps().action
 
   const moved = (event: MouseEvent) => event.movementX !== 0 || event.movementY !== 0
 
@@ -198,29 +201,32 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   return (
     <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
       <Show when={!!props.search}>
-        <div data-slot="list-search" classList={{ [searchProps().class ?? ""]: !!searchProps().class }}>
-          <div data-slot="list-search-container">
-            <Show when={!searchProps().hideIcon}>
-              <Icon name="magnifying-glass" />
+        <div data-slot="list-search-wrapper">
+          <div data-slot="list-search" classList={{ [searchProps().class ?? ""]: !!searchProps().class }}>
+            <div data-slot="list-search-container">
+              <Show when={!searchProps().hideIcon}>
+                <Icon name="magnifying-glass" />
+              </Show>
+              <TextField
+                autofocus={searchProps().autofocus}
+                variant="ghost"
+                data-slot="list-search-input"
+                type="text"
+                value={internalFilter()}
+                onChange={setInternalFilter}
+                onKeyDown={handleKey}
+                placeholder={searchProps().placeholder}
+                spellcheck={false}
+                autocorrect="off"
+                autocomplete="off"
+                autocapitalize="off"
+              />
+            </div>
+            <Show when={internalFilter()}>
+              <IconButton icon="circle-x" variant="ghost" onClick={() => setInternalFilter("")} />
             </Show>
-            <TextField
-              autofocus={searchProps().autofocus}
-              variant="ghost"
-              data-slot="list-search-input"
-              type="text"
-              value={internalFilter()}
-              onChange={setInternalFilter}
-              onKeyDown={handleKey}
-              placeholder={searchProps().placeholder}
-              spellcheck={false}
-              autocorrect="off"
-              autocomplete="off"
-              autocapitalize="off"
-            />
           </div>
-          <Show when={internalFilter()}>
-            <IconButton icon="circle-x" variant="ghost" onClick={() => setInternalFilter("")} />
-          </Show>
+          {searchAction()}
         </div>
       </Show>
       <div ref={setScrollRef} data-slot="list-scroll">
@@ -240,39 +246,43 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                 </Show>
                 <div data-slot="list-items">
                   <For each={group.items}>
-                    {(item, i) => (
-                      <button
-                        data-slot="list-item"
-                        data-key={props.key(item)}
-                        data-active={props.key(item) === active()}
-                        data-selected={item === props.current}
-                        onClick={() => handleSelect(item, i())}
-                        type="button"
-                        onMouseMove={(event) => {
-                          if (!moved(event)) return
-                          setStore("mouseActive", true)
-                          setActive(props.key(item))
-                        }}
-                        onMouseLeave={() => {
-                          if (!store.mouseActive) return
-                          setActive(null)
-                        }}
-                      >
-                        {props.children(item)}
-                        <Show when={item === props.current}>
-                          <span data-slot="list-item-selected-icon">
-                            <Icon name="check-small" />
-                          </span>
-                        </Show>
-                        <Show when={props.activeIcon}>
-                          {(icon) => (
-                            <span data-slot="list-item-active-icon">
-                              <Icon name={icon()} />
+                    {(item, i) => {
+                      const node = (
+                        <button
+                          data-slot="list-item"
+                          data-key={props.key(item)}
+                          data-active={props.key(item) === active()}
+                          data-selected={item === props.current}
+                          onClick={() => handleSelect(item, i())}
+                          type="button"
+                          onMouseMove={(event) => {
+                            if (!moved(event)) return
+                            setStore("mouseActive", true)
+                            setActive(props.key(item))
+                          }}
+                          onMouseLeave={() => {
+                            if (!store.mouseActive) return
+                            setActive(null)
+                          }}
+                        >
+                          {props.children(item)}
+                          <Show when={item === props.current}>
+                            <span data-slot="list-item-selected-icon">
+                              <Icon name="check-small" />
                             </span>
-                          )}
-                        </Show>
-                      </button>
-                    )}
+                          </Show>
+                          <Show when={props.activeIcon}>
+                            {(icon) => (
+                              <span data-slot="list-item-active-icon">
+                                <Icon name={icon()} />
+                              </span>
+                            )}
+                          </Show>
+                        </button>
+                      )
+                      if (props.itemWrapper) return props.itemWrapper(item, node)
+                      return node
+                    }}
                   </For>
                 </div>
               </div>
