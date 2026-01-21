@@ -178,30 +178,32 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   return (
     <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
       <Show when={!!props.search}>
-        <div data-slot="list-search" classList={{ [searchProps().class ?? ""]: !!searchProps().class }}>
-          <div data-slot="list-search-container">
-            <Show when={!searchProps().hideIcon}>
-              <Icon name="magnifying-glass" />
+        <div data-slot="list-search-wrapper">
+          <div data-slot="list-search" classList={{ [searchProps().class ?? ""]: !!searchProps().class }}>
+            <div data-slot="list-search-container">
+              <Show when={!searchProps().hideIcon}>
+                <Icon name="magnifying-glass" />
+              </Show>
+              <TextField
+                autofocus={searchProps().autofocus}
+                variant="ghost"
+                data-slot="list-search-input"
+                type="text"
+                value={internalFilter()}
+                onChange={setInternalFilter}
+                onKeyDown={handleKey}
+                placeholder={searchProps().placeholder}
+                spellcheck={false}
+                autocorrect="off"
+                autocomplete="off"
+                autocapitalize="off"
+              />
+            </div>
+            <Show when={internalFilter()}>
+              <IconButton icon="circle-x" variant="ghost" onClick={() => setInternalFilter("")} />
             </Show>
-            <TextField
-              autofocus={searchProps().autofocus}
-              variant="ghost"
-              data-slot="list-search-input"
-              type="text"
-              value={internalFilter()}
-              onChange={setInternalFilter}
-              onKeyDown={handleKey}
-              placeholder={searchProps().placeholder}
-              spellcheck={false}
-              autocorrect="off"
-              autocomplete="off"
-              autocapitalize="off"
-            />
           </div>
           {searchAction()}
-          <Show when={internalFilter()}>
-            <IconButton icon="circle-x" variant="ghost" onClick={() => setInternalFilter("")} />
-          </Show>
         </div>
       </Show>
       <div ref={setScrollRef} data-slot="list-scroll">
