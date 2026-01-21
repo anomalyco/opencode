@@ -6,16 +6,18 @@ import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { dict as ko } from "@/i18n/ko"
+import { dict as de } from "@/i18n/de"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
 import { dict as uiKo } from "@opencode-ai/ui/i18n/ko"
+import { dict as uiDe } from "@opencode-ai/ui/i18n/de"
 
-export type Locale = "en" | "zh" | "ko"
+export type Locale = "en" | "zh" | "ko" | "de"
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
 
-const LOCALES: readonly Locale[] = ["en", "zh", "ko"]
+const LOCALES: readonly Locale[] = ["en", "zh", "ko", "de"]
 
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
@@ -25,6 +27,7 @@ function detectLocale(): Locale {
     if (!language) continue
     if (language.toLowerCase().startsWith("zh")) return "zh"
     if (language.toLowerCase().startsWith("ko")) return "ko"
+    if (language.toLowerCase().startsWith("de")) return "de"
   }
 
   return "en"
@@ -43,6 +46,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const locale = createMemo<Locale>(() => {
       if (store.locale === "zh") return "zh"
       if (store.locale === "ko") return "ko"
+      if (store.locale === "de") return "de"
       return "en"
     })
 
@@ -56,6 +60,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const dict = createMemo<Dictionary>(() => {
       if (locale() === "en") return base
       if (locale() === "zh") return { ...base, ...i18n.flatten({ ...zh, ...uiZh }) }
+      if (locale() === "de") return { ...base, ...i18n.flatten({ ...de, ...uiDe }) }
       return { ...base, ...i18n.flatten({ ...ko, ...uiKo }) }
     })
 
@@ -65,6 +70,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       en: "language.en",
       zh: "language.zh",
       ko: "language.ko",
+      de: "language.de",
     }
 
     const label = (value: Locale) => t(labelKey[value])
