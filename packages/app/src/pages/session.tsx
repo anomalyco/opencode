@@ -903,7 +903,7 @@ export default function Page() {
 
   const autoScroll = createAutoScroll({
     working: () => true,
-    overflowAnchor: "auto",
+    overflowAnchor: "dynamic",
   })
 
   // When the user returns to the bottom, treat the active message as "latest".
