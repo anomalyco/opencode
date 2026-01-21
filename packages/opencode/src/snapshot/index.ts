@@ -152,7 +152,7 @@ export namespace Snapshot {
             })
           } else {
             log.info("file did not exist in snapshot, deleting", { file })
-            await fs.unlink(file).catch(() => { })
+            await fs.unlink(file).catch(() => {})
           }
         }
         files.add(file)
@@ -209,16 +209,22 @@ export namespace Snapshot {
       const beforeResult = isBinaryFile
         ? { exitCode: 0, text: () => "", stderr: Buffer.from("") }
         : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
-          .quiet()
-          .nothrow()
-      const before = beforeResult.exitCode === 0 ? beforeResult.text() : `[DEBUG ERROR] git show ${from}:${file} failed: ${beforeResult.stderr.toString()}`
+            .quiet()
+            .nothrow()
+      const before =
+        beforeResult.exitCode === 0
+          ? beforeResult.text()
+          : `[DEBUG ERROR] git show ${from}:${file} failed: ${beforeResult.stderr.toString()}`
 
       const afterResult = isBinaryFile
         ? { exitCode: 0, text: () => "", stderr: Buffer.from("") }
         : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
-          .quiet()
-          .nothrow()
-      const after = afterResult.exitCode === 0 ? afterResult.text() : `[DEBUG ERROR] git show ${to}:${file} failed: ${afterResult.stderr.toString()}`
+            .quiet()
+            .nothrow()
+      const after =
+        afterResult.exitCode === 0
+          ? afterResult.text()
+          : `[DEBUG ERROR] git show ${to}:${file} failed: ${afterResult.stderr.toString()}`
       const added = isBinaryFile ? 0 : parseInt(additions)
       const deleted = isBinaryFile ? 0 : parseInt(deletions)
       result.push({
