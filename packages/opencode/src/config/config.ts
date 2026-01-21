@@ -80,10 +80,12 @@ export namespace Config {
     }
 
     // Project config has highest precedence (overrides global and remote)
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
-      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
-      for (const resolved of found.toReversed()) {
-        result = mergeConfigConcatArrays(result, await loadFile(resolved))
+    if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      for (const file of ["opencode.jsonc", "opencode.json"]) {
+        const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+        for (const resolved of found.toReversed()) {
+          result = mergeConfigConcatArrays(result, await loadFile(resolved))
+        }
       }
     }
 
@@ -99,13 +101,17 @@ export namespace Config {
 
     const directories = [
       Global.Path.config,
-      ...(await Array.fromAsync(
-        Filesystem.up({
-          targets: [".opencode"],
-          start: Instance.directory,
-          stop: Instance.worktree,
-        }),
-      )),
+      // Only scan project .opencode/ directories when project discovery is enabled
+      ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+        ? await Array.fromAsync(
+            Filesystem.up({
+              targets: [".opencode"],
+              start: Instance.directory,
+              stop: Instance.worktree,
+            }),
+          )
+        : []),
+      // Always scan ~/.opencode/ (user home directory)
       ...(await Array.fromAsync(
         Filesystem.up({
           targets: [".opencode"],
