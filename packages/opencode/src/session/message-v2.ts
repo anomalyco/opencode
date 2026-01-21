@@ -566,10 +566,7 @@ export namespace MessageV2 {
       }
     }
 
-    return convertToModelMessages(
-      result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
-      { tools: options?.tools },
-    )
+    return convertToModelMessages(result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")))
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {

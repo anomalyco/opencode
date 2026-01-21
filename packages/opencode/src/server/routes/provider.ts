@@ -266,8 +266,8 @@ export const ProviderRoutes = lazy(() =>
       ),
       async (c) => {
         const { providerID, recordID } = c.req.valid("json")
-        const remaining = await Auth.OAuthPool.deleteRecord(providerID, recordID)
-        return c.json({ success: true, remaining })
+        const result = await Auth.OAuthPool.removeRecord(providerID, recordID)
+        return c.json({ success: result.removed, remaining: result.remaining })
       },
     ),
 )
