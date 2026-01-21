@@ -84,7 +84,7 @@ export function Titlebar() {
         onMouseDown={drag}
       >
         <Show when={mac()}>
-          <div class="w-[72px] h-full shrink-0" data-tauri-drag-region />
+          <div class="w-20 h-full shrink-0" data-tauri-drag-region />
           <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">
             <IconButton icon="menu" variant="ghost" class="size-8 rounded-md" onClick={layout.mobileSidebar.toggle} />
           </div>
