@@ -65,7 +65,6 @@ export async function convertToOpenAIResponsesInput({
       }
 
       case "user": {
-        // Filter out unsupported file types before processing
         const supportedImageTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"]
         const filteredContent = content.filter((part) => {
           if (part.type === "text") return true
