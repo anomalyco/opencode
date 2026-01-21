@@ -2078,8 +2078,8 @@ export default function Layout(props: ParentProps) {
     command.register(() => [
       {
         id: "workspace.new",
-        title: "New workspace",
-        category: "Workspace",
+        title: language.t("workspace.new"),
+        category: language.t("command.category.workspace"),
         keybind: "mod+shift+w",
         disabled: !layout.sidebar.workspaces(project()?.worktree ?? "")(),
         onSelect: createWorkspace,

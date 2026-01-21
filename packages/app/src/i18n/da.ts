@@ -13,6 +13,7 @@ export const dict = {
   "command.category.mcp": "MCP",
   "command.category.agent": "Agent",
   "command.category.permissions": "Tilladelser",
+  "command.category.workspace": "Arbejdsområde",
 
   "theme.scheme.system": "System",
   "theme.scheme.light": "Lys",

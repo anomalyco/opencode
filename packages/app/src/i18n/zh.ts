@@ -17,6 +17,7 @@ export const dict = {
   "command.category.mcp": "MCP",
   "command.category.agent": "智能体",
   "command.category.permissions": "权限",
+  "command.category.workspace": "工作区",
 
   "theme.scheme.system": "系统",
   "theme.scheme.light": "浅色",
