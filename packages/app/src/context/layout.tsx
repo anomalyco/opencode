@@ -296,7 +296,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         used.add(color)
         setColors(project.worktree, color)
         if (!project.id) continue
-        void globalSdk.client.project.update({ projectID: project.id, icon: { color } })
+        void globalSdk.client.project.update({ projectID: project.id, directory: project.worktree, icon: { color } })
       }
     })
 

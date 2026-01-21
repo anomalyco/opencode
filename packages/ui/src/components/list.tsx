@@ -6,6 +6,13 @@ import { Icon, type IconProps } from "./icon"
 import { IconButton } from "./icon-button"
 import { TextField } from "./text-field"
 
+function findByKey(container: HTMLElement, key: string) {
+  const nodes = container.querySelectorAll<HTMLElement>('[data-slot="list-item"][data-key]')
+  for (const node of nodes) {
+    if (node.getAttribute("data-key") === key) return node
+  }
+}
+
 export interface ListSearchProps {
   placeholder?: string
   autofocus?: boolean
@@ -97,8 +104,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     if (!props.current) return
     const key = props.key(props.current)
     requestAnimationFrame(() => {
-      const element = scroll.querySelector(`[data-key="${CSS.escape(key)}"]`)
-      if (!(element instanceof HTMLElement)) return
+      const element = findByKey(scroll, key)
+      if (!element) return
       scrollIntoView(scroll, element, "center")
     })
   })
@@ -114,8 +121,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     }
     const key = active()
     if (!key) return
-    const element = scroll.querySelector(`[data-key="${CSS.escape(key)}"]`)
-    if (!(element instanceof HTMLElement)) return
+    const element = findByKey(scroll, key)
+    if (!element) return
     scrollIntoView(scroll, element, "center")
   })
 

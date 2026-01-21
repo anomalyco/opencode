@@ -11,6 +11,7 @@ import { dict as es } from "@/i18n/es"
 import { dict as fr } from "@/i18n/fr"
 import { dict as da } from "@/i18n/da"
 import { dict as ja } from "@/i18n/ja"
+import { dict as pl } from "@/i18n/pl"
 import { dict as ru } from "@/i18n/ru"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
@@ -20,14 +21,15 @@ import { dict as uiEs } from "@opencode-ai/ui/i18n/es"
 import { dict as uiFr } from "@opencode-ai/ui/i18n/fr"
 import { dict as uiDa } from "@opencode-ai/ui/i18n/da"
 import { dict as uiJa } from "@opencode-ai/ui/i18n/ja"
+import { dict as uiPl } from "@opencode-ai/ui/i18n/pl"
 import { dict as uiRu } from "@opencode-ai/ui/i18n/ru"
 
-export type Locale = "en" | "zh" | "ko" | "de" | "es" | "fr" | "da" | "ja" | "ru"
+export type Locale = "en" | "zh" | "ko" | "de" | "es" | "fr" | "da" | "ja" | "pl" | "ru"
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
 
-const LOCALES: readonly Locale[] = ["en", "zh", "ko", "de", "es", "fr", "da", "ja", "ru"]
+const LOCALES: readonly Locale[] = ["en", "zh", "ko", "de", "es", "fr", "da", "ja", "pl", "ru"]
 
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
@@ -42,6 +44,7 @@ function detectLocale(): Locale {
     if (language.toLowerCase().startsWith("fr")) return "fr"
     if (language.toLowerCase().startsWith("da")) return "da"
     if (language.toLowerCase().startsWith("ja")) return "ja"
+    if (language.toLowerCase().startsWith("pl")) return "pl"
     if (language.toLowerCase().startsWith("ru")) return "ru"
   }
 
@@ -66,6 +69,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       if (store.locale === "fr") return "fr"
       if (store.locale === "da") return "da"
       if (store.locale === "ja") return "ja"
+      if (store.locale === "pl") return "pl"
       if (store.locale === "ru") return "ru"
       return "en"
     })
@@ -85,6 +89,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       if (locale() === "fr") return { ...base, ...i18n.flatten({ ...fr, ...uiFr }) }
       if (locale() === "da") return { ...base, ...i18n.flatten({ ...da, ...uiDa }) }
       if (locale() === "ja") return { ...base, ...i18n.flatten({ ...ja, ...uiJa }) }
+      if (locale() === "pl") return { ...base, ...i18n.flatten({ ...pl, ...uiPl }) }
       if (locale() === "ru") return { ...base, ...i18n.flatten({ ...ru, ...uiRu }) }
       return { ...base, ...i18n.flatten({ ...ko, ...uiKo }) }
     })
@@ -100,6 +105,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       fr: "language.fr",
       da: "language.da",
       ja: "language.ja",
+      pl: "language.pl",
       ru: "language.ru",
     }
 
