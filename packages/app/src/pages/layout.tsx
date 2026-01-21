@@ -1573,12 +1573,12 @@ export default function Layout(props: ParentProps) {
             keybind={command.keybind("session.archive")}
             gutter={8}
           >
-              <IconButton
-                icon="archive"
-                variant="ghost"
-                onClick={() => archiveSession(props.session)}
-                aria-label={language.t("command.session.archive")}
-              />
+            <IconButton
+              icon="archive"
+              variant="ghost"
+              onClick={() => archiveSession(props.session)}
+              aria-label={language.t("command.session.archive")}
+            />
           </TooltipKeybind>
         </div>
       </div>

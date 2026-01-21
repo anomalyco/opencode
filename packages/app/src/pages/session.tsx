@@ -2017,9 +2017,7 @@ export default function Page() {
                                 style={{ color: "rgba(239, 68, 68, 0.8)" }}
                               />
                               <div class="text-center" style={{ color: "rgba(255, 255, 255, 0.7)" }}>
-                                <div class="text-14-semibold mb-1">
-                                  {language.t("terminal.connectionLost.title")}
-                                </div>
+                                <div class="text-14-semibold mb-1">{language.t("terminal.connectionLost.title")}</div>
                                 <div class="text-12-regular" style={{ color: "rgba(255, 255, 255, 0.5)" }}>
                                   {language.t("terminal.connectionLost.description")}
                                 </div>

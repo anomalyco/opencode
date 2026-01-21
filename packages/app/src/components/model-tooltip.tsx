@@ -72,8 +72,7 @@ export const ModelTooltip: Component<{ model: ModelInfo; latest?: boolean; free?
       ? language.t("model.tooltip.reasoning.allowed")
       : language.t("model.tooltip.reasoning.none")
   }
-  const context = () =>
-    language.t("model.tooltip.context", { limit: props.model.limit.context.toLocaleString() })
+  const context = () => language.t("model.tooltip.context", { limit: props.model.limit.context.toLocaleString() })
 
   return (
     <div class="flex flex-col gap-1 py-1">
