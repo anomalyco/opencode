@@ -26,7 +26,7 @@ jobs:
             host: windows-latest
             playwright: bunx playwright install
             workdir: packages/app
-            command: bun test:e2e
+            command: bun test:e2e:local
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
@@ -65,6 +65,7 @@ jobs:
           fi
 
       - name: Seed opencode data
+        if: matrix.settings.name != 'windows'
         working-directory: packages/opencode
         run: bun script/seed-e2e.ts
         env:
@@ -85,6 +86,7 @@ jobs:
           OPENCODE_E2E_MODEL: "opencode/gpt-5-nano"
 
       - name: Run opencode server
+        if: matrix.settings.name != 'windows'
         working-directory: packages/opencode
         run: bun dev -- --print-logs --log-level WARN serve --port 4096 --hostname 127.0.0.1 &
         env:
@@ -102,6 +104,7 @@ jobs:
           OPENCODE_CLIENT: "app"
 
       - name: Wait for opencode server
+        if: matrix.settings.name != 'windows'
         run: |
           for i in {1..120}; do
             curl -fsS "http://127.0.0.1:4096/global/health" > /dev/null && exit 0
