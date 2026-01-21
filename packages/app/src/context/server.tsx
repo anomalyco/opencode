@@ -16,10 +16,7 @@ export function normalizeServerUrl(input: string) {
 
 export function serverDisplayName(url: string) {
   if (!url) return ""
-  return url
-    .replace(/^https?:\/\//, "")
-    .replace(/\/+$/, "")
-    .split("/")[0]
+  return url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
 function projectsKey(url: string) {
@@ -39,6 +36,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       createStore({
         list: [] as string[],
         projects: {} as Record<string, StoredProject[]>,
+        lastProject: {} as Record<string, string>,
       }),
     )
 
@@ -199,6 +197,16 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const [item] = result.splice(fromIndex, 1)
           result.splice(toIndex, 0, item)
           setStore("projects", key, result)
+        },
+        last() {
+          const key = origin()
+          if (!key) return
+          return store.lastProject[key]
+        },
+        touch(directory: string) {
+          const key = origin()
+          if (!key) return
+          setStore("lastProject", key, directory)
         },
       },
     }

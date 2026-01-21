@@ -22,6 +22,10 @@ export namespace Global {
     cache,
     config,
     state,
+    // Allow overriding models.dev URL for offline deployments
+    get modelsDevUrl() {
+      return process.env.OPENCODE_MODELS_URL || "https://models.dev"
+    },
   }
 }
 
@@ -33,7 +37,7 @@ await Promise.all([
   fs.mkdir(Global.Path.bin, { recursive: true }),
 ])
 
-const CACHE_VERSION = "16"
+const CACHE_VERSION = "18"
 
 const version = await Bun.file(path.join(Global.Path.cache, "version"))
   .text()

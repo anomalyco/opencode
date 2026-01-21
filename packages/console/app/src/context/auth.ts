@@ -5,12 +5,37 @@ import { redirect } from "@solidjs/router"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 
 import { createClient } from "@openauthjs/openauth/client"
-import { useAuthSession } from "./auth.session"
 
 export const AuthClient = createClient({
   clientID: "app",
   issuer: import.meta.env.VITE_AUTH_URL,
 })
+
+import { useSession } from "@solidjs/start/http"
+import { Resource } from "@opencode-ai/console-resource"
+
+export interface AuthSession {
+  account?: Record<
+    string,
+    {
+      id: string
+      email: string
+    }
+  >
+  current?: string
+}
+
+export function useAuthSession() {
+  return useSession<AuthSession>({
+    password: Resource.ZEN_SESSION_SECRET.value,
+    name: "auth",
+    maxAge: 60 * 60 * 24 * 365,
+    cookie: {
+      secure: false,
+      httpOnly: true,
+    },
+  })
+}
 
 export const getActor = async (workspace?: string): Promise<Actor.Info> => {
   "use server"

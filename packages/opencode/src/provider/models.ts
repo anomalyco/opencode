@@ -47,6 +47,7 @@ export namespace ModelsDev {
       .optional(),
     limit: z.object({
       context: z.number(),
+      input: z.number().optional(),
       output: z.number(),
     }),
     modalities: z
@@ -80,7 +81,12 @@ export namespace ModelsDev {
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
     if (result) return result as Record<string, Provider>
-    const json = await data()
+    if (typeof data === "function") {
+      const json = await data()
+      return JSON.parse(json) as Record<string, Provider>
+    }
+    const url = Global.Path.modelsDevUrl
+    const json = await fetch(`${url}/api.json`).then((x) => x.text())
     return JSON.parse(json) as Record<string, Provider>
   }
 
@@ -90,7 +96,8 @@ export namespace ModelsDev {
     log.info("refreshing", {
       file,
     })
-    const result = await fetch("https://models.dev/api.json", {
+    const url = Global.Path.modelsDevUrl
+    const result = await fetch(`${url}/api.json`, {
       headers: {
         "User-Agent": Installation.USER_AGENT,
       },
