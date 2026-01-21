@@ -32,7 +32,7 @@
     justify-content: center;
     border-radius: 6px;
     overflow: hidden;
-    background: var(--surface-base);
+    background: var(--surface-weak);
     border: 1px solid var(--border-weak-base);
     transition: border-color 0.15s ease;
 
@@ -76,7 +76,8 @@
     white-space: pre-wrap;
     word-break: break-word;
     overflow: hidden;
-    background: var(--surface-base);
+    background: var(--surface-weak);
+    border: 1px solid var(--border-weak-base);
     padding: 8px 12px;
     border-radius: 4px;
 
