@@ -189,7 +189,7 @@ export function SessionHeader() {
                   >
                     <Button
                       variant="ghost"
-                      class="group/review-toggle size-6 p-0"
+                      class="group/review-toggle size-8 rounded-md p-0"
                       onClick={() => view().reviewPanel.toggle()}
                     >
                       <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
@@ -219,7 +219,7 @@ export function SessionHeader() {
                 >
                   <Button
                     variant="ghost"
-                    class="group/terminal-toggle size-6 p-0"
+                    class="group/terminal-toggle size-8 rounded-md p-0"
                     onClick={() => view().terminal.toggle()}
                   >
                     <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
