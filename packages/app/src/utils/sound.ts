@@ -12,18 +12,18 @@ import staplebops06 from "@opencode-ai/ui/audio/staplebops-06.aac"
 import staplebops07 from "@opencode-ai/ui/audio/staplebops-07.aac"
 
 export const SOUND_OPTIONS = [
-  { id: "staplebops-01", label: "Boopy", src: staplebops01 },
-  { id: "staplebops-02", label: "Beepy", src: staplebops02 },
-  { id: "staplebops-03", label: "Staplebops 03", src: staplebops03 },
-  { id: "staplebops-04", label: "Staplebops 04", src: staplebops04 },
-  { id: "staplebops-05", label: "Staplebops 05", src: staplebops05 },
-  { id: "staplebops-06", label: "Staplebops 06", src: staplebops06 },
-  { id: "staplebops-07", label: "Staplebops 07", src: staplebops07 },
-  { id: "nope-01", label: "Nope 01", src: nope01 },
-  { id: "nope-02", label: "Nope 02", src: nope02 },
-  { id: "nope-03", label: "Oopsie", src: nope03 },
-  { id: "nope-04", label: "Nope 04", src: nope04 },
-  { id: "nope-05", label: "Nope 05", src: nope05 },
+  { id: "staplebops-01", label: "sound.option.staplebops01", src: staplebops01 },
+  { id: "staplebops-02", label: "sound.option.staplebops02", src: staplebops02 },
+  { id: "staplebops-03", label: "sound.option.staplebops03", src: staplebops03 },
+  { id: "staplebops-04", label: "sound.option.staplebops04", src: staplebops04 },
+  { id: "staplebops-05", label: "sound.option.staplebops05", src: staplebops05 },
+  { id: "staplebops-06", label: "sound.option.staplebops06", src: staplebops06 },
+  { id: "staplebops-07", label: "sound.option.staplebops07", src: staplebops07 },
+  { id: "nope-01", label: "sound.option.nope01", src: nope01 },
+  { id: "nope-02", label: "sound.option.nope02", src: nope02 },
+  { id: "nope-03", label: "sound.option.nope03", src: nope03 },
+  { id: "nope-04", label: "sound.option.nope04", src: nope04 },
+  { id: "nope-05", label: "sound.option.nope05", src: nope05 },
 ] as const
 
 export type SoundOption = (typeof SOUND_OPTIONS)[number]

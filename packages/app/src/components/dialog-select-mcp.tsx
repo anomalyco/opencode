@@ -77,7 +77,9 @@ export const DialogSelectMcp: Component = () => {
                     <span class="text-11-regular text-text-weaker">{language.t("mcp.status.disabled")}</span>
                   </Show>
                   <Show when={loading() === i.name}>
-                    <span class="text-11-regular text-text-weak">...</span>
+                    <span class="text-11-regular text-text-weak">
+                      {language.t("common.loading.ellipsis")}
+                    </span>
                   </Show>
                 </div>
                 <Show when={error()}>

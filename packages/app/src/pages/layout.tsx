@@ -847,8 +847,8 @@ export default function Layout(props: ParentProps) {
       },
       {
         id: "settings.open",
-        title: "Open settings",
-        category: "Settings",
+        title: language.t("command.settings.open"),
+        category: language.t("command.category.settings"),
         keybind: "mod+comma",
         onSelect: () => openSettings(),
       },
@@ -1573,12 +1573,12 @@ export default function Layout(props: ParentProps) {
             keybind={command.keybind("session.archive")}
             gutter={8}
           >
-            <IconButton
-              icon="archive"
-              variant="ghost"
-              onClick={() => archiveSession(props.session)}
-              aria-label="Archive session"
-            />
+              <IconButton
+                icon="archive"
+                variant="ghost"
+                onClick={() => archiveSession(props.session)}
+                aria-label={language.t("command.session.archive")}
+              />
           </TooltipKeybind>
         </div>
       </div>
@@ -1759,7 +1759,7 @@ export default function Layout(props: ParentProps) {
                         icon="dot-grid"
                         variant="ghost"
                         class="size-6 rounded-md"
-                        aria-label="More options"
+                        aria-label={language.t("common.moreOptions")}
                       />
                     </Tooltip>
                     <DropdownMenu.Portal>
@@ -1808,7 +1808,7 @@ export default function Layout(props: ParentProps) {
                       variant="ghost"
                       class="size-6 rounded-md"
                       onClick={() => navigate(`/${slug()}/session`)}
-                      aria-label="New session"
+                      aria-label={language.t("command.session.new")}
                     />
                   </TooltipKeybind>
                 </div>
@@ -2122,7 +2122,7 @@ export default function Layout(props: ParentProps) {
                     variant="ghost"
                     size="large"
                     onClick={chooseProject}
-                    aria-label="Open project"
+                    aria-label={language.t("command.project.open")}
                   />
                 </Tooltip>
               </div>
@@ -2142,7 +2142,7 @@ export default function Layout(props: ParentProps) {
                 variant="ghost"
                 size="large"
                 onClick={openSettings}
-                aria-label="Settings"
+                aria-label={language.t("sidebar.settings")}
               />
             </TooltipKeybind>
             <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value={language.t("sidebar.help")}>
@@ -2151,7 +2151,7 @@ export default function Layout(props: ParentProps) {
                 variant="ghost"
                 size="large"
                 onClick={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-                aria-label="Help"
+                aria-label={language.t("sidebar.help")}
               />
             </Tooltip>
           </div>
@@ -2202,7 +2202,7 @@ export default function Layout(props: ParentProps) {
                           icon="dot-grid"
                           variant="ghost"
                           class="shrink-0 size-6 rounded-md opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100 data-[expanded]:bg-surface-base-active"
-                          aria-label="Project options"
+                          aria-label={language.t("common.moreOptions")}
                         />
                         <DropdownMenu.Portal>
                           <DropdownMenu.Content class="mt-1">

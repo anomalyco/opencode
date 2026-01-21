@@ -115,8 +115,8 @@ export const ModelSelectorPopover: Component<{
                 variant="ghost"
                 iconSize="normal"
                 class="size-6"
-                aria-label="Manage models"
-                title="Manage models"
+                aria-label={language.t("dialog.model.manage")}
+                title={language.t("dialog.model.manage")}
                 onClick={handleManage}
               />
             }

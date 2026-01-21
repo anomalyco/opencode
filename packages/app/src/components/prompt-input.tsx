@@ -1696,7 +1696,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Match when={working()}>
                     <div class="flex items-center gap-2">
                       <span>{language.t("prompt.action.stop")}</span>
-                      <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
+                      <span class="text-icon-base text-12-medium text-[10px]!">
+                        {language.t("common.key.esc")}
+                      </span>
                     </div>
                   </Match>
                   <Match when={true}>
