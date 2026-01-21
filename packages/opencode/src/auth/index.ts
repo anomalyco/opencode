@@ -14,6 +14,7 @@ export namespace Auth {
       expires: z.number(),
       accountId: z.string().optional(),
       enterpriseUrl: z.string().optional(),
+      label: z.string().optional(),
     })
     .meta({ ref: "OAuth" })
 
@@ -21,6 +22,7 @@ export namespace Auth {
     .object({
       type: z.literal("api"),
       key: z.string(),
+      label: z.string().optional(),
     })
     .meta({ ref: "ApiAuth" })
 
@@ -29,6 +31,7 @@ export namespace Auth {
       type: z.literal("wellknown"),
       key: z.string(),
       token: z.string(),
+      label: z.string().optional(),
     })
     .meta({ ref: "WellKnownAuth" })
 
@@ -69,5 +72,35 @@ export namespace Auth {
     delete data[key]
     await Bun.write(file, JSON.stringify(data, null, 2))
     await fs.chmod(file.name!, 0o600)
+  }
+
+  export function parseProviderKey(key: string): { base: string; alias?: string } {
+    const parts = key.split(":")
+    if (parts.length === 1) return { base: key }
+    return { base: parts[0], alias: parts.slice(1).join(":") }
+  }
+
+  export function createProviderKey(base: string, alias?: string): string {
+    if (!alias) return base
+    return `${base}:${alias}`
+  }
+
+  export async function listForProvider(providerID: string): Promise<Record<string, Info>> {
+    const data = await all()
+    const result: Record<string, Info> = {}
+    for (const [key, value] of Object.entries(data)) {
+      const parsed = parseProviderKey(key)
+      if (parsed.base === providerID) {
+        result[key] = value
+      }
+    }
+    return result
+  }
+
+  export async function generateAlias(base: string): Promise<string> {
+    const existing = await listForProvider(base)
+    const count = Object.keys(existing).length
+    if (count === 0) return base
+    return createProviderKey(base, String(count + 1))
   }
 }

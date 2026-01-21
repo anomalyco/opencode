@@ -1,6 +1,6 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { useSync } from "@tui/context/sync"
-import { map, pipe, sortBy } from "remeda"
+import { groupBy, map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "../context/sdk"
@@ -22,17 +22,47 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   google: 4,
 }
 
+function getBaseProvider(id: string): string {
+  const parts = id.split(":")
+  return parts[0]
+}
+
 export function createDialogProviderOptions() {
   const sync = useSync()
   const dialog = useDialog()
   const sdk = useSDK()
   const connected = createMemo(() => new Set(sync.data.provider_next.connected))
+
+  // Group connected providers by base provider
+  const connectedByBase = createMemo(() => {
+    const result: Record<string, string[]> = {}
+    for (const id of sync.data.provider_next.connected) {
+      const base = getBaseProvider(id)
+      if (!result[base]) result[base] = []
+      result[base].push(id)
+    }
+    return result
+  })
+
+  // Get provider info by ID
+  const providerById = createMemo(() => {
+    const result: Record<string, (typeof sync.data.provider_next.all)[number]> = {}
+    for (const p of sync.data.provider_next.all) {
+      result[p.id] = p
+    }
+    return result
+  })
+
   const options = createMemo(() => {
+    // Filter to only show base providers (not aliased ones)
+    const baseProviders = sync.data.provider_next.all.filter((p) => !p.base)
+
     return pipe(
-      sync.data.provider_next.all,
+      baseProviders,
       sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
       map((provider) => {
-        const isConnected = connected().has(provider.id)
+        const connectedAccounts = connectedByBase()[provider.id] ?? []
+        const isConnected = connectedAccounts.length > 0
         return {
           title: provider.name,
           value: provider.id,
@@ -42,62 +72,21 @@ export function createDialogProviderOptions() {
             openai: "(ChatGPT Plus/Pro or API key)",
           }[provider.id],
           category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
-          footer: isConnected ? "Connected" : undefined,
+          footer: isConnected ? `Connected (${connectedAccounts.length})` : undefined,
           async onSelect() {
-            const methods = sync.data.provider_auth[provider.id] ?? [
-              {
-                type: "api",
-                label: "API key",
-              },
-            ]
-            let index: number | null = 0
-            if (methods.length > 1) {
-              index = await new Promise<number | null>((resolve) => {
-                dialog.replace(
-                  () => (
-                    <DialogSelect
-                      title="Select auth method"
-                      options={methods.map((x, index) => ({
-                        title: x.label,
-                        value: index,
-                      }))}
-                      onSelect={(option) => resolve(option.value)}
-                    />
-                  ),
-                  () => resolve(null),
-                )
-              })
-            }
-            if (index == null) return
-            const method = methods[index]
-            if (method.type === "oauth") {
-              const result = await sdk.client.provider.oauth.authorize({
-                providerID: provider.id,
-                method: index,
-              })
-              if (result.data?.method === "code") {
-                dialog.replace(() => (
-                  <CodeMethod
-                    providerID={provider.id}
-                    title={method.label}
-                    index={index}
-                    authorization={result.data!}
-                  />
-                ))
-              }
-              if (result.data?.method === "auto") {
-                dialog.replace(() => (
-                  <AutoMethod
-                    providerID={provider.id}
-                    title={method.label}
-                    index={index}
-                    authorization={result.data!}
-                  />
-                ))
-              }
-            }
-            if (method.type === "api") {
-              return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
+            if (isConnected) {
+              // Show account management dialog
+              dialog.replace(() => (
+                <DialogProviderAccounts
+                  providerID={provider.id}
+                  providerName={provider.name}
+                  connectedAccounts={connectedAccounts}
+                  providerById={providerById()}
+                />
+              ))
+            } else {
+              // Start normal connection flow
+              startConnectionFlow(provider.id, provider.name, dialog, sdk, sync)
             }
           },
         }
@@ -105,6 +94,134 @@ export function createDialogProviderOptions() {
     )
   })
   return options
+}
+
+async function startConnectionFlow(
+  providerID: string,
+  providerName: string,
+  dialog: ReturnType<typeof useDialog>,
+  sdk: ReturnType<typeof useSDK>,
+  sync: ReturnType<typeof useSync>,
+  label?: string,
+) {
+  const methods = sync.data.provider_auth[providerID] ?? [
+    {
+      type: "api",
+      label: "API key",
+    },
+  ]
+  let index: number | null = 0
+  if (methods.length > 1) {
+    index = await new Promise<number | null>((resolve) => {
+      dialog.replace(
+        () => (
+          <DialogSelect
+            title="Select auth method"
+            options={methods.map((x, idx) => ({
+              title: x.label,
+              value: idx,
+            }))}
+            onSelect={(option) => resolve(option.value)}
+          />
+        ),
+        () => resolve(null),
+      )
+    })
+  }
+  if (index == null) return
+  const method = methods[index]
+  if (method.type === "oauth") {
+    const result = await sdk.client.provider.oauth.authorize({
+      providerID,
+      method: index,
+      label,
+    })
+    if (result.data?.method === "code") {
+      dialog.replace(() => (
+        <CodeMethod
+          providerID={providerID}
+          title={method.label}
+          index={index}
+          authorization={result.data!}
+          label={label}
+        />
+      ))
+    }
+    if (result.data?.method === "auto") {
+      dialog.replace(() => (
+        <AutoMethod
+          providerID={providerID}
+          title={method.label}
+          index={index}
+          authorization={result.data!}
+          label={label}
+        />
+      ))
+    }
+  }
+  if (method.type === "api") {
+    return dialog.replace(() => <ApiMethod providerID={providerID} title={method.label} label={label} />)
+  }
+}
+
+interface DialogProviderAccountsProps {
+  providerID: string
+  providerName: string
+  connectedAccounts: string[]
+  providerById: Record<string, { id: string; name: string; label?: string; base?: string }>
+}
+
+function DialogProviderAccounts(props: DialogProviderAccountsProps) {
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const sync = useSync()
+
+  const options = createMemo(() => {
+    const result: Array<{
+      title: string
+      value: string
+      footer?: string
+      onSelect: () => void
+    }> = []
+
+    // Add "Add another account" option first
+    result.push({
+      title: "Add another account",
+      value: "add",
+      async onSelect() {
+        // Prompt for label
+        dialog.replace(() => (
+          <DialogPrompt
+            title="Account name"
+            placeholder="e.g., Work, Personal"
+            description={() => <text>This helps you identify which account to use</text>}
+            onConfirm={async (label) => {
+              if (!label) return
+              startConnectionFlow(props.providerID, props.providerName, dialog, sdk, sync, label)
+            }}
+          />
+        ))
+      },
+    })
+
+    // Add existing accounts
+    for (const accountID of props.connectedAccounts) {
+      const provider = props.providerById[accountID]
+      const label = provider?.label ?? (accountID === props.providerID ? "Default" : accountID)
+      result.push({
+        title: label,
+        value: accountID,
+        footer: "Connected",
+        onSelect() {
+          dialog.replace(() => <DialogModel providerID={accountID} />)
+        },
+      })
+    }
+
+    return result
+  })
+
+  return <DialogSelect title={props.providerName} options={options()} />
 }
 
 export function DialogProvider() {
@@ -117,6 +234,7 @@ interface AutoMethodProps {
   providerID: string
   title: string
   authorization: ProviderAuthAuthorization
+  label?: string
 }
 function AutoMethod(props: AutoMethodProps) {
   const { theme } = useTheme()
@@ -138,6 +256,7 @@ function AutoMethod(props: AutoMethodProps) {
     const result = await sdk.client.provider.oauth.callback({
       providerID: props.providerID,
       method: props.index,
+      label: props.label,
     })
     if (result.error) {
       dialog.clear()
@@ -145,7 +264,9 @@ function AutoMethod(props: AutoMethodProps) {
     }
     await sdk.client.instance.dispose()
     await sync.bootstrap()
-    dialog.replace(() => <DialogModel providerID={props.providerID} />)
+    // Use the actual provider ID that was created (may be aliased)
+    const targetProviderID = props.label ? `${props.providerID}:${props.label}` : props.providerID
+    dialog.replace(() => <DialogModel providerID={targetProviderID} />)
   })
 
   return (
@@ -173,6 +294,7 @@ interface CodeMethodProps {
   title: string
   providerID: string
   authorization: ProviderAuthAuthorization
+  label?: string
 }
 function CodeMethod(props: CodeMethodProps) {
   const { theme } = useTheme()
@@ -190,11 +312,13 @@ function CodeMethod(props: CodeMethodProps) {
           providerID: props.providerID,
           method: props.index,
           code: value,
+          label: props.label,
         })
         if (!error) {
           await sdk.client.instance.dispose()
           await sync.bootstrap()
-          dialog.replace(() => <DialogModel providerID={props.providerID} />)
+          const targetProviderID = props.label ? `${props.providerID}:${props.label}` : props.providerID
+          dialog.replace(() => <DialogModel providerID={targetProviderID} />)
           return
         }
         setError(true)
@@ -215,6 +339,7 @@ function CodeMethod(props: CodeMethodProps) {
 interface ApiMethodProps {
   providerID: string
   title: string
+  label?: string
 }
 function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
@@ -240,16 +365,18 @@ function ApiMethod(props: ApiMethodProps) {
       }
       onConfirm={async (value) => {
         if (!value) return
+        const targetProviderID = props.label ? `${props.providerID}:${props.label}` : props.providerID
         await sdk.client.auth.set({
-          providerID: props.providerID,
+          providerID: targetProviderID,
           auth: {
             type: "api",
             key: value,
+            label: props.label,
           },
         })
         await sdk.client.instance.dispose()
         await sync.bootstrap()
-        dialog.replace(() => <DialogModel providerID={props.providerID} />)
+        dialog.replace(() => <DialogModel providerID={targetProviderID} />)
       }}
     />
   )

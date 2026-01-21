@@ -1482,6 +1482,8 @@ export type ProviderConfig = {
       }
     }
   }
+  label?: string
+  base?: string
   whitelist?: Array<string>
   blacklist?: Array<string>
   options?: {
@@ -1886,6 +1888,8 @@ export type Provider = {
   models: {
     [key: string]: Model
   }
+  label?: string
+  base?: string
 }
 
 export type ToolIds = Array<string>
@@ -2123,17 +2127,20 @@ export type OAuth = {
   expires: number
   accountId?: string
   enterpriseUrl?: string
+  label?: string
 }
 
 export type ApiAuth = {
   type: "api"
   key: string
+  label?: string
 }
 
 export type WellKnownAuth = {
   type: "wellknown"
   key: string
   token: string
+  label?: string
 }
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
@@ -3875,6 +3882,8 @@ export type ProviderListResponses = {
           }
         }
       }
+      label?: string
+      base?: string
     }>
     default: {
       [key: string]: string
@@ -3911,6 +3920,10 @@ export type ProviderOauthAuthorizeData = {
      * Auth method index
      */
     method: number
+    /**
+     * Account label for multi-account support
+     */
+    label?: string
   }
   path: {
     /**
@@ -3952,6 +3965,10 @@ export type ProviderOauthCallbackData = {
      * OAuth authorization code
      */
     code?: string
+    /**
+     * Account label for multi-account support
+     */
+    label?: string
   }
   path: {
     /**

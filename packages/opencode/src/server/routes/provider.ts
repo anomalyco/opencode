@@ -108,14 +108,16 @@ export const ProviderRoutes = lazy(() =>
         "json",
         z.object({
           method: z.number().meta({ description: "Auth method index" }),
+          label: z.string().optional().meta({ description: "Account label for multi-account support" }),
         }),
       ),
       async (c) => {
         const providerID = c.req.valid("param").providerID
-        const { method } = c.req.valid("json")
+        const { method, label } = c.req.valid("json")
         const result = await ProviderAuth.authorize({
           providerID,
           method,
+          label,
         })
         return c.json(result)
       },
@@ -149,15 +151,17 @@ export const ProviderRoutes = lazy(() =>
         z.object({
           method: z.number().meta({ description: "Auth method index" }),
           code: z.string().optional().meta({ description: "OAuth authorization code" }),
+          label: z.string().optional().meta({ description: "Account label for multi-account support" }),
         }),
       ),
       async (c) => {
         const providerID = c.req.valid("param").providerID
-        const { method, code } = c.req.valid("json")
+        const { method, code, label } = c.req.valid("json")
         await ProviderAuth.callback({
           providerID,
           method,
           code,
+          label,
         })
         return c.json(true)
       },

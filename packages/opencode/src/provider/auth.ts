@@ -55,13 +55,19 @@ export namespace ProviderAuth {
     z.object({
       providerID: z.string(),
       method: z.number(),
+      label: z.string().optional(),
     }),
     async (input): Promise<Authorization | undefined> => {
       const auth = await state().then((s) => s.methods[input.providerID])
       const method = auth.methods[input.method]
       if (method.type === "oauth") {
         const result = await method.authorize()
-        await state().then((s) => (s.pending[input.providerID] = result))
+        const pendingKey = input.label ? `${input.providerID}:${input.label}` : input.providerID
+        await state().then((s) => {
+          s.pending[pendingKey] = result
+          // Store label for use in callback
+          ;(result as any)._label = input.label
+        })
         return {
           url: result.url,
           method: result.method,
@@ -76,9 +82,11 @@ export namespace ProviderAuth {
       providerID: z.string(),
       method: z.number(),
       code: z.string().optional(),
+      label: z.string().optional(),
     }),
     async (input) => {
-      const match = await state().then((s) => s.pending[input.providerID])
+      const pendingKey = input.label ? `${input.providerID}:${input.label}` : input.providerID
+      const match = await state().then((s) => s.pending[pendingKey])
       if (!match) throw new OauthMissing({ providerID: input.providerID })
       let result
 
@@ -91,11 +99,15 @@ export namespace ProviderAuth {
         result = await match.callback()
       }
 
+      // Determine the auth key - use aliased key if label provided
+      const authKey = input.label ? `${input.providerID}:${input.label}` : input.providerID
+
       if (result?.type === "success") {
         if ("key" in result) {
-          await Auth.set(input.providerID, {
+          await Auth.set(authKey, {
             type: "api",
             key: result.key,
+            label: input.label,
           })
         }
         if ("refresh" in result) {
@@ -104,11 +116,12 @@ export namespace ProviderAuth {
             access: result.access,
             refresh: result.refresh,
             expires: result.expires,
+            label: input.label,
           }
           if (result.accountId) {
             info.accountId = result.accountId
           }
-          await Auth.set(input.providerID, info)
+          await Auth.set(authKey, info)
         }
         return
       }

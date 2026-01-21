@@ -586,6 +586,8 @@ export namespace Provider {
       key: z.string().optional(),
       options: z.record(z.string(), z.any()),
       models: z.record(z.string(), Model),
+      label: z.string().optional(),
+      base: z.string().optional(),
     })
     .meta({
       ref: "Provider",
@@ -683,7 +685,11 @@ export namespace Provider {
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
 
     function isProviderAllowed(providerID: string): boolean {
-      if (enabled && !enabled.has(providerID)) return false
+      const parsed = Auth.parseProviderKey(providerID)
+      const checkID = parsed.alias ? parsed.base : providerID
+
+      if (enabled && !enabled.has(checkID)) return false
+      if (disabled.has(checkID)) return false
       if (disabled.has(providerID)) return false
       return true
     }
@@ -821,47 +827,105 @@ export namespace Provider {
       })
     }
 
-    // load apikeys
-    for (const [providerID, provider] of Object.entries(await Auth.all())) {
-      if (disabled.has(providerID)) continue
-      if (provider.type === "api") {
-        mergeProvider(providerID, {
-          source: "api",
-          key: provider.key,
-        })
+    // load apikeys (including aliased providers like "openai:work")
+    for (const [authKey, authInfo] of Object.entries(await Auth.all())) {
+      if (disabled.has(authKey)) continue
+      const parsed = Auth.parseProviderKey(authKey)
+      const baseProviderID = parsed.base
+
+      if (authInfo.type === "api") {
+        if (parsed.alias) {
+          // This is an aliased provider (e.g., "openai:work")
+          const baseProvider = database[baseProviderID]
+          if (!baseProvider) continue
+
+          // Create aliased provider inheriting from base
+          const aliasedProvider: Info = {
+            ...baseProvider,
+            id: authKey,
+            name: authInfo.label ? `${baseProvider.name} (${authInfo.label})` : baseProvider.name,
+            source: "api",
+            key: authInfo.key,
+            label: authInfo.label,
+            base: baseProviderID,
+            models: mapValues(baseProvider.models, (model) => ({
+              ...model,
+              providerID: authKey,
+            })),
+          }
+          providers[authKey] = aliasedProvider
+        } else {
+          mergeProvider(authKey, {
+            source: "api",
+            key: authInfo.key,
+            label: authInfo.label,
+          })
+        }
       }
     }
 
     for (const plugin of await Plugin.list()) {
       if (!plugin.auth) continue
-      const providerID = plugin.auth.provider
-      if (disabled.has(providerID)) continue
+      const baseProviderID = plugin.auth.provider
+      if (disabled.has(baseProviderID)) continue
 
-      // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
-      let hasAuth = false
-      const auth = await Auth.get(providerID)
-      if (auth) hasAuth = true
+      // Get all auth entries for this provider (including aliases like "github-copilot:work")
+      const allAuth = await Auth.all()
+      const relevantAuth = Object.entries(allAuth).filter(([key]) => {
+        const parsed = Auth.parseProviderKey(key)
+        return parsed.base === baseProviderID
+      })
 
-      // Special handling for github-copilot: also check for enterprise auth
-      if (providerID === "github-copilot" && !hasAuth) {
-        const enterpriseAuth = await Auth.get("github-copilot-enterprise")
-        if (enterpriseAuth) hasAuth = true
+      if (relevantAuth.length === 0) {
+        // Special handling for github-copilot: also check for enterprise auth
+        if (baseProviderID === "github-copilot") {
+          const enterpriseAuth = await Auth.get("github-copilot-enterprise")
+          if (!enterpriseAuth) continue
+        } else {
+          continue
+        }
       }
 
-      if (!hasAuth) continue
       if (!plugin.auth.loader) continue
 
-      // Load for the main provider if auth exists
-      if (auth) {
-        const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
-        mergeProvider(plugin.auth.provider, {
-          source: "custom",
-          options: options,
-        })
+      // Load each aliased provider
+      for (const [authKey, authInfo] of relevantAuth) {
+        if (disabled.has(authKey)) continue
+        const parsed = Auth.parseProviderKey(authKey)
+
+        if (parsed.alias) {
+          // Aliased OAuth provider (e.g., "github-copilot:work")
+          const baseProvider = database[baseProviderID]
+          if (!baseProvider) continue
+
+          const options = await plugin.auth.loader(() => Auth.get(authKey) as any, baseProvider)
+          const aliasedProvider: Info = {
+            ...baseProvider,
+            id: authKey,
+            name: authInfo.label ? `${baseProvider.name} (${authInfo.label})` : baseProvider.name,
+            source: "custom",
+            options,
+            label: authInfo.label,
+            base: baseProviderID,
+            models: mapValues(baseProvider.models, (model) => ({
+              ...model,
+              providerID: authKey,
+            })),
+          }
+          providers[authKey] = aliasedProvider
+        } else {
+          // Main provider (e.g., "github-copilot")
+          const options = await plugin.auth.loader(() => Auth.get(authKey) as any, database[plugin.auth.provider])
+          mergeProvider(plugin.auth.provider, {
+            source: "custom",
+            options,
+            label: authInfo.label,
+          })
+        }
       }
 
       // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
-      if (providerID === "github-copilot") {
+      if (baseProviderID === "github-copilot") {
         const enterpriseProviderID = "github-copilot-enterprise"
         if (!disabled.has(enterpriseProviderID)) {
           const enterpriseAuth = await Auth.get(enterpriseProviderID)
@@ -893,6 +957,19 @@ export namespace Provider {
           source: "custom",
           options: result.options,
         })
+      }
+
+      // Also apply custom loader to aliased providers
+      for (const aliasedID of Object.keys(providers)) {
+        const aliased = providers[aliasedID]
+        if (aliased.base !== providerID) continue
+        if (result?.getModel) modelLoaders[aliasedID] = result.getModel
+        if (result?.options) {
+          providers[aliasedID] = {
+            ...aliased,
+            options: mergeDeep(aliased.options, result.options),
+          }
+        }
       }
     }
 
@@ -977,7 +1054,7 @@ export namespace Provider {
           ...model.headers,
         }
 
-      const key = Bun.hash.xxHash32(JSON.stringify({ npm: model.api.npm, options }))
+      const key = Bun.hash.xxHash32(JSON.stringify({ npm: model.api.npm, providerID: model.providerID, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
 
