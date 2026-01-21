@@ -8,18 +8,20 @@ import { dict as zh } from "@/i18n/zh"
 import { dict as ko } from "@/i18n/ko"
 import { dict as de } from "@/i18n/de"
 import { dict as es } from "@/i18n/es"
+import { dict as fr } from "@/i18n/fr"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
 import { dict as uiKo } from "@opencode-ai/ui/i18n/ko"
 import { dict as uiDe } from "@opencode-ai/ui/i18n/de"
 import { dict as uiEs } from "@opencode-ai/ui/i18n/es"
+import { dict as uiFr } from "@opencode-ai/ui/i18n/fr"
 
-export type Locale = "en" | "zh" | "ko" | "de" | "es"
+export type Locale = "en" | "zh" | "ko" | "de" | "es" | "fr"
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
 
-const LOCALES: readonly Locale[] = ["en", "zh", "ko", "de", "es"]
+const LOCALES: readonly Locale[] = ["en", "zh", "ko", "de", "es", "fr"]
 
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
@@ -31,6 +33,7 @@ function detectLocale(): Locale {
     if (language.toLowerCase().startsWith("ko")) return "ko"
     if (language.toLowerCase().startsWith("de")) return "de"
     if (language.toLowerCase().startsWith("es")) return "es"
+    if (language.toLowerCase().startsWith("fr")) return "fr"
   }
 
   return "en"
@@ -51,6 +54,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       if (store.locale === "ko") return "ko"
       if (store.locale === "de") return "de"
       if (store.locale === "es") return "es"
+      if (store.locale === "fr") return "fr"
       return "en"
     })
 
@@ -66,6 +70,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       if (locale() === "zh") return { ...base, ...i18n.flatten({ ...zh, ...uiZh }) }
       if (locale() === "de") return { ...base, ...i18n.flatten({ ...de, ...uiDe }) }
       if (locale() === "es") return { ...base, ...i18n.flatten({ ...es, ...uiEs }) }
+      if (locale() === "fr") return { ...base, ...i18n.flatten({ ...fr, ...uiFr }) }
       return { ...base, ...i18n.flatten({ ...ko, ...uiKo }) }
     })
 
@@ -77,6 +82,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       ko: "language.ko",
       de: "language.de",
       es: "language.es",
+      fr: "language.fr",
     }
 
     const label = (value: Locale) => t(labelKey[value])
