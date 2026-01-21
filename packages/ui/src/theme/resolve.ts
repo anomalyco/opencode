@@ -100,12 +100,10 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["text-weak"] = neutral[8]
   tokens["text-weaker"] = neutral[7]
   tokens["text-strong"] = neutral[11]
-  const invertedNeutral = isDark ? neutral : generateNeutralScale(seeds.neutral, true)
-  const invertedAlpha = isDark ? neutralAlpha : generateNeutralAlphaScale(invertedNeutral, true)
-  tokens["text-invert-base"] = isDark ? invertedNeutral[10] : invertedAlpha[10]
-  tokens["text-invert-weak"] = isDark ? invertedNeutral[8] : invertedAlpha[8]
-  tokens["text-invert-weaker"] = isDark ? invertedNeutral[7] : invertedAlpha[7]
-  tokens["text-invert-strong"] = isDark ? invertedNeutral[11] : invertedAlpha[11]
+  tokens["text-invert-base"] = isDark ? neutral[10] : neutralAlpha[10]
+  tokens["text-invert-weak"] = isDark ? neutral[8] : neutralAlpha[8]
+  tokens["text-invert-weaker"] = isDark ? neutral[7] : neutralAlpha[7]
+  tokens["text-invert-strong"] = isDark ? neutral[11] : neutralAlpha[11]
   tokens["text-interactive-base"] = interactive[isDark ? 10 : 8]
   tokens["text-on-brand-base"] = neutralAlpha[10]
   tokens["text-on-interactive-base"] = isDark ? neutral[11] : neutral[0]
