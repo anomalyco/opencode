@@ -5,15 +5,17 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
+import { dict as ko } from "@/i18n/ko"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
+import { dict as uiKo } from "@opencode-ai/ui/i18n/ko"
 
-export type Locale = "en" | "zh"
+export type Locale = "en" | "zh" | "ko"
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
 
-const LOCALES: readonly Locale[] = ["en", "zh"]
+const LOCALES: readonly Locale[] = ["en", "zh", "ko"]
 
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
@@ -22,6 +24,7 @@ function detectLocale(): Locale {
   for (const language of languages) {
     if (!language) continue
     if (language.toLowerCase().startsWith("zh")) return "zh"
+    if (language.toLowerCase().startsWith("ko")) return "ko"
   }
 
   return "en"
@@ -37,7 +40,11 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       }),
     )
 
-    const locale = createMemo<Locale>(() => (store.locale === "zh" ? "zh" : "en"))
+    const locale = createMemo<Locale>(() => {
+      if (store.locale === "zh") return "zh"
+      if (store.locale === "ko") return "ko"
+      return "en"
+    })
 
     createEffect(() => {
       const current = locale()
@@ -48,7 +55,8 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const base = i18n.flatten({ ...en, ...uiEn })
     const dict = createMemo<Dictionary>(() => {
       if (locale() === "en") return base
-      return { ...base, ...i18n.flatten({ ...zh, ...uiZh }) }
+      if (locale() === "zh") return { ...base, ...i18n.flatten({ ...zh, ...uiZh }) }
+      return { ...base, ...i18n.flatten({ ...ko, ...uiKo }) }
     })
 
     const t = i18n.translator(dict, i18n.resolveTemplate)
@@ -56,6 +64,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const labelKey: Record<Locale, keyof Dictionary> = {
       en: "language.en",
       zh: "language.zh",
+      ko: "language.ko",
     }
 
     const label = (value: Locale) => t(labelKey[value])
