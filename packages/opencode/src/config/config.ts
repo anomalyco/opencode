@@ -1064,6 +1064,7 @@ export namespace Config {
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
         })
         .optional(),
+      yolo: z.boolean().optional().describe("Enable YOLO mode - skip all permission prompts (dangerous!)"),
       experimental: z
         .object({
           hook: z

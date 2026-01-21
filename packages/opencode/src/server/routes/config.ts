@@ -3,6 +3,7 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { Config } from "../../config/config"
 import { Provider } from "../../provider/provider"
+import { Yolo } from "../../yolo"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { Log } from "../../util/log"
@@ -86,6 +87,82 @@ export const ConfigRoutes = lazy(() =>
         return c.json({
           providers: Object.values(providers),
           default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+        })
+      },
+    )
+    .get(
+      "/yolo",
+      describeRoute({
+        summary: "Get YOLO mode status",
+        description: "Check if YOLO mode is currently enabled.",
+        operationId: "config.yolo.get",
+        responses: {
+          200: {
+            description: "YOLO mode status",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    enabled: z.boolean(),
+                    persisted: z.boolean(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const config = await Config.global()
+        return c.json({
+          enabled: Yolo.isEnabled(),
+          persisted: config.yolo === true,
+        })
+      },
+    )
+    .post(
+      "/yolo",
+      describeRoute({
+        summary: "Set YOLO mode",
+        description: "Enable or disable YOLO mode (skip all permission prompts).",
+        operationId: "config.yolo.set",
+        responses: {
+          200: {
+            description: "YOLO mode updated",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    enabled: z.boolean(),
+                    persisted: z.boolean(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          enabled: z.boolean(),
+          persist: z.boolean().optional(),
+        }),
+      ),
+      async (c) => {
+        const { enabled, persist } = c.req.valid("json")
+        Yolo.set(enabled)
+
+        if (persist) {
+          const current = await Config.global()
+          await Config.updateGlobal({ ...current, yolo: enabled ? true : undefined })
+        }
+
+        const config = await Config.global()
+        return c.json({
+          enabled: Yolo.isEnabled(),
+          persisted: config.yolo === true,
         })
       },
     ),

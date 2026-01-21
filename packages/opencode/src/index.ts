@@ -26,6 +26,7 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
+import { YoloCommand } from "./cli/cmd/yolo"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -56,7 +57,17 @@ const cli = yargs(hideBin(process.argv))
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
+  .option("yolo", {
+    describe: "DANGEROUS: Skip all permission prompts. Use at your own risk.",
+    type: "boolean",
+    alias: "dangerously-skip-permissions",
+  })
   .middleware(async (opts) => {
+    // Set YOLO mode before initialization
+    if (opts.yolo) {
+      process.env.OPENCODE_YOLO = "true"
+    }
+
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),
@@ -74,6 +85,10 @@ const cli = yargs(hideBin(process.argv))
       version: Installation.VERSION,
       args: process.argv.slice(2),
     })
+
+    if (opts.yolo) {
+      Log.Default.warn("YOLO mode enabled - all permission prompts will be auto-approved")
+    }
   })
   .usage("\n" + UI.logo())
   .completion("completion", "generate shell completion script")
@@ -97,6 +112,7 @@ const cli = yargs(hideBin(process.argv))
   .command(GithubCommand)
   .command(PrCommand)
   .command(SessionCommand)
+  .command(YoloCommand)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
