@@ -15,6 +15,8 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewWindowBuilder};
+#[cfg(windows)]
+use tauri_plugin_decorum::WebviewWindowExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_store::StoreExt;
@@ -275,6 +277,7 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(PinchZoomDisablePlugin)
+        .plugin(tauri_plugin_decorum::init())
         .invoke_handler(tauri::generate_handler![
             kill_sidecar,
             install_cli,
@@ -319,7 +322,13 @@ pub fn run() {
                 .title_bar_style(tauri::TitleBarStyle::Overlay)
                 .hidden_title(true);
 
-            let _window = window_builder.build().expect("Failed to create window");
+            #[cfg(windows)]
+            let window_builder = window_builder.decorations(false);
+
+            let window = window_builder.build().expect("Failed to create window");
+
+            #[cfg(windows)]
+            let _ = window.create_overlay_titlebar();
 
             let (tx, rx) = oneshot::channel();
             app.manage(ServerState::new(None, rx));

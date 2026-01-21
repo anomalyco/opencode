@@ -5,11 +5,13 @@ import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { List, type ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Component, onCleanup, onMount, Show } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
+import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 
 export const DialogSelectModelUnpaid: Component = () => {
@@ -40,6 +42,22 @@ export const DialogSelectModelUnpaid: Component = () => {
           items={local.model.list}
           current={local.model.current()}
           key={(x) => `${x.provider.id}:${x.id}`}
+          itemWrapper={(item, node) => (
+            <Tooltip
+              class="w-full"
+              placement="right-start"
+              gutter={12}
+              value={
+                <ModelTooltip
+                  model={item}
+                  latest={item.latest}
+                  free={item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)}
+                />
+              }
+            >
+              {node}
+            </Tooltip>
+          )}
           onSelect={(x) => {
             local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
               recent: true,

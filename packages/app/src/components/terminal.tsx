@@ -241,7 +241,6 @@ export const Terminal = (props: TerminalProps) => {
     // console.log("Scroll position:", ydisp)
     // })
     socket.addEventListener("open", () => {
-      console.log("WebSocket connected")
       sdk.client.pty
         .update({
           ptyID: local.pty.id,
@@ -257,10 +256,14 @@ export const Terminal = (props: TerminalProps) => {
     })
     socket.addEventListener("error", (error) => {
       console.error("WebSocket error:", error)
-      props.onConnectError?.(error)
+      local.onConnectError?.(error)
     })
-    socket.addEventListener("close", () => {
-      console.log("WebSocket disconnected")
+    socket.addEventListener("close", (event) => {
+      // Normal closure (code 1000) means PTY process exited - server event handles cleanup
+      // For other codes (network issues, server restart), trigger error handler
+      if (event.code !== 1000) {
+        local.onConnectError?.(new Error(`WebSocket closed abnormally: ${event.code}`))
+      }
     })
   })
 
@@ -293,6 +296,7 @@ export const Terminal = (props: TerminalProps) => {
       ref={container}
       data-component="terminal"
       data-prevent-autofocus
+      tabIndex={-1}
       style={{ "background-color": terminalColors().background }}
       classList={{
         ...(local.classList ?? {}),
