@@ -7359,6 +7359,14 @@
               "$ref": "#/components/schemas/QuestionInfo"
             }
           },
+          "metadata": {
+            "description": "Additional metadata for plugins",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
           "tool": {
             "type": "object",
             "properties": {
