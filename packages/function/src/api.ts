@@ -216,26 +216,28 @@ export default new Hono<{ Bindings: Env }>()
   })
   .post("/feishu", async (c) => {
     const body = (await c.req.json()) as {
-    challenge?: string
-  event?: {
-    message?: {
-      message_id?: string
-      root_id?: string
-      parent_id?: string
-      chat_id?: string
-      content?: string
+      challenge?: string
+      event?: {
+        message?: {
+          message_id?: string
+          root_id?: string
+          parent_id?: string
+          chat_id?: string
+          content?: string
+        }
+      }
     }
-  }
-}
     console.log(JSON.stringify(body, null, 2))
     const challenge = body.challenge
     if (challenge) return c.json({ challenge })
 
     const content = body.event?.message?.content
     const parsed =
-      typeof content === "string" && content.trim().startsWith("{") ? (JSON.parse(content) as {
-  text?: string
-}) : undefined
+      typeof content === "string" && content.trim().startsWith("{")
+        ? (JSON.parse(content) as {
+            text?: string
+          })
+        : undefined
     const text = typeof parsed?.text === "string" ? parsed.text : typeof content === "string" ? content : ""
 
     let message = text.trim().replace(/^@_user_\d+\s*/, "")
