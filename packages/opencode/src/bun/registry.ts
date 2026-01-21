@@ -1,6 +1,5 @@
-import { readableStreamToText } from "bun"
+import { readableStreamToText, semver } from "bun"
 import { Log } from "../util/log"
-import { SemVer } from "../util/semver"
 
 export namespace PackageRegistry {
   const log = Log.create({ service: "bun" })
@@ -40,6 +39,6 @@ export namespace PackageRegistry {
       log.warn("Failed to resolve latest version, using cached", { pkg, cachedVersion })
       return false
     }
-    return SemVer.compare(cachedVersion, latestVersion) < 0
+    return semver.satisfies(cachedVersion, latestVersion)
   }
 }
