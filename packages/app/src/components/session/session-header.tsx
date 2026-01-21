@@ -217,7 +217,7 @@ export function SessionHeader() {
                   title={language.t("command.terminal.toggle")}
                   keybind={command.keybind("terminal.toggle")}
                 >
-              <Button
+                  <Button
                     variant="ghost"
                     class="group/terminal-toggle size-8 rounded-md"
                     onClick={() => view().terminal.toggle()}
