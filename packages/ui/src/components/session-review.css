@@ -198,6 +198,7 @@
 
   [data-slot="session-review-diff-wrapper"] {
     position: relative;
+    overflow: hidden;
   }
 
   [data-slot="session-review-comment-anchor"] {
@@ -213,15 +214,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--surface-base);
-    border: 1px solid color-mix(in oklch, var(--icon-info-active) 60%, transparent);
-    color: var(--icon-info-active);
-    box-shadow: var(--shadow-xs-border);
+    background: var(--surface-warning-base);
+    border: 1px solid var(--border-warning-base);
+    color: var(--icon-warning-active);
+    box-shadow: var(--shadow-xs);
     cursor: pointer;
 
     &:hover {
-      background: var(--surface-raised-base-hover);
-      border-color: var(--icon-info-active);
+      background: var(--surface-warning-weak);
+      border-color: var(--border-warning-hover);
     }
 
     &:focus {
@@ -238,6 +239,12 @@
     flex-direction: column;
     gap: 6px;
     max-width: 320px;
+  }
+
+  [data-slot="session-review-comment-popover"] {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
   [data-slot="session-review-comment-hover-label"],

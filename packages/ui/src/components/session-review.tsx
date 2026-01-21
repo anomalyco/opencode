@@ -581,6 +581,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 }}
                               >
                                 <Popover
+                                  portal={false}
                                   open={isCommentOpen(comment)}
                                   onOpenChange={(open) => {
                                     if (open) {
@@ -632,6 +633,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                               <Show when={draftTop() !== undefined}>
                                 <div data-slot="session-review-comment-anchor" style={{ top: `${draftTop() ?? 0}px` }}>
                                   <Popover
+                                    portal={false}
                                     open={true}
                                     onOpenChange={(open) => {
                                       if (open) return
