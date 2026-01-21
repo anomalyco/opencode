@@ -25,15 +25,21 @@ async function freePort() {
 }
 
 async function waitForHealth(url: string) {
-  const timeout = Date.now() + 60_000
+  const timeout = Date.now() + 120_000
+  const errors: string[] = []
   while (Date.now() < timeout) {
-    const ok = await fetch(url)
-      .then((r) => r.ok)
-      .catch(() => false)
-    if (ok) return
+    const result = await fetch(url)
+      .then((r) => ({ ok: r.ok, error: undefined }))
+      .catch((error) => ({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      }))
+    if (result.ok) return
+    if (result.error) errors.push(result.error)
     await new Promise((r) => setTimeout(r, 250))
   }
-  throw new Error(`Timed out waiting for server health: ${url}`)
+  const last = errors.length ? ` (last error: ${errors[errors.length - 1]})` : ""
+  throw new Error(`Timed out waiting for server health: ${url}${last}`)
 }
 
 const appDir = process.cwd()
@@ -72,7 +78,7 @@ const serverEnv = {
 } satisfies Record<string, string>
 
 const runnerEnv = {
-  ...process.env,
+  ...serverEnv,
   PLAYWRIGHT_SERVER_HOST: "127.0.0.1",
   PLAYWRIGHT_SERVER_PORT: String(serverPort),
   VITE_OPENCODE_SERVER_HOST: "127.0.0.1",
@@ -92,27 +98,21 @@ if (seedExit !== 0) {
   process.exit(seedExit)
 }
 
-const server = Bun.spawn(
-  [
-    "bun",
-    "dev",
-    "--",
-    "--print-logs",
-    "--log-level",
-    "WARN",
-    "serve",
-    "--port",
-    String(serverPort),
-    "--hostname",
-    "127.0.0.1",
-  ],
-  {
-    cwd: opencodeDir,
-    env: serverEnv,
-    stdout: "inherit",
-    stderr: "inherit",
-  },
-)
+Object.assign(process.env, serverEnv)
+process.env.AGENT = "1"
+process.env.OPENCODE = "1"
+
+const log = await import("../../opencode/src/util/log")
+const install = await import("../../opencode/src/installation")
+await log.Log.init({
+  print: true,
+  dev: install.Installation.isLocal(),
+  level: "WARN",
+})
+
+const servermod = await import("../../opencode/src/server/server")
+const server = servermod.Server.listen({ port: serverPort, hostname: "127.0.0.1" })
+console.log(`opencode server listening on http://127.0.0.1:${serverPort}`)
 
 try {
   await waitForHealth(`http://127.0.0.1:${serverPort}/global/health`)
@@ -126,5 +126,5 @@ try {
 
   process.exitCode = await runner.exited
 } finally {
-  server.kill()
+  await server.stop()
 }
