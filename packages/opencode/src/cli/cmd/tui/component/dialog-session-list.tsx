@@ -22,6 +22,8 @@ type SessionOptionValue = {
   directory: string
 }
 
+const SESSION_FETCH_LIMIT = 200
+
 export function DialogSessionList(
   props: {
     project?: string
@@ -80,7 +82,7 @@ export function DialogSessionList(
     const cached = sessionCache.get(project)
     if (cached) return cached
     const client = clientFor(project)
-    const result = await client.session.list({ limit: 200, directory: project })
+    const result = await client.session.list({ limit: SESSION_FETCH_LIMIT, directory: project })
     const data = result.data ?? []
     sessionCache.set(project, data)
     return data
@@ -271,7 +273,7 @@ function DialogProjectSelect(props: { current: string; onSelect: (project: strin
     const lists = await Promise.all(
       entries.map(async (entry) => {
         const client = sdk.createClient(entry.worktree)
-        return (await client.session.list({ limit: 200 }).catch(() => ({ data: [] }))).data ?? []
+        return (await client.session.list({ limit: SESSION_FETCH_LIMIT }).catch(() => ({ data: [] }))).data ?? []
       }),
     )
 
