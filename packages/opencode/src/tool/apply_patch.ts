@@ -2,7 +2,6 @@ import z from "zod"
 import * as path from "path"
 import * as fs from "fs/promises"
 import { Tool } from "./tool"
-import { FileTime } from "../file/time"
 import { Bus } from "../bus"
 import { FileWatcher } from "../file/watcher"
 import { Instance } from "../project/instance"
@@ -13,6 +12,7 @@ import { trimDiff } from "./edit"
 import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
+import { File } from "../file"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -96,8 +96,6 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             throw new Error(`apply_patch verification failed: Failed to read file to update: ${filePath}`)
           }
 
-          // Read file and update time tracking (like edit tool does)
-          await FileTime.assert(ctx.sessionID, filePath)
           const oldContent = await fs.readFile(filePath, "utf-8")
           let newContent = oldContent
 
@@ -174,6 +172,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     const changedFiles: string[] = []
 
     for (const change of fileChanges) {
+      const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
       switch (change.type) {
         case "add":
           // Create parent directories (recursive: true is safe on existing/root dirs)
@@ -203,10 +202,10 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           break
       }
 
-      // Update file time tracking
-      FileTime.read(ctx.sessionID, change.filePath)
-      if (change.movePath) {
-        FileTime.read(ctx.sessionID, change.movePath)
+      if (edited) {
+        await Bus.publish(File.Event.Edited, {
+          file: edited,
+        })
       }
     }
 
