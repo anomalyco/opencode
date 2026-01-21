@@ -26,6 +26,9 @@ import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
+import { DialogConfirm } from "./ui/dialog-confirm"
+import { DialogPrompt } from "./ui/dialog-prompt"
+import { DialogSelect } from "./ui/dialog-select"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
@@ -646,6 +649,140 @@ function App() {
       duration: 10000,
     })
   })
+
+  // Handle modal dialogs from plugins (centralized at app level)
+  createEffect(
+    on(
+      () => sync.data.pendingDialog,
+      (pending) => {
+        if (!pending || pending.mode !== "modal") return
+        dialog.replace(
+          () => {
+            switch (pending.type) {
+              case "select":
+                return (
+                  <DialogSelect
+                    title={pending.title}
+                    message={pending.message}
+                    options={
+                      pending.options?.map((opt: any) => ({
+                        title: opt.title,
+                        value: opt.value,
+                        description: opt.description,
+                        category: opt.category,
+                        disabled: opt.disabled,
+                      })) ?? []
+                    }
+                    keybind={
+                      pending.keybind?.map((kb: any) => ({
+                        keybind: {
+                          name: kb.key,
+                          ctrl: kb.ctrl ?? false,
+                          meta: kb.meta ?? false,
+                          shift: kb.shift ?? false,
+                          super: false,
+                          leader: false,
+                        },
+                        title: kb.label ?? kb.key,
+                        onTrigger: () => {
+                          sdk.client.dialog.reply({
+                            dialogID: pending.id,
+                            value: kb.value,
+                            dismissed: false,
+                          })
+                          dialog.clear()
+                        },
+                      })) ?? []
+                    }
+                    onSelect={(option) => {
+                      sdk.client.dialog.reply({
+                        dialogID: pending.id,
+                        value: option.value,
+                        dismissed: false,
+                      })
+                      dialog.clear()
+                    }}
+                  />
+                )
+
+              case "confirm":
+                return (
+                  <DialogConfirm
+                    title={pending.title}
+                    message={pending.message ?? ""}
+                    onConfirm={() => {
+                      sdk.client.dialog.reply({
+                        dialogID: pending.id,
+                        value: true,
+                        dismissed: false,
+                      })
+                      dialog.clear()
+                    }}
+                    onCancel={() => {
+                      sdk.client.dialog.reply({
+                        dialogID: pending.id,
+                        value: false,
+                        dismissed: false,
+                      })
+                      dialog.clear()
+                    }}
+                  />
+                )
+
+              case "alert":
+                return (
+                  <DialogAlert
+                    title={pending.title}
+                    message={pending.message ?? ""}
+                    onConfirm={() => {
+                      sdk.client.dialog.reply({
+                        dialogID: pending.id,
+                        value: undefined,
+                        dismissed: false,
+                      })
+                      dialog.clear()
+                    }}
+                  />
+                )
+
+              case "prompt":
+                return (
+                  <DialogPrompt
+                    title={pending.title}
+                    placeholder={pending.placeholder}
+                    value={pending.defaultValue ?? ""}
+                    onConfirm={(value: string) => {
+                      sdk.client.dialog.reply({
+                        dialogID: pending.id,
+                        value,
+                        dismissed: false,
+                      })
+                      dialog.clear()
+                    }}
+                    onCancel={() => {
+                      sdk.client.dialog.reply({
+                        dialogID: pending.id,
+                        dismissed: true,
+                      })
+                      dialog.clear()
+                    }}
+                  />
+                )
+
+              default:
+                return null
+            }
+          },
+          () => {
+            sdk.client.dialog.reply({
+              dialogID: pending.id,
+              dismissed: true,
+            })
+          },
+        )
+      },
+    ),
+  )
 
   return (
     <box

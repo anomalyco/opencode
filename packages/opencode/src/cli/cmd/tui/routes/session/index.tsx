@@ -943,68 +943,6 @@ export function Session() {
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
 
-  // Handle modal dialogs
-  createEffect(
-    on(
-      () => sync.data.pendingDialog,
-      (pending) => {
-        if (!pending || pending.mode !== "modal") return
-        dialog.replace(
-          () => (
-            <DialogSelect
-              title={pending.title}
-              message={pending.message}
-              options={
-                pending.options?.map((opt: any) => ({
-                  title: opt.title,
-                  value: opt.value,
-                  description: opt.description,
-                  category: opt.category,
-                  disabled: opt.disabled,
-                })) ?? []
-              }
-              keybind={
-                pending.keybind?.map((kb: any) => ({
-                  keybind: {
-                    name: kb.key,
-                    ctrl: kb.ctrl ?? false,
-                    meta: kb.meta ?? false,
-                    shift: kb.shift ?? false,
-                    super: false,
-                    leader: false,
-                  },
-                  title: kb.label ?? kb.key,
-                  onTrigger: () => {
-                    sdk.client.dialog.reply({
-                      dialogID: pending.id,
-                      value: kb.value,
-                      dismissed: false,
-                    })
-                    dialog.clear()
-                  },
-                })) ?? []
-              }
-              onSelect={(option) => {
-                sdk.client.dialog.reply({
-                  dialogID: pending.id,
-                  value: option.value,
-                  dismissed: false,
-                })
-                dialog.clear()
-              }}
-            />
-          ),
-          () => {
-            sdk.client.dialog.reply({
-              dialogID: pending.id,
-              dismissed: true,
-            })
-          },
-        )
-      },
-    ),
-  )
-
   return (
     <context.Provider
       value={{
