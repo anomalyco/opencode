@@ -59,6 +59,11 @@ test("fromConfig - does not expand tilde in middle of path", () => {
   expect(result).toEqual([{ permission: "external_directory", pattern: "/some/~/path", action: "allow" }])
 })
 
+test("fromConfig - expands exact tilde to home directory", () => {
+  const result = PermissionNext.fromConfig({ external_directory: { "~": "allow" } })
+  expect(result).toEqual([{ permission: "external_directory", pattern: os.homedir(), action: "allow" }])
+})
+
 test("evaluate - matches expanded tilde pattern", () => {
   const ruleset = PermissionNext.fromConfig({ external_directory: { "~/projects/*": "allow" } })
   const result = PermissionNext.evaluate("external_directory", `${os.homedir()}/projects/file.txt`, ruleset)

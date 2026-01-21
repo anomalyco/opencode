@@ -15,6 +15,7 @@ export namespace PermissionNext {
 
   function expand(pattern: string): string {
     if (pattern.startsWith("~/")) return os.homedir() + pattern.slice(1)
+    if (pattern === "~") return os.homedir()
     if (pattern.startsWith("$HOME/")) return os.homedir() + pattern.slice(5)
     if (pattern.startsWith("$HOME")) return os.homedir() + pattern.slice(5)
     return pattern
