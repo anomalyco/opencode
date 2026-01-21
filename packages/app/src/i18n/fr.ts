@@ -475,6 +475,8 @@ export const dict = {
   "settings.shortcuts.conflict.description": "{{keybind}} est déjà assigné à {{titles}}.",
   "settings.shortcuts.unassigned": "Non assigné",
   "settings.shortcuts.pressKeys": "Appuyez sur les touches",
+  "settings.shortcuts.search.placeholder": "Rechercher des raccourcis",
+  "settings.shortcuts.search.empty": "Aucun raccourci trouvé",
 
   "settings.shortcuts.group.general": "Général",
   "settings.shortcuts.group.session": "Session",

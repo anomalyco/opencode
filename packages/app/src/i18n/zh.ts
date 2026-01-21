@@ -459,6 +459,8 @@ export const dict = {
   "settings.shortcuts.conflict.description": "{{keybind}} 已分配给 {{titles}}。",
   "settings.shortcuts.unassigned": "未设置",
   "settings.shortcuts.pressKeys": "按下按键",
+  "settings.shortcuts.search.placeholder": "搜索快捷键",
+  "settings.shortcuts.search.empty": "未找到快捷键",
 
   "settings.shortcuts.group.general": "通用",
   "settings.shortcuts.group.session": "会话",
