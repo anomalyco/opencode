@@ -2074,13 +2074,14 @@ export default function Page() {
                                 >
                                   <button
                                     type="button"
-                                    class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-raised-stronger-non-alpha border border-border-base text-12-regular text-text-strong hover:bg-surface-raised-base-hover"
+                                    class="group relative flex items-center gap-2 h-6 px-2.5 rounded-md bg-surface-raised-stronger-non-alpha border border-border-weak-base text-12-medium text-text-strong shadow-xs-border whitespace-nowrap hover:bg-surface-raised-stronger-hover hover:border-border-hover focus:outline-none focus-visible:shadow-xs-border-focus"
                                     onClick={() => {
                                       const p = path()
                                       if (!p) return
                                       addSelectionToContext(p, sel())
                                     }}
                                   >
+                                    <span class="pointer-events-none absolute -left-1 top-1/2 size-2.5 -translate-y-1/2 rotate-45 bg-surface-raised-stronger-non-alpha border-l border-b border-border-weak-base group-hover:bg-surface-raised-stronger-hover group-hover:border-border-hover" />
                                     <Icon name="plus-small" size="small" />
                                     <span>
                                       {language.t("session.context.addToContext", {

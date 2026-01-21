@@ -32,11 +32,12 @@ const unsafeCSS = `
   --diffs-bg-addition-number: var(--diffs-bg-addition-number-override, light-dark( color-mix(in lab, var(--diffs-bg) 91%, var(--diffs-addition-base)), color-mix(in lab, var(--diffs-bg) 85%, var(--diffs-addition-base))));
   --diffs-bg-addition-hover: var(--diffs-bg-addition-hover-override, light-dark( color-mix(in lab, var(--diffs-bg) 80%, var(--diffs-addition-base)), color-mix(in lab, var(--diffs-bg) 70%, var(--diffs-addition-base))));
   --diffs-bg-addition-emphasis: var(--diffs-bg-addition-emphasis-override, light-dark(rgb(from var(--diffs-addition-base) r g b / 0.07), rgb(from var(--diffs-addition-base) r g b / 0.1)));
-  --diffs-selection-base: var(--text-interactive-base);
-  --diffs-selection-number-fg: light-dark( color-mix(in lab, var(--diffs-selection-base) 65%, var(--diffs-mixer)), color-mix(in lab, var(--diffs-selection-base) 75%, var(--diffs-mixer)));
-  --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--diffs-selection-base) r g b / 0.18));
-  --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, rgb(from var(--diffs-selection-base) r g b / 0.22));
-  --diffs-bg-selection-text: rgb(from var(--diffs-selection-base) r g b / 0.12);
+  --diffs-selection-base: var(--surface-warning-strong);
+  --diffs-selection-border: var(--border-warning-base);
+  --diffs-selection-number-fg: var(--text-on-warning-strong);
+  --diffs-bg-selection: var(--diffs-bg-selection-override, color-mix(in oklch, var(--surface-warning-base) 65%, transparent));
+  --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, color-mix(in oklch, var(--surface-warning-base) 85%, transparent));
+  --diffs-bg-selection-text: color-mix(in oklch, var(--surface-warning-strong) 20%, transparent);
 }
 
 [data-diffs] ::selection {
@@ -48,6 +49,16 @@ const unsafeCSS = `
 }
 
 [data-diffs] [data-comment-selected] [data-column-number] {
+  background-color: var(--diffs-bg-selection-number);
+  color: var(--diffs-selection-number-fg);
+}
+
+[data-diffs] [data-selected-line] {
+  background-color: var(--diffs-bg-selection);
+  box-shadow: inset 2px 0 0 var(--diffs-selection-border);
+}
+
+[data-diffs] [data-selected-line] [data-column-number] {
   background-color: var(--diffs-bg-selection-number);
   color: var(--diffs-selection-number-fg);
 }

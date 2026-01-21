@@ -167,29 +167,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return files.pathFromTab(tab)
   })
 
-  const selectionPreview = (path: string, selection?: FileSelection, preview?: string) => {
-    if (preview) return preview
-    if (!selection) return undefined
-    const content = files.get(path)?.content?.content
-    if (!content) return undefined
-    const start = Math.max(1, Math.min(selection.startLine, selection.endLine))
-    const end = Math.max(selection.startLine, selection.endLine)
-    const lines = content.split("\n").slice(start - 1, end)
-    if (lines.length === 0) return undefined
-    return lines.slice(0, 2).join("\n")
-  }
-
   const activeFileSelection = createMemo(() => {
     const path = activeFile()
     if (!path) return
     const range = files.selectedLines(path)
     if (!range) return
     return selectionFromLines(range)
-  })
-  const activeSelectionPreview = createMemo(() => {
-    const path = activeFile()
-    if (!path) return
-    return selectionPreview(path, activeFileSelection())
   })
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const status = createMemo(
@@ -1534,13 +1517,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       aria-label={language.t("prompt.context.removeActiveFile")}
                     />
                   </div>
-                  <Show when={activeSelectionPreview()}>
-                    {(preview) => (
-                      <pre class="text-10-regular text-text-weak font-mono whitespace-pre-wrap leading-4">
-                        {preview()}
-                      </pre>
-                    )}
-                  </Show>
                 </div>
               )}
             </Show>
