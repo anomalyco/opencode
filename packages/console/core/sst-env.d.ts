@@ -34,6 +34,14 @@ declare module "sst" {
       "type": "sst.cloudflare.SolidStart"
       "url": string
     }
+    "DISCORD_SUPPORT_BOT_TOKEN": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "DISCORD_SUPPORT_CHANNEL_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "Database": {
       "database": string
       "host": string
@@ -43,6 +51,14 @@ declare module "sst" {
       "username": string
     }
     "EMAILOCTOPUS_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "FEISHU_APP_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "FEISHU_APP_SECRET": {
       "type": "sst.sst.Secret"
       "value": string
     }
@@ -75,6 +91,10 @@ declare module "sst" {
       "value": string
     }
     "R2SecretKey": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "STRIPE_PUBLISHABLE_KEY": {
       "type": "sst.sst.Secret"
       "value": string
     }
@@ -127,6 +147,14 @@ declare module "sst" {
       "value": string
     }
     "ZEN_MODELS7": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS8": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_SESSION_SECRET": {
       "type": "sst.sst.Secret"
       "value": string
     }

@@ -1,7 +1,8 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { Log } from "../util/log"
-import { OAUTH_DUMMY_KEY } from "../auth"
-import { ProviderTransform } from "../provider/transform"
+import { Installation } from "../installation"
+import { Auth, OAUTH_DUMMY_KEY } from "../auth"
+import os from "os"
 
 const log = Log.create({ service: "plugin.codex" })
 
@@ -40,6 +41,46 @@ function base64UrlEncode(buffer: ArrayBuffer): string {
 
 function generateState(): string {
   return base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
+}
+
+export interface IdTokenClaims {
+  chatgpt_account_id?: string
+  organizations?: Array<{ id: string }>
+  email?: string
+  "https://api.openai.com/auth"?: {
+    chatgpt_account_id?: string
+  }
+}
+
+export function parseJwtClaims(token: string): IdTokenClaims | undefined {
+  const parts = token.split(".")
+  if (parts.length !== 3) return undefined
+  try {
+    return JSON.parse(Buffer.from(parts[1], "base64url").toString())
+  } catch {
+    return undefined
+  }
+}
+
+export function extractAccountIdFromClaims(claims: IdTokenClaims): string | undefined {
+  return (
+    claims.chatgpt_account_id ||
+    claims["https://api.openai.com/auth"]?.chatgpt_account_id ||
+    claims.organizations?.[0]?.id
+  )
+}
+
+export function extractAccountId(tokens: TokenResponse): string | undefined {
+  if (tokens.id_token) {
+    const claims = parseJwtClaims(tokens.id_token)
+    const accountId = claims && extractAccountIdFromClaims(claims)
+    if (accountId) return accountId
+  }
+  if (tokens.access_token) {
+    const claims = parseJwtClaims(tokens.access_token)
+    return claims ? extractAccountIdFromClaims(claims) : undefined
+  }
+  return undefined
 }
 
 function buildAuthorizeUrl(redirectUri: string, pkce: PkceCodes, state: string): string {
@@ -321,37 +362,6 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
           }
         }
 
-        if (!provider.models["gpt-5.2-codex"]) {
-          const model = {
-            id: "gpt-5.2-codex",
-            providerID: "openai",
-            api: {
-              id: "gpt-5.2-codex",
-              url: "https://chatgpt.com/backend-api/codex",
-              npm: "@ai-sdk/openai",
-            },
-            name: "GPT-5.2 Codex",
-            capabilities: {
-              temperature: false,
-              reasoning: true,
-              attachment: true,
-              toolcall: true,
-              input: { text: true, audio: false, image: true, video: false, pdf: false },
-              output: { text: true, audio: false, image: false, video: false, pdf: false },
-              interleaved: false,
-            },
-            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-            limit: { context: 400000, output: 128000 },
-            status: "active" as const,
-            options: {},
-            headers: {},
-            release_date: "2025-12-18",
-            variants: {} as Record<string, Record<string, any>>,
-          }
-          model.variants = ProviderTransform.variants(model)
-          provider.models["gpt-5.2-codex"] = model
-        }
-
         // Zero out costs for Codex (included with ChatGPT subscription)
         for (const model of Object.values(provider.models)) {
           model.cost = {
@@ -380,10 +390,14 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             const currentAuth = await getAuth()
             if (currentAuth.type !== "oauth") return fetch(requestInput, init)
 
+            // Cast to include accountId field
+            const authWithAccount = currentAuth as typeof currentAuth & { accountId?: string }
+
             // Check if token needs refresh
             if (!currentAuth.access || currentAuth.expires < Date.now()) {
               log.info("refreshing codex access token")
               const tokens = await refreshAccessToken(currentAuth.refresh)
+              const newAccountId = extractAccountId(tokens) || authWithAccount.accountId
               await input.client.auth.set({
                 path: { id: "codex" },
                 body: {
@@ -391,9 +405,11 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                   refresh: tokens.refresh_token,
                   access: tokens.access_token,
                   expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                  ...(newAccountId && { accountId: newAccountId }),
                 },
               })
               currentAuth.access = tokens.access_token
+              authWithAccount.accountId = newAccountId
             }
 
             // Build headers
@@ -415,20 +431,20 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             // Set authorization header with access token
             headers.set("authorization", `Bearer ${currentAuth.access}`)
 
-            // Rewrite URL to Codex endpoint
-            let url: URL
-            if (typeof requestInput === "string") {
-              url = new URL(requestInput)
-            } else if (requestInput instanceof URL) {
-              url = requestInput
-            } else {
-              url = new URL(requestInput.url)
+            // Set ChatGPT-Account-Id header for organization subscriptions
+            if (authWithAccount.accountId) {
+              headers.set("ChatGPT-Account-Id", authWithAccount.accountId)
             }
 
-            // If this is a messages/responses request, redirect to Codex endpoint
-            if (url.pathname.includes("/v1/responses") || url.pathname.includes("/chat/completions")) {
-              url = new URL(CODEX_API_ENDPOINT)
-            }
+            // Rewrite URL to Codex endpoint
+            const parsed =
+              requestInput instanceof URL
+                ? requestInput
+                : new URL(typeof requestInput === "string" ? requestInput : requestInput.url)
+            const url =
+              parsed.pathname.includes("/v1/responses") || parsed.pathname.includes("/chat/completions")
+                ? new URL(CODEX_API_ENDPOINT)
+                : parsed
 
             return fetch(url, {
               ...init,
@@ -456,11 +472,13 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               callback: async () => {
                 const tokens = await callbackPromise
                 stopOAuthServer()
+                const accountId = extractAccountId(tokens)
                 return {
                   type: "success" as const,
                   refresh: tokens.refresh_token,
                   access: tokens.access_token,
                   expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                  accountId,
                 }
               },
             }
@@ -471,6 +489,12 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
           type: "api",
         },
       ],
+    },
+    "chat.headers": async (input, output) => {
+      if (input.model.providerID !== "openai") return
+      output.headers.originator = "opencode"
+      output.headers["User-Agent"] = `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`
+      output.headers.session_id = input.sessionID
     },
   }
 }

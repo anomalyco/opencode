@@ -279,7 +279,7 @@ export namespace File {
 
     // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
     // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
-    if (!Filesystem.contains(Instance.directory, full)) {
+    if (!Instance.containsPath(full)) {
       throw new Error(`Access denied: path escapes project directory`)
     }
 
@@ -339,7 +339,7 @@ export namespace File {
 
     // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
     // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
-    if (!Filesystem.contains(Instance.directory, resolved)) {
+    if (!Instance.containsPath(resolved)) {
       throw new Error(`Access denied: path escapes project directory`)
     }
 
