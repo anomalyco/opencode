@@ -83,6 +83,7 @@
       "background-weak": "#18222c",
       "background-strong": "#0b1015",
       "background-stronger": "#080c10",
+      "surface-base-active": "#1f2935",
       "surface-raised-base-hover": "#0f1419",
       "border-weak-base": "#2b3440",
       "border-weak-hover": "#323c49",
