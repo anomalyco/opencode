@@ -1,5 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
+import { GlobalBus } from "@/bus/global"
 import z from "zod"
 import { Instance } from "../project/instance"
 import { Log } from "../util/log"
@@ -16,6 +17,7 @@ import type ParcelWatcher from "@parcel/watcher"
 import { $ } from "bun"
 import { Flag } from "@/flag/flag"
 import { readdir } from "fs/promises"
+import { createRequire } from "module"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 const CONFIG_DEBOUNCE_MS = 500
@@ -44,6 +46,9 @@ export namespace FileWatcher {
     ),
   }
 
+  // Create require function that works in browser conditions
+  const require = createRequire(import.meta.url)
+
   const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
     try {
       const binding = require(
@@ -56,73 +61,70 @@ export namespace FileWatcher {
     }
   })
 
-  // Per-instance state for config watcher debouncing and in-flight guard
   interface ConfigWatcherState {
-    disposeInFlight: boolean
-    debounceTimer: ReturnType<typeof setTimeout> | undefined
+    inFlight: boolean
+    timer: ReturnType<typeof setTimeout> | undefined
   }
 
-  function handleConfigChange(file: string, event: "add" | "change" | "unlink", configState: ConfigWatcherState) {
+  function handleConfigChange(file: string, event: "add" | "change" | "unlink", state: ConfigWatcherState) {
     log.info("config file changed", { file, event })
     Bus.publish(Event.ConfigChanged, { file, event })
 
-    // Debounce and guard against overlapping dispose calls
-    if (configState.debounceTimer) {
-      clearTimeout(configState.debounceTimer)
-    }
+    if (state.timer) clearTimeout(state.timer)
 
-    configState.debounceTimer = setTimeout(async () => {
-      if (configState.disposeInFlight) {
+    state.timer = setTimeout(async () => {
+      if (state.inFlight) {
         log.debug("dispose already in flight, skipping")
         return
       }
 
-      configState.disposeInFlight = true
+      state.inFlight = true
       try {
+        Config.global.reset()
         log.info("reloading instance due to config change")
         await Instance.dispose()
+        GlobalBus.emit("event", {
+          directory: "global",
+          payload: {
+            type: "global.disposed",
+            properties: {},
+          },
+        })
       } catch (error) {
         log.error("failed to dispose instance", { error })
       } finally {
-        configState.disposeInFlight = false
+        state.inFlight = false
       }
     }, CONFIG_DEBOUNCE_MS)
   }
 
-  // Check if a file path is at the root level of the watched directory
-  function isRootLevelFile(filePath: string, watchedDir: string): boolean {
-    const rel = path.relative(watchedDir, filePath)
-    // Root level = no path separators in relative path
+  function isRootLevel(file: string, dir: string): boolean {
+    const rel = path.relative(dir, file)
     return rel.length > 0 && !rel.includes(path.sep) && !rel.startsWith("..")
   }
 
-  // Create callback for config file watching (filters to config files only)
-  function createConfigCallback(watchedDir: string, configState: ConfigWatcherState): ParcelWatcher.SubscribeCallback {
+  function createConfigCallback(dir: string, state: ConfigWatcherState): ParcelWatcher.SubscribeCallback {
     return (err, evts) => {
       if (err) return
       for (const evt of evts) {
         const filename = path.basename(evt.path)
-        // Only process config files at the root of the watched directory
-        if (!isRootLevelFile(evt.path, watchedDir)) continue
+        if (!isRootLevel(evt.path, dir)) continue
         if (!CONFIG_FILES.has(filename)) continue
 
         const event = evt.type === "create" ? "add" : evt.type === "update" ? "change" : "unlink"
-        handleConfigChange(evt.path, event, configState)
+        handleConfigChange(evt.path, event, state)
       }
     }
   }
 
-  // Subscribe to a directory for config file changes
   async function subscribeConfigDir(
     w: typeof import("@parcel/watcher"),
     dir: string,
     backend: "windows" | "fs-events" | "inotify",
-    configState: ConfigWatcherState,
+    state: ConfigWatcherState,
   ): Promise<ParcelWatcher.AsyncSubscription | undefined> {
     try {
-      const pending = w.subscribe(dir, createConfigCallback(dir, configState), {
-        // Ignore subdirectories - only watch root level files
-        // Note: callback also filters, this is defense in depth
+      const pending = w.subscribe(dir, createConfigCallback(dir, state), {
         ignore: ["*/**"],
         backend,
       })
@@ -131,9 +133,7 @@ export namespace FileWatcher {
         pending.then((s) => s.unsubscribe()).catch(() => {})
         return undefined
       })
-      if (sub) {
-        log.info("watching config directory", { dir })
-      }
+      if (sub) log.info("watching config directory", { dir })
       return sub
     } catch (error) {
       log.error("failed to watch config directory", { error, dir })
@@ -160,43 +160,38 @@ export namespace FileWatcher {
       if (!w) return {}
 
       const subs: ParcelWatcher.AsyncSubscription[] = []
-      const cfgIgnores = cfg.watcher?.ignore ?? []
+      const ignores = cfg.watcher?.ignore ?? []
 
-      // Per-instance config watcher state
       const configState: ConfigWatcherState = {
-        disposeInFlight: false,
-        debounceTimer: undefined,
+        inFlight: false,
+        timer: undefined,
       }
 
-      // --- Config file watching (always enabled unless explicitly disabled) ---
-      if (!Flag.OPENCODE_DISABLE_CONFIG_WATCHER) {
-        // Watch project directory for config files
+      // Config file watching (experimental, opt-in)
+      if (Flag.OPENCODE_EXPERIMENTAL_CONFIG_WATCHER) {
         const projectSub = await subscribeConfigDir(w, Instance.directory, backend, configState)
         if (projectSub) subs.push(projectSub)
 
-        // Watch .opencode subdirectory if it exists
         const dotOpencode = path.join(Instance.directory, ".opencode")
         if (await Filesystem.exists(dotOpencode)) {
-          const dotSub = await subscribeConfigDir(w, dotOpencode, backend, configState)
-          if (dotSub) subs.push(dotSub)
+          const sub = await subscribeConfigDir(w, dotOpencode, backend, configState)
+          if (sub) subs.push(sub)
         }
 
-        // Watch ~/.opencode directory if it exists (user home)
         const homeOpencode = path.join(Global.Path.home, ".opencode")
         if (homeOpencode !== dotOpencode && (await Filesystem.exists(homeOpencode))) {
-          const homeSub = await subscribeConfigDir(w, homeOpencode, backend, configState)
-          if (homeSub) subs.push(homeSub)
+          const sub = await subscribeConfigDir(w, homeOpencode, backend, configState)
+          if (sub) subs.push(sub)
         }
 
-        // Watch global config directory (if different from project and home)
         const globalConfig = Global.Path.config
         if (globalConfig !== Instance.directory && globalConfig !== homeOpencode) {
-          const globalSub = await subscribeConfigDir(w, globalConfig, backend, configState)
-          if (globalSub) subs.push(globalSub)
+          const sub = await subscribeConfigDir(w, globalConfig, backend, configState)
+          if (sub) subs.push(sub)
         }
       }
 
-      // --- General file watching (experimental, git-only) ---
+      // General file watching (experimental)
       const subscribe: ParcelWatcher.SubscribeCallback = (err, evts) => {
         if (err) return
         for (const evt of evts) {
@@ -208,7 +203,7 @@ export namespace FileWatcher {
 
       if (Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
         const pending = w.subscribe(Instance.directory, subscribe, {
-          ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
+          ignore: [...FileIgnore.PATTERNS, ...ignores],
           backend,
         })
         const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
@@ -219,7 +214,7 @@ export namespace FileWatcher {
         if (sub) subs.push(sub)
       }
 
-      // --- Git HEAD watching (git-only) ---
+      // Git HEAD watching
       if (Instance.project.vcs === "git") {
         const vcsDir = await $`git rev-parse --git-dir`
           .quiet()
@@ -228,13 +223,10 @@ export namespace FileWatcher {
           .text()
           .then((x) => path.resolve(Instance.worktree, x.trim()))
           .catch(() => undefined)
-        if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
-          const gitDirContents = await readdir(vcsDir).catch(() => [])
-          const ignoreList = gitDirContents.filter((entry) => entry !== "HEAD")
-          const pending = w.subscribe(vcsDir, subscribe, {
-            ignore: ignoreList,
-            backend,
-          })
+        if (vcsDir && !ignores.includes(".git") && !ignores.includes(vcsDir)) {
+          const contents = await readdir(vcsDir).catch(() => [])
+          const ignore = contents.filter((entry) => entry !== "HEAD")
+          const pending = w.subscribe(vcsDir, subscribe, { ignore, backend })
           const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
             log.error("failed to subscribe to vcsDir", { error: err })
             pending.then((s) => s.unsubscribe()).catch(() => {})
@@ -247,10 +239,9 @@ export namespace FileWatcher {
       return { subs, configState }
     },
     async (state) => {
-      // Clean up debounce timer
-      if (state.configState?.debounceTimer) {
-        clearTimeout(state.configState.debounceTimer)
-        state.configState.debounceTimer = undefined
+      if (state.configState?.timer) {
+        clearTimeout(state.configState.timer)
+        state.configState.timer = undefined
       }
       if (!state.subs) return
       await Promise.all(state.subs.map((sub) => sub?.unsubscribe()))
@@ -258,9 +249,7 @@ export namespace FileWatcher {
   )
 
   export function init() {
-    if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER && Flag.OPENCODE_DISABLE_CONFIG_WATCHER) {
-      return
-    }
+    if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER && !Flag.OPENCODE_EXPERIMENTAL_CONFIG_WATCHER) return
     state()
   }
 }

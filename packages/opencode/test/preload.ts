@@ -34,6 +34,9 @@ if (response.ok) {
 // Disable models.dev refresh to avoid race conditions during tests
 process.env["OPENCODE_DISABLE_MODELS_FETCH"] = "true"
 
+// Enable experimental config watcher for tests
+process.env["OPENCODE_EXPERIMENTAL_CONFIG_WATCHER"] = "true"
+
 // Clear provider env vars to ensure clean test state
 delete process.env["ANTHROPIC_API_KEY"]
 delete process.env["OPENAI_API_KEY"]
