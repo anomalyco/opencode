@@ -123,13 +123,14 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
     >
       <div class="relative h-full">
         <Tabs.Trigger
-          classes={{ button: "border-0" }}
           value={props.terminal.id}
           onClick={focus}
           onMouseDown={(e) => e.preventDefault()}
           onContextMenu={menu}
           class="!shadow-none"
-          classes={{ button: "outline-none focus:outline-none focus-visible:outline-none !shadow-none !ring-0" }}
+          classes={{
+            button: "border-0 outline-none focus:outline-none focus-visible:outline-none !shadow-none !ring-0",
+          }}
           closeButton={
             <IconButton
               icon="close"
