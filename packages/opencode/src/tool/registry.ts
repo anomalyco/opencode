@@ -32,6 +32,7 @@ import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { PTCTool, PTCListTool } from "./ptc"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -134,6 +135,8 @@ export namespace ToolRegistry {
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
           ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
           ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
+          PTCTool,
+          PTCListTool,
           ...custom,
         ]
       })

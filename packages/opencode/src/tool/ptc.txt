@@ -1,0 +1,29 @@
+Execute JavaScript code that can call available tools programmatically.
+
+This tool allows you to write async JavaScript code that orchestrates multiple tool calls in a single execution. All tool functions are async and return Promise<string>.
+
+Common use cases include:
+1. Read/search files in the codebase, call TODO tools to record findings and plans to avoid losing context;
+2. Explore the codebase with different tools and aggregate results;
+3. Perform multi-step reasoning and tool usage in a single execution.
+
+AVAILABLE GLOBALS:
+- tools: Object containing all available tools as async functions
+- log(...args): Function to log messages (captured in output)
+- context: { sessionID, messageID } - current session context
+
+EXAMPLE USAGE:
+```javascript
+// Read a file and search for patterns
+const content = await tools.read({ file_path: "/path/to/file.ts" });
+log("File content length:", content.length);
+
+// Run grep to find matches
+const matches = await tools.grep({ pattern: "TODO", path: "." });
+
+// Return a value (will be included in output)
+return { filesFound: matches.split("\n").length };
+```
+
+Just pass the objects as parameters to your async functions, and use 'await' to call them.
+The code runs in a sandboxed async context. Use 'return' to provide a final result.
