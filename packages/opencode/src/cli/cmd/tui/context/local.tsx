@@ -38,7 +38,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
-        current: agents()[0].name,
+        current: agents()[0]?.name ?? "default",
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
@@ -54,7 +54,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents()
         },
         current() {
-          return agents().find((x) => x.name === agentStore.current)!
+          const found = agents().find((x) => x.name === agentStore.current)
+          if (found) return found
+          const first = agents()[0]
+          if (first) return first
+          return {
+            name: "default",
+            description: "Default agent",
+            order: 0,
+            hidden: false,
+            mode: "agent",
+            model: undefined,
+            color: theme.text,
+            prompts: [],
+            tools: {},
+          } as any
         },
         set(name: string) {
           if (!agents().some((x) => x.name === name))
