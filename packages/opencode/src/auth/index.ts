@@ -635,6 +635,28 @@ export namespace Auth {
       })
     }
 
+    export async function updateRecord(
+      providerID: string,
+      recordID: string,
+      namespace: string,
+      update: { access?: string; refresh?: string; expires?: number },
+    ): Promise<boolean> {
+      return updateStore((store) => {
+        const provider = store.providers[providerID]
+        if (!provider || provider.type !== "oauth") return { value: false, changed: false }
+
+        const record = provider.records.find((r) => r.id === recordID && r.namespace === namespace)
+        if (!record) return { value: false, changed: false }
+
+        if (update.access !== undefined) record.access = update.access
+        if (update.refresh !== undefined) record.refresh = update.refresh
+        if (update.expires !== undefined) record.expires = update.expires
+        record.updatedAt = Date.now()
+
+        return { value: true, changed: true }
+      })
+    }
+
     export async function removeRecord(
       providerID: string,
       recordID: string,
