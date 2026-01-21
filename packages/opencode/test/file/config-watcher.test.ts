@@ -1,9 +1,8 @@
 import { test, expect } from "bun:test"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
-import { FileWatcher } from "../../src/file/watcher"
+import { ConfigWatcher } from "../../src/config/watcher"
 import { Bus } from "../../src/bus"
-import { MCP } from "../../src/mcp"
 import { Config } from "../../src/config/config"
 import path from "path"
 import fs from "fs/promises"
@@ -20,10 +19,10 @@ test("config watcher detects opencode.json changes", async () => {
     directory: tmp.path,
     fn: async () => {
       // Initialize the file watcher
-      FileWatcher.init()
+      ConfigWatcher.init()
 
       // Set up listener for config change events
-      const unsub = Bus.subscribe(FileWatcher.Event.ConfigChanged, (payload) => {
+      const unsub = Bus.subscribe(ConfigWatcher.Event.Changed, (payload) => {
         configChangedEvent = payload.properties
       })
 
@@ -67,7 +66,7 @@ test("config watcher triggers instance reload on config change", async () => {
     directory: tmp.path,
     fn: async () => {
       // Initialize file watcher
-      FileWatcher.init()
+      ConfigWatcher.init()
 
       // Wait for watcher to initialize
       await sleep(500)
@@ -106,9 +105,9 @@ test("config watcher watches .opencode directory", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      FileWatcher.init()
+      ConfigWatcher.init()
 
-      const unsub = Bus.subscribe(FileWatcher.Event.ConfigChanged, (payload) => {
+      const unsub = Bus.subscribe(ConfigWatcher.Event.Changed, (payload) => {
         configChangedEvent = payload.properties
       })
 
@@ -146,9 +145,9 @@ test("config watcher debounces rapid changes", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      FileWatcher.init()
+      ConfigWatcher.init()
 
-      const unsub = Bus.subscribe(FileWatcher.Event.ConfigChanged, (payload) => {
+      const unsub = Bus.subscribe(ConfigWatcher.Event.Changed, (payload) => {
         events.push(payload.properties)
       })
 
@@ -220,9 +219,9 @@ test("config.json changes are also watched", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      FileWatcher.init()
+      ConfigWatcher.init()
 
-      const unsub = Bus.subscribe(FileWatcher.Event.ConfigChanged, (payload) => {
+      const unsub = Bus.subscribe(ConfigWatcher.Event.Changed, (payload) => {
         configChangedEvent = payload.properties
       })
 
@@ -253,9 +252,9 @@ test("opencode.jsonc changes are watched", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      FileWatcher.init()
+      ConfigWatcher.init()
 
-      const unsub = Bus.subscribe(FileWatcher.Event.ConfigChanged, (payload) => {
+      const unsub = Bus.subscribe(ConfigWatcher.Event.Changed, (payload) => {
         configChangedEvent = payload.properties
       })
 
@@ -288,9 +287,9 @@ test("non-config files in project root are not watched", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      FileWatcher.init()
+      ConfigWatcher.init()
 
-      const unsub = Bus.subscribe(FileWatcher.Event.ConfigChanged, (payload) => {
+      const unsub = Bus.subscribe(ConfigWatcher.Event.Changed, (payload) => {
         configChangedEvent = payload.properties
       })
 
