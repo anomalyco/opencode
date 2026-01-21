@@ -73,9 +73,9 @@ const serverEnv = {
 
 const runnerEnv = {
   ...process.env,
-  PLAYWRIGHT_SERVER_HOST: "localhost",
+  PLAYWRIGHT_SERVER_HOST: "127.0.0.1",
   PLAYWRIGHT_SERVER_PORT: String(serverPort),
-  VITE_OPENCODE_SERVER_HOST: "localhost",
+  VITE_OPENCODE_SERVER_HOST: "127.0.0.1",
   VITE_OPENCODE_SERVER_PORT: String(serverPort),
   PLAYWRIGHT_PORT: String(webPort),
 } satisfies Record<string, string>
@@ -115,7 +115,7 @@ const server = Bun.spawn(
 )
 
 try {
-  await waitForHealth(`http://localhost:${serverPort}/global/health`)
+  await waitForHealth(`http://127.0.0.1:${serverPort}/global/health`)
 
   const runner = Bun.spawn(["bun", "test:e2e", ...extraArgs], {
     cwd: appDir,
