@@ -365,7 +365,7 @@ export const SettingsKeybinds: Component = () => {
             </Button>
           </div>
 
-          <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-base">
+          <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface-base">
             <Icon name="magnifying-glass" class="text-icon-weak-base flex-shrink-0" />
             <TextField
               variant="ghost"
