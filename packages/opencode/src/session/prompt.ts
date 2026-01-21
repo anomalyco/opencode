@@ -1816,6 +1816,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
         const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
         draft.title = title
-      })
+      }, { touch: false })
   }
 }

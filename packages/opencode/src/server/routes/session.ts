@@ -281,7 +281,7 @@ export const SessionRoutes = lazy(() =>
             session.title = updates.title
           }
           if (updates.time?.archived !== undefined) session.time.archived = updates.time.archived
-        })
+        }, { touch: false })
 
         return c.json(updatedSession)
       },

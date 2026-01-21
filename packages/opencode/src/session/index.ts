@@ -259,7 +259,7 @@ export namespace Session {
       draft.share = {
         url: share.url,
       }
-    })
+    }, { touch: false })
     return share
   })
 
@@ -269,14 +269,16 @@ export namespace Session {
     await ShareNext.remove(id)
     await update(id, (draft) => {
       draft.share = undefined
-    })
+    }, { touch: false })
   })
 
-  export async function update(id: string, editor: (session: Info) => void) {
+  export async function update(id: string, editor: (session: Info) => void, options?: { touch?: boolean }) {
     const project = Instance.project
     const result = await Storage.update<Info>(["session", project.id, id], (draft) => {
       editor(draft)
-      draft.time.updated = Date.now()
+      if (options?.touch !== false) {
+        draft.time.updated = Date.now()
+      }
     })
     Bus.publish(Event.Updated, {
       info: result,
