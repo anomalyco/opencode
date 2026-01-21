@@ -1,0 +1,15 @@
+Get current context window usage statistics, including percentage of context used and detailed token counts.
+
+Use this tool when the user asks about:
+- Context window usage
+- How much of the context is being used
+- Token consumption statistics
+- Whether we're approaching context limits
+
+The tool returns:
+- Percentage of context window used
+- Total token count vs context limit
+- Status indicator (healthy/moderate/warning/critical)
+- Detailed breakdown by token type (input, output, reasoning, cache read/write)
+
+This helps both the agent and user understand if we're approaching context limits and may need compaction or summary.
