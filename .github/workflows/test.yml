@@ -86,7 +86,7 @@ jobs:
 
       - name: Run opencode server
         working-directory: packages/opencode
-        run: bun dev -- --print-logs --log-level WARN serve --port 4096 --hostname 0.0.0.0 &
+        run: bun dev -- --print-logs --log-level WARN serve --port 4096 --hostname 127.0.0.1 &
         env:
           MODELS_DEV_API_JSON: ${{ env.MODELS_DEV_API_JSON }}
           OPENCODE_DISABLE_MODELS_FETCH: "true"
@@ -103,8 +103,8 @@ jobs:
 
       - name: Wait for opencode server
         run: |
-          for i in {1..60}; do
-            curl -fsS "http://localhost:4096/global/health" > /dev/null && exit 0
+          for i in {1..120}; do
+            curl -fsS "http://127.0.0.1:4096/global/health" > /dev/null && exit 0
             sleep 1
           done
           exit 1
@@ -125,9 +125,9 @@ jobs:
           XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
           XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
           XDG_STATE_HOME: ${{ env.XDG_STATE_HOME }}
-          PLAYWRIGHT_SERVER_HOST: "localhost"
+          PLAYWRIGHT_SERVER_HOST: "127.0.0.1"
           PLAYWRIGHT_SERVER_PORT: "4096"
-          VITE_OPENCODE_SERVER_HOST: "localhost"
+          VITE_OPENCODE_SERVER_HOST: "127.0.0.1"
           VITE_OPENCODE_SERVER_PORT: "4096"
           OPENCODE_CLIENT: "app"
         timeout-minutes: 30
