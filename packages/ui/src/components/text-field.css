@@ -52,6 +52,7 @@
       background: var(--input-base);
 
       &:focus-within {
+        border-color: transparent;
         /* border/shadow-xs/select */
         box-shadow:
           0 0 0 3px var(--border-weak-selected),

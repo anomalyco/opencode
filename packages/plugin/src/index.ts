@@ -114,6 +114,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 refresh: string
                 access: string
                 expires: number
+                accountId?: string
               }
             | { key: string }
           ))
@@ -133,6 +134,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 refresh: string
                 access: string
                 expires: number
+                accountId?: string
               }
             | { key: string }
           ))
@@ -171,6 +173,10 @@ export interface Hooks {
     output: { temperature: number; topP: number; topK: number; options: Record<string, any> },
   ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
+  "command.execute.before"?: (
+    input: { command: string; sessionID: string; arguments: string },
+    output: { parts: Part[] },
+  ) => Promise<void>
   "tool.execute.before"?: (
     input: { tool: string; sessionID: string; callID: string },
     output: { args: any },
@@ -193,7 +199,7 @@ export interface Hooks {
     },
   ) => Promise<void>
   "experimental.chat.system.transform"?: (
-    input: {},
+    input: { sessionID: string },
     output: {
       system: string[]
     },

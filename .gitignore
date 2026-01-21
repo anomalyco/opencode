@@ -20,7 +20,9 @@ opencode.json
 a.out
 target
 .scripts
+.direnv/
 
 # Local dev files
 opencode-dev
 logs/
+*.bun-build
