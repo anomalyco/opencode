@@ -1,12 +1,14 @@
 import { createStore } from "solid-js/store"
 import { createEffect, onCleanup } from "solid-js"
+import { useParams } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSDK } from "./global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { usePlatform } from "@/context/platform"
+import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { Binary } from "@opencode-ai/util/binary"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { Persist, persisted } from "@/utils/persist"
 import { playSound, soundSrc } from "@/utils/sound"
@@ -43,10 +45,12 @@ function pruneNotifications(list: Notification[]) {
 export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
   name: "Notification",
   init: () => {
+    const params = useParams()
     const globalSDK = useGlobalSDK()
     const globalSync = useGlobalSync()
     const platform = usePlatform()
     const settings = useSettings()
+    const language = useLanguage()
 
     const [store, setStore, _, ready] = persisted(
       Persist.global("notification", ["notification.v1"]),
@@ -71,10 +75,15 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const unsub = globalSDK.event.listen((e) => {
       const directory = e.name
       const event = e.details
-      const base = {
-        directory,
-        time: Date.now(),
-        viewed: false,
+      const time = Date.now()
+      const activeDirectory = params.dir ? base64Decode(params.dir) : undefined
+      const activeSession = params.id
+      const viewed = (sessionID?: string) => {
+        if (!activeDirectory) return false
+        if (!activeSession) return false
+        if (!sessionID) return false
+        if (directory !== activeDirectory) return false
+        return sessionID === activeSession
       }
       switch (event.type) {
         case "session.idle": {
@@ -87,16 +96,21 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           playSound(soundSrc(settings.sounds.agent()))
 
           append({
-            ...base,
+            directory,
+            time,
+            viewed: viewed(sessionID),
             type: "turn-complete",
             session: sessionID,
           })
 
           const href = `/${base64Encode(directory)}/session/${sessionID}`
           if (settings.notifications.agent()) {
-            void platform.notify("Response ready", session?.title ?? sessionID, href)
+            void platform.notify(
+              language.t("notification.session.responseReady.title"),
+              session?.title ?? sessionID,
+              href,
+            )
           }
-
           break
         }
         case "session.error": {
@@ -110,18 +124,20 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
           const error = "error" in event.properties ? event.properties.error : undefined
           append({
-            ...base,
+            directory,
+            time,
+            viewed: viewed(sessionID),
             type: "error",
             session: sessionID ?? "global",
             error,
           })
-
-          const description = session?.title ?? (typeof error === "string" ? error : "An error occurred")
+          const description =
+            session?.title ??
+            (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
           const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
           if (settings.notifications.errors()) {
-            void platform.notify("Session error", description, href)
+            void platform.notify(language.t("notification.session.error.title"), description, href)
           }
-
           break
         }
       }
