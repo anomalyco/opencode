@@ -4,6 +4,7 @@ import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
+import { useLanguage } from "@/context/language"
 // import { useServer } from "@/context/server"
 // import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { usePlatform } from "@/context/platform"
@@ -29,6 +30,7 @@ export function SessionHeader() {
   // const dialog = useDialog()
   const sync = useSync()
   const platform = usePlatform()
+  const language = useLanguage()
 
   const projectDirectory = createMemo(() => base64Decode(params.dir ?? ""))
   const project = createMemo(() => {
@@ -138,7 +140,7 @@ export function SessionHeader() {
               <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
                 <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
                 <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate h-4.5 flex items-center">
-                  Search {name()}
+                  {language.t("session.header.search.placeholder", { project: name() })}
                 </span>
               </div>
 
@@ -181,7 +183,10 @@ export function SessionHeader() {
                   }}
                   aria-hidden={!showReview()}
                 >
-                  <TooltipKeybind title="Toggle review" keybind={command.keybind("review.toggle")}>
+                  <TooltipKeybind
+                    title={language.t("command.review.toggle")}
+                    keybind={command.keybind("review.toggle")}
+                  >
                     <Button
                       variant="ghost"
                       class="group/review-toggle size-6 p-0"
@@ -189,18 +194,18 @@ export function SessionHeader() {
                     >
                       <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                         <Icon
-                          name={view().reviewPanel.opened() ? "layout-right" : "layout-left"}
                           size="small"
+                          name={view().reviewPanel.opened() ? "layout-right-full" : "layout-right"}
                           class="group-hover/review-toggle:hidden"
                         />
                         <Icon
-                          name={view().reviewPanel.opened() ? "layout-right-partial" : "layout-left-partial"}
                           size="small"
+                          name="layout-right-partial"
                           class="hidden group-hover/review-toggle:inline-block"
                         />
                         <Icon
-                          name={view().reviewPanel.opened() ? "layout-right-full" : "layout-left-full"}
                           size="small"
+                          name={view().reviewPanel.opened() ? "layout-right" : "layout-right-full"}
                           class="hidden group-active/review-toggle:inline-block"
                         />
                       </div>
@@ -209,12 +214,12 @@ export function SessionHeader() {
                 </div>
                 <TooltipKeybind
                   class="hidden md:block shrink-0"
-                  title="Toggle terminal"
+                  title={language.t("command.terminal.toggle")}
                   keybind={command.keybind("terminal.toggle")}
                 >
                   <Button
                     variant="ghost"
-                    class="group/terminal-toggle size-6 p-0"
+                    class="group/terminal-toggle size-8 rounded-md"
                     onClick={() => view().terminal.toggle()}
                   >
                     <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
@@ -245,20 +250,20 @@ export function SessionHeader() {
                 aria-hidden={!showShare()}
               >
                 <Popover
-                  title="Publish on web"
+                  title={language.t("session.share.popover.title")}
                   description={
                     shareUrl()
-                      ? "This session is public on the web. It is accessible to anyone with the link."
-                      : "Share session publicly on the web. It will be accessible to anyone with the link."
+                      ? language.t("session.share.popover.description.shared")
+                      : language.t("session.share.popover.description.unshared")
                   }
                   trigger={
-                    <Tooltip class="shrink-0" value="Share session">
+                    <Tooltip class="shrink-0" value={language.t("command.session.share")}>
                       <Button
                         variant="secondary"
                         classList={{ "rounded-r-none": shareUrl() !== undefined }}
                         style={{ scale: 1 }}
                       >
-                        Share
+                        {language.t("session.share.action.share")}
                       </Button>
                     </Tooltip>
                   }
@@ -275,7 +280,9 @@ export function SessionHeader() {
                             onClick={shareSession}
                             disabled={state.share}
                           >
-                            {state.share ? "Publishing..." : "Publish"}
+                            {state.share
+                              ? language.t("session.share.action.publishing")
+                              : language.t("session.share.action.publish")}
                           </Button>
                         </div>
                       }
@@ -290,7 +297,9 @@ export function SessionHeader() {
                             onClick={unshareSession}
                             disabled={state.unshare}
                           >
-                            {state.unshare ? "Unpublishing..." : "Unpublish"}
+                            {state.unshare
+                              ? language.t("session.share.action.unpublishing")
+                              : language.t("session.share.action.unpublish")}
                           </Button>
                           <Button
                             size="large"
@@ -299,7 +308,7 @@ export function SessionHeader() {
                             onClick={viewShare}
                             disabled={state.unshare}
                           >
-                            View
+                            {language.t("session.share.action.view")}
                           </Button>
                         </div>
                       </div>
@@ -307,7 +316,13 @@ export function SessionHeader() {
                   </div>
                 </Popover>
                 <Show when={shareUrl()} fallback={<div class="size-6" aria-hidden="true" />}>
-                  <Tooltip value={state.copied ? "Copied" : "Copy link"} placement="top" gutter={8}>
+                  <Tooltip
+                    value={
+                      state.copied ? language.t("session.share.copy.copied") : language.t("session.share.copy.copyLink")
+                    }
+                    placement="top"
+                    gutter={8}
+                  >
                     <IconButton
                       icon={state.copied ? "check" : "copy"}
                       variant="secondary"
