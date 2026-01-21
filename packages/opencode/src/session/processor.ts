@@ -239,9 +239,27 @@ export namespace SessionProcessor {
                     usage: value.usage,
                     metadata: value.providerMetadata,
                   })
+                  const prev = input.assistantMessage.tokens ?? {
+                    input: 0,
+                    output: 0,
+                    reasoning: 0,
+                    cache: {
+                      read: 0,
+                      write: 0,
+                    },
+                  }
+                  const tokens = {
+                    input: prev.input + usage.tokens.input,
+                    output: prev.output + usage.tokens.output,
+                    reasoning: prev.reasoning + usage.tokens.reasoning,
+                    cache: {
+                      read: prev.cache.read + usage.tokens.cache.read,
+                      write: prev.cache.write + usage.tokens.cache.write,
+                    },
+                  }
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
-                  input.assistantMessage.tokens = usage.tokens
+                  input.assistantMessage.tokens = tokens
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,
@@ -271,7 +289,7 @@ export namespace SessionProcessor {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
-                  if (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model })) {
+                  if (await SessionCompaction.isOverflow({ tokens, model: input.model })) {
                     needsCompaction = true
                   }
                   break
