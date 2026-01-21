@@ -1587,7 +1587,7 @@ export type Config = {
    */
   theme?: string
   /**
-   * Shell to use for command execution
+   * Absolute path to the shell binary to use for command execution. This value takes priority over the $SHELL environment variable and any shell resolved via plugin hooks. Example: "/bin/bash" or "/usr/bin/zsh"
    */
   shell?: string
   keybinds?: KeybindsConfig

@@ -121,3 +121,49 @@ test("Shell.acceptable falls back when SHELL is blacklisted", async () => {
     process.env.SHELL = originalEnvShell
   }
 })
+
+test("Config takes priority over plugin", async () => {
+  const originalTrigger = Plugin.trigger
+  Plugin.trigger = mock(async (name, input, output) => {
+    if (name === "shell.resolve") {
+      output.shell = "/plugin/shell"
+    }
+    return output
+  })
+
+  try {
+    await using tmp = await tmpdir({
+      config: {
+        shell: "/config/shell",
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const shell = await Shell.preferred()
+        // Config should win over plugin
+        expect(shell).toBe("/config/shell")
+      },
+    })
+  } finally {
+    Plugin.trigger = originalTrigger
+  }
+})
+
+test("Config can override blacklist for Shell.acceptable", async () => {
+  // fish is normally blacklisted, but config should allow explicit override
+  await using tmp = await tmpdir({
+    config: {
+      shell: "/usr/bin/fish",
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const shell = await Shell.acceptable()
+      // Config explicitly sets fish, so it should be allowed despite blacklist
+      expect(shell).toBe("/usr/bin/fish")
+    },
+  })
+})

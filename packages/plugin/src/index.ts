@@ -173,6 +173,19 @@ export interface Hooks {
     output: { temperature: number; topP: number; topK: number; options: Record<string, any> },
   ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
+  /**
+   * Called when resolving which shell to use for command execution.
+   *
+   * This hook participates in the shell resolution priority chain and allows
+   * plugins to override the default shell selection based on the current
+   * platform or runtime environment.
+   *
+   * Example use cases:
+   * - Selecting a different shell when running inside a container or VM
+   * - Routing commands to a remote shell for specific platforms
+   * - Enforcing a particular shell (e.g., `bash`, `zsh`, `powershell`) for
+   *   consistency across environments
+   */
   "shell.resolve"?: (input: { platform: string }, output: { shell: string }) => Promise<void>
   "command.execute.before"?: (
     input: { command: string; sessionID: string; arguments: string },

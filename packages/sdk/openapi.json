@@ -9314,7 +9314,7 @@
             "type": "string"
           },
           "shell": {
-            "description": "Shell to use for command execution",
+            "description": "Absolute path to the shell binary to use for command execution. This value takes priority over the $SHELL environment variable and any shell resolved via plugin hooks. Example: \"/bin/bash\" or \"/usr/bin/zsh\"",
             "type": "string"
           },
           "keybinds": {
