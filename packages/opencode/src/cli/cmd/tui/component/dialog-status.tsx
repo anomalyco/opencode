@@ -4,7 +4,7 @@ import { useSync } from "@tui/context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
 import { Installation } from "@/installation"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-// test
+// temp
 export type DialogStatusProps = {}
 
 export function DialogStatus() {
