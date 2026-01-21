@@ -12,13 +12,13 @@ import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { ModelTooltip } from "./model-tooltip"
+import { useLanguage } from "@/context/language"
 
 export const DialogSelectModelUnpaid: Component = () => {
   const local = useLocal()
   const dialog = useDialog()
   const providers = useProviders()
-  const isFree = (item: ReturnType<typeof local.model.list>[number]) =>
-    item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)
+  const language = useLanguage()
 
   let listRef: ListRef | undefined
   const handleKey = (e: KeyboardEvent) => {
@@ -34,9 +34,9 @@ export const DialogSelectModelUnpaid: Component = () => {
   })
 
   return (
-    <Dialog title="Select model">
+    <Dialog title={language.t("dialog.model.select.title")}>
       <div class="flex flex-col gap-3 px-2.5">
-        <div class="text-14-medium text-text-base px-2.5">Free models provided by OpenCode</div>
+        <div class="text-14-medium text-text-base px-2.5">{language.t("dialog.model.unpaid.freeModels.title")}</div>
         <List
           ref={(ref) => (listRef = ref)}
           items={local.model.list}
@@ -47,7 +47,7 @@ export const DialogSelectModelUnpaid: Component = () => {
               class="w-full"
               placement="right-start"
               gutter={12}
-              value={<ModelTooltip model={item} latest={item.latest} free={isFree(item)} />}
+              value={<ModelTooltip model={item} latest={item.latest} free={item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)} />}
             >
               {node}
             </Tooltip>
@@ -62,11 +62,9 @@ export const DialogSelectModelUnpaid: Component = () => {
           {(i) => (
             <div class="w-full flex items-center gap-x-2.5">
               <span>{i.name}</span>
-              <Show when={isFree(i)}>
-                <Tag>Free</Tag>
-              </Show>
+              <Tag>{language.t("model.tag.free")}</Tag>
               <Show when={i.latest}>
-                <Tag>Latest</Tag>
+                <Tag>{language.t("model.tag.latest")}</Tag>
               </Show>
             </div>
           )}
@@ -77,7 +75,7 @@ export const DialogSelectModelUnpaid: Component = () => {
       <div class="px-1.5 pb-1.5">
         <div class="w-full rounded-sm border border-border-weak-base bg-surface-raised-base">
           <div class="w-full flex flex-col items-start gap-4 px-1.5 pt-4 pb-4">
-            <div class="px-2 text-14-medium text-text-base">Add more models from popular providers</div>
+            <div class="px-2 text-14-medium text-text-base">{language.t("dialog.model.unpaid.addMore.title")}</div>
             <div class="w-full">
               <List
                 class="w-full px-0"
@@ -99,10 +97,10 @@ export const DialogSelectModelUnpaid: Component = () => {
                     <ProviderIcon data-slot="list-item-extra-icon" id={i.id as IconName} />
                     <span>{i.name}</span>
                     <Show when={i.id === "opencode"}>
-                      <Tag>Recommended</Tag>
+                      <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
                     </Show>
                     <Show when={i.id === "anthropic"}>
-                      <div class="text-14-regular text-text-weak">Connect with Claude Pro/Max or API key</div>
+                      <div class="text-14-regular text-text-weak">{language.t("dialog.provider.anthropic.note")}</div>
                     </Show>
                   </div>
                 )}
@@ -115,7 +113,7 @@ export const DialogSelectModelUnpaid: Component = () => {
                   dialog.show(() => <DialogSelectProvider />)
                 }}
               >
-                View all providers
+                {language.t("dialog.provider.viewAll")}
               </Button>
             </div>
           </div>
