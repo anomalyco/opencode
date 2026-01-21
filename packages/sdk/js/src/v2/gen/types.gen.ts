@@ -4771,6 +4771,33 @@ export type TuiControlResponseResponses = {
 
 export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
 
+export type AuthUsage2Data = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/auth/usage"
+}
+
+export type AuthUsage2Errors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthUsage2Error = AuthUsage2Errors[keyof AuthUsage2Errors]
+
+export type AuthUsage2Responses = {
+  /**
+   * Usage information per provider and account
+   */
+  200: AuthUsage
+}
+
+export type AuthUsage2Response = AuthUsage2Responses[keyof AuthUsage2Responses]
+
 export type AuthSetActive2Data = {
   body?: {
     providerID: string

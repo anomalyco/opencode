@@ -19,6 +19,8 @@ import type {
   AuthSetActiveResponses,
   AuthSetErrors,
   AuthSetResponses,
+  AuthUsage2Errors,
+  AuthUsage2Responses,
   AuthUsageErrors,
   AuthUsageResponses,
   CommandListResponses,
@@ -2153,6 +2155,25 @@ export class Auth extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Get auth usage
+   *
+   * Get rate limit and usage information for authenticated providers.
+   */
+  public usage2<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<AuthUsage2Responses, AuthUsage2Errors, ThrowOnError>({
+      url: "/auth/usage",
+      ...options,
+      ...params,
     })
   }
 
