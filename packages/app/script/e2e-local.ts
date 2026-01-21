@@ -111,20 +111,33 @@ await log.Log.init({
 })
 
 const servermod = await import("../../opencode/src/server/server")
+const inst = await import("../../opencode/src/project/instance")
 const server = servermod.Server.listen({ port: serverPort, hostname: "127.0.0.1" })
 console.log(`opencode server listening on http://127.0.0.1:${serverPort}`)
 
-try {
-  await waitForHealth(`http://127.0.0.1:${serverPort}/global/health`)
+const result = await (async () => {
+  try {
+    await waitForHealth(`http://127.0.0.1:${serverPort}/global/health`)
 
-  const runner = Bun.spawn(["bun", "test:e2e", ...extraArgs], {
-    cwd: appDir,
-    env: runnerEnv,
-    stdout: "inherit",
-    stderr: "inherit",
-  })
+    const runner = Bun.spawn(["bun", "test:e2e", ...extraArgs], {
+      cwd: appDir,
+      env: runnerEnv,
+      stdout: "inherit",
+      stderr: "inherit",
+    })
 
-  process.exitCode = await runner.exited
-} finally {
-  await server.stop()
+    return { code: await runner.exited }
+  } catch (error) {
+    return { error }
+  } finally {
+    await inst.Instance.disposeAll()
+    await server.stop()
+  }
+})()
+
+if ("error" in result) {
+  console.error(result.error)
+  process.exit(1)
 }
+
+process.exit(result.code)
