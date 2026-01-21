@@ -107,10 +107,8 @@ export function Titlebar() {
         </TooltipKeybind>
         <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
         <div class="flex-1 h-full" data-tauri-drag-region />
-        <div id="opencode-titlebar-right" class="flex items-center gap-3 shrink-0" />
-        <Show when={reserve()}>
-          <div class="w-[120px] h-full shrink-0" data-tauri-drag-region />
-        </Show>
+        <div id="opencode-titlebar-right" class="flex items-center gap-3 shrink-0 flex-1 justify-end" />
+
       </div>
       <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div id="opencode-titlebar-center" class="pointer-events-auto" />
