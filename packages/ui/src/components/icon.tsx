@@ -73,7 +73,7 @@ const icons = {
 
 export interface IconProps extends ComponentProps<"svg"> {
   name: keyof typeof icons
-  size?: "small" | "normal" | "large"
+  size?: "small" | "normal" | "medium" | "large"
 }
 
 export function Icon(props: IconProps) {
