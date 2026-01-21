@@ -63,8 +63,13 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
 
+      // Get caller's session to check if this is a subagent calling
+      const callerSession = await Session.get(ctx.sessionID)
+      const isSubagent = callerSession.parentID !== undefined
+
       // Skip permission check when user explicitly invoked via @ or command subtask
-      if (!ctx.extra?.bypassAgentCheck) {
+      // BUT: always check permissions for subagent-to-subagent delegation
+      if (!ctx.extra?.bypassAgentCheck || isSubagent) {
         await ctx.ask({
           permission: "task",
           patterns: [params.subagent_type],
@@ -78,10 +83,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const targetAgent = await Agent.get(params.subagent_type)
       if (!targetAgent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
-
-      // Get caller's session to check if this is a subagent calling
-      const callerSession = await Session.get(ctx.sessionID)
-      const isSubagent = callerSession.parentID !== undefined
 
       // Get caller agent info for budget check (ctx.agent is just the name)
       const callerAgentInfo = ctx.agent ? await Agent.get(ctx.agent) : undefined
