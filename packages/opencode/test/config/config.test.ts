@@ -1325,6 +1325,66 @@ test("project config overrides remote well-known config", async () => {
   }
 })
 
+describe("keybind defaults", () => {
+  test("review keybinds use simple single-key shortcuts", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+
+        // Simple single-key shortcuts for review actions
+        expect(config.keybinds?.review_approve).toBe("a")
+        expect(config.keybinds?.review_reject).toBe("r")
+        expect(config.keybinds?.review_reset).toBe("u")
+        expect(config.keybinds?.review_approve_all).toBe("shift+a")
+        expect(config.keybinds?.review_submit).toBe("shift+s")
+      },
+    })
+  })
+
+  test("review navigation keybinds use j/k", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+
+        expect(config.keybinds?.review_next).toBe("j")
+        expect(config.keybinds?.review_prev).toBe("k")
+      },
+    })
+  })
+
+  test("keybinds can be overridden in config", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            keybinds: {
+              review_approve: "ctrl+a",
+              review_reject: "ctrl+r",
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+
+        expect(config.keybinds?.review_approve).toBe("ctrl+a")
+        expect(config.keybinds?.review_reject).toBe("ctrl+r")
+        // Non-overridden keybinds should still use defaults
+        expect(config.keybinds?.review_submit).toBe("shift+s")
+      },
+    })
+  })
+})
+
 describe("getPluginName", () => {
   test("extracts name from file:// URL", () => {
     expect(Config.getPluginName("file:///path/to/plugin/foo.js")).toBe("foo")

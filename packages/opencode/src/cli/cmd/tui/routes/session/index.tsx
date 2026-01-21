@@ -74,6 +74,8 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { ReviewPanel } from "../../component/review-panel"
+import { useReview } from "../../context/review"
 
 addDefaultParsers(parsers.parsers)
 
@@ -279,6 +281,16 @@ export function Session() {
   }
 
   const local = useLocal()
+  const review = useReview()
+
+  // Send feedback to agent when submitting review
+  const handleReviewFeedback = (message: string) => {
+    if (prompt) {
+      prompt.set({ input: message, parts: [] })
+      // Auto-submit the feedback
+      prompt.submit()
+    }
+  }
 
   function moveChild(direction: number) {
     if (children().length === 1) return
@@ -887,6 +899,38 @@ export function Session() {
         dialog.clear()
       },
     },
+    {
+      title: review.viewMode === "hidden" ? "Review changes" : "Close review",
+      value: "session.review.toggle",
+      keybind: "review_toggle",
+      category: "Review",
+      suggested: review.hasReviews(route.sessionID) && review.viewMode === "hidden",
+      slash: {
+        name: "review",
+        aliases: ["changes", "diff"],
+      },
+      onSelect: (dialog) => {
+        review.toggleView()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Submit review feedback",
+      value: "session.review.send",
+      category: "Review",
+      // Show when review panel is open and there are changes to review
+      hidden: review.viewMode === "hidden",
+      enabled: review.hasReviews(route.sessionID),
+      onSelect: (dialog) => {
+        const message = review.generateFeedbackMessage(route.sessionID)
+        if (message) {
+          handleReviewFeedback(message)
+          review.clearSession(route.sessionID)
+          review.hide()
+        }
+        dialog.clear()
+      },
+    },
   ])
 
   const revertInfo = createMemo(() => session()?.revert)
@@ -1104,7 +1148,16 @@ export function Session() {
           </Show>
           <Toast />
         </box>
-        <Show when={sidebarVisible()}>
+        {/* Review Panel - fullscreen when visible */}
+        <Show when={review.viewMode === "visible"}>
+          <ReviewPanel
+            sessionID={route.sessionID}
+            onSendFeedback={handleReviewFeedback}
+            onClose={() => review.hide()}
+          />
+        </Show>
+        {/* Sidebar - hidden when review panel is visible */}
+        <Show when={sidebarVisible() && review.viewMode === "hidden"}>
           <Switch>
             <Match when={wide()}>
               <Sidebar sessionID={route.sessionID} />

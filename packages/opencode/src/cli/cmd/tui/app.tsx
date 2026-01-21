@@ -9,6 +9,7 @@ import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
+import { ReviewProvider } from "@tui/context/review"
 import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
@@ -133,8 +134,9 @@ export function tui(input: {
                         events={input.events}
                       >
                         <SyncProvider>
-                          <ThemeProvider mode={mode}>
-                            <LocalProvider>
+                          <ReviewProvider>
+                            <ThemeProvider mode={mode}>
+                              <LocalProvider>
                               <KeybindProvider>
                                 <PromptStashProvider>
                                   <DialogProvider>
@@ -152,6 +154,7 @@ export function tui(input: {
                               </KeybindProvider>
                             </LocalProvider>
                           </ThemeProvider>
+                          </ReviewProvider>
                         </SyncProvider>
                       </SDKProvider>
                     </RouteProvider>

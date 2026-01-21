@@ -1298,6 +1298,38 @@ export type KeybindsConfig = {
    * Toggle tips on home screen
    */
   tips_toggle?: string
+  /**
+   * Toggle review panel for changes
+   */
+  review_toggle?: string
+  /**
+   * Approve current file in review
+   */
+  review_approve?: string
+  /**
+   * Reject current file in review
+   */
+  review_reject?: string
+  /**
+   * Reset current file to pending in review
+   */
+  review_reset?: string
+  /**
+   * Approve all files in review
+   */
+  review_approve_all?: string
+  /**
+   * Submit review feedback
+   */
+  review_submit?: string
+  /**
+   * Next file in review
+   */
+  review_next?: string
+  /**
+   * Previous file in review
+   */
+  review_prev?: string
 }
 
 /**

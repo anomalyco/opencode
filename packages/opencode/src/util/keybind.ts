@@ -54,6 +54,36 @@ export namespace Keybind {
     return result
   }
 
+  /**
+   * Convert keybind to a user-friendly display string with platform-specific modifier names.
+   * On macOS: super -> ⌘, ctrl -> ⌃, meta/alt -> ⌥, shift -> ⇧
+   * On other platforms: super -> Ctrl, ctrl -> Ctrl, meta/alt -> Alt, shift -> Shift
+   */
+  export function toDisplay(info: Info | undefined): string {
+    if (!info) return ""
+    const isMac = process.platform === "darwin"
+    const parts: string[] = []
+
+    if (info.ctrl) parts.push(isMac ? "⌃" : "Ctrl")
+    if (info.meta) parts.push(isMac ? "⌥" : "Alt")
+    if (info.super) parts.push(isMac ? "⌘" : "Ctrl")
+    if (info.shift) parts.push(isMac ? "⇧" : "Shift")
+    if (info.name) {
+      if (info.name === "delete") parts.push(isMac ? "⌫" : "Del")
+      else if (info.name === "return") parts.push(isMac ? "↵" : "Enter")
+      else if (info.name === "escape") parts.push("Esc")
+      else parts.push(info.name.toUpperCase())
+    }
+
+    let result = isMac ? parts.join("") : parts.join("+")
+
+    if (info.leader) {
+      result = result ? `<leader> ${result}` : `<leader>`
+    }
+
+    return result
+  }
+
   export function parse(key: string): Info[] {
     if (key === "none") return []
 

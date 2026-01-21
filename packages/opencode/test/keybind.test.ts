@@ -418,4 +418,176 @@ describe("Keybind.parse", () => {
       },
     ])
   })
+
+  test("should parse super+return for submit keybind", () => {
+    const result = Keybind.parse("super+return")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        super: true,
+        leader: false,
+        name: "return",
+      },
+    ])
+  })
+
+  test("super and meta should be different modifiers", () => {
+    // This test ensures we don't confuse Cmd (super) with Option/Alt (meta)
+    const superKey = Keybind.parse("super+y")
+    const metaKey = Keybind.parse("meta+y")
+
+    expect(superKey[0].super).toBe(true)
+    expect(superKey[0].meta).toBe(false)
+
+    expect(metaKey[0].super).toBeUndefined()
+    expect(metaKey[0].meta).toBe(true)
+  })
+})
+
+describe("Keybind modifier semantics", () => {
+  // These tests document the intended mapping of modifiers
+  // super = Cmd key on macOS, Windows/Super key on Linux
+  // meta = Option/Alt key on macOS, Alt key on Windows/Linux
+
+  test("super modifier is for Cmd key (macOS)", () => {
+    const result = Keybind.parse("super+y")
+    expect(result[0].super).toBe(true)
+    expect(result[0].meta).toBe(false)
+    expect(result[0].ctrl).toBe(false)
+  })
+
+  test("meta modifier is for Option/Alt key", () => {
+    const result = Keybind.parse("meta+y")
+    expect(result[0].meta).toBe(true)
+    expect(result[0].super).toBeUndefined()
+  })
+
+  test("alt is alias for meta", () => {
+    const metaResult = Keybind.parse("meta+y")
+    const altResult = Keybind.parse("alt+y")
+    expect(metaResult[0].meta).toBe(altResult[0].meta)
+  })
+
+  test("option is alias for meta", () => {
+    const metaResult = Keybind.parse("meta+y")
+    const optionResult = Keybind.parse("option+y")
+    expect(metaResult[0].meta).toBe(optionResult[0].meta)
+  })
+
+  test("super+shift+y is different from meta+shift+y", () => {
+    const superShiftY = Keybind.parse("super+shift+y")[0]
+    const metaShiftY = Keybind.parse("meta+shift+y")[0]
+
+    expect(Keybind.match(superShiftY, metaShiftY)).toBe(false)
+  })
+
+  test("super+y keybind should NOT match when only meta is pressed (simulated keyboard event)", () => {
+    // This test simulates what happens when the wrong modifier key is pressed
+    // It would have caught the bug where we checked evt.meta instead of evt.super
+
+    const configuredKeybind = Keybind.parse("super+y")[0]
+
+    // Simulate a keyboard event where meta (Option/Alt) is pressed instead of super (Cmd)
+    const wrongKeyEvent: Keybind.Info = {
+      name: "y",
+      ctrl: false,
+      meta: true, // Option/Alt pressed
+      shift: false,
+      super: false, // Cmd NOT pressed
+      leader: false,
+    }
+
+    // The keybind should NOT match because super is required but only meta was pressed
+    expect(Keybind.match(configuredKeybind, wrongKeyEvent)).toBe(false)
+  })
+
+  test("super+y keybind should match when super (Cmd) is pressed", () => {
+    const configuredKeybind = Keybind.parse("super+y")[0]
+
+    // Simulate a keyboard event where super (Cmd) is pressed
+    const correctKeyEvent: Keybind.Info = {
+      name: "y",
+      ctrl: false,
+      meta: false, // Option/Alt NOT pressed
+      shift: false,
+      super: true, // Cmd IS pressed
+      leader: false,
+    }
+
+    expect(Keybind.match(configuredKeybind, correctKeyEvent)).toBe(true)
+  })
+})
+
+describe("Keybind.toDisplay", () => {
+  // Note: These tests will behave differently based on the platform running them
+  // We test the structure rather than exact symbols
+
+  test("should display simple key", () => {
+    const info: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: false, name: "f" }
+    const result = Keybind.toDisplay(info)
+    expect(result).toContain("F")
+  })
+
+  test("should display super modifier with key name in uppercase", () => {
+    const info: Keybind.Info = { ctrl: false, meta: false, shift: false, super: true, leader: false, name: "y" }
+    const result = Keybind.toDisplay(info)
+    // On macOS: ⌘Y, on other platforms: Ctrl+Y
+    expect(result).toContain("Y")
+    if (process.platform === "darwin") {
+      expect(result).toContain("⌘")
+    } else {
+      expect(result).toContain("Ctrl")
+    }
+  })
+
+  test("should display super+shift modifier", () => {
+    const info: Keybind.Info = { ctrl: false, meta: false, shift: true, super: true, leader: false, name: "y" }
+    const result = Keybind.toDisplay(info)
+    expect(result).toContain("Y")
+    if (process.platform === "darwin") {
+      expect(result).toContain("⌘")
+      expect(result).toContain("⇧")
+    } else {
+      expect(result).toContain("Ctrl")
+      expect(result).toContain("Shift")
+    }
+  })
+
+  test("should display return key appropriately", () => {
+    const info: Keybind.Info = { ctrl: false, meta: false, shift: false, super: true, leader: false, name: "return" }
+    const result = Keybind.toDisplay(info)
+    if (process.platform === "darwin") {
+      expect(result).toContain("↵")
+    } else {
+      expect(result).toContain("Enter")
+    }
+  })
+
+  test("should display escape key as Esc", () => {
+    const info: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: false, name: "escape" }
+    const result = Keybind.toDisplay(info)
+    expect(result).toContain("Esc")
+  })
+
+  test("should display ctrl modifier separately from super on macOS", () => {
+    const info: Keybind.Info = { ctrl: true, meta: false, shift: false, super: false, leader: false, name: "c" }
+    const result = Keybind.toDisplay(info)
+    if (process.platform === "darwin") {
+      expect(result).toContain("⌃")
+    } else {
+      expect(result).toContain("Ctrl")
+    }
+  })
+
+  test("should display meta/alt modifier", () => {
+    const info: Keybind.Info = { ctrl: false, meta: true, shift: false, leader: false, name: "x" }
+    const result = Keybind.toDisplay(info)
+    if (process.platform === "darwin") {
+      expect(result).toContain("⌥")
+    } else {
+      expect(result).toContain("Alt")
+    }
+  })
 })

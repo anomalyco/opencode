@@ -95,6 +95,17 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         const result = Keybind.toString(first)
         return result.replace("<leader>", Keybind.toString(keybinds().leader![0]!))
       },
+      /**
+       * Returns a user-friendly display string for a keybind with platform-specific symbols.
+       * On macOS: ⌘ for Cmd, ⌃ for Ctrl, ⌥ for Option, ⇧ for Shift
+       * On other platforms: Ctrl, Alt, Shift
+       */
+      display(key: keyof KeybindsConfig) {
+        const first = keybinds()[key]?.at(0)
+        if (!first) return ""
+        const result = Keybind.toDisplay(first)
+        return result.replace("<leader>", Keybind.toDisplay(keybinds().leader![0]!))
+      },
     }
     return result
   },
