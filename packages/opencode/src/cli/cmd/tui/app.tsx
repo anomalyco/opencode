@@ -37,6 +37,8 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import fs from "fs"
+import path from "path"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -258,6 +260,29 @@ function App() {
           type: "session",
           sessionID: args.sessionID,
         })
+      } else {
+        // Gestaltist Feature: Auto-resume from .opencode-session in current directory
+        // This connects the somatic location (directory) to the temporal flow (session)
+        try {
+          const sessionFile = path.join(process.cwd(), ".opencode-session")
+          if (fs.existsSync(sessionFile)) {
+            const savedID = fs.readFileSync(sessionFile, "utf-8").trim()
+            if (savedID) {
+              route.navigate({
+                type: "session",
+                sessionID: savedID,
+              })
+              // Show toast to confirm somatic connection
+              toast.show({
+                message: "Resuming lab session",
+                variant: "info",
+                duration: 2000,
+              })
+            }
+          }
+        } catch (e) {
+          // Squelch errors - silence is valid
+        }
       }
     })
   })
@@ -266,6 +291,9 @@ function App() {
   createEffect(() => {
     // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
     if (continued || sync.status === "loading" || !args.continue) return
+    // Don't override if we already have a session (e.g. from .opencode-session)
+    if (route.data.type === "session") return
+    
     const match = sync.data.session
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .find((x) => x.parentID === undefined)?.id

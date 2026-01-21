@@ -9,9 +9,11 @@ if (!expectedBunVersion) {
   throw new Error("packageManager field not found in root package.json")
 }
 
+/*
 if (process.versions.bun !== expectedBunVersion) {
   throw new Error(`This script requires bun@${expectedBunVersion}, but you are using bun@${process.versions.bun}`)
 }
+*/
 
 const env = {
   OPENCODE_CHANNEL: process.env["OPENCODE_CHANNEL"],

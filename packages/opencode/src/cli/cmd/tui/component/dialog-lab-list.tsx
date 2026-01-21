@@ -5,6 +5,8 @@ import { useSync } from "@tui/context/sync"
 import { createMemo, createSignal, onMount } from "solid-js"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
+import fs from "fs"
+import path from "path"
 
 import { useToast } from "../ui/toast"
 
@@ -50,6 +52,13 @@ export const LABS: Lab[] = [
     color: "accent",
   },
 ]
+
+const LAB_PATHS: Record<string, string> = {
+  "bootstrap": "/home/bryan/projects/core/sisyphean-works/bootstrap",
+  "the-study-lab": "/home/bryan/projects/core/sisyphean-works/the-study-lab",
+  "the-teach-lab": "/home/bryan/projects/core/sisyphean-works/the-teach-lab",
+  "the-govern-lab": "/home/bryan/projects/core/sisyphean-works/the-govern-lab",
+}
 
 /**
  * Find an existing session for a lab by matching title
@@ -143,8 +152,24 @@ export function DialogLabList() {
     const lab = option._lab
     const existingSession = option._session
 
+    // Gestaltist Feature: Persist session ID to lab directory
+    const persistSession = (id: string) => {
+      const labPath = LAB_PATHS[lab.id]
+      if (labPath) {
+        try {
+          const sessionFile = path.join(labPath, ".opencode-session")
+          if (fs.existsSync(labPath)) {
+             fs.writeFileSync(sessionFile, id)
+          }
+        } catch (e) {
+          console.error("Failed to persist session ID:", e)
+        }
+      }
+    }
+
     if (existingSession) {
       // Navigate to existing session
+      persistSession(existingSession.id)
       route.navigate({
         type: "session",
         sessionID: existingSession.id,
@@ -163,6 +188,7 @@ export function DialogLabList() {
           title: `${lab.icon} ${lab.name}`,
         })
         if (result.data) {
+          persistSession(result.data.id)
           route.navigate({
             type: "session",
             sessionID: result.data.id,
