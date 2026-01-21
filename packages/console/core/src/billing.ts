@@ -218,6 +218,7 @@ export namespace Billing {
               customer: customer.customerID,
               customer_update: {
                 name: "auto",
+                address: "auto",
               },
             }
           : {

@@ -1,6 +1,7 @@
 import type { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
 import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
 import { useSDK } from "@/context/sdk"
+import { monoFontFamily, useSettings } from "@/context/settings"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
 import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
@@ -36,6 +37,7 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
 
 export const Terminal = (props: TerminalProps) => {
   const sdk = useSDK()
+  const settings = useSettings()
   const theme = useTheme()
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnectError"])
@@ -82,6 +84,14 @@ export const Terminal = (props: TerminalProps) => {
     setOption("theme", colors)
   })
 
+  createEffect(() => {
+    const font = monoFontFamily(settings.appearance.font())
+    if (!term) return
+    const setOption = (term as unknown as { setOption?: (key: string, value: string) => void }).setOption
+    if (!setOption) return
+    setOption("fontFamily", font)
+  })
+
   const focusTerminal = () => {
     const t = term
     if (!t) return
@@ -112,7 +122,7 @@ export const Terminal = (props: TerminalProps) => {
       cursorBlink: true,
       cursorStyle: "bar",
       fontSize: 14,
-      fontFamily: "IBM Plex Mono, monospace",
+      fontFamily: monoFontFamily(settings.appearance.font()),
       allowTransparency: true,
       theme: terminalColors(),
       scrollback: 10_000,
@@ -231,7 +241,6 @@ export const Terminal = (props: TerminalProps) => {
     // console.log("Scroll position:", ydisp)
     // })
     socket.addEventListener("open", () => {
-      console.log("WebSocket connected")
       sdk.client.pty
         .update({
           ptyID: local.pty.id,
@@ -247,10 +256,14 @@ export const Terminal = (props: TerminalProps) => {
     })
     socket.addEventListener("error", (error) => {
       console.error("WebSocket error:", error)
-      props.onConnectError?.(error)
+      local.onConnectError?.(error)
     })
-    socket.addEventListener("close", () => {
-      console.log("WebSocket disconnected")
+    socket.addEventListener("close", (event) => {
+      // Normal closure (code 1000) means PTY process exited - server event handles cleanup
+      // For other codes (network issues, server restart), trigger error handler
+      if (event.code !== 1000) {
+        local.onConnectError?.(new Error(`WebSocket closed abnormally: ${event.code}`))
+      }
     })
   })
 
@@ -283,6 +296,7 @@ export const Terminal = (props: TerminalProps) => {
       ref={container}
       data-component="terminal"
       data-prevent-autofocus
+      tabIndex={-1}
       style={{ "background-color": terminalColors().background }}
       classList={{
         ...(local.classList ?? {}),
