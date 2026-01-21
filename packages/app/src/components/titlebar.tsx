@@ -89,12 +89,24 @@ export function Titlebar() {
         <Show when={mac()}>
           <div class="w-[72px] h-full shrink-0" data-tauri-drag-region />
           <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">
-            <IconButton icon="menu" variant="ghost" class="size-8 rounded-md" onClick={layout.mobileSidebar.toggle} aria-label="Toggle menu" />
+            <IconButton
+              icon="menu"
+              variant="ghost"
+              class="size-8 rounded-md"
+              onClick={layout.mobileSidebar.toggle}
+              aria-label="Toggle menu"
+            />
           </div>
         </Show>
         <Show when={!mac()}>
           <div class="xl:hidden w-[48px] shrink-0 flex items-center justify-center">
-            <IconButton icon="menu" variant="ghost" class="size-8 rounded-md" onClick={layout.mobileSidebar.toggle} aria-label="Toggle menu" />
+            <IconButton
+              icon="menu"
+              variant="ghost"
+              class="size-8 rounded-md"
+              onClick={layout.mobileSidebar.toggle}
+              aria-label="Toggle menu"
+            />
           </div>
         </Show>
         <TooltipKeybind

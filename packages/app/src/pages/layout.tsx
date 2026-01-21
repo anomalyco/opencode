@@ -1573,7 +1573,12 @@ export default function Layout(props: ParentProps) {
             keybind={command.keybind("session.archive")}
             gutter={8}
           >
-            <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} aria-label="Archive session" />
+            <IconButton
+              icon="archive"
+              variant="ghost"
+              onClick={() => archiveSession(props.session)}
+              aria-label="Archive session"
+            />
           </TooltipKeybind>
         </div>
       </div>
@@ -1749,7 +1754,13 @@ export default function Layout(props: ParentProps) {
                 >
                   <DropdownMenu open={menuOpen()} onOpenChange={setMenuOpen}>
                     <Tooltip value={language.t("common.moreOptions")} placement="top">
-                      <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="ghost" class="size-6 rounded-md" aria-label="More options" />
+                      <DropdownMenu.Trigger
+                        as={IconButton}
+                        icon="dot-grid"
+                        variant="ghost"
+                        class="size-6 rounded-md"
+                        aria-label="More options"
+                      />
                     </Tooltip>
                     <DropdownMenu.Portal>
                       <DropdownMenu.Content
@@ -2106,7 +2117,13 @@ export default function Layout(props: ParentProps) {
                     </div>
                   }
                 >
-                  <IconButton icon="plus" variant="ghost" size="large" onClick={chooseProject} aria-label="Open project" />
+                  <IconButton
+                    icon="plus"
+                    variant="ghost"
+                    size="large"
+                    onClick={chooseProject}
+                    aria-label="Open project"
+                  />
                 </Tooltip>
               </div>
               <DragOverlay>
@@ -2120,7 +2137,13 @@ export default function Layout(props: ParentProps) {
               title={language.t("sidebar.settings")}
               keybind={command.keybind("settings.open")}
             >
-              <IconButton icon="settings-gear" variant="ghost" size="large" onClick={openSettings} aria-label="Settings" />
+              <IconButton
+                icon="settings-gear"
+                variant="ghost"
+                size="large"
+                onClick={openSettings}
+                aria-label="Settings"
+              />
             </TooltipKeybind>
             <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value={language.t("sidebar.help")}>
               <IconButton
