@@ -17,6 +17,7 @@ export const dict = {
   "command.category.mcp": "MCP",
   "command.category.agent": "智能体",
   "command.category.permissions": "权限",
+  "command.category.workspace": "工作区",
 
   "theme.scheme.system": "系统",
   "theme.scheme.light": "浅色",
@@ -267,6 +268,12 @@ export const dict = {
 
   "language.en": "英语",
   "language.zh": "中文",
+  "language.ko": "韩语",
+  "language.de": "德语",
+  "language.es": "西班牙语",
+  "language.fr": "法语",
+  "language.ja": "日语",
+  "language.da": "丹麦语",
 
   "toast.language.title": "语言",
   "toast.language.description": "已切换到{{language}}",

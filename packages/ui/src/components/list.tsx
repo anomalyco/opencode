@@ -24,6 +24,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
   activeIcon?: IconProps["name"]
   filter?: string
   search?: ListSearchProps | boolean
+  itemWrapper?: (item: T, node: JSX.Element) => JSX.Element
 }
 
 export interface ListRef {
@@ -245,39 +246,43 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                 </Show>
                 <div data-slot="list-items">
                   <For each={group.items}>
-                    {(item, i) => (
-                      <button
-                        data-slot="list-item"
-                        data-key={props.key(item)}
-                        data-active={props.key(item) === active()}
-                        data-selected={item === props.current}
-                        onClick={() => handleSelect(item, i())}
-                        type="button"
-                        onMouseMove={(event) => {
-                          if (!moved(event)) return
-                          setStore("mouseActive", true)
-                          setActive(props.key(item))
-                        }}
-                        onMouseLeave={() => {
-                          if (!store.mouseActive) return
-                          setActive(null)
-                        }}
-                      >
-                        {props.children(item)}
-                        <Show when={item === props.current}>
-                          <span data-slot="list-item-selected-icon">
-                            <Icon name="check-small" />
-                          </span>
-                        </Show>
-                        <Show when={props.activeIcon}>
-                          {(icon) => (
-                            <span data-slot="list-item-active-icon">
-                              <Icon name={icon()} />
+                    {(item, i) => {
+                      const node = (
+                        <button
+                          data-slot="list-item"
+                          data-key={props.key(item)}
+                          data-active={props.key(item) === active()}
+                          data-selected={item === props.current}
+                          onClick={() => handleSelect(item, i())}
+                          type="button"
+                          onMouseMove={(event) => {
+                            if (!moved(event)) return
+                            setStore("mouseActive", true)
+                            setActive(props.key(item))
+                          }}
+                          onMouseLeave={() => {
+                            if (!store.mouseActive) return
+                            setActive(null)
+                          }}
+                        >
+                          {props.children(item)}
+                          <Show when={item === props.current}>
+                            <span data-slot="list-item-selected-icon">
+                              <Icon name="check-small" />
                             </span>
-                          )}
-                        </Show>
-                      </button>
-                    )}
+                          </Show>
+                          <Show when={props.activeIcon}>
+                            {(icon) => (
+                              <span data-slot="list-item-active-icon">
+                                <Icon name={icon()} />
+                              </span>
+                            )}
+                          </Show>
+                        </button>
+                      )
+                      if (props.itemWrapper) return props.itemWrapper(item, node)
+                      return node
+                    }}
                   </For>
                 </div>
               </div>
