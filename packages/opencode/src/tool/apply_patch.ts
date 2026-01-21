@@ -13,6 +13,7 @@ import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
+import { FileTime } from "../file/time"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -219,10 +220,13 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           break
       }
 
-      if (edited) {
-        await Bus.publish(File.Event.Edited, {
-          file: edited,
-        })
+      // Update file time tracking for files that still exist
+      if (change.type === "delete") {
+        // Don't track deleted files
+      } else if (change.type === "move" && change.movePath) {
+        await FileTime.read(ctx.sessionID, change.movePath)
+      } else {
+        await FileTime.read(ctx.sessionID, change.filePath)
       }
     }
 

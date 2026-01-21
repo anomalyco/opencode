@@ -8,7 +8,9 @@ import { afterAll } from "bun:test"
 
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
-afterAll(() => {
+afterAll(async () => {
+  // Allow file handles to release (LSP servers, file watchers, etc.)
+  await new Promise((resolve) => setTimeout(resolve, 25))
   fsSync.rmSync(dir, { recursive: true, force: true })
 })
 // Set test home directory to isolate tests from user's actual home directory

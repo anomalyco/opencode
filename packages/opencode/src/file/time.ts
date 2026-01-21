@@ -21,11 +21,12 @@ export namespace FileTime {
     }
   })
 
-  export function read(sessionID: string, file: string) {
+  export async function read(sessionID: string, file: string) {
     log.info("read", { sessionID, file })
     const { read } = state()
     read[sessionID] = read[sessionID] || {}
-    read[sessionID][file] = new Date()
+    const stats = await Bun.file(file).stat()
+    read[sessionID][file] = stats.mtime
   }
 
   export function get(sessionID: string, file: string) {
