@@ -25,7 +25,9 @@ async function resolveRelativeInstruction(instruction: string): Promise<string[]
     return Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
   }
   if (!Flag.OPENCODE_CONFIG_DIR) {
-    log.warn(`Skipping relative instruction "${instruction}" - no OPENCODE_CONFIG_DIR set while project config is disabled`)
+    log.warn(
+      `Skipping relative instruction "${instruction}" - no OPENCODE_CONFIG_DIR set while project config is disabled`,
+    )
     return []
   }
   return Filesystem.globUp(instruction, Flag.OPENCODE_CONFIG_DIR, Flag.OPENCODE_CONFIG_DIR).catch(() => [])

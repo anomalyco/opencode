@@ -1417,7 +1417,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   test("skips project config files when flag is set", async () => {
     const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
     process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
-    
+
     try {
       await using tmp = await tmpdir({
         init: async (dir) => {
@@ -1453,17 +1453,14 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   test("skips project .opencode/ directories when flag is set", async () => {
     const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
     process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
-    
+
     try {
       await using tmp = await tmpdir({
         init: async (dir) => {
           // Create a .opencode directory with a command
           const opencodeDir = path.join(dir, ".opencode", "command")
           await fs.mkdir(opencodeDir, { recursive: true })
-          await Bun.write(
-            path.join(opencodeDir, "test-cmd.md"),
-            "# Test Command\nThis is a test command.",
-          )
+          await Bun.write(path.join(opencodeDir, "test-cmd.md"), "# Test Command\nThis is a test command.")
         },
       })
       await Instance.provide({
@@ -1471,7 +1468,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
         fn: async () => {
           const directories = await Config.directories()
           // Project .opencode should NOT be in directories list
-          const hasProjectOpencode = directories.some(d => d.startsWith(tmp.path))
+          const hasProjectOpencode = directories.some((d) => d.startsWith(tmp.path))
           expect(hasProjectOpencode).toBe(false)
         },
       })
@@ -1487,7 +1484,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   test("still loads global config when flag is set", async () => {
     const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
     process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
-    
+
     try {
       await using tmp = await tmpdir()
       await Instance.provide({
@@ -1511,12 +1508,12 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   test("skips relative instructions with warning when flag is set but no config dir", async () => {
     const originalDisable = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
     const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
-    
+
     try {
       // Ensure no config dir is set
       delete process.env["OPENCODE_CONFIG_DIR"]
       process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
-      
+
       await using tmp = await tmpdir({
         init: async (dir) => {
           // Create a config with relative instruction path
@@ -1531,7 +1528,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
           await Bun.write(path.join(dir, "CUSTOM.md"), "# Custom Instructions")
         },
       })
-      
+
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
@@ -1561,7 +1558,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   test("OPENCODE_CONFIG_DIR still works when flag is set", async () => {
     const originalDisable = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
     const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
-    
+
     try {
       await using configDirTmp = await tmpdir({
         init: async (dir) => {
@@ -1575,7 +1572,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
           )
         },
       })
-      
+
       await using projectTmp = await tmpdir({
         init: async (dir) => {
           // Create config in project (should be ignored)
@@ -1588,10 +1585,10 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
           )
         },
       })
-      
+
       process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
       process.env["OPENCODE_CONFIG_DIR"] = configDirTmp.path
-      
+
       await Instance.provide({
         directory: projectTmp.path,
         fn: async () => {
