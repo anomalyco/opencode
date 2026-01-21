@@ -16,7 +16,9 @@ import {
   type PermissionOption,
   type PlanEntry,
   type PromptRequest,
-type Role,
+  type ResumeSessionRequest,
+  type ResumeSessionResponse,
+  type Role,
   type SessionInfo,
   type SetSessionModelRequest,
   type SetSessionModeRequest,
@@ -438,6 +440,7 @@ export namespace ACP {
           sessionCapabilities: {
             fork: {},
             list: {},
+            resume: {},
           },
         },
         authMethods: [authMethod],
@@ -551,26 +554,33 @@ export namespace ACP {
 
     async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
       try {
-        const input = params.cwd ? { directory: params.cwd } : undefined
-        const sessions = await this.sdk.session
-          .list(input, { throwOnError: true })
-          .then((x) => x.data ?? [])
         const cursor = params.cursor ? Number(params.cursor) : undefined
-        const ordered = sessions.toSorted((left, right) => right.time.updated - left.time.updated)
-        const filtered =
-          cursor !== undefined && Number.isFinite(cursor)
-            ? ordered.filter((session) => session.time.updated < cursor)
-            : ordered
         const limit = 100
+
+        const sessions = await this.sdk.session
+          .list(
+            {
+              directory: params.cwd ?? undefined,
+              roots: true,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data ?? [])
+
+        const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
+        const filtered = cursor ? sorted.filter((s) => s.time.updated < cursor) : sorted
         const page = filtered.slice(0, limit)
+
         const entries: SessionInfo[] = page.map((session) => ({
           sessionId: session.id,
           cwd: session.directory,
           title: session.title,
           updatedAt: new Date(session.time.updated).toISOString(),
         }))
+
         const last = page[page.length - 1]
         const next = filtered.length > limit && last ? String(last.time.updated) : undefined
+
         const response: ListSessionsResponse = {
           sessions: entries,
         }
@@ -609,7 +619,7 @@ export namespace ACP {
         }
 
         const sessionId = forked.id
-        const state = await this.sessionManager.load(sessionId, directory, mcpServers, model)
+        await this.sessionManager.load(sessionId, directory, mcpServers, model)
 
         log.info("fork_session", { sessionId, mcpServers: mcpServers.length })
 
@@ -619,9 +629,6 @@ export namespace ACP {
           sessionId,
         })
 
-        this.setupEventSubscriptions(state)
-
-        // Replay forked session history
         const messages = await this.sdk.session
           .messages(
             {
@@ -642,6 +649,33 @@ export namespace ACP {
         }
 
         return mode
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    async unstable_resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+      const directory = params.cwd
+      const sessionId = params.sessionId
+      const mcpServers = params.mcpServers ?? []
+
+      try {
+        const model = await defaultModel(this.config, directory)
+        await this.sessionManager.load(sessionId, directory, mcpServers, model)
+
+        log.info("resume_session", { sessionId, mcpServers: mcpServers.length })
+
+        return this.loadSessionMode({
+          cwd: directory,
+          mcpServers,
+          sessionId,
+        })
       } catch (e) {
         const error = MessageV2.fromError(e, {
           providerID: this.config.defaultModel?.providerID ?? "unknown",
