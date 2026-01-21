@@ -62,7 +62,7 @@ function ToastActions(props: ComponentProps<"div">) {
 }
 
 function ToastCloseButton(props: ToastCloseButtonProps & ComponentProps<"button">) {
-  return <Kobalte.CloseButton data-slot="toast-close-button" as={IconButton} icon="close" variant="ghost" {...props} />
+  return <Kobalte.CloseButton data-slot="toast-close-button" as={IconButton} icon="close" variant="ghost" aria-label="Dismiss" {...props} />
 }
 
 function ToastProgressTrack(props: ComponentProps<typeof Kobalte.ProgressTrack>) {
