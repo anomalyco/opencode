@@ -9,7 +9,7 @@ import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import type { BunWebSocketData } from "hono/bun"
-import { getAuthorizationHeader } from "./auth"
+import { getAuthorizationHeader } from "../../../flag/auth"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),

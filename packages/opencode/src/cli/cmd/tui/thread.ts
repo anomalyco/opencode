@@ -12,7 +12,7 @@ import { Filesystem } from "@/util/filesystem"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
-import { getAuthorizationHeader } from "./auth"
+import { getAuthorizationHeader } from "@/flag/auth"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
