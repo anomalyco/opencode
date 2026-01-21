@@ -425,9 +425,7 @@ export const SettingsKeybinds: Component = () => {
 
         <Show when={filter() && !hasResults()}>
           <div class="flex flex-col items-center justify-center py-12 text-center">
-            <span class="text-14-regular text-text-weak">
-              {language.t("settings.shortcuts.search.empty")}
-            </span>
+            <span class="text-14-regular text-text-weak">{language.t("settings.shortcuts.search.empty")}</span>
             <Show when={filter()}>
               <span class="text-14-regular text-text-strong mt-1">"{filter()}"</span>
             </Show>
