@@ -64,6 +64,13 @@ export const ReadTool = Tool.define("read", {
       file.type.startsWith("image/") && file.type !== "image/svg+xml" && file.type !== "image/vnd.fastbidsheet"
     const isPdf = file.type === "application/pdf"
     if (isImage || isPdf) {
+      const isValid = await isValidFile(filepath, file, file.type)
+      if (!isValid) {
+        const fileType = isPdf ? "PDF" : "image"
+        throw new Error(
+          `Invalid ${fileType} file: ${filepath}\n\nThe file has a ${file.type} extension but does not contain valid ${fileType} data. This usually happens when a non-${fileType} file is saved with a ${fileType} extension.`,
+        )
+      }
       const mime = file.type
       const msg = `${isImage ? "Image" : "PDF"} read successfully`
       return {
@@ -143,6 +150,71 @@ export const ReadTool = Tool.define("read", {
     }
   },
 })
+
+async function isValidFile(filepath: string, file: Bun.BunFile, detectedMime: string): Promise<boolean> {
+  // Read the first 12 bytes to check magic numbers
+  const buffer = await file.slice(0, 12).arrayBuffer()
+  if (buffer.byteLength === 0) return false
+
+  const bytes = new Uint8Array(buffer)
+
+  // Check magic bytes for common image formats
+  // PNG: 89 50 4E 47 0D 0A 1A 0A (full 8-byte signature)
+  if (detectedMime === "image/png") {
+    return (
+      bytes.length >= 8 &&
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47 &&
+      bytes[4] === 0x0d &&
+      bytes[5] === 0x0a &&
+      bytes[6] === 0x1a &&
+      bytes[7] === 0x0a
+    )
+  }
+
+  // JPEG: FF D8 FF (start marker, typically followed by FF E0 or FF E1)
+  if (detectedMime === "image/jpeg") {
+    return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+  }
+
+  // GIF: GIF87a or GIF89a (47 49 46 38 37/39 61)
+  if (detectedMime === "image/gif") {
+    if (bytes.length >= 6) {
+      const isGif87 =
+        bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38 && bytes[4] === 0x37 && bytes[5] === 0x61
+      const isGif89 =
+        bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38 && bytes[4] === 0x39 && bytes[5] === 0x61
+      return isGif87 || isGif89
+    }
+    // Fallback: at least check for "GIF" prefix
+    return bytes.length >= 3 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46
+  }
+
+  // WebP: RIFF ... WEBP
+  if (detectedMime === "image/webp") {
+    return (
+      bytes.length >= 12 &&
+      bytes[0] === 0x52 &&
+      bytes[1] === 0x49 &&
+      bytes[2] === 0x46 &&
+      bytes[3] === 0x46 &&
+      bytes[8] === 0x57 &&
+      bytes[9] === 0x45 &&
+      bytes[10] === 0x42 &&
+      bytes[11] === 0x50
+    )
+  }
+
+  // PDF: 25 50 44 46 (% P D F), typically followed by version or dash
+  if (detectedMime === "application/pdf") {
+    return bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46
+  }
+
+  // If we expect an image/PDF but couldn't verify magic bytes, it's likely not valid
+  return false
+}
 
 async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolean> {
   const ext = path.extname(filepath).toLowerCase()

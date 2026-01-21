@@ -329,4 +329,78 @@ root_type Monster;`
       },
     })
   })
+
+  test("detects and rejects invalid image files (text saved with image extension)", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // Create a text file with .jpeg extension
+        await Bun.write(path.join(dir, "fake-image.jpeg"), "hello world, this is not an image")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const error = await read.execute({ filePath: path.join(tmp.path, "fake-image.jpeg") }, ctx).catch((e) => e)
+        expect(error).toBeInstanceOf(Error)
+        expect(error.message).toContain("Invalid image file")
+        expect(error.message).toContain("does not contain valid image data")
+      },
+    })
+  })
+
+  test("detects and rejects invalid PNG files", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // Create a file with .png extension but PNG header
+        await Bun.write(path.join(dir, "fake-png.png"), "This is not a valid PNG file")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const error = await read.execute({ filePath: path.join(tmp.path, "fake-png.png") }, ctx).catch((e) => e)
+        expect(error).toBeInstanceOf(Error)
+        expect(error.message).toContain("Invalid image file")
+      },
+    })
+  })
+
+  test("detects and rejects invalid GIF files", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // Create a file with .gif extension but not a valid GIF
+        await Bun.write(path.join(dir, "fake-gif.gif"), "Not a GIF file at all")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const error = await read.execute({ filePath: path.join(tmp.path, "fake-gif.gif") }, ctx).catch((e) => e)
+        expect(error).toBeInstanceOf(Error)
+        expect(error.message).toContain("Invalid image file")
+      },
+    })
+  })
+
+  test("detects and rejects invalid PDF files", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // Create a file with .pdf extension but not valid PDF
+        await Bun.write(path.join(dir, "fake-pdf.pdf"), "This is not a PDF document")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const error = await read.execute({ filePath: path.join(tmp.path, "fake-pdf.pdf") }, ctx).catch((e) => e)
+        expect(error).toBeInstanceOf(Error)
+        expect(error.message).toContain("Invalid PDF file")
+        expect(error.message).toContain("does not contain valid PDF data")
+      },
+    })
+  })
 })
