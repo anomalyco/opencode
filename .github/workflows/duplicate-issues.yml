@@ -115,13 +115,10 @@ jobs:
           3. Related functionality or components
           4. Similar feature requests
 
-          STEP 3: Check for external dependencies
-          If the issue contains images/screenshots, check if they show errors from external sources like MCP servers, plugins, or 3rd-party tools (not OpenCode itself).
-
-          STEP 4: Provide a quick answer (if applicable)
+          STEP 3: Provide a quick answer (if applicable)
           If the issue is about OpenCode tooling, configuration, or usage, explore the repository codebase to find relevant code, config files, or documentation that could help answer the question. Provide a concise, helpful answer.
 
-          STEP 5: Decide whether to comment
+          STEP 4: Decide whether to comment
           ONLY comment if:
           - You found duplicates with >= 50% confidence, OR
           - You can provide a helpful answer about OpenCode tooling
@@ -140,16 +137,13 @@ jobs:
           ### Quick Answer
           [If you can answer the question about OpenCode tooling/config, provide a concise answer here. Reference specific files if helpful. Otherwise omit this section.]
 
-          ### External Dependencies
-          [If images show errors from MCP servers, plugins, or 3rd-party tools, note it here. Otherwise omit this section.]
-
           ---
           👎 **React with thumbs-down if this does not address your issue.**
           If no reaction is received within 6 hours, this issue will be automatically closed.
 
           _Feel free to reopen if your issue persists._'
 
-          STEP 6: Add label (only if duplicates >= 50%)
+          STEP 5: Add label (only if duplicates >= 50%)
           If you found duplicates with >= 50% confidence, add the label:
           gh issue edit ${{ github.event.issue.number }} --add-label potential-duplicate
 
