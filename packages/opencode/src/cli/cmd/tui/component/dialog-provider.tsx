@@ -28,7 +28,7 @@ export function createDialogProviderOptions() {
   const sdk = useSDK()
   const connected = createMemo(() => new Set(sync.data.provider_next.connected))
   const options = createMemo(() => {
-    return pipe(
+    const providerOptions = pipe(
       sync.data.provider_next.all,
       sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
       map((provider) => {
@@ -103,6 +103,20 @@ export function createDialogProviderOptions() {
         }
       }),
     )
+
+    // Add "Other" option for custom provider configuration
+    const otherOption = {
+      title: "Other",
+      value: "other",
+      description: "(Custom provider)",
+      category: "Other" as const,
+      footer: undefined,
+      async onSelect() {
+        dialog.replace(() => <OtherProviderMethod />)
+      },
+    }
+
+    return [...providerOptions, otherOption]
   })
   return options
 }
@@ -208,6 +222,77 @@ function CodeMethod(props: CodeMethodProps) {
           </Show>
         </box>
       )}
+    />
+  )
+}
+
+function OtherProviderMethod() {
+  const dialog = useDialog()
+  const { theme } = useTheme()
+  const [error, setError] = createSignal<string | null>(null)
+
+  return (
+    <DialogPrompt
+      title="Custom provider"
+      placeholder="Provider ID (e.g., my-provider)"
+      description={() => (
+        <box gap={1}>
+          <text fg={theme.textMuted}>Enter a unique ID for your custom provider.</text>
+          <text fg={theme.textMuted}>Use lowercase letters, numbers, and hyphens only.</text>
+          <Show when={error()}>
+            <text fg={theme.error}>{error()}</text>
+          </Show>
+        </box>
+      )}
+      onConfirm={(value) => {
+        if (!value) return
+        const trimmed = value.trim().replace(/^@ai-sdk\//, "")
+        if (!trimmed.match(/^[0-9a-z-]+$/)) {
+          setError("Use lowercase letters, numbers, and hyphens only")
+          return
+        }
+        dialog.replace(() => <CustomApiMethod providerID={trimmed} />)
+      }}
+    />
+  )
+}
+
+interface CustomApiMethodProps {
+  providerID: string
+}
+function CustomApiMethod(props: CustomApiMethodProps) {
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const sync = useSync()
+  const { theme } = useTheme()
+
+  return (
+    <DialogPrompt
+      title={`API key for ${props.providerID}`}
+      placeholder="API key"
+      description={() => (
+        <box gap={1}>
+          <text fg={theme.textMuted}>
+            This only stores a credential for {props.providerID}.
+          </text>
+          <text fg={theme.textMuted}>
+            You will need to configure it in opencode.json.
+          </text>
+        </box>
+      )}
+      onConfirm={async (value) => {
+        if (!value) return
+        await sdk.client.auth.set({
+          providerID: props.providerID,
+          auth: {
+            type: "api",
+            key: value,
+          },
+        })
+        await sdk.client.instance.dispose()
+        await sync.bootstrap()
+        dialog.clear()
+      }}
     />
   )
 }
