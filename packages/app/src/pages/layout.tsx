@@ -138,6 +138,8 @@ export default function Layout(props: ParentProps) {
   const isBusy = (directory: string) => busyWorkspaces().has(workspaceKey(directory))
   const editorRef = { current: undefined as HTMLInputElement | undefined }
 
+  const [hoverSession, setHoverSession] = createSignal<string | undefined>()
+
   const autoselecting = createMemo(() => {
     if (params.dir) return false
     if (initialDir) return false
@@ -1540,7 +1542,15 @@ export default function Layout(props: ParentProps) {
             </Tooltip>
           }
         >
-          <HoverCard openDelay={1000} closeDelay={0} placement="right-start" gutter={28} trigger={item}>
+          <HoverCard
+            openDelay={1000}
+            closeDelay={0}
+            placement="right"
+            gutter={28}
+            trigger={item}
+            open={hoverSession() === props.session.id}
+            onOpenChange={(open) => setHoverSession(open ? props.session.id : undefined)}
+          >
             <Show
               when={hoverReady()}
               fallback={<div class="text-12-regular text-text-weak">{language.t("session.messages.loading")}</div>}
@@ -1921,7 +1931,10 @@ export default function Layout(props: ParentProps) {
           placement="right-start"
           gutter={6}
           trigger={trigger}
-          onOpenChange={setOpen}
+          onOpenChange={(value) => {
+            setOpen(value)
+            if (value) setHoverSession(undefined)
+          }}
         >
           <div class="-m-3 p-2 flex flex-col w-72">
             <div class="px-4 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
