@@ -369,13 +369,18 @@ export namespace File {
     })
   }
 
-  export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
+  export async function search(input: {
+    query: string
+    directory?: string
+    limit?: number
+    dirs?: boolean
+    type?: "file" | "directory"
+  }) {
     const query = input.query.trim()
     const limit = input.limit ?? 100
     const kind = input.type ?? (input.dirs === false ? "file" : "all")
-    log.info("search", { query, kind })
-
-    const result = await state().then((x) => x.files())
+    const searchDir = input.directory
+    log.info("search", { query, kind, directory: searchDir })
 
     const hidden = (item: string) => {
       const normalized = item.replaceAll("\\", "/").replace(/\/+$/, "")
@@ -393,6 +398,48 @@ export namespace File {
       }
       return [...visible, ...hiddenItems]
     }
+
+    // If a custom directory is provided, scan it directly instead of using cached results
+    if (searchDir && searchDir !== Instance.directory) {
+      const dirs = new Set<string>()
+      const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
+      const shouldIgnore = (name: string) => name.startsWith(".") && !preferHidden
+      const shouldIgnoreNested = (name: string) => (name.startsWith(".") && !preferHidden) || ignoreNested.has(name)
+
+      try {
+        const top = await fs.promises.readdir(searchDir, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
+
+        for (const entry of top) {
+          if (!entry.isDirectory()) continue
+          if (shouldIgnore(entry.name)) continue
+          dirs.add(entry.name + "/")
+
+          // Scan one level deeper
+          const base = path.join(searchDir, entry.name)
+          const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
+          for (const child of children) {
+            if (!child.isDirectory()) continue
+            if (shouldIgnoreNested(child.name)) continue
+            dirs.add(entry.name + "/" + child.name + "/")
+          }
+        }
+
+        const items = Array.from(dirs)
+        if (!query) {
+          return sortHiddenLast(items.toSorted()).slice(0, limit)
+        }
+        const searchLimit = !preferHidden ? limit * 20 : limit
+        const sorted = fuzzysort.go(query, items, { limit: searchLimit }).map((r) => r.target)
+        return sortHiddenLast(sorted).slice(0, limit)
+      } catch (err) {
+        log.error("search directory scan failed", { directory: searchDir, error: err })
+        return []
+      }
+    }
+
+    // Use cached results for Instance.directory
+    const result = await state().then((x) => x.files())
+
     if (!query) {
       if (kind === "file") return result.files.slice(0, limit)
       return sortHiddenLast(result.dirs.toSorted()).slice(0, limit)

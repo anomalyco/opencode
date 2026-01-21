@@ -19,7 +19,17 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const dialog = useDialog()
 
   const home = createMemo(() => sync.data.path.home)
-  const root = createMemo(() => sync.data.path.home || sync.data.path.directory)
+
+  function isAbsolutePath(p: string) {
+    return p.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(p)
+  }
+
+  function getParentPath(p: string) {
+    const normalized = p.replace(/[\\/]+$/, "")
+    const lastSlash = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"))
+    if (lastSlash <= 0) return "/"
+    return normalized.slice(0, lastSlash)
+  }
 
   function join(base: string | undefined, rel: string) {
     const b = (base ?? "").replace(/[\\/]+$/, "")
@@ -29,36 +39,45 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return b + "/" + r
   }
 
-  function display(rel: string) {
-    const full = join(root(), rel)
+  function display(fullPath: string) {
     const h = home()
-    if (!h) return full
-    if (full === h) return "~"
-    if (full.startsWith(h + "/") || full.startsWith(h + "\\")) {
-      return "~" + full.slice(h.length)
+    if (!h) return fullPath
+    if (fullPath === h) return "~"
+    if (fullPath.startsWith(h + "/") || fullPath.startsWith(h + "\\")) {
+      return "~" + fullPath.slice(h.length)
     }
-    return full
+    return fullPath
   }
 
-  function normalizeQuery(query: string) {
+  async function fetchDirs(filter: string) {
+    const trimmed = filter.trim()
     const h = home()
 
-    if (!query) return query
-    if (query.startsWith("~/")) return query.slice(2)
+    // Determine search directory and query based on input
+    let directory: string
+    let query: string
 
-    if (h) {
-      const lc = query.toLowerCase()
-      const hc = h.toLowerCase()
-      if (lc === hc || lc.startsWith(hc + "/") || lc.startsWith(hc + "\\")) {
-        return query.slice(h.length).replace(/^[\\/]+/, "")
+    if (isAbsolutePath(trimmed)) {
+      // Check if path ends with / - user wants to see directory contents
+      if (trimmed.endsWith("/") || trimmed.endsWith("\\")) {
+        directory = trimmed.replace(/[\\/]+$/, "")
+        query = ""
+      } else {
+        // Absolute path without trailing slash: use parent directory, search for basename
+        directory = getParentPath(trimmed)
+        const basename = trimmed.slice(directory.length).replace(/^[\\/]+/, "")
+        query = basename
       }
+    } else if (trimmed.startsWith("~/")) {
+      // Home-relative path
+      directory = h || "/"
+      query = trimmed.slice(2)
+    } else {
+      // Relative query: search in home
+      directory = h || "/"
+      query = trimmed
     }
 
-    return query
-  }
-
-  async function fetchDirs(query: string) {
-    const directory = root()
     if (!directory) return [] as string[]
 
     const results = await sdk.client.find
@@ -66,24 +85,26 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
       .then((x) => x.data ?? [])
       .catch(() => [])
 
-    return results.map((x) => x.replace(/[\\/]+$/, ""))
+    // Results are relative to directory - convert to absolute paths
+    return results.map((x) => {
+      const rel = x.replace(/[\\/]+$/, "")
+      return join(directory, rel)
+    })
   }
 
   const directories = async (filter: string) => {
-    const query = normalizeQuery(filter.trim())
-    return fetchDirs(query)
+    return fetchDirs(filter)
   }
 
-  function resolve(rel: string) {
-    const absolute = join(root(), rel)
-    props.onSelect(props.multiple ? [absolute] : absolute)
+  function resolve(absolutePath: string) {
+    props.onSelect(props.multiple ? [absolutePath] : absolutePath)
     dialog.close()
   }
 
   return (
     <Dialog title={props.title ?? "Open project"}>
       <List
-        search={{ placeholder: "Search folders", autofocus: true }}
+        search={{ placeholder: "Search folders (use / for absolute paths)", autofocus: true }}
         emptyMessage="No folders found"
         items={directories}
         key={(x) => x}
@@ -92,17 +113,17 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
           resolve(path)
         }}
       >
-        {(rel) => {
-          const path = display(rel)
+        {(absolutePath) => {
+          const displayPath = display(absolutePath)
           return (
             <div class="w-full flex items-center justify-between rounded-md">
               <div class="flex items-center gap-x-3 grow min-w-0">
-                <FileIcon node={{ path: rel, type: "directory" }} class="shrink-0 size-4" />
+                <FileIcon node={{ path: absolutePath, type: "directory" }} class="shrink-0 size-4" />
                 <div class="flex items-center text-14-regular min-w-0">
                   <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                    {getDirectory(path)}
+                    {getDirectory(displayPath)}
                   </span>
-                  <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
+                  <span class="text-text-strong whitespace-nowrap">{getFilename(displayPath)}</span>
                 </div>
               </div>
             </div>

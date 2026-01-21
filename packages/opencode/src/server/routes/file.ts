@@ -62,7 +62,8 @@ export const FileRoutes = lazy(() =>
       validator(
         "query",
         z.object({
-          query: z.string(),
+          query: z.string().optional().default(""),
+          directory: z.string().optional(),
           dirs: z.enum(["true", "false"]).optional(),
           type: z.enum(["file", "directory"]).optional(),
           limit: z.coerce.number().int().min(1).max(200).optional(),
@@ -70,11 +71,13 @@ export const FileRoutes = lazy(() =>
       ),
       async (c) => {
         const query = c.req.valid("query").query
+        const directory = c.req.valid("query").directory
         const dirs = c.req.valid("query").dirs
         const type = c.req.valid("query").type
         const limit = c.req.valid("query").limit
         const results = await File.search({
           query,
+          directory,
           limit: limit ?? 10,
           dirs: dirs !== "false",
           type,
