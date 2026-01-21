@@ -229,11 +229,36 @@ To use Amazon Bedrock with OpenCode:
    /models
    ```
 
+:::note
+For custom inference profiles, use the model and provider name in the key and set the `id` property to the arn. This ensures correct caching:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      // ...
+      "models": {
+        "anthropic-claude-sonnet-4.5": {
+          "id": "arn:aws:bedrock:us-east-1:xxx:application-inference-profile/yyy"
+        }
+      }
+    }
+  }
+}
+```
+
+:::
+
 ---
 
 ### Anthropic
 
 We recommend signing up for [Claude Pro](https://www.anthropic.com/news/claude-pro) or [Max](https://www.anthropic.com/max).
+
+:::info
+We've received reports of some users having their subscriptions blocked while using it with OpenCode.
+:::
 
 1. Once you've signed up, run the `/connect` command and select Anthropic.
 
