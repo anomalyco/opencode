@@ -3,8 +3,7 @@
   "name": "@opencode-ai/script",
   "license": "MIT",
   "devDependencies": {
-    "@types/bun": "catalog:",
-    "@types/semver": "catalog:"
+    "@types/bun": "catalog:"
   },
   "exports": {
     ".": "./src/index.ts"

@@ -1,6 +1,5 @@
-import { $ } from "bun"
+import { $, semver } from "bun"
 import path from "path"
-import { satisfies } from "semver"
 
 const rootPkgPath = path.resolve(import.meta.dir, "../../../package.json")
 const rootPkg = await Bun.file(rootPkgPath).json()
@@ -13,7 +12,7 @@ if (!expectedBunVersion) {
 // relax version requirement
 const expectedBunVersionRange = `^${expectedBunVersion}`
 
-if (!satisfies(process.versions.bun, expectedBunVersionRange)) {
+if (!semver.satisfies(process.versions.bun, expectedBunVersionRange)) {
   throw new Error(`This script requires bun@${expectedBunVersionRange}, but you are using bun@${process.versions.bun}`)
 }
 

@@ -4,6 +4,7 @@ import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
 import { Button } from "@opencode-ai/ui/button"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tag } from "@opencode-ai/ui/tag"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
@@ -15,6 +16,7 @@ const ModelList: Component<{
   provider?: string
   class?: string
   onSelect: () => void
+  action?: JSX.Element
 }> = (props) => {
   const local = useLocal()
   const language = useLanguage()
@@ -29,7 +31,7 @@ const ModelList: Component<{
   return (
     <List
       class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${props.class ?? ""}`}
-      search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true }}
+      search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true, action: props.action }}
       emptyMessage={language.t("dialog.model.empty")}
       key={(x) => `${x.provider.id}:${x.id}`}
       items={models}
@@ -71,6 +73,12 @@ export const ModelSelectorPopover: Component<{
   children: JSX.Element
 }> = (props) => {
   const [open, setOpen] = createSignal(false)
+  const dialog = useDialog()
+
+  const handleManage = () => {
+    setOpen(false)
+    dialog.show(() => <DialogManageModels />)
+  }
   const language = useLanguage()
 
   return (
@@ -79,7 +87,22 @@ export const ModelSelectorPopover: Component<{
       <Kobalte.Portal>
         <Kobalte.Content class="w-72 h-80 flex flex-col rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden">
           <Kobalte.Title class="sr-only">{language.t("dialog.model.select.title")}</Kobalte.Title>
-          <ModelList provider={props.provider} onSelect={() => setOpen(false)} class="p-1" />
+          <ModelList
+            provider={props.provider}
+            onSelect={() => setOpen(false)}
+            class="p-1"
+            action={
+              <IconButton
+                icon="sliders"
+                variant="ghost"
+                iconSize="normal"
+                class="size-6"
+                aria-label="Manage models"
+                title="Manage models"
+                onClick={handleManage}
+              />
+            }
+          />
         </Kobalte.Content>
       </Kobalte.Portal>
     </Kobalte>
