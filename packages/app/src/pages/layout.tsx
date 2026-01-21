@@ -979,7 +979,7 @@ export default function Layout(props: ParentProps) {
     const current = displayName(project)
     if (next === current) return
     const name = next === getFilename(project.worktree) ? "" : next
-    await globalSDK.client.project.update({ projectID: project.id, name })
+    await globalSDK.client.project.update({ projectID: project.id, directory: project.worktree, name })
   }
 
   async function renameSession(session: Session, next: string) {
