@@ -1,28 +1,30 @@
-# Agent Guidelines for @opencode/app
+## Debugging
 
-## Build/Test Commands
+- NEVER try to restart the app, or the server process, EVER.
 
-- **Development**: `bun run dev` (starts Vite dev server on port 3000)
-- **Build**: `bun run build` (production build)
-- **Preview**: `bun run serve` (preview production build)
-- **Validation**: Use `bun run typecheck` only - do not build or run project for validation
-- **Testing**: Do not create or run automated tests
+## Local Dev
 
-## Code Style
+- `opencode dev web` proxies `https://app.opencode.ai`, so local UI/CSS changes will not show there.
+- For local UI changes, run the backend and app dev servers separately.
+- Backend (from `packages/opencode`): `bun run --conditions=browser ./src/index.ts serve --port 4096`
+- App (from `packages/app`): `bun dev -- --port 4444`
+- Open `http://localhost:4444` to verify UI changes (it targets the backend at `http://localhost:4096`).
 
-- **Framework**: SolidJS with TypeScript
-- **Imports**: Use `@/` alias for src/ directory (e.g., `import Button from "@/ui/button"`)
-- **Formatting**: Prettier configured with semicolons disabled, 120 character line width
-- **Components**: Use function declarations, splitProps for component props
-- **Types**: Define interfaces for component props, avoid `any` type
-- **CSS**: TailwindCSS with custom CSS variables theme system
-- **Naming**: PascalCase for components, camelCase for variables/functions, snake_case for file names
-- **File Structure**: UI primitives in `/ui/`, higher-level components in `/components/`, pages in `/pages/`, providers in `/providers/`
+## SolidJS
 
-## Key Dependencies
+- Always prefer `createStore` over multiple `createSignal` calls
 
-- SolidJS, @solidjs/router, @kobalte/core (UI primitives)
-- TailwindCSS 4.x with @tailwindcss/vite
-- Custom theme system with CSS variables
+## Tool Calling
 
-No special rules files found.
+- ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
+
+## Browser Automation
+
+Use `agent-browser` for web automation. Run `agent-browser --help` for all commands.
+
+Core workflow:
+
+1. `agent-browser open <url>` - Navigate to page
+2. `agent-browser snapshot -i` - Get interactive elements with refs (@e1, @e2)
+3. `agent-browser click @e1` / `fill @e2 "text"` - Interact using refs
+4. Re-snapshot after page changes

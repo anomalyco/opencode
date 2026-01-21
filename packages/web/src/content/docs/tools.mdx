@@ -5,86 +5,37 @@ description: Manage the tools an LLM can use.
 
 Tools allow the LLM to perform actions in your codebase. OpenCode comes with a set of built-in tools, but you can extend it with [custom tools](/docs/custom-tools) or [MCP servers](/docs/mcp-servers).
 
-By default, all tools are **enabled** and don't need permission to run. But you can configure this and control the [permissions](/docs/permissions) through your config.
+By default, all tools are **enabled** and don't need permission to run. You can control tool behavior through [permissions](/docs/permissions).
 
 ---
 
 ## Configure
 
-You can configure tools globally or per agent. Agent-specific configs override global settings.
-
-By default, all tools are set to `true`. To disable a tool, set it to `false`.
-
----
-
-### Global
-
-Disable or enable tools globally using the `tools` option.
+Use the `permission` field to control tool behavior. You can allow, deny, or require approval for each tool.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": false,
-    "bash": false,
-    "webfetch": true
+  "permission": {
+    "edit": "deny",
+    "bash": "ask",
+    "webfetch": "allow"
   }
 }
 ```
 
-You can also use wildcards to control multiple tools at once. For example, to disable all tools from an MCP server:
+You can also use wildcards to control multiple tools at once. For example, to require approval for all tools from an MCP server:
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "mymcp_*": false
+  "permission": {
+    "mymcp_*": "ask"
   }
 }
 ```
 
----
-
-### Per agent
-
-Override global tool settings for specific agents using the `tools` config in the agent definition.
-
-```json title="opencode.json" {3-6,9-12}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": true,
-    "bash": true
-  },
-  "agent": {
-    "plan": {
-      "tools": {
-        "write": false,
-        "bash": false
-      }
-    }
-  }
-}
-```
-
-For example, here the `plan` agent overrides the global config to disable `write` and `bash` tools.
-
-You can also configure tools for agents in Markdown.
-
-```markdown title="~/.config/opencode/agent/readonly.md"
----
-description: Read-only analysis agent
-mode: subagent
-tools:
-  write: false
-  edit: false
-  bash: false
----
-
-Analyze code without making any modifications.
-```
-
-[Learn more](/docs/agents#tools) about configuring tools per agent.
+[Learn more](/docs/permissions) about configuring permissions.
 
 ---
 
@@ -101,8 +52,8 @@ Execute shell commands in your project environment.
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "bash": true
+  "permission": {
+    "bash": "allow"
   }
 }
 ```
@@ -118,8 +69,8 @@ Modify existing files using exact string replacements.
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "edit": true
+  "permission": {
+    "edit": "allow"
   }
 }
 ```
@@ -135,13 +86,17 @@ Create new files or overwrite existing ones.
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "write": true
+  "permission": {
+    "edit": "allow"
   }
 }
 ```
 
 Use this to allow the LLM to create new files. It will overwrite existing files if they already exist.
+
+:::note
+The `write` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `patch`, `multiedit`).
+:::
 
 ---
 
@@ -152,8 +107,8 @@ Read file contents from your codebase.
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "read": true
+  "permission": {
+    "read": "allow"
   }
 }
 ```
@@ -169,8 +124,8 @@ Search file contents using regular expressions.
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "grep": true
+  "permission": {
+    "grep": "allow"
   }
 }
 ```
@@ -186,8 +141,8 @@ Find files by pattern matching.
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "glob": true
+  "permission": {
+    "glob": "allow"
   }
 }
 ```
@@ -203,8 +158,8 @@ List files and directories in a given path.
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "list": true
+  "permission": {
+    "list": "allow"
   }
 }
 ```
@@ -224,8 +179,8 @@ This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPEN
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "lsp": true
+  "permission": {
+    "lsp": "allow"
   }
 }
 ```
@@ -243,13 +198,17 @@ Apply patches to files.
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "patch": true
+  "permission": {
+    "edit": "allow"
   }
 }
 ```
 
 This tool applies patch files to your codebase. Useful for applying diffs and patches from various sources.
+
+:::note
+The `patch` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `patch`, `multiedit`).
+:::
 
 ---
 
@@ -260,13 +219,11 @@ Load a [skill](/docs/skills) (a `SKILL.md` file) and return its content in the c
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "skill": true
+  "permission": {
+    "skill": "allow"
   }
 }
 ```
-
-You can control approval prompts for loading skills via [permissions](/docs/permissions) using `permission.skill`.
 
 ---
 
@@ -277,8 +234,8 @@ Manage todo lists during coding sessions.
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "todowrite": true
+  "permission": {
+    "todowrite": "allow"
   }
 }
 ```
@@ -286,7 +243,7 @@ Manage todo lists during coding sessions.
 Creates and updates task lists to track progress during complex operations. The LLM uses this to organize multi-step tasks.
 
 :::note
-This tool is disabled for subagents by default, but you can enable it manually. [Learn more](/docs/agents/#tools)
+This tool is disabled for subagents by default, but you can enable it manually. [Learn more](/docs/agents/#permissions)
 :::
 
 ---
@@ -298,8 +255,8 @@ Read existing todo lists.
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "todoread": true
+  "permission": {
+    "todoread": "allow"
   }
 }
 ```
@@ -307,7 +264,7 @@ Read existing todo lists.
 Reads the current todo list state. Used by the LLM to track what tasks are pending or completed.
 
 :::note
-This tool is disabled for subagents by default, but you can enable it manually. [Learn more](/docs/agents/#tools)
+This tool is disabled for subagents by default, but you can enable it manually. [Learn more](/docs/agents/#permissions)
 :::
 
 ---
@@ -319,13 +276,37 @@ Fetch web content.
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "webfetch": true
+  "permission": {
+    "webfetch": "allow"
   }
 }
 ```
 
 Allows the LLM to fetch and read web pages. Useful for looking up documentation or researching online resources.
+
+---
+
+### question
+
+Ask the user questions during execution.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "question": "allow"
+  }
+}
+```
+
+This tool allows the LLM to ask the user questions during a task. It's useful for:
+
+- Gathering user preferences or requirements
+- Clarifying ambiguous instructions
+- Getting decisions on implementation choices
+- Offering choices about what direction to take
+
+Each question includes a header, the question text, and a list of options. Users can select from the provided options or type a custom answer. When there are multiple questions, users can navigate between them before submitting all answers.
 
 ---
 

@@ -129,9 +129,9 @@ export default function Download() {
                 </code>
                 <CopyStatus />
               </button>
-              <button data-component="cli-row" onClick={handleCopyClick("brew install opencode")}>
+              <button data-component="cli-row" onClick={handleCopyClick("brew install anomalyco/tap/opencode")}>
                 <code>
-                  brew install <strong>opencode</strong>
+                  brew install <strong>anomalyco/tap/opencode</strong>
                 </code>
                 <CopyStatus />
               </button>
@@ -244,7 +244,8 @@ export default function Download() {
                   Download
                 </a>
               </div>
-              <div data-component="download-row">
+              {/* Disabled temporarily as it doesn't work */}
+              {/*<div data-component="download-row">
                 <div data-component="download-info">
                   <span data-slot="icon">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -259,7 +260,7 @@ export default function Download() {
                 <a href={getDownloadHref("linux-x64-appimage")} data-component="action-button">
                   Download
                 </a>
-              </div>
+              </div>*/}
             </div>
           </section>
 
@@ -440,7 +441,8 @@ export default function Download() {
             </li>
             <li>
               <Faq question="Can I only use OpenCode in the terminal?">
-                Not anymore! OpenCode is now available as an app for your desktop.
+                Not anymore! OpenCode is now available as an app for your <a href="/download">desktop</a> and{" "}
+                <a href="/docs/cli/#web">web</a>!
               </Faq>
             </li>
             <li>

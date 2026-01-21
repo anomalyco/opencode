@@ -12,7 +12,7 @@ type Usage = {
   total_tokens?: number
 }
 
-export const openaiHelper = {
+export const openaiHelper: ProviderHelper = () => ({
   format: "openai",
   modifyUrl: (providerApi: string) => providerApi + "/responses",
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
@@ -21,6 +21,7 @@ export const openaiHelper = {
   modifyBody: (body: Record<string, any>) => {
     return body
   },
+  createBinaryStreamDecoder: () => undefined,
   streamSeparator: "\n\n",
   createUsageParser: () => {
     let usage: Usage
@@ -58,7 +59,7 @@ export const openaiHelper = {
       cacheWrite1hTokens: undefined,
     }
   },
-} satisfies ProviderHelper
+})
 
 export function fromOpenaiRequest(body: any): CommonRequest {
   if (!body || typeof body !== "object") return body

@@ -7,6 +7,7 @@
     "core:default",
     "opener:default",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-theme",
     "core:webview:allow-set-webview-zoom",
     "core:window:allow-is-focused",
     "core:window:allow-show",

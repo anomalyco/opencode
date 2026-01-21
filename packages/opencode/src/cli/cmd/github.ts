@@ -348,7 +348,7 @@ export const GithubInstallCommand = cmd({
               }
 
               retries++
-              await new Promise((resolve) => setTimeout(resolve, 1000))
+              await Bun.sleep(1000)
             } while (true)
 
             s.stop("Installed GitHub app")
@@ -393,10 +393,12 @@ jobs:
       issues: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Run opencode
-        uses: sst/opencode/github@latest${envStr}
+        uses: anomalyco/opencode/github@latest${envStr}
         with:
           model: ${provider}/${model}`,
             )
@@ -515,7 +517,15 @@ export const GithubRunCommand = cmd({
 
         // Setup opencode session
         const repoData = await fetchRepo()
-        session = await Session.create({})
+        session = await Session.create({
+          permission: [
+            {
+              permission: "question",
+              action: "deny",
+              pattern: "*",
+            },
+          ],
+        })
         subscribeSessionEvents()
         shareId = await (async () => {
           if (share === false) return
@@ -616,7 +626,7 @@ export const GithubRunCommand = cmd({
         }
       } catch (e: any) {
         exitCode = 1
-        console.error(e)
+        console.error(e instanceof Error ? e.message : String(e))
         let msg = e
         if (e instanceof $.ShellError) {
           msg = e.stderr.toString()
@@ -907,7 +917,7 @@ export const GithubRunCommand = cmd({
 
         // result should always be assistant just satisfying type checker
         if (result.info.role === "assistant" && result.info.error) {
-          console.error(result.info)
+          console.error("Agent error:", result.info.error)
           throw new Error(
             `${result.info.error.name}: ${"message" in result.info.error ? result.info.error.message : ""}`,
           )
@@ -936,7 +946,7 @@ export const GithubRunCommand = cmd({
         })
 
         if (summary.info.role === "assistant" && summary.info.error) {
-          console.error(summary.info)
+          console.error("Summary agent error:", summary.info.error)
           throw new Error(
             `${summary.info.error.name}: ${"message" in summary.info.error ? summary.info.error.message : ""}`,
           )
@@ -954,7 +964,7 @@ export const GithubRunCommand = cmd({
         try {
           return await core.getIDToken("opencode-github-action")
         } catch (error) {
-          console.error("Failed to get OIDC token:", error)
+          console.error("Failed to get OIDC token:", error instanceof Error ? error.message : error)
           throw new Error(
             "Could not fetch an OIDC token. Make sure to add `id-token: write` to your workflow permissions.",
           )
@@ -994,12 +1004,16 @@ export const GithubRunCommand = cmd({
 
         console.log("Configuring git...")
         const config = "http.https://github.com/.extraheader"
-        const ret = await $`git config --local --get ${config}`
-        gitConfig = ret.stdout.toString().trim()
+        // actions/checkout@v6 no longer stores credentials in .git/config,
+        // so this may not exist - use nothrow() to handle gracefully
+        const ret = await $`git config --local --get ${config}`.nothrow()
+        if (ret.exitCode === 0) {
+          gitConfig = ret.stdout.toString().trim()
+          await $`git config --local --unset-all ${config}`
+        }
 
         const newCredentials = Buffer.from(`x-access-token:${appToken}`, "utf8").toString("base64")
 
-        await $`git config --local --unset-all ${config}`
         await $`git config --local ${config} "AUTHORIZATION: basic ${newCredentials}"`
         await $`git config --global user.name "${AGENT_USERNAME}"`
         await $`git config --global user.email "${AGENT_USERNAME}@users.noreply.github.com"`
@@ -1233,15 +1247,53 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
 
       async function createPR(base: string, branch: string, title: string, body: string) {
         console.log("Creating pull request...")
-        const pr = await octoRest.rest.pulls.create({
-          owner,
-          repo,
-          head: branch,
-          base,
-          title,
-          body,
-        })
+
+        // Check if an open PR already exists for this head→base combination
+        // This handles the case where the agent created a PR via gh pr create during its run
+        try {
+          const existing = await withRetry(() =>
+            octoRest.rest.pulls.list({
+              owner,
+              repo,
+              head: `${owner}:${branch}`,
+              base,
+              state: "open",
+            }),
+          )
+
+          if (existing.data.length > 0) {
+            console.log(`PR #${existing.data[0].number} already exists for branch ${branch}`)
+            return existing.data[0].number
+          }
+        } catch (e) {
+          // If the check fails, proceed to create - we'll get a clear error if a PR already exists
+          console.log(`Failed to check for existing PR: ${e}`)
+        }
+
+        const pr = await withRetry(() =>
+          octoRest.rest.pulls.create({
+            owner,
+            repo,
+            head: branch,
+            base,
+            title,
+            body,
+          }),
+        )
         return pr.data.number
+      }
+
+      async function withRetry<T>(fn: () => Promise<T>, retries = 1, delayMs = 5000): Promise<T> {
+        try {
+          return await fn()
+        } catch (e) {
+          if (retries > 0) {
+            console.log(`Retrying after ${delayMs}ms...`)
+            await Bun.sleep(delayMs)
+            return withRetry(fn, retries - 1, delayMs)
+          }
+          throw e
+        }
       }
 
       function footer(opts?: { image?: boolean }) {

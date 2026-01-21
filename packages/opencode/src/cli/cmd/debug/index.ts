@@ -12,6 +12,7 @@ import { AgentCommand } from "./agent"
 
 export const DebugCommand = cmd({
   command: "debug",
+  describe: "debugging and troubleshooting tools",
   builder: (yargs) =>
     yargs
       .command(ConfigCommand)
@@ -25,6 +26,7 @@ export const DebugCommand = cmd({
       .command(PathsCommand)
       .command({
         command: "wait",
+        describe: "wait indefinitely (for debugging)",
         async handler() {
           await bootstrap(process.cwd(), async () => {
             await new Promise((resolve) => setTimeout(resolve, 1_000 * 60 * 60 * 24))
@@ -37,6 +39,7 @@ export const DebugCommand = cmd({
 
 const PathsCommand = cmd({
   command: "paths",
+  describe: "show global paths (data, config, cache, state)",
   handler() {
     for (const [key, value] of Object.entries(Global.Path)) {
       console.log(key.padEnd(10), value)
