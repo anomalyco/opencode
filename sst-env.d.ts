@@ -49,6 +49,14 @@ declare module "sst" {
       "type": "sst.cloudflare.SolidStart"
       "url": string
     }
+    "DISCORD_SUPPORT_BOT_TOKEN": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "DISCORD_SUPPORT_CHANNEL_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "Database": {
       "database": string
       "host": string
@@ -64,6 +72,14 @@ declare module "sst" {
     "EnterpriseStorage": {
       "name": string
       "type": "sst.cloudflare.Bucket"
+    }
+    "FEISHU_APP_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "FEISHU_APP_SECRET": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
     "GITHUB_APP_ID": {
       "type": "sst.sst.Secret"
