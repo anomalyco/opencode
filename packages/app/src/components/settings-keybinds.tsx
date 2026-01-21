@@ -380,7 +380,7 @@ export const SettingsKeybinds: Component = () => {
               class="flex-1"
             />
             <Show when={filter()}>
-              <IconButton icon="circle-x" variant="ghost" size="small" onClick={() => setFilter("")} />
+              <IconButton icon="circle-x" variant="ghost" onClick={() => setFilter("")} />
             </Show>
           </div>
         </div>
