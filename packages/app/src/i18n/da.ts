@@ -269,7 +269,8 @@ export const dict = {
   "context.usage.clickToView": "Klik for at se kontekst",
 
   "language.en": "Engelsk",
-  "language.zh": "Kinesisk",
+  "language.zh": "Kinesisk (forenklet)",
+  "language.zht": "Kinesisk (traditionelt)",
   "language.ko": "Koreansk",
   "language.de": "Tysk",
   "language.es": "Spansk",

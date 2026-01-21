@@ -267,7 +267,8 @@ export const dict = {
   "context.usage.clickToView": "点击查看上下文",
 
   "language.en": "英语",
-  "language.zh": "中文",
+  "language.zh": "简体中文",
+  "language.zht": "繁体中文",
   "language.ko": "韩语",
   "language.de": "德语",
   "language.es": "西班牙语",

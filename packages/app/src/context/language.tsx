@@ -5,6 +5,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
+import { dict as zht } from "@/i18n/zht"
 import { dict as ko } from "@/i18n/ko"
 import { dict as de } from "@/i18n/de"
 import { dict as es } from "@/i18n/es"
@@ -15,6 +16,7 @@ import { dict as pl } from "@/i18n/pl"
 import { dict as ru } from "@/i18n/ru"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
+import { dict as uiZht } from "@opencode-ai/ui/i18n/zht"
 import { dict as uiKo } from "@opencode-ai/ui/i18n/ko"
 import { dict as uiDe } from "@opencode-ai/ui/i18n/de"
 import { dict as uiEs } from "@opencode-ai/ui/i18n/es"
@@ -24,12 +26,12 @@ import { dict as uiJa } from "@opencode-ai/ui/i18n/ja"
 import { dict as uiPl } from "@opencode-ai/ui/i18n/pl"
 import { dict as uiRu } from "@opencode-ai/ui/i18n/ru"
 
-export type Locale = "en" | "zh" | "ko" | "de" | "es" | "fr" | "da" | "ja" | "pl" | "ru"
+export type Locale = "en" | "zh" | "zht" | "ko" | "de" | "es" | "fr" | "da" | "ja" | "pl" | "ru"
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
 
-const LOCALES: readonly Locale[] = ["en", "zh", "ko", "de", "es", "fr", "da", "ja", "pl", "ru"]
+const LOCALES: readonly Locale[] = ["en", "zh", "zht", "ko", "de", "es", "fr", "da", "ja", "pl", "ru"]
 
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
@@ -37,7 +39,10 @@ function detectLocale(): Locale {
   const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
   for (const language of languages) {
     if (!language) continue
-    if (language.toLowerCase().startsWith("zh")) return "zh"
+    if (language.toLowerCase().startsWith("zh")) {
+      if (language.toLowerCase().includes("hant")) return "zht"
+      return "zh"
+    }
     if (language.toLowerCase().startsWith("ko")) return "ko"
     if (language.toLowerCase().startsWith("de")) return "de"
     if (language.toLowerCase().startsWith("es")) return "es"
@@ -63,6 +68,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
 
     const locale = createMemo<Locale>(() => {
       if (store.locale === "zh") return "zh"
+      if (store.locale === "zht") return "zht"
       if (store.locale === "ko") return "ko"
       if (store.locale === "de") return "de"
       if (store.locale === "es") return "es"
@@ -84,6 +90,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const dict = createMemo<Dictionary>(() => {
       if (locale() === "en") return base
       if (locale() === "zh") return { ...base, ...i18n.flatten({ ...zh, ...uiZh }) }
+      if (locale() === "zht") return { ...base, ...i18n.flatten({ ...zht, ...uiZht }) }
       if (locale() === "de") return { ...base, ...i18n.flatten({ ...de, ...uiDe }) }
       if (locale() === "es") return { ...base, ...i18n.flatten({ ...es, ...uiEs }) }
       if (locale() === "fr") return { ...base, ...i18n.flatten({ ...fr, ...uiFr }) }
@@ -99,6 +106,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const labelKey: Record<Locale, keyof Dictionary> = {
       en: "language.en",
       zh: "language.zh",
+      zht: "language.zht",
       ko: "language.ko",
       de: "language.de",
       es: "language.es",
