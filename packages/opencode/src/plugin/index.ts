@@ -7,6 +7,7 @@ import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { getAuthorizationHeader } from "../flag/auth"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
@@ -22,11 +23,17 @@ export namespace Plugin {
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin]
 
   const state = Instance.state(async () => {
+    const authHeader = getAuthorizationHeader()
+
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
       directory: Instance.directory,
       // @ts-ignore - fetch type incompatibility
-      fetch: async (...args) => Server.App().fetch(...args),
+      fetch: async (input, init) => {
+        const request = new Request(input, init)
+        if (authHeader) request.headers.set("Authorization", authHeader)
+        return Server.App().fetch(request)
+      },
     })
     const config = await Config.get()
     const hooks: Hooks[] = []
