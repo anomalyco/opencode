@@ -856,6 +856,12 @@ export default function Layout(props: ParentProps) {
         onSelect: () => openSettings(),
       },
       {
+        id: "auth.usage",
+        title: "Auth Usage & Accounts",
+        category: language.t("command.category.settings"),
+        onSelect: () => openAuthUsage(),
+      },
+      {
         id: "session.previous",
         title: language.t("command.session.previous"),
         category: language.t("command.category.session"),
@@ -952,6 +958,10 @@ export default function Layout(props: ParentProps) {
 
   function openSettings() {
     dialog.show(() => <DialogSettings />)
+  }
+
+  function openAuthUsage() {
+    dialog.show(() => <DialogAuthUsage />)
   }
 
   function navigateToProject(directory: string | undefined) {

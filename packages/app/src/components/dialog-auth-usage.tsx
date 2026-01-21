@@ -19,6 +19,13 @@ interface AccountUsage {
   }
 }
 
+interface BrowserSessionStatus {
+  recordId: string
+  isConfigured: boolean
+  hasProfile: boolean
+  lastRefresh?: string
+}
+
 interface AnthropicUsage {
   fiveHour?: { utilization: number; resetsAt?: string }
   sevenDay?: { utilization: number; resetsAt?: string }
@@ -79,6 +86,10 @@ export function DialogAuthUsage() {
   const [switching, setSwitching] = createSignal<string | null>(null)
   const [deleting, setDeleting] = createSignal<string | null>(null)
   const [confirmDelete, setConfirmDelete] = createSignal<string | null>(null)
+  const [browserSessions, setBrowserSessions] = createSignal<Record<string, BrowserSessionStatus>>({})
+  const [settingUpBrowser, setSettingUpBrowser] = createSignal<string | null>(null)
+  const [refreshingBrowser, setRefreshingBrowser] = createSignal<string | null>(null)
+  const [removingBrowser, setRemovingBrowser] = createSignal<string | null>(null)
 
   const doFetch = platform.fetch ?? fetch
 
@@ -86,6 +97,85 @@ export function DialogAuthUsage() {
     const result = await globalSDK.client.auth.usage({})
     return result.data as AuthUsageData
   })
+
+  // Load browser sessions for all accounts
+  const loadBrowserSessions = async () => {
+    try {
+      const result = await doFetch(`${globalSDK.url}/provider/auth/browser/sessions`)
+      if (result.ok) {
+        const sessions = (await result.json()) as BrowserSessionStatus[]
+        const map: Record<string, BrowserSessionStatus> = {}
+        for (const session of sessions) {
+          map[session.recordId] = session
+        }
+        setBrowserSessions(map)
+      }
+    } catch {
+      // Ignore errors
+    }
+  }
+
+  // Load browser sessions when usage loads
+  createResource(
+    () => usage(),
+    async () => {
+      await loadBrowserSessions()
+    },
+  )
+
+  const setupBrowserSession = async (recordId: string) => {
+    setSettingUpBrowser(recordId)
+    try {
+      const result = await doFetch(`${globalSDK.url}/provider/auth/browser/sessions/${recordId}/setup`, {
+        method: "POST",
+      })
+      if (result.ok) {
+        await loadBrowserSessions()
+      }
+    } finally {
+      setSettingUpBrowser(null)
+    }
+  }
+
+  const refreshBrowserSession = async (recordId: string) => {
+    setRefreshingBrowser(recordId)
+    try {
+      const result = await doFetch(`${globalSDK.url}/provider/auth/browser/sessions/${recordId}/refresh`, {
+        method: "POST",
+      })
+      if (result.ok) {
+        await refetch()
+        await loadBrowserSessions()
+      }
+    } finally {
+      setRefreshingBrowser(null)
+    }
+  }
+
+  const removeBrowserSession = async (recordId: string) => {
+    setRemovingBrowser(recordId)
+    try {
+      await doFetch(`${globalSDK.url}/provider/auth/browser/sessions/${recordId}`, {
+        method: "DELETE",
+      })
+      await loadBrowserSessions()
+    } finally {
+      setRemovingBrowser(null)
+    }
+  }
+
+  const formatTimeAgo = (dateStr: string): string => {
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / (1000 * 60))
+    if (diffMins < 1) return "just now"
+    if (diffMins < 60) return `${diffMins}m ago`
+    const diffHours = Math.floor(diffMins / 60)
+    if (diffHours < 24) return `${diffHours}h ago`
+    const diffDays = Math.floor(diffHours / 24)
+    return `${diffDays}d ago`
+  }
 
   const providers = createMemo(() => {
     const data = usage()
@@ -336,6 +426,100 @@ export function DialogAuthUsage() {
                   )
                 }}
               </For>
+
+              {/* Auto-Relogin Section - Anthropic only */}
+              <Show when={providerID === "anthropic"}>
+                <div class="flex flex-col gap-3 p-4 rounded-lg border border-border-weak-base bg-fill-ghost-base">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <Icon name="settings-gear" class="size-4 text-icon-muted" />
+                      <span class="text-13-medium text-text-strong">Auto-Relogin</span>
+                    </div>
+                    <span class="text-10-medium text-text-muted bg-fill-ghost-strong px-2 py-0.5 rounded">
+                      Experimental
+                    </span>
+                  </div>
+
+                  <p class="text-12-regular text-text-muted">
+                    Configure browser sessions for automatic token refresh when tokens expire overnight.
+                  </p>
+
+                  <div class="flex flex-col gap-2">
+                    <For each={info.accounts}>
+                      {(account, index) => {
+                        const session = () => browserSessions()[account.id]
+                        const isSettingUp = () => settingUpBrowser() === account.id
+                        const isRefreshing = () => refreshingBrowser() === account.id
+                        const isRemoving = () => removingBrowser() === account.id
+
+                        return (
+                          <div class="flex items-center justify-between p-3 rounded-lg bg-fill-ghost-strong">
+                            <div class="flex items-center gap-2">
+                              <span class="text-12-medium text-text-base">Account {index() + 1}</span>
+                              <Show
+                                when={session()?.isConfigured}
+                                fallback={<span class="text-11-regular text-text-muted">Not configured</span>}
+                              >
+                                <span class="text-11-medium text-fill-success-base">Enabled</span>
+                                <Show when={session()?.lastRefresh}>
+                                  <span class="text-11-regular text-text-muted">
+                                    (refreshed {formatTimeAgo(session()!.lastRefresh!)})
+                                  </span>
+                                </Show>
+                              </Show>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                              <Show
+                                when={session()?.isConfigured}
+                                fallback={
+                                  <button
+                                    type="button"
+                                    onClick={() => setupBrowserSession(account.id)}
+                                    disabled={isSettingUp()}
+                                    class="text-11-medium text-text-interactive-base hover:text-text-interactive-strong transition-colors disabled:opacity-50"
+                                  >
+                                    <Show when={isSettingUp()} fallback="Setup">
+                                      <span class="flex items-center gap-1">
+                                        <Spinner class="size-3" /> Setting up...
+                                      </span>
+                                    </Show>
+                                  </button>
+                                }
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => refreshBrowserSession(account.id)}
+                                  disabled={isRefreshing()}
+                                  class="text-11-medium text-text-muted hover:text-text-base transition-colors disabled:opacity-50"
+                                >
+                                  <Show when={isRefreshing()} fallback="Test">
+                                    <Spinner class="size-3" />
+                                  </Show>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeBrowserSession(account.id)}
+                                  disabled={isRemoving()}
+                                  class="text-11-medium text-fill-danger-base hover:text-fill-danger-strong transition-colors disabled:opacity-50"
+                                >
+                                  <Show when={isRemoving()} fallback="Remove">
+                                    <Spinner class="size-3" />
+                                  </Show>
+                                </button>
+                              </Show>
+                            </div>
+                          </div>
+                        )
+                      }}
+                    </For>
+                  </div>
+
+                  <p class="text-11-regular text-text-weak">
+                    Setup opens a browser window where you log in to claude.ai. Sessions are stored locally.
+                  </p>
+                </div>
+              </Show>
             </div>
           )}
         </For>
