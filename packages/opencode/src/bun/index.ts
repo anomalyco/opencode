@@ -75,7 +75,18 @@ export namespace BunProc {
     const dependencies = parsed.dependencies ?? {}
     if (!parsed.dependencies) parsed.dependencies = dependencies
     const modExists = await Filesystem.exists(mod)
-    if (dependencies[pkg] === version && modExists) return mod
+    if (version !== "latest" && dependencies[pkg] === version && modExists) return mod
+    if (version === "latest" && modExists) {
+      const recorded = dependencies[pkg]
+      if (recorded && recorded !== "latest") return mod
+      const installedPkgJson = Bun.file(path.join(mod, "package.json"))
+      const installedPkg = await installedPkgJson.json().catch(() => null)
+      if (installedPkg?.version) {
+        parsed.dependencies[pkg] = installedPkg.version
+        await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
+        return mod
+      }
+    }
 
     const proxied = !!(
       process.env.HTTP_PROXY ||
