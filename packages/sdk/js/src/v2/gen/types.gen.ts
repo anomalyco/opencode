@@ -2021,8 +2021,6 @@ export type ProviderAuthAuthorization = {
   instructions: string
 }
 
-export type AuthUsage = unknown
-
 export type Symbol = {
   name: string
   kind: number
@@ -2097,6 +2095,8 @@ export type McpStatus =
   | McpStatusFailed
   | McpStatusNeedsAuth
   | McpStatusNeedsClientRegistration
+
+export type AuthUsage = unknown
 
 export type Path = {
   home: string
@@ -4022,96 +4022,180 @@ export type ProviderOauthCallbackResponses = {
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
 
-export type AuthUsageData = {
+export type ProviderBrowserSessionsData = {
   body?: never
   path?: never
   query?: {
     directory?: string
   }
-  url: "/provider/auth/usage"
+  url: "/provider/browser/sessions"
 }
 
-export type AuthUsageErrors = {
+export type ProviderBrowserSessionsResponses = {
   /**
-   * Bad request
+   * List of browser sessions
    */
-  400: BadRequestError
+  200: Array<{
+    recordId: string
+    enabled: boolean
+    profilePath: string
+    lastRefresh?: number
+    lastError?: string
+    isConfigured: boolean
+    label?: string
+  }>
 }
 
-export type AuthUsageError = AuthUsageErrors[keyof AuthUsageErrors]
+export type ProviderBrowserSessionsResponse = ProviderBrowserSessionsResponses[keyof ProviderBrowserSessionsResponses]
 
-export type AuthUsageResponses = {
-  /**
-   * Usage information per provider and account
-   */
-  200: AuthUsage
-}
-
-export type AuthUsageResponse = AuthUsageResponses[keyof AuthUsageResponses]
-
-export type AuthSetActiveData = {
-  body?: {
-    providerID: string
-    recordID: string
-    namespace?: string
+export type ProviderBrowserSessionRemoveData = {
+  body?: never
+  path: {
+    /**
+     * OAuth record ID
+     */
+    recordId: string
   }
-  path?: never
   query?: {
     directory?: string
   }
-  url: "/provider/auth/active"
+  url: "/provider/browser/sessions/{recordId}"
 }
 
-export type AuthSetActiveErrors = {
+export type ProviderBrowserSessionRemoveErrors = {
   /**
    * Bad request
    */
   400: BadRequestError
 }
 
-export type AuthSetActiveError = AuthSetActiveErrors[keyof AuthSetActiveErrors]
+export type ProviderBrowserSessionRemoveError =
+  ProviderBrowserSessionRemoveErrors[keyof ProviderBrowserSessionRemoveErrors]
 
-export type AuthSetActiveResponses = {
+export type ProviderBrowserSessionRemoveResponses = {
   /**
-   * Active account switched
+   * Browser session removed
    */
   200: boolean
 }
 
-export type AuthSetActiveResponse = AuthSetActiveResponses[keyof AuthSetActiveResponses]
+export type ProviderBrowserSessionRemoveResponse =
+  ProviderBrowserSessionRemoveResponses[keyof ProviderBrowserSessionRemoveResponses]
 
-export type AuthDeleteAccountData = {
-  body?: {
-    providerID: string
-    recordID: string
+export type ProviderBrowserSessionStatusData = {
+  body?: never
+  path: {
+    /**
+     * OAuth record ID
+     */
+    recordId: string
   }
-  path?: never
   query?: {
     directory?: string
   }
-  url: "/provider/auth/account"
+  url: "/provider/browser/sessions/{recordId}"
 }
 
-export type AuthDeleteAccountErrors = {
+export type ProviderBrowserSessionStatusErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ProviderBrowserSessionStatusError =
+  ProviderBrowserSessionStatusErrors[keyof ProviderBrowserSessionStatusErrors]
+
+export type ProviderBrowserSessionStatusResponses = {
+  /**
+   * Browser session status
+   */
+  200: {
+    recordId: string
+    enabled: boolean
+    profilePath: string
+    lastRefresh?: number
+    lastError?: string
+    isConfigured: boolean
+  }
+}
+
+export type ProviderBrowserSessionStatusResponse =
+  ProviderBrowserSessionStatusResponses[keyof ProviderBrowserSessionStatusResponses]
+
+export type ProviderBrowserSessionSetupData = {
+  body?: never
+  path: {
+    /**
+     * OAuth record ID
+     */
+    recordId: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/provider/browser/sessions/{recordId}/setup"
+}
+
+export type ProviderBrowserSessionSetupErrors = {
   /**
    * Bad request
    */
   400: BadRequestError
 }
 
-export type AuthDeleteAccountError = AuthDeleteAccountErrors[keyof AuthDeleteAccountErrors]
+export type ProviderBrowserSessionSetupError =
+  ProviderBrowserSessionSetupErrors[keyof ProviderBrowserSessionSetupErrors]
 
-export type AuthDeleteAccountResponses = {
+export type ProviderBrowserSessionSetupResponses = {
   /**
-   * Account deleted
+   * Browser session setup successful
    */
   200: {
     success: boolean
-    remaining: number
+    message: string
   }
 }
 
-export type AuthDeleteAccountResponse = AuthDeleteAccountResponses[keyof AuthDeleteAccountResponses]
+export type ProviderBrowserSessionSetupResponse =
+  ProviderBrowserSessionSetupResponses[keyof ProviderBrowserSessionSetupResponses]
+
+export type ProviderBrowserSessionRefreshData = {
+  body?: never
+  path: {
+    /**
+     * OAuth record ID
+     */
+    recordId: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/provider/browser/sessions/{recordId}/refresh"
+}
+
+export type ProviderBrowserSessionRefreshErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderBrowserSessionRefreshError =
+  ProviderBrowserSessionRefreshErrors[keyof ProviderBrowserSessionRefreshErrors]
+
+export type ProviderBrowserSessionRefreshResponses = {
+  /**
+   * Token refresh result
+   */
+  200: {
+    success: boolean
+    message: string
+  }
+}
+
+export type ProviderBrowserSessionRefreshResponse =
+  ProviderBrowserSessionRefreshResponses[keyof ProviderBrowserSessionRefreshResponses]
 
 export type FindTextData = {
   body?: never
@@ -4771,7 +4855,7 @@ export type TuiControlResponseResponses = {
 
 export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
 
-export type AuthUsage2Data = {
+export type AuthUsageData = {
   body?: never
   path?: never
   query?: {
@@ -4780,25 +4864,25 @@ export type AuthUsage2Data = {
   url: "/auth/usage"
 }
 
-export type AuthUsage2Errors = {
+export type AuthUsageErrors = {
   /**
    * Bad request
    */
   400: BadRequestError
 }
 
-export type AuthUsage2Error = AuthUsage2Errors[keyof AuthUsage2Errors]
+export type AuthUsageError = AuthUsageErrors[keyof AuthUsageErrors]
 
-export type AuthUsage2Responses = {
+export type AuthUsageResponses = {
   /**
    * Usage information per provider and account
    */
   200: AuthUsage
 }
 
-export type AuthUsage2Response = AuthUsage2Responses[keyof AuthUsage2Responses]
+export type AuthUsageResponse = AuthUsageResponses[keyof AuthUsageResponses]
 
-export type AuthSetActive2Data = {
+export type AuthSetActiveData = {
   body?: {
     providerID: string
     recordID: string
@@ -4811,16 +4895,16 @@ export type AuthSetActive2Data = {
   url: "/auth/active"
 }
 
-export type AuthSetActive2Errors = {
+export type AuthSetActiveErrors = {
   /**
    * Bad request
    */
   400: BadRequestError
 }
 
-export type AuthSetActive2Error = AuthSetActive2Errors[keyof AuthSetActive2Errors]
+export type AuthSetActiveError = AuthSetActiveErrors[keyof AuthSetActiveErrors]
 
-export type AuthSetActive2Responses = {
+export type AuthSetActiveResponses = {
   /**
    * Active account updated
    */
@@ -4830,7 +4914,7 @@ export type AuthSetActive2Responses = {
   }
 }
 
-export type AuthSetActive2Response = AuthSetActive2Responses[keyof AuthSetActive2Responses]
+export type AuthSetActiveResponse = AuthSetActiveResponses[keyof AuthSetActiveResponses]
 
 export type AuthRemoveAccountData = {
   body?: {
