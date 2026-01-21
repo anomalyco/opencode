@@ -18,7 +18,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           fetch-depth: 0 # Fetch full history to access commits
 
@@ -43,7 +43,7 @@ jobs:
 
       - name: Run opencode
         if: steps.commits.outputs.has_commits == 'true'
-        uses: sst/opencode/github@latest
+        uses: sst/opencode/github@d2fcdef571464c64668062718f3dceec0e79fbeb # v1.1.28
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:

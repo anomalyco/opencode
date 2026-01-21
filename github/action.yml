@@ -46,7 +46,7 @@ runs:
 
     - name: Cache opencode
       id: cache
-      uses: actions/cache@v4
+      uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
       with:
         path: ~/.opencode/bin
         key: opencode-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}

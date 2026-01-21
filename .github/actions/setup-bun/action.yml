@@ -4,13 +4,13 @@ runs:
   using: "composite"
   steps:
     - name: Setup Bun
-      uses: oven-sh/setup-bun@v2
+      uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
       with:
         bun-version-file: package.json
 
     - name: Cache ~/.bun
       id: cache-bun
-      uses: actions/cache@v4
+      uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
       with:
         path: ~/.bun
         key: ${{ runner.os }}-bun-${{ hashFiles('package.json') }}-${{ hashFiles('bun.lockb', 'bun.lock') }}

@@ -38,7 +38,7 @@ listeners = "0.3"
 tauri-plugin-os = "2"
 futures = "0.3.31"
 semver = "1.0.27"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["default-tls"] }
 uuid = { version = "1.19.0", features = ["v4"] }
 tauri-plugin-decorum = "1.1.1"
 
@@ -48,7 +48,7 @@ gtk = "0.18.2"
 webkit2gtk = "=2.0.1"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = [
+windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_System_JobObjects",
     "Win32_System_Threading",
