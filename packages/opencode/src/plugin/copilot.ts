@@ -276,8 +276,8 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         })
         .catch(() => undefined)
       if (!session || !session.data.parentID) return
-      // TODO: mark subagent sessions as agent initiated once copilot gives ok
-      // output.headers["x-initiator"] = "agent"
+      // mark subagent sessions as agent initiated matching standard that other copilot tools have
+      output.headers["x-initiator"] = "agent"
     },
   }
 }
