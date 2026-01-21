@@ -2,6 +2,7 @@ import { cmd } from "../cmd"
 import { UI } from "@/cli/ui"
 import { tui } from "./app"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
+import { getAuthorizationHeader } from "@/flag/auth"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -58,6 +59,9 @@ export const AttachCommand = cmd({
         }
       })()
       const headers = (() => {
+        const Authorization = getAuthorizationHeader({ passwordFromCli: args.password })
+        if (!Authorization) return undefined
+        return { Authorization }
         const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
         if (!password) return undefined
         const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
