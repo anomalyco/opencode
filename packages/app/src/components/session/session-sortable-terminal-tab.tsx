@@ -106,6 +106,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
     <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
       <div class="relative h-full">
         <Tabs.Trigger
+          classes={{ button: "border-0" }}
           value={props.terminal.id}
           onClick={focus}
           onMouseDown={(e) => e.preventDefault()}
