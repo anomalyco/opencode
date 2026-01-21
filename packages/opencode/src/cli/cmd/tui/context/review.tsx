@@ -205,17 +205,6 @@ function init() {
       }
     },
 
-    // Reject current selection
-    rejectCurrent(sessionID: string) {
-      const diffs = getDiffs(sessionID)
-      if (diffs.length === 0) return
-      const idx = getSelectedIndex(sessionID)
-      const file = diffs[idx]?.file
-      if (file) {
-        result.setStatus(sessionID, file, "rejected")
-      }
-    },
-
     // Reset current selection to pending
     resetCurrent(sessionID: string) {
       const diffs = getDiffs(sessionID)
@@ -236,18 +225,6 @@ function init() {
       const diffs = getDiffs(sessionID)
       for (const diff of diffs) {
         result.setStatus(sessionID, diff.file, "approved")
-      }
-    },
-
-    // Approve current and advance to next pending file
-    approveAndAdvance(sessionID: string) {
-      const diffs = getDiffs(sessionID)
-      if (diffs.length === 0) return
-      const idx = getSelectedIndex(sessionID)
-      const file = diffs[idx]?.file
-      if (file) {
-        result.setStatus(sessionID, file, "approved")
-        result.advanceToNextPending(sessionID)
       }
     },
 

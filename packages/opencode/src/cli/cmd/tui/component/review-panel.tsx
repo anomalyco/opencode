@@ -8,6 +8,7 @@ import { useSync } from "../context/sync"
 import { useKeybind } from "../context/keybind"
 import { createTwoFilesPatch } from "diff"
 import path from "path"
+import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 
 interface ReviewPanelProps {
   sessionID: string
@@ -16,39 +17,12 @@ interface ReviewPanelProps {
 }
 
 // Helper to get file extension for syntax highlighting
-function filetype(filepath: string): string {
-  const ext = path.extname(filepath).slice(1)
-  const map: Record<string, string> = {
-    ts: "typescript",
-    tsx: "tsx",
-    js: "javascript",
-    jsx: "jsx",
-    py: "python",
-    rb: "ruby",
-    go: "go",
-    rs: "rust",
-    java: "java",
-    kt: "kotlin",
-    swift: "swift",
-    c: "c",
-    cpp: "cpp",
-    h: "c",
-    hpp: "cpp",
-    cs: "csharp",
-    php: "php",
-    sh: "bash",
-    bash: "bash",
-    zsh: "bash",
-    json: "json",
-    yaml: "yaml",
-    yml: "yaml",
-    md: "markdown",
-    html: "html",
-    css: "css",
-    scss: "scss",
-    sql: "sql",
-  }
-  return map[ext] ?? ext
+function filetype(input?: string) {
+  if (!input) return "none"
+  const ext = path.extname(input)
+  const language = LANGUAGE_EXTENSIONS[ext]
+  if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
+  return language
 }
 
 // Button component with hover effect
@@ -266,9 +240,9 @@ export function ReviewPanel(props: ReviewPanelProps) {
       const message = review.generateFeedbackMessage(props.sessionID)
       if (message && props.onSendFeedback) {
         props.onSendFeedback(message)
-        review.clearSession(props.sessionID)
-        review.hide()
       }
+      review.clearSession(props.sessionID)
+      review.hide()
       evt.preventDefault()
       return
     }
@@ -401,9 +375,9 @@ export function ReviewPanel(props: ReviewPanelProps) {
                   const message = review.generateFeedbackMessage(props.sessionID)
                   if (message && props.onSendFeedback) {
                     props.onSendFeedback(message)
-                    review.clearSession(props.sessionID)
-                    review.hide()
                   }
+                  review.clearSession(props.sessionID)
+                  review.hide()
                 }}
                 color={theme.backgroundElement}
                 hoverColor={theme.primary}

@@ -925,9 +925,9 @@ export function Session() {
         const message = review.generateFeedbackMessage(route.sessionID)
         if (message) {
           handleReviewFeedback(message)
-          review.clearSession(route.sessionID)
-          review.hide()
         }
+        review.clearSession(route.sessionID)
+        review.hide()
         dialog.clear()
       },
     },
