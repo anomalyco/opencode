@@ -197,18 +197,6 @@ export namespace Snapshot {
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []
-
-    const show = async (hash: string, file: string) => {
-      const response =
-        await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${hash}:${file}`
-          .quiet()
-          .nothrow()
-      if (response.exitCode === 0) return response.text()
-      const stderr = response.stderr.toString()
-      if (stderr.toLowerCase().includes("does not exist in")) return ""
-      return `[DEBUG ERROR] git show ${hash}:${file} failed: ${stderr}`
-    }
-
     for await (const line of $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
       .quiet()
       .cwd(Instance.directory)
@@ -218,9 +206,25 @@ export namespace Snapshot {
       const [additions, deletions, rawFile] = line.split("\t")
       const file = unquote(rawFile)
       const isBinaryFile = additions === "-" && deletions === "-"
+      const beforeResult = isBinaryFile
+        ? { exitCode: 0, text: () => "", stderr: Buffer.from("") }
+        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
+            .quiet()
+            .nothrow()
+      const before =
+        beforeResult.exitCode === 0
+          ? beforeResult.text()
+          : `[DEBUG ERROR] git show ${from}:${file} failed: ${beforeResult.stderr.toString()}`
 
-      const before = isBinaryFile ? "" : await show(from, file)
-      const after = isBinaryFile ? "" : await show(to, file)
+      const afterResult = isBinaryFile
+        ? { exitCode: 0, text: () => "", stderr: Buffer.from("") }
+        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
+            .quiet()
+            .nothrow()
+      const after =
+        afterResult.exitCode === 0
+          ? afterResult.text()
+          : `[DEBUG ERROR] git show ${to}:${file} failed: ${afterResult.stderr.toString()}`
       const added = isBinaryFile ? 0 : parseInt(additions)
       const deleted = isBinaryFile ? 0 : parseInt(deletions)
       result.push({
