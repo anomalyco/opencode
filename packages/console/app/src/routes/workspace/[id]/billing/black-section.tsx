@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 import { Show } from "solid-js"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Database, eq, and, isNull } from "@opencode-ai/console-core/drizzle/index.js"
-import { SubscriptionTable } from "@opencode-ai/console-core/schema/billing.sql.js"
+import { BillingTable, SubscriptionTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { Black } from "@opencode-ai/console-core/black.js"
 import { withActor } from "~/context/auth.withActor"
@@ -20,19 +20,24 @@ const querySubscription = query(async (workspaceID: string) => {
           fixedUsage: SubscriptionTable.fixedUsage,
           timeRollingUpdated: SubscriptionTable.timeRollingUpdated,
           timeFixedUpdated: SubscriptionTable.timeFixedUpdated,
+          subscription: BillingTable.subscription,
         })
-        .from(SubscriptionTable)
+        .from(BillingTable)
+        .innerJoin(SubscriptionTable, eq(SubscriptionTable.workspaceID, BillingTable.workspaceID))
         .where(and(eq(SubscriptionTable.workspaceID, Actor.workspace()), isNull(SubscriptionTable.timeDeleted)))
         .then((r) => r[0]),
     )
-    if (!row) return null
+    if (!row.subscription) return null
 
     return {
+      plan: row.subscription.plan,
       rollingUsage: Black.analyzeRollingUsage({
+        plan: row.subscription.plan,
         usage: row.rollingUsage ?? 0,
         timeUpdated: row.timeRollingUpdated ?? new Date(),
       }),
       weeklyUsage: Black.analyzeWeeklyUsage({
+        plan: row.subscription.plan,
         usage: row.fixedUsage ?? 0,
         timeUpdated: row.timeFixedUpdated ?? new Date(),
       }),
@@ -89,10 +94,13 @@ export function BlackSection() {
 
   return (
     <section class={styles.root}>
+      <Show when={subscription()}>
+        {(sub) => (
+          <>
       <div data-slot="section-title">
         <h2>Subscription</h2>
         <div data-slot="title-row">
-          <p>You are subscribed to OpenCode Black for $200 per month.</p>
+          <p>You are subscribed to OpenCode Black for ${sub().plan} per month.</p>
           <button
             data-color="primary"
             disabled={sessionSubmission.pending || store.sessionRedirecting}
@@ -102,8 +110,6 @@ export function BlackSection() {
           </button>
         </div>
       </div>
-      <Show when={subscription()}>
-        {(sub) => (
           <div data-slot="usage">
             <div data-slot="usage-item">
               <div data-slot="usage-header">
@@ -126,6 +132,7 @@ export function BlackSection() {
               <span data-slot="reset-time">Resets in {formatResetTime(sub().weeklyUsage.resetInSec)}</span>
             </div>
           </div>
+          </>
         )}
       </Show>
     </section>
