@@ -1389,7 +1389,7 @@ export default function Page() {
                           autoScroll.handleScroll()
                           if (isDesktop() && autoScroll.userScrolled()) scheduleScrollSpy(e.currentTarget)
                         }}
-                        class="relative min-w-0 w-full h-full overflow-y-auto no-scrollbar"
+                        class="relative min-w-0 w-full h-full overflow-y-auto session-scroller"
                         style={{ "--session-title-height": info()?.title ? "40px" : "0px" }}
                       >
                         <Show when={info()?.title}>
