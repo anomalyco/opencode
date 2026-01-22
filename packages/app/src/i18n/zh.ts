@@ -286,6 +286,7 @@ export const dict = {
   "language.pl": "波兰语",
   "language.ar": "阿拉伯语",
   "language.no": "挪威语",
+  "language.br": "葡萄牙语（巴西）",
 
   "toast.language.title": "语言",
   "toast.language.description": "已切换到{{language}}",
