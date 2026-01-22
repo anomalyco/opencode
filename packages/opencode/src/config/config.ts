@@ -926,6 +926,10 @@ export namespace Config {
         .record(z.string(), z.array(z.string()))
         .optional()
         .describe("Limit models per provider to the listed allowlist"),
+      disabled_models: z
+        .record(z.string(), z.array(z.string()))
+        .optional()
+        .describe("Disable models per provider using a blacklist (takes priority over enabled_models)"),
       model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
       small_model: z
         .string()

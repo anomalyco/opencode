@@ -607,6 +607,26 @@ If a provider appears in both `enabled_providers` and `disabled_providers`, the 
 
 ---
 
+### Disabled models
+
+Use `disabled_models` to remove specific models per provider.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "disabled_models": {
+    "anthropic": ["claude-sonnet-4-5"],
+    "openai": ["gpt-5.2-codex"]
+  }
+}
+```
+
+:::note
+The `disabled_models` option takes priority over `enabled_models` when both are set.
+:::
+
+---
+
 ### Allowlist models
 
 Use `enabled_models` to limit which models are available per provider. An empty list removes the provider, effectively disabling that provider.
@@ -620,6 +640,10 @@ Use `enabled_models` to limit which models are available per provider. An empty 
   }
 }
 ```
+
+:::note
+The `disabled_models` option takes priority over `enabled_models`.
+:::
 
 ---
 
