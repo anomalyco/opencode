@@ -1937,7 +1937,7 @@ export default function Layout(props: ParentProps) {
             if (value) setHoverSession(undefined)
           }}
         >
-          <div class="-m-3 p-2 flex flex-col w-72">
+          <div class="-m-1 p-2 flex flex-col w-72">
             <div class="px-4 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
             <div class="px-4 pb-2 text-12-medium text-text-weak">{language.t("sidebar.project.recentSessions")}</div>
             <div class="px-2 pb-2 flex flex-col gap-2">
