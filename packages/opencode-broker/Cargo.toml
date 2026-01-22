@@ -17,6 +17,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "1"
 nix = { version = "0.29", features = ["process", "signal", "user", "term", "fs"] }
 libc = "0.2"
+uuid = { version = "1", features = ["v4"] }
+dashmap = "6"
 futures = "0.3"
 
 [dev-dependencies]
