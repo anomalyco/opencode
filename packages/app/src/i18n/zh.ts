@@ -420,6 +420,7 @@ export const dict = {
   "common.learnMore": "了解更多",
   "common.rename": "重命名",
   "common.reset": "重置",
+  "common.archive": "归档",
   "common.delete": "删除",
   "common.close": "关闭",
   "common.edit": "编辑",
@@ -537,6 +538,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "访问项目目录之外的文件",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
   "settings.permissions.tool.doom_loop.description": "检测具有相同输入的重复工具调用",
+
+  "session.delete.failed.title": "删除会话失败",
+  "session.delete.title": "删除会话",
+  "session.delete.confirm": '删除会话 "{{name}}"?',
+  "session.delete.button": "删除会话",
 
   "workspace.new": "新建工作区",
   "workspace.type.local": "本地",

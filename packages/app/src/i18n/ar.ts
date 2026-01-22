@@ -443,6 +443,7 @@ export const dict = {
   "common.learnMore": "اعرف المزيد",
   "common.rename": "إعادة تسمية",
   "common.reset": "إعادة تعيين",
+  "common.archive": "أرشفة",
   "common.delete": "حذف",
   "common.close": "إغلاق",
   "common.edit": "تحرير",
@@ -619,6 +620,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "الوصول إلى الملفات خارج دليل المشروع",
   "settings.permissions.tool.doom_loop.title": "حلقة الموت",
   "settings.permissions.tool.doom_loop.description": "اكتشاف استدعاءات الأدوات المتكررة بمدخلات متطابقة",
+
+  "session.delete.failed.title": "فشل حذف الجلسة",
+  "session.delete.title": "حذف الجلسة",
+  "session.delete.confirm": 'حذف الجلسة "{{name}}"؟',
+  "session.delete.button": "حذف الجلسة",
 
   "workspace.new": "مساحة عمل جديدة",
   "workspace.type.local": "محلي",

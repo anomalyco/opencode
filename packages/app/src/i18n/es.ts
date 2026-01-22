@@ -427,6 +427,7 @@ export const dict = {
   "common.learnMore": "Saber más",
   "common.rename": "Renombrar",
   "common.reset": "Restablecer",
+  "common.archive": "Archivar",
   "common.delete": "Eliminar",
   "common.close": "Cerrar",
   "common.edit": "Editar",
@@ -548,6 +549,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "Acceder a archivos fuera del directorio del proyecto",
   "settings.permissions.tool.doom_loop.title": "Bucle Infinito",
   "settings.permissions.tool.doom_loop.description": "Detectar llamadas a herramientas repetidas con entrada idéntica",
+
+  "session.delete.failed.title": "Fallo al eliminar sesión",
+  "session.delete.title": "Eliminar sesión",
+  "session.delete.confirm": '¿Eliminar sesión "{{name}}"?',
+  "session.delete.button": "Eliminar sesión",
 
   "workspace.new": "Nuevo espacio de trabajo",
   "workspace.type.local": "local",

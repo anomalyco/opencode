@@ -426,6 +426,7 @@ export const dict = {
   "common.learnMore": "Lær mere",
   "common.rename": "Omdøb",
   "common.reset": "Nulstil",
+  "common.archive": "Arkivér",
   "common.delete": "Slet",
   "common.close": "Luk",
   "common.edit": "Rediger",
@@ -545,6 +546,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "Få adgang til filer uden for projektmappen",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
   "settings.permissions.tool.doom_loop.description": "Opdag gentagne værktøjskald med identisk input",
+
+  "session.delete.failed.title": "Kunne ikke slette session",
+  "session.delete.title": "Slet session",
+  "session.delete.confirm": 'Slet session "{{name}}"?',
+  "session.delete.button": "Slet session",
 
   "workspace.new": "Nyt arbejdsområde",
   "workspace.type.local": "lokal",
