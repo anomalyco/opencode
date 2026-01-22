@@ -1982,8 +1982,9 @@ export namespace LSPServer {
         const platform = process.platform
         const arch = process.arch
 
-        const bufArch =
-          platform === "linux" ? (arch === "arm64" ? "aarch64" : "x86_64") : arch === "arm64" ? "arm64" : "x86_64"
+        let bufArch = "x86_64"
+        if (arch === "arm64") bufArch = platform === "linux" ? "aarch64" : "arm64"
+        else if (arch === "x64") bufArch = "x86_64"
 
         const platforms: Record<string, string> = { darwin: "Darwin", linux: "Linux", win32: "Windows" }
         const bufPlatform = platforms[platform]
