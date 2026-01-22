@@ -1,7 +1,7 @@
 import { dict as en } from "./en"
 type Keys = keyof typeof en
 
-export const dict: Record<Keys, string> = {
+export const dict = {
   "command.category.suggested": "Foreslått",
   "command.category.view": "Visning",
   "command.category.project": "Prosjekt",
