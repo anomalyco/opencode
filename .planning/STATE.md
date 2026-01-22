@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 Phase: 7 of 11 (Security Hardening)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-01-22 - Completed 07-01-PLAN.md
+Last activity: 2026-01-22 - Completed 07-02-PLAN.md
 
-Progress: [██████░░░░] ~57%
+Progress: [██████░░░░] ~59%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 26
-- Average duration: 6.6 min
-- Total execution time: 172 min
+- Total plans completed: 27
+- Average duration: 6.7 min
+- Total execution time: 180 min
 
 **By Phase:**
 
@@ -33,11 +33,11 @@ Progress: [██████░░░░] ~57%
 | 4. Authentication Flow | 2 | 8 min | 4 min |
 | 5. User Process Execution | 10 | 83 min | 8.3 min |
 | 6. Login UI | 1 | 25 min | 25 min |
-| 7. Security Hardening | 1 | 6 min | 6 min |
+| 7. Security Hardening | 2 | 14 min | 7 min |
 
 **Recent Trend:**
-- Last 5 plans: 05-09 (4 min), 05-10 (15 min), 06-01 (25 min), 07-01 (6 min)
-- Trend: Security features faster than UI work
+- Last 5 plans: 05-10 (15 min), 06-01 (25 min), 07-01 (6 min), 07-02 (8 min)
+- Trend: Security features consistent at 6-8 min
 
 *Updated after each plan completion*
 
@@ -105,6 +105,10 @@ Recent decisions affecting current work:
 | 07-01 | HMAC session binding | Prevents token fixation attacks via signature validation |
 | 07-01 | Non-HttpOnly CSRF cookie | Required for double-submit pattern (client reads cookie) |
 | 07-01 | CSRF allowlist includes /auth/login | Login endpoint sets initial cookie, cannot validate one |
+| 07-02 | IP-based rate limiting only | Per user decision: simpler approach blocks single-source brute force |
+| 07-02 | Rate limiting before PAM | Protects PAM from brute force load, fails fast |
+| 07-02 | Default: 5 attempts per 15 min | Balances security vs usability, allows typos without lockout |
+| 07-02 | Privacy-preserving logging | Mask usernames (pe***r) to reduce exposure in security logs |
 
 ### Pending Todos
 
@@ -124,9 +128,9 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed 07-01-PLAN.md
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None
-Next: Continue Phase 7 plans (07-02, 07-03)
+Next: Continue Phase 7 plan 07-03 (Security Headers)
 
 ## Phase 6 Progress
 
@@ -137,5 +141,5 @@ Next: Continue Phase 7 plans (07-02, 07-03)
 
 **Security Hardening - In Progress:**
 - [x] Plan 01: CSRF Protection (6 min)
-- [ ] Plan 02: Rate Limiting
+- [x] Plan 02: Rate Limiting (8 min)
 - [ ] Plan 03: Security Headers
