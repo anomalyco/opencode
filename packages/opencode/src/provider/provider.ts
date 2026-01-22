@@ -35,10 +35,23 @@ import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
+import { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
+
+  function isGpt5OrLater(modelID: string): boolean {
+    const match = /^gpt-(\d+)/.exec(modelID)
+    if (!match) {
+      return false
+    }
+    return Number(match[1]) >= 5
+  }
+
+  function shouldUseCopilotResponsesApi(modelID: string): boolean {
+    return isGpt5OrLater(modelID) && !modelID.startsWith("gpt-5-mini")
+  }
 
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
@@ -60,6 +73,7 @@ export namespace Provider {
     "@ai-sdk/togetherai": createTogetherAI,
     "@ai-sdk/perplexity": createPerplexity,
     "@ai-sdk/vercel": createVercel,
+    "@gitlab/gitlab-ai-provider": createGitLab,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
@@ -118,10 +132,7 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (modelID.includes("codex")) {
-            return sdk.responses(modelID)
-          }
-          return sdk.chat(modelID)
+          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
         },
         options: {},
       }
@@ -130,10 +141,7 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (modelID.includes("codex")) {
-            return sdk.responses(modelID)
-          }
-          return sdk.chat(modelID)
+          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
         },
         options: {},
       }
@@ -195,16 +203,23 @@ export namespace Provider {
         return undefined
       })
 
-      if (!profile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
+      const awsWebIdentityTokenFile = Env.get("AWS_WEB_IDENTITY_TOKEN_FILE")
 
-      const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
-
-      // Build credential provider options (only pass profile if specified)
-      const credentialProviderOptions = profile ? { profile } : {}
+      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile) return { autoload: false }
 
       const providerOptions: AmazonBedrockProviderSettings = {
         region: defaultRegion,
-        credentialProvider: fromNodeProviderChain(credentialProviderOptions),
+      }
+
+      // Only use credential chain if no bearer token exists
+      // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
+      if (!awsBearerToken) {
+        const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
+
+        // Build credential provider options (only pass profile if specified)
+        const credentialProviderOptions = profile ? { profile } : {}
+
+        providerOptions.credentialProvider = fromNodeProviderChain(credentialProviderOptions)
       }
 
       // Add custom endpoint if specified (endpoint takes precedence over baseURL)
@@ -237,6 +252,7 @@ export namespace Provider {
                 "nova-lite",
                 "nova-pro",
                 "nova-premier",
+                "nova-2",
                 "claude",
                 "deepseek",
               ].some((m) => modelID.includes(m))
@@ -266,13 +282,24 @@ export namespace Provider {
             }
             case "ap": {
               const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
+              const isTokyoRegion = region === "ap-northeast-1"
               if (
                 isAustraliaRegion &&
                 ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) => modelID.includes(m))
               ) {
                 regionPrefix = "au"
                 modelID = `${regionPrefix}.${modelID}`
+              } else if (isTokyoRegion) {
+                // Tokyo region uses jp. prefix for cross-region inference
+                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
+                  modelID.includes(m),
+                )
+                if (modelRequiresPrefix) {
+                  regionPrefix = "jp"
+                  modelID = `${regionPrefix}.${modelID}`
+                }
               } else {
+                // Other APAC regions use apac. prefix
                 const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
                   modelID.includes(m),
                 )
@@ -378,6 +405,41 @@ export namespace Provider {
         },
       }
     },
+    gitlab: async (input) => {
+      const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
+
+      const auth = await Auth.get(input.id)
+      const apiKey = await (async () => {
+        if (auth?.type === "oauth") return auth.access
+        if (auth?.type === "api") return auth.key
+        return Env.get("GITLAB_TOKEN")
+      })()
+
+      const config = await Config.get()
+      const providerConfig = config.provider?.["gitlab"]
+
+      return {
+        autoload: !!apiKey,
+        options: {
+          instanceUrl,
+          apiKey,
+          featureFlags: {
+            duo_agent_platform_agentic_chat: true,
+            duo_agent_platform: true,
+            ...(providerConfig?.options?.featureFlags || {}),
+          },
+        },
+        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
+          return sdk.agenticChat(modelID, {
+            featureFlags: {
+              duo_agent_platform_agentic_chat: true,
+              duo_agent_platform: true,
+              ...(providerConfig?.options?.featureFlags || {}),
+            },
+          })
+        },
+      }
+    },
     "cloudflare-ai-gateway": async (input) => {
       const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
       const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
@@ -407,11 +469,26 @@ export namespace Provider {
             "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
           },
-          // Custom fetch to strip Authorization header - AI Gateway uses cf-aig-authorization instead
-          // Sending Authorization header with invalid value causes auth errors
+          // Custom fetch to handle parameter transformation and auth
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
             const headers = new Headers(init?.headers)
+            // Strip Authorization header - AI Gateway uses cf-aig-authorization instead
             headers.delete("Authorization")
+
+            // Transform max_tokens to max_completion_tokens for newer models
+            if (init?.body && init.method === "POST") {
+              try {
+                const body = JSON.parse(init.body as string)
+                if (body.max_tokens !== undefined && !body.max_completion_tokens) {
+                  body.max_completion_tokens = body.max_tokens
+                  delete body.max_tokens
+                  init = { ...init, body: JSON.stringify(body) }
+                }
+              } catch (e) {
+                // If body parsing fails, continue with original request
+              }
+            }
+
             return fetch(input, { ...init, headers })
           },
         },
@@ -486,6 +563,7 @@ export namespace Provider {
       }),
       limit: z.object({
         context: z.number(),
+        input: z.number().optional(),
         output: z.number(),
       }),
       status: z.enum(["alpha", "beta", "deprecated", "active"]),
@@ -523,7 +601,10 @@ export namespace Provider {
       api: {
         id: model.id,
         url: provider.api!,
-        npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
+        npm: iife(() => {
+          if (provider.id.startsWith("github-copilot")) return "@ai-sdk/github-copilot"
+          return model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible"
+        }),
       },
       status: model.status ?? "active",
       headers: model.headers ?? {},
@@ -548,6 +629,7 @@ export namespace Provider {
       },
       limit: {
         context: model.limit.context,
+        input: model.limit.input,
         output: model.limit.output,
       },
       capabilities: {
@@ -799,7 +881,12 @@ export namespace Provider {
 
     for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
       if (disabled.has(providerID)) continue
-      const result = await fn(database[providerID])
+      const data = database[providerID]
+      if (!data) {
+        log.error("Provider does not exist in model list " + providerID)
+        continue
+      }
+      const result = await fn(data)
       if (result && (result.autoload || providers[providerID])) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
         mergeProvider(providerID, {
@@ -824,16 +911,6 @@ export namespace Provider {
         continue
       }
 
-      if (providerID === "github-copilot" || providerID === "github-copilot-enterprise") {
-        provider.models = mapValues(provider.models, (model) => ({
-          ...model,
-          api: {
-            ...model.api,
-            npm: "@ai-sdk/github-copilot",
-          },
-        }))
-      }
-
       const configProvider = config.provider?.[providerID]
 
       for (const [modelID, model] of Object.entries(provider.models)) {
@@ -841,6 +918,7 @@ export namespace Provider {
         if (modelID === "gpt-5-chat-latest" || (providerID === "openrouter" && modelID === "openai/gpt-5-chat"))
           delete provider.models[modelID]
         if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
+        if (model.status === "deprecated") delete provider.models[modelID]
         if (
           (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
           (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
@@ -918,6 +996,24 @@ export namespace Provider {
           const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
           opts.signal = combined
+        }
+
+        // Strip openai itemId metadata following what codex does
+        // Codex uses #[serde(skip_serializing)] on id fields for all item types:
+        // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall
+        // IDs are only re-attached for Azure with store=true
+        if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
+          const body = JSON.parse(opts.body as string)
+          const isAzure = model.providerID.includes("azure")
+          const keepIds = isAzure && body.store === true
+          if (!keepIds && Array.isArray(body.input)) {
+            for (const item of body.input) {
+              if ("id" in item) {
+                delete item.id
+              }
+            }
+            opts.body = JSON.stringify(body)
+          }
         }
 
         return fetchFn(input, {

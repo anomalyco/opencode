@@ -21,6 +21,6 @@ If you find potential duplicates:
 - List them with their titles and URLs
 - Briefly explain why they might be related
 
-If no duplicates are found, say so clearly.
+If no duplicates are found, say so clearly. BUT ONLY SAY "No duplicate PRs found" (don't say anything else if no dups)
 
 Keep your response concise and actionable.

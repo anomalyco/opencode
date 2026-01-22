@@ -1,13 +1,14 @@
-import { createMemo, onCleanup } from "solid-js"
+import { createEffect, createMemo, createRoot, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import type { FileContent, FileNode } from "@opencode-ai/sdk/v2"
+import type { FileContent } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useParams } from "@solidjs/router"
 import { getFilename } from "@opencode-ai/util/path"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
-import { persisted } from "@/utils/persist"
+import { useLanguage } from "@/context/language"
+import { Persist, persisted } from "@/utils/persist"
 
 export type FileSelection = {
   startLine: number
@@ -36,14 +37,6 @@ export type FileState = {
   loading?: boolean
   error?: string
   content?: FileContent
-}
-
-type DirectoryState = {
-  expanded: boolean
-  loaded?: boolean
-  loading?: boolean
-  error?: string
-  children?: string[]
 }
 
 function stripFileProtocol(input: string) {
@@ -90,12 +83,111 @@ function normalizeSelectedLines(range: SelectedLineRange): SelectedLineRange {
   }
 }
 
+const WORKSPACE_KEY = "__workspace__"
+const MAX_FILE_VIEW_SESSIONS = 20
+const MAX_VIEW_FILES = 500
+
+type ViewSession = ReturnType<typeof createViewSession>
+
+type ViewCacheEntry = {
+  value: ViewSession
+  dispose: VoidFunction
+}
+
+function createViewSession(dir: string, id: string | undefined) {
+  const legacyViewKey = `${dir}/file${id ? "/" + id : ""}.v1`
+
+  const [view, setView, _, ready] = persisted(
+    Persist.scoped(dir, id, "file-view", [legacyViewKey]),
+    createStore<{
+      file: Record<string, FileViewState>
+    }>({
+      file: {},
+    }),
+  )
+
+  const meta = { pruned: false }
+
+  const pruneView = (keep?: string) => {
+    const keys = Object.keys(view.file)
+    if (keys.length <= MAX_VIEW_FILES) return
+
+    const drop = keys.filter((key) => key !== keep).slice(0, keys.length - MAX_VIEW_FILES)
+    if (drop.length === 0) return
+
+    setView(
+      produce((draft) => {
+        for (const key of drop) {
+          delete draft.file[key]
+        }
+      }),
+    )
+  }
+
+  createEffect(() => {
+    if (!ready()) return
+    if (meta.pruned) return
+    meta.pruned = true
+    pruneView()
+  })
+
+  const scrollTop = (path: string) => view.file[path]?.scrollTop
+  const scrollLeft = (path: string) => view.file[path]?.scrollLeft
+  const selectedLines = (path: string) => view.file[path]?.selectedLines
+
+  const setScrollTop = (path: string, top: number) => {
+    setView("file", path, (current) => {
+      if (current?.scrollTop === top) return current
+      return {
+        ...(current ?? {}),
+        scrollTop: top,
+      }
+    })
+    pruneView(path)
+  }
+
+  const setScrollLeft = (path: string, left: number) => {
+    setView("file", path, (current) => {
+      if (current?.scrollLeft === left) return current
+      return {
+        ...(current ?? {}),
+        scrollLeft: left,
+      }
+    })
+    pruneView(path)
+  }
+
+  const setSelectedLines = (path: string, range: SelectedLineRange | null) => {
+    const next = range ? normalizeSelectedLines(range) : null
+    setView("file", path, (current) => {
+      if (current?.selectedLines === next) return current
+      return {
+        ...(current ?? {}),
+        selectedLines: next,
+      }
+    })
+    pruneView(path)
+  }
+
+  return {
+    ready,
+    scrollTop,
+    scrollLeft,
+    selectedLines,
+    setScrollTop,
+    setScrollLeft,
+    setSelectedLines,
+  }
+}
+
 export const { use: useFile, provider: FileProvider } = createSimpleContext({
   name: "File",
+  gate: false,
   init: () => {
     const sdk = useSDK()
     const sync = useSync()
     const params = useParams()
+    const language = useLanguage()
 
     const directory = createMemo(() => sync.data.path.directory)
 
@@ -142,26 +234,45 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       file: {},
     })
 
-    const treeInflight = new Map<string, Promise<void>>()
+    const viewCache = new Map<string, ViewCacheEntry>()
 
-    const [tree, setTree] = createStore<{
-      node: Record<string, FileNode>
-      dir: Record<string, DirectoryState>
-    }>({
-      node: {},
-      dir: { "": { expanded: true } },
-    })
+    const disposeViews = () => {
+      for (const entry of viewCache.values()) {
+        entry.dispose()
+      }
+      viewCache.clear()
+    }
 
-    const viewKey = createMemo(() => `${params.dir}/file${params.id ? "/" + params.id : ""}.v1`)
+    const pruneViews = () => {
+      while (viewCache.size > MAX_FILE_VIEW_SESSIONS) {
+        const first = viewCache.keys().next().value
+        if (!first) return
+        const entry = viewCache.get(first)
+        entry?.dispose()
+        viewCache.delete(first)
+      }
+    }
 
-    const [view, setView, _, ready] = persisted(
-      viewKey(),
-      createStore<{
-        file: Record<string, FileViewState>
-      }>({
-        file: {},
-      }),
-    )
+    const loadView = (dir: string, id: string | undefined) => {
+      const key = `${dir}:${id ?? WORKSPACE_KEY}`
+      const existing = viewCache.get(key)
+      if (existing) {
+        viewCache.delete(key)
+        viewCache.set(key, existing)
+        return existing.value
+      }
+
+      const entry = createRoot((dispose) => ({
+        value: createViewSession(dir, id),
+        dispose,
+      }))
+
+      viewCache.set(key, entry)
+      pruneViews()
+      return entry.value
+    }
+
+    const view = createMemo(() => loadView(params.dir!, params.id))
 
     function ensure(path: string) {
       if (!path) return
@@ -214,7 +325,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           )
           showToast({
             variant: "error",
-            title: "Failed to load file",
+            title: language.t("toast.file.loadFailed.title"),
             description: e.message,
           })
         })
@@ -226,216 +337,47 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return promise
     }
 
-    function normalizeDir(input: string) {
-      return normalize(input).replace(/\/+$/, "")
-    }
-
-    function ensureDir(path: string) {
-      if (tree.dir[path]) return
-      setTree("dir", path, { expanded: false })
-    }
-
-    function listDir(input: string, options?: { force?: boolean }) {
-      const dir = normalizeDir(input)
-      ensureDir(dir)
-
-      const current = tree.dir[dir]
-      if (!options?.force && current?.loaded) return Promise.resolve()
-
-      const pending = treeInflight.get(dir)
-      if (pending) return pending
-
-      setTree(
-        "dir",
-        dir,
-        produce((draft) => {
-          draft.loading = true
-          draft.error = undefined
-        }),
-      )
-
-      const promise = sdk.client.file
-        .list({ path: dir })
-        .then((x) => {
-          const nodes = x.data ?? []
-          const prevChildren = tree.dir[dir]?.children ?? []
-          const nextChildren = nodes.map((node) => node.path)
-          const nextSet = new Set(nextChildren)
-
-          setTree(
-            "node",
-            produce((draft) => {
-              const removedDirs: string[] = []
-
-              for (const child of prevChildren) {
-                if (nextSet.has(child)) continue
-                const existing = draft[child]
-                if (existing?.type === "directory") removedDirs.push(child)
-                delete draft[child]
-              }
-
-              if (removedDirs.length > 0) {
-                const keys = Object.keys(draft)
-                for (const key of keys) {
-                  for (const removed of removedDirs) {
-                    if (!key.startsWith(removed + "/")) continue
-                    delete draft[key]
-                    break
-                  }
-                }
-              }
-
-              for (const node of nodes) {
-                draft[node.path] = node
-              }
-            }),
-          )
-
-          setTree(
-            "dir",
-            dir,
-            produce((draft) => {
-              draft.loaded = true
-              draft.loading = false
-              draft.children = nextChildren
-            }),
-          )
-        })
-        .catch((e) => {
-          setTree(
-            "dir",
-            dir,
-            produce((draft) => {
-              draft.loading = false
-              draft.error = e.message
-            }),
-          )
-          showToast({
-            variant: "error",
-            title: "Failed to list files",
-            description: e.message,
-          })
-        })
-        .finally(() => {
-          treeInflight.delete(dir)
-        })
-
-      treeInflight.set(dir, promise)
-      return promise
-    }
-
-    function expandDir(input: string) {
-      const dir = normalizeDir(input)
-      ensureDir(dir)
-      setTree("dir", dir, "expanded", true)
-      void listDir(dir)
-    }
-
-    function collapseDir(input: string) {
-      const dir = normalizeDir(input)
-      ensureDir(dir)
-      setTree("dir", dir, "expanded", false)
-    }
-
-    function dirState(input: string) {
-      const dir = normalizeDir(input)
-      return tree.dir[dir]
-    }
-
-    function children(input: string) {
-      const dir = normalizeDir(input)
-      const ids = tree.dir[dir]?.children
-      if (!ids) return []
-      const out: FileNode[] = []
-      for (const id of ids) {
-        const node = tree.node[id]
-        if (node) out.push(node)
-      }
-      return out
-    }
-
     const stop = sdk.event.listen((e) => {
       const event = e.details
       if (event.type !== "file.watcher.updated") return
       const path = normalize(event.properties.file)
       if (!path) return
       if (path.startsWith(".git/")) return
-
-      if (store.file[path]) {
-        load(path, { force: true })
-      }
-
-      const kind = event.properties.event
-      if (kind !== "add" && kind !== "unlink") return
-
-      const parent = path.split("/").slice(0, -1).join("/")
-      if (!tree.dir[parent]?.loaded) return
-
-      listDir(parent, { force: true })
+      if (!store.file[path]) return
+      load(path, { force: true })
     })
 
     const get = (input: string) => store.file[normalize(input)]
 
-    const scrollTop = (input: string) => view.file[normalize(input)]?.scrollTop
-    const scrollLeft = (input: string) => view.file[normalize(input)]?.scrollLeft
-    const selectedLines = (input: string) => view.file[normalize(input)]?.selectedLines
+    const scrollTop = (input: string) => view().scrollTop(normalize(input))
+    const scrollLeft = (input: string) => view().scrollLeft(normalize(input))
+    const selectedLines = (input: string) => view().selectedLines(normalize(input))
 
     const setScrollTop = (input: string, top: number) => {
       const path = normalize(input)
-      setView("file", path, (current) => {
-        if (current?.scrollTop === top) return current
-        return {
-          ...(current ?? {}),
-          scrollTop: top,
-        }
-      })
+      view().setScrollTop(path, top)
     }
 
     const setScrollLeft = (input: string, left: number) => {
       const path = normalize(input)
-      setView("file", path, (current) => {
-        if (current?.scrollLeft === left) return current
-        return {
-          ...(current ?? {}),
-          scrollLeft: left,
-        }
-      })
+      view().setScrollLeft(path, left)
     }
 
     const setSelectedLines = (input: string, range: SelectedLineRange | null) => {
       const path = normalize(input)
-      const next = range ? normalizeSelectedLines(range) : null
-      setView("file", path, (current) => {
-        if (current?.selectedLines === next) return current
-        return {
-          ...(current ?? {}),
-          selectedLines: next,
-        }
-      })
+      view().setSelectedLines(path, range)
     }
 
-    onCleanup(() => stop())
+    onCleanup(() => {
+      stop()
+      disposeViews()
+    })
 
     return {
-      ready,
+      ready: () => view().ready(),
       normalize,
       tab,
       pathFromTab,
-      tree: {
-        list: listDir,
-        refresh: (input: string) => listDir(input, { force: true }),
-        state: dirState,
-        children,
-        expand: expandDir,
-        collapse: collapseDir,
-        toggle(input: string) {
-          if (dirState(input)?.expanded) {
-            collapseDir(input)
-            return
-          }
-          expandDir(input)
-        },
-      },
       get,
       load,
       scrollTop,

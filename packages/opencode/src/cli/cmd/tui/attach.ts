@@ -21,8 +21,15 @@ export const AttachCommand = cmd({
         describe: "session id to continue",
       }),
   handler: async (args) => {
-    if (args.dir) process.chdir(args.dir)
-    const directory = process.cwd()
+    let directory = args.dir
+    if (args.dir) {
+      try {
+        process.chdir(args.dir)
+        directory = process.cwd()
+      } catch {
+        // If the directory doesn't exist locally (remote attach), pass it through.
+      }
+    }
     await tui({
       url: args.url,
       args: { sessionID: args.session },

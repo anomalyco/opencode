@@ -1,6 +1,7 @@
-import { test, expect } from "bun:test"
+import { test, expect, describe, mock } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
+import { Auth } from "../../src/auth"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
@@ -122,6 +123,44 @@ test("handles environment variable substitution", async () => {
       process.env["TEST_VAR"] = originalEnv
     } else {
       delete process.env["TEST_VAR"]
+    }
+  }
+})
+
+test("preserves env variables when adding $schema to config", async () => {
+  const originalEnv = process.env["PRESERVE_VAR"]
+  process.env["PRESERVE_VAR"] = "secret_value"
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // Config without $schema - should trigger auto-add
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            theme: "{env:PRESERVE_VAR}",
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.theme).toBe("secret_value")
+
+        // Read the file to verify the env variable was preserved
+        const content = await Bun.file(path.join(tmp.path, "opencode.json")).text()
+        expect(content).toContain("{env:PRESERVE_VAR}")
+        expect(content).not.toContain("secret_value")
+        expect(content).toContain("$schema")
+      },
+    })
+  } finally {
+    if (originalEnv !== undefined) {
+      process.env["PRESERVE_VAR"] = originalEnv
+    } else {
+      delete process.env["PRESERVE_VAR"]
     }
   }
 })
@@ -329,6 +368,147 @@ Test agent prompt`,
           prompt: "Test agent prompt",
         }),
       )
+    },
+  })
+})
+
+test("loads agents from .opencode/agents (plural)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      const agentsDir = path.join(opencodeDir, "agents")
+      await fs.mkdir(path.join(agentsDir, "nested"), { recursive: true })
+
+      await Bun.write(
+        path.join(agentsDir, "helper.md"),
+        `---
+model: test/model
+mode: subagent
+---
+Helper agent prompt`,
+      )
+
+      await Bun.write(
+        path.join(agentsDir, "nested", "child.md"),
+        `---
+model: test/model
+mode: subagent
+---
+Nested agent prompt`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.agent?.["helper"]).toMatchObject({
+        name: "helper",
+        model: "test/model",
+        mode: "subagent",
+        prompt: "Helper agent prompt",
+      })
+
+      expect(config.agent?.["nested/child"]).toMatchObject({
+        name: "nested/child",
+        model: "test/model",
+        mode: "subagent",
+        prompt: "Nested agent prompt",
+      })
+    },
+  })
+})
+
+test("loads commands from .opencode/command (singular)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      const commandDir = path.join(opencodeDir, "command")
+      await fs.mkdir(path.join(commandDir, "nested"), { recursive: true })
+
+      await Bun.write(
+        path.join(commandDir, "hello.md"),
+        `---
+description: Test command
+---
+Hello from singular command`,
+      )
+
+      await Bun.write(
+        path.join(commandDir, "nested", "child.md"),
+        `---
+description: Nested command
+---
+Nested command template`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.command?.["hello"]).toEqual({
+        description: "Test command",
+        template: "Hello from singular command",
+      })
+
+      expect(config.command?.["nested/child"]).toEqual({
+        description: "Nested command",
+        template: "Nested command template",
+      })
+    },
+  })
+})
+
+test("loads commands from .opencode/commands (plural)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      const commandsDir = path.join(opencodeDir, "commands")
+      await fs.mkdir(path.join(commandsDir, "nested"), { recursive: true })
+
+      await Bun.write(
+        path.join(commandsDir, "hello.md"),
+        `---
+description: Test command
+---
+Hello from plural commands`,
+      )
+
+      await Bun.write(
+        path.join(commandsDir, "nested", "child.md"),
+        `---
+description: Nested command
+---
+Nested command template`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.command?.["hello"]).toEqual({
+        description: "Test command",
+        template: "Hello from plural commands",
+      })
+
+      expect(config.command?.["nested/child"]).toEqual({
+        description: "Nested command",
+        template: "Nested command template",
+      })
     },
   })
 })
@@ -911,5 +1091,523 @@ test("permission config preserves key order", async () => {
         "pr_comments_*",
       ])
     },
+  })
+})
+
+// MCP config merging tests
+
+test("project config can override MCP server enabled status", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Simulates a base config (like from remote .well-known) with disabled MCP
+      await Bun.write(
+        path.join(dir, "opencode.jsonc"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            jira: {
+              type: "remote",
+              url: "https://jira.example.com/mcp",
+              enabled: false,
+            },
+            wiki: {
+              type: "remote",
+              url: "https://wiki.example.com/mcp",
+              enabled: false,
+            },
+          },
+        }),
+      )
+      // Project config enables just jira
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            jira: {
+              type: "remote",
+              url: "https://jira.example.com/mcp",
+              enabled: true,
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      // jira should be enabled (overridden by project config)
+      expect(config.mcp?.jira).toEqual({
+        type: "remote",
+        url: "https://jira.example.com/mcp",
+        enabled: true,
+      })
+      // wiki should still be disabled (not overridden)
+      expect(config.mcp?.wiki).toEqual({
+        type: "remote",
+        url: "https://wiki.example.com/mcp",
+        enabled: false,
+      })
+    },
+  })
+})
+
+test("MCP config deep merges preserving base config properties", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Base config with full MCP definition
+      await Bun.write(
+        path.join(dir, "opencode.jsonc"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            myserver: {
+              type: "remote",
+              url: "https://myserver.example.com/mcp",
+              enabled: false,
+              headers: {
+                "X-Custom-Header": "value",
+              },
+            },
+          },
+        }),
+      )
+      // Override just enables it, should preserve other properties
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            myserver: {
+              type: "remote",
+              url: "https://myserver.example.com/mcp",
+              enabled: true,
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.mcp?.myserver).toEqual({
+        type: "remote",
+        url: "https://myserver.example.com/mcp",
+        enabled: true,
+        headers: {
+          "X-Custom-Header": "value",
+        },
+      })
+    },
+  })
+})
+
+test("local .opencode config can override MCP from project config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Project config with disabled MCP
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            docs: {
+              type: "remote",
+              url: "https://docs.example.com/mcp",
+              enabled: false,
+            },
+          },
+        }),
+      )
+      // Local .opencode directory config enables it
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+      await Bun.write(
+        path.join(opencodeDir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            docs: {
+              type: "remote",
+              url: "https://docs.example.com/mcp",
+              enabled: true,
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.mcp?.docs?.enabled).toBe(true)
+    },
+  })
+})
+
+test("project config overrides remote well-known config", async () => {
+  const originalFetch = globalThis.fetch
+  let fetchedUrl: string | undefined
+  const mockFetch = mock((url: string | URL | Request) => {
+    const urlStr = url.toString()
+    if (urlStr.includes(".well-known/opencode")) {
+      fetchedUrl = urlStr
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            config: {
+              mcp: {
+                jira: {
+                  type: "remote",
+                  url: "https://jira.example.com/mcp",
+                  enabled: false,
+                },
+              },
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    return originalFetch(url)
+  })
+  globalThis.fetch = mockFetch as unknown as typeof fetch
+
+  const originalAuthAll = Auth.all
+  Auth.all = mock(() =>
+    Promise.resolve({
+      "https://example.com": {
+        type: "wellknown" as const,
+        key: "TEST_TOKEN",
+        token: "test-token",
+      },
+    }),
+  )
+
+  try {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        // Project config enables jira (overriding remote default)
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            mcp: {
+              jira: {
+                type: "remote",
+                url: "https://jira.example.com/mcp",
+                enabled: true,
+              },
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        // Verify fetch was called for wellknown config
+        expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
+        // Project config (enabled: true) should override remote (enabled: false)
+        expect(config.mcp?.jira?.enabled).toBe(true)
+      },
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+    Auth.all = originalAuthAll
+  }
+})
+
+describe("getPluginName", () => {
+  test("extracts name from file:// URL", () => {
+    expect(Config.getPluginName("file:///path/to/plugin/foo.js")).toBe("foo")
+    expect(Config.getPluginName("file:///path/to/plugin/bar.ts")).toBe("bar")
+    expect(Config.getPluginName("file:///some/path/my-plugin.js")).toBe("my-plugin")
+  })
+
+  test("extracts name from npm package with version", () => {
+    expect(Config.getPluginName("oh-my-opencode@2.4.3")).toBe("oh-my-opencode")
+    expect(Config.getPluginName("some-plugin@1.0.0")).toBe("some-plugin")
+    expect(Config.getPluginName("plugin@latest")).toBe("plugin")
+  })
+
+  test("extracts name from scoped npm package", () => {
+    expect(Config.getPluginName("@scope/pkg@1.0.0")).toBe("@scope/pkg")
+    expect(Config.getPluginName("@opencode/plugin@2.0.0")).toBe("@opencode/plugin")
+  })
+
+  test("returns full string for package without version", () => {
+    expect(Config.getPluginName("some-plugin")).toBe("some-plugin")
+    expect(Config.getPluginName("@scope/pkg")).toBe("@scope/pkg")
+  })
+})
+
+describe("deduplicatePlugins", () => {
+  test("removes duplicates keeping higher priority (later entries)", () => {
+    const plugins = ["global-plugin@1.0.0", "shared-plugin@1.0.0", "local-plugin@2.0.0", "shared-plugin@2.0.0"]
+
+    const result = Config.deduplicatePlugins(plugins)
+
+    expect(result).toContain("global-plugin@1.0.0")
+    expect(result).toContain("local-plugin@2.0.0")
+    expect(result).toContain("shared-plugin@2.0.0")
+    expect(result).not.toContain("shared-plugin@1.0.0")
+    expect(result.length).toBe(3)
+  })
+
+  test("prefers local file over npm package with same name", () => {
+    const plugins = ["oh-my-opencode@2.4.3", "file:///project/.opencode/plugin/oh-my-opencode.js"]
+
+    const result = Config.deduplicatePlugins(plugins)
+
+    expect(result.length).toBe(1)
+    expect(result[0]).toBe("file:///project/.opencode/plugin/oh-my-opencode.js")
+  })
+
+  test("preserves order of remaining plugins", () => {
+    const plugins = ["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"]
+
+    const result = Config.deduplicatePlugins(plugins)
+
+    expect(result).toEqual(["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"])
+  })
+
+  test("local plugin directory overrides global opencode.json plugin", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const projectDir = path.join(dir, "project")
+        const opencodeDir = path.join(projectDir, ".opencode")
+        const pluginDir = path.join(opencodeDir, "plugin")
+        await fs.mkdir(pluginDir, { recursive: true })
+
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            plugin: ["my-plugin@1.0.0"],
+          }),
+        )
+
+        await Bun.write(path.join(pluginDir, "my-plugin.js"), "export default {}")
+      },
+    })
+
+    await Instance.provide({
+      directory: path.join(tmp.path, "project"),
+      fn: async () => {
+        const config = await Config.get()
+        const plugins = config.plugin ?? []
+
+        const myPlugins = plugins.filter((p) => Config.getPluginName(p) === "my-plugin")
+        expect(myPlugins.length).toBe(1)
+        expect(myPlugins[0].startsWith("file://")).toBe(true)
+      },
+    })
+  })
+})
+
+describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
+  test("skips project config files when flag is set", async () => {
+    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          // Create a project config that would normally be loaded
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "project/model",
+              username: "project-user",
+            }),
+          )
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          // Project config should NOT be loaded - model should be default, not "project/model"
+          expect(config.model).not.toBe("project/model")
+          expect(config.username).not.toBe("project-user")
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalEnv
+      }
+    }
+  })
+
+  test("skips project .opencode/ directories when flag is set", async () => {
+    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          // Create a .opencode directory with a command
+          const opencodeDir = path.join(dir, ".opencode", "command")
+          await fs.mkdir(opencodeDir, { recursive: true })
+          await Bun.write(path.join(opencodeDir, "test-cmd.md"), "# Test Command\nThis is a test command.")
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const directories = await Config.directories()
+          // Project .opencode should NOT be in directories list
+          const hasProjectOpencode = directories.some((d) => d.startsWith(tmp.path))
+          expect(hasProjectOpencode).toBe(false)
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalEnv
+      }
+    }
+  })
+
+  test("still loads global config when flag is set", async () => {
+    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+
+    try {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          // Should still get default config (from global or defaults)
+          const config = await Config.get()
+          expect(config).toBeDefined()
+          expect(config.username).toBeDefined()
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalEnv
+      }
+    }
+  })
+
+  test("skips relative instructions with warning when flag is set but no config dir", async () => {
+    const originalDisable = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
+
+    try {
+      // Ensure no config dir is set
+      delete process.env["OPENCODE_CONFIG_DIR"]
+      process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          // Create a config with relative instruction path
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              instructions: ["./CUSTOM.md"],
+            }),
+          )
+          // Create the instruction file (should be skipped)
+          await Bun.write(path.join(dir, "CUSTOM.md"), "# Custom Instructions")
+        },
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          // The relative instruction should be skipped without error
+          // We're mainly verifying this doesn't throw and the config loads
+          const config = await Config.get()
+          expect(config).toBeDefined()
+          // The instruction should have been skipped (warning logged)
+          // We can't easily test the warning was logged, but we verify
+          // the relative path didn't cause an error
+        },
+      })
+    } finally {
+      if (originalDisable === undefined) {
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalDisable
+      }
+      if (originalConfigDir === undefined) {
+        delete process.env["OPENCODE_CONFIG_DIR"]
+      } else {
+        process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+      }
+    }
+  })
+
+  test("OPENCODE_CONFIG_DIR still works when flag is set", async () => {
+    const originalDisable = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
+
+    try {
+      await using configDirTmp = await tmpdir({
+        init: async (dir) => {
+          // Create config in the custom config dir
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "configdir/model",
+            }),
+          )
+        },
+      })
+
+      await using projectTmp = await tmpdir({
+        init: async (dir) => {
+          // Create config in project (should be ignored)
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "project/model",
+            }),
+          )
+        },
+      })
+
+      process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+      process.env["OPENCODE_CONFIG_DIR"] = configDirTmp.path
+
+      await Instance.provide({
+        directory: projectTmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          // Should load from OPENCODE_CONFIG_DIR, not project
+          expect(config.model).toBe("configdir/model")
+        },
+      })
+    } finally {
+      if (originalDisable === undefined) {
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalDisable
+      }
+      if (originalConfigDir === undefined) {
+        delete process.env["OPENCODE_CONFIG_DIR"]
+      } else {
+        process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+      }
+    }
   })
 })

@@ -65,6 +65,7 @@ You can also access our models through the following API endpoints.
 | Model              | Model ID           | Endpoint                                           | AI SDK Package              |
 | ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
 | GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.2 Codex      | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.1            | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.1 Codex      | gpt-5.1-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.1 Codex Max  | gpt-5.1-codex-max  | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
@@ -90,8 +91,8 @@ You can also access our models through the following API endpoints.
 | Big Pickle         | big-pickle         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
 The [model id](/docs/config/#models) in your OpenCode config
-uses the format `opencode/<model-id>`. For example, for GPT 5.1 Codex, you would
-use `opencode/gpt-5.1-codex` in your config.
+uses the format `opencode/<model-id>`. For example, for GPT 5.2 Codex, you would
+use `opencode/gpt-5.2-codex` in your config.
 
 ---
 
@@ -131,6 +132,7 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | Gemini 3 Pro (> 200K tokens)      | $4.00  | $18.00 | $0.40       | -            |
 | Gemini 3 Flash                    | $0.50  | $3.00  | $0.05       | -            |
 | GPT 5.2                           | $1.75  | $14.00 | $0.175      | -            |
+| GPT 5.2 Codex                     | $1.75  | $14.00 | $0.175      | -            |
 | GPT 5.1                           | $1.07  | $8.50  | $0.107      | -            |
 | GPT 5.1 Codex                     | $1.07  | $8.50  | $0.107      | -            |
 | GPT 5.1 Codex Max                 | $1.25  | $10.00 | $0.125      | -            |

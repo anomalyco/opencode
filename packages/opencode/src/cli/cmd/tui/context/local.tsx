@@ -75,9 +75,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         color(name: string) {
-          const agent = agents().find((x) => x.name === name)
+          const all = sync.data.agent
+          const agent = all.find((x) => x.name === name)
           if (agent?.color) return RGBA.fromHex(agent.color)
-          const index = agents().findIndex((x) => x.name === name)
+          const index = all.findIndex((x) => x.name === name)
           if (index === -1) return colors()[0]
           return colors()[index % colors().length]
         },
@@ -112,8 +113,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const file = Bun.file(path.join(Global.Path.state, "model.json"))
+      const state = {
+        pending: false,
+      }
 
       function save() {
+        if (!modelStore.ready) {
+          state.pending = true
+          return
+        }
+        state.pending = false
         Bun.write(
           file,
           JSON.stringify({
@@ -134,6 +143,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         .catch(() => {})
         .finally(() => {
           setModelStore("ready", true)
+          if (state.pending) save()
         })
 
       const args = useArgs()

@@ -208,11 +208,8 @@ check_version() {
     if command -v opencode >/dev/null 2>&1; then
         opencode_path=$(which opencode)
 
-
-        ## TODO: check if version is installed
-        # installed_version=$(opencode version)
-        installed_version="0.0.1"
-        installed_version=$(echo $installed_version | awk '{print $2}')
+        ## Check the installed version
+        installed_version=$(opencode --version 2>/dev/null || echo "")
 
         if [[ "$installed_version" != "$specific_version" ]]; then
             print_message info "${MUTED}Installed version: ${NC}$installed_version."
@@ -372,7 +369,7 @@ case $current_shell in
         config_files="$HOME/.config/fish/config.fish"
     ;;
     zsh)
-        config_files="$HOME/.zshrc $HOME/.zshenv $XDG_CONFIG_HOME/zsh/.zshrc $XDG_CONFIG_HOME/zsh/.zshenv"
+        config_files="${ZDOTDIR:-$HOME}/.zshrc ${ZDOTDIR:-$HOME}/.zshenv $XDG_CONFIG_HOME/zsh/.zshrc $XDG_CONFIG_HOME/zsh/.zshenv"
     ;;
     bash)
         config_files="$HOME/.bashrc $HOME/.bash_profile $HOME/.profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/.bash_profile"

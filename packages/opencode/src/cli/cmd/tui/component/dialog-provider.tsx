@@ -10,6 +10,9 @@ import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
+import { useKeyboard } from "@opentui/solid"
+import { Clipboard } from "@tui/util/clipboard"
+import { useToast } from "../ui/toast"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -23,66 +26,82 @@ export function createDialogProviderOptions() {
   const sync = useSync()
   const dialog = useDialog()
   const sdk = useSDK()
+  const connected = createMemo(() => new Set(sync.data.provider_next.connected))
   const options = createMemo(() => {
     return pipe(
       sync.data.provider_next.all,
       sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
-      map((provider) => ({
-        title: provider.name,
-        value: provider.id,
-        description: {
-          opencode: "(Recommended)",
-          anthropic: "(Claude Max or API key)",
-        }[provider.id],
-        category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
-        async onSelect() {
-          const methods = sync.data.provider_auth[provider.id] ?? [
-            {
-              type: "api",
-              label: "API key",
-            },
-          ]
-          let index: number | null = 0
-          if (methods.length > 1) {
-            index = await new Promise<number | null>((resolve) => {
-              dialog.replace(
-                () => (
-                  <DialogSelect
-                    title="Select auth method"
-                    options={methods.map((x, index) => ({
-                      title: x.label,
-                      value: index,
-                    }))}
-                    onSelect={(option) => resolve(option.value)}
+      map((provider) => {
+        const isConnected = connected().has(provider.id)
+        return {
+          title: provider.name,
+          value: provider.id,
+          description: {
+            opencode: "(Recommended)",
+            anthropic: "(Claude Max or API key)",
+            openai: "(ChatGPT Plus/Pro or API key)",
+          }[provider.id],
+          category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
+          footer: isConnected ? "Connected" : undefined,
+          async onSelect() {
+            const methods = sync.data.provider_auth[provider.id] ?? [
+              {
+                type: "api",
+                label: "API key",
+              },
+            ]
+            let index: number | null = 0
+            if (methods.length > 1) {
+              index = await new Promise<number | null>((resolve) => {
+                dialog.replace(
+                  () => (
+                    <DialogSelect
+                      title="Select auth method"
+                      options={methods.map((x, index) => ({
+                        title: x.label,
+                        value: index,
+                      }))}
+                      onSelect={(option) => resolve(option.value)}
+                    />
+                  ),
+                  () => resolve(null),
+                )
+              })
+            }
+            if (index == null) return
+            const method = methods[index]
+            if (method.type === "oauth") {
+              const result = await sdk.client.provider.oauth.authorize({
+                providerID: provider.id,
+                method: index,
+              })
+              if (result.data?.method === "code") {
+                dialog.replace(() => (
+                  <CodeMethod
+                    providerID={provider.id}
+                    title={method.label}
+                    index={index}
+                    authorization={result.data!}
                   />
-                ),
-                () => resolve(null),
-              )
-            })
-          }
-          if (index == null) return
-          const method = methods[index]
-          if (method.type === "oauth") {
-            const result = await sdk.client.provider.oauth.authorize({
-              providerID: provider.id,
-              method: index,
-            })
-            if (result.data?.method === "code") {
-              dialog.replace(() => (
-                <CodeMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
-              ))
+                ))
+              }
+              if (result.data?.method === "auto") {
+                dialog.replace(() => (
+                  <AutoMethod
+                    providerID={provider.id}
+                    title={method.label}
+                    index={index}
+                    authorization={result.data!}
+                  />
+                ))
+              }
             }
-            if (result.data?.method === "auto") {
-              dialog.replace(() => (
-                <AutoMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
-              ))
+            if (method.type === "api") {
+              return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
             }
-          }
-          if (method.type === "api") {
-            return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
-          }
-        },
-      })),
+          },
+        }
+      }),
     )
   })
   return options
@@ -104,6 +123,16 @@ function AutoMethod(props: AutoMethodProps) {
   const sdk = useSDK()
   const dialog = useDialog()
   const sync = useSync()
+  const toast = useToast()
+
+  useKeyboard((evt) => {
+    if (evt.name === "c" && !evt.ctrl && !evt.meta) {
+      const code = props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4}/)?.[0] ?? props.authorization.url
+      Clipboard.copy(code)
+        .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+        .catch(toast.error)
+    }
+  })
 
   onMount(async () => {
     const result = await sdk.client.provider.oauth.callback({
@@ -132,6 +161,9 @@ function AutoMethod(props: AutoMethodProps) {
         <text fg={theme.textMuted}>{props.authorization.instructions}</text>
       </box>
       <text fg={theme.textMuted}>Waiting for authorization...</text>
+      <text fg={theme.text}>
+        c <span style={{ fg: theme.textMuted }}>copy</span>
+      </text>
     </box>
   )
 }
@@ -208,7 +240,7 @@ function ApiMethod(props: ApiMethodProps) {
       }
       onConfirm={async (value) => {
         if (!value) return
-        sdk.client.auth.set({
+        await sdk.client.auth.set({
           providerID: props.providerID,
           auth: {
             type: "api",
