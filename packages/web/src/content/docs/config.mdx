@@ -607,6 +607,22 @@ If a provider appears in both `enabled_providers` and `disabled_providers`, the 
 
 ---
 
+### Allowlist models
+
+Use `enabled_models` to limit which models are available per provider. An empty list removes the provider, effectively disabling that provider.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_models": {
+    "anthropic": ["claude-sonnet-4-5"],
+    "openai": []
+  }
+}
+```
+
+---
+
 ### Experimental
 
 The `experimental` key contains options that are under active development.
