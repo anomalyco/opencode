@@ -9,8 +9,9 @@
 }
 
 [data-page="login"] [data-component="logo-splash"] {
+  display: block;
   width: 80px;
-  height: auto;
+  height: 100px;
   margin-bottom: calc(var(--spacing) * 8);
 }
 
@@ -40,18 +41,40 @@
 }
 
 [data-page="login"] [data-slot="password-wrapper"] {
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+[data-page="login"] [data-slot="password-label"] {
+  color: var(--text-weak);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+  letter-spacing: var(--letter-spacing-normal);
 }
 
 [data-page="login"] [data-slot="password-wrapper"] [data-component="input"] {
   width: 100%;
 }
 
+[data-page="login"] [data-slot="password-wrapper"] [data-slot="password-field"] {
+  position: relative;
+  width: 100%;
+}
+
+[data-page="login"] [data-slot="password-wrapper"] [data-slot="password-field"] [data-slot="input-wrapper"] {
+  padding-right: 36px;
+}
+
 [data-page="login"] [data-slot="password-toggle"] {
   position: absolute;
-  right: calc(var(--spacing) * 2);
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
+  z-index: 1;
 }
 
 [data-page="login"] [data-slot="password-toggle"][aria-pressed="true"] {
