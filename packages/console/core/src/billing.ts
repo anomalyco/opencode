@@ -1,6 +1,6 @@
 import { Stripe } from "stripe"
 import { Database, eq, sql } from "./drizzle"
-import { BillingTable, PaymentTable, UsageTable } from "./schema/billing.sql"
+import { BillingTable, PaymentTable, SubscriptionTable, UsageTable } from "./schema/billing.sql"
 import { Actor } from "./actor"
 import { fn } from "./util/fn"
 import { z } from "zod"
@@ -8,6 +8,7 @@ import { Resource } from "@opencode-ai/console-resource"
 import { Identifier } from "./identifier"
 import { centsToMicroCents } from "./util/price"
 import { User } from "./user"
+import { BlackData } from "./black"
 
 export namespace Billing {
   export const ITEM_CREDIT_NAME = "opencode credits"
@@ -288,4 +289,66 @@ export namespace Billing {
       return charge.receipt_url
     },
   )
+
+  export const subscribe = fn(z.object({
+    seats: z.number(),
+    coupon: z.string().optional(),
+  }), async ({ seats, coupon }) => {
+    const user = Actor.assert("user")
+    const billing = await Database.use((tx) =>
+      tx
+        .select({
+          customerID: BillingTable.customerID,
+          paymentMethodID: BillingTable.paymentMethodID,
+          subscriptionID: BillingTable.subscriptionID,
+          subscriptionPlan: BillingTable.subscriptionPlan,
+          timeSubscriptionSelected: BillingTable.timeSubscriptionSelected,
+        })
+        .from(BillingTable)
+        .where(eq(BillingTable.workspaceID, Actor.workspace()))
+        .then((rows) => rows[0]),
+    )
+
+    if (!billing) throw new Error("Billing record not found")
+    if (!billing.timeSubscriptionSelected) throw new Error("Not selected for subscription")
+    if (billing.subscriptionID) throw new Error("Already subscribed")
+    if (!billing.customerID) throw new Error("No customer ID")
+    if (!billing.paymentMethodID) throw new Error("No payment method")
+    if (!billing.subscriptionPlan) throw new Error("No subscription plan")
+
+    const subscription = await Billing.stripe().subscriptions.create({
+      customer: billing.customerID,
+      default_payment_method: billing.paymentMethodID,
+      items: [{ price: BlackData.planToPriceID({ plan: billing.subscriptionPlan }) }],
+      metadata: {
+        workspaceID: Actor.workspace(),
+      },
+    })
+
+    await Database.transaction(async (tx) => {
+      await tx
+        .update(BillingTable)
+        .set({
+          subscriptionID: subscription.id,
+          subscription: {
+            status: "subscribed",
+            coupon,
+            seats,
+            plan: billing.subscriptionPlan!,
+          },
+          subscriptionPlan: null,
+          timeSubscriptionBooked: null,
+          timeSubscriptionSelected: null,
+        })
+        .where(eq(BillingTable.workspaceID, Actor.workspace()))
+
+      await tx.insert(SubscriptionTable).values({
+        workspaceID: Actor.workspace(),
+        id: Identifier.create("subscription"),
+        userID: user.properties.userID,
+      })
+    })
+
+    return subscription.id
+  })
 }

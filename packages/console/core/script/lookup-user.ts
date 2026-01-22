@@ -244,7 +244,7 @@ function getSubscriptionStatus(row: {
     return { weekly: null, rolling: null, rateLimited: null, retryIn: null }
   }
 
-  const black = BlackData.get({ plan: row.subscription.plan })
+  const black = BlackData.getLimits({ plan: row.subscription.plan })
   const now = new Date()
   const week = getWeekBounds(now)
 

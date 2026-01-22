@@ -28,15 +28,28 @@ export namespace BlackData {
     return input
   })
 
-  export const get = fn(
-    z.object({
+  export const getLimits = fn(z.object({
       plan: z.enum(SubscriptionPlan),
-    }),
-    ({ plan }) => {
-      const json = JSON.parse(Resource.ZEN_BLACK_LIMITS.value)
-      return Schema.parse(json)[plan]
-    },
-  )
+    }), ({ plan }) => {
+    const json = JSON.parse(Resource.ZEN_BLACK_LIMITS.value)
+    return Schema.parse(json)[plan]
+  })
+
+  export const planToPriceID = fn(z.object({
+      plan: z.enum(SubscriptionPlan),
+    }), ({ plan }) => {
+    if (plan === "200") return Resource.ZEN_BLACK_PRICE.plan200
+    if (plan === "100") return Resource.ZEN_BLACK_PRICE.plan100
+    return Resource.ZEN_BLACK_PRICE.plan20
+  })
+
+  export const priceIDToPlan = fn(z.object({
+    priceID: z.string(),
+  }), ({ priceID }) => {
+    if (priceID === Resource.ZEN_BLACK_PRICE.plan200) return "200"
+    if (priceID === Resource.ZEN_BLACK_PRICE.plan100) return "100"
+    return "20"
+  })
 }
 
 export namespace Black {
@@ -48,7 +61,7 @@ export namespace Black {
     }),
     ({ plan, usage, timeUpdated }) => {
       const now = new Date()
-      const black = BlackData.get({ plan })
+      const black = BlackData.getLimits({ plan })
       const rollingWindowMs = black.rollingWindow * 3600 * 1000
       const rollingLimitInMicroCents = centsToMicroCents(black.rollingLimit * 100)
       const windowStart = new Date(now.getTime() - rollingWindowMs)
@@ -83,7 +96,7 @@ export namespace Black {
       timeUpdated: z.date(),
     }),
     ({ plan, usage, timeUpdated }) => {
-      const black = BlackData.get({ plan })
+      const black = BlackData.getLimits({ plan })
       const now = new Date()
       const week = getWeekBounds(now)
       const fixedLimitInMicroCents = centsToMicroCents(black.fixedLimit * 100)

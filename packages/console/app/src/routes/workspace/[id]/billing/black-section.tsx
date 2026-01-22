@@ -9,6 +9,7 @@ import { Black } from "@opencode-ai/console-core/black.js"
 import { withActor } from "~/context/auth.withActor"
 import { queryBillingInfo } from "../../common"
 import styles from "./black-section.module.css"
+import waitlistStyles from "./black-waitlist-section.module.css"
 
 const querySubscription = query(async (workspaceID: string) => {
   "use server"
@@ -27,7 +28,7 @@ const querySubscription = query(async (workspaceID: string) => {
         .where(and(eq(SubscriptionTable.workspaceID, Actor.workspace()), isNull(SubscriptionTable.timeDeleted)))
         .then((r) => r[0]),
     )
-    if (!row.subscription) return null
+    if (!row?.subscription) return null
 
     return {
       plan: row.subscription.plan,
@@ -58,6 +59,37 @@ function formatResetTime(seconds: number) {
   return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`
 }
 
+const cancelWaitlist = action(async (workspaceID: string) => {
+  "use server"
+  return json(
+    await withActor(async () => {
+      await Database.use((tx) =>
+        tx
+          .update(BillingTable)
+          .set({
+            subscriptionPlan: null,
+            timeSubscriptionBooked: null,
+            timeSubscriptionSelected: null,
+          })
+          .where(eq(BillingTable.workspaceID, workspaceID)),
+      )
+      return { error: undefined }
+    }, workspaceID).catch((e) => ({ error: e.message as string })),
+    { revalidate: [queryBillingInfo.key, querySubscription.key] },
+  )
+}, "cancelWaitlist")
+
+const enroll = action(async (workspaceID: string) => {
+  "use server"
+  return json(
+    await withActor(async () => {
+      await Billing.subscribe({ seats: 1 })
+      return { error: undefined }
+    }, workspaceID).catch((e) => ({ error: e.message as string })),
+    { revalidate: [queryBillingInfo.key, querySubscription.key] },
+  )
+}, "enroll")
+
 const createSessionUrl = action(async (workspaceID: string, returnUrl: string) => {
   "use server"
   return json(
@@ -71,17 +103,24 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
           })),
       workspaceID,
     ),
-    { revalidate: queryBillingInfo.key },
+    { revalidate: [queryBillingInfo.key, querySubscription.key] },
   )
 }, "sessionUrl")
 
 export function BlackSection() {
   const params = useParams()
+  const billing = createAsync(() => queryBillingInfo(params.id!))
+  const subscription = createAsync(() => querySubscription(params.id!))
   const sessionAction = useAction(createSessionUrl)
   const sessionSubmission = useSubmission(createSessionUrl)
-  const subscription = createAsync(() => querySubscription(params.id!))
+  const cancelAction = useAction(cancelWaitlist)
+  const cancelSubmission = useSubmission(cancelWaitlist)
+  const enrollAction = useAction(enroll)
+  const enrollSubmission = useSubmission(enroll)
   const [store, setStore] = createStore({
     sessionRedirecting: false,
+    cancelled: false,
+    enrolled: false,
   })
 
   async function onClickSession() {
@@ -92,11 +131,25 @@ export function BlackSection() {
     }
   }
 
+  async function onClickCancel() {
+    const result = await cancelAction(params.id!)
+    if (!result.error) {
+      setStore("cancelled", true)
+    }
+  }
+
+  async function onClickEnroll() {
+    const result = await enrollAction(params.id!)
+    if (!result.error) {
+      setStore("enrolled", true)
+    }
+  }
+
   return (
-    <section class={styles.root}>
+    <>
       <Show when={subscription()}>
         {(sub) => (
-          <>
+          <section class={styles.root}>
             <div data-slot="section-title">
               <h2>Subscription</h2>
               <div data-slot="title-row">
@@ -132,9 +185,45 @@ export function BlackSection() {
                 <span data-slot="reset-time">Resets in {formatResetTime(sub().weeklyUsage.resetInSec)}</span>
               </div>
             </div>
-          </>
+          </section>
         )}
       </Show>
-    </section>
+      <Show when={billing()?.timeSubscriptionBooked}>
+        <section class={waitlistStyles.root}>
+          <div data-slot="section-title">
+            <h2>Waitlist</h2>
+            <div data-slot="title-row">
+              <p>
+                {billing()?.timeSubscriptionSelected
+                  ? `We're ready to enroll you into the $${billing()?.subscriptionPlan} per month OpenCode Black plan.`
+                  : `You are on the waitlist for the $${billing()?.subscriptionPlan} per month OpenCode Black plan.`}
+              </p>
+              <button
+                data-color="danger"
+                disabled={cancelSubmission.pending || store.cancelled}
+                onClick={onClickCancel}
+              >
+                {cancelSubmission.pending ? "Leaving..." : store.cancelled ? "Left" : "Leave Waitlist"}
+              </button>
+            </div>
+          </div>
+          <Show when={billing()?.timeSubscriptionSelected}>
+            <div data-slot="enroll-section">
+              <button
+                data-slot="enroll-button"
+                data-color="primary"
+                disabled={enrollSubmission.pending || store.enrolled}
+                onClick={onClickEnroll}
+              >
+                {enrollSubmission.pending ? "Enrolling..." : store.enrolled ? "Enrolled" : "Enroll"}
+              </button>
+              <p data-slot="enroll-note">
+                When you click Enroll, your subscription starts immediately and your card will be charged.
+              </p>
+            </div>
+          </Show>
+        </section>
+      </Show>
+    </>
   )
 }
