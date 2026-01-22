@@ -50,8 +50,8 @@ export function SessionHeader() {
 
   const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
-  const showReview = createMemo(() => !!currentSession())
   const showShare = createMemo(() => shareEnabled() && !!currentSession())
+  const showReview = createMemo(() => !!currentSession())
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey()))
 
@@ -308,6 +308,11 @@ export function SessionHeader() {
                         class="rounded-l-none"
                         onClick={copyLink}
                         disabled={state.unshare}
+                        aria-label={
+                          state.copied
+                            ? language.t("session.share.copy.copied")
+                            : language.t("session.share.copy.copyLink")
+                        }
                       />
                     </Tooltip>
                   </Show>

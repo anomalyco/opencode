@@ -153,6 +153,7 @@ export const dict = {
   "model.tooltip.context": "Context limit {{limit}}",
 
   "common.search.placeholder": "Search",
+  "common.goBack": "Go back",
   "common.loading": "Loading",
   "common.loading.ellipsis": "...",
   "common.cancel": "Cancel",
@@ -199,7 +200,10 @@ export const dict = {
   "prompt.slash.badge.custom": "custom",
   "prompt.context.active": "active",
   "prompt.context.includeActiveFile": "Include active file",
+  "prompt.context.removeActiveFile": "Remove active file from context",
+  "prompt.context.removeFile": "Remove file from context",
   "prompt.action.attachFile": "Attach file",
+  "prompt.attachment.remove": "Remove attachment",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
 
@@ -243,6 +247,7 @@ export const dict = {
   "dialog.server.default.none": "No server selected",
   "dialog.server.default.set": "Set current server as default",
   "dialog.server.default.clear": "Clear",
+  "dialog.server.action.remove": "Remove server",
 
   "dialog.project.edit.title": "Edit project",
   "dialog.project.edit.name": "Name",
@@ -251,6 +256,10 @@ export const dict = {
   "dialog.project.edit.icon.hint": "Click or drag an image",
   "dialog.project.edit.icon.recommended": "Recommended: 128x128px",
   "dialog.project.edit.color": "Color",
+  "dialog.project.edit.color.select": "Select {{color}} color",
+  "dialog.project.edit.worktree.startup": "Workspace startup script",
+  "dialog.project.edit.worktree.startup.description": "Runs after creating a new workspace (worktree).",
+  "dialog.project.edit.worktree.startup.placeholder": "e.g. bun install",
 
   "context.breakdown.title": "Context Breakdown",
   "context.breakdown.note": 'Approximate breakdown of input tokens. "Other" includes tool definitions and overhead.',
@@ -284,6 +293,7 @@ export const dict = {
   "context.usage.usage": "Usage",
   "context.usage.cost": "Cost",
   "context.usage.clickToView": "Click to view context",
+  "context.usage.view": "View context usage",
 
   "language.en": "English",
   "language.zh": "Chinese (Simplified)",
@@ -296,6 +306,9 @@ export const dict = {
   "language.da": "Danish",
   "language.ru": "Russian",
   "language.pl": "Polish",
+  "language.ar": "Arabic",
+  "language.no": "Norwegian",
+  "language.br": "Portuguese (Brazil)",
 
   "toast.language.title": "Language",
   "toast.language.description": "Switched to {{language}}",
@@ -385,6 +398,7 @@ export const dict = {
   "session.tab.session": "Session",
   "session.tab.review": "Review",
   "session.tab.context": "Context",
+  "session.panel.reviewAndFiles": "Review and files",
   "session.review.filesChanged": "{{count}} Files Changed",
   "session.review.loadingChanges": "Loading changes...",
   "session.review.empty": "No changes in this session yet",
@@ -438,6 +452,7 @@ export const dict = {
   "terminal.loading": "Loading terminal...",
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
+  "terminal.close": "Close terminal",
   "terminal.connectionLost.title": "Connection Lost",
   "terminal.connectionLost.description":
     "The terminal connection was interrupted. This can happen when the server restarts.",
@@ -449,6 +464,7 @@ export const dict = {
   "common.learnMore": "Learn more",
   "common.rename": "Rename",
   "common.reset": "Reset",
+  "common.archive": "Archive",
   "common.delete": "Delete",
   "common.close": "Close",
   "common.edit": "Edit",
@@ -456,6 +472,7 @@ export const dict = {
   "common.key.esc": "ESC",
 
   "sidebar.menu.toggle": "Toggle menu",
+  "sidebar.nav.projectsAndSessions": "Projects and sessions",
   "sidebar.settings": "Settings",
   "sidebar.help": "Help",
   "sidebar.workspaces.enable": "Enable workspaces",
@@ -624,6 +641,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "Access files outside the project directory",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
   "settings.permissions.tool.doom_loop.description": "Detect repeated tool calls with identical input",
+
+  "session.delete.failed.title": "Failed to delete session",
+  "session.delete.title": "Delete session",
+  "session.delete.confirm": 'Delete session "{{name}}"?',
+  "session.delete.button": "Delete session",
 
   "workspace.new": "New workspace",
   "workspace.type.local": "local",

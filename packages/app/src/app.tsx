@@ -23,6 +23,7 @@ import { NotificationProvider } from "@/context/notification"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
 import { LanguageProvider, useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { Logo } from "@opencode-ai/ui/logo"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
@@ -45,6 +46,11 @@ declare global {
   }
 }
 
+function MarkedProviderWithNativeParser(props: ParentProps) {
+  const platform = usePlatform()
+  return <MarkedProvider nativeParser={platform.parseMarkdown}>{props.children}</MarkedProvider>
+}
+
 export function AppBaseProviders(props: ParentProps) {
   return (
     <MetaProvider>
@@ -54,11 +60,11 @@ export function AppBaseProviders(props: ParentProps) {
           <UiI18nBridge>
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
               <DialogProvider>
-                <MarkedProvider>
+                <MarkedProviderWithNativeParser>
                   <DiffComponentProvider component={Diff}>
                     <CodeComponentProvider component={Code}>{props.children}</CodeComponentProvider>
                   </DiffComponentProvider>
-                </MarkedProvider>
+                </MarkedProviderWithNativeParser>
               </DialogProvider>
             </ErrorBoundary>
           </UiI18nBridge>
