@@ -61,8 +61,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const session = await iife(async () => {
         if (params.session_id) {
-          const found = await Session.get(params.session_id).catch(() => {})
-          if (found) return found
+          try {
+            const found = await Session.get(params.session_id)
+            if (found) return found
+          } catch {}
         }
 
         return await Session.create({
