@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 Phase: 5 of 11 (User Process Execution)
-Plan: 3 of 10 in current phase
+Plan: 4 of 10 in current phase
 Status: In progress
-Last activity: 2026-01-22 - Completed 05-03-PLAN.md
+Last activity: 2026-01-22 - Completed 05-04-PLAN.md
 
-Progress: [██████░░░░] ~68%
+Progress: [██████░░░░] ~72%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 17
-- Average duration: 6.5 min
-- Total execution time: 108 min
+- Total plans completed: 18
+- Average duration: 6.2 min
+- Total execution time: 112 min
 
 **By Phase:**
 
@@ -31,11 +31,11 @@ Progress: [██████░░░░] ~68%
 | 2. Session Infrastructure | 2 | 5 min | 2.5 min |
 | 3. Auth Broker Core | 6 | 33 min | 5.5 min |
 | 4. Authentication Flow | 2 | 8 min | 4 min |
-| 5. User Process Execution | 3 | 50 min | 17 min |
+| 5. User Process Execution | 4 | 54 min | 13.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 04-02 (4 min), 05-01 (40 min), 05-02 (4 min), 05-03 (6 min)
-- Trend: Protocol/IPC plans faster than system-level PTY work
+- Last 5 plans: 05-01 (40 min), 05-02 (4 min), 05-03 (6 min), 05-04 (4 min)
+- Trend: Handler wiring plans fast once modules exist
 
 *Updated after each plan completion*
 
@@ -82,6 +82,9 @@ Recent decisions affecting current work:
 | 05-02 | arg0("-") for login shell | Standard UNIX convention for profile loading |
 | 05-03 | Default terminal: xterm-256color, 80x24 | Sensible defaults for SpawnPtyParams |
 | 05-03 | session_id in SpawnPtyParams | User lookup from authenticated session |
+| 05-04 | RwLock for UserSessionStore | Simple thread safety, reads lock-free |
+| 05-04 | Response.data as serde_json::Value | Flexible typed results for any response |
+| 05-04 | Server holds Arc refs to session stores | Shared across all connections |
 
 ### Pending Todos
 
@@ -101,9 +104,9 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed 05-03-PLAN.md
+Stopped at: Completed 05-04-PLAN.md
 Resume file: None
-Next: 05-04-PLAN.md - Session lifecycle
+Next: 05-05-PLAN.md - I/O multiplexing
 
 ## Phase 5 Progress
 
@@ -111,7 +114,7 @@ Next: 05-04-PLAN.md - Session lifecycle
 - [x] Plan 01: PTY allocation module (40 min, 7 tests)
 - [x] Plan 02: Process spawner (4 min, 8 tests)
 - [x] Plan 03: IPC extension for spawn (6 min, 14+4 tests)
-- [ ] Plan 04: Session lifecycle
+- [x] Plan 04: PTY handler implementation (4 min, 8 tests)
 - [ ] Plan 05: I/O multiplexing
 - [ ] Plan 06: Window resize handling
 - [ ] Plan 07: Signal forwarding
