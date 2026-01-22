@@ -1,36 +1,36 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
-import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
-import "opentui-spinner/solid"
-import { useLocal } from "@tui/context/local"
-import { useTheme } from "@tui/context/theme"
-import { EmptyBorder } from "@tui/component/border"
-import { useSDK } from "@tui/context/sdk"
-import { useRoute } from "@tui/context/route"
-import { useSync } from "@tui/context/sync"
 import { Identifier } from "@/id/id"
-import { createStore, produce } from "solid-js/store"
-import { useKeybind } from "@tui/context/keybind"
-import { usePromptHistory, type PromptInfo } from "./history"
-import { usePromptStash } from "./stash"
-import { DialogStash } from "../dialog-stash"
-import { type AutocompleteRef, Autocomplete } from "./autocomplete"
-import { useCommandDialog } from "../dialog-command"
-import { useRenderer } from "@opentui/solid"
-import { Editor } from "@tui/util/editor"
-import { useExit } from "../../context/exit"
-import { Clipboard } from "../../util/clipboard"
-import type { FilePart } from "@opencode-ai/sdk/v2"
-import { TuiEvent } from "../../event"
+import { formatDuration } from "@/util/format"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
-import { formatDuration } from "@/util/format"
-import { createColors, createFrames } from "../../ui/spinner.ts"
+import type { FilePart } from "@opencode-ai/sdk/v2"
+import { BoxRenderable, MouseEvent, PasteEvent, TextareaRenderable } from "@opentui/core"
+import { useRenderer } from "@opentui/solid"
+import { EmptyBorder } from "@tui/component/border"
+import { useKeybind } from "@tui/context/keybind"
+import { useLocal } from "@tui/context/local"
+import { useRoute } from "@tui/context/route"
+import { useSDK } from "@tui/context/sdk"
+import { useSync } from "@tui/context/sync"
+import { useTheme } from "@tui/context/theme"
 import { useDialog } from "@tui/ui/dialog"
-import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
-import { DialogAlert } from "../../ui/dialog-alert"
-import { useToast } from "../../ui/toast"
+import { Editor } from "@tui/util/editor"
+import "opentui-spinner/solid"
+import { createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
+import { createStore, produce } from "solid-js/store"
+import { useExit } from "../../context/exit"
 import { useKV } from "../../context/kv"
+import { TuiEvent } from "../../event"
+import { DialogAlert } from "../../ui/dialog-alert"
+import { createColors, createFrames } from "../../ui/spinner.ts"
+import { useToast } from "../../ui/toast"
+import { Clipboard } from "../../util/clipboard"
+import { useCommandDialog } from "../dialog-command"
+import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
+import { DialogStash } from "../dialog-stash"
 import { useTextareaKeybindings } from "../textarea-keybindings"
+import { Autocomplete, type AutocompleteRef } from "./autocomplete"
+import { usePromptHistory, type PromptInfo } from "./history"
+import { usePromptStash } from "./stash"
 
 export type PromptProps = {
   sessionID?: string
@@ -1075,6 +1075,9 @@ export function Prompt(props: PromptProps) {
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
+                  <text fg={theme.text}>
+                    {keybind.print("autocomplete_show_description")} <span style={{ fg: theme.textMuted }}>description</span>
+                  </text>
                   <Show when={local.model.variant.list().length > 0}>
                     <text fg={theme.text}>
                       {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>

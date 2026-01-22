@@ -78,4 +78,19 @@ export namespace Locale {
     const template = count === 1 ? singular : plural
     return template.replace("{}", count.toString())
   }
+
+  export function truncateFirstLine(str: string, maxLength?: number): string {
+    const firstLineEnd = str.indexOf("\n")
+    const firstLine = firstLineEnd === -1 ? str : str.slice(0, firstLineEnd)
+
+    if (!maxLength) {
+      return firstLine
+    }
+
+    if (firstLine.length <= maxLength) {
+      return firstLine
+    }
+
+    return firstLine.slice(0, maxLength - 1) + "…"
+  }
 }

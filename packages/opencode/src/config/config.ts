@@ -1,17 +1,10 @@
-import { Log } from "../util/log"
-import path from "path"
-import { pathToFileURL } from "url"
-import os from "os"
-import z from "zod"
-import { Filesystem } from "../util/filesystem"
-import { ModelsDev } from "../provider/models"
-import { mergeDeep, pipe, unique } from "remeda"
-import { Global } from "../global"
-import fs from "fs/promises"
-import { lazy } from "../util/lazy"
+import { BunProc } from "@/bun"
+import { Bus } from "@/bus"
+import { GlobalBus } from "@/bus/global"
+import { Installation } from "@/installation"
 import { NamedError } from "@opencode-ai/util/error"
-import { Flag } from "../flag/flag"
-import { Auth } from "../auth"
+import { existsSync } from "fs"
+import fs from "fs/promises"
 import {
   type ParseError as JsoncParseError,
   applyEdits,
@@ -19,15 +12,22 @@ import {
   parse as parseJsonc,
   printParseErrorCode,
 } from "jsonc-parser"
-import { Instance } from "../project/instance"
+import os from "os"
+import path from "path"
+import { mergeDeep, pipe, unique } from "remeda"
+import { pathToFileURL } from "url"
+import z from "zod"
+import { Auth } from "../auth"
+import { Flag } from "../flag/flag"
+import { Global } from "../global"
 import { LSPServer } from "../lsp/server"
-import { BunProc } from "@/bun"
-import { Installation } from "@/installation"
-import { ConfigMarkdown } from "./markdown"
-import { existsSync } from "fs"
-import { Bus } from "@/bus"
-import { GlobalBus } from "@/bus/global"
+import { Instance } from "../project/instance"
+import { ModelsDev } from "../provider/models"
 import { Event } from "../server/event"
+import { Filesystem } from "../util/filesystem"
+import { lazy } from "../util/lazy"
+import { Log } from "../util/log"
+import { ConfigMarkdown } from "./markdown"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -703,6 +703,7 @@ export namespace Config {
       agent_cycle: z.string().optional().default("tab").describe("Next agent"),
       agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
       variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
+      autocomplete_show_description: z.string().optional().default("ctrl+m").describe("Show full description in autocomplete"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
