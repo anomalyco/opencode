@@ -191,6 +191,61 @@ test("model blacklist excludes specific models", async () => {
   })
 })
 
+test("enabled_models allowlist filters models for provider", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          enabled_models: {
+            openai: ["gpt-5.2-codex"],
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENAI_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["openai"]).toBeDefined()
+      const models = Object.keys(providers["openai"].models)
+      expect(models).toContain("gpt-5.2-codex")
+      expect(models.length).toBe(1)
+    },
+  })
+})
+
+test("enabled_models empty list removes provider models", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          enabled_models: {
+            openai: [],
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENAI_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["openai"]).toBeUndefined()
+    },
+  })
+})
+
 test("custom model alias via config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
