@@ -1555,22 +1555,24 @@ export default function Layout(props: ParentProps) {
               when={hoverReady()}
               fallback={<div class="text-12-regular text-text-weak">{language.t("session.messages.loading")}</div>}
             >
-              <MessageNav
-                messages={hoverMessages() ?? []}
-                current={undefined}
-                getLabel={messageLabel}
-                onMessageSelect={(message) => {
-                  if (!isActive()) {
-                    sessionStorage.setItem("opencode.pendingMessage", `${props.session.id}|${message.id}`)
-                    navigate(`${props.slug}/session/${props.session.id}`)
-                    return
-                  }
-                  window.history.replaceState(null, "", `#message-${message.id}`)
-                  window.dispatchEvent(new HashChangeEvent("hashchange"))
-                }}
-                size="normal"
-                class="w-60"
-              />
+              <div class="overflow-y-auto max-h-72 h-full">
+                <MessageNav
+                  messages={hoverMessages() ?? []}
+                  current={undefined}
+                  getLabel={messageLabel}
+                  onMessageSelect={(message) => {
+                    if (!isActive()) {
+                      sessionStorage.setItem("opencode.pendingMessage", `${props.session.id}|${message.id}`)
+                      navigate(`${props.slug}/session/${props.session.id}`)
+                      return
+                    }
+                    window.history.replaceState(null, "", `#message-${message.id}`)
+                    window.dispatchEvent(new HashChangeEvent("hashchange"))
+                  }}
+                  size="normal"
+                  class="w-60"
+                />
+              </div>
             </Show>
           </HoverCard>
         </Show>
