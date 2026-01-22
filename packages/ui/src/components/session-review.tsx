@@ -36,6 +36,7 @@ export interface SessionReviewProps {
 }
 
 const imageExtensions = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "tif", "tiff", "heic"])
+const audioExtensions = new Set(["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus"])
 
 function getExtension(file: string): string {
   const idx = file.lastIndexOf(".")
@@ -47,17 +48,21 @@ function isImageFile(file: string): boolean {
   return imageExtensions.has(getExtension(file))
 }
 
+function isAudioFile(file: string): boolean {
+  return audioExtensions.has(getExtension(file))
+}
+
 function dataUrl(content: FileContent | undefined): string | undefined {
   if (!content) return
   if (content.encoding !== "base64") return
   const mime = content.mimeType ?? ""
-  if (!mime.startsWith("image/")) return
+  if (!mime.startsWith("image/") && !mime.startsWith("audio/")) return
   return `data:${mime};base64,${content.content}`
 }
 
 function dataUrlFromValue(value: unknown): string | undefined {
   if (typeof value === "string") {
-    if (value.startsWith("data:image/")) return value
+    if (value.startsWith("data:image/") || value.startsWith("data:audio/")) return value
     return
   }
   if (!value || typeof value !== "object") return
@@ -69,7 +74,7 @@ function dataUrlFromValue(value: unknown): string | undefined {
   if (typeof content !== "string") return
   if (encoding !== "base64") return
   if (typeof mimeType !== "string") return
-  if (!mimeType.startsWith("image/")) return
+  if (!mimeType.startsWith("image/") && !mimeType.startsWith("audio/")) return
 
   return `data:${mimeType};base64,${content}`
 }
@@ -150,10 +155,15 @@ export const SessionReview = (props: SessionReviewProps) => {
               const isAdded = () => beforeText().length === 0 && afterText().length > 0
               const isDeleted = () => afterText().length === 0 && beforeText().length > 0
               const isImage = () => isImageFile(diff.file)
+              const isAudio = () => isAudioFile(diff.file)
 
               const diffImageSrc = dataUrlFromValue(diff.after) ?? dataUrlFromValue(diff.before)
               const [imageSrc, setImageSrc] = createSignal<string | undefined>(diffImageSrc)
               const [imageStatus, setImageStatus] = createSignal<"idle" | "loading" | "error">("idle")
+
+              const diffAudioSrc = dataUrlFromValue(diff.after) ?? dataUrlFromValue(diff.before)
+              const [audioSrc, setAudioSrc] = createSignal<string | undefined>(diffAudioSrc)
+              const [audioStatus, setAudioStatus] = createSignal<"idle" | "loading" | "error">("idle")
 
               createEffect(() => {
                 if (!open().includes(diff.file)) return
@@ -177,6 +187,31 @@ export const SessionReview = (props: SessionReviewProps) => {
                   })
                   .catch(() => {
                     setImageStatus("error")
+                  })
+              })
+
+              createEffect(() => {
+                if (!open().includes(diff.file)) return
+                if (!isAudio()) return
+                if (audioSrc()) return
+                if (audioStatus() !== "idle") return
+
+                const reader = props.readFile
+                if (!reader) return
+
+                setAudioStatus("loading")
+                reader(diff.file)
+                  .then((result) => {
+                    const src = dataUrl(result)
+                    if (!src) {
+                      setAudioStatus("error")
+                      return
+                    }
+                    setAudioSrc(src)
+                    setAudioStatus("idle")
+                  })
+                  .catch(() => {
+                    setAudioStatus("error")
                   })
               })
 
@@ -216,7 +251,21 @@ export const SessionReview = (props: SessionReviewProps) => {
                           </div>
                         </div>
                         <div data-slot="session-review-trigger-actions">
-                          <DiffChanges changes={diff} />
+                          <Switch>
+                            <Match when={isAdded()}>
+                              <span data-slot="session-review-change" data-type="added">
+                                Added
+                              </span>
+                            </Match>
+                            <Match when={isDeleted()}>
+                              <span data-slot="session-review-change" data-type="removed">
+                                Removed
+                              </span>
+                            </Match>
+                            <Match when={true}>
+                              <DiffChanges changes={diff} />
+                            </Match>
+                          </Switch>
                           <Icon name="chevron-grabber-vertical" size="small" />
                         </div>
                       </div>
@@ -238,6 +287,23 @@ export const SessionReview = (props: SessionReviewProps) => {
                             }
                           >
                             <img data-slot="session-review-image" src={imageSrc()!} alt={getFilename(diff.file)} />
+                          </Show>
+                        </div>
+                      </Match>
+                      <Match when={isAudio()}>
+                        <div data-slot="session-review-audio-container">
+                          <Show
+                            when={audioSrc()}
+                            fallback={
+                              <div data-slot="session-review-audio-placeholder">
+                                <Switch>
+                                  <Match when={audioStatus() === "loading"}>Loading audio...</Match>
+                                  <Match when={true}>Audio preview unavailable</Match>
+                                </Switch>
+                              </div>
+                            }
+                          >
+                            <audio data-slot="session-review-audio" controls src={audioSrc()!} />
                           </Show>
                         </div>
                       </Match>
