@@ -38,6 +38,18 @@ export interface SessionReviewProps {
 const imageExtensions = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "tif", "tiff", "heic"])
 const audioExtensions = new Set(["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus"])
 
+function normalizeMimeType(type: string | undefined): string | undefined {
+  if (!type) return
+
+  const mime = type.split(";", 1)[0]?.trim().toLowerCase()
+  if (!mime) return
+
+  if (mime === "audio/x-aac") return "audio/aac"
+  if (mime === "audio/x-m4a") return "audio/mp4"
+
+  return mime
+}
+
 function getExtension(file: string): string {
   const idx = file.lastIndexOf(".")
   if (idx === -1) return ""
@@ -55,14 +67,18 @@ function isAudioFile(file: string): boolean {
 function dataUrl(content: FileContent | undefined): string | undefined {
   if (!content) return
   if (content.encoding !== "base64") return
-  const mime = content.mimeType ?? ""
+  const mime = normalizeMimeType(content.mimeType)
+  if (!mime) return
   if (!mime.startsWith("image/") && !mime.startsWith("audio/")) return
   return `data:${mime};base64,${content.content}`
 }
 
 function dataUrlFromValue(value: unknown): string | undefined {
   if (typeof value === "string") {
-    if (value.startsWith("data:image/") || value.startsWith("data:audio/")) return value
+    if (value.startsWith("data:image/")) return value
+    if (value.startsWith("data:audio/x-aac;")) return value.replace("data:audio/x-aac;", "data:audio/aac;")
+    if (value.startsWith("data:audio/x-m4a;")) return value.replace("data:audio/x-m4a;", "data:audio/mp4;")
+    if (value.startsWith("data:audio/")) return value
     return
   }
   if (!value || typeof value !== "object") return
@@ -74,9 +90,11 @@ function dataUrlFromValue(value: unknown): string | undefined {
   if (typeof content !== "string") return
   if (encoding !== "base64") return
   if (typeof mimeType !== "string") return
-  if (!mimeType.startsWith("image/") && !mimeType.startsWith("audio/")) return
+  const mime = normalizeMimeType(mimeType)
+  if (!mime) return
+  if (!mime.startsWith("image/") && !mime.startsWith("audio/")) return
 
-  return `data:${mimeType};base64,${content}`
+  return `data:${mime};base64,${content}`
 }
 
 export const SessionReview = (props: SessionReviewProps) => {
@@ -164,6 +182,7 @@ export const SessionReview = (props: SessionReviewProps) => {
               const diffAudioSrc = dataUrlFromValue(diff.after) ?? dataUrlFromValue(diff.before)
               const [audioSrc, setAudioSrc] = createSignal<string | undefined>(diffAudioSrc)
               const [audioStatus, setAudioStatus] = createSignal<"idle" | "loading" | "error">("idle")
+              const [audioMime, setAudioMime] = createSignal<string | undefined>(undefined)
 
               createEffect(() => {
                 if (!open().includes(diff.file)) return
@@ -207,6 +226,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                       setAudioStatus("error")
                       return
                     }
+                    setAudioMime(normalizeMimeType(result?.mimeType))
                     setAudioSrc(src)
                     setAudioStatus("idle")
                   })
@@ -293,7 +313,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                       <Match when={isAudio()}>
                         <div data-slot="session-review-audio-container">
                           <Show
-                            when={audioSrc()}
+                            when={audioSrc() && audioStatus() !== "error"}
                             fallback={
                               <div data-slot="session-review-audio-placeholder">
                                 <Switch>
@@ -303,7 +323,16 @@ export const SessionReview = (props: SessionReviewProps) => {
                               </div>
                             }
                           >
-                            <audio data-slot="session-review-audio" controls src={audioSrc()!} />
+                            <audio
+                              data-slot="session-review-audio"
+                              controls
+                              preload="metadata"
+                              onError={() => {
+                                setAudioStatus("error")
+                              }}
+                            >
+                              <source src={audioSrc()!} type={audioMime()} />
+                            </audio>
                           </Show>
                         </div>
                       </Match>
