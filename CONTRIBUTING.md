@@ -73,16 +73,16 @@ Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
 
 ### Running the API Server
 
-To start the OpenCode API server (required for local web app development):
+To start the OpenCode headless API server:
 
 ```bash
-bun run --cwd packages/opencode dev:server
+bun dev serve
 ```
 
 This starts the headless server on port 4096 by default. You can specify a different port:
 
 ```bash
-bun run --cwd packages/opencode dev:server --port 8080
+bun dev serve --port 8080
 ```
 
 ### Running the Web App
