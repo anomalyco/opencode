@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import { useTheme } from "@tui/context/theme"
+import { useTheme, selectedForeground } from "@tui/context/theme"
 import { useDialog } from "./dialog"
 import { useKeyboard } from "@opentui/solid"
 import { useKeybind } from "@tui/context/keybind"
@@ -7,6 +7,7 @@ import { useKeybind } from "@tui/context/keybind"
 export function DialogHelp() {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const fg = selectedForeground(theme)
   const keybind = useKeybind()
 
   useKeyboard((evt) => {
@@ -30,7 +31,7 @@ export function DialogHelp() {
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
         <box paddingLeft={3} paddingRight={3} backgroundColor={theme.primary} onMouseUp={() => dialog.clear()}>
-          <text fg={theme.selectedListItemText}>ok</text>
+          <text fg={fg}>ok</text>
         </box>
       </box>
     </box>

@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import { useTheme } from "../context/theme"
+import { useTheme, selectedForeground } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { useKeyboard } from "@opentui/solid"
 
@@ -12,6 +12,7 @@ export type DialogAlertProps = {
 export function DialogAlert(props: DialogAlertProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const fg = selectedForeground(theme)
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
@@ -40,7 +41,7 @@ export function DialogAlert(props: DialogAlertProps) {
             dialog.clear()
           }}
         >
-          <text fg={theme.selectedListItemText}>ok</text>
+          <text fg={fg}>ok</text>
         </box>
       </box>
     </box>
