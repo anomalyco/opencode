@@ -6,10 +6,10 @@ import {
   type PermissionRequest,
   TextPart,
   ToolPart,
-  UserMessage,
 } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
+import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 import { Binary } from "@opencode-ai/util/binary"
@@ -21,8 +21,6 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
-import { IconButton } from "./icon-button"
-import { Tooltip } from "./tooltip"
 import { Card } from "./card"
 import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
@@ -32,29 +30,31 @@ import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
-function computeStatusFromPart(part: PartType | undefined): string | undefined {
+type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
+
+function computeStatusFromPart(part: PartType | undefined, t: Translator): string | undefined {
   if (!part) return undefined
 
   if (part.type === "tool") {
     switch (part.tool) {
       case "task":
-        return "Delegating work"
+        return t("ui.sessionTurn.status.delegating")
       case "todowrite":
       case "todoread":
-        return "Planning next steps"
+        return t("ui.sessionTurn.status.planning")
       case "read":
-        return "Gathering context"
+        return t("ui.sessionTurn.status.gatheringContext")
       case "list":
       case "grep":
       case "glob":
-        return "Searching the codebase"
+        return t("ui.sessionTurn.status.searchingCodebase")
       case "webfetch":
-        return "Searching the web"
+        return t("ui.sessionTurn.status.searchingWeb")
       case "edit":
       case "write":
-        return "Making edits"
+        return t("ui.sessionTurn.status.makingEdits")
       case "bash":
-        return "Running commands"
+        return t("ui.sessionTurn.status.runningCommands")
       default:
         return undefined
     }
@@ -62,11 +62,11 @@ function computeStatusFromPart(part: PartType | undefined): string | undefined {
   if (part.type === "reasoning") {
     const text = part.text ?? ""
     const match = text.trimStart().match(/^\*\*(.+?)\*\*/)
-    if (match) return `Thinking · ${match[1].trim()}`
-    return "Thinking"
+    if (match) return t("ui.sessionTurn.status.thinkingWithTopic", { topic: match[1].trim() })
+    return t("ui.sessionTurn.status.thinking")
   }
   if (part.type === "text") {
-    return "Gathering thoughts"
+    return t("ui.sessionTurn.status.gatheringThoughts")
   }
   return undefined
 }
@@ -136,6 +136,7 @@ export function SessionTurn(
     }
   }>,
 ) {
+  const i18n = useI18n()
   const data = useData()
   const diffComponent = useDiffComponent()
 
@@ -331,12 +332,12 @@ export function SessionTurn(
         const msgParts = data.store.part[msg.id] ?? emptyParts
         for (let pi = msgParts.length - 1; pi >= 0; pi--) {
           const part = msgParts[pi]
-          if (part) return computeStatusFromPart(part)
+          if (part) return computeStatusFromPart(part, i18n.t)
         }
       }
     }
 
-    return computeStatusFromPart(last)
+    return computeStatusFromPart(last, i18n.t)
   })
 
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
@@ -352,7 +353,6 @@ export function SessionTurn(
   const hasDiffs = createMemo(() => (data.store.session_diff?.[props.sessionID]?.length ?? 0) > 0)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
-  const [responseCopied, setResponseCopied] = createSignal(false)
   const [rootRef, setRootRef] = createSignal<HTMLDivElement | undefined>()
   const [stickyRef, setStickyRef] = createSignal<HTMLDivElement | undefined>()
 
@@ -361,13 +361,6 @@ export function SessionTurn(
     if (!root) return
     const next = Math.ceil(height)
     root.style.setProperty("--session-turn-sticky-height", `${next}px`)
-  }
-  const handleCopyResponse = async () => {
-    const content = response()
-    if (!content) return
-    await navigator.clipboard.writeText(content)
-    setResponseCopied(true)
-    setTimeout(() => setResponseCopied(false), 2000)
   }
 
   function duration() {
@@ -379,7 +372,7 @@ export function SessionTurn(
     const interval = Interval.fromDateTimes(from, to)
     const unit: DurationUnit[] = interval.length("seconds") > 60 ? ["minutes", "seconds"] : ["seconds"]
 
-    return interval.toDuration(unit).normalize().toHuman({
+    return interval.toDuration(unit).normalize().reconfigure({ locale: i18n.locale() }).toHuman({
       notation: "compact",
       unitDisplay: "narrow",
       compactDisplay: "short",
@@ -390,6 +383,7 @@ export function SessionTurn(
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
+    overflowAnchor: "auto",
   })
 
   createResizeObserver(
@@ -542,13 +536,18 @@ export function SessionTurn(
                                   })()}
                                 </span>
                                 <span data-slot="session-turn-retry-seconds">
-                                  · retrying {store.retrySeconds > 0 ? `in ${store.retrySeconds}s ` : ""}
+                                  · {i18n.t("ui.sessionTurn.retry.retrying")}
+                                  {store.retrySeconds > 0
+                                    ? " " + i18n.t("ui.sessionTurn.retry.inSeconds", { seconds: store.retrySeconds })
+                                    : ""}
                                 </span>
                                 <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                               </Match>
-                              <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
-                              <Match when={props.stepsExpanded}>Hide steps</Match>
-                              <Match when={!props.stepsExpanded}>Show steps</Match>
+                              <Match when={working()}>
+                                {store.status ?? i18n.t("ui.sessionTurn.status.consideringNextSteps")}
+                              </Match>
+                              <Match when={props.stepsExpanded}>{i18n.t("ui.sessionTurn.steps.hide")}</Match>
+                              <Match when={!props.stepsExpanded}>{i18n.t("ui.sessionTurn.steps.show")}</Match>
                             </Switch>
                             <span>·</span>
                             <span>{store.duration}</span>
@@ -589,17 +588,8 @@ export function SessionTurn(
                     {/* Response */}
                     <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
-                        <div data-slot="session-turn-summary-copy">
-                          <Tooltip value={responseCopied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
-                            <IconButton
-                              icon={responseCopied() ? "check" : "copy"}
-                              variant="secondary"
-                              onClick={handleCopyResponse}
-                            />
-                          </Tooltip>
-                        </div>
                         <div data-slot="session-turn-summary-header">
-                          <h2 data-slot="session-turn-summary-title">Response</h2>
+                          <h2 data-slot="session-turn-summary-title">{i18n.t("ui.sessionTurn.summary.response")}</h2>
                           <Markdown
                             data-slot="session-turn-markdown"
                             data-diffs={hasDiffs()}
@@ -630,7 +620,7 @@ export function SessionTurn(
                                         <div data-slot="session-turn-file-path">
                                           <Show when={diff.file.includes("/")}>
                                             <span data-slot="session-turn-directory">
-                                              {getDirectory(diff.file)}&lrm;
+                                              {`\u202A${getDirectory(diff.file)}\u202C`}
                                             </span>
                                           </Show>
                                           <span data-slot="session-turn-filename">{getFilename(diff.file)}</span>
@@ -676,8 +666,9 @@ export function SessionTurn(
                               })
                             }}
                           >
-                            Show more changes (
-                            {(data.store.session_diff?.[props.sessionID]?.length ?? 0) - store.diffLimit})
+                            {i18n.t("ui.sessionTurn.diff.showMore", {
+                              count: (data.store.session_diff?.[props.sessionID]?.length ?? 0) - store.diffLimit,
+                            })}
                           </Button>
                         </Show>
                       </div>
