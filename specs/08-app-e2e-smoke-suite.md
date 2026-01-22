@@ -22,7 +22,7 @@ Add 6 smoke tests to `packages/app/e2e/`:
 ### Progress
 
 - [x] 1. Settings dialog open / switch / close (`packages/app/e2e/settings.spec.ts`)
-- [ ] 2. Prompt slash command path: `/open` opens file picker
+- [x] 2. Prompt slash command path: `/open` opens file picker (`packages/app/e2e/prompt-slash-open.spec.ts`)
 - [ ] 3. Prompt @mention inserts a file pill token
 - [ ] 4. Model selection UI works end-to-end
 - [ ] 5. File viewer renders real file content
