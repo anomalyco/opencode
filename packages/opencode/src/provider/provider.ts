@@ -2,6 +2,7 @@ import z from "zod"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
+import { Wildcard } from "../util/wildcard"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
@@ -682,17 +683,18 @@ export namespace Provider {
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
     const enabledModels = config.enabled_models
-    const allowedModels = enabledModels
-      ? new Map(Object.entries(enabledModels).map(([providerID, models]) => [providerID, new Set(models)]))
-      : null
-    const disabledModels = config.disabled_models
-      ? new Map(Object.entries(config.disabled_models).map(([providerID, models]) => [providerID, new Set(models)]))
-      : null
+    const allowedModels = enabledModels ? new Map(Object.entries(enabledModels)) : null
+    const disabledModels = config.disabled_models ? new Map(Object.entries(config.disabled_models)) : null
 
     function isProviderAllowed(providerID: string): boolean {
       if (enabled && !enabled.has(providerID)) return false
       if (disabled.has(providerID)) return false
       return true
+    }
+
+    function matchesModelPattern(patterns: string[] | undefined, modelID: string, apiID: string) {
+      if (!patterns) return false
+      return patterns.some((pattern) => Wildcard.match(modelID, pattern) || Wildcard.match(apiID, pattern))
     }
 
     const providers: { [providerID: string]: Info } = {}
@@ -928,8 +930,8 @@ export namespace Provider {
           delete provider.models[modelID]
         if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
         if (model.status === "deprecated") delete provider.models[modelID]
-        if (blocked && (blocked.has(modelID) || blocked.has(model.api.id))) delete provider.models[modelID]
-        if (allowed && !allowed.has(modelID) && !allowed.has(model.api.id)) delete provider.models[modelID]
+        if (matchesModelPattern(blocked, modelID, model.api.id)) delete provider.models[modelID]
+        if (allowed && !matchesModelPattern(allowed, modelID, model.api.id)) delete provider.models[modelID]
         if (
           (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
           (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
