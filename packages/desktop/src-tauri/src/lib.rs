@@ -1,6 +1,7 @@
 mod cli;
 #[cfg(windows)]
 mod job_object;
+mod markdown;
 mod window_customizer;
 
 use cli::{install_cli, sync_cli};
@@ -283,7 +284,8 @@ pub fn run() {
             install_cli,
             ensure_server_ready,
             get_default_server_url,
-            set_default_server_url
+            set_default_server_url,
+            markdown::parse_markdown_command
         ])
         .setup(move |app| {
             let app = app.handle().clone();
