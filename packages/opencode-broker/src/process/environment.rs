@@ -171,7 +171,10 @@ mod tests {
             "SSH_AUTH_SOCK".to_string(),
             "/tmp/ssh-agent.sock".to_string(),
         )
-        .with_env("GPG_AGENT_INFO".to_string(), "/tmp/gpg-agent.info".to_string());
+        .with_env(
+            "GPG_AGENT_INFO".to_string(),
+            "/tmp/gpg-agent.info".to_string(),
+        );
 
         let vars = env.build();
         let vars_map: HashMap<_, _> = vars.into_iter().collect();

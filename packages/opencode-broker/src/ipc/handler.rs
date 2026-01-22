@@ -14,7 +14,7 @@ use crate::auth::rate_limit::RateLimiter;
 use crate::auth::validation;
 use crate::config::BrokerConfig;
 use crate::ipc::protocol::{
-    Method, PtyReadResult, SpawnPtyResult, PROTOCOL_VERSION, Request, RequestParams, Response,
+    Method, PROTOCOL_VERSION, PtyReadResult, Request, RequestParams, Response, SpawnPtyResult,
 };
 use crate::process::environment::LoginEnvironment;
 use crate::process::spawn::{self, SpawnConfig};
@@ -435,10 +435,7 @@ async fn handle_register_session(request: Request, user_sessions: &UserSessionSt
 ///
 /// Removes the session's user info from the store. Succeeds even if session
 /// doesn't exist (idempotent).
-async fn handle_unregister_session(
-    request: Request,
-    user_sessions: &UserSessionStore,
-) -> Response {
+async fn handle_unregister_session(request: Request, user_sessions: &UserSessionStore) -> Response {
     let params = match &request.params {
         RequestParams::UnregisterSession(p) => p,
         _ => return Response::failure(&request.id, "invalid params for unregister_session"),
@@ -665,8 +662,14 @@ mod tests {
             params: RequestParams::Ping(PingParams {}),
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(response.success);
         assert_eq!(response.id, "ping-1");
@@ -687,8 +690,14 @@ mod tests {
             params: RequestParams::Ping(PingParams {}),
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(!response.success);
         assert!(
@@ -717,8 +726,14 @@ mod tests {
             }),
         };
 
-        let response1 =
-            handle_request(request1, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response1 = handle_request(
+            request1,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
         // Will fail PAM but rate limit check passes
         assert_eq!(response1.id, "auth-1");
 
@@ -733,8 +748,14 @@ mod tests {
             }),
         };
 
-        let response2 =
-            handle_request(request2, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response2 = handle_request(
+            request2,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(!response2.success);
         assert!(
@@ -763,8 +784,14 @@ mod tests {
             }),
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(!response.success);
         // Should return generic "authentication failed" not validation details
@@ -788,8 +815,14 @@ mod tests {
             }),
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(!response.success);
         assert_eq!(response.error, Some("authentication failed".to_string()));
@@ -815,8 +848,14 @@ mod tests {
             }),
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(!response.success);
         assert_eq!(response.error, Some("session not found".to_string()));
@@ -838,8 +877,14 @@ mod tests {
             }),
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(!response.success);
         assert_eq!(response.error, Some("PTY session not found".to_string()));
@@ -863,8 +908,14 @@ mod tests {
             }),
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(!response.success);
         assert_eq!(response.error, Some("PTY session not found".to_string()));
@@ -885,8 +936,14 @@ mod tests {
             params: RequestParams::Ping(PingParams {}),
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(!response.success);
         assert_eq!(response.id, "spawn-bad-1");
@@ -917,13 +974,21 @@ mod tests {
             }),
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(response.success);
 
         // Verify session was stored
-        let user = user_sessions.get("session-abc").expect("should be registered");
+        let user = user_sessions
+            .get("session-abc")
+            .expect("should be registered");
         assert_eq!(user.username, "testuser");
         assert_eq!(user.uid, 1000);
         assert_eq!(user.home, "/home/testuser");
@@ -958,8 +1023,14 @@ mod tests {
             }),
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(response.success);
         assert!(user_sessions.get("session-abc").is_none());
@@ -981,8 +1052,14 @@ mod tests {
             }),
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         // Should succeed even if session doesn't exist (idempotent)
         assert!(response.success);
@@ -1005,8 +1082,14 @@ mod tests {
             }),
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(!response.success);
         assert_eq!(response.error, Some("PTY session not found".to_string()));
@@ -1029,8 +1112,14 @@ mod tests {
             params: RequestParams::Ping(PingParams {}), // Wrong params
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(!response.success);
         assert_eq!(
@@ -1056,8 +1145,14 @@ mod tests {
             }),
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(!response.success);
         assert_eq!(response.error, Some("PTY session not found".to_string()));
@@ -1077,8 +1172,14 @@ mod tests {
             params: RequestParams::Ping(PingParams {}), // Wrong params
         };
 
-        let response =
-            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+        let response = handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         assert!(!response.success);
         assert_eq!(

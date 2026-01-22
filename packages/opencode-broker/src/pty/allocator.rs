@@ -172,7 +172,7 @@ mod tests {
 
         // After the block, PtyPair is dropped and FDs should be closed.
         // Verify by checking that fcntl fails with EBADF.
-        use nix::fcntl::{fcntl, FcntlArg};
+        use nix::fcntl::{FcntlArg, fcntl};
         let master_result = fcntl(master_fd, FcntlArg::F_GETFD);
         let slave_result = fcntl(slave_fd, FcntlArg::F_GETFD);
 
