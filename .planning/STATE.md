@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 Phase: 5 of 11 (User Process Execution)
-Plan: 6 of 10 in current phase
+Plan: 7 of 10 in current phase
 Status: In progress
-Last activity: 2026-01-22 - Completed 05-06-PLAN.md
+Last activity: 2026-01-22 - Completed 05-07-PLAN.md
 
-Progress: [████████░░] ~78%
+Progress: [████████░░] ~81%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 20
-- Average duration: 5.8 min
-- Total execution time: 116 min
+- Total plans completed: 21
+- Average duration: 5.6 min
+- Total execution time: 118 min
 
 **By Phase:**
 
@@ -31,11 +31,11 @@ Progress: [████████░░] ~78%
 | 2. Session Infrastructure | 2 | 5 min | 2.5 min |
 | 3. Auth Broker Core | 6 | 33 min | 5.5 min |
 | 4. Authentication Flow | 2 | 8 min | 4 min |
-| 5. User Process Execution | 6 | 58 min | 9.7 min |
+| 5. User Process Execution | 7 | 60 min | 8.6 min |
 
 **Recent Trend:**
-- Last 5 plans: 05-03 (6 min), 05-04 (4 min), 05-05 (3 min), 05-06 (1 min)
-- Trend: TypeScript client extensions are very fast (1-3 min)
+- Last 5 plans: 05-04 (4 min), 05-05 (3 min), 05-06 (1 min), 05-07 (2 min)
+- Trend: TypeScript client extensions and integration wiring very fast (1-2 min)
 
 *Updated after each plan completion*
 
@@ -89,6 +89,9 @@ Recent decisions affecting current work:
 | 05-05 | Session-first auth flow | RegisterSession before SpawnPty ensures user info available |
 | 05-06 | Default PTY options: xterm-256color, 80x24 | Sensible defaults matching common terminal emulators |
 | 05-06 | SpawnPty returns structured result | Unlike boolean methods, returns ptyId, pid, error for richer feedback |
+| 05-07 | Fire-and-forget broker calls | Registration/unregistration don't block auth flow |
+| 05-07 | Graceful degradation | Web access works even if broker unavailable |
+| 05-07 | Broker PTY path throws "not yet implemented" | PTY I/O streaming deferred to Plan 05-08 |
 
 ### Pending Todos
 
@@ -108,9 +111,9 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed 05-06-PLAN.md
+Stopped at: Completed 05-07-PLAN.md
 Resume file: None
-Next: 05-07-PLAN.md - Signal forwarding
+Next: 05-08-PLAN.md - PTY lifecycle events
 
 ## Phase 5 Progress
 
@@ -121,7 +124,7 @@ Next: 05-07-PLAN.md - Signal forwarding
 - [x] Plan 04: PTY handler implementation (4 min, 8 tests)
 - [x] Plan 05: Session registration protocol (3 min, 3 tests)
 - [x] Plan 06: TypeScript BrokerClient extension (1 min)
-- [ ] Plan 07: Signal forwarding
+- [x] Plan 07: Web server integration (2 min)
 - [ ] Plan 08: PTY lifecycle events
 - [ ] Plan 09: Client PTY API
 - [ ] Plan 10: Integration test harness
