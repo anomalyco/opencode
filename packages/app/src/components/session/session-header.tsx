@@ -47,7 +47,6 @@ export function SessionHeader() {
 
   const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
-  const showReview = createMemo(() => !!currentSession()?.summary?.files)
   const showShare = createMemo(() => shareEnabled() && !!currentSession())
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey()))
@@ -176,13 +175,7 @@ export function SessionHeader() {
               {/*   <SessionMcpIndicator /> */}
               {/* </div> */}
               <div class="flex items-center gap-1">
-                <div
-                  class="hidden md:block shrink-0"
-                  classList={{
-                    "opacity-0 pointer-events-none": !showReview(),
-                  }}
-                  aria-hidden={!showReview()}
-                >
+                <div class="hidden md:block shrink-0">
                   <TooltipKeybind
                     title={language.t("command.review.toggle")}
                     keybind={command.keybind("review.toggle")}
