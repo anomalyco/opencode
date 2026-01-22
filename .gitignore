@@ -26,3 +26,5 @@ target
 opencode-dev
 logs/
 *.bun-build
+test-daily-recap.sh
+test-daily-pr-recap.sh

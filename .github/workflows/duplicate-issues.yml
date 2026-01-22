@@ -21,6 +21,9 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      - name: Install dependencies
+        run: bun install
+
       - name: Install opencode
         run: curl -fsSL https://opencode.ai/install | bash
 
@@ -32,124 +35,120 @@ jobs:
           gh label create "duplicate" --repo ${{ github.repository }} --color "cfd3d7" --description "This issue is a duplicate" 2>/dev/null || true
           gh label create "spam" --repo ${{ github.repository }} --color "B60205" --description "Spam or low-quality issue" 2>/dev/null || true
 
-      - name: Check for spam/low-quality issues
-        id: spam-check
+      - name: Build prompt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          # Use env vars to avoid shell injection from issue content
-          BODY_LENGTH=${#ISSUE_BODY}
-          TITLE_LENGTH=${#ISSUE_TITLE}
+          {
+            echo "Check for duplicates and spam for this new issue:"
+            echo ""
+            echo "CURRENT_ISSUE_NUMBER: $ISSUE_NUMBER"
+            echo ""
+            echo "Title: $(gh issue view "$ISSUE_NUMBER" --json title --jq .title)"
+            echo ""
+            echo "Body:"
+            gh issue view "$ISSUE_NUMBER" --json body --jq .body
+          } > issue_info.txt
 
-          IS_SPAM="false"
-          SPAM_REASON=""
-
-          # Count alphanumeric characters in title
-          ALPHA_CHARS=$(printf '%s' "$ISSUE_TITLE" | tr -cd '[:alnum:]' | wc -c | tr -d ' ')
-
-          # Only flag as spam if BOTH conditions are met:
-          # 1. Body is empty/very short (< 10 chars)
-          # 2. Title has very few alphanumeric characters (< 3)
-          if [ "$BODY_LENGTH" -lt 10 ] && [ "$ALPHA_CHARS" -lt 3 ]; then
-            IS_SPAM="true"
-            SPAM_REASON="Issue has no meaningful content (empty body and title with no text)"
-          fi
-
-          # Check for spam service offers (requires first-person language)
-          if printf '%s' "$ISSUE_TITLE" | grep -qiE "(i can fix|i will fix|i.ll fix|hire me|contact me|my service|freelanc)"; then
-            IS_SPAM="true"
-            SPAM_REASON="Issue appears to be spam (unsolicited service offer)"
-          fi
-
-          echo "is_spam=$IS_SPAM" >> $GITHUB_OUTPUT
-
-          if [ "$IS_SPAM" = "true" ]; then
-            echo "Detected spam/low-quality issue: $SPAM_REASON"
-            cat > /tmp/spam_comment.txt << SPAM_EOF
-          This issue has been automatically closed because it appears to be spam or lacks sufficient information.
-
-          **Reason:** ${SPAM_REASON}
-
-          If this was closed in error, please reopen with a detailed description of your issue including:
-          - What you were trying to do
-          - What happened instead
-          - Steps to reproduce (if applicable)
-          - Your environment (OS, OpenCode version)
-          SPAM_EOF
-            gh issue close ${{ github.event.issue.number }} --repo ${{ github.repository }} --comment "$(cat /tmp/spam_comment.txt)"
-            gh issue edit ${{ github.event.issue.number }} --repo ${{ github.repository }} --add-label "spam"
-          fi
-
-      - name: Review new issue
-        if: steps.spam-check.outputs.is_spam != 'true'
+      - name: Analyze issue
+        id: analyze
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: |
-            {
-              "bash": {
-                "*": "deny",
-                "gh issue*": "allow"
-              },
-              "webfetch": "deny"
-            }
         run: |
-          opencode run -m opencode/claude-sonnet-4-5 "A new issue has been created: #${{ github.event.issue.number }}
+          RESULT=$(bun script/duplicate-issue.ts -f issue_info.txt "Check the attached file for issue details and analyze for spam/duplicates")
+          echo "$RESULT" > analysis.json
+          cat analysis.json
 
-          STEP 1: Read the issue
-          Look up issue #${{ github.event.issue.number }} and read the FULL content to understand what the user is asking.
+      - name: Process results
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
 
-          STEP 2: Search for duplicates
-          Search through existing issues (excluding #${{ github.event.issue.number }}) to find potential duplicates.
-          For each potential duplicate, assign a confidence score (0-100):
-          - 90-100%: Nearly identical (same error message, same context)
-          - 70-89%: Very similar (same feature/bug area, similar symptoms)
-          - 50-69%: Related (overlapping topic, might be same root cause)
-          - <50%: Loosely related (do not include these)
+          # Validate JSON structure
+          if ! jq -e 'type=="object" and (.spam|type=="object") and (.duplicates|type=="array")' analysis.json > /dev/null 2>&1; then
+            echo "Invalid or unexpected JSON structure, skipping"
+            cat analysis.json
+            exit 0
+          fi
 
-          Consider:
-          1. Similar titles or descriptions
-          2. Same error messages or symptoms
-          3. Related functionality or components
-          4. Similar feature requests
+          IS_SPAM=$(jq -r '.spam.is_spam // false' analysis.json)
+          SPAM_REASON=$(jq -r '.spam.reason // ""' analysis.json)
+          DUPLICATES=$(jq -r '.duplicates // []' analysis.json)
+          QUICK_ANSWER=$(jq -r '.quick_answer // ""' analysis.json)
+          KEYBINDS=$(jq -r '.keybinds_related // false' analysis.json)
 
-          STEP 3: Provide a quick answer (if applicable)
-          If the issue is about OpenCode tooling, configuration, or usage, explore the repository codebase to find relevant code, config files, or documentation that could help answer the question. Provide a concise, helpful answer.
+          # Handle spam
+          if [ "$IS_SPAM" = "true" ]; then
+            echo "Issue detected as spam: $SPAM_REASON"
+            gh issue close "$ISSUE_NUMBER" --repo ${{ github.repository }} --comment "This issue has been automatically closed as spam or low-quality.
 
-          STEP 4: Decide whether to comment
-          ONLY comment if:
-          - You found duplicates with >= 50% confidence, OR
-          - You can provide a helpful answer about OpenCode tooling
+          **Reason:** $SPAM_REASON
 
-          If commenting, use this EXACT format:
-          '## Agent Review
+          If this was closed in error, please reopen with a detailed description of your issue."
+            gh issue edit "$ISSUE_NUMBER" --repo ${{ github.repository }} --add-label "spam"
+            exit 0
+          fi
 
-          ### Duplicate Analysis
-          [If duplicates >= 50% found:]
-          This issue appears to overlap with existing issues:
-          - #[issue_number] ([confidence]%): [specific explanation of what overlaps]
+          # Check for duplicates
+          DUP_COUNT=$(echo "$DUPLICATES" | jq 'length')
+          HAS_DUPLICATES=false
 
-          [If no duplicates >= 50%:]
-          No clear duplicates found.
+          if [ "$DUP_COUNT" -gt 0 ]; then
+            # Check if any have >= 50% confidence
+            HIGH_CONF=$(echo "$DUPLICATES" | jq '[.[] | select(.confidence >= 50)] | length')
+            if [ "$HIGH_CONF" -gt 0 ]; then
+              HAS_DUPLICATES=true
+            fi
+          fi
 
-          ### Quick Answer
-          [If you can answer the question about OpenCode tooling/config, provide a concise answer here. Reference specific files if helpful. Otherwise omit this section.]
+          # Build comment if we have something to say
+          if [ "$HAS_DUPLICATES" = "true" ] || [ -n "$QUICK_ANSWER" ] && [ "$QUICK_ANSWER" != "null" ]; then
+            {
+              echo "## Agent Review"
+              echo ""
+              echo "### Duplicate Analysis"
+              
+              if [ "$HAS_DUPLICATES" = "true" ]; then
+                echo "This issue appears to overlap with existing issues:"
+                echo "$DUPLICATES" | jq -r '.[] | select(.confidence >= 50) | "- #\(.issue_number) (\(.confidence)%): \(.explanation)"'
+              else
+                echo "No clear duplicates found."
+              fi
+              
+              if [ -n "$QUICK_ANSWER" ] && [ "$QUICK_ANSWER" != "null" ]; then
+                echo ""
+                echo "### Quick Answer"
+                echo "$QUICK_ANSWER"
+              fi
+              
+              if [ "$KEYBINDS" = "true" ]; then
+                echo ""
+                echo "### Related"
+                echo "For keybind-related issues, please also check the pinned keybinds documentation: #4997"
+              fi
+              
+              if [ "$HAS_DUPLICATES" = "true" ]; then
+                echo ""
+                echo "---"
+                echo "👎 **React with thumbs-down if this does not address your issue.**"
+                echo "If no reaction is received within 6 hours, this issue will be automatically closed."
+                echo ""
+                echo "_Feel free to reopen if your issue persists._"
+              fi
+            } > comment.txt
 
-          ---
-          👎 **React with thumbs-down if this does not address your issue.**
-          If no reaction is received within 6 hours, this issue will be automatically closed.
-
-          _Feel free to reopen if your issue persists._'
-
-          STEP 5: Add label (only if duplicates >= 50%)
-          If you found duplicates with >= 50% confidence, add the label:
-          gh issue edit ${{ github.event.issue.number }} --add-label potential-duplicate
-
-          SPECIAL CASE: If the issue mentions keybinds, keyboard shortcuts, or key bindings, include a note about the pinned keybinds issue #4997.
-
-          If you cannot help (no duplicates >= 50% AND no helpful answer), do NOT comment."
+            gh issue comment "$ISSUE_NUMBER" --repo ${{ github.repository }} --body "$(cat comment.txt)"
+            
+            if [ "$HAS_DUPLICATES" = "true" ]; then
+              gh issue edit "$ISSUE_NUMBER" --repo ${{ github.repository }} --add-label "potential-duplicate"
+            fi
+          else
+            echo "No duplicates found and no quick answer to provide, not commenting"
+          fi
 
   close-stale-duplicates:
     if: github.event_name == 'schedule'
@@ -184,7 +183,7 @@ jobs:
               comment_created=$(echo "$comment_data" | jq -r '.created_at')
 
               # Check if comment is older than 6 hours (21600 seconds)
-              comment_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$comment_created" +%s 2>/dev/null || date -d "$comment_created" +%s)
+              comment_epoch=$(date -d "$comment_created" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$comment_created" +%s)
               current_epoch=$(date +%s)
               age=$((current_epoch - comment_epoch))
 
