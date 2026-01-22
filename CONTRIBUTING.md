@@ -71,6 +71,24 @@ Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
   - `packages/desktop`: The native desktop app, built with Tauri (wraps `packages/app`)
   - `packages/plugin`: Source for `@opencode-ai/plugin`
 
+### Understanding bun dev vs opencode
+
+During development, `bun dev` is the local equivalent of the built `opencode` command. Both run the same CLI interface:
+
+```bash
+# Development (from project root)
+bun dev --help           # Show all available commands
+bun dev serve            # Start headless API server
+bun dev web              # Start server + open web interface
+bun dev <directory>      # Start TUI in specific directory
+
+# Production
+opencode --help          # Show all available commands
+opencode serve           # Start headless API server
+opencode web             # Start server + open web interface
+opencode <directory>     # Start TUI in specific directory
+```
+
 ### Running the API Server
 
 To start the OpenCode headless API server:
