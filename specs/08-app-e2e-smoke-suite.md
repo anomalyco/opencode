@@ -26,7 +26,7 @@ Add 6 smoke tests to `packages/app/e2e/`:
 - [x] 3. Prompt @mention inserts a file pill token (`packages/app/e2e/prompt-mention.spec.ts`)
 - [x] 4. Model selection UI works end-to-end (`packages/app/e2e/model-picker.spec.ts`)
 - [x] 5. File viewer renders real file content (`packages/app/e2e/file-viewer.spec.ts`)
-- [ ] 8. Terminal init + create new terminal
+- [x] 8. Terminal init + create new terminal (`packages/app/e2e/terminal-init.spec.ts`)
 
 ---
 
