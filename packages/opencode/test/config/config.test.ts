@@ -1078,11 +1078,14 @@ test("permission config preserves key order", async () => {
     fn: async () => {
       const config = await Config.get()
       expect(Object.keys(config.permission!)).toEqual([
+        "doom_loop",
+        "external_directory",
+        "read",
+        "webfetch",
+        "bash",
         "*",
         "edit",
         "write",
-        "external_directory",
-        "read",
         "todowrite",
         "todoread",
         "thoughts_*",
