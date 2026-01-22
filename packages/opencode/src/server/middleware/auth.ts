@@ -77,7 +77,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
   // Get session ID from cookie
   const sessionId = getCookie(c, COOKIE_NAME)
   if (!sessionId) {
-    return c.redirect("/login")
+    return c.redirect("/auth/login")
   }
 
   // Get session from store
@@ -85,7 +85,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
   if (!session) {
     // Stale cookie - clear it
     clearSessionCookie(c)
-    return c.redirect("/login")
+    return c.redirect("/auth/login")
   }
 
   // Check idle timeout
@@ -97,7 +97,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     // Session expired - clean up and redirect
     UserSession.remove(sessionId)
     clearSessionCookie(c)
-    return c.redirect("/login")
+    return c.redirect("/auth/login")
   }
 
   // Update lastAccessTime (sliding expiration)

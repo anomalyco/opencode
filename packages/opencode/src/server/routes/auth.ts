@@ -35,8 +35,76 @@ function isValidReturnUrl(url: string): boolean {
 }
 
 /**
+ * Simple HTML login page for direct backend access.
+ */
+const loginPageHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - opencode</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #e5e5e5; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .container { width: 100%; max-width: 360px; padding: 2rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 1.5rem; text-align: center; }
+    form { display: flex; flex-direction: column; gap: 1rem; }
+    label { font-size: 0.875rem; color: #a3a3a3; }
+    input { width: 100%; padding: 0.75rem; border: 1px solid #333; border-radius: 6px; background: #171717; color: #e5e5e5; font-size: 1rem; }
+    input:focus { outline: none; border-color: #0ea5e9; }
+    button { padding: 0.75rem; border: none; border-radius: 6px; background: #0ea5e9; color: white; font-size: 1rem; cursor: pointer; }
+    button:hover { background: #0284c7; }
+    .error { color: #ef4444; font-size: 0.875rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>opencode</h1>
+    <form id="loginForm">
+      <div>
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required autocomplete="username">
+      </div>
+      <div>
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
+      <div id="error" class="error"></div>
+      <button type="submit">Sign In</button>
+    </form>
+  </div>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const error = document.getElementById('error');
+      error.textContent = '';
+      try {
+        const res = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          body: JSON.stringify({
+            username: document.getElementById('username').value,
+            password: document.getElementById('password').value,
+          }),
+        });
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          const data = await res.json();
+          error.textContent = data.message || 'Authentication failed';
+        }
+      } catch (err) {
+        error.textContent = 'Connection error';
+      }
+    });
+  </script>
+</body>
+</html>`
+
+/**
  * Auth routes for session management.
  *
+ * - GET /login - Login page (HTML)
  * - POST /login - Login with username and password
  * - GET /status - Get auth configuration status
  * - POST /logout - Logout current session
@@ -45,6 +113,9 @@ function isValidReturnUrl(url: string): boolean {
  */
 export const AuthRoutes = lazy(() =>
   new Hono<AuthEnv>()
+    .get("/login", (c) => {
+      return c.html(loginPageHtml)
+    })
     .post(
       "/login",
       describeRoute({
@@ -233,7 +304,7 @@ export const AuthRoutes = lazy(() =>
           UserSession.remove(sessionId)
         }
         clearSessionCookie(c)
-        return c.redirect("/login")
+        return c.redirect("/auth/login")
       },
     )
     .post(
@@ -265,7 +336,7 @@ export const AuthRoutes = lazy(() =>
           UserSession.removeAllForUser(session.username)
         }
         clearSessionCookie(c)
-        return c.redirect("/login")
+        return c.redirect("/auth/login")
       },
     )
     .get(
