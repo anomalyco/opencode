@@ -1710,6 +1710,43 @@ export default function Layout(props: ParentProps) {
     )
   }
 
+  const NewSessionItem = (props: { slug: string; mobile?: boolean; dense?: boolean }): JSX.Element => {
+    const label = language.t("command.session.new")
+    const tooltip = () => props.mobile || !layout.sidebar.opened()
+    const item = (
+      <A
+        href={`${props.slug}/session`}
+        end
+        class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
+        onClick={() => setHoverSession(undefined)}
+      >
+        <div class="flex items-center gap-1 w-full">
+          <div class="shrink-0 size-6 flex items-center justify-center">
+            <Icon name="plus-small" size="small" class="text-icon-weak" />
+          </div>
+          <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
+            {label}
+          </span>
+        </div>
+      </A>
+    )
+
+    return (
+      <div class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3 hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active">
+        <Show
+          when={!tooltip()}
+          fallback={
+            <Tooltip placement={props.mobile ? "bottom" : "right"} value={label} gutter={10}>
+              {item}
+            </Tooltip>
+          }
+        >
+          {item}
+        </Show>
+      </div>
+    )
+  }
+
   const SessionSkeleton = (props: { count?: number }): JSX.Element => {
     const items = Array.from({ length: props.count ?? 4 }, (_, index) => index)
     return (
@@ -1943,16 +1980,7 @@ export default function Layout(props: ParentProps) {
 
           <Collapsible.Content>
             <nav class="flex flex-col gap-1 px-2">
-              <Button
-                as={A}
-                href={`${slug()}/session`}
-                variant="ghost"
-                size="large"
-                icon="edit"
-                class="hidden _flex w-full text-left justify-start text-text-base rounded-md px-3"
-              >
-                {language.t("command.session.new")}
-              </Button>
+              <NewSessionItem slug={slug()} mobile={props.mobile} />
               <Show when={loading()}>
                 <SessionSkeleton />
               </Show>
@@ -2159,6 +2187,7 @@ export default function Layout(props: ParentProps) {
         style={{ "overflow-anchor": "none" }}
       >
         <nav class="flex flex-col gap-1 px-2">
+          <NewSessionItem slug={slug()} mobile={props.mobile} />
           <Show when={loading()}>
             <SessionSkeleton />
           </Show>
