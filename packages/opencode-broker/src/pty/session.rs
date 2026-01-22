@@ -75,6 +75,7 @@ pub struct PtySession {
 impl PtySession {
     /// Create a new PTY session.
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: PtyId,
         master_fd: OwnedFd,

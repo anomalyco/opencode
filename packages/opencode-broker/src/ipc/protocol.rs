@@ -150,7 +150,11 @@ fn default_rows() -> u16 {
 }
 
 /// Parameters for killing a PTY session.
+///
+/// Uses `deny_unknown_fields` to prevent serde untagged matching when
+/// extra fields are present (e.g., PtyWrite's `data` field).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct KillPtyParams {
     /// The PTY session ID to kill.
     pub pty_id: String,
@@ -395,9 +399,7 @@ mod tests {
             term: "xterm-256color".to_string(),
             cols: 120,
             rows: 40,
-            env: std::collections::HashMap::from([
-                ("CUSTOM_VAR".to_string(), "value".to_string()),
-            ]),
+            env: std::collections::HashMap::from([("CUSTOM_VAR".to_string(), "value".to_string())]),
         };
 
         let json = serde_json::to_string(&params).expect("serialize");
@@ -423,7 +425,8 @@ mod tests {
 
     #[test]
     fn test_spawn_pty_params_deserialization_full() {
-        let json = r#"{"session_id":"sess-789","term":"vt100","cols":132,"rows":50,"env":{"FOO":"bar"}}"#;
+        let json =
+            r#"{"session_id":"sess-789","term":"vt100","cols":132,"rows":50,"env":{"FOO":"bar"}}"#;
         let params: SpawnPtyParams = serde_json::from_str(json).expect("deserialize");
 
         assert_eq!(params.session_id, "sess-789");

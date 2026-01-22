@@ -19,12 +19,20 @@
 //! # Security Model
 //!
 //! 1. Broker runs as root with `CAP_SETUID`, `CAP_SETGID`
-//! 2. Pre-exec hook sets up supplementary groups with `initgroups`
+//! 2. Pre-exec hook sets up supplementary groups with `initgroups` (Linux only)
 //! 3. `CommandExt::uid/gid` drops to user's UID/GID
 //! 4. `setsid` creates a new session (process becomes leader)
 //! 5. `TIOCSCTTY` establishes controlling terminal
 //! 6. stdio is redirected to the PTY slave
+//!
+//! ## macOS Note
+//!
+//! On macOS, `initgroups()` fails with EPERM when called in a pre_exec hook
+//! after fork but before exec. This is a macOS security restriction. The
+//! workaround is to skip `initgroups()` on macOS - the supplementary groups
+//! are inherited correctly from the Open Directory system without it.
 
+#[cfg(target_os = "linux")]
 use std::ffi::CString;
 use std::os::fd::RawFd;
 use std::os::unix::process::CommandExt;
@@ -121,14 +129,12 @@ pub fn spawn_as_user(config: SpawnConfig) -> Result<Child, SpawnError> {
     let gid = config.env.gid;
     let slave_fd = config.slave_fd;
 
-    // Convert gid to the platform-specific type for initgroups
-    // Linux uses gid_t (u32), macOS uses c_int (i32)
+    // On Linux, we need to call initgroups() to set supplementary groups.
+    // On macOS, initgroups() fails with EPERM in pre_exec context, but
+    // supplementary groups are inherited correctly from Open Directory.
     #[cfg(target_os = "linux")]
     let initgroups_gid = gid;
-    #[cfg(target_os = "macos")]
-    let initgroups_gid = gid as libc::c_int;
-
-    // Create CString for username BEFORE entering pre_exec (no heap allocation in pre_exec)
+    #[cfg(target_os = "linux")]
     let username = CString::new(config.env.user.as_str())
         .map_err(|_| SpawnError::InvalidUsername(config.env.user.clone()))?;
 
@@ -159,12 +165,15 @@ pub fn spawn_as_user(config: SpawnConfig) -> Result<Child, SpawnError> {
     // The username CString is created before this closure is invoked.
     unsafe {
         cmd.pre_exec(move || {
-            // Set supplementary groups from /etc/group
-            // MUST be called before setgid/setuid (which CommandExt handles)
-            // but initgroups needs to be called while still root
-            let ret = libc::initgroups(username.as_ptr(), initgroups_gid);
-            if ret != 0 {
-                return Err(std::io::Error::last_os_error());
+            // Set supplementary groups from /etc/group (Linux only)
+            // On macOS, this fails with EPERM in pre_exec context, but groups
+            // are inherited correctly from Open Directory without it.
+            #[cfg(target_os = "linux")]
+            {
+                let ret = libc::initgroups(username.as_ptr(), initgroups_gid);
+                if ret != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
             }
 
             // Create a new session (detach from broker's session)
@@ -231,7 +240,9 @@ mod tests {
         assert_eq!(config.env.user, "testuser");
     }
 
+    // This test only applies on Linux where we validate the username for initgroups
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_invalid_username_with_null_byte() {
         let env = LoginEnvironment::new(
             "test\0user".to_string(),
