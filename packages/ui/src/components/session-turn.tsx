@@ -22,10 +22,12 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
+import { IconButton } from "./icon-button"
 import { Card } from "./card"
 import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
 import { Spinner } from "./spinner"
+import { Tooltip } from "./tooltip"
 import { createStore } from "solid-js/store"
 import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
@@ -356,6 +358,16 @@ export function SessionTurn(
   const hasDiffs = createMemo(() => messageDiffs().length > 0)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
+  const [copied, setCopied] = createSignal(false)
+
+  const handleCopy = async () => {
+    const content = response() ?? ""
+    if (!content) return
+    await navigator.clipboard.writeText(content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   const [rootRef, setRootRef] = createSignal<HTMLDivElement | undefined>()
   const [stickyRef, setStickyRef] = createSignal<HTMLDivElement | undefined>()
 
@@ -506,13 +518,13 @@ export function SessionTurn(
                   </Match>
                   <Match when={true}>
                     <Show when={attachmentParts().length > 0}>
-                      <div data-slot="session-turn-attachments">
+                      <div data-slot="session-turn-attachments" aria-live="off">
                         <Message message={msg()} parts={attachmentParts()} />
                       </div>
                     </Show>
                     <div data-slot="session-turn-sticky" ref={setStickyRef}>
                       {/* User Message */}
-                      <div data-slot="session-turn-message-content">
+                      <div data-slot="session-turn-message-content" aria-live="off">
                         <Message message={msg()} parts={stickyParts()} />
                       </div>
 
@@ -525,6 +537,7 @@ export function SessionTurn(
                             variant="ghost"
                             size="small"
                             onClick={props.onStepsExpandedToggle ?? (() => {})}
+                            aria-expanded={props.stepsExpanded}
                           >
                             <Show when={working()}>
                               <Spinner />
@@ -552,8 +565,8 @@ export function SessionTurn(
                               <Match when={props.stepsExpanded}>{i18n.t("ui.sessionTurn.steps.hide")}</Match>
                               <Match when={!props.stepsExpanded}>{i18n.t("ui.sessionTurn.steps.show")}</Match>
                             </Switch>
-                            <span>·</span>
-                            <span>{store.duration}</span>
+                            <span aria-hidden="true">·</span>
+                            <span aria-live="off">{store.duration}</span>
                             <Show when={assistantMessages().length > 0}>
                               <Icon name="chevron-grabber-vertical" size="small" />
                             </Show>
@@ -563,7 +576,7 @@ export function SessionTurn(
                     </div>
                     {/* Response */}
                     <Show when={props.stepsExpanded && assistantMessages().length > 0}>
-                      <div data-slot="session-turn-collapsible-content-inner">
+                      <div data-slot="session-turn-collapsible-content-inner" aria-hidden={working()}>
                         <For each={assistantMessages()}>
                           {(assistantMessage) => (
                             <AssistantMessageItem
@@ -589,16 +602,41 @@ export function SessionTurn(
                       </div>
                     </Show>
                     {/* Response */}
+                    <div class="sr-only" aria-live="polite">
+                      {!working() && response() ? response() : ""}
+                    </div>
                     <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-header">
                           <h2 data-slot="session-turn-summary-title">{i18n.t("ui.sessionTurn.summary.response")}</h2>
-                          <Markdown
-                            data-slot="session-turn-markdown"
-                            data-diffs={hasDiffs()}
-                            text={response() ?? ""}
-                            cacheKey={responsePartId()}
-                          />
+                          <div data-slot="session-turn-response">
+                            <Markdown
+                              data-slot="session-turn-markdown"
+                              data-diffs={hasDiffs()}
+                              text={response() ?? ""}
+                              cacheKey={responsePartId()}
+                            />
+                            <Show when={response()}>
+                              <div data-slot="session-turn-response-copy-wrapper">
+                                <Tooltip
+                                  value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                                  placement="top"
+                                  gutter={8}
+                                >
+                                  <IconButton
+                                    icon={copied() ? "check" : "copy"}
+                                    variant="secondary"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      handleCopy()
+                                    }}
+                                    aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                                  />
+                                </Tooltip>
+                              </div>
+                            </Show>
+                          </div>
                         </div>
                         <Accordion
                           data-slot="session-turn-accordion"

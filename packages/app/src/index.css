@@ -29,3 +29,29 @@
 *[data-tauri-drag-region] {
   app-region: drag;
 }
+
+.session-scroller::-webkit-scrollbar {
+  width: 10px !important;
+  height: 10px !important;
+}
+
+.session-scroller::-webkit-scrollbar-track {
+  background: transparent !important;
+  border-radius: 5px !important;
+}
+
+.session-scroller::-webkit-scrollbar-thumb {
+  background: var(--border-weak-base) !important;
+  border-radius: 5px !important;
+  border: 3px solid transparent !important;
+  background-clip: padding-box !important;
+}
+
+.session-scroller::-webkit-scrollbar-thumb:hover {
+  background: var(--border-weak-base) !important;
+}
+
+.session-scroller {
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--border-weak-base) transparent !important;
+}

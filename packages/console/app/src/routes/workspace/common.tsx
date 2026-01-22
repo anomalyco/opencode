@@ -111,6 +111,8 @@ export const queryBillingInfo = query(async (workspaceID: string) => {
       reloadError: billing.reloadError,
       timeReloadError: billing.timeReloadError,
       subscriptionID: billing.subscriptionID,
+      subscriptionPlan: billing.subscriptionPlan,
+      timeSubscriptionBooked: billing.timeSubscriptionBooked,
     }
   }, workspaceID)
 }, "billing.get")

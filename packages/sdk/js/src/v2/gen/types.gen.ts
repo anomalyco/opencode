@@ -28,6 +28,12 @@ export type Project = {
     override?: string
     color?: string
   }
+  commands?: {
+    /**
+     * Startup script to run when creating a new workspace (worktree)
+     */
+    start?: string
+  }
   time: {
     created: number
     updated: number
@@ -1918,6 +1924,9 @@ export type Worktree = {
 
 export type WorktreeCreateInput = {
   name?: string
+  /**
+   * Additional startup script to run after the project's start command
+   */
   startCommand?: string
 }
 
@@ -2244,6 +2253,12 @@ export type ProjectUpdateData = {
       url?: string
       override?: string
       color?: string
+    }
+    commands?: {
+      /**
+       * Startup script to run when creating a new workspace (worktree)
+       */
+      start?: string
     }
   }
   path: {
