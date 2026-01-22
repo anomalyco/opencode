@@ -1,4 +1,16 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import {
+  For,
+  Index,
+  onCleanup,
+  onMount,
+  Show,
+  Match,
+  Switch,
+  createMemo,
+  createEffect,
+  on,
+  createSignal,
+} from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -18,7 +30,7 @@ import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
-import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
+import { Mark } from "@opencode-ai/ui/logo"
 
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
@@ -33,6 +45,7 @@ import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
 import { useCommand } from "@/context/command"
+import { useLanguage } from "@/context/language"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import type { FileDiff } from "@opencode-ai/sdk/v2/client"
@@ -161,12 +174,15 @@ export default function Page() {
   const dialog = useDialog()
   const codeComponent = useCodeComponent()
   const command = useCommand()
+  const language = useLanguage()
   const platform = usePlatform()
   const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
   const prompt = usePrompt()
   const permission = usePermission()
+  const [pendingMessage, setPendingMessage] = createSignal<string | undefined>(undefined)
+  const [pendingHash, setPendingHash] = createSignal<string | undefined>(undefined)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
@@ -346,14 +362,7 @@ export default function Page() {
 
     const current = activeMessage()
     const currentIndex = current ? msgs.findIndex((m) => m.id === current.id) : -1
-
-    let targetIndex: number
-    if (currentIndex === -1) {
-      targetIndex = offset > 0 ? 0 : msgs.length - 1
-    } else {
-      targetIndex = currentIndex + offset
-    }
-
+    const targetIndex = currentIndex === -1 ? (offset > 0 ? 0 : msgs.length - 1) : currentIndex + offset
     if (targetIndex < 0 || targetIndex >= msgs.length) return
 
     scrollToMessage(msgs[targetIndex], "auto")
@@ -377,12 +386,56 @@ export default function Page() {
     sync.session.sync(params.id)
   })
 
+  const [autoCreated, setAutoCreated] = createSignal(false)
+
   createEffect(() => {
-    if (!view().terminal.opened()) return
-    if (!terminal.ready()) return
-    if (terminal.all().length !== 0) return
+    if (!view().terminal.opened()) {
+      setAutoCreated(false)
+      return
+    }
+    if (!terminal.ready() || terminal.all().length !== 0 || autoCreated()) return
     terminal.new()
+    setAutoCreated(true)
   })
+
+  createEffect(
+    on(
+      () => terminal.all().length,
+      (count, prevCount) => {
+        if (prevCount !== undefined && prevCount > 0 && count === 0) {
+          if (view().terminal.opened()) {
+            view().terminal.toggle()
+          }
+        }
+      },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => terminal.active(),
+      (activeId) => {
+        if (!activeId || !view().terminal.opened()) return
+        // Immediately remove focus
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur()
+        }
+        const wrapper = document.getElementById(`terminal-wrapper-${activeId}`)
+        const element = wrapper?.querySelector('[data-component="terminal"]') as HTMLElement
+        if (!element) return
+
+        // Find and focus the ghostty textarea (the actual input element)
+        const textarea = element.querySelector("textarea") as HTMLTextAreaElement
+        if (textarea) {
+          textarea.focus()
+          return
+        }
+        // Fallback: focus container and dispatch pointer event
+        element.focus()
+        element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }))
+      },
+    ),
+  )
 
   createEffect(
     on(
@@ -418,51 +471,54 @@ export default function Page() {
   command.register(() => [
     {
       id: "session.new",
-      title: "New session",
-      category: "Session",
+      title: language.t("command.session.new"),
+      category: language.t("command.category.session"),
       keybind: "mod+shift+s",
       slash: "new",
       onSelect: () => navigate(`/${params.dir}/session`),
     },
     {
       id: "file.open",
-      title: "Open file",
-      description: "Search files and commands",
-      category: "File",
+      title: language.t("command.file.open"),
+      description: language.t("command.file.open.description"),
+      category: language.t("command.category.file"),
       keybind: "mod+p",
       slash: "open",
       onSelect: () => dialog.show(() => <DialogSelectFile />),
     },
     {
       id: "terminal.toggle",
-      title: "Toggle terminal",
+      title: language.t("command.terminal.toggle"),
       description: "",
-      category: "View",
+      category: language.t("command.category.view"),
       keybind: "ctrl+`",
       slash: "terminal",
       onSelect: () => view().terminal.toggle(),
     },
     {
       id: "review.toggle",
-      title: "Toggle review",
+      title: language.t("command.review.toggle"),
       description: "",
-      category: "View",
+      category: language.t("command.category.view"),
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     },
     {
       id: "terminal.new",
-      title: "New terminal",
-      description: "Create a new terminal tab",
-      category: "Terminal",
-      keybind: "ctrl+shift+`",
-      onSelect: () => terminal.new(),
+      title: language.t("command.terminal.new"),
+      description: language.t("command.terminal.new.description"),
+      category: language.t("command.category.terminal"),
+      keybind: "ctrl+alt+t",
+      onSelect: () => {
+        if (terminal.all().length > 0) terminal.new()
+        view().terminal.open()
+      },
     },
     {
       id: "steps.toggle",
-      title: "Toggle steps",
-      description: "Show or hide steps for the current message",
-      category: "View",
+      title: language.t("command.steps.toggle"),
+      description: language.t("command.steps.toggle.description"),
+      category: language.t("command.category.view"),
       keybind: "mod+e",
       slash: "steps",
       disabled: !params.id,
@@ -474,99 +530,96 @@ export default function Page() {
     },
     {
       id: "message.previous",
-      title: "Previous message",
-      description: "Go to the previous user message",
-      category: "Session",
+      title: language.t("command.message.previous"),
+      description: language.t("command.message.previous.description"),
+      category: language.t("command.category.session"),
       keybind: "mod+arrowup",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(-1),
     },
     {
       id: "message.next",
-      title: "Next message",
-      description: "Go to the next user message",
-      category: "Session",
+      title: language.t("command.message.next"),
+      description: language.t("command.message.next.description"),
+      category: language.t("command.category.session"),
       keybind: "mod+arrowdown",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(1),
     },
     {
       id: "model.choose",
-      title: "Choose model",
-      description: "Select a different model",
-      category: "Model",
+      title: language.t("command.model.choose"),
+      description: language.t("command.model.choose.description"),
+      category: language.t("command.category.model"),
       keybind: "mod+'",
       slash: "model",
       onSelect: () => dialog.show(() => <DialogSelectModel />),
     },
     {
       id: "mcp.toggle",
-      title: "Toggle MCPs",
-      description: "Toggle MCPs",
-      category: "MCP",
+      title: language.t("command.mcp.toggle"),
+      description: language.t("command.mcp.toggle.description"),
+      category: language.t("command.category.mcp"),
       keybind: "mod+;",
       slash: "mcp",
       onSelect: () => dialog.show(() => <DialogSelectMcp />),
     },
     {
       id: "agent.cycle",
-      title: "Cycle agent",
-      description: "Switch to the next agent",
-      category: "Agent",
+      title: language.t("command.agent.cycle"),
+      description: language.t("command.agent.cycle.description"),
+      category: language.t("command.category.agent"),
       keybind: "mod+.",
       slash: "agent",
       onSelect: () => local.agent.move(1),
     },
     {
       id: "agent.cycle.reverse",
-      title: "Cycle agent backwards",
-      description: "Switch to the previous agent",
-      category: "Agent",
+      title: language.t("command.agent.cycle.reverse"),
+      description: language.t("command.agent.cycle.reverse.description"),
+      category: language.t("command.category.agent"),
       keybind: "shift+mod+.",
       onSelect: () => local.agent.move(-1),
     },
     {
       id: "model.variant.cycle",
-      title: "Cycle thinking effort",
-      description: "Switch to the next effort level",
-      category: "Model",
-      keybind: "shift+mod+t",
+      title: language.t("command.model.variant.cycle"),
+      description: language.t("command.model.variant.cycle.description"),
+      category: language.t("command.category.model"),
+      keybind: "shift+mod+d",
       onSelect: () => {
         local.model.variant.cycle()
-        showToast({
-          title: "Thinking effort changed",
-          description: "The thinking effort has been changed to " + (local.model.variant.current() ?? "Default"),
-        })
       },
     },
     {
       id: "permissions.autoaccept",
       title:
         params.id && permission.isAutoAccepting(params.id, sdk.directory)
-          ? "Stop auto-accepting edits"
-          : "Auto-accept edits",
-      category: "Permissions",
+          ? language.t("command.permissions.autoaccept.disable")
+          : language.t("command.permissions.autoaccept.enable"),
+      category: language.t("command.category.permissions"),
       keybind: "mod+shift+a",
       disabled: !params.id || !permission.permissionsEnabled(),
       onSelect: () => {
         const sessionID = params.id
         if (!sessionID) return
         permission.toggleAutoAccept(sessionID, sdk.directory)
+        const enabled = permission.isAutoAccepting(sessionID, sdk.directory)
         showToast({
-          title: permission.isAutoAccepting(sessionID, sdk.directory)
-            ? "Auto-accepting edits"
-            : "Stopped auto-accepting edits",
-          description: permission.isAutoAccepting(sessionID, sdk.directory)
-            ? "Edit and write permissions will be automatically approved"
-            : "Edit and write permissions will require approval",
+          title: enabled
+            ? language.t("toast.permissions.autoaccept.on.title")
+            : language.t("toast.permissions.autoaccept.off.title"),
+          description: enabled
+            ? language.t("toast.permissions.autoaccept.on.description")
+            : language.t("toast.permissions.autoaccept.off.description"),
         })
       },
     },
     {
       id: "session.undo",
-      title: "Undo",
-      description: "Undo the last message",
-      category: "Session",
+      title: language.t("command.session.undo"),
+      description: language.t("command.session.undo.description"),
+      category: language.t("command.category.session"),
       slash: "undo",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -583,7 +636,10 @@ export default function Page() {
         // Restore the prompt from the reverted message
         const parts = sync.data.part[message.id]
         if (parts) {
-          const restored = extractPromptFromParts(parts, { directory: sdk.directory })
+          const restored = extractPromptFromParts(parts, {
+            directory: sdk.directory,
+            attachmentName: language.t("common.attachment"),
+          })
           prompt.set(restored)
         }
         // Navigate to the message before the reverted one (which will be the new last visible message)
@@ -593,9 +649,9 @@ export default function Page() {
     },
     {
       id: "session.redo",
-      title: "Redo",
-      description: "Redo the last undone message",
-      category: "Session",
+      title: language.t("command.session.redo"),
+      description: language.t("command.session.redo.description"),
+      category: language.t("command.category.session"),
       slash: "redo",
       disabled: !params.id || !info()?.revert?.messageID,
       onSelect: async () => {
@@ -622,9 +678,9 @@ export default function Page() {
     },
     {
       id: "session.compact",
-      title: "Compact session",
-      description: "Summarize the session to reduce context size",
-      category: "Session",
+      title: language.t("command.session.compact"),
+      description: language.t("command.session.compact.description"),
+      category: language.t("command.category.session"),
       slash: "compact",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -633,8 +689,8 @@ export default function Page() {
         const model = local.model.current()
         if (!model) {
           showToast({
-            title: "No model selected",
-            description: "Connect a provider to summarize this session",
+            title: language.t("toast.model.none.title"),
+            description: language.t("toast.model.none.description"),
           })
           return
         }
@@ -647,13 +703,79 @@ export default function Page() {
     },
     {
       id: "session.fork",
-      title: "Fork from message",
-      description: "Create a new session from a previous message",
-      category: "Session",
+      title: language.t("command.session.fork"),
+      description: language.t("command.session.fork.description"),
+      category: language.t("command.category.session"),
       slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: () => dialog.show(() => <DialogFork />),
     },
+    ...(sync.data.config.share !== "disabled"
+      ? [
+          {
+            id: "session.share",
+            title: language.t("command.session.share"),
+            description: language.t("command.session.share.description"),
+            category: language.t("command.category.session"),
+            slash: "share",
+            disabled: !params.id || !!info()?.share?.url,
+            onSelect: async () => {
+              if (!params.id) return
+              await sdk.client.session
+                .share({ sessionID: params.id })
+                .then((res) => {
+                  navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
+                    showToast({
+                      title: language.t("toast.session.share.copyFailed.title"),
+                      variant: "error",
+                    }),
+                  )
+                })
+                .then(() =>
+                  showToast({
+                    title: language.t("toast.session.share.success.title"),
+                    description: language.t("toast.session.share.success.description"),
+                    variant: "success",
+                  }),
+                )
+                .catch(() =>
+                  showToast({
+                    title: language.t("toast.session.share.failed.title"),
+                    description: language.t("toast.session.share.failed.description"),
+                    variant: "error",
+                  }),
+                )
+            },
+          },
+          {
+            id: "session.unshare",
+            title: language.t("command.session.unshare"),
+            description: language.t("command.session.unshare.description"),
+            category: language.t("command.category.session"),
+            slash: "unshare",
+            disabled: !params.id || !info()?.share?.url,
+            onSelect: async () => {
+              if (!params.id) return
+              await sdk.client.session
+                .unshare({ sessionID: params.id })
+                .then(() =>
+                  showToast({
+                    title: language.t("toast.session.unshare.success.title"),
+                    description: language.t("toast.session.unshare.success.description"),
+                    variant: "success",
+                  }),
+                )
+                .catch(() =>
+                  showToast({
+                    title: language.t("toast.session.unshare.failed.title"),
+                    description: language.t("toast.session.unshare.failed.description"),
+                    variant: "error",
+                  }),
+                )
+            },
+          },
+        ]
+      : []),
   ])
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -669,6 +791,9 @@ export default function Page() {
       if (event.key === "Escape") inputRef?.blur()
       return
     }
+
+    // Don't autofocus chat if terminal panel is open
+    if (view().terminal.opened()) return
 
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
       inputRef?.focus()
@@ -717,6 +842,23 @@ export default function Page() {
 
   const handleTerminalDragEnd = () => {
     setStore("activeTerminalDraggable", undefined)
+    const activeId = terminal.active()
+    if (!activeId) return
+    setTimeout(() => {
+      const wrapper = document.getElementById(`terminal-wrapper-${activeId}`)
+      const element = wrapper?.querySelector('[data-component="terminal"]') as HTMLElement
+      if (!element) return
+
+      // Find and focus the ghostty textarea (the actual input element)
+      const textarea = element.querySelector("textarea") as HTMLTextAreaElement
+      if (textarea) {
+        textarea.focus()
+        return
+      }
+      // Fallback: focus container and dispatch pointer event
+      element.focus()
+      element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }))
+    }, 0)
   }
 
   const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
@@ -726,17 +868,14 @@ export default function Page() {
       .filter((tab) => tab !== "context"),
   )
 
-  const reviewTab = createMemo(() => hasReview() || tabs().active() === "review")
-  const mobileReview = createMemo(() => !isDesktop() && hasReview() && store.mobileTab === "review")
+  const mobileReview = createMemo(() => !isDesktop() && view().reviewPanel.opened() && store.mobileTab === "review")
 
-  const showTabs = createMemo(
-    () => view().reviewPanel.opened() && (hasReview() || tabs().all().length > 0 || contextOpen()),
-  )
+  const showTabs = createMemo(() => view().reviewPanel.opened())
 
   const activeTab = createMemo(() => {
     const active = tabs().active()
     if (active) return active
-    if (reviewTab()) return "review"
+    if (hasReview()) return "review"
 
     const first = openedTabs()[0]
     if (first) return first
@@ -764,9 +903,35 @@ export default function Page() {
   })
 
   const isWorking = createMemo(() => status().type !== "idle")
+
   const autoScroll = createAutoScroll({
-    working: isWorking,
+    working: () => true,
+    overflowAnchor: "dynamic",
   })
+
+  // When the user returns to the bottom, treat the active message as "latest".
+  createEffect(
+    on(
+      autoScroll.userScrolled,
+      (scrolled) => {
+        if (scrolled) return
+        setStore("messageId", undefined)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      isWorking,
+      (working, prev) => {
+        if (!working || prev) return
+        if (autoScroll.userScrolled()) return
+        autoScroll.forceScrollToBottom()
+      },
+      { defer: true },
+    ),
+  )
 
   let scrollSpyFrame: number | undefined
   let scrollSpyTarget: HTMLDivElement | undefined
@@ -884,40 +1049,88 @@ export default function Page() {
     window.history.replaceState(null, "", `#${anchor(id)}`)
   }
 
+  createEffect(() => {
+    const sessionID = params.id
+    if (!sessionID) return
+    const raw = sessionStorage.getItem("opencode.pendingMessage")
+    if (!raw) return
+    const parts = raw.split("|")
+    const pendingSessionID = parts[0]
+    const messageID = parts[1]
+    if (!pendingSessionID || !messageID) return
+    if (pendingSessionID !== sessionID) return
+
+    sessionStorage.removeItem("opencode.pendingMessage")
+    setPendingMessage(messageID)
+  })
+
   const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
     const root = scroller
-    if (!root) {
-      el.scrollIntoView({ behavior, block: "start" })
-      return
-    }
+    if (!root) return false
 
     const a = el.getBoundingClientRect()
     const b = root.getBoundingClientRect()
-    const top = a.top - b.top + root.scrollTop
-    root.scrollTo({ top, behavior })
+    const offset = (info()?.title ? 40 : 0) + 12
+    const top = a.top - b.top + root.scrollTop - offset
+    root.scrollTo({ top: top > 0 ? top : 0, behavior })
+    return true
   }
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
+    // Navigating to a specific message should always pause auto-follow.
+    autoScroll.pause()
     setActiveMessage(message)
+    updateHash(message.id)
 
     const msgs = visibleUserMessages()
     const index = msgs.findIndex((m) => m.id === message.id)
     if (index !== -1 && index < store.turnStart) {
       setStore("turnStart", index)
       scheduleTurnBackfill()
+    }
 
-      requestAnimationFrame(() => {
-        const el = document.getElementById(anchor(message.id))
-        if (el) scrollToElement(el, behavior)
-      })
+    const id = anchor(message.id)
+    const attempt = (tries: number) => {
+      const el = document.getElementById(id)
+      if (el && scrollToElement(el, behavior)) return
+      if (tries >= 8) return
+      requestAnimationFrame(() => attempt(tries + 1))
+    }
+    attempt(0)
+  }
 
-      updateHash(message.id)
+  const applyHash = (behavior: ScrollBehavior) => {
+    const hash = window.location.hash.slice(1)
+    if (!hash) {
+      setPendingHash(undefined)
+      autoScroll.forceScrollToBottom()
       return
     }
 
-    const el = document.getElementById(anchor(message.id))
-    if (el) scrollToElement(el, behavior)
-    updateHash(message.id)
+    const match = hash.match(/^message-(.+)$/)
+    if (match) {
+      const msg = visibleUserMessages().find((m) => m.id === match[1])
+      if (msg) {
+        setPendingHash(undefined)
+        scrollToMessage(msg, behavior)
+        return
+      }
+
+      // If we have a message hash but the message isn't loaded/rendered yet,
+      // don't fall back to "bottom". We'll retry once messages arrive.
+      setPendingHash(match[1])
+      return
+    }
+
+    const target = document.getElementById(hash)
+    if (target) {
+      setPendingHash(undefined)
+      scrollToElement(target, behavior)
+      return
+    }
+
+    setPendingHash(undefined)
+    autoScroll.forceScrollToBottom()
   }
 
   const getActiveMessageId = (container: HTMLDivElement) => {
@@ -960,29 +1173,39 @@ export default function Page() {
     if (!sessionID || !ready) return
 
     requestAnimationFrame(() => {
-      const hash = window.location.hash.slice(1)
-      if (!hash) {
-        autoScroll.forceScrollToBottom()
-        return
-      }
-
-      const hashTarget = document.getElementById(hash)
-      if (hashTarget) {
-        scrollToElement(hashTarget, "auto")
-        return
-      }
-
-      const match = hash.match(/^message-(.+)$/)
-      if (match) {
-        const msg = visibleUserMessages().find((m) => m.id === match[1])
-        if (msg) {
-          scrollToMessage(msg, "auto")
-          return
-        }
-      }
-
-      autoScroll.forceScrollToBottom()
+      applyHash("auto")
     })
+  })
+
+  // Retry message navigation once the target message is actually loaded.
+  createEffect(() => {
+    const sessionID = params.id
+    const ready = messagesReady()
+    if (!sessionID || !ready) return
+
+    // dependencies
+    visibleUserMessages().length
+    store.turnStart
+
+    const targetId = pendingMessage() ?? pendingHash()
+    if (!targetId) return
+    if (store.messageId === targetId) return
+
+    const msg = visibleUserMessages().find((m) => m.id === targetId)
+    if (!msg) return
+    if (pendingMessage() === targetId) setPendingMessage(undefined)
+    if (pendingHash() === targetId) setPendingHash(undefined)
+    requestAnimationFrame(() => scrollToMessage(msg, "auto"))
+  })
+
+  createEffect(() => {
+    const sessionID = params.id
+    const ready = messagesReady()
+    if (!sessionID || !ready) return
+
+    const handler = () => requestAnimationFrame(() => applyHash("auto"))
+    window.addEventListener("hashchange", handler)
+    onCleanup(() => window.removeEventListener("hashchange", handler))
   })
 
   createEffect(() => {
@@ -1008,7 +1231,22 @@ export default function Page() {
 
   createEffect(() => {
     if (!terminal.ready()) return
-    handoff.terminals = terminal.all().map((t) => t.title)
+    language.locale()
+
+    const label = (pty: LocalPTY) => {
+      const title = pty.title
+      const number = pty.titleNumber
+      const match = title.match(/^Terminal (\d+)$/)
+      const parsed = match ? Number(match[1]) : undefined
+      const isDefaultTitle = Number.isFinite(number) && number > 0 && Number.isFinite(parsed) && parsed === number
+
+      if (title && !isDefaultTitle) return title
+      if (Number.isFinite(number) && number > 0) return language.t("terminal.title.numbered", { number })
+      if (title) return title
+      return language.t("terminal.title")
+    }
+
+    handoff.terminals = terminal.all().map(label)
   })
 
   createEffect(() => {
@@ -1034,8 +1272,8 @@ export default function Page() {
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
-        {/* Mobile tab bar - only shown on mobile when there are diffs */}
-        <Show when={!isDesktop() && hasReview()}>
+        {/* Mobile tab bar - only shown on mobile when user opened review */}
+        <Show when={!isDesktop() && view().reviewPanel.opened()}>
           <Tabs class="h-auto">
             <Tabs.List>
               <Tabs.Trigger
@@ -1044,7 +1282,7 @@ export default function Page() {
                 classes={{ button: "w-full" }}
                 onClick={() => setStore("mobileTab", "session")}
               >
-                Session
+                {language.t("session.tab.session")}
               </Tabs.Trigger>
               <Tabs.Trigger
                 value="review"
@@ -1052,7 +1290,12 @@ export default function Page() {
                 classes={{ button: "w-full" }}
                 onClick={() => setStore("mobileTab", "review")}
               >
-                {reviewCount()} Files Changed
+                <Switch>
+                  <Match when={hasReview()}>
+                    {language.t("session.review.filesChanged", { count: reviewCount() })}
+                  </Match>
+                  <Match when={true}>{language.t("session.tab.review")}</Match>
+                </Switch>
               </Tabs.Trigger>
             </Tabs.List>
           </Tabs>
@@ -1077,54 +1320,93 @@ export default function Page() {
                     when={!mobileReview()}
                     fallback={
                       <div class="relative h-full overflow-hidden">
-                        <Show
-                          when={diffsReady()}
-                          fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
-                        >
-                          <SessionReviewTab
-                            diffs={diffs}
-                            view={view}
-                            diffStyle="unified"
-                            onViewFile={(path) => {
-                              const value = file.tab(path)
-                              tabs().open(value)
-                              file.load(path)
-                            }}
-                            classes={{
-                              root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
-                              header: "px-4",
-                              container: "px-4",
-                            }}
-                          />
-                        </Show>
+                        <Switch>
+                          <Match when={hasReview()}>
+                            <Show
+                              when={diffsReady()}
+                              fallback={
+                                <div class="px-4 py-4 text-text-weak">
+                                  {language.t("session.review.loadingChanges")}
+                                </div>
+                              }
+                            >
+                              <SessionReviewTab
+                                diffs={diffs}
+                                view={view}
+                                diffStyle="unified"
+                                onViewFile={(path) => {
+                                  const value = file.tab(path)
+                                  tabs().open(value)
+                                  file.load(path)
+                                }}
+                                classes={{
+                                  root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
+                                  header: "px-4",
+                                  container: "px-4",
+                                }}
+                              />
+                            </Show>
+                          </Match>
+                          <Match when={true}>
+                            <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
+                              <Mark class="w-14 opacity-10" />
+                              <div class="text-14-regular text-text-weak max-w-56">
+                                {language.t("session.review.empty")}
+                              </div>
+                            </div>
+                          </Match>
+                        </Switch>
                       </div>
                     }
                   >
                     <div class="relative w-full h-full min-w-0">
-                      <Show when={isDesktop()}>
-                        <div class="absolute inset-0 pointer-events-none z-10">
-                          <SessionMessageRail
-                            messages={visibleUserMessages()}
-                            current={activeMessage()}
-                            onMessageSelect={scrollToMessage}
-                            wide={!showTabs()}
-                            class="pointer-events-auto"
-                          />
+                      <Show when={autoScroll.userScrolled()}>
+                        <div class="absolute right-4 md:right-6 bottom-[calc(var(--prompt-height,8rem)+16px)] z-[60] pointer-events-none">
+                          <Button
+                            variant="secondary"
+                            size="small"
+                            icon="chevron-down"
+                            class="pointer-events-auto shadow-sm"
+                            onClick={() => {
+                              setStore("messageId", undefined)
+                              autoScroll.forceScrollToBottom()
+                              window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
+                            }}
+                          >
+                            {language.t("session.messages.jumpToLatest")}
+                          </Button>
                         </div>
                       </Show>
                       <div
                         ref={setScrollRef}
                         onScroll={(e) => {
                           autoScroll.handleScroll()
-                          if (isDesktop()) scheduleScrollSpy(e.currentTarget)
+                          if (isDesktop() && autoScroll.userScrolled()) scheduleScrollSpy(e.currentTarget)
                         }}
-                        onClick={autoScroll.handleInteraction}
                         class="relative min-w-0 w-full h-full overflow-y-auto no-scrollbar"
+                        style={{ "--session-title-height": info()?.title ? "40px" : "0px" }}
                       >
+                        <Show when={info()?.title}>
+                          <div
+                            classList={{
+                              "sticky top-0 z-30 bg-background-stronger": true,
+                              "w-full": true,
+                              "px-4 md:px-6": true,
+                              "md:max-w-200 md:mx-auto": !showTabs(),
+                            }}
+                          >
+                            <div class="h-10 flex items-center">
+                              <h1 class="text-16-medium text-text-strong truncate">{info()?.title}</h1>
+                            </div>
+                          </div>
+                        </Show>
+
                         <div
                           ref={autoScroll.contentRef}
                           class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
+                            "w-full": true,
+                            "md:max-w-200 md:mx-auto": !showTabs(),
                             "mt-0.5": !showTabs(),
                             "mt-0": showTabs(),
                           }}
@@ -1137,7 +1419,7 @@ export default function Page() {
                                 class="text-12-medium opacity-50"
                                 onClick={() => setStore("turnStart", 0)}
                               >
-                                Render earlier messages
+                                {language.t("session.messages.renderEarlier")}
                               </Button>
                             </div>
                           </Show>
@@ -1155,7 +1437,9 @@ export default function Page() {
                                   sync.session.history.loadMore(id)
                                 }}
                               >
-                                {historyLoading() ? "Loading earlier messages..." : "Load earlier messages"}
+                                {historyLoading()
+                                  ? language.t("session.messages.loadingEarlier")
+                                  : language.t("session.messages.loadEarlier")}
                               </Button>
                             </div>
                           </Show>
@@ -1175,10 +1459,7 @@ export default function Page() {
                                   data-message-id={message.id}
                                   classList={{
                                     "min-w-0 w-full max-w-full": true,
-                                    "last:min-h-[calc(100vh-5.5rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-4.5rem-var(--prompt-height,10rem)-64px)]":
-                                      platform.platform !== "desktop",
-                                    "last:min-h-[calc(100vh-7rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-6rem-var(--prompt-height,10rem)-64px)]":
-                                      platform.platform === "desktop",
+                                    "md:max-w-200": !showTabs(),
                                   }}
                                 >
                                   <SessionTurn
@@ -1191,15 +1472,8 @@ export default function Page() {
                                     }
                                     classes={{
                                       root: "min-w-0 w-full relative",
-                                      content:
-                                        "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
-                                      container:
-                                        "px-4 md:px-6 " +
-                                        (!showTabs()
-                                          ? "md:max-w-200 md:mx-auto"
-                                          : visibleUserMessages().length > 1
-                                            ? "md:pr-6 md:pl-18"
-                                            : ""),
+                                      content: "flex flex-col justify-between !overflow-visible",
+                                      container: "w-full px-4 md:px-6",
                                     }}
                                   />
                                 </div>
@@ -1237,7 +1511,7 @@ export default function Page() {
           {/* Prompt input */}
           <div
             ref={(el) => (promptDock = el)}
-            class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-8 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+            class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-6 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
           >
             <div
               classList={{
@@ -1249,7 +1523,7 @@ export default function Page() {
                 when={prompt.ready()}
                 fallback={
                   <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                    {handoff.prompt || "Loading prompt..."}
+                    {handoff.prompt || language.t("prompt.loading")}
                   </div>
                 }
               >
@@ -1289,14 +1563,14 @@ export default function Page() {
               <Tabs value={activeTab()} onChange={openTab}>
                 <div class="sticky top-0 shrink-0 flex">
                   <Tabs.List>
-                    <Show when={reviewTab()}>
+                    <Show when={true}>
                       <Tabs.Trigger value="review">
                         <div class="flex items-center gap-3">
                           <Show when={diffs()}>
                             <DiffChanges changes={diffs()} variant="bars" />
                           </Show>
                           <div class="flex items-center gap-1.5">
-                            <div>Review</div>
+                            <div>{language.t("session.tab.review")}</div>
                             <Show when={info()?.summary?.files}>
                               <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
                                 {info()?.summary?.files ?? 0}
@@ -1310,7 +1584,7 @@ export default function Page() {
                       <Tabs.Trigger
                         value="context"
                         closeButton={
-                          <Tooltip value="Close tab" placement="bottom">
+                          <Tooltip value={language.t("common.closeTab")} placement="bottom">
                             <IconButton icon="close" variant="ghost" onClick={() => tabs().close("context")} />
                           </Tooltip>
                         }
@@ -1319,7 +1593,7 @@ export default function Page() {
                       >
                         <div class="flex items-center gap-2">
                           <SessionContextUsage variant="indicator" />
-                          <div>Context</div>
+                          <div>{language.t("session.tab.context")}</div>
                         </div>
                       </Tabs.Trigger>
                     </Show>
@@ -1328,7 +1602,7 @@ export default function Page() {
                     </SortableProvider>
                     <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
                       <TooltipKeybind
-                        title="Open file"
+                        title={language.t("command.file.open")}
                         keybind={command.keybind("file.open")}
                         class="flex items-center"
                       >
@@ -1342,26 +1616,42 @@ export default function Page() {
                     </div>
                   </Tabs.List>
                 </div>
-                <Show when={reviewTab()}>
+                <Show when={true}>
                   <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                     <Show when={activeTab() === "review"}>
                       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                        <Show
-                          when={diffsReady()}
-                          fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
-                        >
-                          <SessionReviewTab
-                            diffs={diffs}
-                            view={view}
-                            diffStyle={layout.review.diffStyle()}
-                            onDiffStyleChange={layout.review.setDiffStyle}
-                            onViewFile={(path) => {
-                              const value = file.tab(path)
-                              tabs().open(value)
-                              file.load(path)
-                            }}
-                          />
-                        </Show>
+                        <Switch>
+                          <Match when={hasReview()}>
+                            <Show
+                              when={diffsReady()}
+                              fallback={
+                                <div class="px-6 py-4 text-text-weak">
+                                  {language.t("session.review.loadingChanges")}
+                                </div>
+                              }
+                            >
+                              <SessionReviewTab
+                                diffs={diffs}
+                                view={view}
+                                diffStyle={layout.review.diffStyle()}
+                                onDiffStyleChange={layout.review.setDiffStyle}
+                                onViewFile={(path) => {
+                                  const value = file.tab(path)
+                                  tabs().open(value)
+                                  file.load(path)
+                                }}
+                              />
+                            </Show>
+                          </Match>
+                          <Match when={true}>
+                            <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
+                              <Mark class="w-14 opacity-10" />
+                              <div class="text-14-regular text-text-weak max-w-56">
+                                {language.t("session.review.empty")}
+                              </div>
+                            </div>
+                          </Match>
+                        </Switch>
                       </div>
                     </Show>
                   </Tabs.Content>
@@ -1538,7 +1828,9 @@ export default function Page() {
                                   }}
                                 >
                                   <Icon name="plus-small" size="small" />
-                                  <span>Add {selectionLabel()} to context</span>
+                                  <span>
+                                    {language.t("session.context.addToContext", { selection: selectionLabel() ?? "" })}
+                                  </span>
                                 </button>
                               </div>
                             )}
@@ -1595,7 +1887,7 @@ export default function Page() {
                               />
                             </Match>
                             <Match when={state()?.loading}>
-                              <div class="px-6 py-4 text-text-weak">Loading...</div>
+                              <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
                             </Match>
                             <Match when={state()?.error}>
                               {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
@@ -1626,7 +1918,7 @@ export default function Page() {
 
       <Show when={isDesktop() && view().terminal.opened()}>
         <div
-          class="relative w-full flex-col shrink-0 border-t border-border-weak-base"
+          class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
           style={{ height: `${layout.terminal.height()}px` }}
         >
           <ResizeHandle
@@ -1651,9 +1943,11 @@ export default function Page() {
                     )}
                   </For>
                   <div class="flex-1" />
-                  <div class="text-text-weak pr-2">Loading...</div>
+                  <div class="text-text-weak pr-2">{language.t("common.loading")}...</div>
                 </div>
-                <div class="flex-1 flex items-center justify-center text-text-weak">Loading terminal...</div>
+                <div class="flex-1 flex items-center justify-center text-text-weak">
+                  {language.t("terminal.loading")}
+                </div>
               </div>
             }
           >
@@ -1665,29 +1959,106 @@ export default function Page() {
             >
               <DragDropSensors />
               <ConstrainDragYAxis />
-              <Tabs variant="alt" value={terminal.active()} onChange={terminal.open}>
-                <Tabs.List class="h-10">
-                  <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
-                    <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
-                  </SortableProvider>
-                  <div class="h-full flex items-center justify-center">
-                    <TooltipKeybind
-                      title="New terminal"
-                      keybind={command.keybind("terminal.new")}
-                      class="flex items-center"
-                    >
-                      <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
-                    </TooltipKeybind>
-                  </div>
-                </Tabs.List>
-                <For each={terminal.all()}>
-                  {(pty) => (
-                    <Tabs.Content value={pty.id}>
-                      <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
-                    </Tabs.Content>
-                  )}
-                </For>
-              </Tabs>
+              <div class="flex flex-col h-full">
+                <Tabs
+                  variant="alt"
+                  value={terminal.active()}
+                  onChange={(id) => {
+                    // Only switch tabs if not in the middle of starting edit mode
+                    terminal.open(id)
+                  }}
+                  class="!h-auto !flex-none"
+                >
+                  <Tabs.List class="h-10">
+                    <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
+                      <For each={terminal.all()}>
+                        {(pty) => (
+                          <SortableTerminalTab
+                            terminal={pty}
+                            onClose={() => {
+                              view().terminal.close()
+                              setAutoCreated(false)
+                            }}
+                          />
+                        )}
+                      </For>
+                    </SortableProvider>
+                    <div class="h-full flex items-center justify-center">
+                      <TooltipKeybind
+                        title={language.t("command.terminal.new")}
+                        keybind={command.keybind("terminal.new")}
+                        class="flex items-center"
+                      >
+                        <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
+                      </TooltipKeybind>
+                    </div>
+                  </Tabs.List>
+                </Tabs>
+                <div class="flex-1 min-h-0 relative">
+                  <For each={terminal.all()}>
+                    {(pty) => {
+                      const [dismissed, setDismissed] = createSignal(false)
+                      return (
+                        <div
+                          id={`terminal-wrapper-${pty.id}`}
+                          class="absolute inset-0"
+                          style={{
+                            display: terminal.active() === pty.id ? "block" : "none",
+                          }}
+                        >
+                          <Terminal
+                            pty={pty}
+                            onCleanup={(data) => terminal.update({ ...data, id: pty.id })}
+                            onConnect={() => {
+                              terminal.update({ id: pty.id, error: false })
+                              setDismissed(false)
+                            }}
+                            onConnectError={() => {
+                              setDismissed(false)
+                              terminal.update({ id: pty.id, error: true })
+                            }}
+                          />
+                          <Show when={pty.error && !dismissed()}>
+                            <div
+                              class="absolute inset-0 flex flex-col items-center justify-center gap-3"
+                              style={{ "background-color": "rgba(0, 0, 0, 0.6)" }}
+                            >
+                              <Icon
+                                name="circle-ban-sign"
+                                class="w-8 h-8"
+                                style={{ color: "rgba(239, 68, 68, 0.8)" }}
+                              />
+                              <div class="text-center" style={{ color: "rgba(255, 255, 255, 0.7)" }}>
+                                <div class="text-14-semibold mb-1">{language.t("terminal.connectionLost.title")}</div>
+                                <div class="text-12-regular" style={{ color: "rgba(255, 255, 255, 0.5)" }}>
+                                  {language.t("terminal.connectionLost.description")}
+                                </div>
+                              </div>
+                              <button
+                                class="mt-2 px-3 py-1.5 text-12-medium rounded-lg transition-colors"
+                                style={{
+                                  "background-color": "rgba(255, 255, 255, 0.1)",
+                                  color: "rgba(255, 255, 255, 0.7)",
+                                  border: "1px solid rgba(255, 255, 255, 0.2)",
+                                }}
+                                onMouseEnter={(e) =>
+                                  (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)")
+                                }
+                                onMouseLeave={(e) =>
+                                  (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.1)")
+                                }
+                                onClick={() => setDismissed(true)}
+                              >
+                                {language.t("common.dismiss")}
+                              </button>
+                            </div>
+                          </Show>
+                        </div>
+                      )
+                    }}
+                  </For>
+                </div>
+              </div>
               <DragOverlay>
                 <Show when={store.activeTerminalDraggable}>
                   {(draggedId) => {
@@ -1696,7 +2067,20 @@ export default function Page() {
                       <Show when={pty()}>
                         {(t) => (
                           <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
-                            {t().title}
+                            {(() => {
+                              const title = t().title
+                              const number = t().titleNumber
+                              const match = title.match(/^Terminal (\d+)$/)
+                              const parsed = match ? Number(match[1]) : undefined
+                              const isDefaultTitle =
+                                Number.isFinite(number) && number > 0 && Number.isFinite(parsed) && parsed === number
+
+                              if (title && !isDefaultTitle) return title
+                              if (Number.isFinite(number) && number > 0)
+                                return language.t("terminal.title.numbered", { number })
+                              if (title) return title
+                              return language.t("terminal.title")
+                            })()}
                           </div>
                         )}
                       </Show>
