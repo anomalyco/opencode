@@ -124,10 +124,10 @@ Plans:
   2. Login page matches opencode visual design
   3. Password field has show/hide toggle (eye icon)
   4. Form shows clear error messages for failed login
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 06-01: TBD
+- [ ] 06-01-PLAN.md — Login page route with form, password toggle, styling, and error display
 
 ### Phase 7: Security Hardening
 **Goal**: Login and state-changing operations are protected against common attacks
@@ -209,7 +209,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 3. Auth Broker Core | 6/6 | Complete | 2026-01-20 |
 | 4. Authentication Flow | 2/2 | Complete | 2026-01-20 |
 | 5. User Process Execution | 10/10 | Complete | 2026-01-22 |
-| 6. Login UI | 0/TBD | Not started | - |
+| 6. Login UI | 0/1 | Planned | - |
 | 7. Security Hardening | 0/TBD | Not started | - |
 | 8. Session Enhancements | 0/TBD | Not started | - |
 | 9. Connection Security UI | 0/TBD | Not started | - |
