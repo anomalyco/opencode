@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 Phase: 5 of 11 (User Process Execution)
-Plan: 7 of 10 in current phase
+Plan: 8 of 10 in current phase
 Status: In progress
-Last activity: 2026-01-22 - Completed 05-07-PLAN.md
+Last activity: 2026-01-22 - Completed 05-08-PLAN.md
 
-Progress: [████████░░] ~81%
+Progress: [████████░░] ~85%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 21
-- Average duration: 5.6 min
-- Total execution time: 118 min
+- Total plans completed: 22
+- Average duration: 5.5 min
+- Total execution time: 122 min
 
 **By Phase:**
 
@@ -31,11 +31,11 @@ Progress: [████████░░] ~81%
 | 2. Session Infrastructure | 2 | 5 min | 2.5 min |
 | 3. Auth Broker Core | 6 | 33 min | 5.5 min |
 | 4. Authentication Flow | 2 | 8 min | 4 min |
-| 5. User Process Execution | 7 | 60 min | 8.6 min |
+| 5. User Process Execution | 8 | 64 min | 8 min |
 
 **Recent Trend:**
-- Last 5 plans: 05-04 (4 min), 05-05 (3 min), 05-06 (1 min), 05-07 (2 min)
-- Trend: TypeScript client extensions and integration wiring very fast (1-2 min)
+- Last 5 plans: 05-05 (3 min), 05-06 (1 min), 05-07 (2 min), 05-08 (4 min)
+- Trend: I/O implementation slightly longer, but still fast
 
 *Updated after each plan completion*
 
@@ -92,6 +92,10 @@ Recent decisions affecting current work:
 | 05-07 | Fire-and-forget broker calls | Registration/unregistration don't block auth flow |
 | 05-07 | Graceful degradation | Web access works even if broker unavailable |
 | 05-07 | Broker PTY path throws "not yet implemented" | PTY I/O streaming deferred to Plan 05-08 |
+| 05-08 | Broker relay approach for I/O | Simplest option, reuses existing IPC infrastructure |
+| 05-08 | Base64 encoding for PTY data | Safe transport of binary data over JSON protocol |
+| 05-08 | Non-blocking read for ptyRead | Prevents blocking on empty PTY, returns WouldBlock gracefully |
+| 05-08 | Output streaming deferred | Polling foundation sufficient for MVP |
 
 ### Pending Todos
 
@@ -111,9 +115,9 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed 05-07-PLAN.md
+Stopped at: Completed 05-08-PLAN.md
 Resume file: None
-Next: 05-08-PLAN.md - PTY lifecycle events
+Next: 05-09-PLAN.md - Client PTY API
 
 ## Phase 5 Progress
 
@@ -125,6 +129,6 @@ Next: 05-08-PLAN.md - PTY lifecycle events
 - [x] Plan 05: Session registration protocol (3 min, 3 tests)
 - [x] Plan 06: TypeScript BrokerClient extension (1 min)
 - [x] Plan 07: Web server integration (2 min)
-- [ ] Plan 08: PTY lifecycle events
+- [x] Plan 08: Broker PTY I/O (4 min, 7 new tests)
 - [ ] Plan 09: Client PTY API
 - [ ] Plan 10: Integration test harness
