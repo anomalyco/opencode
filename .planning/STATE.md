@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 Phase: 5 of 11 (User Process Execution)
-Plan: 1 of 3 in current phase
+Plan: 2 of 10 in current phase
 Status: In progress
-Last activity: 2026-01-22 - Completed 05-01-PLAN.md
+Last activity: 2026-01-22 - Completed 05-02-PLAN.md
 
-Progress: [██████░░░░] ~65%
+Progress: [██████░░░░] ~67%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 15
-- Average duration: 7.5 min
-- Total execution time: 98 min
+- Total plans completed: 16
+- Average duration: 6.7 min
+- Total execution time: 102 min
 
 **By Phase:**
 
@@ -31,11 +31,11 @@ Progress: [██████░░░░] ~65%
 | 2. Session Infrastructure | 2 | 5 min | 2.5 min |
 | 3. Auth Broker Core | 6 | 33 min | 5.5 min |
 | 4. Authentication Flow | 2 | 8 min | 4 min |
-| 5. User Process Execution | 1 | 40 min | 40 min |
+| 5. User Process Execution | 2 | 44 min | 22 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-06 (8 min), 04-01 (4 min), 04-02 (4 min), 05-01 (40 min)
-- Trend: 05-01 longer due to nix API exploration
+- Last 5 plans: 04-01 (4 min), 04-02 (4 min), 05-01 (40 min), 05-02 (4 min)
+- Trend: 05-02 much faster, straightforward implementation
 
 *Updated after each plan completion*
 
@@ -76,6 +76,10 @@ Recent decisions affecting current work:
 | 05-01 | Platform-specific ptsname | ptsname_r on Linux (thread-safe), ptsname on macOS |
 | 05-01 | DashMap for session management | Lock-free concurrent access without async overhead |
 | 05-01 | Direct libc for ptsname | nix ptsname requires PtyMaster, openpty returns OwnedFd |
+| 05-02 | Platform-specific TIOCSCTTY | Linux 0x540E, macOS 0x20007461 from tty headers |
+| 05-02 | Platform-specific gid for initgroups | Linux gid_t (u32), macOS c_int (i32) |
+| 05-02 | Fresh env via env_clear() | Prevent root environment leaking to user process |
+| 05-02 | arg0("-") for login shell | Standard UNIX convention for profile loading |
 
 ### Pending Todos
 
@@ -90,17 +94,25 @@ From research summary (Phase 2, 3 flags):
 **Resolved:**
 - macOS PAM crate compatibility - resolved by using nonstick instead of pam-client
 - PTY allocation on macOS - working with platform-specific ptsname
+- macOS initgroups type - resolved with platform-specific gid type casting
 
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed 05-01-PLAN.md
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
-Next: 05-02-PLAN.md - Process spawner
+Next: 05-03-PLAN.md - IPC extension for spawn
 
 ## Phase 5 Progress
 
 **User Process Execution - In Progress:**
 - [x] Plan 01: PTY allocation module (40 min, 7 tests)
-- [ ] Plan 02: Process spawner
+- [x] Plan 02: Process spawner (4 min, 8 tests)
 - [ ] Plan 03: IPC extension for spawn
+- [ ] Plan 04: Session lifecycle
+- [ ] Plan 05: I/O multiplexing
+- [ ] Plan 06: Window resize handling
+- [ ] Plan 07: Signal forwarding
+- [ ] Plan 08: PTY lifecycle events
+- [ ] Plan 09: Client PTY API
+- [ ] Plan 10: Integration test harness
