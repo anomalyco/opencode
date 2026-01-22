@@ -8,6 +8,8 @@ import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
+import { BrokerClient } from "@/auth/broker-client"
+import { ServerAuth } from "@/config/server-auth"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -93,7 +95,74 @@ export namespace Pty {
     return state().get(id)?.info
   }
 
-  export async function create(input: CreateInput) {
+  /**
+   * Create a PTY session.
+   *
+   * When auth is enabled and a session ID is provided, routes creation
+   * through the broker for user impersonation. Otherwise uses local bun-pty.
+   *
+   * @param input - PTY configuration options
+   * @param maybeSessionId - Optional session ID for broker-based creation
+   */
+  export async function create(input: CreateInput, maybeSessionId?: string): Promise<Info> {
+    const authConfig = ServerAuth.get()
+
+    // If auth is enabled and session ID provided, use broker
+    if (authConfig.enabled && maybeSessionId) {
+      return createViaBroker(input, maybeSessionId)
+    }
+
+    // Otherwise use existing bun-pty (runs as server user)
+    return createLocal(input)
+  }
+
+  /**
+   * Create a PTY session via the auth broker.
+   *
+   * The broker spawns the process with the user's UID/GID based on
+   * the session registration.
+   *
+   * Note: Currently throws "not yet implemented" - PTY I/O streaming
+   * will be implemented in Plan 05-08.
+   */
+  async function createViaBroker(input: CreateInput, sessionId: string): Promise<Info> {
+    const brokerClient = new BrokerClient()
+
+    const result = await brokerClient.spawnPty(sessionId, {
+      term: input.env?.TERM ?? "xterm-256color",
+      cols: 80, // Could get from input if added
+      rows: 24,
+      env: input.env,
+    })
+
+    if (!result.success) {
+      throw new Error(result.error ?? "Failed to spawn PTY via broker")
+    }
+
+    // For broker-spawned PTYs, we need a different approach
+    // The broker holds the master_fd, we need to connect to it for I/O
+    // This is a TODO - for now, throw indicating feature incomplete
+    throw new Error("Broker PTY I/O not yet implemented - see Plan 05-08")
+
+    // Future: return broker-backed PTY info
+    // const info: Info = {
+    //   id: result.ptyId!,
+    //   title: input.title || `Terminal ${result.ptyId!.slice(-4)}`,
+    //   command: "shell",
+    //   args: [],
+    //   cwd: input.cwd || "/",
+    //   status: "running",
+    //   pid: result.pid!,
+    // }
+    // return info
+  }
+
+  /**
+   * Create a PTY session locally using bun-pty.
+   *
+   * Runs as the server user (no user impersonation).
+   */
+  async function createLocal(input: CreateInput): Promise<Info> {
     const id = Identifier.create("pty", false)
     const command = input.command || Shell.preferred()
     const args = input.args || []
