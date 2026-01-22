@@ -7,6 +7,20 @@ import { Instance } from "../project/instance"
 import { pathToFileURL } from "url"
 import { assertExternalDirectory } from "./external-directory"
 
+/**
+ * Normalize Windows path to ensure consistent drive letter casing.
+ * Windows paths are case-insensitive, but pathToFileURL preserves the case,
+ * which can cause URI mismatches when comparing URIs from different sources.
+ */
+function normalizePathForUri(filePath: string): string {
+  const resolved = path.resolve(filePath)
+  // Uppercase drive letter on Windows for consistent URI generation
+  if (process.platform === "win32" && /^[a-z]:/.test(resolved)) {
+    return resolved[0].toUpperCase() + resolved.slice(1)
+  }
+  return resolved
+}
+
 const operations = [
   "goToDefinition",
   "findReferences",
@@ -28,7 +42,8 @@ export const LspTool = Tool.define("lsp", {
     character: z.number().int().min(1).describe("The character offset (1-based, as shown in editors)"),
   }),
   execute: async (args, ctx) => {
-    const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
+    const rawFile = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
+    const file = normalizePathForUri(rawFile)
     await assertExternalDirectory(ctx, file)
 
     await ctx.ask({

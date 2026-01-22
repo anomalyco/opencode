@@ -3,13 +3,21 @@ import { Bus } from "@/bus"
 import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "path"
-import { pathToFileURL } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { LSPServer } from "./server"
 import z from "zod"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
+
+function normalizePathForUri(filePath: string): string {
+  const resolved = path.resolve(filePath)
+  if (process.platform === "win32" && /^[a-z]:/.test(resolved)) {
+    return resolved[0].toUpperCase() + resolved.slice(1)
+  }
+  return resolved
+}
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -301,11 +309,12 @@ export namespace LSP {
   }
 
   export async function hover(input: { file: string; line: number; character: number }) {
-    return run(input.file, (client) => {
+    const file = normalizePathForUri(input.file)
+    return run(file, (client) => {
       return client.connection
         .sendRequest("textDocument/hover", {
           textDocument: {
-            uri: pathToFileURL(input.file).href,
+            uri: pathToFileURL(file).href,
           },
           position: {
             line: input.line,
@@ -369,7 +378,7 @@ export namespace LSP {
   }
 
   export async function documentSymbol(uri: string) {
-    const file = new URL(uri).pathname
+    const file = fileURLToPath(uri)
     return run(file, (client) =>
       client.connection
         .sendRequest("textDocument/documentSymbol", {
@@ -384,10 +393,11 @@ export namespace LSP {
   }
 
   export async function definition(input: { file: string; line: number; character: number }) {
-    return run(input.file, (client) =>
+    const file = normalizePathForUri(input.file)
+    return run(file, (client) =>
       client.connection
         .sendRequest("textDocument/definition", {
-          textDocument: { uri: pathToFileURL(input.file).href },
+          textDocument: { uri: pathToFileURL(file).href },
           position: { line: input.line, character: input.character },
         })
         .catch(() => null),
@@ -395,10 +405,11 @@ export namespace LSP {
   }
 
   export async function references(input: { file: string; line: number; character: number }) {
-    return run(input.file, (client) =>
+    const file = normalizePathForUri(input.file)
+    return run(file, (client) =>
       client.connection
         .sendRequest("textDocument/references", {
-          textDocument: { uri: pathToFileURL(input.file).href },
+          textDocument: { uri: pathToFileURL(file).href },
           position: { line: input.line, character: input.character },
           context: { includeDeclaration: true },
         })
@@ -407,10 +418,11 @@ export namespace LSP {
   }
 
   export async function implementation(input: { file: string; line: number; character: number }) {
-    return run(input.file, (client) =>
+    const file = normalizePathForUri(input.file)
+    return run(file, (client) =>
       client.connection
         .sendRequest("textDocument/implementation", {
-          textDocument: { uri: pathToFileURL(input.file).href },
+          textDocument: { uri: pathToFileURL(file).href },
           position: { line: input.line, character: input.character },
         })
         .catch(() => null),
@@ -418,10 +430,11 @@ export namespace LSP {
   }
 
   export async function prepareCallHierarchy(input: { file: string; line: number; character: number }) {
-    return run(input.file, (client) =>
+    const file = normalizePathForUri(input.file)
+    return run(file, (client) =>
       client.connection
         .sendRequest("textDocument/prepareCallHierarchy", {
-          textDocument: { uri: pathToFileURL(input.file).href },
+          textDocument: { uri: pathToFileURL(file).href },
           position: { line: input.line, character: input.character },
         })
         .catch(() => []),
@@ -429,10 +442,11 @@ export namespace LSP {
   }
 
   export async function incomingCalls(input: { file: string; line: number; character: number }) {
-    return run(input.file, async (client) => {
+    const file = normalizePathForUri(input.file)
+    return run(file, async (client) => {
       const items = (await client.connection
         .sendRequest("textDocument/prepareCallHierarchy", {
-          textDocument: { uri: pathToFileURL(input.file).href },
+          textDocument: { uri: pathToFileURL(file).href },
           position: { line: input.line, character: input.character },
         })
         .catch(() => [])) as any[]
@@ -442,10 +456,11 @@ export namespace LSP {
   }
 
   export async function outgoingCalls(input: { file: string; line: number; character: number }) {
-    return run(input.file, async (client) => {
+    const file = normalizePathForUri(input.file)
+    return run(file, async (client) => {
       const items = (await client.connection
         .sendRequest("textDocument/prepareCallHierarchy", {
-          textDocument: { uri: pathToFileURL(input.file).href },
+          textDocument: { uri: pathToFileURL(file).href },
           position: { line: input.line, character: input.character },
         })
         .catch(() => [])) as any[]
