@@ -7,6 +7,7 @@ import {
   TextPart,
   ToolPart,
 } from "@opencode-ai/sdk/v2/client"
+import { type FileDiff } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
@@ -146,6 +147,7 @@ export function SessionTurn(
   const emptyAssistant: AssistantMessage[] = []
   const emptyPermissions: PermissionRequest[] = []
   const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
+  const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
   const allMessages = createMemo(() => data.store.message[props.sessionID] ?? emptyMessages)
@@ -350,7 +352,8 @@ export function SessionTurn(
 
   const response = createMemo(() => lastTextPart()?.text)
   const responsePartId = createMemo(() => lastTextPart()?.id)
-  const hasDiffs = createMemo(() => (data.store.session_diff?.[props.sessionID]?.length ?? 0) > 0)
+  const messageDiffs = createMemo(() => message()?.summary?.diffs ?? emptyDiffs)
+  const hasDiffs = createMemo(() => messageDiffs().length > 0)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
   const [rootRef, setRootRef] = createSignal<HTMLDivElement | undefined>()
@@ -606,7 +609,7 @@ export function SessionTurn(
                             setStore("diffsOpen", value)
                           }}
                         >
-                          <For each={(data.store.session_diff?.[props.sessionID] ?? []).slice(0, store.diffLimit)}>
+                          <For each={messageDiffs().slice(0, store.diffLimit)}>
                             {(diff) => (
                               <Accordion.Item value={diff.file}>
                                 <StickyAccordionHeader>
@@ -652,13 +655,13 @@ export function SessionTurn(
                             )}
                           </For>
                         </Accordion>
-                        <Show when={(data.store.session_diff?.[props.sessionID]?.length ?? 0) > store.diffLimit}>
+                        <Show when={messageDiffs().length > store.diffLimit}>
                           <Button
                             data-slot="session-turn-accordion-more"
                             variant="ghost"
                             size="small"
                             onClick={() => {
-                              const total = data.store.session_diff?.[props.sessionID]?.length ?? 0
+                              const total = messageDiffs().length
                               setStore("diffLimit", (limit) => {
                                 const next = limit + diffBatch
                                 if (next > total) return total
@@ -667,7 +670,7 @@ export function SessionTurn(
                             }}
                           >
                             {i18n.t("ui.sessionTurn.diff.showMore", {
-                              count: (data.store.session_diff?.[props.sessionID]?.length ?? 0) - store.diffLimit,
+                              count: messageDiffs().length - store.diffLimit,
                             })}
                           </Button>
                         </Show>
