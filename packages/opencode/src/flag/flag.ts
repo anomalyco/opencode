@@ -24,6 +24,7 @@ export namespace Flag {
   export const OPENCODE_DISABLE_CLAUDE_CODE_SKILLS =
     OPENCODE_DISABLE_CLAUDE_CODE || truthy("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS")
   export declare const OPENCODE_DISABLE_PROJECT_CONFIG: boolean
+  export declare const OPENCODE_DISABLE_GLOBAL_CONFIG: boolean
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
   export const OPENCODE_CLIENT = process.env["OPENCODE_CLIENT"] ?? "cli"
   export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
@@ -62,6 +63,17 @@ export namespace Flag {
 Object.defineProperty(Flag, "OPENCODE_DISABLE_PROJECT_CONFIG", {
   get() {
     return truthy("OPENCODE_DISABLE_PROJECT_CONFIG")
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_DISABLE_GLOBAL_CONFIG
+// This must be evaluated at access time, not module load time,
+// because external tooling may set this env var at runtime
+Object.defineProperty(Flag, "OPENCODE_DISABLE_GLOBAL_CONFIG", {
+  get() {
+    return truthy("OPENCODE_DISABLE_GLOBAL_CONFIG")
   },
   enumerable: true,
   configurable: false,

@@ -55,10 +55,12 @@ export namespace InstructionPrompt {
       }
     }
 
-    for (const file of globalFiles()) {
-      if (await Bun.file(file).exists()) {
-        paths.add(path.resolve(file))
-        break
+    if (!Flag.OPENCODE_DISABLE_GLOBAL_CONFIG) {
+      for (const file of globalFiles()) {
+        if (await Bun.file(file).exists()) {
+          paths.add(path.resolve(file))
+          break
+        }
       }
     }
 

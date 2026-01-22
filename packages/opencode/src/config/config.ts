@@ -71,7 +71,9 @@ export namespace Config {
     }
 
     // Global user config overrides remote config
-    result = mergeConfigConcatArrays(result, await global())
+    if (!Flag.OPENCODE_DISABLE_GLOBAL_CONFIG) {
+      result = mergeConfigConcatArrays(result, await global())
+    }
 
     // Custom config path overrides global
     if (Flag.OPENCODE_CONFIG) {
@@ -100,7 +102,8 @@ export namespace Config {
     result.plugin = result.plugin || []
 
     const directories = [
-      Global.Path.config,
+      // Only scan global config directory when global config is enabled
+      ...(!Flag.OPENCODE_DISABLE_GLOBAL_CONFIG ? [Global.Path.config] : []),
       // Only scan project .opencode/ directories when project discovery is enabled
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
@@ -111,14 +114,16 @@ export namespace Config {
             }),
           )
         : []),
-      // Always scan ~/.opencode/ (user home directory)
-      ...(await Array.fromAsync(
-        Filesystem.up({
-          targets: [".opencode"],
-          start: Global.Path.home,
-          stop: Global.Path.home,
-        }),
-      )),
+      // Only scan ~/.opencode/ (user home directory) when global config is enabled
+      ...(!Flag.OPENCODE_DISABLE_GLOBAL_CONFIG
+        ? await Array.fromAsync(
+            Filesystem.up({
+              targets: [".opencode"],
+              start: Global.Path.home,
+              stop: Global.Path.home,
+            }),
+          )
+        : []),
     ]
 
     if (Flag.OPENCODE_CONFIG_DIR) {

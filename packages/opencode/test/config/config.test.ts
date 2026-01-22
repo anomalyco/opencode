@@ -2,6 +2,7 @@ import { test, expect, describe, mock } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
+import { Global } from "../../src/global"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
@@ -1602,6 +1603,199 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
         delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
       } else {
         process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalDisable
+      }
+      if (originalConfigDir === undefined) {
+        delete process.env["OPENCODE_CONFIG_DIR"]
+      } else {
+        process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+      }
+    }
+  })
+})
+
+describe("OPENCODE_DISABLE_GLOBAL_CONFIG", () => {
+  test("skips global config files when flag is set", async () => {
+    const originalEnv = process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"]
+    process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"] = "true"
+
+    try {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const directories = await Config.directories()
+          // Global config directory should NOT be in directories list
+          const hasGlobalConfig = directories.some((d) => d === Global.Path.config)
+          expect(hasGlobalConfig).toBe(false)
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"] = originalEnv
+      }
+    }
+  })
+
+  test("skips ~/.opencode/ directories when flag is set", async () => {
+    const originalEnv = process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"]
+    process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"] = "true"
+
+    try {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const directories = await Config.directories()
+          // Home .opencode directory should NOT be in directories list
+          const hasHomeOpencode = directories.some((d) => d === path.join(Global.Path.home, ".opencode"))
+          expect(hasHomeOpencode).toBe(false)
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"] = originalEnv
+      }
+    }
+  })
+
+  test("still loads project config when flag is set", async () => {
+    const originalEnv = process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"]
+    process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"] = "true"
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          // Create a project config that should still be loaded
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "project/model",
+              username: "project-user",
+            }),
+          )
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          // Project config should still be loaded
+          expect(config.model).toBe("project/model")
+          expect(config.username).toBe("project-user")
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"] = originalEnv
+      }
+    }
+  })
+
+  test("OPENCODE_CONFIG_DIR still works when flag is set", async () => {
+    const originalDisable = process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"]
+    const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
+
+    try {
+      await using configDirTmp = await tmpdir({
+        init: async (dir) => {
+          // Create config in the custom config dir
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "configdir/model",
+            }),
+          )
+        },
+      })
+
+      await using projectTmp = await tmpdir()
+
+      process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"] = "true"
+      process.env["OPENCODE_CONFIG_DIR"] = configDirTmp.path
+
+      await Instance.provide({
+        directory: projectTmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          // Should load from OPENCODE_CONFIG_DIR even with global config disabled
+          expect(config.model).toBe("configdir/model")
+        },
+      })
+    } finally {
+      if (originalDisable === undefined) {
+        delete process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"] = originalDisable
+      }
+      if (originalConfigDir === undefined) {
+        delete process.env["OPENCODE_CONFIG_DIR"]
+      } else {
+        process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+      }
+    }
+  })
+
+  test("both flags can be combined to use only OPENCODE_CONFIG_DIR", async () => {
+    const originalDisableGlobal = process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"]
+    const originalDisableProject = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
+
+    try {
+      await using configDirTmp = await tmpdir({
+        init: async (dir) => {
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "configdir/model",
+            }),
+          )
+        },
+      })
+
+      await using projectTmp = await tmpdir({
+        init: async (dir) => {
+          // Create project config that should be ignored
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "project/model",
+            }),
+          )
+        },
+      })
+
+      process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"] = "true"
+      process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+      process.env["OPENCODE_CONFIG_DIR"] = configDirTmp.path
+
+      await Instance.provide({
+        directory: projectTmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          // Should only load from OPENCODE_CONFIG_DIR
+          expect(config.model).toBe("configdir/model")
+        },
+      })
+    } finally {
+      if (originalDisableGlobal === undefined) {
+        delete process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_GLOBAL_CONFIG"] = originalDisableGlobal
+      }
+      if (originalDisableProject === undefined) {
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalDisableProject
       }
       if (originalConfigDir === undefined) {
         delete process.env["OPENCODE_CONFIG_DIR"]
