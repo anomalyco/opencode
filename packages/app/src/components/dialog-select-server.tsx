@@ -158,6 +158,7 @@ export function DialogSelectServer() {
                   icon="circle-x"
                   variant="ghost"
                   class="bg-transparent transition-opacity shrink-0 hover:scale-110"
+                  aria-label="Remove server"
                   onClick={(e) => {
                     e.stopPropagation()
                     handleRemove(i)

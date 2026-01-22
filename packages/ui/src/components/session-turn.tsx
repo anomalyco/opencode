@@ -7,6 +7,7 @@ import {
   TextPart,
   ToolPart,
 } from "@opencode-ai/sdk/v2/client"
+import { type FileDiff } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
@@ -146,6 +147,7 @@ export function SessionTurn(
   const emptyAssistant: AssistantMessage[] = []
   const emptyPermissions: PermissionRequest[] = []
   const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
+  const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
   const allMessages = createMemo(() => data.store.message[props.sessionID] ?? emptyMessages)
@@ -350,7 +352,8 @@ export function SessionTurn(
 
   const response = createMemo(() => lastTextPart()?.text)
   const responsePartId = createMemo(() => lastTextPart()?.id)
-  const hasDiffs = createMemo(() => (data.store.session_diff?.[props.sessionID]?.length ?? 0) > 0)
+  const messageDiffs = createMemo(() => message()?.summary?.diffs ?? emptyDiffs)
+  const hasDiffs = createMemo(() => messageDiffs().length > 0)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
   const [rootRef, setRootRef] = createSignal<HTMLDivElement | undefined>()
@@ -503,13 +506,13 @@ export function SessionTurn(
                   </Match>
                   <Match when={true}>
                     <Show when={attachmentParts().length > 0}>
-                      <div data-slot="session-turn-attachments">
+                      <div data-slot="session-turn-attachments" aria-live="off">
                         <Message message={msg()} parts={attachmentParts()} />
                       </div>
                     </Show>
                     <div data-slot="session-turn-sticky" ref={setStickyRef}>
                       {/* User Message */}
-                      <div data-slot="session-turn-message-content">
+                      <div data-slot="session-turn-message-content" aria-live="off">
                         <Message message={msg()} parts={stickyParts()} />
                       </div>
 
@@ -522,6 +525,7 @@ export function SessionTurn(
                             variant="ghost"
                             size="small"
                             onClick={props.onStepsExpandedToggle ?? (() => {})}
+                            aria-expanded={props.stepsExpanded}
                           >
                             <Show when={working()}>
                               <Spinner />
@@ -549,8 +553,8 @@ export function SessionTurn(
                               <Match when={props.stepsExpanded}>{i18n.t("ui.sessionTurn.steps.hide")}</Match>
                               <Match when={!props.stepsExpanded}>{i18n.t("ui.sessionTurn.steps.show")}</Match>
                             </Switch>
-                            <span>·</span>
-                            <span>{store.duration}</span>
+                            <span aria-hidden="true">·</span>
+                            <span aria-live="off">{store.duration}</span>
                             <Show when={assistantMessages().length > 0}>
                               <Icon name="chevron-grabber-vertical" size="small" />
                             </Show>
@@ -560,7 +564,7 @@ export function SessionTurn(
                     </div>
                     {/* Response */}
                     <Show when={props.stepsExpanded && assistantMessages().length > 0}>
-                      <div data-slot="session-turn-collapsible-content-inner">
+                      <div data-slot="session-turn-collapsible-content-inner" aria-hidden={working()}>
                         <For each={assistantMessages()}>
                           {(assistantMessage) => (
                             <AssistantMessageItem
@@ -586,6 +590,9 @@ export function SessionTurn(
                       </div>
                     </Show>
                     {/* Response */}
+                    <div class="sr-only" aria-live="polite">
+                      {!working() && response() ? response() : ""}
+                    </div>
                     <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-header">
@@ -606,7 +613,7 @@ export function SessionTurn(
                             setStore("diffsOpen", value)
                           }}
                         >
-                          <For each={(data.store.session_diff?.[props.sessionID] ?? []).slice(0, store.diffLimit)}>
+                          <For each={messageDiffs().slice(0, store.diffLimit)}>
                             {(diff) => (
                               <Accordion.Item value={diff.file}>
                                 <StickyAccordionHeader>
@@ -652,13 +659,13 @@ export function SessionTurn(
                             )}
                           </For>
                         </Accordion>
-                        <Show when={(data.store.session_diff?.[props.sessionID]?.length ?? 0) > store.diffLimit}>
+                        <Show when={messageDiffs().length > store.diffLimit}>
                           <Button
                             data-slot="session-turn-accordion-more"
                             variant="ghost"
                             size="small"
                             onClick={() => {
-                              const total = data.store.session_diff?.[props.sessionID]?.length ?? 0
+                              const total = messageDiffs().length
                               setStore("diffLimit", (limit) => {
                                 const next = limit + diffBatch
                                 if (next > total) return total
@@ -667,7 +674,7 @@ export function SessionTurn(
                             }}
                           >
                             {i18n.t("ui.sessionTurn.diff.showMore", {
-                              count: (data.store.session_diff?.[props.sessionID]?.length ?? 0) - store.diffLimit,
+                              count: messageDiffs().length - store.diffLimit,
                             })}
                           </Button>
                         </Show>

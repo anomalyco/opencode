@@ -429,6 +429,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                   event.stopPropagation()
                   handleCopy()
                 }}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               />
             </Tooltip>
           </div>

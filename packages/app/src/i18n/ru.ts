@@ -295,6 +295,7 @@ export const dict = {
   "language.ja": "Японский",
   "language.da": "Датский",
   "language.ru": "Русский",
+  "language.ar": "Арабский",
 
   "toast.language.title": "Язык",
   "toast.language.description": "Переключено на {{language}}",

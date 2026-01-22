@@ -272,6 +272,8 @@ export const dict = {
   "language.zh": "簡體中文",
   "language.zht": "繁體中文",
   "language.ko": "韓語",
+  "language.ru": "俄語",
+  "language.ar": "阿拉伯語",
 
   "toast.language.title": "語言",
   "toast.language.description": "已切換到 {{language}}",
