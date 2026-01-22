@@ -1,4 +1,16 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on, createSignal } from "solid-js"
+import {
+  For,
+  Index,
+  onCleanup,
+  onMount,
+  Show,
+  Match,
+  Switch,
+  createMemo,
+  createEffect,
+  on,
+  createSignal,
+} from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -350,14 +362,7 @@ export default function Page() {
 
     const current = activeMessage()
     const currentIndex = current ? msgs.findIndex((m) => m.id === current.id) : -1
-
-    let targetIndex: number
-    if (currentIndex === -1) {
-      targetIndex = offset > 0 ? 0 : msgs.length - 1
-    } else {
-      targetIndex = currentIndex + offset
-    }
-
+    const targetIndex = currentIndex === -1 ? (offset > 0 ? 0 : msgs.length - 1) : currentIndex + offset
     if (targetIndex < 0 || targetIndex >= msgs.length) return
 
     scrollToMessage(msgs[targetIndex], "auto")
@@ -381,11 +386,16 @@ export default function Page() {
     sync.session.sync(params.id)
   })
 
+  const [autoCreated, setAutoCreated] = createSignal(false)
+
   createEffect(() => {
-    if (!view().terminal.opened()) return
-    if (!terminal.ready()) return
-    if (terminal.all().length !== 0) return
+    if (!view().terminal.opened()) {
+      setAutoCreated(false)
+      return
+    }
+    if (!terminal.ready() || terminal.all().length !== 0 || autoCreated()) return
     terminal.new()
+    setAutoCreated(true)
   })
 
   createEffect(
@@ -397,6 +407,32 @@ export default function Page() {
             view().terminal.toggle()
           }
         }
+      },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => terminal.active(),
+      (activeId) => {
+        if (!activeId || !view().terminal.opened()) return
+        // Immediately remove focus
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur()
+        }
+        const wrapper = document.getElementById(`terminal-wrapper-${activeId}`)
+        const element = wrapper?.querySelector('[data-component="terminal"]') as HTMLElement
+        if (!element) return
+
+        // Find and focus the ghostty textarea (the actual input element)
+        const textarea = element.querySelector("textarea") as HTMLTextAreaElement
+        if (textarea) {
+          textarea.focus()
+          return
+        }
+        // Fallback: focus container and dispatch pointer event
+        element.focus()
+        element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }))
       },
     ),
   )
@@ -473,7 +509,10 @@ export default function Page() {
       description: language.t("command.terminal.new.description"),
       category: language.t("command.category.terminal"),
       keybind: "ctrl+alt+t",
-      onSelect: () => terminal.new(),
+      onSelect: () => {
+        if (terminal.all().length > 0) terminal.new()
+        view().terminal.open()
+      },
     },
     {
       id: "steps.toggle",
@@ -753,6 +792,9 @@ export default function Page() {
       return
     }
 
+    // Don't autofocus chat if terminal panel is open
+    if (view().terminal.opened()) return
+
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
       inputRef?.focus()
     }
@@ -800,6 +842,23 @@ export default function Page() {
 
   const handleTerminalDragEnd = () => {
     setStore("activeTerminalDraggable", undefined)
+    const activeId = terminal.active()
+    if (!activeId) return
+    setTimeout(() => {
+      const wrapper = document.getElementById(`terminal-wrapper-${activeId}`)
+      const element = wrapper?.querySelector('[data-component="terminal"]') as HTMLElement
+      if (!element) return
+
+      // Find and focus the ghostty textarea (the actual input element)
+      const textarea = element.querySelector("textarea") as HTMLTextAreaElement
+      if (textarea) {
+        textarea.focus()
+        return
+      }
+      // Fallback: focus container and dispatch pointer event
+      element.focus()
+      element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }))
+    }, 0)
   }
 
   const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
@@ -847,7 +906,7 @@ export default function Page() {
 
   const autoScroll = createAutoScroll({
     working: () => true,
-    overflowAnchor: "auto",
+    overflowAnchor: "dynamic",
   })
 
   // When the user returns to the bottom, treat the active message as "latest".
@@ -1175,11 +1234,15 @@ export default function Page() {
     language.locale()
 
     const label = (pty: LocalPTY) => {
+      const title = pty.title
       const number = pty.titleNumber
-      if (Number.isFinite(number) && number > 0) {
-        return language.t("terminal.title.numbered", { number })
-      }
-      if (pty.title) return pty.title
+      const match = title.match(/^Terminal (\d+)$/)
+      const parsed = match ? Number(match[1]) : undefined
+      const isDefaultTitle = Number.isFinite(number) && number > 0 && Number.isFinite(parsed) && parsed === number
+
+      if (title && !isDefaultTitle) return title
+      if (Number.isFinite(number) && number > 0) return language.t("terminal.title.numbered", { number })
+      if (title) return title
       return language.t("terminal.title")
     }
 
@@ -1310,7 +1373,7 @@ export default function Page() {
                               window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
                             }}
                           >
-                            Jump to latest
+                            {language.t("session.messages.jumpToLatest")}
                           </Button>
                         </div>
                       </Show>
@@ -1855,7 +1918,7 @@ export default function Page() {
 
       <Show when={isDesktop() && view().terminal.opened()}>
         <div
-          class="relative w-full flex-col shrink-0 border-t border-border-weak-base"
+          class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
           style={{ height: `${layout.terminal.height()}px` }}
         >
           <ResizeHandle
@@ -1896,29 +1959,106 @@ export default function Page() {
             >
               <DragDropSensors />
               <ConstrainDragYAxis />
-              <Tabs variant="alt" value={terminal.active()} onChange={terminal.open}>
-                <Tabs.List class="h-10">
-                  <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
-                    <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
-                  </SortableProvider>
-                  <div class="h-full flex items-center justify-center">
-                    <TooltipKeybind
-                      title={language.t("command.terminal.new")}
-                      keybind={command.keybind("terminal.new")}
-                      class="flex items-center"
-                    >
-                      <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
-                    </TooltipKeybind>
-                  </div>
-                </Tabs.List>
-                <For each={terminal.all()}>
-                  {(pty) => (
-                    <Tabs.Content value={pty.id}>
-                      <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
-                    </Tabs.Content>
-                  )}
-                </For>
-              </Tabs>
+              <div class="flex flex-col h-full">
+                <Tabs
+                  variant="alt"
+                  value={terminal.active()}
+                  onChange={(id) => {
+                    // Only switch tabs if not in the middle of starting edit mode
+                    terminal.open(id)
+                  }}
+                  class="!h-auto !flex-none"
+                >
+                  <Tabs.List class="h-10">
+                    <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
+                      <For each={terminal.all()}>
+                        {(pty) => (
+                          <SortableTerminalTab
+                            terminal={pty}
+                            onClose={() => {
+                              view().terminal.close()
+                              setAutoCreated(false)
+                            }}
+                          />
+                        )}
+                      </For>
+                    </SortableProvider>
+                    <div class="h-full flex items-center justify-center">
+                      <TooltipKeybind
+                        title={language.t("command.terminal.new")}
+                        keybind={command.keybind("terminal.new")}
+                        class="flex items-center"
+                      >
+                        <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
+                      </TooltipKeybind>
+                    </div>
+                  </Tabs.List>
+                </Tabs>
+                <div class="flex-1 min-h-0 relative">
+                  <For each={terminal.all()}>
+                    {(pty) => {
+                      const [dismissed, setDismissed] = createSignal(false)
+                      return (
+                        <div
+                          id={`terminal-wrapper-${pty.id}`}
+                          class="absolute inset-0"
+                          style={{
+                            display: terminal.active() === pty.id ? "block" : "none",
+                          }}
+                        >
+                          <Terminal
+                            pty={pty}
+                            onCleanup={(data) => terminal.update({ ...data, id: pty.id })}
+                            onConnect={() => {
+                              terminal.update({ id: pty.id, error: false })
+                              setDismissed(false)
+                            }}
+                            onConnectError={() => {
+                              setDismissed(false)
+                              terminal.update({ id: pty.id, error: true })
+                            }}
+                          />
+                          <Show when={pty.error && !dismissed()}>
+                            <div
+                              class="absolute inset-0 flex flex-col items-center justify-center gap-3"
+                              style={{ "background-color": "rgba(0, 0, 0, 0.6)" }}
+                            >
+                              <Icon
+                                name="circle-ban-sign"
+                                class="w-8 h-8"
+                                style={{ color: "rgba(239, 68, 68, 0.8)" }}
+                              />
+                              <div class="text-center" style={{ color: "rgba(255, 255, 255, 0.7)" }}>
+                                <div class="text-14-semibold mb-1">{language.t("terminal.connectionLost.title")}</div>
+                                <div class="text-12-regular" style={{ color: "rgba(255, 255, 255, 0.5)" }}>
+                                  {language.t("terminal.connectionLost.description")}
+                                </div>
+                              </div>
+                              <button
+                                class="mt-2 px-3 py-1.5 text-12-medium rounded-lg transition-colors"
+                                style={{
+                                  "background-color": "rgba(255, 255, 255, 0.1)",
+                                  color: "rgba(255, 255, 255, 0.7)",
+                                  border: "1px solid rgba(255, 255, 255, 0.2)",
+                                }}
+                                onMouseEnter={(e) =>
+                                  (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)")
+                                }
+                                onMouseLeave={(e) =>
+                                  (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.1)")
+                                }
+                                onClick={() => setDismissed(true)}
+                              >
+                                {language.t("common.dismiss")}
+                              </button>
+                            </div>
+                          </Show>
+                        </div>
+                      )
+                    }}
+                  </For>
+                </div>
+              </div>
               <DragOverlay>
                 <Show when={store.activeTerminalDraggable}>
                   {(draggedId) => {
@@ -1928,11 +2068,17 @@ export default function Page() {
                         {(t) => (
                           <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
                             {(() => {
+                              const title = t().title
                               const number = t().titleNumber
-                              if (Number.isFinite(number) && number > 0) {
+                              const match = title.match(/^Terminal (\d+)$/)
+                              const parsed = match ? Number(match[1]) : undefined
+                              const isDefaultTitle =
+                                Number.isFinite(number) && number > 0 && Number.isFinite(parsed) && parsed === number
+
+                              if (title && !isDefaultTitle) return title
+                              if (Number.isFinite(number) && number > 0)
                                 return language.t("terminal.title.numbered", { number })
-                              }
-                              if (t().title) return t().title
+                              if (title) return title
                               return language.t("terminal.title")
                             })()}
                           </div>

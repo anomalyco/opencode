@@ -550,6 +550,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
   })
 
+  const selectPopoverActive = () => {
+    if (store.popover === "at") {
+      const items = atFlat()
+      if (items.length === 0) return
+      const active = atActive()
+      const item = items.find((entry) => atKey(entry) === active) ?? items[0]
+      handleAtSelect(item)
+      return
+    }
+
+    if (store.popover === "slash") {
+      const items = slashFlat()
+      if (items.length === 0) return
+      const active = slashActive()
+      const item = items.find((entry) => entry.id === active) ?? items[0]
+      handleSlashSelect(item)
+    }
+  }
+
   createEffect(
     on(
       () => prompt.current(),
@@ -910,14 +929,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    if (store.popover && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
-      if (store.popover === "at") {
-        atOnKeyDown(event)
-      } else {
-        slashOnKeyDown(event)
+    if (store.popover) {
+      if (event.key === "Tab") {
+        selectPopoverActive()
+        event.preventDefault()
+        return
       }
-      event.preventDefault()
-      return
+      if (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter") {
+        if (store.popover === "at") {
+          atOnKeyDown(event)
+          event.preventDefault()
+          return
+        }
+        if (store.popover === "slash") {
+          slashOnKeyDown(event)
+        }
+        event.preventDefault()
+        return
+      }
     }
 
     const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
@@ -1696,7 +1725,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Match when={working()}>
                     <div class="flex items-center gap-2">
                       <span>{language.t("prompt.action.stop")}</span>
-                      <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
+                      <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
                     </div>
                   </Match>
                   <Match when={true}>

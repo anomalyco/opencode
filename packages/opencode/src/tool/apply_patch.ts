@@ -172,7 +172,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     const changedFiles: string[] = []
 
     for (const change of fileChanges) {
-      const edited = change.type === "delete" ? undefined : change.movePath ?? change.filePath
+      const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
       switch (change.type) {
         case "add":
           // Create parent directories (recursive: true is safe on existing/root dirs)
