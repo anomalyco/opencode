@@ -365,6 +365,74 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
 
 ---
 
+### BytePlus Coding Plan
+
+[BytePlus Coding Plan](https://www.byteplus.com/en/activity/codingplan) provides powerful coding models optimized for software development tasks through an OpenAI-compatible API. This is for users **outside China**.
+
+:::tip
+For users in China, use [Volcengine Coding Plan](#volcengine-coding-plan) instead.
+:::
+
+1. Head over to the [BytePlus Coding Plan](https://www.byteplus.com/en/activity/codingplan), create an account, and generate an API key.
+
+2. Run the `/connect` command and search for **Other**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter `byteplus` as the provider ID, then enter your API key.
+
+   ```txt
+   ┌ Provider ID
+   │ byteplus
+   └
+
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Add the following to your `opencode.json`:
+
+   ```json title="opencode.json" "byteplus" {5-20}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "byteplus": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "BytePlus Coding Plan",
+         "options": {
+           "baseURL": "https://ark.ap-southeast.bytepluses.com/api/coding/v3"
+         },
+         "models": {
+           "ark-code-latest": {
+             "name": "Ark Code Latest",
+             "options": {
+               "thinking": {
+                 "type": "enabled"
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+5. Run the `/models` command and select **byteplus/ark-code-latest**.
+
+   ```txt
+   /models
+   ```
+
+:::note
+The `ark-code-latest` model supports extended thinking mode for complex coding tasks.
+:::
+
+---
+
 ### Baseten
 
 1. Head over to the [Baseten](https://app.baseten.co/), create an account, and generate an API key.
@@ -1504,6 +1572,74 @@ To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-ap
    ```txt
    /models
    ```
+
+---
+
+### Volcengine Coding Plan
+
+[Volcengine Coding Plan](https://www.volcengine.com/activity/codingplan) provides powerful coding models optimized for software development tasks through an OpenAI-compatible API. This is for users in **China**.
+
+:::tip
+For users outside China, use [BytePlus Coding Plan](#byteplus-coding-plan) instead.
+:::
+
+1. Head over to the [Volcengine Coding Plan](https://www.volcengine.com/activity/codingplan), create an account, and generate an API key.
+
+2. Run the `/connect` command and search for **Other**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter `volcengine` as the provider ID, then enter your API key.
+
+   ```txt
+   ┌ Provider ID
+   │ volcengine
+   └
+
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Add the following to your `opencode.json`:
+
+   ```json title="opencode.json" "volcengine" {5-20}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "volcengine": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "Volcengine Coding Plan",
+         "options": {
+           "baseURL": "https://ark.cn-beijing.volces.com/api/coding/v3"
+         },
+         "models": {
+           "ark-code-latest": {
+             "name": "Ark Code Latest",
+             "options": {
+               "thinking": {
+                 "type": "enabled"
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+5. Run the `/models` command and select **volcengine/ark-code-latest**.
+
+   ```txt
+   /models
+   ```
+
+:::note
+The `ark-code-latest` model supports extended thinking mode for complex coding tasks.
+:::
 
 ---
 
