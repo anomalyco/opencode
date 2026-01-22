@@ -68,7 +68,7 @@ const subscription = await Billing.stripe().subscriptions.create({
     {
       price: `price_1SmfyI2StuRr0lbXovxJNeZn`,
       discounts: [{ coupon: couponID }],
-      quantity: 2,
+      quantity: seats,
     },
   ],
 })

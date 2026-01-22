@@ -2,6 +2,7 @@ import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
+import { Log } from "../util/log"
 
 import { Instance } from "../project/instance"
 import path from "path"
@@ -13,10 +14,24 @@ import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 
-import PROMPT_CODEX from "./prompt/codex.txt"
-import PROMPT_CODEX_INSTRUCTIONS from "./prompt/codex_header.txt"
+import PROMPT_CODEX from "./prompt/codex_header.txt"
 import type { Provider } from "@/provider/provider"
 import { Flag } from "@/flag/flag"
+
+const log = Log.create({ service: "system-prompt" })
+
+async function resolveRelativeInstruction(instruction: string): Promise<string[]> {
+  if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+    return Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
+  }
+  if (!Flag.OPENCODE_CONFIG_DIR) {
+    log.warn(
+      `Skipping relative instruction "${instruction}" - no OPENCODE_CONFIG_DIR set while project config is disabled`,
+    )
+    return []
+  }
+  return Filesystem.globUp(instruction, Flag.OPENCODE_CONFIG_DIR, Flag.OPENCODE_CONFIG_DIR).catch(() => [])
+}
 
 export namespace SystemPrompt {
   export function header(providerID: string) {
@@ -25,7 +40,7 @@ export namespace SystemPrompt {
   }
 
   export function instructions() {
-    return PROMPT_CODEX_INSTRUCTIONS.trim()
+    return PROMPT_CODEX.trim()
   }
 
   export function provider(model: Provider.Model) {
@@ -80,11 +95,14 @@ export namespace SystemPrompt {
     const config = await Config.get()
     const paths = new Set<string>()
 
-    for (const localRuleFile of LOCAL_RULE_FILES) {
-      const matches = await Filesystem.findUp(localRuleFile, Instance.directory, Instance.worktree)
-      if (matches.length > 0) {
-        matches.forEach((path) => paths.add(path))
-        break
+    // Only scan local rule files when project discovery is enabled
+    if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      for (const localRuleFile of LOCAL_RULE_FILES) {
+        const matches = await Filesystem.findUp(localRuleFile, Instance.directory, Instance.worktree)
+        if (matches.length > 0) {
+          matches.forEach((path) => paths.add(path))
+          break
+        }
       }
     }
 
@@ -115,7 +133,7 @@ export namespace SystemPrompt {
             }),
           ).catch(() => [])
         } else {
-          matches = await Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
+          matches = await resolveRelativeInstruction(instruction)
         }
         matches.forEach((path) => paths.add(path))
       }

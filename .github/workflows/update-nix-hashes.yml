@@ -128,7 +128,7 @@ jobs:
           echo "Changes detected:"
           echo "$STATUS"
           git add "${FILES[@]}"
-          git commit -m "Update $TITLE"
+          git commit -m "chore: update nix node_modules hashes"
 
           BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
           git pull --rebase --autostash origin "$BRANCH"

@@ -10,6 +10,7 @@ import { useProviders } from "@/hooks/use-providers"
 import { DateTime } from "luxon"
 import { Persist, persisted } from "@/utils/persist"
 import { showToast } from "@opencode-ai/ui/toast"
+import { useLanguage } from "@/context/language"
 
 export type LocalFile = FileNode &
   Partial<{
@@ -42,6 +43,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sdk = useSDK()
     const sync = useSync()
     const providers = useProviders()
+    const language = useLanguage()
 
     function isModelValid(model: ModelKey) {
       const provider = providers.all().find((x) => x.id === model.providerID)
@@ -409,7 +411,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           .catch((e) => {
             showToast({
               variant: "error",
-              title: "Failed to load file",
+              title: language.t("toast.file.loadFailed.title"),
               description: e.message,
             })
           })

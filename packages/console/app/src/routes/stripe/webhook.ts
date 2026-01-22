@@ -87,7 +87,6 @@ export async function POST(input: APIEvent) {
               ...(customer?.customerID
                 ? {}
                 : {
-                    reload: true,
                     reloadError: null,
                     timeReloadError: null,
                   }),
