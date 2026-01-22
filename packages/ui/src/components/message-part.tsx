@@ -425,6 +425,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               <IconButton
                 icon={copied() ? "check" : "copy"}
                 variant="secondary"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={(event) => {
                   event.stopPropagation()
                   handleCopy()
@@ -701,6 +702,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
               <IconButton
                 icon={copied() ? "check" : "copy"}
                 variant="secondary"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={handleCopy}
                 aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               />
