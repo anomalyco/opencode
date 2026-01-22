@@ -296,6 +296,17 @@ export const terraform: Info = {
   },
 }
 
+export const terragrunt: Info = {
+  name: "terragrunt",
+  command: ["terragrunt", "hcl", "fmt", "--file", "$FILE"],
+  extensions: [".hcl"],
+  async enabled() {
+    if (Bun.which("terragrunt") === null) return false
+    const items = await Filesystem.findUp("terragrunt.hcl", Instance.directory, Instance.worktree)
+    return items.length > 0
+  },
+}
+
 export const latexindent: Info = {
   name: "latexindent",
   command: ["latexindent", "-w", "-s", "$FILE"],
