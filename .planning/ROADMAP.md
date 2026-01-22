@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Auth Broker Core** - Privileged helper for PAM authentication and IPC
 - [x] **Phase 4: Authentication Flow** - Login endpoint with PAM validation and session-user mapping
 - [x] **Phase 5: User Process Execution** - Commands execute under authenticated user's UID
-- [ ] **Phase 6: Login UI** - Web login form with opencode styling
+- [x] **Phase 6: Login UI** - Web login form with opencode styling
 - [ ] **Phase 7: Security Hardening** - CSRF, rate limiting, HTTPS detection
 - [ ] **Phase 8: Session Enhancements** - Remember me and session activity indicator
 - [ ] **Phase 9: Connection Security UI** - HTTPS/HTTP security badge in UI
@@ -127,7 +127,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 06-01-PLAN.md — Login page route with form, password toggle, styling, and error display
+- [x] 06-01-PLAN.md — Login page route with form, password toggle, styling, and error display
 
 ### Phase 7: Security Hardening
 **Goal**: Login and state-changing operations are protected against common attacks
@@ -209,7 +209,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 3. Auth Broker Core | 6/6 | Complete | 2026-01-20 |
 | 4. Authentication Flow | 2/2 | Complete | 2026-01-20 |
 | 5. User Process Execution | 10/10 | Complete | 2026-01-22 |
-| 6. Login UI | 0/1 | Planned | - |
+| 6. Login UI | 1/1 | Complete | 2026-01-22 |
 | 7. Security Hardening | 0/TBD | Not started | - |
 | 8. Session Enhancements | 0/TBD | Not started | - |
 | 9. Connection Security UI | 0/TBD | Not started | - |

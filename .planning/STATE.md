@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Secure remote access to your opencode instance from anywhere — authenticate once with your system credentials, work on your projects from any device.
-**Current focus:** Phase 6 (Login UI) - Not started
+**Current focus:** Phase 7 (Security Hardening) - Not started
 
 ## Current Position
 
-Phase: 6 of 11 (Login UI)
+Phase: 7 of 11 (Security Hardening)
 Plan: 0 of TBD in current phase
 Status: Ready to plan
-Last activity: 2026-01-22 - Completed Phase 5
+Last activity: 2026-01-22 - Completed Phase 6
 
-Progress: [█████░░░░░] ~45%
+Progress: [██████░░░░] ~55%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 24
-- Average duration: 5.9 min
-- Total execution time: 141 min
+- Total plans completed: 25
+- Average duration: 6.6 min
+- Total execution time: 166 min
 
 **By Phase:**
 
@@ -32,10 +32,11 @@ Progress: [█████░░░░░] ~45%
 | 3. Auth Broker Core | 6 | 33 min | 5.5 min |
 | 4. Authentication Flow | 2 | 8 min | 4 min |
 | 5. User Process Execution | 10 | 83 min | 8.3 min |
+| 6. Login UI | 1 | 25 min | 25 min |
 
 **Recent Trend:**
-- Last 5 plans: 05-07 (2 min), 05-08 (4 min), 05-09 (4 min), 05-10 (15 min)
-- Trend: Integration testing requires more time for manual verification
+- Last 5 plans: 05-08 (4 min), 05-09 (4 min), 05-10 (15 min), 06-01 (25 min)
+- Trend: UI work with architecture correction took longer
 
 *Updated after each plan completion*
 
@@ -118,20 +119,11 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed Phase 5
+Stopped at: Completed Phase 6
 Resume file: None
-Next: Phase 6 - Login UI
+Next: Phase 7 - Security Hardening
 
-## Phase 5 Progress
+## Phase 6 Progress
 
-**User Process Execution - Complete:**
-- [x] Plan 01: PTY allocation module (40 min, 7 tests)
-- [x] Plan 02: Process spawner (4 min, 8 tests)
-- [x] Plan 03: IPC extension for spawn (6 min, 14+4 tests)
-- [x] Plan 04: PTY handler implementation (4 min, 8 tests)
-- [x] Plan 05: Session registration protocol (3 min, 3 tests)
-- [x] Plan 06: TypeScript BrokerClient extension (1 min)
-- [x] Plan 07: Web server integration (2 min)
-- [x] Plan 08: Broker PTY I/O (4 min, 7 new tests)
-- [x] Plan 09: Auth enforcement on PTY routes (4 min, 11 tests)
-- [x] Plan 10: Integration test harness (15 min, 9 tests)
+**Login UI - Complete:**
+- [x] Plan 01: Login page with form, password toggle, styling (25 min)
