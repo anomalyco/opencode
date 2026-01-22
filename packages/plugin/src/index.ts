@@ -37,6 +37,20 @@ export type Plugin = (input: PluginInput) => Promise<Hooks>
 export type AuthHook = {
   provider: string
   loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
+  /**
+   * Refresh an expired OAuth token. Called when a 401 "invalid_token" error is received.
+   * Returns the new auth info on success, or undefined if refresh is not supported.
+   */
+  refresh?: (auth: () => Promise<Auth>) => Promise<
+    | {
+        type: "success"
+        refresh: string
+        access: string
+        expires: number
+        accountId?: string
+      }
+    | undefined
+  >
   methods: (
     | {
         type: "oauth"

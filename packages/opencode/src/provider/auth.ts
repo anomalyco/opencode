@@ -144,4 +144,32 @@ export namespace ProviderAuth {
   )
 
   export const OauthCallbackFailed = NamedError.create("ProviderAuthOauthCallbackFailed", z.object({}))
+
+  /**
+   * Refresh an OAuth token for the given provider.
+   * Returns true if refresh was successful, false otherwise.
+   */
+  export async function refresh(providerID: string): Promise<boolean> {
+    const auth = await state().then((s) => s.methods[providerID])
+    if (!auth?.refresh) return false
+
+    const result = await auth.refresh(() => Auth.get(providerID) as any)
+    if (!result) return false
+
+    if (result.type === "success") {
+      const info: Auth.Info = {
+        type: "oauth",
+        access: result.access,
+        refresh: result.refresh,
+        expires: result.expires,
+      }
+      if (result.accountId) {
+        info.accountId = result.accountId
+      }
+      await Auth.set(providerID, info)
+      return true
+    }
+
+    return false
+  }
 }

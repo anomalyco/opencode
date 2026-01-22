@@ -9,6 +9,7 @@ import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "../auth"
+import { ProviderAuth } from "./auth"
 import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
@@ -409,6 +410,7 @@ export namespace Provider {
       const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
 
       const auth = await Auth.get(input.id)
+      const isOAuth = auth?.type === "oauth"
       const apiKey = await (async () => {
         if (auth?.type === "oauth") return auth.access
         if (auth?.type === "api") return auth.key
@@ -428,6 +430,55 @@ export namespace Provider {
             duo_agent_platform: true,
             ...(providerConfig?.options?.featureFlags || {}),
           },
+          // Custom fetch to handle OAuth token refresh on 401
+          ...(isOAuth && {
+            fetch: async (requestInput: RequestInfo | URL, init?: RequestInit) => {
+              // Get fresh auth for each request
+              const currentAuth = await Auth.get(input.id)
+              if (currentAuth?.type !== "oauth") {
+                return fetch(requestInput, init)
+              }
+
+              // Check if token is expired and refresh proactively
+              const isExpired = currentAuth.expires > 0 && currentAuth.expires < Date.now()
+              if (isExpired) {
+                log.info("gitlab oauth token expired, attempting refresh", { providerID: input.id })
+                const refreshed = await ProviderAuth.refresh(input.id)
+                if (refreshed) {
+                  const newAuth = await Auth.get(input.id)
+                  if (newAuth?.type === "oauth") {
+                    const headers = new Headers(init?.headers)
+                    headers.set("Authorization", `Bearer ${newAuth.access}`)
+                    return fetch(requestInput, { ...init, headers })
+                  }
+                }
+              }
+
+              // Make the request with current token
+              const headers = new Headers(init?.headers)
+              headers.set("Authorization", `Bearer ${currentAuth.access}`)
+              const response = await fetch(requestInput, { ...init, headers })
+
+              // Handle 401 with invalid_token error - try to refresh and retry
+              if (response.status === 401) {
+                const body = await response.clone().json().catch(() => ({}))
+                if (body.error === "invalid_token" || body.error_description?.includes("expired")) {
+                  log.info("gitlab oauth token invalid, attempting refresh", { providerID: input.id })
+                  const refreshed = await ProviderAuth.refresh(input.id)
+                  if (refreshed) {
+                    const newAuth = await Auth.get(input.id)
+                    if (newAuth?.type === "oauth") {
+                      const retryHeaders = new Headers(init?.headers)
+                      retryHeaders.set("Authorization", `Bearer ${newAuth.access}`)
+                      return fetch(requestInput, { ...init, headers: retryHeaders })
+                    }
+                  }
+                }
+              }
+
+              return response
+            },
+          }),
         },
         async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
           return sdk.agenticChat(modelID, {
