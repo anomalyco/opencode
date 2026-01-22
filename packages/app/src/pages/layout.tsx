@@ -1488,6 +1488,7 @@ export default function Layout(props: ParentProps) {
         class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
         onMouseEnter={() => prefetchSession(props.session, "high")}
         onFocus={() => prefetchSession(props.session, "high")}
+        onClick={() => setHoverSession(undefined)}
       >
         <div class="flex items-center gap-1 w-full">
           <div
