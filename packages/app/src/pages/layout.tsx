@@ -1964,7 +1964,9 @@ export default function Layout(props: ParentProps) {
 
           <Collapsible.Content>
             <nav class="flex flex-col gap-1 px-2">
-              <NewSessionItem slug={slug()} mobile={props.mobile} />
+              <Show when={workspaceSetting()}>
+                <NewSessionItem slug={slug()} mobile={props.mobile} />
+              </Show>
               <Show when={loading()}>
                 <SessionSkeleton />
               </Show>
@@ -2171,7 +2173,9 @@ export default function Layout(props: ParentProps) {
         style={{ "overflow-anchor": "none" }}
       >
         <nav class="flex flex-col gap-1 px-2">
-          <NewSessionItem slug={slug()} mobile={props.mobile} />
+          <Show when={workspaceSetting()}>
+            <NewSessionItem slug={slug()} mobile={props.mobile} />
+          </Show>
           <Show when={loading()}>
             <SessionSkeleton />
           </Show>
