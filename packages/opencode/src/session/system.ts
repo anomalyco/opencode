@@ -116,6 +116,14 @@ export namespace SystemPrompt {
       }
     }
 
+    // Always load AGENTS.md from OPENCODE_CONFIG_DIR if set (explicit override)
+    if (Flag.OPENCODE_CONFIG_DIR) {
+      const configDirAgents = path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md")
+      if (await Bun.file(configDirAgents).exists()) {
+        paths.add(configDirAgents)
+      }
+    }
+
     const urls: string[] = []
     if (config.instructions) {
       for (let instruction of config.instructions) {
