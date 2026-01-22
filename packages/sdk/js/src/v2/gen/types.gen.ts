@@ -68,6 +68,71 @@ export type EventGlobalDisposed = {
   }
 }
 
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
+
+export type EventCredentialFailover = {
+  type: "credential.failover"
+  properties: {
+    providerID: string
+    fromRecordID: string
+    toRecordID?: string
+    statusCode: number
+    message: string
+  }
+}
+
 export type EventLspClientDiagnostics = {
   type: "lsp.client.diagnostics"
   properties: {
@@ -231,21 +296,6 @@ export type TextPart = {
   metadata?: {
     [key: string]: unknown
   }
-}
-
-export type SubtaskPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "subtask"
-  prompt: string
-  description: string
-  agent: string
-  model?: {
-    providerID: string
-    modelID: string
-  }
-  command?: string
 }
 
 export type ReasoningPart = {
@@ -464,7 +514,20 @@ export type CompactionPart = {
 
 export type Part =
   | TextPart
-  | SubtaskPart
+  | {
+      id: string
+      sessionID: string
+      messageID: string
+      type: "subtask"
+      prompt: string
+      description: string
+      agent: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
+      command?: string
+    }
   | ReasoningPart
   | FilePart
   | ToolPart
@@ -629,14 +692,6 @@ export type EventSessionCompacted = {
   }
 }
 
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
 export type Todo = {
   /**
    * Brief description of the task
@@ -664,57 +719,11 @@ export type EventTodoUpdated = {
   }
 }
 
-export type EventTuiPromptAppend = {
-  type: "tui.prompt.append"
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
   properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    /**
-     * Duration in milliseconds
-     */
-    duration?: number
-  }
-}
-
-export type EventTuiSessionSelect = {
-  type: "tui.session.select"
-  properties: {
-    /**
-     * Session ID to navigate to
-     */
-    sessionID: string
+    file: string
+    event: "add" | "change" | "unlink"
   }
 }
 
@@ -890,6 +899,11 @@ export type Event =
   | EventServerInstanceDisposed
   | EventServerConnected
   | EventGlobalDisposed
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow
+  | EventTuiSessionSelect
+  | EventCredentialFailover
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventFileEdited
@@ -905,12 +919,8 @@ export type Event =
   | EventQuestionReplied
   | EventQuestionRejected
   | EventSessionCompacted
-  | EventFileWatcherUpdated
   | EventTodoUpdated
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow
-  | EventTuiSessionSelect
+  | EventFileWatcherUpdated
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -930,6 +940,21 @@ export type Event =
 export type GlobalEvent = {
   directory: string
   payload: Event
+}
+
+export type BadRequestError = {
+  data: unknown
+  errors: Array<{
+    [key: string]: unknown
+  }>
+  success: false
+}
+
+export type NotFoundError = {
+  name: "NotFoundError"
+  data: {
+    message: string
+  }
 }
 
 /**
@@ -1364,17 +1389,12 @@ export type PermissionConfig =
       codesearch?: PermissionActionConfig
       lsp?: PermissionRuleConfig
       doom_loop?: PermissionActionConfig
-      skill?: PermissionRuleConfig
       [key: string]: PermissionRuleConfig | Array<string> | PermissionActionConfig | undefined
     }
   | PermissionActionConfig
 
 export type AgentConfig = {
   model?: string
-  /**
-   * Default model variant for this agent (applies only when using the agent's configured model).
-   */
-  variant?: string
   temperature?: number
   top_p?: number
   prompt?: string
@@ -1499,6 +1519,31 @@ export type ProviderConfig = {
   }
   whitelist?: Array<string>
   blacklist?: Array<string>
+  /**
+   * OAuth rotation settings
+   */
+  oauth?: {
+    /**
+     * Rate limit cooldown in milliseconds
+     */
+    rateLimitCooldownMs?: number
+    /**
+     * Auth failure cooldown in milliseconds
+     */
+    authFailureCooldownMs?: number
+    /**
+     * Network retry attempts per OAuth credential before failing
+     */
+    networkRetryAttempts?: number
+    /**
+     * Maximum OAuth credential attempts per request
+     */
+    maxAttempts?: number
+    /**
+     * Failover toast duration in milliseconds
+     */
+    toastDurationMs?: number
+  }
   options?: {
     apiKey?: string
     baseURL?: string
@@ -1638,15 +1683,6 @@ export type Config = {
       subtask?: boolean
     }
   }
-  /**
-   * Additional skill folder paths
-   */
-  skills?: {
-    /**
-     * Additional paths to skill folders
-     */
-    paths?: Array<string>
-  }
   watcher?: {
     ignore?: Array<string>
   }
@@ -1783,6 +1819,26 @@ export type Config = {
     prune?: boolean
   }
   experimental?: {
+    hook?: {
+      file_edited?: {
+        [key: string]: Array<{
+          command: Array<string>
+          environment?: {
+            [key: string]: string
+          }
+        }>
+      }
+      session_completed?: Array<{
+        command: Array<string>
+        environment?: {
+          [key: string]: string
+        }
+      }>
+    }
+    /**
+     * Number of retries for chat completions on failure
+     */
+    chatMaxRetries?: number
     disable_paste_summary?: boolean
     /**
      * Enable the batch tool
@@ -1804,43 +1860,6 @@ export type Config = {
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
-  }
-}
-
-export type BadRequestError = {
-  data: unknown
-  errors: Array<{
-    [key: string]: unknown
-  }>
-  success: false
-}
-
-export type OAuth = {
-  type: "oauth"
-  refresh: string
-  access: string
-  expires: number
-  accountId?: string
-  enterpriseUrl?: string
-}
-
-export type ApiAuth = {
-  type: "api"
-  key: string
-}
-
-export type WellKnownAuth = {
-  type: "wellknown"
-  key: string
-  token: string
-}
-
-export type Auth = OAuth | ApiAuth | WellKnownAuth
-
-export type NotFoundError = {
-  name: "NotFoundError"
-  data: {
-    message: string
   }
 }
 
@@ -2028,6 +2047,8 @@ export type ProviderAuthAuthorization = {
   instructions: string
 }
 
+export type AuthUsage = unknown
+
 export type Symbol = {
   name: string
   kind: number
@@ -2046,7 +2067,7 @@ export type FileNode = {
 }
 
 export type FileContent = {
-  type: "text" | "binary"
+  type: "text"
   content: string
   diff?: string
   patch?: {
@@ -2120,7 +2141,7 @@ export type Command = {
   description?: string
   agent?: string
   model?: string
-  source?: "command" | "mcp" | "skill"
+  mcp?: boolean
   template: string
   subtask?: boolean
   hints: Array<string>
@@ -2140,7 +2161,6 @@ export type Agent = {
     modelID: string
     providerID: string
   }
-  variant?: string
   prompt?: string
   options: {
     [key: string]: unknown
@@ -2160,6 +2180,28 @@ export type FormatterStatus = {
   extensions: Array<string>
   enabled: boolean
 }
+
+export type OAuth = {
+  type: "oauth"
+  refresh: string
+  access: string
+  expires: number
+  accountId?: string
+  enterpriseUrl?: string
+}
+
+export type ApiAuth = {
+  type: "api"
+  key: string
+}
+
+export type WellKnownAuth = {
+  type: "wellknown"
+  key: string
+  token: string
+}
+
+export type Auth = OAuth | ApiAuth | WellKnownAuth
 
 export type GlobalHealthData = {
   body?: never
@@ -2196,47 +2238,6 @@ export type GlobalEventResponses = {
 
 export type GlobalEventResponse = GlobalEventResponses[keyof GlobalEventResponses]
 
-export type GlobalConfigGetData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/global/config"
-}
-
-export type GlobalConfigGetResponses = {
-  /**
-   * Get global config info
-   */
-  200: Config
-}
-
-export type GlobalConfigGetResponse = GlobalConfigGetResponses[keyof GlobalConfigGetResponses]
-
-export type GlobalConfigUpdateData = {
-  body?: Config
-  path?: never
-  query?: never
-  url: "/global/config"
-}
-
-export type GlobalConfigUpdateErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type GlobalConfigUpdateError = GlobalConfigUpdateErrors[keyof GlobalConfigUpdateErrors]
-
-export type GlobalConfigUpdateResponses = {
-  /**
-   * Successfully updated global config
-   */
-  200: Config
-}
-
-export type GlobalConfigUpdateResponse = GlobalConfigUpdateResponses[keyof GlobalConfigUpdateResponses]
-
 export type GlobalDisposeData = {
   body?: never
   path?: never
@@ -2252,60 +2253,6 @@ export type GlobalDisposeResponses = {
 }
 
 export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
-
-export type AuthRemoveData = {
-  body?: never
-  path: {
-    providerID: string
-  }
-  query?: never
-  url: "/auth/{providerID}"
-}
-
-export type AuthRemoveErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type AuthRemoveError = AuthRemoveErrors[keyof AuthRemoveErrors]
-
-export type AuthRemoveResponses = {
-  /**
-   * Successfully removed authentication credentials
-   */
-  200: boolean
-}
-
-export type AuthRemoveResponse = AuthRemoveResponses[keyof AuthRemoveResponses]
-
-export type AuthSetData = {
-  body?: Auth
-  path: {
-    providerID: string
-  }
-  query?: never
-  url: "/auth/{providerID}"
-}
-
-export type AuthSetErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type AuthSetError = AuthSetErrors[keyof AuthSetErrors]
-
-export type AuthSetResponses = {
-  /**
-   * Successfully set authentication credentials
-   */
-  200: boolean
-}
-
-export type AuthSetResponse = AuthSetResponses[keyof AuthSetResponses]
 
 export type ProjectListData = {
   body?: never
@@ -4107,6 +4054,97 @@ export type ProviderOauthCallbackResponses = {
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
 
+export type AuthUsageData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth/usage"
+}
+
+export type AuthUsageErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthUsageError = AuthUsageErrors[keyof AuthUsageErrors]
+
+export type AuthUsageResponses = {
+  /**
+   * Usage information per provider and account
+   */
+  200: AuthUsage
+}
+
+export type AuthUsageResponse = AuthUsageResponses[keyof AuthUsageResponses]
+
+export type AuthSetActiveData = {
+  body?: {
+    providerID: string
+    recordID: string
+    namespace?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth/active"
+}
+
+export type AuthSetActiveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthSetActiveError = AuthSetActiveErrors[keyof AuthSetActiveErrors]
+
+export type AuthSetActiveResponses = {
+  /**
+   * Active account switched
+   */
+  200: boolean
+}
+
+export type AuthSetActiveResponse = AuthSetActiveResponses[keyof AuthSetActiveResponses]
+
+export type AuthDeleteAccountData = {
+  body?: {
+    providerID: string
+    recordID: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider/auth/account"
+}
+
+export type AuthDeleteAccountErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthDeleteAccountError = AuthDeleteAccountErrors[keyof AuthDeleteAccountErrors]
+
+export type AuthDeleteAccountResponses = {
+  /**
+   * Account deleted
+   */
+  200: {
+    success: boolean
+    remaining: number
+  }
+}
+
+export type AuthDeleteAccountResponse = AuthDeleteAccountResponses[keyof AuthDeleteAccountResponses]
+
 export type FindTextData = {
   body?: never
   path?: never
@@ -4765,6 +4803,101 @@ export type TuiControlResponseResponses = {
 
 export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
 
+export type AuthUsage2Data = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/auth/usage"
+}
+
+export type AuthUsage2Errors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthUsage2Error = AuthUsage2Errors[keyof AuthUsage2Errors]
+
+export type AuthUsage2Responses = {
+  /**
+   * Usage information per provider and account
+   */
+  200: AuthUsage
+}
+
+export type AuthUsage2Response = AuthUsage2Responses[keyof AuthUsage2Responses]
+
+export type AuthSetActive2Data = {
+  body?: {
+    providerID: string
+    recordID: string
+    namespace?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/auth/active"
+}
+
+export type AuthSetActive2Errors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthSetActive2Error = AuthSetActive2Errors[keyof AuthSetActive2Errors]
+
+export type AuthSetActive2Responses = {
+  /**
+   * Active account updated
+   */
+  200: {
+    success: boolean
+    anthropicUsage?: unknown
+  }
+}
+
+export type AuthSetActive2Response = AuthSetActive2Responses[keyof AuthSetActive2Responses]
+
+export type AuthRemoveAccountData = {
+  body?: {
+    providerID: string
+    recordID: string
+    namespace?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/auth/account"
+}
+
+export type AuthRemoveAccountErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthRemoveAccountError = AuthRemoveAccountErrors[keyof AuthRemoveAccountErrors]
+
+export type AuthRemoveAccountResponses = {
+  /**
+   * Account removed
+   */
+  200: {
+    removed: boolean
+    remaining: number
+  }
+}
+
+export type AuthRemoveAccountResponse = AuthRemoveAccountResponses[keyof AuthRemoveAccountResponses]
+
 export type InstanceDisposeData = {
   body?: never
   path?: never
@@ -4918,7 +5051,6 @@ export type AppSkillsResponses = {
     name: string
     description: string
     location: string
-    content: string
   }>
 }
 
@@ -4959,6 +5091,35 @@ export type FormatterStatusResponses = {
 }
 
 export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
+
+export type AuthSetData = {
+  body?: Auth
+  path: {
+    providerID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/auth/{providerID}"
+}
+
+export type AuthSetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthSetError = AuthSetErrors[keyof AuthSetErrors]
+
+export type AuthSetResponses = {
+  /**
+   * Successfully set authentication credentials
+   */
+  200: boolean
+}
+
+export type AuthSetResponse = AuthSetResponses[keyof AuthSetResponses]
 
 export type EventSubscribeData = {
   body?: never

@@ -7,6 +7,7 @@ import { Storage } from "@/storage/storage"
 import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
+import { Yolo } from "@/yolo"
 import os from "os"
 import z from "zod"
 
@@ -137,6 +138,11 @@ export namespace PermissionNext {
         if (rule.action === "deny")
           throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
         if (rule.action === "ask") {
+          // YOLO mode auto-approves all "ask" permissions (but respects explicit "deny")
+          if (Yolo.isEnabled()) {
+            log.warn("YOLO mode auto-approved", { permission: request.permission, pattern })
+            continue
+          }
           const id = input.id ?? Identifier.ascending("permission")
           return new Promise<void>((resolve, reject) => {
             const info: Request = {

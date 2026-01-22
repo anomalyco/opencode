@@ -1,4 +1,4 @@
-import { Component, createMemo, type JSX } from "solid-js"
+import { Component, createMemo, createSignal, Show, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Select } from "@opencode-ai/ui/select"
@@ -9,6 +9,7 @@ import { ScrollFade } from "@opencode-ai/ui/scroll-fade"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings, monoFontFamily } from "@/context/settings"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 
@@ -36,6 +37,53 @@ export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
   const settings = useSettings()
+  const globalSDK = useGlobalSDK()
+
+  // YOLO state - wird später vom Server geladen
+  const [yoloEnabled, setYoloEnabled] = createSignal(false)
+  const [yoloPersisted, setYoloPersisted] = createSignal(false)
+
+  // Lade YOLO status beim Öffnen - mit kleinem Delay für Stabilität
+  const loadYoloStatus = () => {
+    const doFetch = platform.fetch ?? fetch
+    doFetch(`${globalSDK.url}/config/yolo`)
+      .then((response) => {
+        if (response.ok) return response.json()
+        return null
+      })
+      .then((data) => {
+        if (data) {
+          setYoloEnabled(data.enabled === true)
+          setYoloPersisted(data.persisted === true)
+        }
+      })
+      .catch(() => {
+        // Silently ignore errors
+      })
+  }
+
+  // Initialer Load mit kleinem Delay
+  setTimeout(loadYoloStatus, 100)
+
+  const setYolo = (enabled: boolean, persist: boolean) => {
+    const doFetch = platform.fetch ?? fetch
+    doFetch(`${globalSDK.url}/config/yolo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled, persist }),
+    })
+      .then((response) => {
+        if (response.ok) return response.json()
+        return null
+      })
+      .then((data) => {
+        if (data) {
+          setYoloEnabled(data.enabled === true)
+          setYoloPersisted(data.persisted === true)
+        }
+      })
+      .catch((e) => console.error("Failed to set YOLO:", e))
+  }
 
   const [store, setStore] = createStore({
     checking: false,
@@ -414,6 +462,128 @@ export const SettingsGeneral: Component = () => {
                   : language.t("settings.updates.action.checkNow")}
               </Button>
             </SettingsRow>
+          </div>
+        </div>
+
+        {/* YOLO Mode Section */}
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center gap-2 pb-2">
+            <h3 class="text-14-medium text-text-strong">YOLO Mode</h3>
+            <Show when={yoloEnabled()}>
+              <span class="text-10-medium text-fill-danger-base bg-fill-danger-ghost px-1.5 py-0.5 rounded">
+                ACTIVE
+              </span>
+            </Show>
+          </div>
+
+          <p class="text-12-regular text-text-muted pb-2">
+            Skip ALL permission prompts. OpenCode will execute without asking for confirmation.
+          </p>
+
+          {/* Warning */}
+          <div class="p-3 rounded-lg border border-fill-warning-base bg-fill-warning-ghost mb-3">
+            <p class="text-12-regular text-text-base">
+              <span class="text-12-medium">Warning:</span> This is dangerous. Only enable if you fully trust OpenCode's
+              actions. Explicit deny rules in your config will still be respected.
+            </p>
+          </div>
+
+          {/* This Session Only Card */}
+          <div
+            class="p-3 rounded-lg border-2 transition-all mb-2"
+            classList={{
+              "border-fill-danger-base bg-fill-danger-ghost": yoloEnabled() && !yoloPersisted(),
+              "border-border-weak-base bg-fill-ghost-base": !(yoloEnabled() && !yoloPersisted()),
+            }}
+          >
+            <div class="flex items-center justify-between">
+              <div class="flex flex-col gap-0.5">
+                <div class="flex items-center gap-2">
+                  <span class="text-13-medium text-text-base">This Session Only</span>
+                  <Show when={yoloEnabled() && !yoloPersisted()}>
+                    <span class="text-10-medium text-fill-danger-base">ACTIVE</span>
+                  </Show>
+                </div>
+                <span class="text-11-regular text-text-muted">Resets when you restart OpenCode</span>
+              </div>
+              <Show
+                when={yoloEnabled() && !yoloPersisted()}
+                fallback={
+                  <button
+                    type="button"
+                    onClick={() => setYolo(true, false)}
+                    class="px-3 py-1.5 rounded text-12-medium bg-fill-danger-base text-white hover:bg-fill-danger-strong transition-colors"
+                  >
+                    Enable
+                  </button>
+                }
+              >
+                <button
+                  type="button"
+                  onClick={() => setYolo(false, false)}
+                  class="px-3 py-1.5 rounded border border-border-base text-12-medium text-text-base hover:bg-fill-ghost-base transition-colors"
+                >
+                  Disable
+                </button>
+              </Show>
+            </div>
+          </div>
+
+          {/* Always Enabled Card */}
+          <div
+            class="p-3 rounded-lg border-2 transition-all mb-3"
+            classList={{
+              "border-fill-danger-base bg-fill-danger-ghost": yoloPersisted(),
+              "border-border-weak-base bg-fill-ghost-base": !yoloPersisted(),
+            }}
+          >
+            <div class="flex items-center justify-between">
+              <div class="flex flex-col gap-0.5">
+                <div class="flex items-center gap-2">
+                  <span class="text-13-medium text-text-base">Always Enabled</span>
+                  <Show when={yoloPersisted()}>
+                    <span class="text-10-medium text-fill-danger-base">ACTIVE</span>
+                    <span class="text-10-medium text-fill-success-base">Saved</span>
+                  </Show>
+                </div>
+                <span class="text-11-regular text-text-muted">Persists across restarts (saved in config.json)</span>
+              </div>
+              <Show
+                when={yoloPersisted()}
+                fallback={
+                  <button
+                    type="button"
+                    onClick={() => setYolo(true, true)}
+                    class="px-3 py-1.5 rounded text-12-medium bg-fill-danger-base text-white hover:bg-fill-danger-strong transition-colors"
+                  >
+                    Save to Config
+                  </button>
+                }
+              >
+                <button
+                  type="button"
+                  onClick={() => setYolo(false, true)}
+                  class="px-3 py-1.5 rounded border border-border-base text-12-medium text-text-base hover:bg-fill-ghost-base transition-colors"
+                >
+                  Remove from Config
+                </button>
+              </Show>
+            </div>
+          </div>
+
+          {/* CLI Usage */}
+          <div class="p-3 rounded-lg border border-border-weak-base bg-fill-ghost-base">
+            <span class="text-12-medium text-text-base">CLI Usage</span>
+            <div class="mt-2 flex flex-col gap-1">
+              <div class="flex items-center gap-3">
+                <code class="text-11-regular font-mono text-text-muted">opencode --yolo</code>
+                <span class="text-11-regular text-text-weak">one session</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <code class="text-11-regular font-mono text-text-muted">OPENCODE_YOLO=true</code>
+                <span class="text-11-regular text-text-weak">env var</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

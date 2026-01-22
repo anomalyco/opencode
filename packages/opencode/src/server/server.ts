@@ -227,6 +227,126 @@ export namespace Server {
         .route("/", FileRoutes())
         .route("/mcp", McpRoutes())
         .route("/tui", TuiRoutes())
+        .get(
+          "/auth/usage",
+          describeRoute({
+            summary: "Get auth usage",
+            description: "Get rate limit and usage information for authenticated providers.",
+            operationId: "auth.usage",
+            responses: {
+              200: {
+                description: "Usage information per provider and account",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.any().meta({ ref: "AuthUsage" })),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          async (c) => {
+            const all = await Auth.all()
+            const result: Record<
+              string,
+              {
+                accounts: Awaited<ReturnType<typeof Auth.OAuthPool.getUsage>>
+                anthropicUsage?: Awaited<ReturnType<typeof Auth.OAuthPool.fetchAnthropicUsage>>
+              }
+            > = {}
+
+            for (const [providerID, info] of Object.entries(all)) {
+              if (info.type === "oauth") {
+                const accounts = await Auth.OAuthPool.getUsage(providerID)
+                const anthropicUsage = await Auth.OAuthPool.fetchAnthropicUsage(providerID)
+                result[providerID] = { accounts, anthropicUsage: anthropicUsage ?? undefined }
+              }
+            }
+
+            return c.json(result)
+          },
+        )
+        .post(
+          "/auth/active",
+          describeRoute({
+            summary: "Set active OAuth account",
+            description:
+              "Set the active OAuth account for a provider. This account will be used for requests until rate limited.",
+            operationId: "auth.setActive",
+            responses: {
+              200: {
+                description: "Active account updated",
+                content: {
+                  "application/json": {
+                    schema: resolver(
+                      z.object({
+                        success: z.boolean(),
+                        anthropicUsage: z.any().optional(),
+                      }),
+                    ),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "json",
+            z.object({
+              providerID: z.string(),
+              recordID: z.string(),
+              namespace: z.string().optional(),
+            }),
+          ),
+          async (c) => {
+            const body = c.req.valid("json")
+            const namespace = body.namespace ?? "default"
+            const success = await Auth.OAuthPool.setActive(body.providerID, namespace, body.recordID)
+            const anthropicUsage = success
+              ? await Auth.OAuthPool.fetchAnthropicUsage(body.providerID, namespace, body.recordID)
+              : null
+            return c.json({ success, anthropicUsage: anthropicUsage ?? undefined })
+          },
+        )
+        .delete(
+          "/auth/account",
+          describeRoute({
+            summary: "Remove OAuth account",
+            description:
+              "Remove an OAuth account from a provider. If this is the last account, the provider will be disconnected.",
+            operationId: "auth.removeAccount",
+            responses: {
+              200: {
+                description: "Account removed",
+                content: {
+                  "application/json": {
+                    schema: resolver(
+                      z.object({
+                        removed: z.boolean(),
+                        remaining: z.number(),
+                      }),
+                    ),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "json",
+            z.object({
+              providerID: z.string(),
+              recordID: z.string(),
+              namespace: z.string().optional(),
+            }),
+          ),
+          async (c) => {
+            const body = c.req.valid("json")
+            const namespace = body.namespace ?? "default"
+            const result = await Auth.OAuthPool.removeRecord(body.providerID, body.recordID, namespace)
+            return c.json(result)
+          },
+        )
         .post(
           "/instance/dispose",
           describeRoute({

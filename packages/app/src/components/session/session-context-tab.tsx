@@ -1,9 +1,11 @@
-import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
+import { createMemo, createEffect, on, onCleanup, For, Show, createSignal, createResource } from "solid-js"
 import type { JSX } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
 import { useLayout } from "@/context/layout"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { usePlatform } from "@/context/platform"
 import { checksum } from "@opencode-ai/util/encode"
 import { findLast } from "@opencode-ai/util/array"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -11,14 +13,230 @@ import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Code } from "@opencode-ai/ui/code"
 import { Markdown } from "@opencode-ai/ui/markdown"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import type { AssistantMessage, Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { useLanguage } from "@/context/language"
+
+interface AnthropicUsage {
+  fiveHour?: { utilization: number; resetsAt?: string }
+  sevenDay?: { utilization: number; resetsAt?: string }
+  sevenDaySonnet?: { utilization: number; resetsAt?: string }
+}
+
+interface AccountUsage {
+  id: string
+  label?: string
+  isActive?: boolean
+  health: { successCount: number; failureCount: number; cooldownUntil?: number }
+}
+
+interface ProviderUsageData {
+  accounts: AccountUsage[]
+  anthropicUsage?: AnthropicUsage
+}
 
 interface SessionContextTabProps {
   messages: () => Message[]
   visibleUserMessages: () => UserMessage[]
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
   info: () => ReturnType<ReturnType<typeof useSync>["session"]["get"]>
+}
+
+function formatResetTime(resetAt?: string): string {
+  if (!resetAt) return ""
+  const reset = new Date(resetAt)
+  const now = new Date()
+  const diffMs = reset.getTime() - now.getTime()
+  if (diffMs <= 0) return "now"
+  const totalMinutes = Math.floor(diffMs / (1000 * 60))
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}m`
+}
+
+function getUsageColor(percent: number): string {
+  if (percent <= 50) return "var(--syntax-success)"
+  if (percent <= 80) return "var(--syntax-warning)"
+  return "var(--syntax-danger)"
+}
+
+function AnthropicUsageSection() {
+  const globalSDK = useGlobalSDK()
+  const platform = usePlatform()
+  const [switching, setSwitching] = createSignal<string | null>(null)
+
+  const [usage, { refetch, mutate }] = createResource(async () => {
+    const result = await globalSDK.client.auth.usage({})
+    const data = result.data as Record<string, ProviderUsageData>
+    return data["anthropic"]
+  })
+
+  const switchAccount = async (recordID: string) => {
+    setSwitching(recordID)
+    try {
+      const doFetch = platform.fetch ?? fetch
+      const response = await doFetch(`${globalSDK.url}/auth/active`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providerID: "anthropic", recordID }),
+      })
+      if (response.ok) {
+        const result = await response.json()
+        const current = usage()
+        if (current && result.success) {
+          // Update accounts list to reflect new active status
+          // and use anthropicUsage from response (fetched for the specific recordID)
+          mutate({
+            ...current,
+            accounts: current.accounts.map((acc) => ({
+              ...acc,
+              isActive: acc.id === recordID,
+            })),
+            anthropicUsage: result.anthropicUsage ?? current.anthropicUsage,
+          })
+        }
+      }
+    } catch (e) {
+      console.error("Failed to switch account:", e)
+    } finally {
+      setSwitching(null)
+    }
+  }
+
+  const rateLimits = createMemo(() => {
+    const data = usage()
+    if (!data?.anthropicUsage) return []
+
+    const limits: { key: string; label: string; utilization: number; resetsAt?: string; color: string }[] = []
+
+    if (data.anthropicUsage.fiveHour) {
+      limits.push({
+        key: "5h",
+        label: "5-Hour",
+        utilization: data.anthropicUsage.fiveHour.utilization,
+        resetsAt: data.anthropicUsage.fiveHour.resetsAt,
+        color: getUsageColor(data.anthropicUsage.fiveHour.utilization),
+      })
+    }
+    if (data.anthropicUsage.sevenDay) {
+      limits.push({
+        key: "7d",
+        label: "Weekly (All)",
+        utilization: data.anthropicUsage.sevenDay.utilization,
+        resetsAt: data.anthropicUsage.sevenDay.resetsAt,
+        color: getUsageColor(data.anthropicUsage.sevenDay.utilization),
+      })
+    }
+    if (data.anthropicUsage.sevenDaySonnet) {
+      limits.push({
+        key: "7d-sonnet",
+        label: "Weekly (Sonnet)",
+        utilization: data.anthropicUsage.sevenDaySonnet.utilization,
+        resetsAt: data.anthropicUsage.sevenDaySonnet.resetsAt,
+        color: getUsageColor(data.anthropicUsage.sevenDaySonnet.utilization),
+      })
+    }
+
+    return limits
+  })
+
+  return (
+    <div class="flex flex-col gap-2">
+      <div class="text-12-regular text-text-weak">Anthropic Rate Limits</div>
+
+      <Show when={usage.loading}>
+        <div class="flex items-center justify-center py-4">
+          <Spinner class="size-4" />
+        </div>
+      </Show>
+
+      <Show when={!usage.loading && usage()}>
+        {(data) => (
+          <>
+            <Show when={rateLimits().length > 0}>
+              <For each={rateLimits()}>
+                {(limit) => (
+                  <div class="flex flex-col gap-1">
+                    <div class="h-2 w-full rounded-full bg-surface-base overflow-hidden">
+                      <div
+                        class="h-full transition-all"
+                        style={{
+                          width: `${limit.utilization}%`,
+                          "background-color": limit.color,
+                        }}
+                      />
+                    </div>
+                    <div class="flex items-center gap-1 text-11-regular text-text-weak">
+                      <div class="size-2 rounded-sm" style={{ "background-color": limit.color }} />
+                      <div>{limit.label}</div>
+                      <div class="text-text-weaker">{limit.utilization}%</div>
+                      <Show when={limit.resetsAt}>
+                        <div class="text-text-weaker ml-auto">resets {formatResetTime(limit.resetsAt)}</div>
+                      </Show>
+                    </div>
+                  </div>
+                )}
+              </For>
+            </Show>
+
+            <Show when={data().accounts.length > 1}>
+              <div class="flex flex-col gap-2 mt-2">
+                <div class="text-11-regular text-text-weak">Accounts ({data().accounts.length}) - click to switch</div>
+                <div class="flex flex-wrap gap-1">
+                  <For each={data().accounts}>
+                    {(account, index) => {
+                      const isSwitching = () => switching() === account.id
+                      const canSwitch = () => !account.isActive && !isSwitching()
+
+                      return (
+                        <button
+                          type="button"
+                          disabled={!canSwitch()}
+                          onClick={() => canSwitch() && switchAccount(account.id)}
+                          class="px-2 py-1 rounded text-11-medium transition-all"
+                          classList={{
+                            "bg-fill-success-ghost border border-fill-success-base text-fill-success-base":
+                              account.isActive,
+                            "bg-surface-base border border-border-base text-text-muted hover:border-border-strong hover:text-text-base cursor-pointer":
+                              canSwitch(),
+                            "bg-surface-base border border-border-base text-text-weaker":
+                              !canSwitch() && !account.isActive,
+                          }}
+                        >
+                          <Show when={isSwitching()}>
+                            <Spinner class="size-3 mr-1 inline" />
+                          </Show>
+                          Account {index() + 1}
+                          <Show when={account.isActive}>
+                            <span class="ml-1 text-10-regular">(active)</span>
+                          </Show>
+                        </button>
+                      )
+                    }}
+                  </For>
+                </div>
+              </div>
+            </Show>
+
+            <button
+              type="button"
+              class="text-11-regular text-text-muted hover:text-text-base transition-colors self-start mt-1"
+              onClick={() => refetch()}
+            >
+              Refresh
+            </button>
+          </>
+        )}
+      </Show>
+
+      <Show when={!usage.loading && !usage()}>
+        <div class="text-11-regular text-text-muted p-2 rounded bg-surface-base">
+          No Anthropic OAuth account connected.
+        </div>
+      </Show>
+    </div>
+  )
 }
 
 export function SessionContextTab(props: SessionContextTabProps) {
@@ -408,6 +626,11 @@ export function SessionContextTab(props: SessionContextTabProps) {
             </div>
             <div class="hidden text-11-regular text-text-weaker">{language.t("context.breakdown.note")}</div>
           </div>
+        </Show>
+
+        {/* Anthropic Rate Limits - only show when provider is Anthropic */}
+        <Show when={ctx()?.provider?.id === "anthropic"}>
+          <AnthropicUsageSection />
         </Show>
 
         <Show when={systemPrompt()}>

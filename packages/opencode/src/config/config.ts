@@ -894,6 +894,26 @@ export namespace Config {
           }),
         )
         .optional(),
+      oauth: z
+        .object({
+          rateLimitCooldownMs: z.number().int().positive().optional().describe("Rate limit cooldown in milliseconds"),
+          authFailureCooldownMs: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Auth failure cooldown in milliseconds"),
+          networkRetryAttempts: z
+            .number()
+            .int()
+            .nonnegative()
+            .optional()
+            .describe("Network retry attempts per OAuth credential before failing"),
+          maxAttempts: z.number().int().positive().optional().describe("Maximum OAuth credential attempts per request"),
+          toastDurationMs: z.number().int().positive().optional().describe("Failover toast duration in milliseconds"),
+        })
+        .optional()
+        .describe("OAuth rotation settings"),
       options: z
         .object({
           apiKey: z.string().optional(),
@@ -1088,6 +1108,7 @@ export namespace Config {
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
         })
         .optional(),
+      yolo: z.boolean().optional().describe("Enable YOLO mode - skip all permission prompts (dangerous!)"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),
