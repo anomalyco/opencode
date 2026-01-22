@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Secure remote access to your opencode instance from anywhere — authenticate once with your system credentials, work on your projects from any device.
-**Current focus:** Phase 4 (Authentication Flow) - COMPLETE
+**Current focus:** Phase 5 (User Process Execution) - In Progress
 
 ## Current Position
 
-Phase: 4 of 11 (Authentication Flow) - COMPLETE
-Plan: 2 of 2 in current phase (all complete)
-Status: Phase complete - ready for Phase 5
-Last activity: 2026-01-20 - Completed 04-02-PLAN.md
+Phase: 5 of 11 (User Process Execution)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-01-22 - Completed 05-01-PLAN.md
 
-Progress: [██████░░░░] ~60%
+Progress: [██████░░░░] ~65%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14
-- Average duration: 4.1 min
-- Total execution time: 58 min
+- Total plans completed: 15
+- Average duration: 7.5 min
+- Total execution time: 98 min
 
 **By Phase:**
 
@@ -31,10 +31,11 @@ Progress: [██████░░░░] ~60%
 | 2. Session Infrastructure | 2 | 5 min | 2.5 min |
 | 3. Auth Broker Core | 6 | 33 min | 5.5 min |
 | 4. Authentication Flow | 2 | 8 min | 4 min |
+| 5. User Process Execution | 1 | 40 min | 40 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-05 (3 min), 03-06 (8 min), 04-01 (4 min), 04-02 (4 min)
-- Trend: Stable
+- Last 5 plans: 03-06 (8 min), 04-01 (4 min), 04-02 (4 min), 05-01 (40 min)
+- Trend: 05-01 longer due to nix API exploration
 
 *Updated after each plan completion*
 
@@ -72,6 +73,9 @@ Recent decisions affecting current work:
 | 04-02 | X-Requested-With header required for CSRF | Basic CSRF protection - browser won't add this header cross-origin |
 | 04-02 | Generic auth_failed error on all failures | Prevents user enumeration attacks |
 | 04-02 | returnUrl validation (starts with /, no //) | Prevents open redirect vulnerabilities |
+| 05-01 | Platform-specific ptsname | ptsname_r on Linux (thread-safe), ptsname on macOS |
+| 05-01 | DashMap for session management | Lock-free concurrent access without async overhead |
+| 05-01 | Direct libc for ptsname | nix ptsname requires PtyMaster, openpty returns OwnedFd |
 
 ### Pending Todos
 
@@ -85,16 +89,18 @@ From research summary (Phase 2, 3 flags):
 
 **Resolved:**
 - macOS PAM crate compatibility - resolved by using nonstick instead of pam-client
+- PTY allocation on macOS - working with platform-specific ptsname
 
 ## Session Continuity
 
-Last session: 2026-01-20
-Stopped at: Phase 4 complete
+Last session: 2026-01-22
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
-Next: Phase 5 - User Process Execution
+Next: 05-02-PLAN.md - Process spawner
 
-## Phase 4 Progress
+## Phase 5 Progress
 
-**Authentication Flow - COMPLETE:**
-- [x] Plan 01: User info lookup module and session extension (4 min, 10 tests)
-- [x] Plan 02: Login endpoint (4 min, 17 tests)
+**User Process Execution - In Progress:**
+- [x] Plan 01: PTY allocation module (40 min, 7 tests)
+- [ ] Plan 02: Process spawner
+- [ ] Plan 03: IPC extension for spawn
