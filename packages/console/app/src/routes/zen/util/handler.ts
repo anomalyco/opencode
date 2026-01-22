@@ -468,6 +468,7 @@ export async function handler(
       api_key: data.apiKey,
       workspace: data.workspaceID,
       isSubscription: data.subscription ? true : false,
+      subscription: data.billing.subscription?.plan,
     })
 
     return {
