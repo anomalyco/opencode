@@ -54,6 +54,7 @@ function detectLocale(): Locale {
     if (language.toLowerCase().startsWith("pl")) return "pl"
     if (language.toLowerCase().startsWith("ru")) return "ru"
     if (language.toLowerCase().startsWith("ar")) return "ar"
+    if (language.toLowerCase().startsWith("en")) return "en"
   }
 
   return "en"
