@@ -1110,13 +1110,19 @@ export function Prompt(props: PromptProps) {
                 </box>
               </Show>
               <box flexGrow={1} />
-              <box
-                flexDirection="row"
-                onMouseUp={async () => {
-                  if (!voiceEnabled() && !store.recording && !store.processing) return
+                <box
+                  flexDirection="row"
+                  onMouseUp={async () => {
+                  if (!voiceEnabled() && !store.recording && !store.processing) {
+                    toast.show({
+                      message: "Voice input unavailable (missing transcription API key)",
+                      variant: "warning",
+                    })
+                    return
+                  }
                   await toggleVoice()
-                }}
-              >
+                  }}
+                >
                 <text fg={voiceColor()}>{voiceLabel()}</text>
               </box>
             </box>
