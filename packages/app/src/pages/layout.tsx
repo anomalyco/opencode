@@ -2195,7 +2195,7 @@ export default function Layout(props: ParentProps) {
                         />
 
                         <Tooltip
-                          placement={sidebarProps.mobile ? "bottom" : "top"}
+                          placement="bottom"
                           gutter={2}
                           value={project()?.worktree}
                           class="shrink-0"
