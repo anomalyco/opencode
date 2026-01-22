@@ -134,3 +134,14 @@ jobs:
           VITE_OPENCODE_SERVER_PORT: "4096"
           OPENCODE_CLIENT: "app"
         timeout-minutes: 30
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.settings.name }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            packages/app/e2e/test-results
+            packages/app/e2e/playwright-report
