@@ -4,15 +4,22 @@ import { modKey } from "./utils"
 test("smoke file viewer renders real file content", async ({ page, gotoSession }) => {
   await gotoSession()
 
+  const sep = process.platform === "win32" ? "\\" : "/"
+  const file = ["packages", "app", "package.json"].join(sep)
+
   await page.keyboard.press(`${modKey}+P`)
 
   const dialog = page.getByRole("dialog")
   await expect(dialog).toBeVisible()
 
   const input = dialog.getByRole("textbox").first()
-  await input.fill("packages/app/package.json")
+  await input.fill(file)
 
-  const fileItem = dialog.locator('[data-slot="list-item"][data-key="file:packages/app/package.json"]')
+  const fileItem = dialog
+    .locator(
+      '[data-slot="list-item"][data-key^="file:"][data-key*="packages"][data-key*="app"][data-key$="package.json"]',
+    )
+    .first()
   await expect(fileItem).toBeVisible()
   await fileItem.click()
 

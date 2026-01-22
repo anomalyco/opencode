@@ -3,6 +3,7 @@ import { BillingSection } from "./billing-section"
 import { ReloadSection } from "./reload-section"
 import { PaymentSection } from "./payment-section"
 import { BlackSection } from "./black-section"
+import { BlackWaitlistSection } from "./black-waitlist-section"
 import { Show } from "solid-js"
 import { createAsync, useParams } from "@solidjs/router"
 import { queryBillingInfo, querySessionInfo } from "../../common"
@@ -18,6 +19,9 @@ export default function () {
         <Show when={sessionInfo()?.isAdmin}>
           <Show when={billingInfo()?.subscriptionID}>
             <BlackSection />
+          </Show>
+          <Show when={billingInfo()?.timeSubscriptionBooked}>
+            <BlackWaitlistSection />
           </Show>
           <BillingSection />
           <Show when={billingInfo()?.customerID}>

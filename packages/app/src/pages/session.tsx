@@ -93,6 +93,15 @@ function SessionReviewTab(props: SessionReviewTabProps) {
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
 
+  const sdk = useSDK()
+
+  const readFile = (path: string) => {
+    return sdk.client.file
+      .read({ path })
+      .then((x) => x.data)
+      .catch(() => undefined)
+  }
+
   const restoreScroll = (retries = 0) => {
     const el = scroll
     if (!el) return
@@ -161,6 +170,7 @@ function SessionReviewTab(props: SessionReviewTabProps) {
       diffStyle={props.diffStyle}
       onDiffStyleChange={props.onDiffStyleChange}
       onViewFile={props.onViewFile}
+      readFile={readFile}
     />
   )
 }

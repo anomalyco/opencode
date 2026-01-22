@@ -308,6 +308,7 @@ export const dict = {
   "language.pl": "Polsk",
   "language.ar": "Arabisk",
   "language.no": "Norsk",
+  "language.br": "Portugisisk (Brasil)",
 
   "toast.language.title": "Språk",
   "toast.language.description": "Byttet til {{language}}",

@@ -626,6 +626,7 @@ export function SessionTurn(
                                   <IconButton
                                     icon={copied() ? "check" : "copy"}
                                     variant="secondary"
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={(event) => {
                                       event.stopPropagation()
                                       handleCopy()
