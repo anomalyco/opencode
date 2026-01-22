@@ -15,7 +15,8 @@ governor = "0.6"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "1"
-nix = { version = "0.29", features = ["process", "signal", "user"] }
+nix = { version = "0.29", features = ["process", "signal", "user", "term", "fs"] }
+libc = "0.2"
 futures = "0.3"
 
 [dev-dependencies]

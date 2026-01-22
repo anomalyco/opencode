@@ -382,6 +382,7 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "governor",
+ "libc",
  "nix",
  "nonstick",
  "sd-notify",
