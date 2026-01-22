@@ -211,7 +211,9 @@ async fn handle_resize_pty(request: Request) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ipc::protocol::{AuthenticateParams, PingParams};
+    use crate::ipc::protocol::{
+        AuthenticateParams, KillPtyParams, PingParams, ResizePtyParams, SpawnPtyParams,
+    };
 
     fn test_config() -> BrokerConfig {
         BrokerConfig {
@@ -348,5 +350,103 @@ mod tests {
 
         assert!(!response.success);
         assert_eq!(response.error, Some("authentication failed".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_spawn_pty_stub_returns_not_implemented() {
+        let config = test_config();
+        let rate_limiter = RateLimiter::new(5);
+
+        let request = Request {
+            id: "spawn-1".to_string(),
+            version: PROTOCOL_VERSION,
+            method: Method::SpawnPty,
+            params: RequestParams::SpawnPty(SpawnPtyParams {
+                session_id: "sess-123".to_string(),
+                term: "xterm-256color".to_string(),
+                cols: 80,
+                rows: 24,
+                env: std::collections::HashMap::new(),
+            }),
+        };
+
+        let response = handle_request(request, &config, &rate_limiter).await;
+
+        assert!(!response.success);
+        assert_eq!(response.id, "spawn-1");
+        assert_eq!(
+            response.error,
+            Some("spawn_pty not implemented".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_kill_pty_stub_returns_not_implemented() {
+        let config = test_config();
+        let rate_limiter = RateLimiter::new(5);
+
+        let request = Request {
+            id: "kill-1".to_string(),
+            version: PROTOCOL_VERSION,
+            method: Method::KillPty,
+            params: RequestParams::KillPty(KillPtyParams {
+                pty_id: "pty-abc".to_string(),
+            }),
+        };
+
+        let response = handle_request(request, &config, &rate_limiter).await;
+
+        assert!(!response.success);
+        assert_eq!(response.id, "kill-1");
+        assert_eq!(response.error, Some("kill_pty not implemented".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_resize_pty_stub_returns_not_implemented() {
+        let config = test_config();
+        let rate_limiter = RateLimiter::new(5);
+
+        let request = Request {
+            id: "resize-1".to_string(),
+            version: PROTOCOL_VERSION,
+            method: Method::ResizePty,
+            params: RequestParams::ResizePty(ResizePtyParams {
+                pty_id: "pty-def".to_string(),
+                cols: 120,
+                rows: 40,
+            }),
+        };
+
+        let response = handle_request(request, &config, &rate_limiter).await;
+
+        assert!(!response.success);
+        assert_eq!(response.id, "resize-1");
+        assert_eq!(
+            response.error,
+            Some("resize_pty not implemented".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_spawn_pty_invalid_params() {
+        let config = test_config();
+        let rate_limiter = RateLimiter::new(5);
+
+        // Send SpawnPty method with wrong param type (Ping params)
+        let request = Request {
+            id: "spawn-bad-1".to_string(),
+            version: PROTOCOL_VERSION,
+            method: Method::SpawnPty,
+            params: RequestParams::Ping(PingParams {}),
+        };
+
+        let response = handle_request(request, &config, &rate_limiter).await;
+
+        assert!(!response.success);
+        assert_eq!(response.id, "spawn-bad-1");
+        assert_eq!(
+            response.error,
+            Some("invalid params for spawn_pty".to_string())
+        );
     }
 }
