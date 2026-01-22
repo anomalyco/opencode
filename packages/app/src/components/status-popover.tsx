@@ -114,8 +114,9 @@ export function StatusPopover() {
 
   const overallHealthy = createMemo(() => {
     const serverHealthy = server.healthy() === true
-    const anyMcpFailed = mcpItems().some((m) => m.status === "failed")
-    return serverHealthy && !anyMcpFailed
+    const anyMcpIssue = mcpItems().some((m) => m.status !== "connected" && m.status !== "disabled")
+    const anyLspIssue = lspItems().some((l) => l.status !== "connected")
+    return serverHealthy && !anyMcpIssue && !anyLspIssue
   })
 
   const serverCount = createMemo(() => sortedServers().length)
