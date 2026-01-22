@@ -1,0 +1,61 @@
+.status-trigger[data-expanded] {
+  background-color: var(--surface-raised-base-hover);
+}
+
+.status-popover {
+  min-width: 320px;
+  max-width: 400px;
+
+  [data-slot="popover-body"] {
+    padding: 0;
+  }
+
+  [data-component="tabs"] {
+    background-color: transparent;
+
+    [data-slot="tabs-list"] {
+      height: auto;
+      padding: 8px 20px 0 20px;
+      gap: 16px;
+      border-bottom: 0;
+      background-color: transparent;
+
+      &::after {
+        display: none;
+      }
+    }
+
+    [data-slot="tabs-trigger-wrapper"] {
+      height: auto;
+      border: none;
+      background-color: transparent;
+      border-bottom: 2px solid transparent;
+      padding-bottom: 6px;
+      gap: 0;
+
+      font-family: var(--font-family-sans);
+      font-size: var(--font-size-small);
+      font-weight: var(--font-weight-regular);
+      color: var(--text-weak);
+
+      [data-slot="tabs-trigger"] {
+        padding: 0;
+      }
+
+      &:has([data-selected]) {
+        color: var(--text-strong);
+        border-bottom-color: var(--icon-strong-base);
+      }
+
+      &:hover:not(:disabled):not(:has([data-selected])) {
+        color: var(--text-base);
+      }
+    }
+
+    [data-slot="tabs-content"] {
+      margin: 0 8px 8px;
+      background-color: var(--surface-base);
+      border-radius: var(--radius-md);
+    }
+  }
+}

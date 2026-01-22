@@ -20,6 +20,7 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Popover } from "@opencode-ai/ui/popover"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Keybind } from "@opencode-ai/ui/keybind"
+import { StatusPopover } from "@/components/status-popover"
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
@@ -154,28 +155,9 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-3">
-              {/* <div class="hidden md:flex items-center gap-1"> */}
-              {/*   <Button */}
-              {/*     size="small" */}
-              {/*     variant="ghost" */}
-              {/*     onClick={() => { */}
-              {/*       dialog.show(() => <DialogSelectServer />) */}
-              {/*     }} */}
-              {/*   > */}
-              {/*     <div */}
-              {/*       classList={{ */}
-              {/*         "size-1.5 rounded-full": true, */}
-              {/*         "bg-icon-success-base": server.healthy() === true, */}
-              {/*         "bg-icon-critical-base": server.healthy() === false, */}
-              {/*         "bg-border-weak-base": server.healthy() === undefined, */}
-              {/*       }} */}
-              {/*     /> */}
-              {/*     <Icon name="server" size="small" class="text-icon-weak" /> */}
-              {/*     <span class="text-12-regular text-text-weak truncate max-w-[200px]">{server.name}</span> */}
-              {/*   </Button> */}
-              {/*   <SessionLspIndicator /> */}
-              {/*   <SessionMcpIndicator /> */}
-              {/* </div> */}
+              <div class="hidden md:block">
+                <StatusPopover />
+              </div>
               <div class="flex items-center gap-1">
                 <div class="hidden md:block shrink-0">
                   <TooltipKeybind
