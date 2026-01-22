@@ -554,4 +554,17 @@ export const dict = {
   "workspace.reset.archived.one": "1つのセッションがアーカイブされます。",
   "workspace.reset.archived.many": "{{count}}個のセッションがアーカイブされます。",
   "workspace.reset.note": "これにより、ワークスペースはデフォルトブランチと一致するようにリセットされます。",
+
+  "status.button.label": "ステータス",
+  "status.button.tooltip": "システムステータスを表示",
+  "status.tab.servers": "{{count}} サーバー",
+  "status.tab.mcp": "{{count}} MCP",
+  "status.tab.lsp": "{{count}} LSP",
+  "status.tab.plugins": "{{count}} プラグイン",
+  "status.servers.empty": "サーバーが設定されていません",
+  "status.servers.manage": "サーバーを管理",
+  "status.mcp.empty": "MCPサーバーが設定されていません",
+  "status.lsp.empty": "アクティブなLSPサーバーはありません",
+  "status.plugins.empty": "'opencode.json'でプラグインを設定",
+  "status.noProject": "プロジェクトを開いて表示",
 }

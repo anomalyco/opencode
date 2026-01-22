@@ -544,4 +544,17 @@ export const dict = {
   "workspace.reset.archived.one": "將封存 1 個工作階段。",
   "workspace.reset.archived.many": "將封存 {{count}} 個工作階段。",
   "workspace.reset.note": "這將把工作區重設為與預設分支一致。",
+
+  "status.button.label": "狀態",
+  "status.button.tooltip": "檢視系統狀態",
+  "status.tab.servers": "{{count}} 伺服器",
+  "status.tab.mcp": "{{count}} MCP",
+  "status.tab.lsp": "{{count}} LSP",
+  "status.tab.plugins": "{{count}} 外掛程式",
+  "status.servers.empty": "未設定伺服器",
+  "status.servers.manage": "管理伺服器",
+  "status.mcp.empty": "未設定 MCP 伺服器",
+  "status.lsp.empty": "沒有作用中的 LSP 伺服器",
+  "status.plugins.empty": "外掛程式在 'opencode.json' 中設定",
+  "status.noProject": "開啟專案以檢視",
 } satisfies Partial<Record<Keys, string>>

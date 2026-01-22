@@ -555,4 +555,17 @@ export const dict = {
   "workspace.reset.archived.one": "1개의 세션이 보관됩니다.",
   "workspace.reset.archived.many": "{{count}}개의 세션이 보관됩니다.",
   "workspace.reset.note": "이 작업은 작업 공간을 기본 브랜치와 일치하도록 재설정합니다.",
+
+  "status.button.label": "상태",
+  "status.button.tooltip": "시스템 상태 보기",
+  "status.tab.servers": "{{count}} 서버",
+  "status.tab.mcp": "{{count}} MCP",
+  "status.tab.lsp": "{{count}} LSP",
+  "status.tab.plugins": "{{count}} 플러그인",
+  "status.servers.empty": "구성된 서버 없음",
+  "status.servers.manage": "서버 관리",
+  "status.mcp.empty": "구성된 MCP 서버 없음",
+  "status.lsp.empty": "활성 LSP 서버 없음",
+  "status.plugins.empty": "'opencode.json'에서 플러그인 구성",
+  "status.noProject": "프로젝트를 열어서 보기",
 }

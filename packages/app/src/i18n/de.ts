@@ -566,4 +566,17 @@ export const dict = {
   "workspace.reset.archived.one": "1 Sitzung wird archiviert.",
   "workspace.reset.archived.many": "{{count}} Sitzungen werden archiviert.",
   "workspace.reset.note": "Dadurch wird der Arbeitsbereich auf den Standard-Branch zurückgesetzt.",
+
+  "status.button.label": "Status",
+  "status.button.tooltip": "Systemstatus anzeigen",
+  "status.tab.servers": "{{count}} Server",
+  "status.tab.mcp": "{{count}} MCP",
+  "status.tab.lsp": "{{count}} LSP",
+  "status.tab.plugins": "{{count}} Plugins",
+  "status.servers.empty": "Keine Server konfiguriert",
+  "status.servers.manage": "Server verwalten",
+  "status.mcp.empty": "Keine MCP-Server konfiguriert",
+  "status.lsp.empty": "Keine LSP-Server aktiv",
+  "status.plugins.empty": "Plugins in 'opencode.json' konfiguriert",
+  "status.noProject": "Projekt öffnen zum Anzeigen",
 } satisfies Partial<Record<Keys, string>>

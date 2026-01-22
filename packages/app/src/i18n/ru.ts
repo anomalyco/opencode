@@ -639,4 +639,17 @@ export const dict = {
   "workspace.reset.archived.one": "1 сессия будет архивирована.",
   "workspace.reset.archived.many": "{{count}} сессий будет архивировано.",
   "workspace.reset.note": "Рабочее пространство будет сброшено в соответствие с веткой по умолчанию.",
+
+  "status.button.label": "Статус",
+  "status.button.tooltip": "Просмотр статуса системы",
+  "status.tab.servers": "{{count}} Сервера",
+  "status.tab.mcp": "{{count}} MCP",
+  "status.tab.lsp": "{{count}} LSP",
+  "status.tab.plugins": "{{count}} Плагины",
+  "status.servers.empty": "Серверы не настроены",
+  "status.servers.manage": "Управление серверами",
+  "status.mcp.empty": "MCP серверы не настроены",
+  "status.lsp.empty": "Нет активных LSP серверов",
+  "status.plugins.empty": "Плагины настроены в 'opencode.json'",
+  "status.noProject": "Откройте проект для просмотра",
 }

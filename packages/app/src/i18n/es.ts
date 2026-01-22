@@ -560,4 +560,17 @@ export const dict = {
   "workspace.reset.archived.one": "1 sesión será archivada.",
   "workspace.reset.archived.many": "{{count}} sesiones serán archivadas.",
   "workspace.reset.note": "Esto restablecerá el espacio de trabajo para coincidir con la rama predeterminada.",
+
+  "status.button.label": "Estado",
+  "status.button.tooltip": "Ver estado del sistema",
+  "status.tab.servers": "{{count}} Servidores",
+  "status.tab.mcp": "{{count}} MCP",
+  "status.tab.lsp": "{{count}} LSP",
+  "status.tab.plugins": "{{count}} Plugins",
+  "status.servers.empty": "No hay servidores configurados",
+  "status.servers.manage": "Administrar servidores",
+  "status.mcp.empty": "No hay servidores MCP configurados",
+  "status.lsp.empty": "No hay servidores LSP activos",
+  "status.plugins.empty": "Plugins configurados en 'opencode.json'",
+  "status.noProject": "Abre un proyecto para ver",
 }

@@ -549,4 +549,17 @@ export const dict = {
   "workspace.reset.archived.one": "将归档 1 个会话。",
   "workspace.reset.archived.many": "将归档 {{count}} 个会话。",
   "workspace.reset.note": "这将把工作区重置为与默认分支一致。",
+
+  "status.button.label": "状态",
+  "status.button.tooltip": "查看系统状态",
+  "status.tab.servers": "{{count}} 服务器",
+  "status.tab.mcp": "{{count}} MCP",
+  "status.tab.lsp": "{{count}} LSP",
+  "status.tab.plugins": "{{count}} 插件",
+  "status.servers.empty": "未配置服务器",
+  "status.servers.manage": "管理服务器",
+  "status.mcp.empty": "未配置 MCP 服务器",
+  "status.lsp.empty": "无活跃的 LSP 服务器",
+  "status.plugins.empty": "插件在 'opencode.json' 中配置",
+  "status.noProject": "打开项目以查看",
 } satisfies Partial<Record<Keys, string>>

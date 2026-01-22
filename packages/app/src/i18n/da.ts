@@ -557,4 +557,17 @@ export const dict = {
   "workspace.reset.archived.one": "1 session vil blive arkiveret.",
   "workspace.reset.archived.many": "{{count}} sessioner vil blive arkiveret.",
   "workspace.reset.note": "Dette vil nulstille arbejdsområdet til at matche hovedgrenen.",
+
+  "status.button.label": "Status",
+  "status.button.tooltip": "Se systemstatus",
+  "status.tab.servers": "{{count}} Servere",
+  "status.tab.mcp": "{{count}} MCP",
+  "status.tab.lsp": "{{count}} LSP",
+  "status.tab.plugins": "{{count}} Plugins",
+  "status.servers.empty": "Ingen servere konfigureret",
+  "status.servers.manage": "Administrer servere",
+  "status.mcp.empty": "Ingen MCP-servere konfigureret",
+  "status.lsp.empty": "Ingen LSP-servere aktive",
+  "status.plugins.empty": "Plugins konfigureret i 'opencode.json'",
+  "status.noProject": "Åbn et projekt for at se",
 }

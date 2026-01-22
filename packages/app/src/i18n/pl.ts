@@ -635,4 +635,17 @@ export const dict = {
   "workspace.reset.archived.one": "1 sesja zostanie zarchiwizowana.",
   "workspace.reset.archived.many": "{{count}} sesji zostanie zarchiwizowanych.",
   "workspace.reset.note": "To zresetuje przestrzeń roboczą, aby odpowiadała domyślnej gałęzi.",
+
+  "status.button.label": "Status",
+  "status.button.tooltip": "Zobacz status systemu",
+  "status.tab.servers": "{{count}} Serwery",
+  "status.tab.mcp": "{{count}} MCP",
+  "status.tab.lsp": "{{count}} LSP",
+  "status.tab.plugins": "{{count}} Wtyczki",
+  "status.servers.empty": "Brak skonfigurowanych serwerów",
+  "status.servers.manage": "Zarządzaj serwerami",
+  "status.mcp.empty": "Brak skonfigurowanych serwerów MCP",
+  "status.lsp.empty": "Brak aktywnych serwerów LSP",
+  "status.plugins.empty": "Wtyczki skonfigurowane w 'opencode.json'",
+  "status.noProject": "Otwórz projekt, aby zobaczyć",
 }
