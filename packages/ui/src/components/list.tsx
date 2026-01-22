@@ -208,11 +208,20 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   return (
     <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
       <Show when={!!props.search}>
-        <div data-slot="list-search-wrapper">
-          <div data-slot="list-search" classList={{ [searchProps().class ?? ""]: !!searchProps().class }}>
+        <div data-slot="list-search-wrapper" class="pt-px">
+          <div
+            data-slot="list-search"
+            classList={{
+              [searchProps().class ?? ""]: !!searchProps().class,
+              "focus-within:shadow-xs-border-weak-focus group/list-search transition-shadow": true,
+            }}
+          >
             <div data-slot="list-search-container">
               <Show when={!searchProps().hideIcon}>
-                <Icon name="magnifying-glass" />
+                <Icon
+                  name="magnifying-glass"
+                  class="text-icon-weak-base group-focus-within/list-search:text-text-weak"
+                />
               </Show>
               <TextField
                 autofocus={searchProps().autofocus}

@@ -148,7 +148,7 @@ export function DialogSelectFile() {
         search={{
           placeholder: language.t("palette.search.placeholder"),
           autofocus: true,
-          hideIcon: true,
+          hideIcon: false,
           class: "pl-3 pr-2 !mb-0",
         }}
         emptyMessage={language.t("palette.empty")}
