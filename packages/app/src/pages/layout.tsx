@@ -1916,6 +1916,7 @@ export default function Layout(props: ParentProps) {
           "bg-surface-base-hover border border-border-weak-base": !selected() && open(),
         }}
         onClick={() => navigateToProject(props.project.worktree)}
+        onBlur={() => setOpen(false)}
       >
         <ProjectIcon project={props.project} notify />
       </button>
@@ -2343,7 +2344,8 @@ export default function Layout(props: ParentProps) {
     <div class="relative bg-background-base flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       <Titlebar />
       <div class="flex-1 min-h-0 flex">
-        <div
+        <nav
+          aria-label="Projects and sessions"
           classList={{
             "hidden xl:block": true,
             "relative shrink-0": true,
@@ -2364,7 +2366,7 @@ export default function Layout(props: ParentProps) {
               onCollapse={layout.sidebar.close}
             />
           </Show>
-        </div>
+        </nav>
         <div class="xl:hidden">
           <div
             classList={{
@@ -2376,7 +2378,8 @@ export default function Layout(props: ParentProps) {
               if (e.target === e.currentTarget) layout.mobileSidebar.hide()
             }}
           />
-          <div
+          <nav
+            aria-label="Projects and sessions"
             classList={{
               "@container fixed top-10 bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
               "translate-x-0": layout.mobileSidebar.opened(),
@@ -2385,7 +2388,7 @@ export default function Layout(props: ParentProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <SidebarContent mobile />
-          </div>
+          </nav>
         </div>
 
         <main

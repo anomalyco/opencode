@@ -135,6 +135,7 @@ export function SessionHeader() {
               type="button"
               class="hidden md:flex w-[320px] p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
               onClick={() => command.trigger("file.open")}
+              aria-label="Search files"
             >
               <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
                 <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
@@ -184,6 +185,10 @@ export function SessionHeader() {
                       variant="ghost"
                       class="group/review-toggle size-6 p-0"
                       onClick={() => view().reviewPanel.toggle()}
+                      aria-label="Toggle review panel"
+                      aria-expanded={view().reviewPanel.opened()}
+                      aria-controls="review-panel"
+                      tabIndex={showReview() ? 0 : -1}
                     >
                       <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                         <Icon
@@ -214,6 +219,9 @@ export function SessionHeader() {
                     variant="ghost"
                     class="group/terminal-toggle size-6 p-0"
                     onClick={() => view().terminal.toggle()}
+                    aria-label="Toggle terminal"
+                    aria-expanded={view().terminal.opened()}
+                    aria-controls="terminal-panel"
                   >
                     <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                       <Icon
@@ -235,32 +243,23 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <div
-                class="flex items-center"
-                classList={{
-                  "opacity-0 pointer-events-none": !showShare(),
-                }}
-                aria-hidden={!showShare()}
-              >
-                <Popover
-                  title={language.t("session.share.popover.title")}
-                  description={
-                    shareUrl()
-                      ? language.t("session.share.popover.description.shared")
-                      : language.t("session.share.popover.description.unshared")
-                  }
-                  trigger={
-                    <Tooltip class="shrink-0" value={language.t("command.session.share")}>
-                      <Button
-                        variant="secondary"
-                        classList={{ "rounded-r-none": shareUrl() !== undefined }}
-                        style={{ scale: 1 }}
-                      >
-                        {language.t("session.share.action.share")}
-                      </Button>
-                    </Tooltip>
-                  }
-                >
+              <Show when={showShare()}>
+                <div class="flex items-center">
+                  <Popover
+                    title={language.t("session.share.popover.title")}
+                    description={
+                      shareUrl()
+                        ? language.t("session.share.popover.description.shared")
+                        : language.t("session.share.popover.description.unshared")
+                    }
+                    triggerAs={Button}
+                    triggerProps={{
+                      variant: "secondary",
+                      classList: { "rounded-r-none": shareUrl() !== undefined },
+                      style: { scale: 1 },
+                    }}
+                    trigger={language.t("session.share.action.share")}
+                  >
                   <div class="flex flex-col gap-2">
                     <Show
                       when={shareUrl()}
@@ -322,10 +321,12 @@ export function SessionHeader() {
                       class="rounded-l-none"
                       onClick={copyLink}
                       disabled={state.unshare}
+                      aria-label="Copy share link"
                     />
                   </Tooltip>
                 </Show>
-              </div>
+                </div>
+              </Show>
             </div>
           </Portal>
         )}

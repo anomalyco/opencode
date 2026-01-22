@@ -506,13 +506,13 @@ export function SessionTurn(
                   </Match>
                   <Match when={true}>
                     <Show when={attachmentParts().length > 0}>
-                      <div data-slot="session-turn-attachments">
+                      <div data-slot="session-turn-attachments" aria-live="off">
                         <Message message={msg()} parts={attachmentParts()} />
                       </div>
                     </Show>
                     <div data-slot="session-turn-sticky" ref={setStickyRef}>
                       {/* User Message */}
-                      <div data-slot="session-turn-message-content">
+                      <div data-slot="session-turn-message-content" aria-live="off">
                         <Message message={msg()} parts={stickyParts()} />
                       </div>
 
@@ -525,6 +525,7 @@ export function SessionTurn(
                             variant="ghost"
                             size="small"
                             onClick={props.onStepsExpandedToggle ?? (() => {})}
+                            aria-expanded={props.stepsExpanded}
                           >
                             <Show when={working()}>
                               <Spinner />
@@ -552,8 +553,8 @@ export function SessionTurn(
                               <Match when={props.stepsExpanded}>{i18n.t("ui.sessionTurn.steps.hide")}</Match>
                               <Match when={!props.stepsExpanded}>{i18n.t("ui.sessionTurn.steps.show")}</Match>
                             </Switch>
-                            <span>·</span>
-                            <span>{store.duration}</span>
+                            <span aria-hidden="true">·</span>
+                            <span aria-live="off">{store.duration}</span>
                             <Show when={assistantMessages().length > 0}>
                               <Icon name="chevron-grabber-vertical" size="small" />
                             </Show>
@@ -563,7 +564,7 @@ export function SessionTurn(
                     </div>
                     {/* Response */}
                     <Show when={props.stepsExpanded && assistantMessages().length > 0}>
-                      <div data-slot="session-turn-collapsible-content-inner">
+                      <div data-slot="session-turn-collapsible-content-inner" aria-hidden={working()}>
                         <For each={assistantMessages()}>
                           {(assistantMessage) => (
                             <AssistantMessageItem
@@ -589,6 +590,9 @@ export function SessionTurn(
                       </div>
                     </Show>
                     {/* Response */}
+                    <div class="sr-only" aria-live="polite">
+                      {!working() && response() ? response() : ""}
+                    </div>
                     <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-header">

@@ -40,7 +40,7 @@ export function Dialog(props: DialogProps) {
               <Switch>
                 <Match when={props.action}>{props.action}</Match>
                 <Match when={true}>
-                  <Kobalte.CloseButton data-slot="dialog-close-button" as={IconButton} icon="close" variant="ghost" />
+                  <Kobalte.CloseButton data-slot="dialog-close-button" as={IconButton} icon="close" variant="ghost" aria-label="Close" />
                 </Match>
               </Switch>
             </div>

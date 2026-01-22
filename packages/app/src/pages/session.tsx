@@ -782,7 +782,7 @@ export default function Page() {
     const activeElement = document.activeElement as HTMLElement | undefined
     if (activeElement) {
       const isProtected = activeElement.closest("[data-prevent-autofocus]")
-      const isInput = /^(INPUT|TEXTAREA|SELECT)$/.test(activeElement.tagName) || activeElement.isContentEditable
+      const isInput = /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(activeElement.tagName) || activeElement.isContentEditable
       if (isProtected || isInput) return
     }
     if (dialog.active) return
@@ -1404,6 +1404,7 @@ export default function Page() {
 
                         <div
                           ref={autoScroll.contentRef}
+                          role="log"
                           class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
                             "w-full": true,
@@ -1552,7 +1553,7 @@ export default function Page() {
 
         {/* Desktop tabs panel (Review + Context + Files) - hidden on mobile */}
         <Show when={isDesktop() && showTabs()}>
-          <div class="relative flex-1 min-w-0 h-full border-l border-border-weak-base">
+          <aside id="review-panel" aria-label="Review and files" class="relative flex-1 min-w-0 h-full border-l border-border-weak-base">
             <DragDropProvider
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
@@ -1586,7 +1587,7 @@ export default function Page() {
                         value="context"
                         closeButton={
                           <Tooltip value={language.t("common.closeTab")} placement="bottom">
-                            <IconButton icon="close" variant="ghost" onClick={() => tabs().close("context")} />
+                            <IconButton icon="close" variant="ghost" onClick={() => tabs().close("context")} aria-label="Close context tab" />
                           </Tooltip>
                         }
                         hideCloseButton
@@ -1612,6 +1613,7 @@ export default function Page() {
                           variant="ghost"
                           iconSize="large"
                           onClick={() => dialog.show(() => <DialogSelectFile />)}
+                          aria-label="Open file"
                         />
                       </TooltipKeybind>
                     </div>
@@ -1913,12 +1915,15 @@ export default function Page() {
                 </Show>
               </DragOverlay>
             </DragDropProvider>
-          </div>
+          </aside>
         </Show>
       </div>
 
       <Show when={isDesktop() && view().terminal.opened()}>
         <div
+          id="terminal-panel"
+          role="region"
+          aria-label="Terminal"
           class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
           style={{ height: `${layout.terminal.height()}px` }}
         >
@@ -1990,7 +1995,7 @@ export default function Page() {
                         keybind={command.keybind("terminal.new")}
                         class="flex items-center"
                       >
-                        <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
+                        <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} aria-label="New terminal" />
                       </TooltipKeybind>
                     </div>
                   </Tabs.List>
