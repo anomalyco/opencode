@@ -4,3 +4,4 @@ pub mod ipc;
 pub mod platform;
 pub mod process;
 pub mod pty;
+pub mod session;
