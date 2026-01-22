@@ -75,6 +75,17 @@
       background-color: var(--background-stronger);
       z-index: -1;
     }
+
+    &::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      height: 32px;
+      background: linear-gradient(to bottom, var(--background-stronger), transparent);
+      pointer-events: none;
+    }
   }
 
   [data-slot="session-turn-response-trigger"] {
