@@ -60,6 +60,10 @@ pub struct PtySession {
     pub gid: u32,
     /// Username of the session owner.
     pub username: String,
+    /// User's home directory (for verification/debugging).
+    pub home: String,
+    /// User's login shell (for verification/debugging).
+    pub shell: String,
     /// When the session was created.
     pub created_at: Instant,
     /// Terminal width in columns.
@@ -77,6 +81,8 @@ impl PtySession {
         uid: u32,
         gid: u32,
         username: String,
+        home: String,
+        shell: String,
         cols: u16,
         rows: u16,
     ) -> Self {
@@ -87,6 +93,8 @@ impl PtySession {
             uid,
             gid,
             username,
+            home,
+            shell,
             created_at: Instant::now(),
             cols,
             rows,
@@ -206,6 +214,8 @@ mod tests {
             uid,
             gid,
             username.to_string(),
+            "/home/test".to_string(),
+            "/bin/bash".to_string(),
             80,
             24,
         ))

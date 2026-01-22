@@ -240,6 +240,8 @@ async fn handle_spawn_pty(
         user.uid,
         user.gid,
         user.username.clone(),
+        user.home.clone(),
+        user.shell.clone(),
         params.cols,
         params.rows,
     );
