@@ -17,16 +17,16 @@ const options = {
     describe: "enable mDNS service discovery (defaults hostname to 0.0.0.0)",
     default: false,
   },
-  "mdns-domain": {
-    type: "string" as const,
-    describe: "custom domain name for mDNS service (default: opencode.local)",
-    default: "opencode.local",
-  },
   cors: {
     type: "string" as const,
     array: true,
     describe: "additional domains to allow for CORS",
     default: [] as string[],
+  },
+  "base-path": {
+    type: "string" as const,
+    describe: "base path prefix for all routes (e.g., /app/)",
+    default: "/",
   },
 }
 
@@ -41,11 +41,10 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const portExplicitlySet = process.argv.includes("--port")
   const hostnameExplicitlySet = process.argv.includes("--hostname")
   const mdnsExplicitlySet = process.argv.includes("--mdns")
-  const mdnsDomainExplicitlySet = process.argv.includes("--mdns-domain")
   const corsExplicitlySet = process.argv.includes("--cors")
+  const basePathExplicitlySet = process.argv.includes("--base-path")
 
   const mdns = mdnsExplicitlySet ? args.mdns : (config?.server?.mdns ?? args.mdns)
-  const mdnsDomain = mdnsDomainExplicitlySet ? args["mdns-domain"] : (config?.server?.mdnsDomain ?? args["mdns-domain"])
   const port = portExplicitlySet ? args.port : (config?.server?.port ?? args.port)
   const hostname = hostnameExplicitlySet
     ? args.hostname
@@ -55,6 +54,7 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const configCors = config?.server?.cors ?? []
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
+  const basePath = basePathExplicitlySet ? args["base-path"] : (config?.server?.basePath ?? args["base-path"])
 
-  return { hostname, port, mdns, mdnsDomain, cors }
+  return { hostname, port, mdns, cors, basePath }
 }
