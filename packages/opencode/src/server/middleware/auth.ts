@@ -6,6 +6,17 @@ import { ServerAuth } from "../../config/server-auth"
 import { parseDuration } from "../../util/duration"
 
 /**
+ * Auth context with essential session information.
+ * Extracted for use by route handlers.
+ */
+export interface AuthContext {
+  sessionId: string
+  username: string
+  uid?: number
+  gid?: number
+}
+
+/**
  * Type definition for auth context variables.
  * Available after authMiddleware runs on protected routes.
  */
@@ -13,6 +24,8 @@ export type AuthEnv = {
   Variables: {
     session: UserSession.Info
     username: string
+    sessionId: string
+    auth: AuthContext
   }
 }
 
@@ -93,6 +106,26 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
   // Set context variables for downstream handlers
   c.set("session", session)
   c.set("username", session.username)
+  c.set("sessionId", session.id)
+
+  // Set structured auth context
+  const auth: AuthContext = {
+    sessionId: session.id,
+    username: session.username,
+    uid: session.uid,
+    gid: session.gid,
+  }
+  c.set("auth", auth)
 
   return next()
 })
+
+/**
+ * Get the auth context from a Hono context.
+ *
+ * Returns undefined if auth is disabled or user is not authenticated.
+ * Use this in route handlers to check authentication and get session info.
+ */
+export function getAuthContext(c: Context): AuthContext | undefined {
+  return c.get("auth") as AuthContext | undefined
+}
