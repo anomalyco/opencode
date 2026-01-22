@@ -25,6 +25,7 @@ export type Project = {
   name?: string
   icon?: {
     url?: string
+    override?: string
     color?: string
   }
   time: {
@@ -44,6 +45,20 @@ export type EventServerInstanceDisposed = {
   type: "server.instance.disposed"
   properties: {
     directory: string
+  }
+}
+
+export type EventServerConnected = {
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventGlobalDisposed = {
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -845,25 +860,13 @@ export type EventPtyDeleted = {
   }
 }
 
-export type EventGlobalDisposed = {
-  type: "global.disposed"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type EventServerConnected = {
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventProjectUpdated
   | EventServerInstanceDisposed
+  | EventServerConnected
+  | EventGlobalDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventFileEdited
@@ -898,8 +901,6 @@ export type Event =
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
-  | EventGlobalDisposed
-  | EventServerConnected
 
 export type GlobalEvent = {
   directory: string
@@ -2229,6 +2230,7 @@ export type ProjectUpdateData = {
     name?: string
     icon?: {
       url?: string
+      override?: string
       color?: string
     }
   }
