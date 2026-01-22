@@ -94,7 +94,7 @@ async function main() {
 
   const readResult = await client.ptyRead(spawnResult.ptyId)
   if (readResult && readResult.data) {
-    const output = Buffer.from(readResult.data, "base64").toString()
+    const output = new TextDecoder().decode(readResult.data)
     console.log("   Output:")
     console.log("   ---")
     output.split("\n").forEach((line) => console.log(`   ${line}`))

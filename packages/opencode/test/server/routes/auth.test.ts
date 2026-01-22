@@ -29,10 +29,14 @@ let mockAuthConfig: AuthConfig = {
   sessionPersistence: true,
 }
 
+// Mock for registerSession (fire-and-forget, just needs to not throw)
+const mockRegisterSession = mock<() => Promise<boolean>>(() => Promise.resolve(true))
+
 // Apply mocks before importing the module under test
 mock.module("../../../src/auth/broker-client", () => ({
   BrokerClient: class {
     authenticate = mockAuthenticate
+    registerSession = mockRegisterSession
   },
 }))
 mock.module("../../../src/auth/user-info", () => ({
@@ -42,6 +46,21 @@ mock.module("../../../src/config/server-auth", () => ({
   ServerAuth: {
     get: () => mockAuthConfig,
     isEnabled: () => mockAuthConfig.enabled,
+    _setForTesting: (config: AuthConfig) => {
+      mockAuthConfig = config
+    },
+    _reset: () => {
+      mockAuthConfig = {
+        enabled: true,
+        method: "pam",
+        sessionTimeout: "7d",
+        rememberMeDuration: "90d",
+        requireHttps: "warn",
+        rateLimiting: true,
+        allowedUsers: [],
+        sessionPersistence: true,
+      }
+    },
   },
 }))
 
