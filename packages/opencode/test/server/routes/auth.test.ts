@@ -25,8 +25,12 @@ let mockAuthConfig: AuthConfig = {
   rememberMeDuration: "90d",
   requireHttps: "warn",
   rateLimiting: false, // Disabled by default for tests, enabled explicitly where needed
+  rateLimitWindow: "15m",
+  rateLimitMax: 5,
   allowedUsers: [],
   sessionPersistence: true,
+  csrfVerboseErrors: false,
+  csrfAllowlist: [],
 }
 
 // Mock for registerSession (fire-and-forget, just needs to not throw)
@@ -57,8 +61,12 @@ mock.module("../../../src/config/server-auth", () => ({
         rememberMeDuration: "90d",
         requireHttps: "warn",
         rateLimiting: false, // Disabled by default for tests
+        rateLimitWindow: "15m",
+        rateLimitMax: 5,
         allowedUsers: [],
         sessionPersistence: true,
+        csrfVerboseErrors: false,
+        csrfAllowlist: [],
       }
     },
   },
@@ -76,8 +84,12 @@ function setMockAuthConfig(config: Partial<AuthConfig>) {
     rememberMeDuration: "90d",
     requireHttps: "warn",
     rateLimiting: false, // Disabled by default for tests
+    rateLimitWindow: "15m",
+    rateLimitMax: 5,
     allowedUsers: [],
     sessionPersistence: true,
+    csrfVerboseErrors: false,
+    csrfAllowlist: [],
     ...config,
   }
 }

@@ -69,8 +69,12 @@ describe("PTY auth enforcement logic", () => {
         rememberMeDuration: "90d",
         requireHttps: "warn",
         rateLimiting: true,
+        rateLimitWindow: "15m",
+        rateLimitMax: 5,
         allowedUsers: [],
         sessionPersistence: true,
+        csrfVerboseErrors: false,
+        csrfAllowlist: [],
       })
 
       const app = new Hono<AuthEnv>()
@@ -185,8 +189,12 @@ describe("PTY auth enforcement logic", () => {
           rememberMeDuration: "90d",
           requireHttps: "warn",
           rateLimiting: true,
+          rateLimitWindow: "15m",
+          rateLimitMax: 5,
           allowedUsers: [],
           sessionPersistence: true,
+          csrfVerboseErrors: false,
+          csrfAllowlist: [],
         })
       })
 
@@ -239,8 +247,12 @@ describe("PTY auth enforcement logic", () => {
           rememberMeDuration: "90d",
           requireHttps: "warn",
           rateLimiting: true,
+          rateLimitWindow: "15m",
+          rateLimitMax: 5,
           allowedUsers: [],
           sessionPersistence: true,
+          csrfVerboseErrors: false,
+          csrfAllowlist: [],
         })
       })
 
@@ -292,8 +304,12 @@ describe("PTY auth enforcement logic", () => {
           rememberMeDuration: "90d",
           requireHttps: "warn",
           rateLimiting: true,
+          rateLimitWindow: "15m",
+          rateLimitMax: 5,
           allowedUsers: [],
           sessionPersistence: true,
+          csrfVerboseErrors: false,
+          csrfAllowlist: [],
         })
 
         const { app, mockCreate } = createPtyRouteSimulator()
@@ -331,8 +347,12 @@ describe("PTY auth enforcement logic", () => {
           rememberMeDuration: "90d",
           requireHttps: "warn",
           rateLimiting: true,
+          rateLimitWindow: "15m",
+          rateLimitMax: 5,
           allowedUsers: [],
           sessionPersistence: true,
+          csrfVerboseErrors: false,
+          csrfAllowlist: [],
         })
 
         const { app, mockCreate } = createPtyRouteSimulator()

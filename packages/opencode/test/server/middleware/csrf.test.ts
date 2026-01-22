@@ -6,8 +6,11 @@ import { ServerAuth } from "../../../src/config/server-auth"
 import type { AuthConfig } from "../../../src/config/auth"
 import { CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from "../../../src/server/security/csrf"
 
+// Type for test context with sessionId variable
+type TestEnv = { Variables: { sessionId: string } }
+
 describe("CSRF middleware", () => {
-  let app: Hono
+  let app: Hono<TestEnv>
 
   // Mock ServerAuth.get() to return test config
   let mockAuthConfig: AuthConfig
@@ -15,7 +18,7 @@ describe("CSRF middleware", () => {
 
   beforeEach(() => {
     // Reset app for each test
-    app = new Hono()
+    app = new Hono<TestEnv>()
 
     // Default auth config: enabled with CSRF
     mockAuthConfig = {

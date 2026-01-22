@@ -519,7 +519,8 @@ export const AuthRoutes = lazy(() =>
         // 2. Apply rate limiting if enabled
         const rateLimiter = loginRateLimiter()
         if (rateLimiter) {
-          const rateLimitResult = await rateLimiter(c, async () => {})
+          // Cast context - rate limiter only uses request headers, not env bindings
+          const rateLimitResult = await rateLimiter(c as Parameters<typeof rateLimiter>[0], async () => {})
           if (rateLimitResult) {
             return rateLimitResult
           }

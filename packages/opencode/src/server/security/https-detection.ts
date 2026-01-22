@@ -1,9 +1,11 @@
-import type { Context } from "hono"
+import type { Context, Env, Input } from "hono"
 
 /**
  * Check if the current request is from localhost.
  */
-export function isLocalhost(c: Context): boolean {
+export function isLocalhost<E extends Env = Env, P extends string = string, I extends Input = Input>(
+  c: Context<E, P, I>
+): boolean {
   const host = c.req.header("Host") ?? ""
 
   // Check for localhost variations with or without port
@@ -21,7 +23,10 @@ export function isLocalhost(c: Context): boolean {
  * When trustProxy is true, checks X-Forwarded-Proto header first.
  * Falls back to direct connection protocol check.
  */
-export function isSecureConnection(c: Context, trustProxy: boolean): boolean {
+export function isSecureConnection<E extends Env = Env, P extends string = string, I extends Input = Input>(
+  c: Context<E, P, I>,
+  trustProxy: boolean
+): boolean {
   // Check X-Forwarded-Proto when behind proxy
   if (trustProxy) {
     const forwardedProto = c.req.header("X-Forwarded-Proto")
@@ -45,8 +50,8 @@ export function isSecureConnection(c: Context, trustProxy: boolean): boolean {
  * - Connection is not localhost
  * - Connection is not secure
  */
-export function shouldBlockInsecureLogin(
-  c: Context,
+export function shouldBlockInsecureLogin<E extends Env = Env, P extends string = string, I extends Input = Input>(
+  c: Context<E, P, I>,
   config: { requireHttps: "off" | "warn" | "block"; trustProxy?: boolean }
 ): boolean {
   // Never block if requireHttps is off
@@ -65,8 +70,8 @@ export function shouldBlockInsecureLogin(
 /**
  * Get comprehensive connection security information for login page.
  */
-export function getConnectionSecurityInfo(
-  c: Context,
+export function getConnectionSecurityInfo<E extends Env = Env, P extends string = string, I extends Input = Input>(
+  c: Context<E, P, I>,
   config: { requireHttps: "off" | "warn" | "block"; trustProxy?: boolean }
 ): {
   isSecure: boolean
