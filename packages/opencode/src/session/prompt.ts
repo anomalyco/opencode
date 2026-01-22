@@ -722,12 +722,6 @@ export namespace SessionPrompt {
           )
           return result
         },
-        toModelOutput(result) {
-          return {
-            type: "text",
-            value: result.output,
-          }
-        },
       })
     }
 
@@ -817,12 +811,6 @@ export namespace SessionPrompt {
           output: truncated.content,
           attachments,
           content: result.content, // directly return content to preserve ordering when outputting to model
-        }
-      }
-      item.toModelOutput = (result) => {
-        return {
-          type: "text",
-          value: result.output,
         }
       }
       tools[key] = item
