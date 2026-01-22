@@ -223,7 +223,14 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <StatusPopover sync={sync} sdk={sdk} />
+              <div
+                classList={{
+                  "opacity-0 pointer-events-none": !currentSession(),
+                }}
+                aria-hidden={!currentSession()}
+              >
+                <StatusPopover sync={sync} sdk={sdk} />
+              </div>
               <div
                 class="flex items-center"
                 classList={{
