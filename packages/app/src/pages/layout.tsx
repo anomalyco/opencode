@@ -1951,7 +1951,22 @@ export default function Layout(props: ParentProps) {
           }}
         >
           <div class="-m-3 p-2 flex flex-col w-72">
-            <div class="px-4 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
+            <div class="px-4 pt-2 pb-1 flex items-center gap-2">
+              <div class="text-14-medium text-text-strong truncate grow">{displayName(props.project)}</div>
+              <Tooltip value={language.t("common.close")} placement="top" gutter={6}>
+                <IconButton
+                  icon="circle-x"
+                  variant="ghost"
+                  class="shrink-0"
+                  aria-label={language.t("common.close")}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setOpen(false)
+                    closeProject(props.project.worktree)
+                  }}
+                />
+              </Tooltip>
+            </div>
             <div class="px-4 pb-2 text-12-medium text-text-weak">{language.t("sidebar.project.recentSessions")}</div>
             <div class="px-2 pb-2 flex flex-col gap-2">
               <Show
