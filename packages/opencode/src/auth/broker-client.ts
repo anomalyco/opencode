@@ -10,7 +10,16 @@ interface BrokerRequest {
   /** Protocol version (always 1 for now) */
   version: 1
   /** Method to invoke */
-  method: "authenticate" | "ping" | "registersession" | "unregistersession" | "spawnpty" | "killpty" | "resizepty"
+  method:
+    | "authenticate"
+    | "ping"
+    | "registersession"
+    | "unregistersession"
+    | "spawnpty"
+    | "killpty"
+    | "resizepty"
+    | "ptywrite"
+    | "ptyread"
   /** Username for authenticate method */
   username?: string
   /** Password for authenticate method */
@@ -35,6 +44,10 @@ interface BrokerRequest {
   rows?: number
   /** Environment variables for PTY spawn */
   env?: Record<string, string>
+  /** Base64-encoded data for ptyWrite */
+  data?: string
+  /** Maximum bytes to read for ptyRead */
+  max_bytes?: number
 }
 
 /**
@@ -51,7 +64,21 @@ interface BrokerResponse {
   data?: {
     pty_id?: string
     pid?: number
+    /** Base64-encoded data from ptyRead */
+    data?: string
+    /** Whether more data is available (ptyRead) */
+    more?: boolean
   }
+}
+
+/**
+ * Result from reading PTY output.
+ */
+export interface PtyReadResult {
+  /** Decoded data from PTY */
+  data: Uint8Array
+  /** Whether more data is available */
+  more: boolean
 }
 
 /**
@@ -416,6 +443,99 @@ export class BrokerClient {
       return response.id === id && response.success
     } catch {
       return false
+    }
+  }
+
+  /**
+   * Write data to a PTY.
+   *
+   * Sends data to the PTY's master fd via the broker.
+   * Data is base64-encoded for transport over JSON IPC.
+   *
+   * @param ptyId - PTY session ID
+   * @param data - Data to write (string or bytes)
+   * @returns true if write succeeded, false otherwise
+   *
+   * @example
+   * ```typescript
+   * // Send user input to PTY
+   * await client.ptyWrite(ptyId, "ls -la\n")
+   * ```
+   */
+  async ptyWrite(ptyId: string, data: string | Uint8Array): Promise<boolean> {
+    const id = crypto.randomUUID()
+
+    // Convert to base64
+    const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data
+    const base64 = Buffer.from(bytes).toString("base64")
+
+    const request: BrokerRequest = {
+      id,
+      version: 1,
+      method: "ptywrite",
+      pty_id: ptyId,
+      data: base64,
+    }
+
+    try {
+      const response = await this.sendRequest(request)
+      return response.id === id && response.success
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Read data from a PTY.
+   *
+   * Reads available output from the PTY's master fd via the broker.
+   * Data is base64-encoded for transport over JSON IPC.
+   *
+   * Note: This is a polling-based approach. For efficient streaming,
+   * a push-based mechanism would be needed (future work).
+   *
+   * @param ptyId - PTY session ID
+   * @param maxBytes - Maximum bytes to read (0 = all available, default: 4096)
+   * @returns Read result with data and more flag, or null on failure
+   *
+   * @example
+   * ```typescript
+   * const result = await client.ptyRead(ptyId)
+   * if (result) {
+   *   const text = new TextDecoder().decode(result.data)
+   *   console.log(text)
+   * }
+   * ```
+   */
+  async ptyRead(ptyId: string, maxBytes = 4096): Promise<PtyReadResult | null> {
+    const id = crypto.randomUUID()
+
+    const request: BrokerRequest = {
+      id,
+      version: 1,
+      method: "ptyread",
+      pty_id: ptyId,
+      max_bytes: maxBytes,
+    }
+
+    try {
+      const response = await this.sendRequest(request)
+      if (response.id !== id || !response.success || !response.data) {
+        return null
+      }
+
+      const base64Data = response.data.data
+      if (typeof base64Data !== "string") {
+        return null
+      }
+
+      const decoded = Buffer.from(base64Data, "base64")
+      return {
+        data: new Uint8Array(decoded),
+        more: response.data.more ?? false,
+      }
+    } catch {
+      return null
     }
   }
 

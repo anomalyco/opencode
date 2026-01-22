@@ -11,6 +11,9 @@ import { Shell } from "@/shell/shell"
 import { BrokerClient } from "@/auth/broker-client"
 import { ServerAuth } from "@/config/server-auth"
 
+// Re-export broker PTY module for authenticated sessions
+export * as BrokerPty from "./broker-pty"
+
 export namespace Pty {
   const log = Log.create({ service: "pty" })
 
