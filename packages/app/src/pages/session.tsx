@@ -1360,23 +1360,24 @@ export default function Page() {
                     }
                   >
                     <div class="relative w-full h-full min-w-0">
-                      <Show when={autoScroll.userScrolled()}>
-                        <div class="absolute right-4 md:right-6 bottom-[calc(var(--prompt-height,8rem)+16px)] z-[60] pointer-events-none">
-                          <Button
-                            variant="secondary"
-                            size="small"
-                            icon="chevron-down"
-                            class="pointer-events-auto shadow-sm"
-                            onClick={() => {
-                              setStore("messageId", undefined)
-                              autoScroll.forceScrollToBottom()
-                              window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
-                            }}
-                          >
-                            {language.t("session.messages.jumpToLatest")}
-                          </Button>
-                        </div>
-                      </Show>
+                      <div
+                        class="absolute left-1/2 -translate-x-1/2 bottom-[calc(var(--prompt-height,8rem)+32px)] z-[60] pointer-events-none transition-all duration-200 ease-out"
+                        classList={{
+                          "opacity-100 translate-y-0 scale-100": autoScroll.userScrolled(),
+                          "opacity-0 translate-y-2 scale-95 pointer-events-none": !autoScroll.userScrolled(),
+                        }}
+                      >
+                        <button
+                          class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
+                          onClick={() => {
+                            setStore("messageId", undefined)
+                            autoScroll.forceScrollToBottom()
+                            window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
+                          }}
+                        >
+                          <Icon name="arrow-down-to-line" />
+                        </button>
+                      </div>
                       <div
                         ref={setScrollRef}
                         onScroll={(e) => {
