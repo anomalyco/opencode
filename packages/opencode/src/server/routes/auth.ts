@@ -221,6 +221,15 @@ export const AuthRoutes = lazy(() =>
       async (c) => {
         const sessionId = getCookie(c, "opencode_session")
         if (sessionId) {
+          // Unregister session from broker (fire-and-forget)
+          // Session removal proceeds regardless of broker call result
+          const authConfig = ServerAuth.get()
+          if (authConfig.enabled) {
+            const brokerForUnregistration = new BrokerClient()
+            brokerForUnregistration.unregisterSession(sessionId).catch((err) => {
+              log.warn("Failed to unregister session from broker", { error: err })
+            })
+          }
           UserSession.remove(sessionId)
         }
         clearSessionCookie(c)
@@ -242,6 +251,17 @@ export const AuthRoutes = lazy(() =>
       async (c) => {
         const session = c.get("session")
         if (session) {
+          // Unregister all sessions from broker (fire-and-forget)
+          const authConfig = ServerAuth.get()
+          if (authConfig.enabled) {
+            const sessionIds = UserSession.getSessionIdsForUser(session.username)
+            const brokerForUnregistration = new BrokerClient()
+            for (const sessionId of sessionIds) {
+              brokerForUnregistration.unregisterSession(sessionId).catch((err) => {
+                log.warn("Failed to unregister session from broker", { error: err, sessionId })
+              })
+            }
+          }
           UserSession.removeAllForUser(session.username)
         }
         clearSessionCookie(c)

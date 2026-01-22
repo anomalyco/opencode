@@ -107,6 +107,16 @@ export namespace UserSession {
   }
 
   /**
+   * Get all session IDs for a user.
+   * Useful for unregistering sessions from external services before removal.
+   */
+  export function getSessionIdsForUser(username: string): string[] {
+    const userSessions = sessionsByUser.get(username)
+    if (!userSessions) return []
+    return Array.from(userSessions)
+  }
+
+  /**
    * Remove all sessions for a user (logout everywhere).
    * Returns the count of removed sessions.
    */
