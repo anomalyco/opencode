@@ -2,6 +2,8 @@ import { createMemo, createSignal, For } from "solid-js"
 import { DEFAULT_THEMES, useTheme } from "@tui/context/theme"
 
 const themeCount = Object.keys(DEFAULT_THEMES).length
+const isMac = process.platform === "darwin"
+const pasteKey = isMac ? "Cmd+V" : "Ctrl+V"
 const themeTip = `Use {highlight}/theme{/highlight} or {highlight}Ctrl+X T{/highlight} to switch between ${themeCount} built-in themes`
 
 type TipPart = { text: string; highlight: boolean }
@@ -56,7 +58,7 @@ const TIPS = [
   "Use {highlight}/redo{/highlight} to restore previously undone messages and file changes",
   "Run {highlight}/share{/highlight} to create a public link to your conversation at opencode.ai",
   "Drag and drop images into the terminal to add them as context",
-  "Press {highlight}Ctrl+V{/highlight} to paste images from your clipboard into the prompt",
+  `Press {highlight}${pasteKey}{/highlight} to paste images from your clipboard into the prompt`,
   "Press {highlight}Ctrl+X E{/highlight} or {highlight}/editor{/highlight} to compose messages in your external editor",
   "Run {highlight}/init{/highlight} to auto-generate project rules based on your codebase",
   "Run {highlight}/models{/highlight} or {highlight}Ctrl+X M{/highlight} to see and switch between available AI models",
