@@ -924,8 +924,6 @@ export default function Page() {
     sync.session.diff(id)
   })
 
-  const isWorking = createMemo(() => status().type !== "idle")
-
   const autoScroll = createAutoScroll({
     working: () => true,
     overflowAnchor: "dynamic",
@@ -943,18 +941,6 @@ export default function Page() {
       (scrolled) => {
         if (scrolled) return
         setStore("messageId", undefined)
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
-      isWorking,
-      (working, prev) => {
-        if (!working || prev) return
-        if (autoScroll.userScrolled()) return
-        autoScroll.forceScrollToBottom()
       },
       { defer: true },
     ),
@@ -1415,7 +1401,7 @@ export default function Page() {
                         }}
                         onScroll={(e) => {
                           if (!hasScrollGesture()) return
-                          setScrollGesture(Date.now())
+                          markScrollGesture(e.target)
                           autoScroll.handleScroll()
                           if (isDesktop() && autoScroll.userScrolled()) scheduleScrollSpy(e.currentTarget)
                         }}
