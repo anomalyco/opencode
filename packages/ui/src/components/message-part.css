@@ -32,7 +32,7 @@
     justify-content: center;
     border-radius: 6px;
     overflow: hidden;
-    background: var(--surface-base);
+    background: var(--surface-weak);
     border: 1px solid var(--border-weak-base);
     transition: border-color 0.15s ease;
 
@@ -76,7 +76,8 @@
     white-space: pre-wrap;
     word-break: break-word;
     overflow: hidden;
-    background: var(--surface-base);
+    background: var(--surface-weak);
+    border: 1px solid var(--border-weak-base);
     padding: 8px 12px;
     border-radius: 4px;
 
@@ -113,11 +114,22 @@
 
 [data-component="reasoning-part"] {
   width: 100%;
-  opacity: 0.5;
+  color: var(--text-base);
+  opacity: 0.8;
+  line-height: var(--line-height-large);
 
   [data-component="markdown"] {
     margin-top: 24px;
     font-style: italic !important;
+
+    p:has(strong) {
+      margin-top: 24px;
+      margin-bottom: 0;
+
+      &:first-child {
+        margin-top: 0;
+      }
+    }
   }
 }
 
@@ -218,6 +230,9 @@
 
   [data-slot="message-part-title"] {
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-style: normal;
@@ -225,7 +240,14 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--text-base);
+  }
+
+  [data-slot="message-part-title-text"] {
     text-transform: capitalize;
+  }
+
+  [data-slot="message-part-title-filename"] {
+    /* No text-transform - preserve original filename casing */
   }
 
   [data-slot="message-part-path"] {
