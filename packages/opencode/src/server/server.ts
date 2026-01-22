@@ -499,6 +499,7 @@ export namespace Server {
         )
         .all("/*", async (c) => {
           const path = c.req.path
+
           const response = await proxy(`https://app.opencode.ai${path}`, {
             ...c.req,
             headers: {

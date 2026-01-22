@@ -2,6 +2,7 @@ import { Component } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
+import { useLanguage } from "@/context/language"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsPermissions } from "./settings-permissions"
@@ -12,19 +13,34 @@ import { SettingsCommands } from "./settings-commands"
 import { SettingsMcp } from "./settings-mcp"
 
 export const DialogSettings: Component = () => {
+  const language = useLanguage()
+
   return (
-    <Dialog size="large">
+    <Dialog size="x-large">
       <Tabs orientation="vertical" variant="settings" defaultValue="general" class="h-full settings-dialog">
         <Tabs.List>
-          <Tabs.SectionTitle>Desktop</Tabs.SectionTitle>
-          <Tabs.Trigger value="general">
-            <Icon name="settings-gear" />
-            General
-          </Tabs.Trigger>
-          <Tabs.Trigger value="shortcuts">
-            <Icon name="console" />
-            Shortcuts
-          </Tabs.Trigger>
+          <div
+            style={{
+              display: "flex",
+              "flex-direction": "column",
+              gap: "12px",
+              width: "100%",
+              "padding-top": "12px",
+              "padding-bottom": "12px",
+            }}
+          >
+            <Tabs.SectionTitle>{language.t("settings.section.desktop")}</Tabs.SectionTitle>
+            <div style={{ display: "flex", "flex-direction": "column", gap: "6px", width: "100%" }}>
+              <Tabs.Trigger value="general">
+                <Icon name="sliders" />
+                {language.t("settings.tab.general")}
+              </Tabs.Trigger>
+              <Tabs.Trigger value="shortcuts">
+                <Icon name="keyboard" />
+                {language.t("settings.tab.shortcuts")}
+              </Tabs.Trigger>
+            </div>
+          </div>
           {/* <Tabs.SectionTitle>Server</Tabs.SectionTitle> */}
           {/* <Tabs.Trigger value="permissions"> */}
           {/*   <Icon name="checklist" /> */}

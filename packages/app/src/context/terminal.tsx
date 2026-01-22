@@ -1,6 +1,6 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createMemo, createRoot, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
 import { Persist, persisted } from "@/utils/persist"
@@ -13,6 +13,7 @@ export type LocalPTY = {
   cols?: number
   buffer?: string
   scrollY?: number
+  error?: boolean
 }
 
 const WORKSPACE_KEY = "__workspace__"
@@ -27,6 +28,14 @@ type TerminalCacheEntry = {
 
 function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, session?: string) {
   const legacy = session ? [`${dir}/terminal/${session}.v1`, `${dir}/terminal.v1`] : [`${dir}/terminal.v1`]
+
+  const numberFromTitle = (title: string) => {
+    const match = title.match(/^Terminal (\d+)$/)
+    if (!match) return
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) return
+    return value
+  }
 
   const [store, setStore, _, ready] = persisted(
     Persist.workspace(dir, "terminal", legacy),
@@ -54,24 +63,36 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
   })
   onCleanup(unsub)
 
+  const meta = { migrated: false }
+
+  createEffect(() => {
+    if (!ready()) return
+    if (meta.migrated) return
+    meta.migrated = true
+
+    setStore("all", (all) => {
+      const next = all.map((pty) => {
+        const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
+        if (direct !== undefined) return pty
+        const parsed = numberFromTitle(pty.title)
+        if (parsed === undefined) return pty
+        return { ...pty, titleNumber: parsed }
+      })
+      if (next.every((pty, index) => pty === all[index])) return all
+      return next
+    })
+  })
+
   return {
     ready,
     all: createMemo(() => Object.values(store.all)),
     active: createMemo(() => store.active),
     new() {
-      const parse = (title: string) => {
-        const match = title.match(/^Terminal (\d+)$/)
-        if (!match) return
-        const value = Number(match[1])
-        if (!Number.isFinite(value) || value <= 0) return
-        return value
-      }
-
       const existingTitleNumbers = new Set(
         store.all.flatMap((pty) => {
           const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
           if (direct !== undefined) return [direct]
-          const parsed = parse(pty.title)
+          const parsed = numberFromTitle(pty.title)
           if (parsed === undefined) return []
           return [parsed]
         }),
@@ -87,14 +108,15 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
         .then((pty) => {
           const id = pty.data?.id
           if (!id) return
-          setStore("all", [
-            ...store.all,
-            {
-              id,
-              title: pty.data?.title ?? "Terminal",
-              titleNumber: nextNumber,
-            },
-          ])
+          const newTerminal = {
+            id,
+            title: pty.data?.title ?? "Terminal",
+            titleNumber: nextNumber,
+          }
+          setStore("all", (all) => {
+            const newAll = [...all, newTerminal]
+            return newAll
+          })
           setStore("active", id)
         })
         .catch((e) => {
@@ -102,7 +124,10 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
         })
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
-      setStore("all", (x) => x.map((x) => (x.id === pty.id ? { ...x, ...pty } : x)))
+      const index = store.all.findIndex((x) => x.id === pty.id)
+      if (index !== -1) {
+        setStore("all", index, (existing) => ({ ...existing, ...pty }))
+      }
       sdk.client.pty
         .update({
           ptyID: pty.id,
@@ -137,18 +162,29 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
     open(id: string) {
       setStore("active", id)
     },
+    next() {
+      const index = store.all.findIndex((x) => x.id === store.active)
+      if (index === -1) return
+      const nextIndex = (index + 1) % store.all.length
+      setStore("active", store.all[nextIndex]?.id)
+    },
+    previous() {
+      const index = store.all.findIndex((x) => x.id === store.active)
+      if (index === -1) return
+      const prevIndex = index === 0 ? store.all.length - 1 : index - 1
+      setStore("active", store.all[prevIndex]?.id)
+    },
     async close(id: string) {
       batch(() => {
-        setStore(
-          "all",
-          store.all.filter((x) => x.id !== id),
-        )
+        const filtered = store.all.filter((x) => x.id !== id)
         if (store.active === id) {
           const index = store.all.findIndex((f) => f.id === id)
-          const previous = store.all[Math.max(0, index - 1)]
-          setStore("active", previous?.id)
+          const next = index > 0 ? index - 1 : 0
+          setStore("active", filtered[next]?.id)
         }
+        setStore("all", filtered)
       })
+
       await sdk.client.pty.remove({ ptyID: id }).catch((e) => {
         console.error("Failed to close terminal", e)
       })
@@ -224,6 +260,8 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       open: (id: string) => workspace().open(id),
       close: (id: string) => workspace().close(id),
       move: (id: string, to: number) => workspace().move(id, to),
+      next: () => workspace().next(),
+      previous: () => workspace().previous(),
     }
   },
 })
