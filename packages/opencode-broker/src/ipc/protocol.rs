@@ -66,21 +66,25 @@ pub enum Method {
 /// Parameters for different request types.
 ///
 /// IMPORTANT: Order matters for `#[serde(untagged)]` - serde tries variants in order.
-/// `Ping` must be LAST because `PingParams` is empty and matches any JSON.
+/// Rules:
+/// - Variants with MORE required fields come BEFORE variants with fewer
+/// - `RegisterSession` (6 required) before `SpawnPty` (1 required + defaults)
+/// - `UnregisterSession` (1 required + deny_unknown_fields) before `SpawnPty`
+/// - `Ping` must be LAST because `PingParams` is empty and matches any JSON
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RequestParams {
     Authenticate(AuthenticateParams),
+    /// RegisterSession has 6 required fields - must come before SpawnPty.
+    RegisterSession(RegisterSessionParams),
+    /// UnregisterSession uses deny_unknown_fields - must come before SpawnPty.
+    UnregisterSession(UnregisterSessionParams),
     /// Parameters for spawning a new PTY.
     SpawnPty(SpawnPtyParams),
     /// Parameters for killing an existing PTY.
     KillPty(KillPtyParams),
     /// Parameters for resizing an existing PTY.
     ResizePty(ResizePtyParams),
-    /// Parameters for registering a session.
-    RegisterSession(RegisterSessionParams),
-    /// Parameters for unregistering a session.
-    UnregisterSession(UnregisterSessionParams),
     /// Parameters for writing to a PTY.
     PtyWrite(PtyWriteParams),
     /// Parameters for reading from a PTY.
@@ -183,7 +187,11 @@ pub struct RegisterSessionParams {
 
 /// Parameters for unregistering a session.
 /// Called by web server on logout.
+///
+/// Uses `deny_unknown_fields` to prevent matching SpawnPty requests
+/// (which also has session_id but with additional optional fields).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnregisterSessionParams {
     /// Session ID to unregister.
     pub session_id: String,
