@@ -83,7 +83,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           panelOpened: true,
         },
         fileTree: {
-          opened: false,
+          opened: true,
           width: 260,
         },
         session: {
@@ -246,6 +246,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }
       }
       return map
+    })
+
+    createEffect(() => {
+      if (store.fileTree.opened) return
+      setStore("fileTree", "opened", true)
     })
 
     createEffect(() => {

@@ -139,6 +139,54 @@ export default function Layout(props: ParentProps) {
   const editorRef = { current: undefined as HTMLInputElement | undefined }
 
   const [hoverSession, setHoverSession] = createSignal<string | undefined>()
+  const [panel, setPanel] = createSignal<"sessions" | "files">("sessions")
+  const showFiles = createMemo(() => panel() === "files")
+  const showSessions = createMemo(() => panel() === "sessions")
+  const openPanel = (next: "sessions" | "files") => {
+    setPanel(next)
+    if (next !== "files") return
+    if (typeof window === "undefined") return
+    window.dispatchEvent(new Event("sidebar.files"))
+  }
+
+  const isEditableTarget = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return false
+    if (target.isContentEditable) return true
+    const editable = target.closest('input, textarea, [contenteditable="true"], [contenteditable=""]')
+    return !!editable
+  }
+
+  const handlePanelKeydown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return
+    if (event.ctrlKey || event.metaKey || event.altKey) return
+    if (!event.shiftKey) return
+    if (isEditableTarget(event.target)) return
+
+    const key = event.key.toLowerCase()
+    if (key === "s") {
+      openPanel("sessions")
+      event.preventDefault()
+      return
+    }
+    if (key === "f") {
+      openPanel("files")
+      event.preventDefault()
+    }
+  }
+
+  onMount(() => {
+    document.addEventListener("keydown", handlePanelKeydown)
+  })
+
+  onCleanup(() => {
+    document.removeEventListener("keydown", handlePanelKeydown)
+  })
+
+  createEffect(() => {
+    if (panel() !== "files") return
+    if (!params.dir) return
+    window.dispatchEvent(new Event("sidebar.files"))
+  })
 
   const autoselecting = createMemo(() => {
     if (params.dir) return false
@@ -951,6 +999,23 @@ export default function Layout(props: ParentProps) {
       keybind: "mod+shift+s",
       onSelect: () => cycleColorScheme(1),
     })
+
+    commands.push(
+      {
+        id: "sidebar.panel.sessions",
+        title: "Toggle sessions view",
+        category: language.t("command.category.view"),
+        keybind: "shift+s",
+        onSelect: () => openPanel("sessions"),
+      },
+      {
+        id: "sidebar.panel.files",
+        title: "Toggle files view",
+        category: language.t("command.category.view"),
+        keybind: "shift+f",
+        onSelect: () => openPanel("files"),
+      },
+    )
 
     for (const scheme of colorSchemeOrder) {
       commands.push({
@@ -1876,7 +1941,7 @@ export default function Layout(props: ParentProps) {
         </Show>
         <Icon
           name={open() ? "chevron-down" : "chevron-right"}
-          size="small"
+          size="normal"
           class="shrink-0 text-icon-base opacity-0 transition-opacity group-hover/workspace:opacity-100 group-focus-within/workspace:opacity-100"
         />
       </div>
@@ -2329,6 +2394,51 @@ export default function Layout(props: ParentProps) {
             <Show when={project()} keyed>
               {(p) => (
                 <>
+                  <div class="px-3 pt-2 pb-2">
+                    <div class="w-full flex items-center justify-center rounded-md border border-border-weak-base bg-background-base px-2 py-1">
+                      <div class="inline-flex items-center gap-1">
+                        <TooltipKeybind
+                          title="Sessions"
+                          keybind={command.keybind("sidebar.panel.sessions") ?? "shift+s"}
+                          placement="bottom"
+                        >
+                          <IconButton
+                            icon="speech-bubble"
+                            variant="ghost"
+                            size="normal"
+                            classList={{
+                              "rounded-md size-8": true,
+                              "bg-surface-raised-base": showSessions(),
+                              "text-icon-strong": showSessions(),
+                              "text-icon-weak": !showSessions(),
+                            }}
+                            onClick={() => openPanel("sessions")}
+                            aria-label="Sessions"
+                          />
+                        </TooltipKeybind>
+                        <TooltipKeybind
+                          title="Files"
+                          keybind={command.keybind("sidebar.panel.files") ?? "shift+f"}
+                          placement="bottom"
+                        >
+                          <IconButton
+                            icon="bullet-list"
+                            variant="ghost"
+                            size="normal"
+                            classList={{
+                              "rounded-md size-8": true,
+                              "bg-surface-raised-base": showFiles(),
+                              "text-icon-strong": showFiles(),
+                              "text-icon-weak": !showFiles(),
+                            }}
+                            onClick={() => openPanel("files")}
+                            aria-label="Files"
+                          />
+                        </TooltipKeybind>
+                      </div>
+                    </div>
+                  </div>
+
                   <div class="shrink-0 px-2 py-1">
                     <div class="group/project flex items-start justify-between gap-2 p-2 pr-1">
                       <div class="flex flex-col min-w-0">
@@ -2391,72 +2501,98 @@ export default function Layout(props: ParentProps) {
                     when={layout.sidebar.workspaces(p.worktree)()}
                     fallback={
                       <>
-                        <div class="py-4 px-3">
-                          <TooltipKeybind
-                            title={language.t("command.session.new")}
-                            keybind={command.keybind("session.new")}
-                            placement="top"
-                          >
-                            <Button
-                              size="large"
-                              icon="plus-small"
-                              class="w-full"
-                              onClick={() => {
-                                navigate(`/${base64Encode(p.worktree)}/session`)
-                                layout.mobileSidebar.hide()
-                              }}
+                        <Show when={showSessions()}>
+                          <div class="py-4 px-3">
+                            <TooltipKeybind
+                              title={language.t("command.session.new")}
+                              keybind={command.keybind("session.new")}
+                              placement="top"
                             >
-                              {language.t("command.session.new")}
-                            </Button>
-                          </TooltipKeybind>
+                              <Button
+                                size="large"
+                                icon="plus-small"
+                                class="w-full"
+                                onClick={() => {
+                                  navigate(`/${base64Encode(p.worktree)}/session`)
+                                  layout.mobileSidebar.hide()
+                                }}
+                              >
+                                {language.t("command.session.new")}
+                              </Button>
+                            </TooltipKeybind>
+                          </div>
+                        </Show>
+                        <div
+                          classList={{
+                            "flex-1 min-h-0 overflow-y-auto no-scrollbar px-3 pb-3": true,
+                            hidden: !showFiles() || !layout.fileTree.opened() || !params.dir,
+                          }}
+                        >
+                          <div class="text-12-medium text-text-weak">Files</div>
+                          <div id="sidebar-file-tree" class="mt-2 flex flex-col gap-1" />
                         </div>
-                        <div class="flex-1 min-h-0">
-                          <LocalWorkspace project={p} mobile={sidebarProps.mobile} />
-                        </div>
+                        <Show when={showSessions()}>
+                          <div class="flex-1 min-h-0">
+                            <LocalWorkspace project={p} mobile={sidebarProps.mobile} />
+                          </div>
+                        </Show>
                       </>
                     }
                   >
                     <>
-                      <div class="py-4 px-3">
-                        <TooltipKeybind
-                          title={language.t("workspace.new")}
-                          keybind={command.keybind("workspace.new")}
-                          placement="top"
-                        >
-                          <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
-                            {language.t("workspace.new")}
-                          </Button>
-                        </TooltipKeybind>
-                      </div>
-                      <div class="relative flex-1 min-h-0">
-                        <DragDropProvider
-                          onDragStart={handleWorkspaceDragStart}
-                          onDragEnd={handleWorkspaceDragEnd}
-                          onDragOver={handleWorkspaceDragOver}
-                          collisionDetector={closestCenter}
-                        >
-                          <DragDropSensors />
-                          <ConstrainDragXAxis />
-                          <div
-                            ref={(el) => {
-                              if (!sidebarProps.mobile) scrollContainerRef = el
-                            }}
-                            class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar"
-                            style={{ "overflow-anchor": "none" }}
+                      <Show when={showSessions()}>
+                        <div class="py-4 px-3">
+                          <TooltipKeybind
+                            title={language.t("workspace.new")}
+                            keybind={command.keybind("workspace.new")}
+                            placement="top"
                           >
-                            <SortableProvider ids={workspaces()}>
-                              <For each={workspaces()}>
-                                {(directory) => (
-                                  <SortableWorkspace directory={directory} project={p} mobile={sidebarProps.mobile} />
-                                )}
-                              </For>
-                            </SortableProvider>
-                          </div>
-                          <DragOverlay>
-                            <WorkspaceDragOverlay />
-                          </DragOverlay>
-                        </DragDropProvider>
+                            <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
+                              {language.t("workspace.new")}
+                            </Button>
+                          </TooltipKeybind>
+                        </div>
+                      </Show>
+                      <div
+                        classList={{
+                          "flex-1 min-h-0 overflow-y-auto no-scrollbar px-3 pb-3": true,
+                          hidden: !showFiles() || !layout.fileTree.opened() || !params.dir,
+                        }}
+                      >
+                        <div class="text-12-medium text-text-weak">Files</div>
+                        <div id="sidebar-file-tree" class="mt-2 flex flex-col gap-1" />
                       </div>
+                      <Show when={showSessions()}>
+                        <div class="relative flex-1 min-h-0">
+                          <DragDropProvider
+                            onDragStart={handleWorkspaceDragStart}
+                            onDragEnd={handleWorkspaceDragEnd}
+                            onDragOver={handleWorkspaceDragOver}
+                            collisionDetector={closestCenter}
+                          >
+                            <DragDropSensors />
+                            <ConstrainDragXAxis />
+                            <div
+                              ref={(el) => {
+                                if (!sidebarProps.mobile) scrollContainerRef = el
+                              }}
+                              class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar"
+                              style={{ "overflow-anchor": "none" }}
+                            >
+                              <SortableProvider ids={workspaces()}>
+                                <For each={workspaces()}>
+                                  {(directory) => (
+                                    <SortableWorkspace directory={directory} project={p} mobile={sidebarProps.mobile} />
+                                  )}
+                                </For>
+                              </SortableProvider>
+                            </div>
+                            <DragOverlay>
+                              <WorkspaceDragOverlay />
+                            </DragOverlay>
+                          </DragDropProvider>
+                        </div>
+                      </Show>
                     </>
                   </Show>
                 </>

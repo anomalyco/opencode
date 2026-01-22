@@ -13,7 +13,7 @@ import {
 } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Dynamic } from "solid-js/web"
+import { Dynamic, Portal } from "solid-js/web"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, useFile, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
@@ -27,6 +27,7 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
+import FileTree from "@/components/file-tree"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
@@ -238,6 +239,7 @@ export default function Page() {
   }
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
+  const [sidebarFileTreeTarget, setSidebarFileTreeTarget] = createSignal<HTMLElement | null>(null)
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -258,9 +260,9 @@ export default function Page() {
 
   const openTab = (value: string) => {
     const next = normalizeTab(value)
-    tabs().open(next)
-
     const path = file.pathFromTab(next)
+    if (path) view().reviewPanel.open()
+    tabs().open(next)
     if (path) file.load(path)
   }
 
@@ -288,6 +290,15 @@ export default function Page() {
     const normalized = normalizeTab(active)
     if (active === normalized) return
     tabs().setActive(normalized)
+  })
+
+  onMount(() => {
+    setSidebarFileTreeTarget(document.getElementById("sidebar-file-tree"))
+    const handleFilesPanel = () => file.tree.refresh("")
+    window.addEventListener("sidebar.files", handleFilesPanel)
+    onCleanup(() => {
+      window.removeEventListener("sidebar.files", handleFilesPanel)
+    })
   })
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
@@ -1293,6 +1304,11 @@ export default function Page() {
 
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
+      <Show when={layout.fileTree.opened() && sidebarFileTreeTarget()}>
+        <Portal mount={sidebarFileTreeTarget() ?? undefined}>
+          <FileTree path="" onFileClick={(node) => openTab(file.tab(node.path))} />
+        </Portal>
+      </Show>
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         {/* Mobile tab bar - only shown on mobile when user opened review */}
