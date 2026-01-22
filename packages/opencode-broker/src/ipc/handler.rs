@@ -1,25 +1,38 @@
 //! Request handler for the authentication broker.
 //!
 //! Orchestrates the authentication flow: validation -> rate limiting -> PAM.
-//! This module is the core of the broker, connecting all auth components.
+//! Also handles PTY operations: spawn, kill, resize.
+
+use std::os::fd::AsRawFd;
+use std::path::PathBuf;
 
 use crate::auth::pam;
 use crate::auth::rate_limit::RateLimiter;
 use crate::auth::validation;
 use crate::config::BrokerConfig;
-use crate::ipc::protocol::{Method, PROTOCOL_VERSION, Request, RequestParams, Response};
-use tracing::{debug, info, warn};
+use crate::ipc::protocol::{
+    Method, SpawnPtyResult, PROTOCOL_VERSION, Request, RequestParams, Response,
+};
+use crate::process::environment::LoginEnvironment;
+use crate::process::spawn::{self, SpawnConfig};
+use crate::pty::allocator;
+use crate::pty::session::{PtyId, PtySession, SessionManager};
+use crate::session::user::UserSessionStore;
+use tracing::{debug, error, info, warn};
 
 /// Handle a single IPC request.
 ///
 /// This function dispatches to the appropriate handler based on the request
-/// method, orchestrating validation, rate limiting, and PAM authentication.
+/// method, orchestrating validation, rate limiting, and PAM authentication,
+/// as well as PTY operations (spawn, kill, resize).
 ///
 /// # Arguments
 ///
 /// * `request` - The parsed IPC request.
 /// * `config` - Server configuration.
 /// * `rate_limiter` - Per-username rate limiter.
+/// * `user_sessions` - Session-to-user mapping store.
+/// * `pty_sessions` - Active PTY session manager.
 ///
 /// # Returns
 ///
@@ -34,6 +47,8 @@ pub async fn handle_request(
     request: Request,
     config: &BrokerConfig,
     rate_limiter: &RateLimiter,
+    user_sessions: &UserSessionStore,
+    pty_sessions: &SessionManager,
 ) -> Response {
     // Version check
     if request.version != PROTOCOL_VERSION {
@@ -54,11 +69,11 @@ pub async fn handle_request(
 
         Method::Authenticate => handle_authenticate(request, config, rate_limiter).await,
 
-        Method::SpawnPty => handle_spawn_pty(request).await,
+        Method::SpawnPty => handle_spawn_pty(request, user_sessions, pty_sessions).await,
 
-        Method::KillPty => handle_kill_pty(request).await,
+        Method::KillPty => handle_kill_pty(request, pty_sessions).await,
 
-        Method::ResizePty => handle_resize_pty(request).await,
+        Method::ResizePty => handle_resize_pty(request, pty_sessions).await,
     }
 }
 
@@ -131,81 +146,246 @@ async fn handle_authenticate(
     }
 }
 
-/// Handle a PTY spawn request (stub - returns not implemented).
+/// Handle a PTY spawn request.
 ///
-/// In the full implementation, this will:
-/// 1. Look up the user's session by session_id
-/// 2. Allocate a PTY pair
-/// 3. Spawn the user's shell with proper user/group IDs
-/// 4. Return the PTY ID and PID
-async fn handle_spawn_pty(request: Request) -> Response {
-    // Extract and log params for debugging
+/// 1. Look up user from session_id
+/// 2. Allocate PTY pair with user's uid/gid
+/// 3. Spawn shell as user with PTY as controlling terminal
+/// 4. Register session and return pty_id and pid
+async fn handle_spawn_pty(
+    request: Request,
+    user_sessions: &UserSessionStore,
+    pty_sessions: &SessionManager,
+) -> Response {
     let params = match &request.params {
-        RequestParams::SpawnPty(params) => params,
+        RequestParams::SpawnPty(p) => p,
         _ => {
             return Response::failure(&request.id, "invalid params for spawn_pty");
         }
     };
 
+    // Look up user info from session
+    let user = match user_sessions.get(&params.session_id) {
+        Some(u) => u,
+        None => {
+            warn!(
+                id = %request.id,
+                session_id = %params.session_id,
+                "spawn_pty: session not found"
+            );
+            return Response::failure(&request.id, "session not found");
+        }
+    };
+
     info!(
         id = %request.id,
-        session_id = %params.session_id,
-        term = %params.term,
-        cols = params.cols,
-        rows = params.rows,
-        "spawn_pty request (not implemented)"
+        username = %user.username,
+        uid = user.uid,
+        gid = user.gid,
+        "spawning PTY"
     );
 
-    Response::failure(&request.id, "spawn_pty not implemented")
+    // Allocate PTY pair
+    let pty_pair = match allocator::allocate(user.uid, user.gid) {
+        Ok(p) => p,
+        Err(e) => {
+            error!(error = %e, "failed to allocate PTY");
+            return Response::failure(&request.id, "failed to allocate PTY");
+        }
+    };
+
+    // Build login environment
+    let env = LoginEnvironment::new(
+        user.username.clone(),
+        user.home.clone(),
+        user.shell.clone(),
+        user.uid,
+        user.gid,
+    )
+    .with_term(params.term.clone())
+    .with_envs(params.env.clone());
+
+    // Get slave fd for spawn (before moving pty_pair.slave)
+    let slave_fd = pty_pair.slave.as_raw_fd();
+
+    // Spawn process as user
+    let spawn_config = SpawnConfig::new(env, slave_fd, PathBuf::from(&user.home));
+
+    let child = match spawn::spawn_as_user(spawn_config) {
+        Ok(c) => c,
+        Err(e) => {
+            error!(error = %e, "failed to spawn process");
+            return Response::failure(&request.id, "failed to spawn process");
+        }
+    };
+
+    let pid = child.id();
+
+    // Create PTY session entry
+    let pty_id = PtyId::new();
+    let mut session = PtySession::new(
+        pty_id.clone(),
+        pty_pair.master,
+        user.uid,
+        user.gid,
+        user.username.clone(),
+        params.cols,
+        params.rows,
+    );
+    session.set_child_pid(nix::unistd::Pid::from_raw(pid as i32));
+
+    // Register session
+    pty_sessions.insert(session);
+
+    // Close slave in parent (child has it via dup2 in pre_exec)
+    drop(pty_pair.slave);
+
+    info!(
+        id = %request.id,
+        pty_id = %pty_id,
+        pid = pid,
+        username = %user.username,
+        "PTY spawned successfully"
+    );
+
+    // Return success with PTY info
+    let result = SpawnPtyResult {
+        pty_id: pty_id.as_str().to_string(),
+        pid,
+    };
+
+    Response::success_with_data(
+        &request.id,
+        serde_json::to_value(result).expect("SpawnPtyResult serialization cannot fail"),
+    )
 }
 
-/// Handle a PTY kill request (stub - returns not implemented).
+/// Handle a PTY kill request.
 ///
-/// In the full implementation, this will:
-/// 1. Look up the PTY session by pty_id
-/// 2. Send SIGTERM/SIGKILL to the child process
-/// 3. Clean up PTY resources
-async fn handle_kill_pty(request: Request) -> Response {
-    // Extract and log params for debugging
+/// 1. Look up PTY session by pty_id
+/// 2. Send SIGTERM to child process
+/// 3. Remove session from manager (master fd closes on drop)
+async fn handle_kill_pty(request: Request, pty_sessions: &SessionManager) -> Response {
     let params = match &request.params {
-        RequestParams::KillPty(params) => params,
+        RequestParams::KillPty(p) => p,
         _ => {
             return Response::failure(&request.id, "invalid params for kill_pty");
         }
     };
 
+    let pty_id = PtyId::from(params.pty_id.clone());
+
+    // Remove and get session
+    let session = match pty_sessions.remove(&pty_id) {
+        Some(s) => s,
+        None => {
+            warn!(
+                id = %request.id,
+                pty_id = %params.pty_id,
+                "kill_pty: session not found"
+            );
+            return Response::failure(&request.id, "PTY session not found");
+        }
+    };
+
+    // Kill the child process if still running
+    if let Some(pid) = session.child_pid {
+        info!(
+            id = %request.id,
+            pty_id = %params.pty_id,
+            pid = pid.as_raw(),
+            "killing PTY process"
+        );
+
+        // Send SIGTERM to the child process
+        // If the process is already dead, this will return an error which we ignore
+        if let Err(e) = nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGTERM) {
+            debug!(
+                error = %e,
+                pid = pid.as_raw(),
+                "SIGTERM failed (process may already be dead)"
+            );
+        }
+    }
+
+    // master_fd will be closed when session is dropped
+    // This sends SIGHUP to the child if still running
+
     info!(
         id = %request.id,
         pty_id = %params.pty_id,
-        "kill_pty request (not implemented)"
+        "PTY session terminated"
     );
 
-    Response::failure(&request.id, "kill_pty not implemented")
+    Response::success(&request.id)
 }
 
-/// Handle a PTY resize request (stub - returns not implemented).
+/// Handle a PTY resize request.
 ///
-/// In the full implementation, this will:
-/// 1. Look up the PTY session by pty_id
-/// 2. Call TIOCSWINSZ ioctl with new dimensions
-async fn handle_resize_pty(request: Request) -> Response {
-    // Extract and log params for debugging
+/// 1. Look up PTY session by pty_id
+/// 2. Call TIOCSWINSZ ioctl to resize
+/// 3. Update stored dimensions
+async fn handle_resize_pty(request: Request, pty_sessions: &SessionManager) -> Response {
     let params = match &request.params {
-        RequestParams::ResizePty(params) => params,
+        RequestParams::ResizePty(p) => p,
         _ => {
             return Response::failure(&request.id, "invalid params for resize_pty");
         }
     };
+
+    let pty_id = PtyId::from(params.pty_id.clone());
+
+    // Get mutable reference to session
+    let mut session = match pty_sessions.get_mut(&pty_id) {
+        Some(s) => s,
+        None => {
+            warn!(
+                id = %request.id,
+                pty_id = %params.pty_id,
+                "resize_pty: session not found"
+            );
+            return Response::failure(&request.id, "PTY session not found");
+        }
+    };
+
+    // Use ioctl TIOCSWINSZ to resize
+    let winsize = nix::pty::Winsize {
+        ws_row: params.rows,
+        ws_col: params.cols,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+
+    let master_fd = session.master_fd.as_raw_fd();
+
+    // TIOCSWINSZ - set window size
+    let result = unsafe {
+        libc::ioctl(
+            master_fd,
+            libc::TIOCSWINSZ,
+            &winsize as *const nix::pty::Winsize,
+        )
+    };
+
+    if result < 0 {
+        let err = std::io::Error::last_os_error();
+        error!(error = %err, "failed to resize PTY");
+        return Response::failure(&request.id, "failed to resize PTY");
+    }
+
+    // Update stored dimensions
+    session.cols = params.cols;
+    session.rows = params.rows;
 
     info!(
         id = %request.id,
         pty_id = %params.pty_id,
         cols = params.cols,
         rows = params.rows,
-        "resize_pty request (not implemented)"
+        "PTY resized"
     );
 
-    Response::failure(&request.id, "resize_pty not implemented")
+    Response::success(&request.id)
 }
 
 #[cfg(test)]
@@ -228,6 +408,8 @@ mod tests {
     async fn test_ping_returns_success() {
         let config = test_config();
         let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
 
         let request = Request {
             id: "ping-1".to_string(),
@@ -236,7 +418,8 @@ mod tests {
             params: RequestParams::Ping(PingParams {}),
         };
 
-        let response = handle_request(request, &config, &rate_limiter).await;
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
 
         assert!(response.success);
         assert_eq!(response.id, "ping-1");
@@ -247,6 +430,8 @@ mod tests {
     async fn test_unknown_version_returns_error() {
         let config = test_config();
         let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
 
         let request = Request {
             id: "ver-1".to_string(),
@@ -255,7 +440,8 @@ mod tests {
             params: RequestParams::Ping(PingParams {}),
         };
 
-        let response = handle_request(request, &config, &rate_limiter).await;
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
 
         assert!(!response.success);
         assert!(
@@ -270,6 +456,8 @@ mod tests {
     async fn test_rate_limit_rejection() {
         let config = test_config();
         let rate_limiter = RateLimiter::new(1); // Only 1 attempt allowed
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
 
         // First attempt should be allowed (but will fail PAM)
         let request1 = Request {
@@ -282,7 +470,8 @@ mod tests {
             }),
         };
 
-        let response1 = handle_request(request1, &config, &rate_limiter).await;
+        let response1 =
+            handle_request(request1, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
         // Will fail PAM but rate limit check passes
         assert_eq!(response1.id, "auth-1");
 
@@ -297,7 +486,8 @@ mod tests {
             }),
         };
 
-        let response2 = handle_request(request2, &config, &rate_limiter).await;
+        let response2 =
+            handle_request(request2, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
 
         assert!(!response2.success);
         assert!(
@@ -312,6 +502,8 @@ mod tests {
     async fn test_invalid_username_returns_generic_error() {
         let config = test_config();
         let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
 
         // Invalid username (uppercase)
         let request = Request {
@@ -324,7 +516,8 @@ mod tests {
             }),
         };
 
-        let response = handle_request(request, &config, &rate_limiter).await;
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
 
         assert!(!response.success);
         // Should return generic "authentication failed" not validation details
@@ -335,6 +528,8 @@ mod tests {
     async fn test_empty_username_returns_generic_error() {
         let config = test_config();
         let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
 
         let request = Request {
             id: "auth-1".to_string(),
@@ -346,23 +541,26 @@ mod tests {
             }),
         };
 
-        let response = handle_request(request, &config, &rate_limiter).await;
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
 
         assert!(!response.success);
         assert_eq!(response.error, Some("authentication failed".to_string()));
     }
 
     #[tokio::test]
-    async fn test_spawn_pty_stub_returns_not_implemented() {
+    async fn test_spawn_pty_session_not_found() {
         let config = test_config();
         let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
 
         let request = Request {
             id: "spawn-1".to_string(),
             version: PROTOCOL_VERSION,
             method: Method::SpawnPty,
             params: RequestParams::SpawnPty(SpawnPtyParams {
-                session_id: "sess-123".to_string(),
+                session_id: "nonexistent-session".to_string(),
                 term: "xterm-256color".to_string(),
                 cols: 80,
                 rows: 24,
@@ -370,67 +568,67 @@ mod tests {
             }),
         };
 
-        let response = handle_request(request, &config, &rate_limiter).await;
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
 
         assert!(!response.success);
-        assert_eq!(response.id, "spawn-1");
-        assert_eq!(
-            response.error,
-            Some("spawn_pty not implemented".to_string())
-        );
+        assert_eq!(response.error, Some("session not found".to_string()));
     }
 
     #[tokio::test]
-    async fn test_kill_pty_stub_returns_not_implemented() {
+    async fn test_kill_pty_session_not_found() {
         let config = test_config();
         let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
 
         let request = Request {
             id: "kill-1".to_string(),
             version: PROTOCOL_VERSION,
             method: Method::KillPty,
             params: RequestParams::KillPty(KillPtyParams {
-                pty_id: "pty-abc".to_string(),
+                pty_id: "nonexistent-pty".to_string(),
             }),
         };
 
-        let response = handle_request(request, &config, &rate_limiter).await;
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
 
         assert!(!response.success);
-        assert_eq!(response.id, "kill-1");
-        assert_eq!(response.error, Some("kill_pty not implemented".to_string()));
+        assert_eq!(response.error, Some("PTY session not found".to_string()));
     }
 
     #[tokio::test]
-    async fn test_resize_pty_stub_returns_not_implemented() {
+    async fn test_resize_pty_session_not_found() {
         let config = test_config();
         let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
 
         let request = Request {
             id: "resize-1".to_string(),
             version: PROTOCOL_VERSION,
             method: Method::ResizePty,
             params: RequestParams::ResizePty(ResizePtyParams {
-                pty_id: "pty-def".to_string(),
+                pty_id: "nonexistent-pty".to_string(),
                 cols: 120,
                 rows: 40,
             }),
         };
 
-        let response = handle_request(request, &config, &rate_limiter).await;
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
 
         assert!(!response.success);
-        assert_eq!(response.id, "resize-1");
-        assert_eq!(
-            response.error,
-            Some("resize_pty not implemented".to_string())
-        );
+        assert_eq!(response.error, Some("PTY session not found".to_string()));
     }
 
     #[tokio::test]
     async fn test_spawn_pty_invalid_params() {
         let config = test_config();
         let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
 
         // Send SpawnPty method with wrong param type (Ping params)
         let request = Request {
@@ -440,7 +638,8 @@ mod tests {
             params: RequestParams::Ping(PingParams {}),
         };
 
-        let response = handle_request(request, &config, &rate_limiter).await;
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
 
         assert!(!response.success);
         assert_eq!(response.id, "spawn-bad-1");

@@ -7,6 +7,8 @@ use crate::auth::rate_limit::RateLimiter;
 use crate::config::BrokerConfig;
 use crate::ipc::handler;
 use crate::ipc::protocol::{Request, Response};
+use crate::pty::session::SessionManager;
+use crate::session::user::UserSessionStore;
 use futures::{SinkExt, StreamExt};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -48,6 +50,10 @@ pub struct Server {
     config: Arc<BrokerConfig>,
     /// Rate limiter for authentication attempts.
     rate_limiter: Arc<RateLimiter>,
+    /// Session-to-user mapping store.
+    user_sessions: Arc<UserSessionStore>,
+    /// Active PTY session manager.
+    pty_sessions: Arc<SessionManager>,
 }
 
 impl Server {
@@ -55,12 +61,30 @@ impl Server {
     pub fn new(config: BrokerConfig) -> Self {
         let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit_per_minute));
         let socket_path = PathBuf::from(&config.socket_path);
+        let user_sessions = Arc::new(UserSessionStore::new());
+        let pty_sessions = Arc::new(SessionManager::new());
 
         Self {
             socket_path,
             config: Arc::new(config),
             rate_limiter,
+            user_sessions,
+            pty_sessions,
         }
+    }
+
+    /// Get a reference to the user session store.
+    ///
+    /// This allows external code (e.g., web server after login) to register sessions.
+    pub fn user_sessions(&self) -> &Arc<UserSessionStore> {
+        &self.user_sessions
+    }
+
+    /// Get a reference to the PTY session manager.
+    ///
+    /// This allows external code to access PTY sessions for I/O operations.
+    pub fn pty_sessions(&self) -> &Arc<SessionManager> {
+        &self.pty_sessions
     }
 
     /// Run the server until shutdown is signaled.
@@ -111,8 +135,18 @@ impl Server {
                             debug!("accepted connection");
                             let config = Arc::clone(&self.config);
                             let rate_limiter = Arc::clone(&self.rate_limiter);
+                            let user_sessions = Arc::clone(&self.user_sessions);
+                            let pty_sessions = Arc::clone(&self.pty_sessions);
                             tokio::spawn(async move {
-                                if let Err(e) = handle_connection(stream, config, rate_limiter).await {
+                                if let Err(e) = handle_connection(
+                                    stream,
+                                    config,
+                                    rate_limiter,
+                                    user_sessions,
+                                    pty_sessions,
+                                )
+                                .await
+                                {
                                     debug!(error = %e, "connection error");
                                 }
                             });
@@ -150,6 +184,8 @@ async fn handle_connection(
     stream: UnixStream,
     config: Arc<BrokerConfig>,
     rate_limiter: Arc<RateLimiter>,
+    user_sessions: Arc<UserSessionStore>,
+    pty_sessions: Arc<SessionManager>,
 ) -> Result<(), ConnectionError> {
     let (reader, writer) = stream.into_split();
 
@@ -185,7 +221,14 @@ async fn handle_connection(
         };
 
         // Handle the request
-        let response = handler::handle_request(request, &config, &rate_limiter).await;
+        let response = handler::handle_request(
+            request,
+            &config,
+            &rate_limiter,
+            &user_sessions,
+            &pty_sessions,
+        )
+        .await;
 
         // Send the response
         let response_json =

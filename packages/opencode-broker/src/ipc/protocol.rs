@@ -160,6 +160,10 @@ pub struct Response {
     /// to prevent user enumeration attacks.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Optional data payload for successful responses.
+    /// Used to return structured data like SpawnPtyResult.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<serde_json::Value>,
 }
 
 impl Response {
@@ -169,6 +173,17 @@ impl Response {
             id: id.into(),
             success: true,
             error: None,
+            data: None,
+        }
+    }
+
+    /// Create a successful response with data payload.
+    pub fn success_with_data(id: impl Into<String>, data: serde_json::Value) -> Self {
+        Self {
+            id: id.into(),
+            success: true,
+            error: None,
+            data: Some(data),
         }
     }
 
@@ -179,6 +194,7 @@ impl Response {
             id: id.into(),
             success: false,
             error: Some(error.into()),
+            data: None,
         }
     }
 

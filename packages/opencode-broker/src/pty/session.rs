@@ -34,6 +34,18 @@ impl std::fmt::Display for PtyId {
     }
 }
 
+impl From<String> for PtyId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for PtyId {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
 /// A PTY session representing an allocated PTY with associated metadata.
 pub struct PtySession {
     /// Unique identifier for this session.
