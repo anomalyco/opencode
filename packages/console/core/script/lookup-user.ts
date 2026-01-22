@@ -1,7 +1,13 @@
 import { Database, and, eq, sql } from "../src/drizzle/index.js"
 import { AuthTable } from "../src/schema/auth.sql.js"
 import { UserTable } from "../src/schema/user.sql.js"
-import { BillingTable, PaymentTable, SubscriptionTable, SubscriptionPlan, UsageTable } from "../src/schema/billing.sql.js"
+import {
+  BillingTable,
+  PaymentTable,
+  SubscriptionTable,
+  SubscriptionPlan,
+  UsageTable,
+} from "../src/schema/billing.sql.js"
 import { WorkspaceTable } from "../src/schema/workspace.sql.js"
 import { BlackData } from "../src/black.js"
 import { centsToMicroCents } from "../src/util/price.js"
@@ -226,7 +232,7 @@ function formatRetryTime(seconds: number) {
 
 function getSubscriptionStatus(row: {
   subscription: {
-    plan: typeof SubscriptionPlan[number]
+    plan: (typeof SubscriptionPlan)[number]
   } | null
   timeSubscriptionCreated: Date | null
   fixedUsage: number | null

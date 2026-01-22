@@ -109,9 +109,9 @@ const zenPriceProps = {
     intervalCount: 1,
   },
 }
-const zenPrice200 = new stripe.Price("ZenBlackPrice", { ...zenPriceProps, unitAmount: 20000, })
-const zenPrice100 = new stripe.Price("ZenBlack100Price", { ...zenPriceProps, unitAmount: 10000, })
-const zenPrice20 = new stripe.Price("ZenBlack20Price", { ...zenPriceProps, unitAmount: 2000, })
+const zenPrice200 = new stripe.Price("ZenBlackPrice", { ...zenPriceProps, unitAmount: 20000 })
+const zenPrice100 = new stripe.Price("ZenBlack100Price", { ...zenPriceProps, unitAmount: 10000 })
+const zenPrice20 = new stripe.Price("ZenBlack20Price", { ...zenPriceProps, unitAmount: 2000 })
 const ZEN_BLACK_PRICE = new sst.Linkable("ZEN_BLACK_PRICE", {
   properties: {
     product: zenProduct.id,

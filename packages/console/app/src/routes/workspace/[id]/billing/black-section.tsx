@@ -97,41 +97,41 @@ export function BlackSection() {
       <Show when={subscription()}>
         {(sub) => (
           <>
-      <div data-slot="section-title">
-        <h2>Subscription</h2>
-        <div data-slot="title-row">
-          <p>You are subscribed to OpenCode Black for ${sub().plan} per month.</p>
-          <button
-            data-color="primary"
-            disabled={sessionSubmission.pending || store.sessionRedirecting}
-            onClick={onClickSession}
-          >
-            {sessionSubmission.pending || store.sessionRedirecting ? "Loading..." : "Manage Subscription"}
-          </button>
-        </div>
-      </div>
-          <div data-slot="usage">
-            <div data-slot="usage-item">
-              <div data-slot="usage-header">
-                <span data-slot="usage-label">5-hour Usage</span>
-                <span data-slot="usage-value">{sub().rollingUsage.usagePercent}%</span>
+            <div data-slot="section-title">
+              <h2>Subscription</h2>
+              <div data-slot="title-row">
+                <p>You are subscribed to OpenCode Black for ${sub().plan} per month.</p>
+                <button
+                  data-color="primary"
+                  disabled={sessionSubmission.pending || store.sessionRedirecting}
+                  onClick={onClickSession}
+                >
+                  {sessionSubmission.pending || store.sessionRedirecting ? "Loading..." : "Manage Subscription"}
+                </button>
               </div>
-              <div data-slot="progress">
-                <div data-slot="progress-bar" style={{ width: `${sub().rollingUsage.usagePercent}%` }} />
-              </div>
-              <span data-slot="reset-time">Resets in {formatResetTime(sub().rollingUsage.resetInSec)}</span>
             </div>
-            <div data-slot="usage-item">
-              <div data-slot="usage-header">
-                <span data-slot="usage-label">Weekly Usage</span>
-                <span data-slot="usage-value">{sub().weeklyUsage.usagePercent}%</span>
+            <div data-slot="usage">
+              <div data-slot="usage-item">
+                <div data-slot="usage-header">
+                  <span data-slot="usage-label">5-hour Usage</span>
+                  <span data-slot="usage-value">{sub().rollingUsage.usagePercent}%</span>
+                </div>
+                <div data-slot="progress">
+                  <div data-slot="progress-bar" style={{ width: `${sub().rollingUsage.usagePercent}%` }} />
+                </div>
+                <span data-slot="reset-time">Resets in {formatResetTime(sub().rollingUsage.resetInSec)}</span>
               </div>
-              <div data-slot="progress">
-                <div data-slot="progress-bar" style={{ width: `${sub().weeklyUsage.usagePercent}%` }} />
+              <div data-slot="usage-item">
+                <div data-slot="usage-header">
+                  <span data-slot="usage-label">Weekly Usage</span>
+                  <span data-slot="usage-value">{sub().weeklyUsage.usagePercent}%</span>
+                </div>
+                <div data-slot="progress">
+                  <div data-slot="progress-bar" style={{ width: `${sub().weeklyUsage.usagePercent}%` }} />
+                </div>
+                <span data-slot="reset-time">Resets in {formatResetTime(sub().weeklyUsage.resetInSec)}</span>
               </div>
-              <span data-slot="reset-time">Resets in {formatResetTime(sub().weeklyUsage.resetInSec)}</span>
             </div>
-          </div>
           </>
         )}
       </Show>

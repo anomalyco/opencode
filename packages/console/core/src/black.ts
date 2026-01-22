@@ -28,12 +28,15 @@ export namespace BlackData {
     return input
   })
 
-  export const get = fn(z.object({
+  export const get = fn(
+    z.object({
       plan: z.enum(SubscriptionPlan),
-    }), ({ plan }) => {
-    const json = JSON.parse(Resource.ZEN_BLACK_LIMITS.value)
-    return Schema.parse(json)[plan]
-  })
+    }),
+    ({ plan }) => {
+      const json = JSON.parse(Resource.ZEN_BLACK_LIMITS.value)
+      return Schema.parse(json)[plan]
+    },
+  )
 }
 
 export namespace Black {
@@ -75,7 +78,7 @@ export namespace Black {
 
   export const analyzeWeeklyUsage = fn(
     z.object({
-      plan:z.enum(SubscriptionPlan),
+      plan: z.enum(SubscriptionPlan),
       usage: z.number().int(),
       timeUpdated: z.date(),
     }),
