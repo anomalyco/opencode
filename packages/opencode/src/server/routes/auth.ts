@@ -12,6 +12,7 @@ import { ServerAuth } from "../../config/server-auth"
 import { Log } from "../../util/log"
 import { createLoginRateLimiter, getClientIP } from "../security/rate-limit"
 import { parseDuration } from "../../util/duration"
+import { getConnectionSecurityInfo, shouldBlockInsecureLogin } from "../security/https-detection"
 
 const log = Log.create({ service: "auth-routes" })
 
@@ -91,9 +92,16 @@ function isValidReturnUrl(url: string): boolean {
 }
 
 /**
- * Polished HTML login page matching opencode design.
+ * Generate login page HTML with security context.
  */
-const loginPageHtml = `<!DOCTYPE html>
+function generateLoginPageHtml(securityContext: {
+  shouldWarn: boolean
+  shouldBlock: boolean
+  isSecure: boolean
+}): string {
+  const { shouldWarn, shouldBlock } = securityContext
+
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -165,6 +173,12 @@ const loginPageHtml = `<!DOCTYPE html>
       box-shadow: 0 0 0 3px rgba(220,38,38,0.3), 0 0 0 1px #dc2626;
     }
     input::placeholder { color: #525252; }
+    input:disabled {
+      background: #0a0a0a;
+      color: #525252;
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
     .password-toggle {
       position: absolute;
       right: 4px;
@@ -232,6 +246,46 @@ const loginPageHtml = `<!DOCTYPE html>
       color: #737373;
       cursor: not-allowed;
     }
+    .http-warning {
+      background: rgba(234, 179, 8, 0.15);
+      border: 1px solid rgba(234, 179, 8, 0.4);
+      border-radius: 8px;
+      padding: 0.75rem;
+      margin-bottom: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .http-warning.hidden { display: none; }
+    .http-warning-text {
+      color: #fbbf24;
+      font-size: 0.75rem;
+      line-height: 1.4;
+    }
+    .http-warning-dismiss {
+      background: transparent;
+      border: 1px solid rgba(234, 179, 8, 0.4);
+      color: #fbbf24;
+      font-size: 0.75rem;
+      padding: 0.375rem 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      align-self: flex-start;
+    }
+    .http-warning-dismiss:hover {
+      background: rgba(234, 179, 8, 0.1);
+    }
+    .blocked-message {
+      color: #fca5a5;
+      font-size: 0.875rem;
+      padding: 1rem;
+      background: rgba(239,68,68,0.15);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 8px;
+      margin-bottom: 1.25rem;
+      text-align: center;
+      line-height: 1.5;
+    }
     @media (max-width: 480px) {
       .card { padding: 1.5rem; border-radius: 8px; }
       .logo { width: 60px; height: 75px; margin-bottom: 1.5rem; }
@@ -246,20 +300,32 @@ const loginPageHtml = `<!DOCTYPE html>
 
   <div class="card">
     <form id="loginForm">
+      ${shouldBlock ? `<div class="blocked-message">
+        <strong>HTTPS is required to log in.</strong><br>
+        Please access this page over a secure connection.
+      </div>` : ''}
+      ${shouldWarn ? `<div id="httpWarning" class="http-warning">
+        <div class="http-warning-text">
+          ⚠️ You are connecting over HTTP. Your credentials may be visible to attackers on this network.
+        </div>
+        <button type="button" id="dismissWarning" class="http-warning-dismiss">
+          I understand the risks
+        </button>
+      </div>` : ''}
       <div id="error" class="error"></div>
 
       <div class="field">
         <label for="username">Username</label>
         <div class="input-wrapper">
-          <input type="text" id="username" name="username" required autocomplete="username" autofocus>
+          <input type="text" id="username" name="username" required autocomplete="username" autofocus ${shouldBlock ? 'disabled' : ''}>
         </div>
       </div>
 
       <div class="field">
         <label for="password">Password</label>
         <div class="input-wrapper">
-          <input type="password" id="password" name="password" required autocomplete="current-password" class="password-input">
-          <button type="button" class="password-toggle" id="passwordToggle" aria-label="Show password" aria-pressed="false">
+          <input type="password" id="password" name="password" required autocomplete="current-password" class="password-input" ${shouldBlock ? 'disabled' : ''}>
+          <button type="button" class="password-toggle" id="passwordToggle" aria-label="Show password" aria-pressed="false" ${shouldBlock ? 'disabled' : ''}>
             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
               <path d="M10 4.58325C5.83333 4.58325 2.5 9.99992 2.5 9.99992C2.5 9.99992 5.83333 15.4166 10 15.4166C14.1667 15.4166 17.5 9.99992 17.5 9.99992C17.5 9.99992 14.1667 4.58325 10 4.58325Z"/>
               <circle cx="10" cy="10" r="2.5"/>
@@ -269,11 +335,11 @@ const loginPageHtml = `<!DOCTYPE html>
       </div>
 
       <div class="checkbox-wrapper">
-        <input type="checkbox" id="rememberMe" name="rememberMe">
+        <input type="checkbox" id="rememberMe" name="rememberMe" ${shouldBlock ? 'disabled' : ''}>
         <label for="rememberMe" class="checkbox-label">Remember me</label>
       </div>
 
-      <button type="submit" id="submitBtn">Sign In</button>
+      ${shouldBlock ? '' : '<button type="submit" id="submitBtn">Sign In</button>'}
     </form>
   </div>
 
@@ -284,6 +350,22 @@ const loginPageHtml = `<!DOCTYPE html>
     const passwordInput = document.getElementById('password');
     const passwordToggle = document.getElementById('passwordToggle');
     const submitBtn = document.getElementById('submitBtn');
+
+    // HTTP warning dismissal
+    const httpWarning = document.getElementById('httpWarning');
+    const dismissWarning = document.getElementById('dismissWarning');
+
+    // Check if warning was previously dismissed this session
+    if (httpWarning && sessionStorage.getItem('http-warning-dismissed')) {
+      httpWarning.classList.add('hidden');
+    }
+
+    if (dismissWarning) {
+      dismissWarning.addEventListener('click', () => {
+        sessionStorage.setItem('http-warning-dismissed', 'true');
+        httpWarning.classList.add('hidden');
+      });
+    }
 
     // Password visibility toggle
     passwordToggle.addEventListener('click', () => {
@@ -354,6 +436,8 @@ const loginPageHtml = `<!DOCTYPE html>
   </script>
 </body>
 </html>`
+}
+
 
 /**
  * Auth routes for session management.
@@ -368,7 +452,14 @@ const loginPageHtml = `<!DOCTYPE html>
 export const AuthRoutes = lazy(() =>
   new Hono<AuthEnv>()
     .get("/login", (c) => {
-      return c.html(loginPageHtml)
+      // Get security context for connection
+      const authConfig = ServerAuth.get()
+      const securityContext = getConnectionSecurityInfo(c, {
+        requireHttps: authConfig.requireHttps,
+        trustProxy: authConfig.trustProxy,
+      })
+
+      return c.html(generateLoginPageHtml(securityContext))
     })
     .post(
       "/login",
@@ -407,6 +498,22 @@ export const AuthRoutes = lazy(() =>
         const authConfig = ServerAuth.get()
         if (!authConfig.enabled) {
           return c.json({ error: "auth_disabled", message: "Authentication is not enabled" }, 403)
+        }
+
+        // 1a. Check HTTPS requirement
+        if (shouldBlockInsecureLogin(c, {
+          requireHttps: authConfig.requireHttps,
+          trustProxy: authConfig.trustProxy,
+        })) {
+          const ip = getClientIP(c)
+          logSecurityEvent({
+            type: "login_failed",
+            ip,
+            reason: "https_required",
+            timestamp: new Date().toISOString(),
+            userAgent: c.req.header("User-Agent"),
+          })
+          return c.json({ error: "https_required", message: "HTTPS is required for login" }, 403)
         }
 
         // 2. Apply rate limiting if enabled
