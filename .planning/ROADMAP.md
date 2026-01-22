@@ -101,10 +101,19 @@ Plans:
   2. File operations respect authenticated user's permissions
   3. Process environment includes correct USER, HOME, SHELL
   4. Unauthorized users cannot execute commands (auth required)
-**Plans**: TBD
+**Plans**: 10 plans
 
 Plans:
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md — PTY allocation module (openpty, chown, session state)
+- [ ] 05-02-PLAN.md — User process spawning (impersonation, login environment)
+- [ ] 05-03-PLAN.md — IPC protocol extension (SpawnPty, KillPty, ResizePty methods)
+- [ ] 05-04-PLAN.md — PTY handler implementation (wire handlers to modules)
+- [ ] 05-05-PLAN.md — Session registration protocol (RegisterSession, UnregisterSession)
+- [ ] 05-06-PLAN.md — TypeScript BrokerClient extension (spawn/kill/resize/register)
+- [ ] 05-07-PLAN.md — Web server integration (login registers, PTY routes use broker)
+- [ ] 05-08-PLAN.md — Broker PTY I/O (PtyWrite, PtyRead, broker-pty.ts)
+- [ ] 05-09-PLAN.md — Auth enforcement on PTY routes (require session, pass sessionId)
+- [ ] 05-10-PLAN.md — Integration tests and verification (end-to-end testing)
 
 ### Phase 6: Login UI
 **Goal**: Users have a polished login form matching opencode design
@@ -199,7 +208,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 2. Session Infrastructure | 2/2 | Complete | 2026-01-20 |
 | 3. Auth Broker Core | 6/6 | Complete | 2026-01-20 |
 | 4. Authentication Flow | 2/2 | Complete | 2026-01-20 |
-| 5. User Process Execution | 0/TBD | Not started | - |
+| 5. User Process Execution | 0/10 | Planned | - |
 | 6. Login UI | 0/TBD | Not started | - |
 | 7. Security Hardening | 0/TBD | Not started | - |
 | 8. Session Enhancements | 0/TBD | Not started | - |
