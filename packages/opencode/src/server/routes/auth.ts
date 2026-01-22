@@ -5,9 +5,12 @@ import z from "zod"
 import { UserSession } from "../../session/user-session"
 import { clearSessionCookie, setSessionCookie, type AuthEnv } from "../middleware/auth"
 import { lazy } from "../../util/lazy"
-import { BrokerClient } from "../../auth/broker-client"
+import { BrokerClient, type UserInfo } from "../../auth/broker-client"
 import { getUserInfo } from "../../auth/user-info"
 import { ServerAuth } from "../../config/server-auth"
+import { Log } from "../../util/log"
+
+const log = Log.create({ service: "auth-routes" })
 
 /**
  * Login request schema - accepts username and password.
@@ -145,7 +148,22 @@ export const AuthRoutes = lazy(() =>
         // 9. Set session cookie
         setSessionCookie(c, session.id)
 
-        // 10. Return success with user info
+        // 10. Register session with broker for PTY operations (fire-and-forget)
+        // If broker registration fails, user can still use web interface
+        // PTY operations will fail gracefully with "session not found"
+        const userInfoForBroker: UserInfo = {
+          username,
+          uid: userInfo.uid,
+          gid: userInfo.gid,
+          home: userInfo.home,
+          shell: userInfo.shell,
+        }
+        const brokerForRegistration = new BrokerClient()
+        brokerForRegistration.registerSession(session.id, userInfoForBroker).catch((err) => {
+          log.warn("Failed to register session with broker", { error: err })
+        })
+
+        // 11. Return success with user info
         return c.json({
           success: true as const,
           user: {
