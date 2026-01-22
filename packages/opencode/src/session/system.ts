@@ -82,13 +82,15 @@ export namespace SystemPrompt {
     "CLAUDE.md",
     "CONTEXT.md", // deprecated
   ]
-  const GLOBAL_RULE_FILES = [path.join(Global.Path.config, "AGENTS.md")]
-  if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
-    GLOBAL_RULE_FILES.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
-  }
-
-  if (Flag.OPENCODE_CONFIG_DIR) {
-    GLOBAL_RULE_FILES.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
+  function globalRuleFiles() {
+    const files = [path.join(Global.Path.config, "AGENTS.md")]
+    if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
+      files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
+    }
+    if (Flag.OPENCODE_CONFIG_DIR) {
+      files.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
+    }
+    return files
   }
 
   export async function custom() {
@@ -107,7 +109,7 @@ export namespace SystemPrompt {
       }
     }
 
-    for (const globalRuleFile of GLOBAL_RULE_FILES) {
+    for (const globalRuleFile of globalRuleFiles()) {
       if (await Bun.file(globalRuleFile).exists()) {
         paths.add(globalRuleFile)
         break
