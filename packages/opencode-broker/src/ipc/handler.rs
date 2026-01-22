@@ -74,6 +74,10 @@ pub async fn handle_request(
         Method::KillPty => handle_kill_pty(request, pty_sessions).await,
 
         Method::ResizePty => handle_resize_pty(request, pty_sessions).await,
+
+        Method::RegisterSession => handle_register_session(request, user_sessions).await,
+
+        Method::UnregisterSession => handle_unregister_session(request, user_sessions).await,
     }
 }
 
@@ -385,6 +389,69 @@ async fn handle_resize_pty(request: Request, pty_sessions: &SessionManager) -> R
         "PTY resized"
     );
 
+    Response::success(&request.id)
+}
+
+/// Handle a session registration request.
+///
+/// Stores user info associated with the session ID for later PTY spawning.
+async fn handle_register_session(request: Request, user_sessions: &UserSessionStore) -> Response {
+    let params = match &request.params {
+        RequestParams::RegisterSession(p) => p,
+        _ => return Response::failure(&request.id, "invalid params for register_session"),
+    };
+
+    info!(
+        id = %request.id,
+        session_id = %params.session_id,
+        username = %params.username,
+        uid = params.uid,
+        "registering session"
+    );
+
+    let user = crate::session::user::UserInfo {
+        username: params.username.clone(),
+        uid: params.uid,
+        gid: params.gid,
+        home: params.home.clone(),
+        shell: params.shell.clone(),
+    };
+
+    user_sessions.register(&params.session_id, user);
+
+    Response::success(&request.id)
+}
+
+/// Handle a session unregistration request.
+///
+/// Removes the session's user info from the store. Succeeds even if session
+/// doesn't exist (idempotent).
+async fn handle_unregister_session(
+    request: Request,
+    user_sessions: &UserSessionStore,
+) -> Response {
+    let params = match &request.params {
+        RequestParams::UnregisterSession(p) => p,
+        _ => return Response::failure(&request.id, "invalid params for unregister_session"),
+    };
+
+    info!(
+        id = %request.id,
+        session_id = %params.session_id,
+        "unregistering session"
+    );
+
+    let removed = user_sessions.remove(&params.session_id);
+
+    if !removed {
+        debug!(
+            id = %request.id,
+            session_id = %params.session_id,
+            "session not found during unregister"
+        );
+    }
+
+    // Always succeed - unregister is idempotent
     Response::success(&request.id)
 }
 
