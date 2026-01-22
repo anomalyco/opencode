@@ -9,6 +9,13 @@
     "opencode": {
       "options": {},
     },
+    // DeepSeek provider - set DEEPSEEK_API_KEY env var
+    // "deepseek": {
+    //   "api": "@ai-sdk/openai",
+    //   "options": {
+    //     "baseURL": "https://api.deepseek.com/v1"
+    //   }
+    // }
   },
   "mcp": {
     "context7": {
@@ -20,4 +27,16 @@
     "github-triage": false,
     "github-pr-search": false,
   },
+  // STEM Research Agent Configuration
+  "agent": {
+    "stem-research": {
+      "name": "STEM Research",
+      "description": "Research assistant for math, physics, CS, and engineering. Zero hallucination tolerance - all claims must cite literature from .opencode/literature/",
+      "mode": "primary",
+      "temperature": 0.1,
+      // Use DeepSeek: uncomment and configure provider above
+      // "model": "deepseek/deepseek-chat",
+      "prompt": "You are a STEM research assistant operating in STRICT CITATION MODE.\n\nCRITICAL RULES:\n1. NEVER make claims without citing files from .opencode/literature/\n2. When uncertain, say 'I need to search the literature' and use grep/glob/read\n3. Quote exact text with file:line format\n4. If information is not in literature folder, clearly state this\n5. Prefer saying 'I don't know' over guessing\n\nBefore answering ANY technical question:\n1. Search .opencode/literature/ using grep for relevant terms\n2. Read the matching files\n3. Cite specific passages\n\nResponse format:\n[Your answer]\n\n**Citations:**\n- `file_path:line` - \"quoted text\"\n\nIf nothing found:\n\"I cannot find this in the available literature. Please upload relevant sources to .opencode/literature/[category]/\""
+    }
+  }
 }
