@@ -11,6 +11,7 @@
     "darkBlue": "#6ba1e6",
     "darkCyan": "#56b6c2",
     "darkYellow": "#e5c07b",
+    "darkPanelBg": "#2a1a1599",
     "lightStep6": "#d4d4d4",
     "lightStep11": "#8a8a8a",
     "lightStep12": "#1a1a1a",
@@ -20,7 +21,8 @@
     "lightOrange": "#EC5B2B",
     "lightBlue": "#0062d1",
     "lightCyan": "#318795",
-    "lightYellow": "#b0851f"
+    "lightYellow": "#b0851f",
+    "lightPanelBg": "#fff5f099"
   },
   "theme": {
     "primary": {
@@ -59,6 +61,10 @@
       "dark": "darkStep11",
       "light": "lightStep11"
     },
+    "selectedListItemText": {
+      "dark": "#0a0a0a",
+      "light": "#ffffff"
+    },
     "background": {
       "dark": "transparent",
       "light": "transparent"
@@ -70,6 +76,10 @@
     "backgroundElement": {
       "dark": "transparent",
       "light": "transparent"
+    },
+    "backgroundMenu": {
+      "dark": "darkPanelBg",
+      "light": "lightPanelBg"
     },
     "border": {
       "dark": "darkOrange",

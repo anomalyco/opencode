@@ -58,6 +58,26 @@ describe("session.retry.delay", () => {
     const longError = apiError({ "retry-after-ms": "700000" })
     expect(SessionRetry.delay(1, longError)).toBe(700000)
   })
+
+  test("sleep caps delay to max 32-bit signed integer to avoid TimeoutOverflowWarning", async () => {
+    const controller = new AbortController()
+
+    const warnings: string[] = []
+    const originalWarn = process.emitWarning
+    process.emitWarning = (warning: string | Error) => {
+      warnings.push(typeof warning === "string" ? warning : warning.message)
+    }
+
+    const promise = SessionRetry.sleep(2_560_914_000, controller.signal)
+    controller.abort()
+
+    try {
+      await promise
+    } catch {}
+
+    process.emitWarning = originalWarn
+    expect(warnings.some((w) => w.includes("TimeoutOverflowWarning"))).toBe(false)
+  })
 })
 
 describe("session.message-v2.fromError", () => {

@@ -140,7 +140,7 @@ export default function Home() {
                     <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span>
                         <span data-slot="protocol">brew install </span>
-                        <span data-slot="highlight">opencode</span>
+                        <span data-slot="highlight">anomalyco/tap/opencode</span>
                       </span>
                       <CopyStatus />
                     </button>
@@ -192,7 +192,13 @@ export default function Home() {
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Claude Pro</strong> Log in with Anthropic to use your Claude Pro or Max account
+                  <strong>GitHub Copilot</strong> Log in with GitHub to use your Copilot account
+                </div>
+              </li>
+              <li>
+                <span>[*]</span>
+                <div>
+                  <strong>ChatGPT Plus/Pro</strong> Log in with OpenAI to use your ChatGPT Plus or Pro account
                 </div>
               </li>
               <li>
@@ -686,7 +692,8 @@ export default function Home() {
               </li>
               <li>
                 <Faq question="Can I only use OpenCode in the terminal?">
-                  Not anymore! OpenCode is now available as an app for your desktop.
+                  Not anymore! OpenCode is now available as an app for your <a href="/download">desktop</a> and{" "}
+                  <a href="/docs/web">web</a>!
                 </Faq>
               </li>
               <li>

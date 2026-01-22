@@ -5,6 +5,7 @@ import path from "path"
 import fs from "fs/promises"
 import fsSync from "fs"
 import { afterAll } from "bun:test"
+const { Global } = await import("../src/global")
 
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
@@ -27,7 +28,8 @@ process.env["XDG_STATE_HOME"] = path.join(dir, "state")
 const cacheDir = path.join(dir, "cache", "opencode")
 await fs.mkdir(cacheDir, { recursive: true })
 await fs.writeFile(path.join(cacheDir, "version"), "14")
-const response = await fetch("https://models.dev/api.json")
+const url = Global.Path.modelsDevUrl
+const response = await fetch(`${url}/api.json`)
 if (response.ok) {
   await fs.writeFile(path.join(cacheDir, "models.json"), await response.text())
 }
@@ -42,6 +44,8 @@ delete process.env["GOOGLE_GENERATIVE_AI_API_KEY"]
 delete process.env["AZURE_OPENAI_API_KEY"]
 delete process.env["AWS_ACCESS_KEY_ID"]
 delete process.env["AWS_PROFILE"]
+delete process.env["AWS_REGION"]
+delete process.env["AWS_BEARER_TOKEN_BEDROCK"]
 delete process.env["OPENROUTER_API_KEY"]
 delete process.env["GROQ_API_KEY"]
 delete process.env["MISTRAL_API_KEY"]

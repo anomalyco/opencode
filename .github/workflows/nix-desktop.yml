@@ -1,0 +1,46 @@
+name: nix desktop
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - "packages/app/**"
+      - "packages/desktop/**"
+      - ".github/workflows/nix-desktop.yml"
+  pull_request:
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - "packages/app/**"
+      - "packages/desktop/**"
+      - ".github/workflows/nix-desktop.yml"
+  workflow_dispatch:
+
+jobs:
+  build-desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - blacksmith-4vcpu-ubuntu-2404
+          - blacksmith-4vcpu-ubuntu-2404-arm
+          - macos-15-intel
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Nix
+        uses: nixbuild/nix-quick-install-action@v34
+
+      - name: Build desktop via flake
+        run: |
+          set -euo pipefail
+          nix --version
+          nix build .#desktop -L

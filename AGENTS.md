@@ -1,11 +1,4 @@
-## Debugging
-
-- To test opencode in the `packages/opencode` directory you can run `bun dev`
-
-## SDK
-
-To regenerate the javascript SDK, run ./packages/sdk/js/script/build.ts
-
-## Tool Calling
-
+- To test opencode in `packages/opencode`, run `bun dev`.
+- To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
+- The default branch in this repo is `dev`.

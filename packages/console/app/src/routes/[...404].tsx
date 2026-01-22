@@ -26,7 +26,7 @@ export default function NotFound() {
             <a href="/docs">Docs</a>
           </div>
           <div data-slot="action">
-            <a href="https://github.com/sst/opencode">GitHub</a>
+            <a href="https://github.com/anomalyco/opencode">GitHub</a>
           </div>
           <div data-slot="action">
             <a href="/discord">Discord</a>

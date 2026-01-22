@@ -31,7 +31,7 @@ permissions:
 jobs:
   publish:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'sst/opencode'
+    if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -92,7 +92,7 @@ jobs:
 
   publish-tauri:
     needs: publish
-    continue-on-error: true
+    continue-on-error: false
     strategy:
       fail-fast: false
       matrix:
@@ -177,8 +177,22 @@ jobs:
           cargo tauri --version
 
       - name: Build and upload artifacts
-        timeout-minutes: 20
-        uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
+        uses: Wandalen/wretry.action@v3
+        timeout-minutes: 60
+        with:
+          attempt_limit: 3
+          attempt_delay: 10000
+          action: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
+          with: |
+            projectPath: packages/desktop
+            uploadWorkflowArtifacts: true
+            tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
+            args: --target ${{ matrix.settings.target }} --config ./src-tauri/tauri.prod.conf.json --verbose
+            updaterJsonPreferNsis: true
+            releaseId: ${{ needs.publish.outputs.release }}
+            tagName: ${{ needs.publish.outputs.tag }}
+            releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
+            releaseDraft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
@@ -190,16 +204,6 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ${{ runner.temp }}/apple-api-key.p8
-        with:
-          projectPath: packages/desktop
-          uploadWorkflowArtifacts: true
-          tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
-          args: --target ${{ matrix.settings.target }} --config ./src-tauri/tauri.prod.conf.json --verbose
-          updaterJsonPreferNsis: true
-          releaseId: ${{ needs.publish.outputs.release }}
-          tagName: ${{ needs.publish.outputs.tag }}
-          releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
-          releaseDraft: true
 
   publish-release:
     needs:

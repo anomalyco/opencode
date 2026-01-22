@@ -98,6 +98,9 @@ export namespace LSPClient {
           },
           workspace: {
             configuration: true,
+            didChangeWatchedFiles: {
+              dynamicRegistration: true,
+            },
           },
           textDocument: {
             synchronization: {
@@ -151,6 +154,16 @@ export namespace LSPClient {
 
           const version = files[input.path]
           if (version !== undefined) {
+            log.info("workspace/didChangeWatchedFiles", input)
+            await connection.sendNotification("workspace/didChangeWatchedFiles", {
+              changes: [
+                {
+                  uri: pathToFileURL(input.path).href,
+                  type: 2, // Changed
+                },
+              ],
+            })
+
             const next = version + 1
             files[input.path] = next
             log.info("textDocument/didChange", {
@@ -166,6 +179,16 @@ export namespace LSPClient {
             })
             return
           }
+
+          log.info("workspace/didChangeWatchedFiles", input)
+          await connection.sendNotification("workspace/didChangeWatchedFiles", {
+            changes: [
+              {
+                uri: pathToFileURL(input.path).href,
+                type: 1, // Created
+              },
+            ],
+          })
 
           log.info("textDocument/didOpen", input)
           diagnostics.delete(input.path)

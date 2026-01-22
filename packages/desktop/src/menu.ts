@@ -1,7 +1,10 @@
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu"
 import { type as ostype } from "@tauri-apps/plugin-os"
+import { invoke } from "@tauri-apps/api/core"
+import { relaunch } from "@tauri-apps/plugin-process"
 
 import { runUpdater, UPDATER_ENABLED } from "./updater"
+import { installCli } from "./cli"
 
 export async function createMenu() {
   if (ostype() !== "macos") return
@@ -18,6 +21,21 @@ export async function createMenu() {
             enabled: UPDATER_ENABLED,
             action: () => runUpdater({ alertOnFail: true }),
             text: "Check For Updates...",
+          }),
+          await MenuItem.new({
+            action: () => installCli(),
+            text: "Install CLI...",
+          }),
+          await MenuItem.new({
+            action: async () => window.location.reload(),
+            text: "Reload Webview",
+          }),
+          await MenuItem.new({
+            action: async () => {
+              await invoke("kill_sidecar").catch(() => undefined)
+              await relaunch().catch(() => undefined)
+            },
+            text: "Restart",
           }),
           await PredefinedMenuItem.new({
             item: "Separator",

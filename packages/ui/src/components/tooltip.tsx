@@ -5,12 +5,34 @@ import type { ComponentProps } from "solid-js"
 export interface TooltipProps extends ComponentProps<typeof KobalteTooltip> {
   value: JSX.Element
   class?: string
+  contentClass?: string
+  contentStyle?: JSX.CSSProperties
   inactive?: boolean
+}
+
+export interface TooltipKeybindProps extends Omit<TooltipProps, "value"> {
+  title: string
+  keybind: string
+}
+
+export function TooltipKeybind(props: TooltipKeybindProps) {
+  const [local, others] = splitProps(props, ["title", "keybind"])
+  return (
+    <Tooltip
+      {...others}
+      value={
+        <div data-slot="tooltip-keybind">
+          <span>{local.title}</span>
+          <span data-slot="tooltip-keybind-key">{local.keybind}</span>
+        </div>
+      }
+    />
+  )
 }
 
 export function Tooltip(props: TooltipProps) {
   const [open, setOpen] = createSignal(false)
-  const [local, others] = splitProps(props, ["children", "class", "inactive"])
+  const [local, others] = splitProps(props, ["children", "class", "contentClass", "contentStyle", "inactive"])
 
   const c = children(() => local.children)
 
@@ -38,7 +60,12 @@ export function Tooltip(props: TooltipProps) {
             {c()}
           </KobalteTooltip.Trigger>
           <KobalteTooltip.Portal>
-            <KobalteTooltip.Content data-component="tooltip" data-placement={props.placement}>
+            <KobalteTooltip.Content
+              data-component="tooltip"
+              data-placement={props.placement}
+              class={local.contentClass}
+              style={local.contentStyle}
+            >
               {others.value}
               {/* <KobalteTooltip.Arrow data-slot="tooltip-arrow" /> */}
             </KobalteTooltip.Content>

@@ -140,7 +140,7 @@ The user will primarily request you perform software engineering tasks. This inc
 
 Here is useful information about the environment you are running in:
 <env>
-Working directory: /home/thdxr/dev/projects/sst/opencode/packages/opencode
+Working directory: /home/thdxr/dev/projects/anomalyco/opencode/packages/opencode
 Is directory a git repo: Yes
 Platform: linux
 OS Version: Linux 6.12.4-arch1-1

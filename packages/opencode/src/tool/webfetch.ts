@@ -2,8 +2,6 @@ import z from "zod"
 import { Tool } from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
-import { Config } from "../config/config"
-import { Permission } from "../permission"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -25,20 +23,16 @@ export const WebFetchTool = Tool.define("webfetch", {
       throw new Error("URL must start with http:// or https://")
     }
 
-    const cfg = await Config.get()
-    if (cfg.permission?.webfetch === "ask")
-      await Permission.ask({
-        type: "webfetch",
-        sessionID: ctx.sessionID,
-        messageID: ctx.messageID,
-        callID: ctx.callID,
-        title: "Fetch content from: " + params.url,
-        metadata: {
-          url: params.url,
-          format: params.format,
-          timeout: params.timeout,
-        },
-      })
+    await ctx.ask({
+      permission: "webfetch",
+      patterns: [params.url],
+      always: ["*"],
+      metadata: {
+        url: params.url,
+        format: params.format,
+        timeout: params.timeout,
+      },
+    })
 
     const timeout = Math.min((params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000, MAX_TIMEOUT)
 
@@ -66,7 +60,7 @@ export const WebFetchTool = Tool.define("webfetch", {
       signal: AbortSignal.any([controller.signal, ctx.abort]),
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
         Accept: acceptHeader,
         "Accept-Language": "en-US,en;q=0.9",
       },
