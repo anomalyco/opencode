@@ -1,0 +1,90 @@
+import type { Context } from "hono"
+
+/**
+ * Check if the current request is from localhost.
+ */
+export function isLocalhost(c: Context): boolean {
+  const host = c.req.header("Host") ?? ""
+
+  // Check for localhost variations with or without port
+  if (host === "localhost" || host.startsWith("localhost:")) return true
+  if (host === "127.0.0.1" || host.startsWith("127.0.0.1:")) return true
+  if (host === "::1" || host.startsWith("::1:")) return true
+  if (host === "[::1]" || host.startsWith("[::1]:")) return true
+
+  return false
+}
+
+/**
+ * Check if the current connection is secure (HTTPS).
+ *
+ * When trustProxy is true, checks X-Forwarded-Proto header first.
+ * Falls back to direct connection protocol check.
+ */
+export function isSecureConnection(c: Context, trustProxy: boolean): boolean {
+  // Check X-Forwarded-Proto when behind proxy
+  if (trustProxy) {
+    const forwardedProto = c.req.header("X-Forwarded-Proto")
+    if (forwardedProto === "https") return true
+  }
+
+  // Fall back to checking direct connection protocol
+  try {
+    const url = new URL(c.req.url)
+    return url.protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Determine if insecure login should be blocked based on configuration.
+ *
+ * Returns true if:
+ * - requireHttps is 'block'
+ * - Connection is not localhost
+ * - Connection is not secure
+ */
+export function shouldBlockInsecureLogin(
+  c: Context,
+  config: { requireHttps: "off" | "warn" | "block"; trustProxy?: boolean }
+): boolean {
+  // Never block if requireHttps is off
+  if (config.requireHttps === "off") return false
+
+  // Never block localhost (allow dev over HTTP)
+  if (isLocalhost(c)) return false
+
+  // Never block if connection is secure
+  if (isSecureConnection(c, config.trustProxy ?? false)) return false
+
+  // Block if requireHttps is 'block'
+  return config.requireHttps === "block"
+}
+
+/**
+ * Get comprehensive connection security information for login page.
+ */
+export function getConnectionSecurityInfo(
+  c: Context,
+  config: { requireHttps: "off" | "warn" | "block"; trustProxy?: boolean }
+): {
+  isSecure: boolean
+  isLocalhost: boolean
+  shouldBlock: boolean
+  shouldWarn: boolean
+} {
+  const localhost = isLocalhost(c)
+  const secure = isSecureConnection(c, config.trustProxy ?? false)
+  const shouldBlock = shouldBlockInsecureLogin(c, config)
+
+  // Should warn when: not secure AND not localhost AND requireHttps is 'warn'
+  const shouldWarn = !secure && !localhost && config.requireHttps === "warn"
+
+  return {
+    isSecure: secure,
+    isLocalhost: localhost,
+    shouldBlock,
+    shouldWarn,
+  }
+}
