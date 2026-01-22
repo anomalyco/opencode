@@ -35,7 +35,7 @@ function isValidReturnUrl(url: string): boolean {
 }
 
 /**
- * Simple HTML login page for direct backend access.
+ * Polished HTML login page matching opencode design.
  */
 const loginPageHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -45,58 +45,248 @@ const loginPageHtml = `<!DOCTYPE html>
   <title>Login - opencode</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #e5e5e5; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-    .container { width: 100%; max-width: 360px; padding: 2rem; }
-    h1 { font-size: 1.5rem; margin-bottom: 1.5rem; text-align: center; }
-    form { display: flex; flex-direction: column; gap: 1rem; }
-    label { font-size: 0.875rem; color: #a3a3a3; }
-    input { width: 100%; padding: 0.75rem; border: 1px solid #333; border-radius: 6px; background: #171717; color: #e5e5e5; font-size: 1rem; }
-    input:focus { outline: none; border-color: #0ea5e9; }
-    button { padding: 0.75rem; border: none; border-radius: 6px; background: #0ea5e9; color: white; font-size: 1rem; cursor: pointer; }
-    button:hover { background: #0284c7; }
-    .error { color: #ef4444; font-size: 0.875rem; text-align: center; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0a0a0a;
+      color: #e5e5e5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .logo {
+      width: 80px;
+      height: 100px;
+      margin-bottom: 2rem;
+    }
+    .card {
+      width: 100%;
+      max-width: 360px;
+      padding: 2rem;
+      background: #141414;
+      border: 1px solid #262626;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -2px rgba(0,0,0,0.3);
+    }
+    form { display: flex; flex-direction: column; gap: 1.25rem; }
+    .field { display: flex; flex-direction: column; gap: 0.5rem; }
+    label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #a3a3a3;
+      letter-spacing: 0.01em;
+    }
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      height: 36px;
+      padding: 0 12px;
+      border: 1px solid #333;
+      border-radius: 8px;
+      background: #1a1a1a;
+      color: #e5e5e5;
+      font-size: 14px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus {
+      outline: none;
+      border-color: #525252;
+      box-shadow: 0 0 0 3px rgba(82,82,82,0.3), 0 0 0 1px #525252;
+    }
+    input.invalid {
+      background: rgba(239,68,68,0.1);
+      border-color: #dc2626;
+    }
+    input::placeholder { color: #525252; }
+    .password-toggle {
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      color: #737373;
+      transition: background-color 0.15s, color 0.15s;
+    }
+    .password-toggle:hover { background: #262626; }
+    .password-toggle.active { color: #0ea5e9; }
+    .password-toggle svg { width: 16px; height: 16px; }
+    .password-input { padding-right: 36px; }
+    .checkbox-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: -0.25rem;
+    }
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #0ea5e9;
+      cursor: pointer;
+    }
+    .checkbox-label {
+      font-size: 0.875rem;
+      color: #a3a3a3;
+      cursor: pointer;
+      user-select: none;
+    }
+    .error {
+      color: #fca5a5;
+      font-size: 0.75rem;
+      padding: 0.75rem;
+      background: rgba(239,68,68,0.15);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 8px;
+      display: none;
+    }
+    .error.visible { display: block; }
+    button[type="submit"] {
+      height: 40px;
+      border: none;
+      border-radius: 8px;
+      background: #e5e5e5;
+      color: #0a0a0a;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s;
+      margin-top: 0.5rem;
+    }
+    button[type="submit"]:hover { background: #d4d4d4; }
+    button[type="submit"]:disabled {
+      background: #404040;
+      color: #737373;
+      cursor: not-allowed;
+    }
+    @media (max-width: 480px) {
+      .card { padding: 1.5rem; border-radius: 8px; }
+      .logo { width: 60px; height: 75px; margin-bottom: 1.5rem; }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>opencode</h1>
+  <svg class="logo" viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M60 80H20V40H60V80Z" fill="#525252"/>
+    <path d="M60 20H20V80H60V20ZM80 100H0V0H80V100Z" fill="#e5e5e5"/>
+  </svg>
+
+  <div class="card">
     <form id="loginForm">
-      <div>
-        <label for="username">Username</label>
-        <input type="text" id="username" name="username" required autocomplete="username">
-      </div>
-      <div>
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password" required autocomplete="current-password">
-      </div>
       <div id="error" class="error"></div>
-      <button type="submit">Sign In</button>
+
+      <div class="field">
+        <label for="username">Username</label>
+        <div class="input-wrapper">
+          <input type="text" id="username" name="username" required autocomplete="username" autofocus>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <div class="input-wrapper">
+          <input type="password" id="password" name="password" required autocomplete="current-password" class="password-input">
+          <button type="button" class="password-toggle" id="passwordToggle" aria-label="Show password" aria-pressed="false">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 4.58325C5.83333 4.58325 2.5 9.99992 2.5 9.99992C2.5 9.99992 5.83333 15.4166 10 15.4166C14.1667 15.4166 17.5 9.99992 17.5 9.99992C17.5 9.99992 14.1667 4.58325 10 4.58325Z"/>
+              <circle cx="10" cy="10" r="2.5"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="checkbox-wrapper">
+        <input type="checkbox" id="rememberMe" name="rememberMe">
+        <label for="rememberMe" class="checkbox-label">Remember me</label>
+      </div>
+
+      <button type="submit" id="submitBtn">Sign In</button>
     </form>
   </div>
+
   <script>
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    const form = document.getElementById('loginForm');
+    const errorDiv = document.getElementById('error');
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const passwordToggle = document.getElementById('passwordToggle');
+    const submitBtn = document.getElementById('submitBtn');
+
+    // Password visibility toggle
+    passwordToggle.addEventListener('click', () => {
+      const isPassword = passwordInput.type === 'password';
+      passwordInput.type = isPassword ? 'text' : 'password';
+      passwordToggle.classList.toggle('active', isPassword);
+      passwordToggle.setAttribute('aria-pressed', isPassword);
+      passwordToggle.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+    });
+
+    // Form submission
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const error = document.getElementById('error');
-      error.textContent = '';
+      errorDiv.classList.remove('visible');
+      errorDiv.textContent = '';
+
+      // Validate
+      let valid = true;
+      if (!usernameInput.value.trim()) {
+        usernameInput.classList.add('invalid');
+        valid = false;
+      } else {
+        usernameInput.classList.remove('invalid');
+      }
+      if (!passwordInput.value) {
+        passwordInput.classList.add('invalid');
+        valid = false;
+      } else {
+        passwordInput.classList.remove('invalid');
+      }
+      if (!valid) return;
+
+      // Submit
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing in...';
+
       try {
         const res = await fetch('/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
           body: JSON.stringify({
-            username: document.getElementById('username').value,
-            password: document.getElementById('password').value,
+            username: usernameInput.value,
+            password: passwordInput.value,
           }),
         });
         if (res.ok) {
           window.location.href = '/';
         } else {
           const data = await res.json();
-          error.textContent = data.message || 'Authentication failed';
+          errorDiv.textContent = data.message || 'Authentication failed';
+          errorDiv.classList.add('visible');
         }
       } catch (err) {
-        error.textContent = 'Connection error';
+        errorDiv.textContent = 'Connection error';
+        errorDiv.classList.add('visible');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign In';
       }
     });
+
+    // Clear invalid state on input
+    usernameInput.addEventListener('input', () => usernameInput.classList.remove('invalid'));
+    passwordInput.addEventListener('input', () => passwordInput.classList.remove('invalid'));
   </script>
 </body>
 </html>`
