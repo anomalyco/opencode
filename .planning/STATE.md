@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 Phase: 5 of 11 (User Process Execution)
-Plan: 5 of 10 in current phase
+Plan: 6 of 10 in current phase
 Status: In progress
-Last activity: 2026-01-22 - Completed 05-05-PLAN.md
+Last activity: 2026-01-22 - Completed 05-06-PLAN.md
 
-Progress: [███████░░░] ~76%
+Progress: [████████░░] ~78%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 19
-- Average duration: 6.1 min
-- Total execution time: 115 min
+- Total plans completed: 20
+- Average duration: 5.8 min
+- Total execution time: 116 min
 
 **By Phase:**
 
@@ -31,11 +31,11 @@ Progress: [███████░░░] ~76%
 | 2. Session Infrastructure | 2 | 5 min | 2.5 min |
 | 3. Auth Broker Core | 6 | 33 min | 5.5 min |
 | 4. Authentication Flow | 2 | 8 min | 4 min |
-| 5. User Process Execution | 5 | 57 min | 11.4 min |
+| 5. User Process Execution | 6 | 58 min | 9.7 min |
 
 **Recent Trend:**
-- Last 5 plans: 05-02 (4 min), 05-03 (6 min), 05-04 (4 min), 05-05 (3 min)
-- Trend: Protocol extension plans are fast (3-6 min)
+- Last 5 plans: 05-03 (6 min), 05-04 (4 min), 05-05 (3 min), 05-06 (1 min)
+- Trend: TypeScript client extensions are very fast (1-3 min)
 
 *Updated after each plan completion*
 
@@ -87,6 +87,8 @@ Recent decisions affecting current work:
 | 05-04 | Server holds Arc refs to session stores | Shared across all connections |
 | 05-05 | Unregister is idempotent | Logout can be called multiple times without error |
 | 05-05 | Session-first auth flow | RegisterSession before SpawnPty ensures user info available |
+| 05-06 | Default PTY options: xterm-256color, 80x24 | Sensible defaults matching common terminal emulators |
+| 05-06 | SpawnPty returns structured result | Unlike boolean methods, returns ptyId, pid, error for richer feedback |
 
 ### Pending Todos
 
@@ -106,9 +108,9 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed 05-05-PLAN.md
+Stopped at: Completed 05-06-PLAN.md
 Resume file: None
-Next: 05-06-PLAN.md - Window resize handling
+Next: 05-07-PLAN.md - Signal forwarding
 
 ## Phase 5 Progress
 
@@ -118,7 +120,7 @@ Next: 05-06-PLAN.md - Window resize handling
 - [x] Plan 03: IPC extension for spawn (6 min, 14+4 tests)
 - [x] Plan 04: PTY handler implementation (4 min, 8 tests)
 - [x] Plan 05: Session registration protocol (3 min, 3 tests)
-- [ ] Plan 06: Window resize handling
+- [x] Plan 06: TypeScript BrokerClient extension (1 min)
 - [ ] Plan 07: Signal forwarding
 - [ ] Plan 08: PTY lifecycle events
 - [ ] Plan 09: Client PTY API
