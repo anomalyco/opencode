@@ -1,0 +1,82 @@
+[data-page="login"] {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-base);
+  padding: calc(var(--spacing) * 4);
+}
+
+[data-page="login"] [data-component="logo-splash"] {
+  width: 80px;
+  height: auto;
+  margin-bottom: calc(var(--spacing) * 8);
+}
+
+[data-page="login"] [data-component="card"] {
+  width: 100%;
+  max-width: 360px;
+  padding: calc(var(--spacing) * 8);
+  background: var(--surface-strong);
+  border: 1px solid var(--border-weak-base);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+[data-page="login"] form {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 5);
+}
+
+[data-page="login"] [data-slot="error-message"] {
+  color: var(--text-on-critical-base);
+  font-size: var(--font-size-small);
+  padding: calc(var(--spacing) * 3);
+  background: var(--surface-critical-weak);
+  border: 1px solid var(--border-critical-base);
+  border-radius: var(--radius-md);
+}
+
+[data-page="login"] [data-slot="password-wrapper"] {
+  position: relative;
+}
+
+[data-page="login"] [data-slot="password-wrapper"] [data-component="input"] {
+  width: 100%;
+}
+
+[data-page="login"] [data-slot="password-toggle"] {
+  position: absolute;
+  right: calc(var(--spacing) * 2);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+[data-page="login"] [data-slot="password-toggle"][aria-pressed="true"] {
+  color: var(--text-interactive-base);
+}
+
+[data-page="login"] [data-component="checkbox"] {
+  margin-top: calc(var(--spacing) * -1);
+}
+
+[data-page="login"] [data-component="button"][data-variant="primary"] {
+  width: 100%;
+  margin-top: calc(var(--spacing) * 2);
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  [data-page="login"] [data-component="card"] {
+    max-width: 100%;
+    padding: calc(var(--spacing) * 6);
+    border-radius: var(--radius-md);
+  }
+
+  [data-page="login"] [data-component="logo-splash"] {
+    width: 60px;
+    margin-bottom: calc(var(--spacing) * 6);
+  }
+}
