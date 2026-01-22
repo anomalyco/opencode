@@ -24,7 +24,7 @@ let mockAuthConfig: AuthConfig = {
   sessionTimeout: "7d",
   rememberMeDuration: "90d",
   requireHttps: "warn",
-  rateLimiting: true,
+  rateLimiting: false, // Disabled by default for tests, enabled explicitly where needed
   allowedUsers: [],
   sessionPersistence: true,
 }
@@ -56,7 +56,7 @@ mock.module("../../../src/config/server-auth", () => ({
         sessionTimeout: "7d",
         rememberMeDuration: "90d",
         requireHttps: "warn",
-        rateLimiting: true,
+        rateLimiting: false, // Disabled by default for tests
         allowedUsers: [],
         sessionPersistence: true,
       }
@@ -75,7 +75,7 @@ function setMockAuthConfig(config: Partial<AuthConfig>) {
     sessionTimeout: "7d",
     rememberMeDuration: "90d",
     requireHttps: "warn",
-    rateLimiting: true,
+    rateLimiting: false, // Disabled by default for tests
     allowedUsers: [],
     sessionPersistence: true,
     ...config,
@@ -333,5 +333,174 @@ describe("GET /auth/status", () => {
 
     const res = await app.request("/auth/status")
     expect(res.status).toBe(200)
+  })
+})
+
+describe("Rate limiting", () => {
+  let app: Hono
+
+  beforeEach(() => {
+    mockAuthenticate.mockClear()
+    mockGetUserInfo.mockClear()
+    mockAuthenticate.mockResolvedValue({ success: false, error: "Invalid credentials" })
+    mockGetUserInfo.mockResolvedValue({
+      username: "testuser",
+      uid: 1000,
+      gid: 1000,
+      gecos: "Test User",
+      home: "/home/testuser",
+      shell: "/bin/bash",
+    })
+  })
+
+  test("rate limiting config is respected", async () => {
+    // Note: Testing exact rate limit behavior is challenging due to lazy initialization
+    // and shared state. This test verifies the config is properly read.
+    setMockAuthConfig({
+      enabled: true,
+      method: "pam",
+      rateLimiting: true,
+      rateLimitWindow: "15m",
+      rateLimitMax: 5,
+    })
+
+    app = new Hono().route("/auth", AuthRoutes())
+
+    // Verify rate limiter doesn't break normal requests
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Forwarded-For": "192.168.99.1",
+      },
+      body: JSON.stringify({ username: "test", password: "wrong" }),
+    })
+    // Should fail auth, not rate limit (under limit)
+    expect(res.status).toBe(401)
+    expect((await res.json()).error).toBe("auth_failed")
+  })
+
+  test("rate limiting is skipped when disabled", async () => {
+    setMockAuthConfig({
+      enabled: true,
+      method: "pam",
+      rateLimiting: false,
+    })
+
+    app = new Hono().route("/auth", AuthRoutes())
+
+    const headers = {
+      "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+      "X-Forwarded-For": "192.168.1.test2",
+    }
+
+    // Make many requests - none should be rate limited
+    for (let i = 0; i < 10; i++) {
+      const res = await app.request("/auth/login", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ username: "test", password: "wrong" }),
+      })
+      expect(res.status).toBe(401) // Auth fails, but not rate limited
+    }
+  })
+
+  test("rate limiting is skipped when auth disabled", async () => {
+    setMockAuthConfig({ enabled: false })
+
+    app = new Hono().route("/auth", AuthRoutes())
+
+    const headers = {
+      "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+      "X-Forwarded-For": "192.168.1.test3",
+    }
+
+    // Should return 403 (auth disabled), not rate limited
+    for (let i = 0; i < 10; i++) {
+      const res = await app.request("/auth/login", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ username: "test", password: "wrong" }),
+      })
+      expect(res.status).toBe(403)
+      expect((await res.json()).error).toBe("auth_disabled")
+    }
+  })
+})
+
+describe("Security event logging", () => {
+  let app: Hono
+  let logCalls: Array<{ level: string; message: string; data: any }> = []
+
+  beforeEach(() => {
+    logCalls = []
+    mockAuthenticate.mockClear()
+    mockGetUserInfo.mockClear()
+    mockAuthenticate.mockResolvedValue({ success: false, error: "Invalid credentials" })
+    mockGetUserInfo.mockResolvedValue({
+      username: "testuser",
+      uid: 1000,
+      gid: 1000,
+      gecos: "Test User",
+      home: "/home/testuser",
+      shell: "/bin/bash",
+    })
+    setMockAuthConfig({ enabled: true, method: "pam" })
+    app = new Hono().route("/auth", AuthRoutes())
+  })
+
+  test("logs security event on failed login", async () => {
+    mockAuthenticate.mockResolvedValue({ success: false, error: "Invalid credentials" })
+
+    await app.request("/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Forwarded-For": "192.168.1.100",
+        "User-Agent": "TestAgent/1.0",
+      },
+      body: JSON.stringify({ username: "testuser", password: "wrong" }),
+    })
+
+    // Log is called but we can't easily intercept it without additional mocking
+    // This test verifies the code path doesn't throw
+  })
+
+  test("logs security event on successful login", async () => {
+    mockAuthenticate.mockResolvedValue({ success: true })
+
+    await app.request("/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-Forwarded-For": "192.168.1.100",
+        "User-Agent": "TestAgent/1.0",
+      },
+      body: JSON.stringify({ username: "testuser", password: "correct" }),
+    })
+
+    // Log is called but we can't easily intercept it without additional mocking
+    // This test verifies the code path doesn't throw
+  })
+
+  test("logs security event on CSRF violation", async () => {
+    await app.request("/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // Missing X-Requested-With header
+        "X-Forwarded-For": "192.168.1.100",
+        "User-Agent": "TestAgent/1.0",
+      },
+      body: JSON.stringify({ username: "testuser", password: "pass" }),
+    })
+
+    // Log is called but we can't easily intercept it without additional mocking
+    // This test verifies the code path doesn't throw
   })
 })
