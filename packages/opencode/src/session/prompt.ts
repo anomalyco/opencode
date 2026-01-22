@@ -887,7 +887,11 @@ export namespace SessionPrompt {
             errorOutput,
           )
           if (errorOutput.result) {
-            return errorOutput.result
+            // Return with content array for MCP tool consistency
+            return {
+              ...errorOutput.result,
+              content: [{ type: "text" as const, text: errorOutput.result.output }],
+            }
           }
           throw errorOutput.error
         }
