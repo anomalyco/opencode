@@ -81,11 +81,16 @@ export namespace Plugin {
       // as both a named export and default export (e.g., `export const X` and `export default X`).
       // Object.entries(mod) would return both entries pointing to the same function reference.
       const seen = new Set<PluginInstance>()
-      for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+      for (const [name, fn] of Object.entries<PluginInstance>(mod)) {
+        if (typeof fn !== "function") continue
         if (seen.has(fn)) continue
         seen.add(fn)
-        const init = await fn(input)
-        hooks.push(init)
+        try {
+          const init = await fn(input)
+          hooks.push(init)
+        } catch (error) {
+          log.error("failed to initialize plugin", { path: plugin, name, error })
+        }
       }
     }
 

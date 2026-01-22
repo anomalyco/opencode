@@ -18,13 +18,16 @@ type PluginAuth = NonNullable<Hooks["auth"]>
  * Handle plugin-based authentication flow.
  * Returns true if auth was handled, false if it should fall through to default handling.
  */
-async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string): Promise<boolean> {
+async function handlePluginAuth(plugins: { auth: PluginAuth }[], provider: string): Promise<boolean> {
+  const methods = plugins.flatMap((p) => p.auth.methods)
+  if (methods.length === 0) return false
+
   let index = 0
-  if (plugin.auth.methods.length > 1) {
+  if (methods.length > 1) {
     const method = await prompts.select({
       message: "Login method",
       options: [
-        ...plugin.auth.methods.map((x, index) => ({
+        ...methods.map((x, index) => ({
           label: x.label,
           value: index.toString(),
         })),
@@ -33,7 +36,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
     if (prompts.isCancel(method)) throw new UI.CancelledError()
     index = parseInt(method)
   }
-  const method = plugin.auth.methods[index]
+  const method = methods[index]
 
   // Handle prompts for all auth types
   await Bun.sleep(10)
@@ -307,9 +310,11 @@ export const AuthLoginCommand = cmd({
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-        const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-        if (plugin && plugin.auth) {
-          const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
+        const plugins = await Plugin.list().then((x) =>
+          x.filter((x): x is typeof x & { auth: PluginAuth } => x.auth?.provider === provider),
+        )
+        if (plugins.length > 0) {
+          const handled = await handlePluginAuth(plugins, provider)
           if (handled) return
         }
 
@@ -323,9 +328,11 @@ export const AuthLoginCommand = cmd({
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
           // Check if a plugin provides auth for this custom provider
-          const customPlugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-          if (customPlugin && customPlugin.auth) {
-            const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
+          const customPlugins = await Plugin.list().then((x) =>
+            x.filter((x): x is typeof x & { auth: PluginAuth } => x.auth?.provider === provider),
+          )
+          if (customPlugins.length > 0) {
+            const handled = await handlePluginAuth(customPlugins, provider)
             if (handled) return
           }
 
