@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Session Infrastructure** - Core session middleware, cookies, and expiration
 - [x] **Phase 3: Auth Broker Core** - Privileged helper for PAM authentication and IPC
 - [x] **Phase 4: Authentication Flow** - Login endpoint with PAM validation and session-user mapping
-- [ ] **Phase 5: User Process Execution** - Commands execute under authenticated user's UID
+- [x] **Phase 5: User Process Execution** - Commands execute under authenticated user's UID
 - [ ] **Phase 6: Login UI** - Web login form with opencode styling
 - [ ] **Phase 7: Security Hardening** - CSRF, rate limiting, HTTPS detection
 - [ ] **Phase 8: Session Enhancements** - Remember me and session activity indicator
@@ -104,16 +104,16 @@ Plans:
 **Plans**: 10 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — PTY allocation module (openpty, chown, session state)
-- [ ] 05-02-PLAN.md — User process spawning (impersonation, login environment)
-- [ ] 05-03-PLAN.md — IPC protocol extension (SpawnPty, KillPty, ResizePty methods)
-- [ ] 05-04-PLAN.md — PTY handler implementation (wire handlers to modules)
-- [ ] 05-05-PLAN.md — Session registration protocol (RegisterSession, UnregisterSession)
-- [ ] 05-06-PLAN.md — TypeScript BrokerClient extension (spawn/kill/resize/register)
-- [ ] 05-07-PLAN.md — Web server integration (login registers, PTY routes use broker)
-- [ ] 05-08-PLAN.md — Broker PTY I/O (PtyWrite, PtyRead, broker-pty.ts)
-- [ ] 05-09-PLAN.md — Auth enforcement on PTY routes (require session, pass sessionId)
-- [ ] 05-10-PLAN.md — Integration tests and verification (end-to-end testing)
+- [x] 05-01-PLAN.md — PTY allocation module (openpty, chown, session state)
+- [x] 05-02-PLAN.md — User process spawning (impersonation, login environment)
+- [x] 05-03-PLAN.md — IPC protocol extension (SpawnPty, KillPty, ResizePty methods)
+- [x] 05-04-PLAN.md — PTY handler implementation (wire handlers to modules)
+- [x] 05-05-PLAN.md — Session registration protocol (RegisterSession, UnregisterSession)
+- [x] 05-06-PLAN.md — TypeScript BrokerClient extension (spawn/kill/resize/register)
+- [x] 05-07-PLAN.md — Web server integration (login registers, PTY routes use broker)
+- [x] 05-08-PLAN.md — Broker PTY I/O (PtyWrite, PtyRead, broker-pty.ts)
+- [x] 05-09-PLAN.md — Auth enforcement on PTY routes (require session, pass sessionId)
+- [x] 05-10-PLAN.md — Integration tests and verification (end-to-end testing)
 
 ### Phase 6: Login UI
 **Goal**: Users have a polished login form matching opencode design
@@ -208,7 +208,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 2. Session Infrastructure | 2/2 | Complete | 2026-01-20 |
 | 3. Auth Broker Core | 6/6 | Complete | 2026-01-20 |
 | 4. Authentication Flow | 2/2 | Complete | 2026-01-20 |
-| 5. User Process Execution | 0/10 | Planned | - |
+| 5. User Process Execution | 10/10 | Complete | 2026-01-22 |
 | 6. Login UI | 0/TBD | Not started | - |
 | 7. Security Hardening | 0/TBD | Not started | - |
 | 8. Session Enhancements | 0/TBD | Not started | - |

@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Secure remote access to your opencode instance from anywhere — authenticate once with your system credentials, work on your projects from any device.
-**Current focus:** Phase 5 (User Process Execution) - In Progress
+**Current focus:** Phase 6 (Login UI) - Not started
 
 ## Current Position
 
-Phase: 5 of 11 (User Process Execution)
-Plan: 9 of 10 in current phase
-Status: In progress
-Last activity: 2026-01-22 - Completed 05-09-PLAN.md
+Phase: 6 of 11 (Login UI)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-01-22 - Completed Phase 5
 
-Progress: [█████████░] ~90%
+Progress: [█████░░░░░] ~45%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 23
-- Average duration: 5.5 min
-- Total execution time: 126 min
+- Total plans completed: 24
+- Average duration: 5.9 min
+- Total execution time: 141 min
 
 **By Phase:**
 
@@ -31,11 +31,11 @@ Progress: [█████████░] ~90%
 | 2. Session Infrastructure | 2 | 5 min | 2.5 min |
 | 3. Auth Broker Core | 6 | 33 min | 5.5 min |
 | 4. Authentication Flow | 2 | 8 min | 4 min |
-| 5. User Process Execution | 9 | 68 min | 7.6 min |
+| 5. User Process Execution | 10 | 83 min | 8.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 05-06 (1 min), 05-07 (2 min), 05-08 (4 min), 05-09 (4 min)
-- Trend: Consistent execution pace
+- Last 5 plans: 05-07 (2 min), 05-08 (4 min), 05-09 (4 min), 05-10 (15 min)
+- Trend: Integration testing requires more time for manual verification
 
 *Updated after each plan completion*
 
@@ -118,13 +118,13 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed 05-09-PLAN.md
+Stopped at: Completed Phase 5
 Resume file: None
-Next: 05-10-PLAN.md - Integration test harness
+Next: Phase 6 - Login UI
 
 ## Phase 5 Progress
 
-**User Process Execution - In Progress:**
+**User Process Execution - Complete:**
 - [x] Plan 01: PTY allocation module (40 min, 7 tests)
 - [x] Plan 02: Process spawner (4 min, 8 tests)
 - [x] Plan 03: IPC extension for spawn (6 min, 14+4 tests)
@@ -134,4 +134,4 @@ Next: 05-10-PLAN.md - Integration test harness
 - [x] Plan 07: Web server integration (2 min)
 - [x] Plan 08: Broker PTY I/O (4 min, 7 new tests)
 - [x] Plan 09: Auth enforcement on PTY routes (4 min, 11 tests)
-- [ ] Plan 10: Integration test harness
+- [x] Plan 10: Integration test harness (15 min, 9 tests)
