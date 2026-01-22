@@ -349,8 +349,12 @@ export namespace ProviderTransform {
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
       case "@ai-sdk/github-copilot":
+        const copilotEfforts = iife(() => {
+          if (id.includes("5.1-codex-max") || id.includes("5.2")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+          return WIDELY_SUPPORTED_EFFORTS
+        })
         return Object.fromEntries(
-          WIDELY_SUPPORTED_EFFORTS.map((effort) => [
+          copilotEfforts.map((effort) => [
             effort,
             {
               reasoningEffort: effort,
