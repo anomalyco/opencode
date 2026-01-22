@@ -1,7 +1,8 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { Log } from "../util/log"
-import { OAUTH_DUMMY_KEY } from "../auth"
-import { ProviderTransform } from "../provider/transform"
+import { Installation } from "../installation"
+import { Auth, OAUTH_DUMMY_KEY } from "../auth"
+import os from "os"
 
 const log = Log.create({ service: "plugin.codex" })
 
@@ -488,6 +489,12 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
           type: "api",
         },
       ],
+    },
+    "chat.headers": async (input, output) => {
+      if (input.model.providerID !== "openai") return
+      output.headers.originator = "opencode"
+      output.headers["User-Agent"] = `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`
+      output.headers.session_id = input.sessionID
     },
   }
 }
