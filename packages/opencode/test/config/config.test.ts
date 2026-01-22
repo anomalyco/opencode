@@ -1611,3 +1611,195 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
     }
   })
 })
+
+describe("OPENCODE_NO_PARENT_CONFIG", () => {
+  test("loads config from current directory", async () => {
+    const originalEnv = process.env["OPENCODE_NO_PARENT_CONFIG"]
+    process.env["OPENCODE_NO_PARENT_CONFIG"] = "true"
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "current/model",
+            }),
+          )
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          // Config from current directory should still be loaded
+          expect(config.model).toBe("current/model")
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_NO_PARENT_CONFIG"]
+      } else {
+        process.env["OPENCODE_NO_PARENT_CONFIG"] = originalEnv
+      }
+    }
+  })
+
+  test("ignores config from parent directories when flag is set", async () => {
+    const originalEnv = process.env["OPENCODE_NO_PARENT_CONFIG"]
+    process.env["OPENCODE_NO_PARENT_CONFIG"] = "true"
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          // Create parent config
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "parent/model",
+              username: "parent-user",
+            }),
+          )
+          // Create child directory with its own config
+          const childDir = path.join(dir, "child")
+          await fs.mkdir(childDir, { recursive: true })
+          await Bun.write(
+            path.join(childDir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "child/model",
+            }),
+          )
+        },
+      })
+
+      const childDir = path.join(tmp.path, "child")
+      await Instance.provide({
+        directory: childDir,
+        fn: async () => {
+          const config = await Config.get()
+          // Should load child config but NOT parent config
+          expect(config.model).toBe("child/model")
+          // username should NOT be from parent
+          expect(config.username).not.toBe("parent-user")
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_NO_PARENT_CONFIG"]
+      } else {
+        process.env["OPENCODE_NO_PARENT_CONFIG"] = originalEnv
+      }
+    }
+  })
+
+  test("ignores .opencode/ from parent directories when flag is set", async () => {
+    const originalEnv = process.env["OPENCODE_NO_PARENT_CONFIG"]
+    process.env["OPENCODE_NO_PARENT_CONFIG"] = "true"
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          // Create parent .opencode directory with a command
+          const parentOpencode = path.join(dir, ".opencode", "command")
+          await fs.mkdir(parentOpencode, { recursive: true })
+          await Bun.write(path.join(parentOpencode, "parent-cmd.md"), "# Parent Command")
+
+          // Create child directory
+          const childDir = path.join(dir, "child")
+          await fs.mkdir(childDir, { recursive: true })
+        },
+      })
+
+      const childDir = path.join(tmp.path, "child")
+      await Instance.provide({
+        directory: childDir,
+        fn: async () => {
+          const directories = await Config.directories()
+          // Parent .opencode should NOT be in directories list
+          const hasParentOpencode = directories.some((d) => d === path.join(tmp.path, ".opencode"))
+          expect(hasParentOpencode).toBe(false)
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_NO_PARENT_CONFIG"]
+      } else {
+        process.env["OPENCODE_NO_PARENT_CONFIG"] = originalEnv
+      }
+    }
+  })
+
+  test("still loads global config when flag is set", async () => {
+    const originalEnv = process.env["OPENCODE_NO_PARENT_CONFIG"]
+    process.env["OPENCODE_NO_PARENT_CONFIG"] = "true"
+
+    try {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          // Should still get config (global + defaults)
+          const config = await Config.get()
+          expect(config).toBeDefined()
+          expect(config.username).toBeDefined()
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_NO_PARENT_CONFIG"]
+      } else {
+        process.env["OPENCODE_NO_PARENT_CONFIG"] = originalEnv
+      }
+    }
+  })
+
+  test("without flag, parent config is merged", async () => {
+    const originalEnv = process.env["OPENCODE_NO_PARENT_CONFIG"]
+    delete process.env["OPENCODE_NO_PARENT_CONFIG"]
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          // Create parent config
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              username: "parent-user",
+            }),
+          )
+          // Create child directory with its own config
+          const childDir = path.join(dir, "child")
+          await fs.mkdir(childDir, { recursive: true })
+          await Bun.write(
+            path.join(childDir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "child/model",
+            }),
+          )
+        },
+      })
+
+      const childDir = path.join(tmp.path, "child")
+      await Instance.provide({
+        directory: childDir,
+        fn: async () => {
+          const config = await Config.get()
+          // Should merge both configs
+          expect(config.model).toBe("child/model")
+          expect(config.username).toBe("parent-user")
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_NO_PARENT_CONFIG"]
+      } else {
+        process.env["OPENCODE_NO_PARENT_CONFIG"] = originalEnv
+      }
+    }
+  })
+})

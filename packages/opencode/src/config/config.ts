@@ -81,8 +81,9 @@ export namespace Config {
 
     // Project config has highest precedence (overrides global and remote)
     if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      const stop = Flag.OPENCODE_NO_PARENT_CONFIG ? Instance.directory : Instance.worktree
       for (const file of ["opencode.jsonc", "opencode.json"]) {
-        const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+        const found = await Filesystem.findUp(file, Instance.directory, stop)
         for (const resolved of found.toReversed()) {
           result = mergeConfigConcatArrays(result, await loadFile(resolved))
         }
@@ -107,7 +108,7 @@ export namespace Config {
             Filesystem.up({
               targets: [".opencode"],
               start: Instance.directory,
-              stop: Instance.worktree,
+              stop: Flag.OPENCODE_NO_PARENT_CONFIG ? Instance.directory : Instance.worktree,
             }),
           )
         : []),
