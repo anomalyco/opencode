@@ -1933,9 +1933,6 @@ export default function Layout(props: ParentProps) {
                           openEditor(`workspace:${props.directory}`, workspaceValue())
                         }}
                       >
-                        <DropdownMenu.Item onSelect={() => navigate(`/${slug()}/session`)}>
-                          <DropdownMenu.ItemLabel>{language.t("command.session.new")}</DropdownMenu.ItemLabel>
-                        </DropdownMenu.Item>
                         <DropdownMenu.Item
                           disabled={local()}
                           onSelect={() => {
@@ -1960,19 +1957,6 @@ export default function Layout(props: ParentProps) {
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
                   </DropdownMenu>
-                  <TooltipKeybind
-                    placement="right"
-                    title={language.t("command.session.new")}
-                    keybind={command.keybind("session.new")}
-                  >
-                    <IconButton
-                      icon="plus-small"
-                      variant="ghost"
-                      class="size-6 rounded-md"
-                      onClick={() => navigate(`/${slug()}/session`)}
-                      aria-label={language.t("command.session.new")}
-                    />
-                  </TooltipKeybind>
                 </div>
               </div>
             </div>
