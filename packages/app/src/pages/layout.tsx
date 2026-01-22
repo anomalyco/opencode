@@ -983,6 +983,9 @@ export default function Layout(props: ParentProps) {
       directory = directory.slice(1)
     }
     directory = directory.replace(/\/$/, "")
+    if (platform.os === "windows") {
+      directory = directory.replace(/\//g, "\\")
+    }
     if (!directory) return
     return directory
   }
