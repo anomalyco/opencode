@@ -1568,6 +1568,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         class="h-5 w-5"
                         onClick={(e) => {
                           e.stopPropagation()
+                          if (item.commentID) comments.remove(item.path, item.commentID)
                           prompt.context.remove(item.key)
                         }}
                         aria-label={language.t("prompt.context.removeFile")}
