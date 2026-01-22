@@ -289,6 +289,7 @@ export const dict = {
   "language.ru": "러시아어",
   "language.pl": "폴란드어",
   "language.ar": "아랍어",
+  "language.no": "노르웨이어",
 
   "toast.language.title": "언어",
   "toast.language.description": "{{language}}(으)로 전환됨",

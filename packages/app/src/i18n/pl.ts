@@ -303,6 +303,7 @@ export const dict = {
   "language.pl": "Polski",
   "language.ru": "Rosyjski",
   "language.ar": "Arabski",
+  "language.no": "Norweski",
 
   "toast.language.title": "Język",
   "toast.language.description": "Przełączono na {{language}}",
