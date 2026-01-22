@@ -1,0 +1,169 @@
+name: Daily PR Recap
+
+on:
+  schedule:
+    # Run at 5pm EST (22:00 UTC, or 21:00 UTC during daylight saving)
+    - cron: "0 22 * * *"
+  workflow_dispatch: # Allow manual trigger for testing
+
+jobs:
+  pr-recap:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Install opencode
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Generate daily PR recap
+        id: recap
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENCODE_PERMISSION: |
+            {
+              "bash": {
+                "*": "deny",
+                "gh pr*": "allow",
+                "gh search*": "allow"
+              },
+              "webfetch": "deny",
+              "edit": "deny",
+              "write": "deny"
+            }
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+
+          opencode run -m opencode/claude-sonnet-4-5 "Generate a daily PR activity recap for the OpenCode repository.
+
+          TODAY'S DATE: ${TODAY}
+
+          STEP 1: Gather PR data
+          Run these commands to gather PR information. ONLY include PRs created or updated TODAY (${TODAY}):
+
+          # PRs created today
+          gh pr list --repo ${{ github.repository }} --state all --search \"created:${TODAY}\" --json number,title,author,labels,createdAt,updatedAt,reviewDecision,isDraft,additions,deletions --limit 100
+
+          # PRs with activity today (updated today)
+          gh pr list --repo ${{ github.repository }} --state open --search \"updated:${TODAY}\" --json number,title,author,labels,createdAt,updatedAt,reviewDecision,isDraft,additions,deletions --limit 100
+
+
+
+          STEP 2: For high-activity PRs, check comment counts
+          For promising PRs, run:
+          gh pr view [NUMBER] --repo ${{ github.repository }} --json comments --jq '[.comments[] | select(.author.login != \"copilot-pull-request-reviewer\" and .author.login != \"github-actions\")] | length'
+
+          IMPORTANT: When counting comments/activity, EXCLUDE these bot accounts:
+          - copilot-pull-request-reviewer
+          - github-actions
+
+          STEP 3: Identify what matters (ONLY from today's PRs)
+
+          **Bug Fixes From Today:**
+          - PRs with 'fix' or 'bug' in title created/updated today
+          - Small bug fixes (< 100 lines changed) that are easy to review
+          - Bug fixes from community contributors
+
+          **High Activity Today:**
+          - PRs with significant human comments today (excluding bots listed above)
+          - PRs with back-and-forth discussion today
+
+          **Quick Wins:**
+          - Small PRs (< 50 lines) that are approved or nearly approved
+          - PRs that just need a final review
+
+          STEP 4: Generate the recap
+          Create a structured recap:
+
+          ===DISCORD_START===
+          **Daily PR Recap - ${TODAY}**
+
+          **New PRs Today**
+          [PRs opened today - group by type: bug fixes, features, etc.]
+
+          **Active PRs Today**
+          [PRs with activity/updates today - significant discussion]
+
+          **Quick Wins**
+          [Small PRs ready to merge]
+          ===DISCORD_END===
+
+          STEP 5: Format for Discord
+          - Use Discord markdown (**, __, etc.)
+          - BE EXTREMELY CONCISE - surface what we might miss
+          - Use hyperlinked PR numbers with suppressed embeds: [#1234](<https://github.com/${{ github.repository }}/pull/1234>)
+          - Include PR author: [#1234](<url>) (@author)
+          - For bug fixes, add brief description of what it fixes
+          - Show line count for quick wins: \"(+15/-3 lines)\"
+          - HARD LIMIT: Keep under 1800 characters total
+          - Skip empty sections
+          - Focus on PRs that need human eyes
+
+          OUTPUT: Output ONLY the content between ===DISCORD_START=== and ===DISCORD_END=== markers. Include the markers so I can extract it." > /tmp/pr_recap_raw.txt
+
+          # Extract only the Discord message between markers
+          sed -n '/===DISCORD_START===/,/===DISCORD_END===/p' /tmp/pr_recap_raw.txt | grep -v '===DISCORD' > /tmp/pr_recap.txt
+
+          echo "recap_file=/tmp/pr_recap.txt" >> $GITHUB_OUTPUT
+
+      - name: Post to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ISSUES_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "Warning: DISCORD_ISSUES_WEBHOOK_URL secret not set, skipping Discord post"
+            cat /tmp/pr_recap.txt
+            exit 0
+          fi
+
+          # Read the recap
+          RECAP_RAW=$(cat /tmp/pr_recap.txt)
+          RECAP_LENGTH=${#RECAP_RAW}
+
+          echo "Recap length: ${RECAP_LENGTH} chars"
+
+          # Function to post a message to Discord
+          post_to_discord() {
+            local msg="$1"
+            local content=$(echo "$msg" | jq -Rs '.')
+            curl -s -H "Content-Type: application/json" \
+                 -X POST \
+                 -d "{\"content\": ${content}}" \
+                 "$DISCORD_WEBHOOK_URL"
+            sleep 1
+          }
+
+          # If under limit, send as single message
+          if [ "$RECAP_LENGTH" -le 1950 ]; then
+            post_to_discord "$RECAP_RAW"
+          else
+            echo "Splitting into multiple messages..."
+            remaining="$RECAP_RAW"
+            while [ ${#remaining} -gt 0 ]; do
+              if [ ${#remaining} -le 1950 ]; then
+                post_to_discord "$remaining"
+                break
+              else
+                chunk="${remaining:0:1900}"
+                last_newline=$(echo "$chunk" | grep -bo $'\n' | tail -1 | cut -d: -f1)
+                if [ -n "$last_newline" ] && [ "$last_newline" -gt 500 ]; then
+                  chunk="${remaining:0:$last_newline}"
+                  remaining="${remaining:$((last_newline+1))}"
+                else
+                  chunk="${remaining:0:1900}"
+                  remaining="${remaining:1900}"
+                fi
+                post_to_discord "$chunk"
+              fi
+            done
+          fi
+
+          echo "Posted daily PR recap to Discord"

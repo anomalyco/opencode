@@ -381,6 +381,22 @@ export default function Page() {
   let promptDock: HTMLDivElement | undefined
   let scroller: HTMLDivElement | undefined
 
+  const [scrollGesture, setScrollGesture] = createSignal(0)
+  const scrollGestureWindowMs = 250
+
+  const markScrollGesture = (target?: EventTarget | null) => {
+    const root = scroller
+    if (!root) return
+
+    const el = target instanceof Element ? target : undefined
+    const nested = el?.closest("[data-scrollable]")
+    if (nested && nested !== root) return
+
+    setScrollGesture(Date.now())
+  }
+
+  const hasScrollGesture = () => Date.now() - scrollGesture() < scrollGestureWindowMs
+
   createEffect(() => {
     if (!params.id) return
     sync.session.sync(params.id)
@@ -509,7 +525,10 @@ export default function Page() {
       description: language.t("command.terminal.new.description"),
       category: language.t("command.category.terminal"),
       keybind: "ctrl+alt+t",
-      onSelect: () => terminal.new(),
+      onSelect: () => {
+        if (terminal.all().length > 0) terminal.new()
+        view().terminal.open()
+      },
     },
     {
       id: "steps.toggle",
@@ -779,7 +798,7 @@ export default function Page() {
     const activeElement = document.activeElement as HTMLElement | undefined
     if (activeElement) {
       const isProtected = activeElement.closest("[data-prevent-autofocus]")
-      const isInput = /^(INPUT|TEXTAREA|SELECT)$/.test(activeElement.tagName) || activeElement.isContentEditable
+      const isInput = /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(activeElement.tagName) || activeElement.isContentEditable
       if (isProtected || isInput) return
     }
     if (dialog.active) return
@@ -791,6 +810,12 @@ export default function Page() {
 
     // Don't autofocus chat if terminal panel is open
     if (view().terminal.opened()) return
+
+    // Only treat explicit scroll keys as potential "user scroll" gestures.
+    if (event.key === "PageUp" || event.key === "PageDown" || event.key === "Home" || event.key === "End") {
+      markScrollGesture()
+      return
+    }
 
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
       inputRef?.focus()
@@ -899,12 +924,15 @@ export default function Page() {
     sync.session.diff(id)
   })
 
-  const isWorking = createMemo(() => status().type !== "idle")
-
   const autoScroll = createAutoScroll({
     working: () => true,
     overflowAnchor: "dynamic",
   })
+
+  const resumeScroll = () => {
+    setStore("messageId", undefined)
+    autoScroll.forceScrollToBottom()
+  }
 
   // When the user returns to the bottom, treat the active message as "latest".
   createEffect(
@@ -913,18 +941,6 @@ export default function Page() {
       (scrolled) => {
         if (scrolled) return
         setStore("messageId", undefined)
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
-      isWorking,
-      (working, prev) => {
-        if (!working || prev) return
-        if (autoScroll.userScrolled()) return
-        autoScroll.forceScrollToBottom()
       },
       { defer: true },
     ),
@@ -1357,30 +1373,39 @@ export default function Page() {
                     }
                   >
                     <div class="relative w-full h-full min-w-0">
-                      <Show when={autoScroll.userScrolled()}>
-                        <div class="absolute right-4 md:right-6 bottom-[calc(var(--prompt-height,8rem)+16px)] z-[60] pointer-events-none">
-                          <Button
-                            variant="secondary"
-                            size="small"
-                            icon="chevron-down"
-                            class="pointer-events-auto shadow-sm"
-                            onClick={() => {
-                              setStore("messageId", undefined)
-                              autoScroll.forceScrollToBottom()
-                              window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
-                            }}
-                          >
-                            {language.t("session.messages.jumpToLatest")}
-                          </Button>
-                        </div>
-                      </Show>
+                      <div
+                        class="absolute left-1/2 -translate-x-1/2 bottom-[calc(var(--prompt-height,8rem)+32px)] z-[60] pointer-events-none transition-all duration-200 ease-out"
+                        classList={{
+                          "opacity-100 translate-y-0 scale-100": autoScroll.userScrolled(),
+                          "opacity-0 translate-y-2 scale-95 pointer-events-none": !autoScroll.userScrolled(),
+                        }}
+                      >
+                        <button
+                          class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
+                          onClick={() => {
+                            setStore("messageId", undefined)
+                            autoScroll.forceScrollToBottom()
+                            window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
+                          }}
+                        >
+                          <Icon name="arrow-down-to-line" />
+                        </button>
+                      </div>
                       <div
                         ref={setScrollRef}
+                        onWheel={(e) => markScrollGesture(e.target)}
+                        onTouchMove={(e) => markScrollGesture(e.target)}
+                        onPointerDown={(e) => {
+                          if (e.target !== e.currentTarget) return
+                          markScrollGesture(e.target)
+                        }}
                         onScroll={(e) => {
+                          if (!hasScrollGesture()) return
+                          markScrollGesture(e.target)
                           autoScroll.handleScroll()
                           if (isDesktop() && autoScroll.userScrolled()) scheduleScrollSpy(e.currentTarget)
                         }}
-                        class="relative min-w-0 w-full h-full overflow-y-auto no-scrollbar"
+                        class="relative min-w-0 w-full h-full overflow-y-auto session-scroller"
                         style={{ "--session-title-height": info()?.title ? "40px" : "0px" }}
                       >
                         <Show when={info()?.title}>
@@ -1400,6 +1425,7 @@ export default function Page() {
 
                         <div
                           ref={autoScroll.contentRef}
+                          role="log"
                           class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
                             "w-full": true,
@@ -1530,6 +1556,7 @@ export default function Page() {
                   }}
                   newSessionWorktree={newSessionWorktree()}
                   onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+                  onSubmit={resumeScroll}
                 />
               </Show>
             </div>
@@ -1548,7 +1575,11 @@ export default function Page() {
 
         {/* Desktop tabs panel (Review + Context + Files) - hidden on mobile */}
         <Show when={isDesktop() && showTabs()}>
-          <div class="relative flex-1 min-w-0 h-full border-l border-border-weak-base">
+          <aside
+            id="review-panel"
+            aria-label={language.t("session.panel.reviewAndFiles")}
+            class="relative flex-1 min-w-0 h-full border-l border-border-weak-base"
+          >
             <DragDropProvider
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
@@ -1582,7 +1613,12 @@ export default function Page() {
                         value="context"
                         closeButton={
                           <Tooltip value={language.t("common.closeTab")} placement="bottom">
-                            <IconButton icon="close" variant="ghost" onClick={() => tabs().close("context")} />
+                            <IconButton
+                              icon="close"
+                              variant="ghost"
+                              onClick={() => tabs().close("context")}
+                              aria-label={language.t("common.closeTab")}
+                            />
                           </Tooltip>
                         }
                         hideCloseButton
@@ -1608,6 +1644,7 @@ export default function Page() {
                           variant="ghost"
                           iconSize="large"
                           onClick={() => dialog.show(() => <DialogSelectFile />)}
+                          aria-label={language.t("command.file.open")}
                         />
                       </TooltipKeybind>
                     </div>
@@ -1909,12 +1946,15 @@ export default function Page() {
                 </Show>
               </DragOverlay>
             </DragDropProvider>
-          </div>
+          </aside>
         </Show>
       </div>
 
       <Show when={isDesktop() && view().terminal.opened()}>
         <div
+          id="terminal-panel"
+          role="region"
+          aria-label={language.t("terminal.title")}
           class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
           style={{ height: `${layout.terminal.height()}px` }}
         >
@@ -1986,7 +2026,13 @@ export default function Page() {
                         keybind={command.keybind("terminal.new")}
                         class="flex items-center"
                       >
-                        <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
+                        <IconButton
+                          icon="plus-small"
+                          variant="ghost"
+                          iconSize="large"
+                          onClick={terminal.new}
+                          aria-label={language.t("command.terminal.new")}
+                        />
                       </TooltipKeybind>
                     </div>
                   </Tabs.List>
