@@ -681,6 +681,10 @@ export namespace Provider {
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
+    const enabledModels = config.enabled_models
+    const allowedModels = enabledModels
+      ? new Map(Object.entries(enabledModels).map(([providerID, models]) => [providerID, new Set(models)]))
+      : null
 
     function isProviderAllowed(providerID: string): boolean {
       if (enabled && !enabled.has(providerID)) return false
@@ -912,6 +916,7 @@ export namespace Provider {
       }
 
       const configProvider = config.provider?.[providerID]
+      const allowed = allowedModels?.get(providerID)
 
       for (const [modelID, model] of Object.entries(provider.models)) {
         model.api.id = model.api.id ?? model.id ?? modelID
@@ -919,6 +924,7 @@ export namespace Provider {
           delete provider.models[modelID]
         if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
         if (model.status === "deprecated") delete provider.models[modelID]
+        if (allowed && !allowed.has(modelID) && !allowed.has(model.api.id)) delete provider.models[modelID]
         if (
           (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
           (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
