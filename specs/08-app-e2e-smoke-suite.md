@@ -24,7 +24,7 @@ Add 6 smoke tests to `packages/app/e2e/`:
 - [x] 1. Settings dialog open / switch / close (`packages/app/e2e/settings.spec.ts`)
 - [x] 2. Prompt slash command path: `/open` opens file picker (`packages/app/e2e/prompt-slash-open.spec.ts`)
 - [x] 3. Prompt @mention inserts a file pill token (`packages/app/e2e/prompt-mention.spec.ts`)
-- [ ] 4. Model selection UI works end-to-end
+- [x] 4. Model selection UI works end-to-end (`packages/app/e2e/model-picker.spec.ts`)
 - [ ] 5. File viewer renders real file content
 - [ ] 8. Terminal init + create new terminal
 
@@ -162,10 +162,11 @@ Steps:
 
 1. `await gotoSession()`.
 2. Focus prompt, type `/model`, press `Enter`.
-3. In the model dialog, use the search field to filter to a deterministic model, e.g. `qwen3-coder`.
-4. Select the first matching model.
-5. Assert dialog closed.
-6. Assert the prompt footer now shows the chosen model name.
+3. In the model dialog, pick a visible model that is not the current selection (if available).
+4. Use the search field to filter to that model (use its id from the list item's `data-key` to avoid time-based model visibility drift).
+5. Select the filtered model.
+6. Assert dialog closed.
+7. Assert the prompt footer now shows the chosen model name.
 
 Acceptance criteria:
 
@@ -217,7 +218,7 @@ These tests run with `fullyParallel: true` in `packages/app/playwright.config.ts
 - Avoid ordering-based assertions: never assume a “first” session/project/file is stable unless you filtered by unique text.
 - Prefer deterministic targets:
   - use `packages/app/package.json` rather than bare `package.json` (multiple hits possible)
-  - filter model search to a specific id/name (e.g. `qwen3-coder`)
+  - for models, avoid hardcoding a single model id; pick from the visible list and filter by its `data-key` instead
 - Prefer robust selectors:
   - role selectors: `getByRole('dialog')`, `getByRole('textbox')`, `getByRole('tab')`
   - stable data attributes already present: `promptSelector`, `[data-component="terminal"]`
