@@ -191,7 +191,7 @@ test("model blacklist excludes specific models", async () => {
   })
 })
 
-test("enabled_models allowlist filters models for provider", async () => {
+test("enabled_models restricts to only listed models", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -229,6 +229,63 @@ test("enabled_models empty list removes provider models", async () => {
           $schema: "https://opencode.ai/config.json",
           enabled_models: {
             openai: [],
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENAI_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["openai"]).toBeUndefined()
+    },
+  })
+})
+
+test("disabled_models excludes specific models", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          disabled_models: {
+            anthropic: ["claude-sonnet-4-20250514"],
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["anthropic"]).toBeDefined()
+      const models = Object.keys(providers["anthropic"].models)
+      expect(models).not.toContain("claude-sonnet-4-20250514")
+    },
+  })
+})
+
+test("disabled_models overrides enabled_models", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          enabled_models: {
+            openai: ["gpt-5.2-codex"],
+          },
+          disabled_models: {
+            openai: ["gpt-5.2-codex"],
           },
         }),
       )
