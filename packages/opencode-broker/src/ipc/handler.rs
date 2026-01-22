@@ -53,6 +53,12 @@ pub async fn handle_request(
         }
 
         Method::Authenticate => handle_authenticate(request, config, rate_limiter).await,
+
+        Method::SpawnPty => handle_spawn_pty(request).await,
+
+        Method::KillPty => handle_kill_pty(request).await,
+
+        Method::ResizePty => handle_resize_pty(request).await,
     }
 }
 
@@ -123,6 +129,83 @@ async fn handle_authenticate(
             Response::auth_failure(&request.id)
         }
     }
+}
+
+/// Handle a PTY spawn request (stub - returns not implemented).
+///
+/// In the full implementation, this will:
+/// 1. Look up the user's session by session_id
+/// 2. Allocate a PTY pair
+/// 3. Spawn the user's shell with proper user/group IDs
+/// 4. Return the PTY ID and PID
+async fn handle_spawn_pty(request: Request) -> Response {
+    // Extract and log params for debugging
+    let params = match &request.params {
+        RequestParams::SpawnPty(params) => params,
+        _ => {
+            return Response::failure(&request.id, "invalid params for spawn_pty");
+        }
+    };
+
+    info!(
+        id = %request.id,
+        session_id = %params.session_id,
+        term = %params.term,
+        cols = params.cols,
+        rows = params.rows,
+        "spawn_pty request (not implemented)"
+    );
+
+    Response::failure(&request.id, "spawn_pty not implemented")
+}
+
+/// Handle a PTY kill request (stub - returns not implemented).
+///
+/// In the full implementation, this will:
+/// 1. Look up the PTY session by pty_id
+/// 2. Send SIGTERM/SIGKILL to the child process
+/// 3. Clean up PTY resources
+async fn handle_kill_pty(request: Request) -> Response {
+    // Extract and log params for debugging
+    let params = match &request.params {
+        RequestParams::KillPty(params) => params,
+        _ => {
+            return Response::failure(&request.id, "invalid params for kill_pty");
+        }
+    };
+
+    info!(
+        id = %request.id,
+        pty_id = %params.pty_id,
+        "kill_pty request (not implemented)"
+    );
+
+    Response::failure(&request.id, "kill_pty not implemented")
+}
+
+/// Handle a PTY resize request (stub - returns not implemented).
+///
+/// In the full implementation, this will:
+/// 1. Look up the PTY session by pty_id
+/// 2. Call TIOCSWINSZ ioctl with new dimensions
+async fn handle_resize_pty(request: Request) -> Response {
+    // Extract and log params for debugging
+    let params = match &request.params {
+        RequestParams::ResizePty(params) => params,
+        _ => {
+            return Response::failure(&request.id, "invalid params for resize_pty");
+        }
+    };
+
+    info!(
+        id = %request.id,
+        pty_id = %params.pty_id,
+        cols = params.cols,
+        rows = params.rows,
+        "resize_pty request (not implemented)"
+    );
+
+    Response::failure(&request.id, "resize_pty not implemented")
 }
 
 #[cfg(test)]
