@@ -45,6 +45,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { Output } from "@/util/output"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1485,29 +1486,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       },
     })
 
-    let output = ""
+    const state = Output.create()
 
-    proc.stdout?.on("data", (chunk) => {
-      output += chunk.toString()
+    const handleChunk = (chunk: Buffer) => {
+      Output.append(state, chunk)
       if (part.state.status === "running") {
         part.state.metadata = {
-          output: output,
+          output: Output.preview(state),
           description: "",
         }
         Session.updatePart(part)
       }
-    })
+    }
 
-    proc.stderr?.on("data", (chunk) => {
-      output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
-        }
-        Session.updatePart(part)
-      }
-    })
+    proc.stdout?.on("data", handleChunk)
+    proc.stderr?.on("data", handleChunk)
 
     let aborted = false
     let exited = false
@@ -1517,11 +1510,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     if (abort.aborted) {
       aborted = true
       await kill()
+      Output.cleanup(state)
     }
 
     const abortHandler = () => {
       aborted = true
       void kill()
+      Output.cleanup(state)
     }
 
     abort.addEventListener("abort", abortHandler, { once: true })
@@ -1534,11 +1529,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
     })
 
+    Output.close(state)
+
     if (aborted) {
-      output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
+      Output.appendMetadata(state, "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n"))
     }
+
     msg.time.completed = Date.now()
     await Session.updateMessage(msg)
+
+    const result = Output.finalize(state)
+
     if (part.state.status === "running") {
       part.state = {
         status: "completed",
@@ -1549,10 +1550,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         input: part.state.input,
         title: "",
         metadata: {
-          output,
+          output: result.preview,
           description: "",
+          ...(result.truncated && { outputPath: result.path }),
         },
-        output,
+        output: result.output,
       }
       await Session.updatePart(part)
     }

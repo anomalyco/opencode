@@ -9,15 +9,14 @@ import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
 
 import { $ } from "bun"
-import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
+import { Output } from "@/util/output"
 
-const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
 export const log = Log.create({ service: "bash-tool" })
@@ -164,7 +163,7 @@ export const BashTool = Tool.define("bash", async () => {
         detached: process.platform !== "win32",
       })
 
-      let output = ""
+      const state = Output.create()
 
       // Initialize metadata with empty output
       ctx.metadata({
@@ -175,11 +174,10 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const append = (chunk: Buffer) => {
-        output += chunk.toString()
+        Output.append(state, chunk)
         ctx.metadata({
           metadata: {
-            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
-            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+            output: Output.preview(state),
             description: params.description,
           },
         })
@@ -197,11 +195,13 @@ export const BashTool = Tool.define("bash", async () => {
       if (ctx.abort.aborted) {
         aborted = true
         await kill()
+        Output.cleanup(state)
       }
 
       const abortHandler = () => {
         aborted = true
         void kill()
+        Output.cleanup(state)
       }
 
       ctx.abort.addEventListener("abort", abortHandler, { once: true })
@@ -240,18 +240,28 @@ export const BashTool = Tool.define("bash", async () => {
         resultMetadata.push("User aborted the command")
       }
 
+      Output.close(state)
+
       if (resultMetadata.length > 0) {
-        output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
+        Output.appendMetadata(state, "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>")
       }
+
+      const result = Output.finalize(state, {
+        hint: state.file
+          ? `The command output was ${state.written} bytes and was truncated (inline limit: ${Output.THRESHOLD} bytes).\nFull output saved to: ${state.file.path}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
+          : undefined,
+      })
 
       return {
         title: params.description,
         metadata: {
-          output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+          output: result.preview,
           exit: proc.exitCode,
           description: params.description,
+          truncated: result.truncated,
+          outputPath: result.path,
         },
-        output,
+        output: result.output,
       }
     },
   }
