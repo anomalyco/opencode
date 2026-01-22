@@ -31,6 +31,8 @@ impl fmt::Debug for Request {
             RequestParams::SpawnPty(params) => s.field("params", params),
             RequestParams::KillPty(params) => s.field("params", params),
             RequestParams::ResizePty(params) => s.field("params", params),
+            RequestParams::RegisterSession(params) => s.field("params", params),
+            RequestParams::UnregisterSession(params) => s.field("params", params),
         };
 
         s.finish()
@@ -49,6 +51,10 @@ pub enum Method {
     KillPty,
     /// Resize an existing PTY session.
     ResizePty,
+    /// Register a session with user info after successful authentication.
+    RegisterSession,
+    /// Unregister a session on logout.
+    UnregisterSession,
 }
 
 /// Parameters for different request types.
@@ -63,6 +69,10 @@ pub enum RequestParams {
     KillPty(KillPtyParams),
     /// Parameters for resizing an existing PTY.
     ResizePty(ResizePtyParams),
+    /// Parameters for registering a session.
+    RegisterSession(RegisterSessionParams),
+    /// Parameters for unregistering a session.
+    UnregisterSession(UnregisterSessionParams),
 }
 
 /// Parameters for authentication requests.
@@ -137,6 +147,32 @@ pub struct ResizePtyParams {
     pub cols: u16,
     /// New number of rows.
     pub rows: u16,
+}
+
+/// Parameters for registering a session with user info.
+/// Called by web server after successful PAM authentication.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterSessionParams {
+    /// Session ID (from web server's UserSession).
+    pub session_id: String,
+    /// UNIX username.
+    pub username: String,
+    /// UNIX user ID.
+    pub uid: u32,
+    /// UNIX primary group ID.
+    pub gid: u32,
+    /// User's home directory.
+    pub home: String,
+    /// User's login shell.
+    pub shell: String,
+}
+
+/// Parameters for unregistering a session.
+/// Called by web server on logout.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnregisterSessionParams {
+    /// Session ID to unregister.
+    pub session_id: String,
 }
 
 /// Result of a successful PTY spawn.
@@ -413,5 +449,61 @@ mod tests {
 
         let resize: Method = serde_json::from_str("\"resizepty\"").expect("deserialize");
         assert_eq!(resize, Method::ResizePty);
+    }
+
+    #[test]
+    fn test_register_session_params_roundtrip() {
+        let params = RegisterSessionParams {
+            session_id: "sess-abc".to_string(),
+            username: "testuser".to_string(),
+            uid: 1000,
+            gid: 1000,
+            home: "/home/testuser".to_string(),
+            shell: "/bin/bash".to_string(),
+        };
+
+        let json = serde_json::to_string(&params).expect("serialize");
+        let parsed: RegisterSessionParams = serde_json::from_str(&json).expect("deserialize");
+
+        assert_eq!(parsed.session_id, "sess-abc");
+        assert_eq!(parsed.username, "testuser");
+        assert_eq!(parsed.uid, 1000);
+        assert_eq!(parsed.gid, 1000);
+        assert_eq!(parsed.home, "/home/testuser");
+        assert_eq!(parsed.shell, "/bin/bash");
+    }
+
+    #[test]
+    fn test_unregister_session_params_roundtrip() {
+        let params = UnregisterSessionParams {
+            session_id: "sess-def".to_string(),
+        };
+
+        let json = serde_json::to_string(&params).expect("serialize");
+        let parsed: UnregisterSessionParams = serde_json::from_str(&json).expect("deserialize");
+
+        assert_eq!(parsed.session_id, "sess-def");
+    }
+
+    #[test]
+    fn test_session_method_serialization() {
+        assert_eq!(
+            serde_json::to_string(&Method::RegisterSession).expect("serialize"),
+            "\"registersession\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Method::UnregisterSession).expect("serialize"),
+            "\"unregistersession\""
+        );
+    }
+
+    #[test]
+    fn test_session_method_deserialization() {
+        let register: Method = serde_json::from_str("\"registersession\"").expect("deserialize");
+        assert_eq!(register, Method::RegisterSession);
+
+        let unregister: Method =
+            serde_json::from_str("\"unregistersession\"").expect("deserialize");
+        assert_eq!(unregister, Method::UnregisterSession);
     }
 }
