@@ -50,6 +50,15 @@ export const Terminal = (props: TerminalProps) => {
   let handleResize: () => void
   let handleTextareaFocus: () => void
   let handleTextareaBlur: () => void
+  let handleCompositionStart: (event: CompositionEvent) => void
+  let handleCompositionEnd: (event: CompositionEvent) => void
+  let handleKeydown: (event: KeyboardEvent) => void
+  let handleInput: (event: Event) => void
+  let composing = false
+  let lastCompositionText = ""
+  let lastCompositionTime = 0
+  let lastInputText = ""
+  let lastInputTime = 0
   let reconnect: number | undefined
   let disposed = false
 
@@ -160,6 +169,20 @@ export const Terminal = (props: TerminalProps) => {
 
     t.attachCustomKeyEventHandler((event) => {
       const key = event.key.toLowerCase()
+      const isComposing = composing || event.isComposing || event.keyCode === 229 || event.key === "Process"
+      if (isComposing) return true
+
+      const isNumpadEnter =
+        event.code === "NumpadEnter" ||
+        (event.key === "Enter" && event.location === KeyboardEvent.DOM_KEY_LOCATION_NUMPAD)
+
+      if (isNumpadEnter) {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send("\r")
+        }
+        props.onSubmit?.()
+        return true
+      }
 
       if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
         copy()
@@ -188,6 +211,96 @@ export const Terminal = (props: TerminalProps) => {
     t.open(container)
     container.addEventListener("pointerdown", handlePointerDown)
 
+    handleKeydown = (event) => {
+      const isCtrlOnly = event.ctrlKey && !event.metaKey && !event.altKey
+      if (!isCtrlOnly) return
+
+      if (!event.shiftKey && event.key.toLowerCase() === "c" && t.hasSelection()) {
+        event.preventDefault()
+        event.stopPropagation()
+        copy()
+        return
+      }
+
+      if (event.key === "Backspace") {
+        event.preventDefault()
+        event.stopPropagation()
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send("\x17")
+        }
+        return
+      }
+
+      const isEnter = event.key === "Enter" || event.code === "NumpadEnter"
+      if (!isEnter) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send("\r")
+      }
+      props.onSubmit?.()
+    }
+
+    handleCompositionStart = () => {
+      composing = true
+    }
+    handleCompositionEnd = (event) => {
+      composing = false
+      const target = event.target
+      const value = target instanceof HTMLTextAreaElement ? target.value : ""
+      const text = event.data || value || t.textarea?.value || ""
+      if (!text) return
+      const now = Date.now()
+      if (text === lastCompositionText && now - lastCompositionTime < 50) return
+      if (text === lastInputText && now - lastInputTime < 50) return
+      lastCompositionText = text
+      lastCompositionTime = now
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(text.replace(/\n/g, "\r"))
+      }
+      if (target instanceof HTMLTextAreaElement) {
+        target.value = ""
+      }
+      if (t.textarea) {
+        t.textarea.value = ""
+      }
+      const nodes = Array.from(container.childNodes)
+      for (const node of nodes) {
+        if (node.nodeType === 3) container.removeChild(node)
+      }
+    }
+    handleInput = (event) => {
+      const target = event.target
+      if (!(target instanceof HTMLTextAreaElement)) return
+
+      const text = target.value
+      if (!text) return
+
+      const now = Date.now()
+      if (event instanceof InputEvent && (event.isComposing || composing)) {
+        lastCompositionText = text
+        lastCompositionTime = now
+        return
+      }
+
+      if (text === lastCompositionText && now - lastCompositionTime < 50) {
+        target.value = ""
+        return
+      }
+      if (text === lastInputText && now - lastInputTime < 50) {
+        target.value = ""
+        return
+      }
+
+      lastInputText = text
+      lastInputTime = now
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(text.replace(/\n/g, "\r"))
+      }
+      target.value = ""
+    }
+
     handleTextareaFocus = () => {
       t.options.cursorBlink = true
     }
@@ -197,6 +310,12 @@ export const Terminal = (props: TerminalProps) => {
 
     t.textarea?.addEventListener("focus", handleTextareaFocus)
     t.textarea?.addEventListener("blur", handleTextareaBlur)
+    t.textarea?.addEventListener("compositionstart", handleCompositionStart)
+    t.textarea?.addEventListener("compositionend", handleCompositionEnd)
+    t.textarea?.addEventListener("input", handleInput)
+    container.addEventListener("keydown", handleKeydown, true)
+    container.addEventListener("compositionstart", handleCompositionStart)
+    container.addEventListener("compositionend", handleCompositionEnd)
 
     focusTerminal()
 
@@ -234,11 +353,8 @@ export const Terminal = (props: TerminalProps) => {
       }
     })
     t.onKey((key) => {
-      const isNumpadEnter =
-        key.key === "NumpadEnter" ||
-        key.domEvent?.code === "NumpadEnter" ||
-        (key.domEvent?.key === "Enter" && key.domEvent?.location === KeyboardEvent.DOM_KEY_LOCATION_NUMPAD)
-      if (key.key === "Enter" || isNumpadEnter) {
+      const isEnter = key.key === "Enter" || key.key === "\r" || key.domEvent?.key === "Enter"
+      if (isEnter) {
         props.onSubmit?.()
       }
     })
@@ -283,6 +399,12 @@ export const Terminal = (props: TerminalProps) => {
     container.removeEventListener("pointerdown", handlePointerDown)
     term?.textarea?.removeEventListener("focus", handleTextareaFocus)
     term?.textarea?.removeEventListener("blur", handleTextareaBlur)
+    term?.textarea?.removeEventListener("compositionstart", handleCompositionStart)
+    term?.textarea?.removeEventListener("compositionend", handleCompositionEnd)
+    term?.textarea?.removeEventListener("input", handleInput)
+    container.removeEventListener("keydown", handleKeydown, true)
+    container.removeEventListener("compositionstart", handleCompositionStart)
+    container.removeEventListener("compositionend", handleCompositionEnd)
 
     const t = term
     if (serializeAddon && props.onCleanup && t) {
