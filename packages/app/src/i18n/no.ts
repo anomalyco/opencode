@@ -262,8 +262,7 @@ export const dict: Record<Keys, string> = {
   "dialog.project.edit.color.select": "Velg fargen {{color}}",
 
   "context.breakdown.title": "Kontekstfordeling",
-  "context.breakdown.note":
-    'Omtrentlig fordeling av input-tokens. "Annet" inkluderer verktøydefinisjoner og overhead.',
+  "context.breakdown.note": 'Omtrentlig fordeling av input-tokens. "Annet" inkluderer verktøydefinisjoner og overhead.',
   "context.breakdown.system": "System",
   "context.breakdown.user": "Bruker",
   "context.breakdown.assistant": "Assistent",
@@ -542,7 +541,8 @@ export const dict: Record<Keys, string> = {
   "settings.permissions.tool.read.title": "Les",
   "settings.permissions.tool.read.description": "Lesing av en fil (matcher filbanen)",
   "settings.permissions.tool.edit.title": "Rediger",
-  "settings.permissions.tool.edit.description": "Endre filer, inkludert redigeringer, skriving, patcher og multi-redigeringer",
+  "settings.permissions.tool.edit.description":
+    "Endre filer, inkludert redigeringer, skriving, patcher og multi-redigeringer",
   "settings.permissions.tool.glob.title": "Glob",
   "settings.permissions.tool.glob.description": "Match filer ved hjelp av glob-mønstre",
   "settings.permissions.tool.grep.title": "Grep",
