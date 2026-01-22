@@ -28,7 +28,7 @@ import { ConfigMarkdown } from "./markdown"
 import { existsSync } from "fs"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
-import { Event } from "../server/event"
+import { Event as ServerEvent } from "../server/event"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -1421,7 +1421,7 @@ export const state = Instance.state(async () => {
     GlobalBus.emit("event", {
       directory: "global",
       payload: {
-        type: Event.Disposed.type,
+        type: ServerEvent.Disposed.type,
         properties: {},
       },
     })
