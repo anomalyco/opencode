@@ -25,6 +25,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
     name: defaultName(),
     color: props.project.icon?.color || "pink",
     iconUrl: props.project.icon?.override || "",
+    startup: props.project.commands?.start ?? "",
     saving: false,
   })
 
@@ -69,15 +70,18 @@ export function DialogEditProject(props: { project: LocalProject }) {
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
+
     if (!props.project.id) return
 
     setStore("saving", true)
     const name = store.name.trim() === folderName() ? "" : store.name.trim()
+    const start = store.startup.trim()
     await globalSDK.client.project.update({
       projectID: props.project.id,
       directory: props.project.worktree,
       name,
       icon: { color: store.color, override: store.iconUrl },
+      commands: { start },
     })
     setStore("saving", false)
     dialog.close()
@@ -215,6 +219,17 @@ export function DialogEditProject(props: { project: LocalProject }) {
               </div>
             </div>
           </Show>
+
+          <TextField
+            multiline
+            label={language.t("dialog.project.edit.worktree.startup")}
+            description={language.t("dialog.project.edit.worktree.startup.description")}
+            placeholder={language.t("dialog.project.edit.worktree.startup.placeholder")}
+            value={store.startup}
+            onChange={(v) => setStore("startup", v)}
+            spellcheck={false}
+            class="max-h-40 w-full font-mono text-xs no-scrollbar"
+          />
         </div>
 
         <div class="flex justify-end gap-2">
