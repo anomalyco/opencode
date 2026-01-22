@@ -1,6 +1,5 @@
 import { Accordion } from "./accordion"
 import { Button } from "./button"
-import { HoverCard } from "./hover-card"
 import { Popover } from "./popover"
 import { RadioGroup } from "./radio-group"
 import { DiffChanges } from "./diff-changes"
@@ -151,6 +150,7 @@ function markerTop(wrapper: HTMLElement, marker: HTMLElement) {
 }
 
 export const SessionReview = (props: SessionReviewProps) => {
+  let scroll: HTMLDivElement | undefined
   const i18n = useI18n()
   const diffComponent = useDiffComponent()
   const anchors = new Map<string, HTMLElement>()
@@ -212,7 +212,29 @@ export const SessionReview = (props: SessionReviewProps) => {
     }
 
     requestAnimationFrame(() => {
-      anchors.get(focus.file)?.scrollIntoView({ block: "center" })
+      requestAnimationFrame(() => {
+        const root = scroll
+        if (!root) return
+
+        const anchor = root.querySelector(`[data-comment-id="${focus.id}"]`)
+        if (anchor instanceof HTMLElement) {
+          const rootRect = root.getBoundingClientRect()
+          const anchorRect = anchor.getBoundingClientRect()
+          const offset = anchorRect.top - rootRect.top
+          const next = root.scrollTop + offset - rootRect.height / 2 + anchorRect.height / 2
+          root.scrollTop = Math.max(0, next)
+          return
+        }
+
+        const target = anchors.get(focus.file)
+        if (!target) return
+
+        const rootRect = root.getBoundingClientRect()
+        const targetRect = target.getBoundingClientRect()
+        const offset = targetRect.top - rootRect.top
+        const next = root.scrollTop + offset - rootRect.height / 2 + targetRect.height / 2
+        root.scrollTop = Math.max(0, next)
+      })
     })
 
     requestAnimationFrame(() => props.onFocusedCommentChange?.(null))
@@ -221,7 +243,10 @@ export const SessionReview = (props: SessionReviewProps) => {
   return (
     <div
       data-component="session-review"
-      ref={props.scrollRef}
+      ref={(el) => {
+        scroll = el
+        props.scrollRef?.(el)
+      }}
       onScroll={props.onScroll}
       classList={{
         ...(props.classList ?? {}),
@@ -574,6 +599,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                             {(comment) => (
                               <div
                                 data-slot="session-review-comment-anchor"
+                                data-comment-id={comment.id}
                                 style={{
                                   top: `${positions()[comment.id] ?? 0}px`,
                                   opacity: positions()[comment.id] === undefined ? 0 : 1,
@@ -583,6 +609,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 <Popover
                                   portal={false}
                                   open={isCommentOpen(comment)}
+                                  class="session-review-comment-popover-content"
                                   onOpenChange={(open) => {
                                     if (open) {
                                       openComment(comment)
@@ -592,26 +619,15 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     setOpened(null)
                                   }}
                                   trigger={
-                                    <HoverCard
-                                      trigger={
-                                        <button
-                                          type="button"
-                                          data-slot="session-review-comment-button"
-                                          onMouseEnter={() =>
-                                            setSelection({ file: comment.file, range: comment.selection })
-                                          }
-                                        >
-                                          <Icon name="speech-bubble" size="small" />
-                                        </button>
+                                    <button
+                                      type="button"
+                                      data-slot="session-review-comment-button"
+                                      onMouseEnter={() =>
+                                        setSelection({ file: comment.file, range: comment.selection })
                                       }
                                     >
-                                      <div data-slot="session-review-comment-hover">
-                                        <div data-slot="session-review-comment-hover-label">
-                                          {getFilename(comment.file)}:{selectionLabel(comment.selection)}
-                                        </div>
-                                        <div data-slot="session-review-comment-hover-text">{comment.comment}</div>
-                                      </div>
-                                    </HoverCard>
+                                      <Icon name="speech-bubble" size="small" />
+                                    </button>
                                   }
                                 >
                                   <div data-slot="session-review-comment-popover">
@@ -635,6 +651,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   <Popover
                                     portal={false}
                                     open={true}
+                                    class="session-review-comment-popover-content"
                                     onOpenChange={(open) => {
                                       if (open) return
                                       setCommenting(null)
