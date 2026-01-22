@@ -6,6 +6,8 @@ import { Pty } from "@/pty"
 import { Storage } from "../../storage/storage"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { getAuthContext } from "../middleware/auth"
+import { ServerAuth } from "@/config/server-auth"
 
 export const PtyRoutes = lazy(() =>
   new Hono()
@@ -50,6 +52,19 @@ export const PtyRoutes = lazy(() =>
       }),
       validator("json", Pty.CreateInput),
       async (c) => {
+        const authConfig = ServerAuth.get()
+
+        // If auth enabled, require session and pass session ID
+        if (authConfig.enabled) {
+          const auth = getAuthContext(c)
+          if (!auth) {
+            return c.json({ error: "Authentication required" }, 401)
+          }
+          const info = await Pty.create(c.req.valid("json"), auth.sessionId)
+          return c.json(info)
+        }
+
+        // Auth disabled - use existing behavior
         const info = await Pty.create(c.req.valid("json"))
         return c.json(info)
       },
@@ -102,6 +117,16 @@ export const PtyRoutes = lazy(() =>
       validator("param", z.object({ ptyID: z.string() })),
       validator("json", Pty.UpdateInput),
       async (c) => {
+        const authConfig = ServerAuth.get()
+
+        // If auth enabled, require session
+        if (authConfig.enabled) {
+          const auth = getAuthContext(c)
+          if (!auth) {
+            return c.json({ error: "Authentication required" }, 401)
+          }
+        }
+
         const info = await Pty.update(c.req.valid("param").ptyID, c.req.valid("json"))
         return c.json(info)
       },
@@ -126,6 +151,17 @@ export const PtyRoutes = lazy(() =>
       }),
       validator("param", z.object({ ptyID: z.string() })),
       async (c) => {
+        const authConfig = ServerAuth.get()
+
+        // If auth enabled, require session
+        if (authConfig.enabled) {
+          const auth = getAuthContext(c)
+          if (!auth) {
+            return c.json({ error: "Authentication required" }, 401)
+          }
+          // Note: Future improvement could verify PTY belongs to this user's session
+        }
+
         await Pty.remove(c.req.valid("param").ptyID)
         return c.json(true)
       },
