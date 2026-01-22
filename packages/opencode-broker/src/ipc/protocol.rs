@@ -64,11 +64,13 @@ pub enum Method {
 }
 
 /// Parameters for different request types.
+///
+/// IMPORTANT: Order matters for `#[serde(untagged)]` - serde tries variants in order.
+/// `Ping` must be LAST because `PingParams` is empty and matches any JSON.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RequestParams {
     Authenticate(AuthenticateParams),
-    Ping(PingParams),
     /// Parameters for spawning a new PTY.
     SpawnPty(SpawnPtyParams),
     /// Parameters for killing an existing PTY.
@@ -83,6 +85,8 @@ pub enum RequestParams {
     PtyWrite(PtyWriteParams),
     /// Parameters for reading from a PTY.
     PtyRead(PtyReadParams),
+    /// Ping must be last - empty params match any JSON with untagged serde.
+    Ping(PingParams),
 }
 
 /// Parameters for authentication requests.
