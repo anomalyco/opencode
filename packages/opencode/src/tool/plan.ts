@@ -7,6 +7,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Provider } from "../provider/provider"
 import { Instance } from "../project/instance"
+import { Agent } from "../agent/agent"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 import ENTER_DESCRIPTION from "./plan-enter.txt"
 
@@ -23,15 +24,19 @@ export const PlanExitTool = Tool.define("plan_exit", {
   async execute(_params, ctx) {
     const session = await Session.get(ctx.sessionID)
     const plan = path.relative(Instance.worktree, Session.plan(session))
+
+    // Get the default primary agent (falls back if "build" is disabled)
+    const targetAgent = await Agent.defaultAgent()
+
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
       questions: [
         {
-          question: `Plan at ${plan} is complete. Would you like to switch to the build agent and start implementing?`,
-          header: "Build Agent",
+          question: `Plan at ${plan} is complete. Would you like to switch to the ${targetAgent} agent and start implementing?`,
+          header: "Exit Plan Mode",
           custom: false,
           options: [
-            { label: "Yes", description: "Switch to build agent and start implementing the plan" },
+            { label: "Yes", description: `Switch to ${targetAgent} agent and start implementing the plan` },
             { label: "No", description: "Stay with plan agent to continue refining the plan" },
           ],
         },
@@ -51,7 +56,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
       time: {
         created: Date.now(),
       },
-      agent: "build",
+      agent: targetAgent,
       model,
     }
     await Session.updateMessage(userMsg)
@@ -65,8 +70,8 @@ export const PlanExitTool = Tool.define("plan_exit", {
     } satisfies MessageV2.TextPart)
 
     return {
-      title: "Switching to build agent",
-      output: "User approved switching to build agent. Wait for further instructions.",
+      title: `Switching to ${targetAgent} agent`,
+      output: `User approved switching to ${targetAgent} agent. Wait for further instructions.`,
       metadata: {},
     }
   },
