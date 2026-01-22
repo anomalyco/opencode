@@ -11,6 +11,7 @@ import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
+import { Installation } from "../installation"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -42,6 +43,13 @@ export namespace Plugin {
       const init = await plugin(input)
       hooks.push(init)
     }
+
+    // Ensure @opencode-ai/plugin is available in the cache environment
+    await BunProc.install("@opencode-ai/plugin", Installation.isLocal() ? "latest" : Installation.VERSION).catch(
+      (err) => {
+        log.error("failed to install @opencode-ai/plugin", { error: err })
+      },
+    )
 
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
