@@ -48,6 +48,7 @@ export function SessionHeader() {
   const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const showShare = createMemo(() => shareEnabled() && !!currentSession())
+  const showReview = createMemo(() => !!currentSession())
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey()))
 
@@ -135,7 +136,7 @@ export function SessionHeader() {
               type="button"
               class="hidden md:flex w-[320px] p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
               onClick={() => command.trigger("file.open")}
-              aria-label="Search files"
+              aria-label={language.t("session.header.searchFiles")}
             >
               <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
                 <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
@@ -185,7 +186,7 @@ export function SessionHeader() {
                       variant="ghost"
                       class="group/review-toggle size-6 p-0"
                       onClick={() => view().reviewPanel.toggle()}
-                      aria-label="Toggle review panel"
+                      aria-label={language.t("command.review.toggle")}
                       aria-expanded={view().reviewPanel.opened()}
                       aria-controls="review-panel"
                       tabIndex={showReview() ? 0 : -1}
@@ -219,7 +220,7 @@ export function SessionHeader() {
                     variant="ghost"
                     class="group/terminal-toggle size-6 p-0"
                     onClick={() => view().terminal.toggle()}
-                    aria-label="Toggle terminal"
+                    aria-label={language.t("command.terminal.toggle")}
                     aria-expanded={view().terminal.opened()}
                     aria-controls="terminal-panel"
                   >
@@ -323,7 +324,11 @@ export function SessionHeader() {
                         class="rounded-l-none"
                         onClick={copyLink}
                         disabled={state.unshare}
-                        aria-label="Copy share link"
+                        aria-label={
+                          state.copied
+                            ? language.t("session.share.copy.copied")
+                            : language.t("session.share.copy.copyLink")
+                        }
                       />
                     </Tooltip>
                   </Show>

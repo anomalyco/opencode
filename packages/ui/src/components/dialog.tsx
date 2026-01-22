@@ -1,5 +1,6 @@
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
 import { ComponentProps, JSXElement, Match, ParentProps, Show, Switch } from "solid-js"
+import { useI18n } from "../context/i18n"
 import { IconButton } from "./icon-button"
 
 export interface DialogProps extends ParentProps {
@@ -13,6 +14,7 @@ export interface DialogProps extends ParentProps {
 }
 
 export function Dialog(props: DialogProps) {
+  const i18n = useI18n()
   return (
     <div data-component="dialog" data-fit={props.fit ? true : undefined} data-size={props.size || "normal"}>
       <div data-slot="dialog-container">
@@ -45,7 +47,7 @@ export function Dialog(props: DialogProps) {
                     as={IconButton}
                     icon="close"
                     variant="ghost"
-                    aria-label="Close"
+                    aria-label={i18n.t("ui.common.close")}
                   />
                 </Match>
               </Switch>

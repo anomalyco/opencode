@@ -2345,7 +2345,7 @@ export default function Layout(props: ParentProps) {
       <Titlebar />
       <div class="flex-1 min-h-0 flex">
         <nav
-          aria-label="Projects and sessions"
+          aria-label={language.t("sidebar.nav.projectsAndSessions")}
           classList={{
             "hidden xl:block": true,
             "relative shrink-0": true,
@@ -2379,7 +2379,7 @@ export default function Layout(props: ParentProps) {
             }}
           />
           <nav
-            aria-label="Projects and sessions"
+            aria-label={language.t("sidebar.nav.projectsAndSessions")}
             classList={{
               "@container fixed top-10 bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
               "translate-x-0": layout.mobileSidebar.opened(),

@@ -96,7 +96,13 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         <Switch>
           <Match when={variant() === "indicator"}>{circle()}</Match>
           <Match when={true}>
-            <Button type="button" variant="ghost" class="size-6" onClick={openContext} aria-label="View context usage">
+            <Button
+              type="button"
+              variant="ghost"
+              class="size-6"
+              onClick={openContext}
+              aria-label={language.t("context.usage.view")}
+            >
               {circle()}
             </Button>
           </Match>

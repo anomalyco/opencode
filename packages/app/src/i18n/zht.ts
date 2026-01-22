@@ -138,6 +138,7 @@ export const dict = {
   "model.tag.latest": "最新",
 
   "common.search.placeholder": "搜尋",
+  "common.goBack": "返回",
   "common.loading": "載入中",
   "common.cancel": "取消",
   "common.submit": "提交",
@@ -183,7 +184,10 @@ export const dict = {
   "prompt.slash.badge.custom": "自訂",
   "prompt.context.active": "作用中",
   "prompt.context.includeActiveFile": "包含作用中檔案",
+  "prompt.context.removeActiveFile": "從上下文移除目前檔案",
+  "prompt.context.removeFile": "從上下文移除檔案",
   "prompt.action.attachFile": "附加檔案",
+  "prompt.attachment.remove": "移除附件",
   "prompt.action.send": "傳送",
   "prompt.action.stop": "停止",
 
@@ -226,6 +230,7 @@ export const dict = {
   "dialog.server.default.none": "未選擇伺服器",
   "dialog.server.default.set": "將目前伺服器設為預設",
   "dialog.server.default.clear": "清除",
+  "dialog.server.action.remove": "移除伺服器",
 
   "dialog.project.edit.title": "編輯專案",
   "dialog.project.edit.name": "名稱",
@@ -234,6 +239,7 @@ export const dict = {
   "dialog.project.edit.icon.hint": "點擊或拖曳圖片",
   "dialog.project.edit.icon.recommended": "建議：128x128px",
   "dialog.project.edit.color": "顏色",
+  "dialog.project.edit.color.select": "選擇{{color}}顏色",
 
   "context.breakdown.title": "上下文拆分",
   "context.breakdown.note": "輸入 token 的大致拆分。「其他」包含工具定義和額外開銷。",
@@ -267,6 +273,7 @@ export const dict = {
   "context.usage.usage": "使用量",
   "context.usage.cost": "成本",
   "context.usage.clickToView": "點擊查看上下文",
+  "context.usage.view": "檢視上下文用量",
 
   "language.en": "英語",
   "language.zh": "簡體中文",
@@ -361,6 +368,7 @@ export const dict = {
   "session.tab.session": "工作階段",
   "session.tab.review": "審查",
   "session.tab.context": "上下文",
+  "session.panel.reviewAndFiles": "審查與檔案",
   "session.review.filesChanged": "{{count}} 個檔案變更",
   "session.review.loadingChanges": "正在載入變更...",
   "session.review.empty": "此工作階段暫無變更",
@@ -377,6 +385,7 @@ export const dict = {
   "session.new.lastModified": "最後修改",
 
   "session.header.search.placeholder": "搜尋 {{project}}",
+  "session.header.searchFiles": "搜尋檔案",
 
   "session.share.popover.title": "發佈到網頁",
   "session.share.popover.description.shared": "此工作階段已在網頁上公開。任何擁有連結的人都可以存取。",
@@ -397,6 +406,7 @@ export const dict = {
   "terminal.loading": "正在載入終端機...",
   "terminal.title": "終端機",
   "terminal.title.numbered": "終端機 {{number}}",
+  "terminal.close": "關閉終端機",
 
   "common.closeTab": "關閉標籤頁",
   "common.dismiss": "忽略",
@@ -410,6 +420,7 @@ export const dict = {
   "common.edit": "編輯",
   "common.loadMore": "載入更多",
 
+  "sidebar.nav.projectsAndSessions": "專案與工作階段",
   "sidebar.settings": "設定",
   "sidebar.help": "說明",
   "sidebar.workspaces.enable": "啟用工作區",

@@ -1555,7 +1555,7 @@ export default function Page() {
         <Show when={isDesktop() && showTabs()}>
           <aside
             id="review-panel"
-            aria-label="Review and files"
+            aria-label={language.t("session.panel.reviewAndFiles")}
             class="relative flex-1 min-w-0 h-full border-l border-border-weak-base"
           >
             <DragDropProvider
@@ -1595,7 +1595,7 @@ export default function Page() {
                               icon="close"
                               variant="ghost"
                               onClick={() => tabs().close("context")}
-                              aria-label="Close context tab"
+                              aria-label={language.t("common.closeTab")}
                             />
                           </Tooltip>
                         }
@@ -1622,7 +1622,7 @@ export default function Page() {
                           variant="ghost"
                           iconSize="large"
                           onClick={() => dialog.show(() => <DialogSelectFile />)}
-                          aria-label="Open file"
+                          aria-label={language.t("command.file.open")}
                         />
                       </TooltipKeybind>
                     </div>
@@ -1932,7 +1932,7 @@ export default function Page() {
         <div
           id="terminal-panel"
           role="region"
-          aria-label="Terminal"
+          aria-label={language.t("terminal.title")}
           class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
           style={{ height: `${layout.terminal.height()}px` }}
         >
@@ -2009,7 +2009,7 @@ export default function Page() {
                           variant="ghost"
                           iconSize="large"
                           onClick={terminal.new}
-                          aria-label="New terminal"
+                          aria-label={language.t("command.terminal.new")}
                         />
                       </TooltipKeybind>
                     </div>

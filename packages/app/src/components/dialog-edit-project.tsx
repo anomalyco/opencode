@@ -193,7 +193,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   {(color) => (
                     <button
                       type="button"
-                      aria-label={`Select ${color} color`}
+                      aria-label={language.t("dialog.project.edit.color.select", { color })}
                       aria-pressed={store.color === color}
                       classList={{
                         "flex items-center justify-center size-10 p-0.5 rounded-lg overflow-hidden transition-colors cursor-default": true,

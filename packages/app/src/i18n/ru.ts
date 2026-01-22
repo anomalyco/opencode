@@ -153,6 +153,7 @@ export const dict = {
   "model.tooltip.context": "Лимит контекста {{limit}}",
 
   "common.search.placeholder": "Поиск",
+  "common.goBack": "Назад",
   "common.loading": "Загрузка",
   "common.loading.ellipsis": "...",
   "common.cancel": "Отмена",
@@ -199,7 +200,10 @@ export const dict = {
   "prompt.slash.badge.custom": "своё",
   "prompt.context.active": "активно",
   "prompt.context.includeActiveFile": "Включить активный файл",
+  "prompt.context.removeActiveFile": "Удалить активный файл из контекста",
+  "prompt.context.removeFile": "Удалить файл из контекста",
   "prompt.action.attachFile": "Прикрепить файл",
+  "prompt.attachment.remove": "Удалить вложение",
   "prompt.action.send": "Отправить",
   "prompt.action.stop": "Остановить",
 
@@ -243,6 +247,7 @@ export const dict = {
   "dialog.server.default.none": "Сервер не выбран",
   "dialog.server.default.set": "Установить текущий сервер по умолчанию",
   "dialog.server.default.clear": "Очистить",
+  "dialog.server.action.remove": "Удалить сервер",
 
   "dialog.project.edit.title": "Редактировать проект",
   "dialog.project.edit.name": "Название",
@@ -251,6 +256,7 @@ export const dict = {
   "dialog.project.edit.icon.hint": "Нажмите или перетащите изображение",
   "dialog.project.edit.icon.recommended": "Рекомендуется: 128x128px",
   "dialog.project.edit.color": "Цвет",
+  "dialog.project.edit.color.select": "Выбрать цвет {{color}}",
 
   "context.breakdown.title": "Разбивка контекста",
   "context.breakdown.note":
@@ -285,6 +291,7 @@ export const dict = {
   "context.usage.usage": "Использование",
   "context.usage.cost": "Стоимость",
   "context.usage.clickToView": "Нажмите для просмотра контекста",
+  "context.usage.view": "Показать использование контекста",
 
   "language.en": "Английский",
   "language.zh": "Китайский",
@@ -387,6 +394,7 @@ export const dict = {
   "session.tab.session": "Сессия",
   "session.tab.review": "Обзор",
   "session.tab.context": "Контекст",
+  "session.panel.reviewAndFiles": "Обзор и файлы",
   "session.review.filesChanged": "{{count}} файлов изменено",
   "session.review.loadingChanges": "Загрузка изменений...",
   "session.review.empty": "Изменений в этой сессии пока нет",
@@ -404,6 +412,7 @@ export const dict = {
   "session.new.lastModified": "Последнее изменение",
 
   "session.header.search.placeholder": "Поиск {{project}}",
+  "session.header.searchFiles": "Поиск файлов",
 
   "session.share.popover.title": "Опубликовать в интернете",
   "session.share.popover.description.shared":
@@ -426,6 +435,7 @@ export const dict = {
   "terminal.loading": "Загрузка терминала...",
   "terminal.title": "Терминал",
   "terminal.title.numbered": "Терминал {{number}}",
+  "terminal.close": "Закрыть терминал",
   "terminal.connectionLost.title": "Соединение потеряно",
   "terminal.connectionLost.description":
     "Соединение с терминалом прервано. Это может произойти при перезапуске сервера.",
@@ -444,6 +454,7 @@ export const dict = {
   "common.key.esc": "ESC",
 
   "sidebar.menu.toggle": "Переключить меню",
+  "sidebar.nav.projectsAndSessions": "Проекты и сессии",
   "sidebar.settings": "Настройки",
   "sidebar.help": "Помощь",
   "sidebar.workspaces.enable": "Включить рабочие пространства",

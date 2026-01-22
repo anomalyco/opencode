@@ -1487,7 +1487,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     variant="ghost"
                     class="h-6 w-6"
                     onClick={() => prompt.context.removeActive()}
-                    aria-label="Remove active file from context"
+                    aria-label={language.t("prompt.context.removeActiveFile")}
                   />
                 </div>
               )}
@@ -1525,7 +1525,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     variant="ghost"
                     class="h-6 w-6"
                     onClick={() => prompt.context.remove(item.key)}
-                    aria-label="Remove file from context"
+                    aria-label={language.t("prompt.context.removeFile")}
                   />
                 </div>
               )}
@@ -1558,7 +1558,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     type="button"
                     onClick={() => removeImageAttachment(attachment.id)}
                     class="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-surface-raised-stronger-non-alpha border border-border-base flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-surface-raised-base-hover"
-                    aria-label="Remove attachment"
+                    aria-label={language.t("prompt.attachment.remove")}
                   >
                     <Icon name="close" class="size-3 text-text-weak" />
                   </button>
@@ -1691,7 +1691,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         "text-text-base": !permission.isAutoAccepting(params.id!, sdk.directory),
                         "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!, sdk.directory),
                       }}
-                      aria-label="Toggle auto-accept permissions"
+                      aria-label={
+                        permission.isAutoAccepting(params.id!, sdk.directory)
+                          ? language.t("command.permissions.autoaccept.disable")
+                          : language.t("command.permissions.autoaccept.enable")
+                      }
                       aria-pressed={permission.isAutoAccepting(params.id!, sdk.directory)}
                     >
                       <Icon
@@ -1726,7 +1730,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     variant="ghost"
                     class="size-6"
                     onClick={() => fileInputRef.click()}
-                    aria-label="Attach file"
+                    aria-label={language.t("prompt.action.attachFile")}
                   >
                     <Icon name="photo" class="size-4.5" />
                   </Button>
@@ -1759,7 +1763,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
                 class="h-6 w-4.5"
-                aria-label={working() ? "Stop" : "Send message"}
+                aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
               />
             </Tooltip>
           </div>

@@ -139,7 +139,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
                 e.stopPropagation()
                 close()
               }}
-              aria-label="Close terminal"
+              aria-label={language.t("terminal.close")}
             />
           }
         >

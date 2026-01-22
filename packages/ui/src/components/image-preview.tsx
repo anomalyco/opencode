@@ -19,7 +19,7 @@ export function ImagePreview(props: ImagePreviewProps) {
               as={IconButton}
               icon="close"
               variant="ghost"
-              aria-label="Close"
+              aria-label={i18n.t("ui.common.close")}
             />
           </div>
           <div data-slot="image-preview-body">

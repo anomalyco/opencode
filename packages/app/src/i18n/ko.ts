@@ -139,6 +139,7 @@ export const dict = {
   "model.tag.latest": "최신",
 
   "common.search.placeholder": "검색",
+  "common.goBack": "뒤로 가기",
   "common.loading": "로딩 중",
   "common.cancel": "취소",
   "common.submit": "제출",
@@ -184,7 +185,10 @@ export const dict = {
   "prompt.slash.badge.custom": "사용자 지정",
   "prompt.context.active": "활성",
   "prompt.context.includeActiveFile": "활성 파일 포함",
+  "prompt.context.removeActiveFile": "컨텍스트에서 활성 파일 제거",
+  "prompt.context.removeFile": "컨텍스트에서 파일 제거",
   "prompt.action.attachFile": "파일 첨부",
+  "prompt.attachment.remove": "첨부 파일 제거",
   "prompt.action.send": "전송",
   "prompt.action.stop": "중지",
 
@@ -228,6 +232,7 @@ export const dict = {
   "dialog.server.default.none": "선택된 서버 없음",
   "dialog.server.default.set": "현재 서버를 기본값으로 설정",
   "dialog.server.default.clear": "지우기",
+  "dialog.server.action.remove": "서버 제거",
 
   "dialog.project.edit.title": "프로젝트 편집",
   "dialog.project.edit.name": "이름",
@@ -236,6 +241,7 @@ export const dict = {
   "dialog.project.edit.icon.hint": "이미지를 클릭하거나 드래그하세요",
   "dialog.project.edit.icon.recommended": "권장: 128x128px",
   "dialog.project.edit.color": "색상",
+  "dialog.project.edit.color.select": "{{color}} 색상 선택",
 
   "context.breakdown.title": "컨텍스트 분석",
   "context.breakdown.note": '입력 토큰의 대략적인 분석입니다. "기타"에는 도구 정의 및 오버헤드가 포함됩니다.',
@@ -269,6 +275,7 @@ export const dict = {
   "context.usage.usage": "사용량",
   "context.usage.cost": "비용",
   "context.usage.clickToView": "컨텍스트를 보려면 클릭",
+  "context.usage.view": "컨텍스트 사용량 보기",
 
   "language.en": "영어",
   "language.zh": "중국어 (간체)",
@@ -370,6 +377,7 @@ export const dict = {
   "session.tab.session": "세션",
   "session.tab.review": "검토",
   "session.tab.context": "컨텍스트",
+  "session.panel.reviewAndFiles": "검토 및 파일",
   "session.review.filesChanged": "{{count}}개 파일 변경됨",
   "session.review.loadingChanges": "변경 사항 로드 중...",
   "session.review.empty": "이 세션에 변경 사항이 아직 없습니다",
@@ -386,6 +394,7 @@ export const dict = {
   "session.new.lastModified": "최근 수정",
 
   "session.header.search.placeholder": "{{project}} 검색",
+  "session.header.searchFiles": "파일 검색",
 
   "session.share.popover.title": "웹에 게시",
   "session.share.popover.description.shared": "이 세션은 웹에 공개되었습니다. 링크가 있는 누구나 액세스할 수 있습니다.",
@@ -407,6 +416,7 @@ export const dict = {
   "terminal.loading": "터미널 로드 중...",
   "terminal.title": "터미널",
   "terminal.title.numbered": "터미널 {{number}}",
+  "terminal.close": "터미널 닫기",
 
   "common.closeTab": "탭 닫기",
   "common.dismiss": "닫기",
@@ -420,6 +430,7 @@ export const dict = {
   "common.edit": "편집",
   "common.loadMore": "더 불러오기",
 
+  "sidebar.nav.projectsAndSessions": "프로젝트 및 세션",
   "sidebar.settings": "설정",
   "sidebar.help": "도움말",
   "sidebar.workspaces.enable": "작업 공간 활성화",

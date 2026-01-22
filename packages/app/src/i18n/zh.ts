@@ -136,6 +136,7 @@ export const dict = {
   "model.tag.latest": "最新",
 
   "common.search.placeholder": "搜索",
+  "common.goBack": "返回",
   "common.loading": "加载中",
   "common.cancel": "取消",
   "common.submit": "提交",
@@ -181,7 +182,10 @@ export const dict = {
   "prompt.slash.badge.custom": "自定义",
   "prompt.context.active": "当前",
   "prompt.context.includeActiveFile": "包含当前文件",
+  "prompt.context.removeActiveFile": "从上下文移除活动文件",
+  "prompt.context.removeFile": "从上下文移除文件",
   "prompt.action.attachFile": "附加文件",
+  "prompt.attachment.remove": "移除附件",
   "prompt.action.send": "发送",
   "prompt.action.stop": "停止",
 
@@ -224,6 +228,7 @@ export const dict = {
   "dialog.server.default.none": "未选择服务器",
   "dialog.server.default.set": "将当前服务器设为默认",
   "dialog.server.default.clear": "清除",
+  "dialog.server.action.remove": "移除服务器",
 
   "dialog.project.edit.title": "编辑项目",
   "dialog.project.edit.name": "名称",
@@ -232,6 +237,7 @@ export const dict = {
   "dialog.project.edit.icon.hint": "点击或拖拽图片",
   "dialog.project.edit.icon.recommended": "建议：128x128px",
   "dialog.project.edit.color": "颜色",
+  "dialog.project.edit.color.select": "选择{{color}}颜色",
 
   "context.breakdown.title": "上下文拆分",
   "context.breakdown.note": "输入 token 的大致拆分。“其他”包含工具定义和开销。",
@@ -265,6 +271,7 @@ export const dict = {
   "context.usage.usage": "使用率",
   "context.usage.cost": "成本",
   "context.usage.clickToView": "点击查看上下文",
+  "context.usage.view": "查看上下文用量",
 
   "language.en": "英语",
   "language.zh": "简体中文",
@@ -365,6 +372,7 @@ export const dict = {
   "session.tab.session": "会话",
   "session.tab.review": "审查",
   "session.tab.context": "上下文",
+  "session.panel.reviewAndFiles": "审查和文件",
   "session.review.filesChanged": "{{count}} 个文件变更",
   "session.review.loadingChanges": "正在加载更改...",
   "session.review.empty": "此会话暂无更改",
@@ -381,6 +389,7 @@ export const dict = {
   "session.new.lastModified": "最后修改",
 
   "session.header.search.placeholder": "搜索 {{project}}",
+  "session.header.searchFiles": "搜索文件",
 
   "session.share.popover.title": "发布到网页",
   "session.share.popover.description.shared": "此会话已在网页上公开。任何拥有链接的人都可以访问。",
@@ -401,6 +410,7 @@ export const dict = {
   "terminal.loading": "正在加载终端...",
   "terminal.title": "终端",
   "terminal.title.numbered": "终端 {{number}}",
+  "terminal.close": "关闭终端",
 
   "common.closeTab": "关闭标签页",
   "common.dismiss": "忽略",
@@ -414,6 +424,7 @@ export const dict = {
   "common.edit": "编辑",
   "common.loadMore": "加载更多",
 
+  "sidebar.nav.projectsAndSessions": "项目和会话",
   "sidebar.settings": "设置",
   "sidebar.help": "帮助",
   "sidebar.workspaces.enable": "启用工作区",

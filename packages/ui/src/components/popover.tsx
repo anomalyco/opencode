@@ -1,5 +1,6 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
 import { ComponentProps, JSXElement, ParentProps, Show, splitProps, ValidComponent } from "solid-js"
+import { useI18n } from "../context/i18n"
 import { IconButton } from "./icon-button"
 
 export interface PopoverProps<T extends ValidComponent = "div">
@@ -15,6 +16,7 @@ export interface PopoverProps<T extends ValidComponent = "div">
 }
 
 export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>) {
+  const i18n = useI18n()
   const [local, rest] = splitProps(props, [
     "trigger",
     "triggerAs",
@@ -48,7 +50,7 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
                 as={IconButton}
                 icon="close"
                 variant="ghost"
-                aria-label="Close"
+                aria-label={i18n.t("ui.common.close")}
               />
             </div>
           </Show>

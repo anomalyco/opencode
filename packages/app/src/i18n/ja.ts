@@ -135,6 +135,7 @@ export const dict = {
   "model.tag.latest": "最新",
 
   "common.search.placeholder": "検索",
+  "common.goBack": "戻る",
   "common.loading": "読み込み中",
   "common.cancel": "キャンセル",
   "common.submit": "送信",
@@ -180,7 +181,10 @@ export const dict = {
   "prompt.slash.badge.custom": "カスタム",
   "prompt.context.active": "アクティブ",
   "prompt.context.includeActiveFile": "アクティブなファイルを含める",
+  "prompt.context.removeActiveFile": "コンテキストからアクティブなファイルを削除",
+  "prompt.context.removeFile": "コンテキストからファイルを削除",
   "prompt.action.attachFile": "ファイルを添付",
+  "prompt.attachment.remove": "添付ファイルを削除",
   "prompt.action.send": "送信",
   "prompt.action.stop": "停止",
 
@@ -224,6 +228,7 @@ export const dict = {
   "dialog.server.default.none": "サーバーが選択されていません",
   "dialog.server.default.set": "現在のサーバーをデフォルトに設定",
   "dialog.server.default.clear": "クリア",
+  "dialog.server.action.remove": "サーバーを削除",
 
   "dialog.project.edit.title": "プロジェクトを編集",
   "dialog.project.edit.name": "名前",
@@ -232,6 +237,7 @@ export const dict = {
   "dialog.project.edit.icon.hint": "クリックまたは画像をドラッグ",
   "dialog.project.edit.icon.recommended": "推奨: 128x128px",
   "dialog.project.edit.color": "色",
+  "dialog.project.edit.color.select": "{{color}}の色を選択",
 
   "context.breakdown.title": "コンテキストの内訳",
   "context.breakdown.note": '入力トークンのおおよその内訳です。"その他"にはツールの定義やオーバーヘッドが含まれます。',
@@ -265,6 +271,7 @@ export const dict = {
   "context.usage.usage": "使用量",
   "context.usage.cost": "コスト",
   "context.usage.clickToView": "クリックしてコンテキストを表示",
+  "context.usage.view": "コンテキスト使用量を表示",
 
   "language.en": "英語",
   "language.zh": "中国語(簡体字)",
@@ -367,6 +374,7 @@ export const dict = {
   "session.tab.session": "セッション",
   "session.tab.review": "レビュー",
   "session.tab.context": "コンテキスト",
+  "session.panel.reviewAndFiles": "レビューとファイル",
   "session.review.filesChanged": "{{count}} ファイル変更",
   "session.review.loadingChanges": "変更を読み込み中...",
   "session.review.empty": "このセッションでの変更はまだありません",
@@ -383,6 +391,7 @@ export const dict = {
   "session.new.lastModified": "最終更新",
 
   "session.header.search.placeholder": "{{project}}を検索",
+  "session.header.searchFiles": "ファイルを検索",
 
   "session.share.popover.title": "ウェブで公開",
   "session.share.popover.description.shared":
@@ -405,6 +414,7 @@ export const dict = {
   "terminal.loading": "ターミナルを読み込み中...",
   "terminal.title": "ターミナル",
   "terminal.title.numbered": "ターミナル {{number}}",
+  "terminal.close": "ターミナルを閉じる",
 
   "common.closeTab": "タブを閉じる",
   "common.dismiss": "閉じる",
@@ -418,6 +428,7 @@ export const dict = {
   "common.edit": "編集",
   "common.loadMore": "さらに読み込む",
 
+  "sidebar.nav.projectsAndSessions": "プロジェクトとセッション",
   "sidebar.settings": "設定",
   "sidebar.help": "ヘルプ",
   "sidebar.workspaces.enable": "ワークスペースを有効化",

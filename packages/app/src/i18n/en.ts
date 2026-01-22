@@ -153,6 +153,7 @@ export const dict = {
   "model.tooltip.context": "Context limit {{limit}}",
 
   "common.search.placeholder": "Search",
+  "common.goBack": "Go back",
   "common.loading": "Loading",
   "common.loading.ellipsis": "...",
   "common.cancel": "Cancel",
@@ -199,7 +200,10 @@ export const dict = {
   "prompt.slash.badge.custom": "custom",
   "prompt.context.active": "active",
   "prompt.context.includeActiveFile": "Include active file",
+  "prompt.context.removeActiveFile": "Remove active file from context",
+  "prompt.context.removeFile": "Remove file from context",
   "prompt.action.attachFile": "Attach file",
+  "prompt.attachment.remove": "Remove attachment",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
 
@@ -243,6 +247,7 @@ export const dict = {
   "dialog.server.default.none": "No server selected",
   "dialog.server.default.set": "Set current server as default",
   "dialog.server.default.clear": "Clear",
+  "dialog.server.action.remove": "Remove server",
 
   "dialog.project.edit.title": "Edit project",
   "dialog.project.edit.name": "Name",
@@ -251,6 +256,7 @@ export const dict = {
   "dialog.project.edit.icon.hint": "Click or drag an image",
   "dialog.project.edit.icon.recommended": "Recommended: 128x128px",
   "dialog.project.edit.color": "Color",
+  "dialog.project.edit.color.select": "Select {{color}} color",
 
   "context.breakdown.title": "Context Breakdown",
   "context.breakdown.note": 'Approximate breakdown of input tokens. "Other" includes tool definitions and overhead.',
@@ -284,6 +290,7 @@ export const dict = {
   "context.usage.usage": "Usage",
   "context.usage.cost": "Cost",
   "context.usage.clickToView": "Click to view context",
+  "context.usage.view": "View context usage",
 
   "language.en": "English",
   "language.zh": "Chinese (Simplified)",
@@ -386,6 +393,7 @@ export const dict = {
   "session.tab.session": "Session",
   "session.tab.review": "Review",
   "session.tab.context": "Context",
+  "session.panel.reviewAndFiles": "Review and files",
   "session.review.filesChanged": "{{count}} Files Changed",
   "session.review.loadingChanges": "Loading changes...",
   "session.review.empty": "No changes in this session yet",
@@ -403,6 +411,7 @@ export const dict = {
   "session.new.lastModified": "Last modified",
 
   "session.header.search.placeholder": "Search {{project}}",
+  "session.header.searchFiles": "Search files",
 
   "session.share.popover.title": "Publish on web",
   "session.share.popover.description.shared":
@@ -425,6 +434,7 @@ export const dict = {
   "terminal.loading": "Loading terminal...",
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
+  "terminal.close": "Close terminal",
   "terminal.connectionLost.title": "Connection Lost",
   "terminal.connectionLost.description":
     "The terminal connection was interrupted. This can happen when the server restarts.",
@@ -443,6 +453,7 @@ export const dict = {
   "common.key.esc": "ESC",
 
   "sidebar.menu.toggle": "Toggle menu",
+  "sidebar.nav.projectsAndSessions": "Projects and sessions",
   "sidebar.settings": "Settings",
   "sidebar.help": "Help",
   "sidebar.workspaces.enable": "Enable workspaces",
