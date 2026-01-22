@@ -2,7 +2,9 @@ import { Popover as Kobalte } from "@kobalte/core/popover"
 import { ComponentProps, JSXElement, ParentProps, Show, splitProps, ValidComponent } from "solid-js"
 import { IconButton } from "./icon-button"
 
-export interface PopoverProps<T extends ValidComponent = "div"> extends ParentProps, Omit<ComponentProps<typeof Kobalte>, "children"> {
+export interface PopoverProps<T extends ValidComponent = "div">
+  extends ParentProps,
+    Omit<ComponentProps<typeof Kobalte>, "children"> {
   trigger?: JSXElement
   triggerAs?: T
   triggerProps?: ComponentProps<T>
@@ -13,7 +15,16 @@ export interface PopoverProps<T extends ValidComponent = "div"> extends ParentPr
 }
 
 export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>) {
-  const [local, rest] = splitProps(props, ["trigger", "triggerAs", "triggerProps", "title", "description", "class", "classList", "children"])
+  const [local, rest] = splitProps(props, [
+    "trigger",
+    "triggerAs",
+    "triggerProps",
+    "title",
+    "description",
+    "class",
+    "classList",
+    "children",
+  ])
 
   return (
     <Kobalte gutter={4} {...rest}>
@@ -32,7 +43,13 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
           <Show when={local.title}>
             <div data-slot="popover-header">
               <Kobalte.Title data-slot="popover-title">{local.title}</Kobalte.Title>
-              <Kobalte.CloseButton data-slot="popover-close-button" as={IconButton} icon="close" variant="ghost" aria-label="Close" />
+              <Kobalte.CloseButton
+                data-slot="popover-close-button"
+                as={IconButton}
+                icon="close"
+                variant="ghost"
+                aria-label="Close"
+              />
             </div>
           </Show>
           <Show when={local.description}>

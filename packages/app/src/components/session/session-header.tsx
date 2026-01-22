@@ -260,71 +260,73 @@ export function SessionHeader() {
                     }}
                     trigger={language.t("session.share.action.share")}
                   >
-                  <div class="flex flex-col gap-2">
-                    <Show
-                      when={shareUrl()}
-                      fallback={
-                        <div class="flex">
-                          <Button
-                            size="large"
-                            variant="primary"
-                            class="w-1/2"
-                            onClick={shareSession}
-                            disabled={state.share}
-                          >
-                            {state.share
-                              ? language.t("session.share.action.publishing")
-                              : language.t("session.share.action.publish")}
-                          </Button>
+                    <div class="flex flex-col gap-2">
+                      <Show
+                        when={shareUrl()}
+                        fallback={
+                          <div class="flex">
+                            <Button
+                              size="large"
+                              variant="primary"
+                              class="w-1/2"
+                              onClick={shareSession}
+                              disabled={state.share}
+                            >
+                              {state.share
+                                ? language.t("session.share.action.publishing")
+                                : language.t("session.share.action.publish")}
+                            </Button>
+                          </div>
+                        }
+                      >
+                        <div class="flex flex-col gap-2 w-72">
+                          <TextField value={shareUrl() ?? ""} readOnly copyable class="w-full" />
+                          <div class="grid grid-cols-2 gap-2">
+                            <Button
+                              size="large"
+                              variant="secondary"
+                              class="w-full shadow-none border border-border-weak-base"
+                              onClick={unshareSession}
+                              disabled={state.unshare}
+                            >
+                              {state.unshare
+                                ? language.t("session.share.action.unpublishing")
+                                : language.t("session.share.action.unpublish")}
+                            </Button>
+                            <Button
+                              size="large"
+                              variant="primary"
+                              class="w-full"
+                              onClick={viewShare}
+                              disabled={state.unshare}
+                            >
+                              {language.t("session.share.action.view")}
+                            </Button>
+                          </div>
                         </div>
+                      </Show>
+                    </div>
+                  </Popover>
+                  <Show when={shareUrl()} fallback={<div class="size-6" aria-hidden="true" />}>
+                    <Tooltip
+                      value={
+                        state.copied
+                          ? language.t("session.share.copy.copied")
+                          : language.t("session.share.copy.copyLink")
                       }
+                      placement="top"
+                      gutter={8}
                     >
-                      <div class="flex flex-col gap-2 w-72">
-                        <TextField value={shareUrl() ?? ""} readOnly copyable class="w-full" />
-                        <div class="grid grid-cols-2 gap-2">
-                          <Button
-                            size="large"
-                            variant="secondary"
-                            class="w-full shadow-none border border-border-weak-base"
-                            onClick={unshareSession}
-                            disabled={state.unshare}
-                          >
-                            {state.unshare
-                              ? language.t("session.share.action.unpublishing")
-                              : language.t("session.share.action.unpublish")}
-                          </Button>
-                          <Button
-                            size="large"
-                            variant="primary"
-                            class="w-full"
-                            onClick={viewShare}
-                            disabled={state.unshare}
-                          >
-                            {language.t("session.share.action.view")}
-                          </Button>
-                        </div>
-                      </div>
-                    </Show>
-                  </div>
-                </Popover>
-                <Show when={shareUrl()} fallback={<div class="size-6" aria-hidden="true" />}>
-                  <Tooltip
-                    value={
-                      state.copied ? language.t("session.share.copy.copied") : language.t("session.share.copy.copyLink")
-                    }
-                    placement="top"
-                    gutter={8}
-                  >
-                    <IconButton
-                      icon={state.copied ? "check" : "copy"}
-                      variant="secondary"
-                      class="rounded-l-none"
-                      onClick={copyLink}
-                      disabled={state.unshare}
-                      aria-label="Copy share link"
-                    />
-                  </Tooltip>
-                </Show>
+                      <IconButton
+                        icon={state.copied ? "check" : "copy"}
+                        variant="secondary"
+                        class="rounded-l-none"
+                        onClick={copyLink}
+                        disabled={state.unshare}
+                        aria-label="Copy share link"
+                      />
+                    </Tooltip>
+                  </Show>
                 </div>
               </Show>
             </div>

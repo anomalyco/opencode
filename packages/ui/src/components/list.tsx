@@ -230,7 +230,12 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
               />
             </div>
             <Show when={internalFilter()}>
-              <IconButton icon="circle-x" variant="ghost" onClick={() => setInternalFilter("")} aria-label="Clear filter" />
+              <IconButton
+                icon="circle-x"
+                variant="ghost"
+                onClick={() => setInternalFilter("")}
+                aria-label="Clear filter"
+              />
             </Show>
           </div>
           {searchAction()}

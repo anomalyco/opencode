@@ -14,7 +14,13 @@ export function ImagePreview(props: ImagePreviewProps) {
       <div data-slot="image-preview-container">
         <Kobalte.Content data-slot="image-preview-content">
           <div data-slot="image-preview-header">
-            <Kobalte.CloseButton data-slot="image-preview-close" as={IconButton} icon="close" variant="ghost" aria-label="Close" />
+            <Kobalte.CloseButton
+              data-slot="image-preview-close"
+              as={IconButton}
+              icon="close"
+              variant="ghost"
+              aria-label="Close"
+            />
           </div>
           <div data-slot="image-preview-body">
             <img src={props.src} alt={props.alt ?? i18n.t("ui.imagePreview.alt")} data-slot="image-preview-image" />

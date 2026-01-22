@@ -1553,7 +1553,11 @@ export default function Page() {
 
         {/* Desktop tabs panel (Review + Context + Files) - hidden on mobile */}
         <Show when={isDesktop() && showTabs()}>
-          <aside id="review-panel" aria-label="Review and files" class="relative flex-1 min-w-0 h-full border-l border-border-weak-base">
+          <aside
+            id="review-panel"
+            aria-label="Review and files"
+            class="relative flex-1 min-w-0 h-full border-l border-border-weak-base"
+          >
             <DragDropProvider
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
@@ -1587,7 +1591,12 @@ export default function Page() {
                         value="context"
                         closeButton={
                           <Tooltip value={language.t("common.closeTab")} placement="bottom">
-                            <IconButton icon="close" variant="ghost" onClick={() => tabs().close("context")} aria-label="Close context tab" />
+                            <IconButton
+                              icon="close"
+                              variant="ghost"
+                              onClick={() => tabs().close("context")}
+                              aria-label="Close context tab"
+                            />
                           </Tooltip>
                         }
                         hideCloseButton
@@ -1995,7 +2004,13 @@ export default function Page() {
                         keybind={command.keybind("terminal.new")}
                         class="flex items-center"
                       >
-                        <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} aria-label="New terminal" />
+                        <IconButton
+                          icon="plus-small"
+                          variant="ghost"
+                          iconSize="large"
+                          onClick={terminal.new}
+                          aria-label="New terminal"
+                        />
                       </TooltipKeybind>
                     </div>
                   </Tabs.List>

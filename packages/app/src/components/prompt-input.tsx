@@ -1653,10 +1653,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     title={language.t("command.model.choose")}
                     keybind={command.keybind("model.choose")}
                   >
-                    <ModelSelectorPopover
-                      triggerAs={Button}
-                      triggerProps={{ variant: "ghost" }}
-                    >
+                    <ModelSelectorPopover triggerAs={Button} triggerProps={{ variant: "ghost" }}>
                       <Show when={local.model.current()?.provider?.id}>
                         <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                       </Show>
