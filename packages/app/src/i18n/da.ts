@@ -13,6 +13,7 @@ export const dict = {
   "command.category.mcp": "MCP",
   "command.category.agent": "Agent",
   "command.category.permissions": "Tilladelser",
+  "command.category.workspace": "Arbejdsområde",
 
   "theme.scheme.system": "System",
   "theme.scheme.light": "Lys",
@@ -268,13 +269,16 @@ export const dict = {
   "context.usage.clickToView": "Klik for at se kontekst",
 
   "language.en": "Engelsk",
-  "language.zh": "Kinesisk",
+  "language.zh": "Kinesisk (forenklet)",
+  "language.zht": "Kinesisk (traditionelt)",
   "language.ko": "Koreansk",
   "language.de": "Tysk",
   "language.es": "Spansk",
   "language.fr": "Fransk",
   "language.ja": "Japansk",
   "language.da": "Dansk",
+  "language.ru": "Russisk",
+  "language.pl": "Polsk",
 
   "toast.language.title": "Sprog",
   "toast.language.description": "Skiftede til {{language}}",
@@ -465,6 +469,8 @@ export const dict = {
   "settings.shortcuts.conflict.description": "{{keybind}} er allerede tildelt til {{titles}}.",
   "settings.shortcuts.unassigned": "Ikke tildelt",
   "settings.shortcuts.pressKeys": "Tryk på taster",
+  "settings.shortcuts.search.placeholder": "Søg genveje",
+  "settings.shortcuts.search.empty": "Ingen genveje fundet",
 
   "settings.shortcuts.group.general": "Generelt",
   "settings.shortcuts.group.session": "Session",

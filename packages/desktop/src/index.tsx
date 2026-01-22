@@ -270,7 +270,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
       .then(() => {
         const notification = new Notification(title, {
           body: description ?? "",
-          icon: "https://opencode.ai/favicon-96x96-v2.png",
+          icon: "https://opencode.ai/favicon-96x96-v3.png",
         })
         notification.onclick = () => {
           const win = getCurrentWindow()
@@ -362,7 +362,7 @@ type ServerReadyData = { url: string; password: string | null }
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
   const [serverData] = createResource<ServerReadyData>(() =>
     invoke("ensure_server_ready").then((v) => {
-      return new Promise((res) => setTimeout(() => res(v), 2000))
+      return new Promise((res) => setTimeout(() => res(v as ServerReadyData), 2000))
     }),
   )
 

@@ -13,6 +13,7 @@ export const dict = {
   "command.category.mcp": "MCP",
   "command.category.agent": "Agente",
   "command.category.permissions": "Permisos",
+  "command.category.workspace": "Espacio de trabajo",
 
   "theme.scheme.system": "Sistema",
   "theme.scheme.light": "Claro",
@@ -268,13 +269,16 @@ export const dict = {
   "context.usage.clickToView": "Haz clic para ver contexto",
 
   "language.en": "Inglés",
-  "language.zh": "Chino",
+  "language.zh": "Chino (simplificado)",
+  "language.zht": "Chino (tradicional)",
   "language.ko": "Coreano",
   "language.de": "Alemán",
   "language.es": "Español",
   "language.fr": "Francés",
   "language.ja": "Japonés",
   "language.da": "Danés",
+  "language.ru": "Ruso",
+  "language.pl": "Polaco",
 
   "toast.language.title": "Idioma",
   "toast.language.description": "Cambiado a {{language}}",
@@ -468,6 +472,8 @@ export const dict = {
   "settings.shortcuts.conflict.description": "{{keybind}} ya está asignado a {{titles}}.",
   "settings.shortcuts.unassigned": "Sin asignar",
   "settings.shortcuts.pressKeys": "Presiona teclas",
+  "settings.shortcuts.search.placeholder": "Buscar atajos",
+  "settings.shortcuts.search.empty": "No se encontraron atajos",
 
   "settings.shortcuts.group.general": "General",
   "settings.shortcuts.group.session": "Sesión",

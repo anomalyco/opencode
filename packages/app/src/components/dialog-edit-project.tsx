@@ -75,6 +75,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
     const name = store.name.trim() === folderName() ? "" : store.name.trim()
     await globalSDK.client.project.update({
       projectID: props.project.id,
+      directory: props.project.worktree,
       name,
       icon: { color: store.color, override: store.iconUrl },
     })

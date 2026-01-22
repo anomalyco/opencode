@@ -17,6 +17,7 @@ export const dict = {
   "command.category.mcp": "MCP",
   "command.category.agent": "에이전트",
   "command.category.permissions": "권한",
+  "command.category.workspace": "작업 공간",
 
   "theme.scheme.system": "시스템",
   "theme.scheme.light": "라이트",
@@ -270,13 +271,16 @@ export const dict = {
   "context.usage.clickToView": "컨텍스트를 보려면 클릭",
 
   "language.en": "영어",
-  "language.zh": "중국어",
+  "language.zh": "중국어 (간체)",
+  "language.zht": "중국어 (번체)",
   "language.ko": "한국어",
   "language.de": "독일어",
   "language.es": "스페인어",
   "language.fr": "프랑스어",
   "language.ja": "일본어",
   "language.da": "덴마크어",
+  "language.ru": "러시아어",
+  "language.pl": "폴란드어",
 
   "toast.language.title": "언어",
   "toast.language.description": "{{language}}(으)로 전환됨",
@@ -464,6 +468,8 @@ export const dict = {
   "settings.shortcuts.conflict.description": "{{keybind}}은(는) 이미 {{titles}}에 할당되어 있습니다.",
   "settings.shortcuts.unassigned": "할당되지 않음",
   "settings.shortcuts.pressKeys": "키 누르기",
+  "settings.shortcuts.search.placeholder": "단축키 검색",
+  "settings.shortcuts.search.empty": "단축키를 찾을 수 없습니다",
 
   "settings.shortcuts.group.general": "일반",
   "settings.shortcuts.group.session": "세션",
