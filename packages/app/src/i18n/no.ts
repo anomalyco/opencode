@@ -596,4 +596,4 @@ export const dict: Record<Keys, string> = {
   "workspace.reset.archived.one": "1 sesjon vil bli arkivert.",
   "workspace.reset.archived.many": "{{count}} sesjoner vil bli arkivert.",
   "workspace.reset.note": "Dette vil tilbakestille arbeidsområdet til å samsvare med standardgrenen.",
-}
+} satisfies Partial<Record<Keys, string>>
