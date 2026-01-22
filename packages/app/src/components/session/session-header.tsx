@@ -50,7 +50,7 @@ export function SessionHeader() {
 
   const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
-  const showReview = createMemo(() => !!currentSession()?.summary?.files)
+  const showReview = createMemo(() => !!currentSession())
   const showShare = createMemo(() => shareEnabled() && !!currentSession())
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey()))
@@ -139,6 +139,7 @@ export function SessionHeader() {
               type="button"
               class="hidden md:flex w-[320px] p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
               onClick={() => command.trigger("file.open")}
+              aria-label={language.t("session.header.searchFiles")}
             >
               <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
                 <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
@@ -157,13 +158,7 @@ export function SessionHeader() {
           <Portal mount={mount()}>
             <div class="flex items-center gap-3">
               <div class="flex items-center gap-1">
-                <div
-                  class="hidden md:block shrink-0"
-                  classList={{
-                    "opacity-0 pointer-events-none": !showReview(),
-                  }}
-                  aria-hidden={!showReview()}
-                >
+                <div class="hidden md:block shrink-0">
                   <TooltipKeybind
                     title={language.t("command.review.toggle")}
                     keybind={command.keybind("review.toggle")}
@@ -172,6 +167,10 @@ export function SessionHeader() {
                       variant="ghost"
                       class="group/review-toggle size-6 p-0"
                       onClick={() => view().reviewPanel.toggle()}
+                      aria-label={language.t("command.review.toggle")}
+                      aria-expanded={view().reviewPanel.opened()}
+                      aria-controls="review-panel"
+                      tabIndex={showReview() ? 0 : -1}
                     >
                       <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                         <Icon
@@ -200,8 +199,11 @@ export function SessionHeader() {
                 >
                   <Button
                     variant="ghost"
-                    class="group/terminal-toggle size-8 rounded-md"
+                    class="group/terminal-toggle size-6 p-0"
                     onClick={() => view().terminal.toggle()}
+                    aria-label={language.t("command.terminal.toggle")}
+                    aria-expanded={view().terminal.opened()}
+                    aria-controls="terminal-panel"
                   >
                     <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                       <Icon
@@ -223,105 +225,94 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
-              <div
-                classList={{
-                  "opacity-0 pointer-events-none": !currentSession(),
-                }}
-                aria-hidden={!currentSession()}
-              >
+              <Show when={currentSession()}>
                 <StatusPopover sync={sync} sdk={sdk} />
-              </div>
-              <div
-                class="flex items-center"
-                classList={{
-                  "opacity-0 pointer-events-none": !showShare(),
-                }}
-                aria-hidden={!showShare()}
-              >
-                <Popover
-                  title={language.t("session.share.popover.title")}
-                  description={
-                    shareUrl()
-                      ? language.t("session.share.popover.description.shared")
-                      : language.t("session.share.popover.description.unshared")
-                  }
-                  trigger={
-                    <Tooltip class="shrink-0" value={language.t("command.session.share")}>
-                      <Button
-                        variant="secondary"
-                        classList={{ "rounded-r-none": shareUrl() !== undefined }}
-                        style={{ scale: 1 }}
-                      >
-                        {language.t("session.share.action.share")}
-                      </Button>
-                    </Tooltip>
-                  }
-                >
-                  <div class="flex flex-col gap-2">
-                    <Show
-                      when={shareUrl()}
-                      fallback={
-                        <div class="flex">
-                          <Button
-                            size="large"
-                            variant="primary"
-                            class="w-1/2"
-                            onClick={shareSession}
-                            disabled={state.share}
-                          >
-                            {state.share
-                              ? language.t("session.share.action.publishing")
-                              : language.t("session.share.action.publish")}
-                          </Button>
-                        </div>
-                      }
-                    >
-                      <div class="flex flex-col gap-2 w-72">
-                        <TextField value={shareUrl() ?? ""} readOnly copyable class="w-full" />
-                        <div class="grid grid-cols-2 gap-2">
-                          <Button
-                            size="large"
-                            variant="secondary"
-                            class="w-full shadow-none border border-border-weak-base"
-                            onClick={unshareSession}
-                            disabled={state.unshare}
-                          >
-                            {state.unshare
-                              ? language.t("session.share.action.unpublishing")
-                              : language.t("session.share.action.unpublish")}
-                          </Button>
-                          <Button
-                            size="large"
-                            variant="primary"
-                            class="w-full"
-                            onClick={viewShare}
-                            disabled={state.unshare}
-                          >
-                            {language.t("session.share.action.view")}
-                          </Button>
-                        </div>
-                      </div>
-                    </Show>
-                  </div>
-                </Popover>
-                <Show when={shareUrl()} fallback={<div class="size-6" aria-hidden="true" />}>
-                  <Tooltip
-                    value={
-                      state.copied ? language.t("session.share.copy.copied") : language.t("session.share.copy.copyLink")
+              </Show>
+              <Show when={showShare()}>
+                <div class="flex items-center">
+                  <Popover
+                    title={language.t("session.share.popover.title")}
+                    description={
+                      shareUrl()
+                        ? language.t("session.share.popover.description.shared")
+                        : language.t("session.share.popover.description.unshared")
                     }
-                    placement="top"
-                    gutter={8}
+                    triggerAs={Button}
+                    triggerProps={{
+                      variant: "secondary",
+                      classList: { "rounded-r-none": shareUrl() !== undefined },
+                      style: { scale: 1 },
+                    }}
+                    trigger={language.t("session.share.action.share")}
                   >
-                    <IconButton
-                      icon={state.copied ? "check" : "copy"}
-                      variant="secondary"
-                      class="rounded-l-none"
-                      onClick={copyLink}
-                      disabled={state.unshare}
-                    />
-                  </Tooltip>
-                </Show>
-              </div>
+                    <div class="flex flex-col gap-2">
+                      <Show
+                        when={shareUrl()}
+                        fallback={
+                          <div class="flex">
+                            <Button
+                              size="large"
+                              variant="primary"
+                              class="w-1/2"
+                              onClick={shareSession}
+                              disabled={state.share}
+                            >
+                              {state.share
+                                ? language.t("session.share.action.publishing")
+                                : language.t("session.share.action.publish")}
+                            </Button>
+                          </div>
+                        }
+                      >
+                        <div class="flex flex-col gap-2 w-72">
+                          <TextField value={shareUrl() ?? ""} readOnly copyable class="w-full" />
+                          <div class="grid grid-cols-2 gap-2">
+                            <Button
+                              size="large"
+                              variant="secondary"
+                              class="w-full shadow-none border border-border-weak-base"
+                              onClick={unshareSession}
+                              disabled={state.unshare}
+                            >
+                              {state.unshare
+                                ? language.t("session.share.action.unpublishing")
+                                : language.t("session.share.action.unpublish")}
+                            </Button>
+                            <Button
+                              size="large"
+                              variant="primary"
+                              class="w-full"
+                              onClick={viewShare}
+                              disabled={state.unshare}
+                            >
+                              {language.t("session.share.action.view")}
+                            </Button>
+                          </div>
+                        </div>
+                      </Show>
+                    </div>
+                  </Popover>
+                  <Show when={shareUrl()} fallback={<div class="size-6" aria-hidden="true" />}>
+                    <Tooltip
+                      value={
+                        state.copied
+                          ? language.t("session.share.copy.copied")
+                          : language.t("session.share.copy.copyLink")
+                      }
+                      placement="top"
+                      gutter={8}
+                    >
+                      <IconButton
+                        icon={state.copied ? "check" : "copy"}
+                        variant="secondary"
+                        class="rounded-l-none"
+                        onClick={copyLink}
+                        disabled={state.unshare}
+                      />
+                    </Tooltip>
+                  </Show>
+                </div>
+              </Show>
             </div>
           </Portal>
         )}

@@ -402,6 +402,7 @@ export const dict = {
   "session.new.lastModified": "Last modified",
 
   "session.header.search.placeholder": "Search {{project}}",
+  "session.header.searchFiles": "Search files",
 
   "session.share.popover.title": "Publish on web",
   "session.share.popover.description.shared":

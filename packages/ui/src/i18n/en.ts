@@ -62,6 +62,7 @@ export const dict = {
 
   "ui.common.add": "Add",
   "ui.common.cancel": "Cancel",
+  "ui.common.close": "Close",
   "ui.common.confirm": "Confirm",
   "ui.common.dismiss": "Dismiss",
   "ui.common.next": "Next",
