@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Secure remote access to your opencode instance from anywhere — authenticate once with your system credentials, work on your projects from any device.
-**Current focus:** Phase 7 (Security Hardening) - Not started
+**Current focus:** Phase 7 (Security Hardening) - In progress
 
 ## Current Position
 
 Phase: 7 of 11 (Security Hardening)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-01-22 - Completed Phase 6
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-01-22 - Completed 07-01-PLAN.md
 
-Progress: [██████░░░░] ~55%
+Progress: [██████░░░░] ~57%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 25
+- Total plans completed: 26
 - Average duration: 6.6 min
-- Total execution time: 166 min
+- Total execution time: 172 min
 
 **By Phase:**
 
@@ -33,10 +33,11 @@ Progress: [██████░░░░] ~55%
 | 4. Authentication Flow | 2 | 8 min | 4 min |
 | 5. User Process Execution | 10 | 83 min | 8.3 min |
 | 6. Login UI | 1 | 25 min | 25 min |
+| 7. Security Hardening | 1 | 6 min | 6 min |
 
 **Recent Trend:**
-- Last 5 plans: 05-08 (4 min), 05-09 (4 min), 05-10 (15 min), 06-01 (25 min)
-- Trend: UI work with architecture correction took longer
+- Last 5 plans: 05-09 (4 min), 05-10 (15 min), 06-01 (25 min), 07-01 (6 min)
+- Trend: Security features faster than UI work
 
 *Updated after each plan completion*
 
@@ -100,6 +101,10 @@ Recent decisions affecting current work:
 | 05-09 | AuthContext interface | Structured sessionId, username, uid, gid for route access |
 | 05-09 | Route-level auth checks | Double-check auth for critical PTY operations |
 | 05-09 | Conditional sessionId | Pass to Pty.create only when auth enabled |
+| 07-01 | Double-submit cookie pattern | Stateless CSRF protection fits in-memory session design |
+| 07-01 | HMAC session binding | Prevents token fixation attacks via signature validation |
+| 07-01 | Non-HttpOnly CSRF cookie | Required for double-submit pattern (client reads cookie) |
+| 07-01 | CSRF allowlist includes /auth/login | Login endpoint sets initial cookie, cannot validate one |
 
 ### Pending Todos
 
@@ -119,11 +124,18 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed Phase 6
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
-Next: Phase 7 - Security Hardening
+Next: Continue Phase 7 plans (07-02, 07-03)
 
 ## Phase 6 Progress
 
 **Login UI - Complete:**
 - [x] Plan 01: Login page with form, password toggle, styling (25 min)
+
+## Phase 7 Progress
+
+**Security Hardening - In Progress:**
+- [x] Plan 01: CSRF Protection (6 min)
+- [ ] Plan 02: Rate Limiting
+- [ ] Plan 03: Security Headers
