@@ -25,7 +25,7 @@ Add 6 smoke tests to `packages/app/e2e/`:
 - [x] 2. Prompt slash command path: `/open` opens file picker (`packages/app/e2e/prompt-slash-open.spec.ts`)
 - [x] 3. Prompt @mention inserts a file pill token (`packages/app/e2e/prompt-mention.spec.ts`)
 - [x] 4. Model selection UI works end-to-end (`packages/app/e2e/model-picker.spec.ts`)
-- [ ] 5. File viewer renders real file content
+- [x] 5. File viewer renders real file content (`packages/app/e2e/file-viewer.spec.ts`)
 - [ ] 8. Terminal init + create new terminal
 
 ---
@@ -183,9 +183,10 @@ Steps:
 2. Open file picker (either `mod+p` or `/open`).
 3. Search for `packages/app/package.json`.
 4. Click the matching file result.
-5. Assert the code viewer contains a known substring:
+5. Ensure the new file tab is active (click the `package.json` tab if needed so the viewer mounts).
+6. Assert the code viewer contains a known substring:
    - `"name": "@opencode-ai/app"`.
-6. Optionally assert the file tab is active and visible.
+7. Optionally assert the file tab is active and visible.
 
 Acceptance criteria:
 
