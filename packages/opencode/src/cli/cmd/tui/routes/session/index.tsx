@@ -127,6 +127,25 @@ export function Session() {
       .filter((x) => x.parentID === parentID || x.id === parentID)
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
+  // Siblings: sessions with the same direct parent (for left/right cycling)
+  const siblings = createMemo(() => {
+    const currentParentID = session()?.parentID
+    if (!currentParentID) {
+      // Root session: no siblings to cycle
+      return [session()!].filter(Boolean)
+    }
+    return sync.data.session
+      .filter((x) => x.parentID === currentParentID)
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  })
+  // Direct children: sessions whose parent is this session (for down navigation)
+  const directChildren = createMemo(() => {
+    const currentID = session()?.id
+    if (!currentID) return []
+    return sync.data.session
+      .filter((x) => x.parentID === currentID)
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
@@ -315,29 +334,40 @@ export function Session() {
 
   const local = useLocal()
 
-  function moveFirstChild() {
-    if (children().length === 1) return
-    const next = children().find((x) => !!x.parentID)
-    if (next) {
+  function moveChild(direction: number) {
+    // Use siblings for cycling (sessions with same parentID)
+    const sibs = siblings()
+    if (sibs.length <= 1) return
+    let next = sibs.findIndex((x) => x.id === session()?.id) + direction
+    if (next >= sibs.length) next = 0
+    if (next < 0) next = sibs.length - 1
+    if (sibs[next]) {
       navigate({
         type: "session",
-        sessionID: next.id,
+        sessionID: sibs[next].id,
       })
     }
   }
 
-  function moveChild(direction: number) {
-    if (children().length === 1) return
+  function moveToFirstChild() {
+    const children = directChildren()
+    if (children.length === 0) return
+    navigate({
+      type: "session",
+      sessionID: children[0].id,
+    })
+  }
 
-    const sessions = children().filter((x) => !!x.parentID)
-    let next = sessions.findIndex((x) => x.id === session()?.id) + direction
-
-    if (next >= sessions.length) next = 0
-    if (next < 0) next = sessions.length - 1
-    if (sessions[next]) {
+  function moveToRoot() {
+    // Traverse up to find root session (no parentID)
+    let current = session()
+    while (current?.parentID) {
+      current = sync.session.get(current.parentID)
+    }
+    if (current && current.id !== session()?.id) {
       navigate({
         type: "session",
-        sessionID: sessions[next].id,
+        sessionID: current.id,
       })
     }
   }
@@ -919,6 +949,17 @@ export function Session() {
       },
     },
     {
+      title: "Go to first child session",
+      value: "session.child.down",
+      keybind: "session_child_down",
+      category: "Session",
+      hidden: true,
+      onSelect: (dialog) => {
+        moveToFirstChild()
+        dialog.clear()
+      },
+    },
+    {
       title: "Go to parent session",
       value: "session.parent",
       keybind: "session_parent",
@@ -956,6 +997,17 @@ export function Session() {
         moveChild(-1)
         dialog.clear()
       }),
+    },
+    {
+      title: "Go to root session",
+      value: "session.root",
+      keybind: "session_root",
+      category: "Session",
+      hidden: true,
+      onSelect: (dialog) => {
+        moveToRoot()
+        dialog.clear()
+      },
     },
   ])
 
@@ -1937,7 +1989,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
   return (
     <Switch>
-      <Match when={props.input.description || props.input.subagent_type}>
+      <Match when={props.metadata.sessionId}>
         <BlockTool
           title={"# " + Locale.titlecase(props.input.subagent_type ?? "unknown") + " Task"}
           onClick={
@@ -1965,7 +2017,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
           </box>
           <Show when={props.metadata.sessionId}>
             <text fg={theme.text}>
-              {keybind.print("session_child_first")}
+              {keybind.print("session_child_down")}
               <span style={{ fg: theme.textMuted }}> view subagents</span>
             </text>
           </Show>
