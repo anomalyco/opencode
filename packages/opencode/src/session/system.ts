@@ -17,6 +17,7 @@ import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 import PROMPT_CODEX from "./prompt/codex_header.txt"
 import type { Provider } from "@/provider/provider"
 import { Flag } from "@/flag/flag"
+import { SmartRule } from "@/smart-rule"
 
 const log = Log.create({ service: "system-prompt" })
 
@@ -152,5 +153,9 @@ export namespace SystemPrompt {
         .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
     )
     return Promise.all([...foundFiles, ...foundUrls]).then((result) => result.filter(Boolean))
+  }
+
+  export async function smartRules(sessionID: string): Promise<string[]> {
+    return SmartRule.inject(sessionID)
   }
 }
