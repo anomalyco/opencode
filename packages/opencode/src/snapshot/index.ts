@@ -104,7 +104,6 @@ export namespace Snapshot {
         .split("\n")
         .map((x) => x.trim())
         .filter(Boolean)
-        .map((x) => unquote(x))
         .map((x) => path.join(Instance.worktree, x)),
     }
   }
@@ -203,28 +202,20 @@ export namespace Snapshot {
       .nothrow()
       .lines()) {
       if (!line) continue
-      const [additions, deletions, rawFile] = line.split("\t")
-      const file = unquote(rawFile)
+      const [additions, deletions, file] = line.split("\t")
       const isBinaryFile = additions === "-" && deletions === "-"
-      const beforeResult = isBinaryFile
-        ? { exitCode: 0, text: () => "", stderr: Buffer.from("") }
+      const before = isBinaryFile
+        ? ""
         : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
             .quiet()
             .nothrow()
-      const before =
-        beforeResult.exitCode === 0
-          ? beforeResult.text()
-          : `[DEBUG ERROR] git show ${from}:${file} failed: ${beforeResult.stderr.toString()}`
-
-      const afterResult = isBinaryFile
-        ? { exitCode: 0, text: () => "", stderr: Buffer.from("") }
+            .text()
+      const after = isBinaryFile
+        ? ""
         : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
             .quiet()
             .nothrow()
-      const after =
-        afterResult.exitCode === 0
-          ? afterResult.text()
-          : `[DEBUG ERROR] git show ${to}:${file} failed: ${afterResult.stderr.toString()}`
+            .text()
       const added = isBinaryFile ? 0 : parseInt(additions)
       const deleted = isBinaryFile ? 0 : parseInt(deletions)
       result.push({
@@ -236,69 +227,6 @@ export namespace Snapshot {
       })
     }
     return result
-  }
-
-  export function unquote(path: string): string {
-    // If the path is wrapped in quotes, it might contain octal escapes
-    if (path.startsWith('"') && path.endsWith('"')) {
-      const quoted = path.slice(1, -1)
-      // Decode escaped characters
-      const buffer: number[] = []
-      for (let i = 0; i < quoted.length; i++) {
-        if (quoted[i] === "\\") {
-          i++
-          // Check for octal escape (e.g. \344)
-          if (i + 2 < quoted.length && /^[0-7]{3}$/.test(quoted.slice(i, i + 3))) {
-            const octal = quoted.slice(i, i + 3)
-            buffer.push(parseInt(octal, 8))
-            i += 2
-          } else {
-            // Handle standard escapes
-            switch (quoted[i]) {
-              case "b":
-                buffer.push(8)
-                break
-              case "t":
-                buffer.push(9)
-                break
-              case "n":
-                buffer.push(10)
-                break
-              case "v":
-                buffer.push(11)
-                break
-              case "f":
-                buffer.push(12)
-                break
-              case "r":
-                buffer.push(13)
-                break
-              case '"':
-                buffer.push(34)
-                break
-              case "\\":
-                buffer.push(92)
-                break
-              default:
-                // If unknown escape, keep original (or char code of escaped char)
-                buffer.push(quoted.charCodeAt(i))
-            }
-          }
-        } else {
-          const charCode = quoted.charCodeAt(i)
-          if (charCode < 128) {
-            buffer.push(charCode)
-          } else {
-            const charBuffer = Buffer.from(quoted[i])
-            for (const byte of charBuffer) {
-              buffer.push(byte)
-            }
-          }
-        }
-      }
-      return Buffer.from(buffer).toString("utf8")
-    }
-    return path
   }
 
   function gitdir() {
