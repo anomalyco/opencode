@@ -6,9 +6,46 @@ import { Global } from "../global"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import { Scheduler } from "../scheduler"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
+  const hour = 60 * 60 * 1000
+  const prune = "7.days"
+
+  export function init() {
+    Scheduler.register({
+      id: "snapshot.cleanup",
+      interval: hour,
+      run: cleanup,
+      scope: "instance",
+    })
+  }
+
+  export async function cleanup() {
+    if (Instance.project.vcs !== "git") return
+    const cfg = await Config.get()
+    if (cfg.snapshot === false) return
+    const git = gitdir()
+    const exists = await fs
+      .stat(git)
+      .then(() => true)
+      .catch(() => false)
+    if (!exists) return
+    const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} gc --prune=${prune}`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+    if (result.exitCode !== 0) {
+      log.warn("cleanup failed", {
+        exitCode: result.exitCode,
+        stderr: result.stderr.toString(),
+        stdout: result.stdout.toString(),
+      })
+      return
+    }
+    log.info("cleanup", { prune })
+  }
 
   export async function track() {
     if (Instance.project.vcs !== "git") return
@@ -67,6 +104,7 @@ export namespace Snapshot {
         .split("\n")
         .map((x) => x.trim())
         .filter(Boolean)
+        .map((x) => unquote(x))
         .map((x) => path.join(Instance.worktree, x)),
     }
   }
@@ -159,26 +197,30 @@ export namespace Snapshot {
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []
+
+    const show = async (hash: string, file: string) => {
+      const response =
+        await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${hash}:${file}`
+          .quiet()
+          .nothrow()
+      if (response.exitCode === 0) return response.text()
+      const stderr = response.stderr.toString()
+      if (stderr.toLowerCase().includes("does not exist in")) return ""
+      return `[DEBUG ERROR] git show ${hash}:${file} failed: ${stderr}`
+    }
+
     for await (const line of $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
       .quiet()
       .cwd(Instance.directory)
       .nothrow()
       .lines()) {
       if (!line) continue
-      const [additions, deletions, file] = line.split("\t")
+      const [additions, deletions, rawFile] = line.split("\t")
+      const file = unquote(rawFile)
       const isBinaryFile = additions === "-" && deletions === "-"
-      const before = isBinaryFile
-        ? ""
-        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
-            .quiet()
-            .nothrow()
-            .text()
-      const after = isBinaryFile
-        ? ""
-        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
-            .quiet()
-            .nothrow()
-            .text()
+
+      const before = isBinaryFile ? "" : await show(from, file)
+      const after = isBinaryFile ? "" : await show(to, file)
       const added = isBinaryFile ? 0 : parseInt(additions)
       const deleted = isBinaryFile ? 0 : parseInt(deletions)
       result.push({
@@ -190,6 +232,69 @@ export namespace Snapshot {
       })
     }
     return result
+  }
+
+  export function unquote(path: string): string {
+    // If the path is wrapped in quotes, it might contain octal escapes
+    if (path.startsWith('"') && path.endsWith('"')) {
+      const quoted = path.slice(1, -1)
+      // Decode escaped characters
+      const buffer: number[] = []
+      for (let i = 0; i < quoted.length; i++) {
+        if (quoted[i] === "\\") {
+          i++
+          // Check for octal escape (e.g. \344)
+          if (i + 2 < quoted.length && /^[0-7]{3}$/.test(quoted.slice(i, i + 3))) {
+            const octal = quoted.slice(i, i + 3)
+            buffer.push(parseInt(octal, 8))
+            i += 2
+          } else {
+            // Handle standard escapes
+            switch (quoted[i]) {
+              case "b":
+                buffer.push(8)
+                break
+              case "t":
+                buffer.push(9)
+                break
+              case "n":
+                buffer.push(10)
+                break
+              case "v":
+                buffer.push(11)
+                break
+              case "f":
+                buffer.push(12)
+                break
+              case "r":
+                buffer.push(13)
+                break
+              case '"':
+                buffer.push(34)
+                break
+              case "\\":
+                buffer.push(92)
+                break
+              default:
+                // If unknown escape, keep original (or char code of escaped char)
+                buffer.push(quoted.charCodeAt(i))
+            }
+          }
+        } else {
+          const charCode = quoted.charCodeAt(i)
+          if (charCode < 128) {
+            buffer.push(charCode)
+          } else {
+            const charBuffer = Buffer.from(quoted[i])
+            for (const byte of charBuffer) {
+              buffer.push(byte)
+            }
+          }
+        }
+      }
+      return Buffer.from(buffer).toString("utf8")
+    }
+    return path
   }
 
   function gitdir() {

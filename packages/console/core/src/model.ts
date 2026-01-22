@@ -35,7 +35,7 @@ export namespace ZenData {
     cost200K: ModelCostSchema.optional(),
     allowAnonymous: z.boolean().optional(),
     byokProvider: z.enum(["openai", "anthropic", "google"]).optional(),
-    stickyProvider: z.boolean().optional(),
+    stickyProvider: z.enum(["strict", "prefer"]).optional(),
     trial: TrialSchema.optional(),
     rateLimit: z.number().optional(),
     fallbackProvider: z.string().optional(),
@@ -74,7 +74,8 @@ export namespace ZenData {
         Resource.ZEN_MODELS4.value +
         Resource.ZEN_MODELS5.value +
         Resource.ZEN_MODELS6.value +
-        Resource.ZEN_MODELS7.value,
+        Resource.ZEN_MODELS7.value +
+        Resource.ZEN_MODELS8.value,
     )
     return ModelsSchema.parse(json)
   })

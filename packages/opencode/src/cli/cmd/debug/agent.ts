@@ -70,8 +70,8 @@ export const AgentCommand = cmd({
 })
 
 async function getAvailableTools(agent: Agent.Info) {
-  const providerID = agent.model?.providerID ?? (await Provider.defaultModel()).providerID
-  return ToolRegistry.tools(providerID, agent)
+  const model = agent.model ?? (await Provider.defaultModel())
+  return ToolRegistry.tools(model, agent)
 }
 
 async function resolveTools(agent: Agent.Info, availableTools: Awaited<ReturnType<typeof getAvailableTools>>) {

@@ -24,16 +24,12 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [grouped, { refetch }] = createResource(
     () => ({
       filter: store.filter,
-      items:
-        typeof props.items === "function"
-          ? props.items.length === 0
-            ? (props.items as () => T[])()
-            : undefined
-          : props.items,
+      items: typeof props.items === "function" ? props.items(store.filter) : props.items,
     }),
     async ({ filter, items }) => {
-      const needle = filter?.toLowerCase()
-      const all = (items ?? (await (props.items as (filter: string) => T[] | Promise<T[]>)(needle))) || []
+      const query = filter ?? ""
+      const needle = query.toLowerCase()
+      const all = (await Promise.resolve(items)) || []
       const result = pipe(
         all,
         (x) => {
@@ -81,11 +77,20 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && !event.isComposing) {
       event.preventDefault()
       const selectedIndex = flat().findIndex((x) => props.key(x) === list.active())
       const selected = flat()[selectedIndex]
       if (selected) props.onSelect?.(selected, selectedIndex)
+    } else if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+      if (event.key === "n" || event.key === "p") {
+        event.preventDefault()
+        const navEvent = new KeyboardEvent("keydown", {
+          key: event.key === "n" ? "ArrowDown" : "ArrowUp",
+          bubbles: true,
+        })
+        list.onKeyDown(navEvent)
+      }
     } else {
       // Skip list navigation for text editing shortcuts (e.g., Option+Arrow, Option+Backspace on macOS)
       if (event.altKey || event.metaKey) return

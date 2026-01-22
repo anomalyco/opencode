@@ -87,7 +87,6 @@ export async function POST(input: APIEvent) {
               ...(customer?.customerID
                 ? {}
                 : {
-                    reload: true,
                     reloadError: null,
                     timeReloadError: null,
                   }),
@@ -183,7 +182,12 @@ export async function POST(input: APIEvent) {
             .set({
               customerID,
               subscriptionID,
-              subscriptionCouponID: couponID,
+              subscription: {
+                status: "subscribed",
+                coupon: couponID,
+                seats: 1,
+                plan: "200",
+              },
               paymentMethodID: paymentMethod.id,
               paymentMethodLast4: paymentMethod.card?.last4 ?? null,
               paymentMethodType: paymentMethod.type,
@@ -408,7 +412,7 @@ export async function POST(input: APIEvent) {
       await Database.transaction(async (tx) => {
         await tx
           .update(BillingTable)
-          .set({ subscriptionID: null, subscriptionCouponID: null })
+          .set({ subscriptionID: null, subscription: null })
           .where(eq(BillingTable.workspaceID, workspaceID))
 
         await tx.delete(SubscriptionTable).where(eq(SubscriptionTable.workspaceID, workspaceID))
