@@ -33,6 +33,8 @@ export const AuthConfig = z
       .default("warn")
       .describe("HTTPS requirement mode: 'off' allows HTTP, 'warn' logs warnings, 'block' rejects HTTP"),
     rateLimiting: z.boolean().optional().default(true).describe("Enable rate limiting for login attempts"),
+    rateLimitWindow: Duration.optional().default("15m").describe("Rate limit window duration (e.g., '15m', '1h')"),
+    rateLimitMax: z.number().optional().default(5).describe("Maximum login attempts per window"),
     allowedUsers: z
       .array(z.string())
       .optional()
