@@ -996,6 +996,41 @@ describe("ProviderTransform.message - providerOptions key remapping", () => {
   })
 })
 
+describe("ProviderTransform.message - claude w/bedrock custom inference profile", () => {
+  test("adds cachePoint", () => {
+    const model = {
+      id: "amazon-bedrock/custom-claude-sonnet-4.5",
+      providerID: "amazon-bedrock",
+      api: {
+        id: "arn:aws:bedrock:xxx:yyy:application-inference-profile/zzz",
+        url: "https://api.test.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+      name: "Custom inference profile",
+      capabilities: {},
+      options: {},
+      headers: {},
+    } as any
+
+    const msgs = [
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect(result[0].providerOptions?.bedrock).toEqual(
+      expect.objectContaining({
+        cachePoint: {
+          type: "ephemeral",
+        },
+      }),
+    )
+  })
+})
+
 describe("ProviderTransform.variants", () => {
   const createMockModel = (overrides: Partial<any> = {}): any => ({
     id: "test/test-model",
