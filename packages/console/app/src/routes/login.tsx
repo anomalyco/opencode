@@ -6,6 +6,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Card } from "@opencode-ai/ui/card"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import "@opencode-ai/ui/styles"
 import "./login.css"
 
 export default function Login() {
@@ -16,10 +17,11 @@ export default function Login() {
   const [error, setError] = createSignal("")
   const [loading, setLoading] = createSignal(false)
   const [submitted, setSubmitted] = createSignal(false)
-  let usernameInputRef: HTMLInputElement | undefined
 
   onMount(() => {
-    usernameInputRef?.focus()
+    // Focus the username input after mount
+    const usernameInput = document.querySelector<HTMLInputElement>('[name="username"]')
+    usernameInput?.focus()
   })
 
   const handleSubmit = async (e: Event) => {
@@ -81,7 +83,6 @@ export default function Login() {
             onChange={setUsername}
             required
             autoComplete="username"
-            ref={usernameInputRef}
             validationState={submitted() && !username().trim() ? "invalid" : undefined}
           />
 
