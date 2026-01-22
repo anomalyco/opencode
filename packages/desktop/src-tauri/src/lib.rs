@@ -15,6 +15,8 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewWindowBuilder};
+#[cfg(windows)]
+use tauri_plugin_decorum::WebviewWindowExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_store::StoreExt;
@@ -156,6 +158,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32, password: &str) -> CommandChild {
     println!("spawning sidecar on port {port}");
 
     let (mut rx, child) = cli::create_command(app, format!("serve --port {port}").as_str())
+        .env("OPENCODE_SERVER_USERNAME", "opencode")
         .env("OPENCODE_SERVER_PASSWORD", password)
         .spawn()
         .expect("Failed to spawn opencode");
@@ -197,17 +200,37 @@ fn spawn_sidecar(app: &AppHandle, port: u32, password: &str) -> CommandChild {
     child
 }
 
-async fn check_server_health(url: &str, password: Option<&str>) -> bool {
-    let health_url = format!("{}/global/health", url.trim_end_matches('/'));
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(3))
-        .build();
+fn url_is_localhost(url: &reqwest::Url) -> bool {
+    url.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("localhost")
+            || host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback())
+    })
+}
 
-    let Ok(client) = client else {
+async fn check_server_health(url: &str, password: Option<&str>) -> bool {
+    let Ok(url) = reqwest::Url::parse(url) else {
         return false;
     };
 
-    let mut req = client.get(&health_url);
+    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(3));
+
+    if url_is_localhost(&url) {
+        // Some environments set proxy variables (HTTP_PROXY/HTTPS_PROXY/ALL_PROXY) without
+        // excluding loopback. reqwest respects these by default, which can prevent the desktop
+        // app from reaching its own local sidecar server.
+        builder = builder.no_proxy();
+    };
+
+    let Ok(client) = builder.build() else {
+        return false;
+    };
+    let Ok(health_url) = url.join("/global/health") else {
+        return false;
+    };
+
+    let mut req = client.get(health_url);
 
     if let Some(password) = password {
         req = req.basic_auth("opencode", Some(password));
@@ -254,6 +277,7 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(PinchZoomDisablePlugin)
+        .plugin(tauri_plugin_decorum::init())
         .invoke_handler(tauri::generate_handler![
             kill_sidecar,
             install_cli,
@@ -298,7 +322,13 @@ pub fn run() {
                 .title_bar_style(tauri::TitleBarStyle::Overlay)
                 .hidden_title(true);
 
-            let _window = window_builder.build().expect("Failed to create window");
+            #[cfg(windows)]
+            let window_builder = window_builder.decorations(false);
+
+            let window = window_builder.build().expect("Failed to create window");
+
+            #[cfg(windows)]
+            let _ = window.create_overlay_titlebar();
 
             let (tx, rx) = oneshot::channel();
             app.manage(ServerState::new(None, rx));
