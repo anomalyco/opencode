@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 Phase: 5 of 11 (User Process Execution)
-Plan: 4 of 10 in current phase
+Plan: 5 of 10 in current phase
 Status: In progress
-Last activity: 2026-01-22 - Completed 05-04-PLAN.md
+Last activity: 2026-01-22 - Completed 05-05-PLAN.md
 
-Progress: [██████░░░░] ~72%
+Progress: [███████░░░] ~76%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 18
-- Average duration: 6.2 min
-- Total execution time: 112 min
+- Total plans completed: 19
+- Average duration: 6.1 min
+- Total execution time: 115 min
 
 **By Phase:**
 
@@ -31,11 +31,11 @@ Progress: [██████░░░░] ~72%
 | 2. Session Infrastructure | 2 | 5 min | 2.5 min |
 | 3. Auth Broker Core | 6 | 33 min | 5.5 min |
 | 4. Authentication Flow | 2 | 8 min | 4 min |
-| 5. User Process Execution | 4 | 54 min | 13.5 min |
+| 5. User Process Execution | 5 | 57 min | 11.4 min |
 
 **Recent Trend:**
-- Last 5 plans: 05-01 (40 min), 05-02 (4 min), 05-03 (6 min), 05-04 (4 min)
-- Trend: Handler wiring plans fast once modules exist
+- Last 5 plans: 05-02 (4 min), 05-03 (6 min), 05-04 (4 min), 05-05 (3 min)
+- Trend: Protocol extension plans are fast (3-6 min)
 
 *Updated after each plan completion*
 
@@ -85,6 +85,8 @@ Recent decisions affecting current work:
 | 05-04 | RwLock for UserSessionStore | Simple thread safety, reads lock-free |
 | 05-04 | Response.data as serde_json::Value | Flexible typed results for any response |
 | 05-04 | Server holds Arc refs to session stores | Shared across all connections |
+| 05-05 | Unregister is idempotent | Logout can be called multiple times without error |
+| 05-05 | Session-first auth flow | RegisterSession before SpawnPty ensures user info available |
 
 ### Pending Todos
 
@@ -104,9 +106,9 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-22
-Stopped at: Completed 05-04-PLAN.md
+Stopped at: Completed 05-05-PLAN.md
 Resume file: None
-Next: 05-05-PLAN.md - I/O multiplexing
+Next: 05-06-PLAN.md - Window resize handling
 
 ## Phase 5 Progress
 
@@ -115,7 +117,7 @@ Next: 05-05-PLAN.md - I/O multiplexing
 - [x] Plan 02: Process spawner (4 min, 8 tests)
 - [x] Plan 03: IPC extension for spawn (6 min, 14+4 tests)
 - [x] Plan 04: PTY handler implementation (4 min, 8 tests)
-- [ ] Plan 05: I/O multiplexing
+- [x] Plan 05: Session registration protocol (3 min, 3 tests)
 - [ ] Plan 06: Window resize handling
 - [ ] Plan 07: Signal forwarding
 - [ ] Plan 08: PTY lifecycle events
