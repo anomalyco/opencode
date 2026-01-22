@@ -504,3 +504,145 @@ describe("Security event logging", () => {
     // This test verifies the code path doesn't throw
   })
 })
+
+describe("HTTPS detection and enforcement", () => {
+  let app: Hono
+
+  beforeEach(() => {
+    mockAuthenticate.mockClear()
+    mockGetUserInfo.mockClear()
+    mockAuthenticate.mockResolvedValue({ success: true })
+    mockGetUserInfo.mockResolvedValue({
+      username: "testuser",
+      uid: 1000,
+      gid: 1000,
+      gecos: "Test User",
+      home: "/home/testuser",
+      shell: "/bin/bash",
+    })
+  })
+
+  test("GET /login returns warning HTML when requireHttps is warn and HTTP", async () => {
+    setMockAuthConfig({ requireHttps: "warn" })
+    app = new Hono().route("/auth", AuthRoutes())
+
+    const res = await app.request("http://example.com/auth/login", {
+      method: "GET",
+      headers: { Host: "example.com" },
+    })
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('id="httpWarning"')
+    expect(html).toContain("You are connecting over HTTP")
+  })
+
+  test("GET /login returns blocked HTML when requireHttps is block and HTTP", async () => {
+    setMockAuthConfig({ requireHttps: "block" })
+    app = new Hono().route("/auth", AuthRoutes())
+
+    const res = await app.request("http://example.com/auth/login", {
+      method: "GET",
+      headers: { Host: "example.com" },
+    })
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain("HTTPS is required to log in")
+    expect(html).toContain("disabled")
+  })
+
+  test("GET /login returns normal HTML for secure connection", async () => {
+    setMockAuthConfig({ requireHttps: "block", trustProxy: true })
+    app = new Hono().route("/auth", AuthRoutes())
+
+    const res = await app.request("http://example.com/auth/login", {
+      method: "GET",
+      headers: { Host: "example.com", "X-Forwarded-Proto": "https" },
+    })
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).not.toContain('id="httpWarning"')
+    expect(html).not.toContain("HTTPS is required")
+  })
+
+  test("GET /login returns normal HTML for localhost over HTTP", async () => {
+    setMockAuthConfig({ requireHttps: "block" })
+    app = new Hono().route("/auth", AuthRoutes())
+
+    const res = await app.request("http://localhost:4096/auth/login", {
+      method: "GET",
+      headers: { Host: "localhost:4096" },
+    })
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).not.toContain('id="httpWarning"')
+    expect(html).not.toContain("HTTPS is required")
+  })
+
+  test("POST /login returns 403 when requireHttps is block and HTTP", async () => {
+    setMockAuthConfig({ requireHttps: "block", trustProxy: false })
+    app = new Hono().route("/auth", AuthRoutes())
+
+    const res = await app.request("http://example.com/auth/login", {
+      method: "POST",
+      headers: {
+        Host: "example.com",
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      body: JSON.stringify({ username: "testuser", password: "correct" }),
+    })
+    expect(res.status).toBe(403)
+    const body = await res.json()
+    expect(body.error).toBe("https_required")
+  })
+
+  test("POST /login succeeds for localhost even in block mode", async () => {
+    setMockAuthConfig({ requireHttps: "block", trustProxy: false })
+    app = new Hono().route("/auth", AuthRoutes())
+
+    const res = await app.request("http://localhost:4096/auth/login", {
+      method: "POST",
+      headers: {
+        Host: "localhost:4096",
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      body: JSON.stringify({ username: "testuser", password: "correct" }),
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.success).toBe(true)
+  })
+
+  test("respects X-Forwarded-Proto when trustProxy is true", async () => {
+    setMockAuthConfig({ requireHttps: "warn", trustProxy: true })
+    app = new Hono().route("/auth", AuthRoutes())
+
+    const res = await app.request("http://example.com/auth/login", {
+      method: "GET",
+      headers: {
+        Host: "example.com",
+        "X-Forwarded-Proto": "https",
+      },
+    })
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).not.toContain('id="httpWarning"') // Should not warn because X-Forwarded-Proto says https
+  })
+
+  test("ignores X-Forwarded-Proto when trustProxy is false", async () => {
+    setMockAuthConfig({ requireHttps: "warn", trustProxy: false })
+    app = new Hono().route("/auth", AuthRoutes())
+
+    const res = await app.request("http://example.com/auth/login", {
+      method: "GET",
+      headers: {
+        Host: "example.com",
+        "X-Forwarded-Proto": "https",
+      },
+    })
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('id="httpWarning"') // Should warn because trustProxy is false
+  })
+})
