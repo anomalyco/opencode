@@ -75,13 +75,18 @@
     overflow: hidden;
   }
 
-  [data-component="popover-content"] {
-    position: absolute !important;
-  }
-
-  .session-review-comment-popover-content {
-    left: auto !important;
-    right: calc(100% + 12px) !important;
+  [data-slot="session-review-comment-popover-content"] {
+    position: absolute;
+    top: 0;
+    right: calc(100% + 12px);
+    z-index: 40;
+    min-width: 200px;
+    max-width: min(320px, calc(100vw - 48px));
+    border-radius: var(--radius-md);
+    background-color: var(--surface-raised-stronger-non-alpha);
+    border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);
+    box-shadow: var(--shadow-md);
+    padding: 12px;
   }
 
   [data-slot="session-review-trigger-content"] {

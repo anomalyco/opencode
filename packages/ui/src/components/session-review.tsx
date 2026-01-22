@@ -1,6 +1,5 @@
 import { Accordion } from "./accordion"
 import { Button } from "./button"
-import { Popover } from "./popover"
 import { RadioGroup } from "./radio-group"
 import { DiffChanges } from "./diff-changes"
 import { FileIcon } from "./file-icon"
@@ -151,6 +150,7 @@ function markerTop(wrapper: HTMLElement, marker: HTMLElement) {
 
 export const SessionReview = (props: SessionReviewProps) => {
   let scroll: HTMLDivElement | undefined
+  let focusToken = 0
   const i18n = useI18n()
   const diffComponent = useDiffComponent()
   const anchors = new Map<string, HTMLElement>()
@@ -201,6 +201,9 @@ export const SessionReview = (props: SessionReviewProps) => {
     const focus = props.focusedComment
     if (!focus) return
 
+    focusToken++
+    const token = focusToken
+
     setOpened(focus)
 
     const comment = (props.comments ?? []).find((c) => c.file === focus.file && c.id === focus.id)
@@ -211,31 +214,35 @@ export const SessionReview = (props: SessionReviewProps) => {
       handleChange([...current, focus.file])
     }
 
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const root = scroll
-        if (!root) return
+    const scrollTo = (attempt: number) => {
+      if (token !== focusToken) return
 
-        const anchor = root.querySelector(`[data-comment-id="${focus.id}"]`)
-        if (anchor instanceof HTMLElement) {
-          const rootRect = root.getBoundingClientRect()
-          const anchorRect = anchor.getBoundingClientRect()
-          const offset = anchorRect.top - rootRect.top
-          const next = root.scrollTop + offset - rootRect.height / 2 + anchorRect.height / 2
-          root.scrollTop = Math.max(0, next)
-          return
-        }
+      const root = scroll
+      if (!root) return
 
-        const target = anchors.get(focus.file)
-        if (!target) return
+      const anchor = root.querySelector(`[data-comment-id="${focus.id}"]`)
+      const ready =
+        anchor instanceof HTMLElement && anchor.style.pointerEvents !== "none" && anchor.style.opacity !== "0"
 
-        const rootRect = root.getBoundingClientRect()
-        const targetRect = target.getBoundingClientRect()
-        const offset = targetRect.top - rootRect.top
-        const next = root.scrollTop + offset - rootRect.height / 2 + targetRect.height / 2
-        root.scrollTop = Math.max(0, next)
-      })
-    })
+      const target = ready ? anchor : anchors.get(focus.file)
+      if (!target) {
+        if (attempt >= 24) return
+        requestAnimationFrame(() => scrollTo(attempt + 1))
+        return
+      }
+
+      const rootRect = root.getBoundingClientRect()
+      const targetRect = target.getBoundingClientRect()
+      const offset = targetRect.top - rootRect.top
+      const next = root.scrollTop + offset - rootRect.height / 2 + targetRect.height / 2
+      root.scrollTop = Math.max(0, next)
+
+      if (ready) return
+      if (attempt >= 24) return
+      requestAnimationFrame(() => scrollTo(attempt + 1))
+    }
+
+    requestAnimationFrame(() => scrollTo(0))
 
     requestAnimationFrame(() => props.onFocusedCommentChange?.(null))
   })
@@ -519,207 +526,145 @@ export const SessionReview = (props: SessionReviewProps) => {
                     </Accordion.Trigger>
                   </StickyAccordionHeader>
                   <Accordion.Content data-slot="session-review-accordion-content">
-                    <Switch>
-                      <Match when={isImage()}>
-                        <div data-slot="session-review-image-container">
-                          <Show
-                            when={imageSrc()}
-                            fallback={
-                              <div data-slot="session-review-image-placeholder">
-                                <Switch>
-                                  <Match when={imageStatus() === "loading"}>Loading image...</Match>
-                                  <Match when={true}>Image preview unavailable</Match>
-                                </Switch>
-                              </div>
-                            }
+                    <div
+                      data-slot="session-review-diff-wrapper"
+                      ref={(el) => {
+                        wrapper = el
+                        anchors.set(diff.file, el)
+                        scheduleAnchors()
+                      }}
+                    >
+                      <Dynamic
+                        component={diffComponent}
+                        preloadedDiff={diff.preloaded}
+                        diffStyle={diffStyle()}
+                        onRendered={() => {
+                          props.onDiffRendered?.()
+                          scheduleAnchors()
+                        }}
+                        enableLineSelection={props.onLineComment != null}
+                        onLineSelected={handleLineSelected}
+                        onLineSelectionEnd={handleLineSelectionEnd}
+                        selectedLines={selectedLines()}
+                        commentedLines={commentedLines()}
+                        before={{
+                          name: diff.file!,
+                          contents: typeof diff.before === "string" ? diff.before : "",
+                        }}
+                        after={{
+                          name: diff.file!,
+                          contents: typeof diff.after === "string" ? diff.after : "",
+                        }}
+                      />
+
+                      <For each={comments()}>
+                        {(comment) => (
+                          <div
+                            data-slot="session-review-comment-anchor"
+                            data-comment-id={comment.id}
+                            style={{
+                              top: `${positions()[comment.id] ?? 0}px`,
+                              opacity: positions()[comment.id] === undefined ? 0 : 1,
+                              "pointer-events": positions()[comment.id] === undefined ? "none" : "auto",
+                            }}
                           >
-                            <img data-slot="session-review-image" src={imageSrc()!} alt={getFilename(diff.file)} />
-                          </Show>
-                        </div>
-                      </Match>
-                      <Match when={isAudio()}>
-                        <div data-slot="session-review-audio-container">
-                          <Show
-                            when={audioSrc() && audioStatus() !== "error"}
-                            fallback={
-                              <div data-slot="session-review-audio-placeholder">
-                                <Switch>
-                                  <Match when={audioStatus() === "loading"}>Loading audio...</Match>
-                                  <Match when={true}>Audio preview unavailable</Match>
-                                </Switch>
-                              </div>
-                            }
-                          >
-                            <audio
-                              data-slot="session-review-audio"
-                              controls
-                              preload="metadata"
-                              onError={() => {
-                                setAudioStatus("error")
+                            <button
+                              type="button"
+                              data-slot="session-review-comment-button"
+                              onMouseEnter={() => setSelection({ file: comment.file, range: comment.selection })}
+                              onClick={() => {
+                                if (isCommentOpen(comment)) {
+                                  setOpened(null)
+                                  return
+                                }
+
+                                openComment(comment)
                               }}
                             >
-                              <source src={audioSrc()!} type={audioMime()} />
-                            </audio>
-                          </Show>
-                        </div>
-                      </Match>
-                      <Match when={true}>
-                        <div
-                          data-slot="session-review-diff-wrapper"
-                          ref={(el) => {
-                            wrapper = el
-                            anchors.set(diff.file, el)
-                            scheduleAnchors()
-                          }}
-                        >
-                          <Dynamic
-                            component={diffComponent}
-                            preloadedDiff={diff.preloaded}
-                            diffStyle={diffStyle()}
-                            onRendered={() => {
-                              props.onDiffRendered?.()
-                              scheduleAnchors()
-                            }}
-                            enableLineSelection={props.onLineComment != null}
-                            onLineSelected={handleLineSelected}
-                            onLineSelectionEnd={handleLineSelectionEnd}
-                            selectedLines={selectedLines()}
-                            commentedLines={commentedLines()}
-                            before={{
-                              name: diff.file!,
-                              contents: beforeText(),
-                            }}
-                            after={{
-                              name: diff.file!,
-                              contents: afterText(),
-                            }}
-                          />
-
-                          <For each={comments()}>
-                            {(comment) => (
-                              <div
-                                data-slot="session-review-comment-anchor"
-                                data-comment-id={comment.id}
-                                style={{
-                                  top: `${positions()[comment.id] ?? 0}px`,
-                                  opacity: positions()[comment.id] === undefined ? 0 : 1,
-                                  "pointer-events": positions()[comment.id] === undefined ? "none" : "auto",
-                                }}
-                              >
-                                <Popover
-                                  portal={false}
-                                  open={isCommentOpen(comment)}
-                                  class="session-review-comment-popover-content"
-                                  onOpenChange={(open) => {
-                                    if (open) {
-                                      openComment(comment)
-                                      return
-                                    }
-                                    if (!isCommentOpen(comment)) return
-                                    setOpened(null)
-                                  }}
-                                  trigger={
-                                    <button
-                                      type="button"
-                                      data-slot="session-review-comment-button"
-                                      onMouseEnter={() =>
-                                        setSelection({ file: comment.file, range: comment.selection })
-                                      }
-                                    >
-                                      <Icon name="speech-bubble" size="small" />
-                                    </button>
-                                  }
-                                >
-                                  <div data-slot="session-review-comment-popover">
-                                    <div data-slot="session-review-comment-popover-label">
-                                      {getFilename(comment.file)}:{selectionLabel(comment.selection)}
-                                    </div>
-                                    <div data-slot="session-review-comment-popover-text">{comment.comment}</div>
-                                    <Show when={selectionPreview(diff, comment.selection)}>
-                                      {(preview) => <pre data-slot="session-review-comment-preview">{preview()}</pre>}
-                                    </Show>
+                              <Icon name="speech-bubble" size="small" />
+                            </button>
+                            <Show when={isCommentOpen(comment)}>
+                              <div data-slot="session-review-comment-popover-content">
+                                <div data-slot="session-review-comment-popover">
+                                  <div data-slot="session-review-comment-popover-label">
+                                    {getFilename(comment.file)}:{selectionLabel(comment.selection)}
                                   </div>
-                                </Popover>
+                                  <div data-slot="session-review-comment-popover-text">{comment.comment}</div>
+                                </div>
                               </div>
-                            )}
-                          </For>
+                            </Show>
+                          </div>
+                        )}
+                      </For>
 
-                          <Show when={draftRange()}>
-                            {(range) => (
-                              <Show when={draftTop() !== undefined}>
-                                <div data-slot="session-review-comment-anchor" style={{ top: `${draftTop() ?? 0}px` }}>
-                                  <Popover
-                                    portal={false}
-                                    open={true}
-                                    class="session-review-comment-popover-content"
-                                    onOpenChange={(open) => {
-                                      if (open) return
+                      <Show when={draftRange()}>
+                        {(range) => (
+                          <Show when={draftTop() !== undefined}>
+                            <div data-slot="session-review-comment-anchor" style={{ top: `${draftTop() ?? 0}px` }}>
+                              <button
+                                type="button"
+                                data-slot="session-review-comment-button"
+                                onClick={() => textarea?.focus()}
+                              >
+                                <Icon name="speech-bubble" size="small" />
+                              </button>
+                              <div data-slot="session-review-comment-popover-content">
+                                <div data-slot="session-review-comment-popover">
+                                  <div data-slot="session-review-comment-popover-label">
+                                    Commenting on {getFilename(diff.file)}:{selectionLabel(range())}
+                                  </div>
+                                  <textarea
+                                    ref={textarea}
+                                    data-slot="session-review-comment-textarea"
+                                    rows={3}
+                                    placeholder="Add a comment"
+                                    value={draft()}
+                                    onInput={(e) => setDraft(e.currentTarget.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key !== "Enter") return
+                                      if (e.shiftKey) return
+                                      e.preventDefault()
+                                      const value = draft().trim()
+                                      if (!value) return
+                                      props.onLineComment?.({
+                                        file: diff.file,
+                                        selection: range(),
+                                        comment: value,
+                                        preview: selectionPreview(diff, range()),
+                                      })
                                       setCommenting(null)
                                     }}
-                                    trigger={
-                                      <button type="button" data-slot="session-review-comment-button">
-                                        <Icon name="speech-bubble" size="small" />
-                                      </button>
-                                    }
-                                  >
-                                    <div data-slot="session-review-comment-popover">
-                                      <div data-slot="session-review-comment-popover-label">
-                                        Commenting on {getFilename(diff.file)}:{selectionLabel(range())}
-                                      </div>
-                                      <textarea
-                                        ref={textarea}
-                                        data-slot="session-review-comment-textarea"
-                                        rows={3}
-                                        placeholder="Add a comment"
-                                        value={draft()}
-                                        onInput={(e) => setDraft(e.currentTarget.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key !== "Enter") return
-                                          if (e.shiftKey) return
-                                          e.preventDefault()
-                                          const value = draft().trim()
-                                          if (!value) return
-                                          props.onLineComment?.({
-                                            file: diff.file,
-                                            selection: range(),
-                                            comment: value,
-                                            preview: selectionPreview(diff, range()),
-                                          })
-                                          setCommenting(null)
-                                        }}
-                                      />
-                                      <div data-slot="session-review-comment-actions">
-                                        <Button size="small" variant="ghost" onClick={() => setCommenting(null)}>
-                                          Cancel
-                                        </Button>
-                                        <Button
-                                          size="small"
-                                          variant="secondary"
-                                          disabled={draft().trim().length === 0}
-                                          onClick={() => {
-                                            const value = draft().trim()
-                                            if (!value) return
-                                            props.onLineComment?.({
-                                              file: diff.file,
-                                              selection: range(),
-                                              comment: value,
-                                              preview: selectionPreview(diff, range()),
-                                            })
-                                            setCommenting(null)
-                                          }}
-                                        >
-                                          Comment
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </Popover>
+                                  />
+                                  <div data-slot="session-review-comment-actions">
+                                    <Button size="small" variant="ghost" onClick={() => setCommenting(null)}>
+                                      Cancel
+                                    </Button>
+                                    <Button
+                                      size="small"
+                                      variant="secondary"
+                                      disabled={draft().trim().length === 0}
+                                      onClick={() => {
+                                        const value = draft().trim()
+                                        if (!value) return
+                                        props.onLineComment?.({
+                                          file: diff.file,
+                                          selection: range(),
+                                          comment: value,
+                                          preview: selectionPreview(diff, range()),
+                                        })
+                                        setCommenting(null)
+                                      }}
+                                    >
+                                      Comment
+                                    </Button>
+                                  </div>
                                 </div>
-                              </Show>
-                            )}
+                              </div>
+                            </div>
                           </Show>
-                        </div>
-                      </Match>
-                    </Switch>
+                        )}
+                      </Show>
+                    </div>
                   </Accordion.Content>
                 </Accordion.Item>
               )

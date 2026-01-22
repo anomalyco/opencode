@@ -39,6 +39,7 @@ import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
 import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
+import { getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
@@ -1866,6 +1867,258 @@ export default function Page() {
                       return `L${sel.startLine}-${sel.endLine}`
                     })
 
+                    let wrap: HTMLDivElement | undefined
+                    let textarea: HTMLTextAreaElement | undefined
+
+                    const fileComments = createMemo(() => {
+                      const p = path()
+                      if (!p) return []
+                      return comments.list(p)
+                    })
+
+                    const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
+
+                    const [openedComment, setOpenedComment] = createSignal<string | null>(null)
+                    const [commenting, setCommenting] = createSignal<SelectedLineRange | null>(null)
+                    const [draft, setDraft] = createSignal("")
+                    const [positions, setPositions] = createSignal<Record<string, number>>({})
+                    const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
+
+                    const commentLabel = (range: SelectedLineRange) => {
+                      const start = Math.min(range.start, range.end)
+                      const end = Math.max(range.start, range.end)
+                      if (start === end) return `line ${start}`
+                      return `lines ${start}-${end}`
+                    }
+
+                    const getRoot = () => {
+                      const el = wrap
+                      if (!el) return
+
+                      const host = el.querySelector("diffs-container")
+                      if (!(host instanceof HTMLElement)) return
+
+                      const root = host.shadowRoot
+                      if (!root) return
+
+                      return root
+                    }
+
+                    const findMarker = (root: ShadowRoot, range: SelectedLineRange) => {
+                      const line = Math.max(range.start, range.end)
+                      const node = root.querySelector(`[data-line="${line}"]`)
+                      if (!(node instanceof HTMLElement)) return
+                      return node
+                    }
+
+                    const markerTop = (wrapper: HTMLElement, marker: HTMLElement) => {
+                      const wrapperRect = wrapper.getBoundingClientRect()
+                      const rect = marker.getBoundingClientRect()
+                      return rect.top - wrapperRect.top + Math.max(0, (rect.height - 20) / 2)
+                    }
+
+                    const updateComments = () => {
+                      const el = wrap
+                      const root = getRoot()
+                      if (!el || !root) {
+                        setPositions({})
+                        setDraftTop(undefined)
+                        return
+                      }
+
+                      const next: Record<string, number> = {}
+                      for (const comment of fileComments()) {
+                        const marker = findMarker(root, comment.selection)
+                        if (!marker) continue
+                        next[comment.id] = markerTop(el, marker)
+                      }
+
+                      setPositions(next)
+
+                      const range = commenting()
+                      if (!range) {
+                        setDraftTop(undefined)
+                        return
+                      }
+
+                      const marker = findMarker(root, range)
+                      if (!marker) {
+                        setDraftTop(undefined)
+                        return
+                      }
+
+                      setDraftTop(markerTop(el, marker))
+                    }
+
+                    const scheduleComments = () => {
+                      requestAnimationFrame(updateComments)
+                    }
+
+                    createEffect(() => {
+                      fileComments()
+                      scheduleComments()
+                    })
+
+                    createEffect(() => {
+                      commenting()
+                      scheduleComments()
+                    })
+
+                    createEffect(() => {
+                      const range = commenting()
+                      if (!range) return
+                      setDraft("")
+                      requestAnimationFrame(() => textarea?.focus())
+                    })
+
+                    const renderCode = (source: string, wrapperClass: string) => (
+                      <div
+                        ref={(el) => {
+                          wrap = el
+                          scheduleComments()
+                        }}
+                        class={`relative overflow-hidden ${wrapperClass}`}
+                      >
+                        <Dynamic
+                          component={codeComponent}
+                          file={{
+                            name: path() ?? "",
+                            contents: source,
+                            cacheKey: cacheKey(),
+                          }}
+                          enableLineSelection
+                          selectedLines={selectedLines()}
+                          commentedLines={commentedLines()}
+                          onRendered={() => {
+                            requestAnimationFrame(restoreScroll)
+                            requestAnimationFrame(updateSelectionPopover)
+                            requestAnimationFrame(scheduleComments)
+                          }}
+                          onLineSelected={(range: SelectedLineRange | null) => {
+                            const p = path()
+                            if (!p) return
+                            file.setSelectedLines(p, range)
+                            if (!range) setCommenting(null)
+                          }}
+                          onLineSelectionEnd={(range: SelectedLineRange | null) => {
+                            if (!range) {
+                              setCommenting(null)
+                              return
+                            }
+
+                            setOpenedComment(null)
+                            setCommenting(range)
+                          }}
+                          overflow="scroll"
+                          class="select-text"
+                        />
+                        <For each={fileComments()}>
+                          {(comment) => (
+                            <div
+                              class="absolute right-6 z-30"
+                              style={{
+                                top: `${positions()[comment.id] ?? 0}px`,
+                                opacity: positions()[comment.id] === undefined ? 0 : 1,
+                                "pointer-events": positions()[comment.id] === undefined ? "none" : "auto",
+                              }}
+                            >
+                              <button
+                                type="button"
+                                class="size-5 rounded-md flex items-center justify-center bg-surface-warning-base border border-border-warning-base text-icon-warning-active shadow-xs hover:bg-surface-warning-weak hover:border-border-warning-hover focus:outline-none focus-visible:shadow-xs-border-focus"
+                                onMouseEnter={() => {
+                                  const p = path()
+                                  if (!p) return
+                                  file.setSelectedLines(p, comment.selection)
+                                }}
+                                onClick={() => {
+                                  const p = path()
+                                  if (!p) return
+                                  setCommenting(null)
+                                  setOpenedComment((current) => (current === comment.id ? null : comment.id))
+                                  file.setSelectedLines(p, comment.selection)
+                                }}
+                              >
+                                <Icon name="speech-bubble" size="small" />
+                              </button>
+                              <Show when={openedComment() === comment.id}>
+                                <div class="absolute top-0 right-[calc(100%+12px)] z-40 min-w-[200px] max-w-[320px] rounded-md bg-surface-raised-stronger-non-alpha border border-border-base shadow-md p-3">
+                                  <div class="flex flex-col gap-1.5">
+                                    <div class="text-12-medium text-text-strong whitespace-nowrap">
+                                      {getFilename(comment.file)}:{commentLabel(comment.selection)}
+                                    </div>
+                                    <div class="text-12-regular text-text-base whitespace-pre-wrap">
+                                      {comment.comment}
+                                    </div>
+                                  </div>
+                                </div>
+                              </Show>
+                            </div>
+                          )}
+                        </For>
+                        <Show when={commenting()}>
+                          {(range) => (
+                            <Show when={draftTop() !== undefined}>
+                              <div class="absolute right-6 z-30" style={{ top: `${draftTop() ?? 0}px` }}>
+                                <button
+                                  type="button"
+                                  class="size-5 rounded-md flex items-center justify-center bg-surface-warning-base border border-border-warning-base text-icon-warning-active shadow-xs hover:bg-surface-warning-weak hover:border-border-warning-hover focus:outline-none focus-visible:shadow-xs-border-focus"
+                                  onClick={() => textarea?.focus()}
+                                >
+                                  <Icon name="speech-bubble" size="small" />
+                                </button>
+                                <div class="absolute top-0 right-[calc(100%+12px)] z-40 min-w-[200px] max-w-[320px] rounded-md bg-surface-raised-stronger-non-alpha border border-border-base shadow-md p-3">
+                                  <div class="flex flex-col gap-2">
+                                    <div class="text-12-medium text-text-strong">
+                                      Commenting on {getFilename(path() ?? "")}:{commentLabel(range())}
+                                    </div>
+                                    <textarea
+                                      ref={textarea}
+                                      class="w-[320px] max-w-[calc(100vw-48px)] resize-vertical p-2 rounded-sm bg-surface-base border border-border-base text-text-strong text-12-regular leading-5 focus:outline-none focus:shadow-xs-border-focus"
+                                      rows={3}
+                                      placeholder="Add a comment"
+                                      value={draft()}
+                                      onInput={(e) => setDraft(e.currentTarget.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key !== "Enter") return
+                                        if (e.shiftKey) return
+                                        e.preventDefault()
+                                        const value = draft().trim()
+                                        if (!value) return
+                                        const p = path()
+                                        if (!p) return
+                                        addCommentToContext({ file: p, selection: range(), comment: value })
+                                        setCommenting(null)
+                                      }}
+                                    />
+                                    <div class="flex justify-end gap-2">
+                                      <Button size="small" variant="ghost" onClick={() => setCommenting(null)}>
+                                        Cancel
+                                      </Button>
+                                      <Button
+                                        size="small"
+                                        variant="secondary"
+                                        disabled={draft().trim().length === 0}
+                                        onClick={() => {
+                                          const value = draft().trim()
+                                          if (!value) return
+                                          const p = path()
+                                          if (!p) return
+                                          addCommentToContext({ file: p, selection: range(), comment: value })
+                                          setCommenting(null)
+                                        }}
+                                      >
+                                        Comment
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </Show>
+                          )}
+                        </Show>
+                      </div>
+                    )
+
                     const updateSelectionPopover = () => {
                       const el = scroll
                       if (!el) {
@@ -2107,27 +2360,7 @@ export default function Page() {
                           </Match>
                           <Match when={state()?.loaded && isSvg()}>
                             <div class="flex flex-col gap-4 px-6 py-4">
-                              <Dynamic
-                                component={codeComponent}
-                                file={{
-                                  name: path() ?? "",
-                                  contents: svgContent() ?? "",
-                                  cacheKey: cacheKey(),
-                                }}
-                                enableLineSelection
-                                selectedLines={selectedLines()}
-                                onRendered={() => {
-                                  requestAnimationFrame(restoreScroll)
-                                  requestAnimationFrame(updateSelectionPopover)
-                                }}
-                                onLineSelected={(range: SelectedLineRange | null) => {
-                                  const p = path()
-                                  if (!p) return
-                                  file.setSelectedLines(p, range)
-                                }}
-                                overflow="scroll"
-                                class="select-text"
-                              />
+                              {renderCode(svgContent() ?? "", "")}
                               <Show when={svgPreviewUrl()}>
                                 <div class="flex justify-center pb-40">
                                   <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
@@ -2135,29 +2368,7 @@ export default function Page() {
                               </Show>
                             </div>
                           </Match>
-                          <Match when={state()?.loaded}>
-                            <Dynamic
-                              component={codeComponent}
-                              file={{
-                                name: path() ?? "",
-                                contents: contents(),
-                                cacheKey: cacheKey(),
-                              }}
-                              enableLineSelection
-                              selectedLines={selectedLines()}
-                              onRendered={() => {
-                                requestAnimationFrame(restoreScroll)
-                                requestAnimationFrame(updateSelectionPopover)
-                              }}
-                              onLineSelected={(range: SelectedLineRange | null) => {
-                                const p = path()
-                                if (!p) return
-                                file.setSelectedLines(p, range)
-                              }}
-                              overflow="scroll"
-                              class="select-text pb-40"
-                            />
-                          </Match>
+                          <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>
                           <Match when={state()?.loading}>
                             <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
                           </Match>
