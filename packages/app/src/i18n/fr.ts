@@ -136,6 +136,7 @@ export const dict = {
   "model.tag.latest": "Dernier",
 
   "common.search.placeholder": "Rechercher",
+  "common.goBack": "Retour",
   "common.loading": "Chargement",
   "common.cancel": "Annuler",
   "common.submit": "Soumettre",
@@ -181,7 +182,10 @@ export const dict = {
   "prompt.slash.badge.custom": "personnalisé",
   "prompt.context.active": "actif",
   "prompt.context.includeActiveFile": "Inclure le fichier actif",
+  "prompt.context.removeActiveFile": "Retirer le fichier actif du contexte",
+  "prompt.context.removeFile": "Retirer le fichier du contexte",
   "prompt.action.attachFile": "Joindre un fichier",
+  "prompt.attachment.remove": "Supprimer la pièce jointe",
   "prompt.action.send": "Envoyer",
   "prompt.action.stop": "Arrêter",
 
@@ -225,6 +229,7 @@ export const dict = {
   "dialog.server.default.none": "Aucun serveur sélectionné",
   "dialog.server.default.set": "Définir le serveur actuel comme défaut",
   "dialog.server.default.clear": "Effacer",
+  "dialog.server.action.remove": "Supprimer le serveur",
 
   "dialog.project.edit.title": "Modifier le projet",
   "dialog.project.edit.name": "Nom",
@@ -233,6 +238,7 @@ export const dict = {
   "dialog.project.edit.icon.hint": "Cliquez ou faites glisser une image",
   "dialog.project.edit.icon.recommended": "Recommandé : 128x128px",
   "dialog.project.edit.color": "Couleur",
+  "dialog.project.edit.color.select": "Sélectionner la couleur {{color}}",
 
   "context.breakdown.title": "Répartition du contexte",
   "context.breakdown.note":
@@ -267,6 +273,7 @@ export const dict = {
   "context.usage.usage": "Utilisation",
   "context.usage.cost": "Coût",
   "context.usage.clickToView": "Cliquez pour voir le contexte",
+  "context.usage.view": "Voir l'utilisation du contexte",
 
   "language.en": "Anglais",
   "language.zh": "Chinois (simplifié)",
@@ -279,6 +286,8 @@ export const dict = {
   "language.da": "Danois",
   "language.ru": "Russe",
   "language.pl": "Polonais",
+  "language.ar": "Arabe",
+  "language.no": "Norvégien",
 
   "toast.language.title": "Langue",
   "toast.language.description": "Passé à {{language}}",
@@ -374,6 +383,7 @@ export const dict = {
   "session.tab.session": "Session",
   "session.tab.review": "Revue",
   "session.tab.context": "Contexte",
+  "session.panel.reviewAndFiles": "Revue et fichiers",
   "session.review.filesChanged": "{{count}} fichiers modifiés",
   "session.review.loadingChanges": "Chargement des modifications...",
   "session.review.empty": "Aucune modification dans cette session pour l'instant",
@@ -390,6 +400,7 @@ export const dict = {
   "session.new.lastModified": "Dernière modification",
 
   "session.header.search.placeholder": "Rechercher {{project}}",
+  "session.header.searchFiles": "Rechercher des fichiers",
 
   "session.share.popover.title": "Publier sur le web",
   "session.share.popover.description.shared":
@@ -412,6 +423,7 @@ export const dict = {
   "terminal.loading": "Chargement du terminal...",
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
+  "terminal.close": "Fermer le terminal",
 
   "common.closeTab": "Fermer l'onglet",
   "common.dismiss": "Ignorer",
@@ -425,6 +437,7 @@ export const dict = {
   "common.edit": "Modifier",
   "common.loadMore": "Charger plus",
 
+  "sidebar.nav.projectsAndSessions": "Projets et sessions",
   "sidebar.settings": "Paramètres",
   "sidebar.help": "Aide",
   "sidebar.workspaces.enable": "Activer les espaces de travail",

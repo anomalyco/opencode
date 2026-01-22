@@ -6,6 +6,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
 import { Project } from "../project/project"
+import { Storage } from "../storage/storage"
 import { fn } from "../util/fn"
 import { Config } from "@/config/config"
 
@@ -25,7 +26,10 @@ export namespace Worktree {
   export const CreateInput = z
     .object({
       name: z.string().optional(),
-      startCommand: z.string().optional(),
+      startCommand: z
+        .string()
+        .optional()
+        .describe("Additional startup script to run after the project's start command"),
     })
     .meta({
       ref: "WorktreeCreateInput",
@@ -238,12 +242,23 @@ export namespace Worktree {
       throw new CreateFailedError({ message: errorText(created) || "Failed to create git worktree" })
     }
 
-    const cmd = input?.startCommand?.trim()
-    if (!cmd) return info
+    const project = await Storage.read<Project.Info>(["project", Instance.project.id]).catch(() => Instance.project)
+    const startup = project.commands?.start?.trim()
+    if (startup) {
+      const ran = await runStartCommand(info.directory, startup)
+      if (ran.exitCode !== 0) {
+        throw new StartCommandFailedError({
+          message: errorText(ran) || "Project start command failed",
+        })
+      }
+    }
 
-    const ran = await runStartCommand(info.directory, cmd)
-    if (ran.exitCode !== 0) {
-      throw new StartCommandFailedError({ message: errorText(ran) || "Worktree start command failed" })
+    const extra = input?.startCommand?.trim()
+    if (extra) {
+      const ran = await runStartCommand(info.directory, extra)
+      if (ran.exitCode !== 0) {
+        throw new StartCommandFailedError({ message: errorText(ran) || "Worktree start command failed" })
+      }
     }
 
     return info
