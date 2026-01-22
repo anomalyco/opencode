@@ -819,6 +819,49 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  async function deleteSession(session: Session) {
+    const [store, setStore] = globalSync.child(session.directory)
+    const sessions = (store.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
+    const index = sessions.findIndex((s) => s.id === session.id)
+    const nextSession = sessions[index + 1] ?? sessions[index - 1]
+
+    const result = await globalSDK.client.session
+      .delete({ directory: session.directory, sessionID: session.id })
+      .then((x) => x.data)
+      .catch((err) => {
+        showToast({
+          title: language.t("session.delete.failed.title"),
+          description: errorMessage(err),
+        })
+        return false
+      })
+
+    if (!result) return
+
+    setStore(
+      produce((draft) => {
+        const removed = new Set<string>([session.id])
+        const collect = (parentID: string) => {
+          for (const item of draft.session) {
+            if (item.parentID !== parentID) continue
+            removed.add(item.id)
+            collect(item.id)
+          }
+        }
+        collect(session.id)
+        draft.session = draft.session.filter((s) => !removed.has(s.id))
+      }),
+    )
+
+    if (session.id === params.id) {
+      if (nextSession) {
+        navigate(`/${params.dir}/session/${nextSession.id}`)
+      } else {
+        navigate(`/${params.dir}/session`)
+      }
+    }
+  }
+
   command.register(() => {
     const commands: CommandOption[] = [
       {
@@ -1143,6 +1186,33 @@ export default function Layout(props: ParentProps) {
         },
       ],
     })
+  }
+
+  function DialogDeleteSession(props: { session: Session }) {
+    const handleDelete = async () => {
+      await deleteSession(props.session)
+      dialog.close()
+    }
+
+    return (
+      <Dialog title={language.t("session.delete.title")} fit>
+        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
+          <div class="flex flex-col gap-1">
+            <span class="text-14-regular text-text-strong">
+              {language.t("session.delete.confirm", { name: props.session.title })}
+            </span>
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              {language.t("common.cancel")}
+            </Button>
+            <Button variant="primary" size="large" onClick={handleDelete}>
+              {language.t("session.delete.button")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
   }
 
   function DialogDeleteWorkspace(props: { directory: string }) {
@@ -1485,6 +1555,8 @@ export default function Layout(props: ParentProps) {
     const hoverAllowed = createMemo(() => !props.mobile && layout.sidebar.opened())
     const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
     const isActive = createMemo(() => props.session.id === params.id)
+    const [menuOpen, setMenuOpen] = createSignal(false)
+    const [pendingRename, setPendingRename] = createSignal(false)
 
     const messageLabel = (message: Message) => {
       const parts = sessionStore.part[message.id] ?? []
@@ -1495,7 +1567,7 @@ export default function Layout(props: ParentProps) {
     const item = (
       <A
         href={`${props.slug}/session/${props.session.id}`}
-        class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
+        class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${menuOpen() ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
         onMouseEnter={() => prefetchSession(props.session, "high")}
         onFocus={() => prefetchSession(props.session, "high")}
         onClick={() => setHoverSession(undefined)}
@@ -1588,21 +1660,51 @@ export default function Layout(props: ParentProps) {
           </HoverCard>
         </Show>
         <div
-          class={`hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"}`}
+          class={`absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"} flex items-center gap-0.5 transition-opacity`}
+          classList={{
+            "opacity-100 pointer-events-auto": menuOpen(),
+            "opacity-0 pointer-events-none": !menuOpen(),
+            "group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
+            "group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
+          }}
         >
-          <TooltipKeybind
-            placement={props.mobile ? "bottom" : "right"}
-            title={language.t("command.session.archive")}
-            keybind={command.keybind("session.archive")}
-            gutter={8}
-          >
-            <IconButton
-              icon="archive"
-              variant="ghost"
-              onClick={() => archiveSession(props.session)}
-              aria-label={language.t("command.session.archive")}
-            />
-          </TooltipKeybind>
+          <DropdownMenu open={menuOpen()} onOpenChange={setMenuOpen}>
+            <Tooltip value={language.t("common.moreOptions")} placement="top">
+              <DropdownMenu.Trigger
+                as={IconButton}
+                icon="dot-grid"
+                variant="ghost"
+                class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                aria-label={language.t("common.moreOptions")}
+              />
+            </Tooltip>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                onCloseAutoFocus={(event) => {
+                  if (!pendingRename()) return
+                  event.preventDefault()
+                  setPendingRename(false)
+                  openEditor(`session:${props.session.id}`, props.session.title)
+                }}
+              >
+                <DropdownMenu.Item
+                  onSelect={() => {
+                    setPendingRename(true)
+                    setMenuOpen(false)
+                  }}
+                >
+                  <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => archiveSession(props.session)}>
+                  <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator />
+                <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogDeleteSession session={props.session} />)}>
+                  <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu>
         </div>
       </div>
     )
