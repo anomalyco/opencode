@@ -558,6 +558,9 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
+      // Get command definition to check silent flag later
+      const cmd = sync.data.command.find((x) => x.name === command.slice(1))
+
       sdk.client.session.command({
         sessionID,
         command: command.slice(1),
@@ -573,6 +576,23 @@ export function Prompt(props: PromptProps) {
             ...x,
           })),
       })
+
+      // silent: skip navigation
+      if (cmd?.silent) {
+        history.append({
+          ...store.prompt,
+          mode: currentMode,
+        })
+        input.extmarks.clear()
+        setStore("prompt", {
+          input: "",
+          parts: [],
+        })
+        setStore("extmarkToPartIndex", new Map())
+        props.onSubmit?.()
+        input.clear()
+        return
+      }
     } else {
       sdk.client.session
         .prompt({

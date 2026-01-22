@@ -641,6 +641,16 @@ function App() {
     })
   })
 
+  // silent commands: navigate when assistant responds
+  sdk.event.on("message.updated", (evt) => {
+    if (route.data.type !== "home") return
+    if (evt.properties.info.role !== "assistant") return
+    route.navigate({
+      type: "session",
+      sessionID: evt.properties.info.sessionID,
+    })
+  })
+
   sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
     toast.show({
       variant: "info",
@@ -650,7 +660,7 @@ function App() {
     })
   })
 
-  // Handle modal dialogs from plugins (centralized at app level)
+  // modal dialogs
   createEffect(
     on(
       () => sync.data.pendingDialog,

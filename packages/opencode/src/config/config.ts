@@ -370,17 +370,22 @@ export namespace Config {
 
   /**
    * Extracts a canonical plugin name from a plugin specifier.
-   * - For file:// URLs: extracts filename without extension
+   * - For file:// URLs: extracts filename without extension (or parent dir for index.ts)
    * - For npm packages: extracts package name without version
    *
    * @example
    * getPluginName("file:///path/to/plugin/foo.js") // "foo"
+   * getPluginName("file:///path/to/my-plugin/index.ts") // "my-plugin"
    * getPluginName("oh-my-opencode@2.4.3") // "oh-my-opencode"
    * getPluginName("@scope/pkg@1.0.0") // "@scope/pkg"
    */
   export function getPluginName(plugin: string): string {
     if (plugin.startsWith("file://")) {
-      return path.parse(new URL(plugin).pathname).name
+      const parsed = path.parse(new URL(plugin).pathname)
+      if (parsed.name === "index") {
+        return path.basename(parsed.dir)
+      }
+      return parsed.name
     }
     const lastAt = plugin.lastIndexOf("@")
     if (lastAt > 0) {
@@ -556,6 +561,7 @@ export namespace Config {
     agent: z.string().optional(),
     model: z.string().optional(),
     subtask: z.boolean().optional(),
+    silent: z.boolean().optional(),
   })
   export type Command = z.infer<typeof Command>
 
