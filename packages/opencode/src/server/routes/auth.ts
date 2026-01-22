@@ -102,6 +102,11 @@ const loginPageHtml = `<!DOCTYPE html>
     input.invalid {
       background: rgba(239,68,68,0.1);
       border-color: #dc2626;
+      box-shadow: 0 0 0 3px rgba(220,38,38,0.3), 0 0 0 1px #dc2626;
+    }
+    input.invalid:focus {
+      border-color: #dc2626;
+      box-shadow: 0 0 0 3px rgba(220,38,38,0.3), 0 0 0 1px #dc2626;
     }
     input::placeholder { color: #525252; }
     .password-toggle {
