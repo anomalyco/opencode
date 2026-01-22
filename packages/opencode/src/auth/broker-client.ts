@@ -10,11 +10,31 @@ interface BrokerRequest {
   /** Protocol version (always 1 for now) */
   version: 1
   /** Method to invoke */
-  method: "authenticate" | "ping"
+  method: "authenticate" | "ping" | "registersession" | "unregistersession" | "spawnpty" | "killpty" | "resizepty"
   /** Username for authenticate method */
   username?: string
   /** Password for authenticate method */
   password?: string
+  /** Session ID for session and PTY methods */
+  session_id?: string
+  /** UNIX user ID for session registration */
+  uid?: number
+  /** UNIX group ID for session registration */
+  gid?: number
+  /** Home directory for session registration */
+  home?: string
+  /** Login shell for session registration */
+  shell?: string
+  /** PTY session ID for PTY operations */
+  pty_id?: string
+  /** Terminal type for PTY spawn */
+  term?: string
+  /** Column count for PTY spawn/resize */
+  cols?: number
+  /** Row count for PTY spawn/resize */
+  rows?: number
+  /** Environment variables for PTY spawn */
+  env?: Record<string, string>
 }
 
 /**
@@ -27,6 +47,56 @@ interface BrokerResponse {
   success: boolean
   /** Error message if operation failed (generic for auth) */
   error?: string
+  /** Optional data payload for responses that return values */
+  data?: {
+    pty_id?: string
+    pid?: number
+  }
+}
+
+/**
+ * UNIX user information required for session registration.
+ * Must match the broker's UserInfo struct.
+ */
+export interface UserInfo {
+  /** System username */
+  username: string
+  /** UNIX user ID */
+  uid: number
+  /** UNIX primary group ID */
+  gid: number
+  /** Home directory path */
+  home: string
+  /** Login shell path */
+  shell: string
+}
+
+/**
+ * Result of a PTY spawn operation.
+ */
+export interface SpawnPtyResult {
+  /** Whether the spawn succeeded */
+  success: boolean
+  /** PTY session ID (present on success) */
+  ptyId?: string
+  /** Process ID of the spawned shell (present on success) */
+  pid?: number
+  /** Error message (present on failure) */
+  error?: string
+}
+
+/**
+ * Options for spawning a PTY session.
+ */
+export interface SpawnPtyOptions {
+  /** Terminal type (default: "xterm-256color") */
+  term?: string
+  /** Column count (default: 80) */
+  cols?: number
+  /** Row count (default: 24) */
+  rows?: number
+  /** Additional environment variables */
+  env?: Record<string, string>
 }
 
 /**
@@ -122,6 +192,223 @@ export class BrokerClient {
       id,
       version: 1,
       method: "ping",
+    }
+
+    try {
+      const response = await this.sendRequest(request)
+      return response.id === id && response.success
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Register a session with user info after successful authentication.
+   *
+   * Must be called before spawning PTY sessions for this user.
+   * The broker stores the user info so it knows how to run processes
+   * with the correct UID/GID when spawnPty is called.
+   *
+   * @param sessionId - Session ID from UserSession
+   * @param userInfo - UNIX user information (uid, gid, home, shell)
+   * @returns true if registration succeeded, false otherwise
+   *
+   * @example
+   * ```typescript
+   * // After successful authentication
+   * const session = UserSession.create(username, userAgent, userInfo)
+   *
+   * // Register session with broker for PTY spawning
+   * const registered = await client.registerSession(session.id, {
+   *   username: session.username,
+   *   uid: session.uid!,
+   *   gid: session.gid!,
+   *   home: session.home!,
+   *   shell: session.shell!,
+   * })
+   * ```
+   */
+  async registerSession(sessionId: string, userInfo: UserInfo): Promise<boolean> {
+    const id = crypto.randomUUID()
+
+    const request: BrokerRequest = {
+      id,
+      version: 1,
+      method: "registersession",
+      session_id: sessionId,
+      username: userInfo.username,
+      uid: userInfo.uid,
+      gid: userInfo.gid,
+      home: userInfo.home,
+      shell: userInfo.shell,
+    }
+
+    try {
+      const response = await this.sendRequest(request)
+      return response.id === id && response.success
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Unregister a session on logout.
+   *
+   * This notifies the broker that the session is no longer valid.
+   * The broker will clean up any associated PTY sessions.
+   * This operation is idempotent - calling it multiple times is safe.
+   *
+   * @param sessionId - Session ID to unregister
+   * @returns true if unregistration succeeded, false otherwise
+   *
+   * @example
+   * ```typescript
+   * // On logout
+   * await client.unregisterSession(session.id)
+   * UserSession.remove(session.id)
+   * ```
+   */
+  async unregisterSession(sessionId: string): Promise<boolean> {
+    const id = crypto.randomUUID()
+
+    const request: BrokerRequest = {
+      id,
+      version: 1,
+      method: "unregistersession",
+      session_id: sessionId,
+    }
+
+    try {
+      const response = await this.sendRequest(request)
+      return response.id === id && response.success
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Spawn a PTY session as the authenticated user.
+   *
+   * The session must be registered first via registerSession().
+   * The spawned process runs with the user's UID/GID and has their
+   * login shell as the command.
+   *
+   * @param sessionId - Session ID from web authentication (must be registered)
+   * @param options - PTY configuration options
+   * @returns Result with PTY ID and PID on success, error on failure
+   *
+   * @example
+   * ```typescript
+   * // After successful login and session registration
+   * await client.registerSession(session.id, {
+   *   username: session.username,
+   *   uid: session.uid!,
+   *   gid: session.gid!,
+   *   home: session.home!,
+   *   shell: session.shell!,
+   * })
+   *
+   * // Spawn PTY
+   * const result = await client.spawnPty(session.id, { cols: 80, rows: 24 })
+   * if (result.success) {
+   *   console.log(`PTY ${result.ptyId} spawned with PID ${result.pid}`)
+   * }
+   * ```
+   */
+  async spawnPty(sessionId: string, options: SpawnPtyOptions = {}): Promise<SpawnPtyResult> {
+    const id = crypto.randomUUID()
+
+    const request: BrokerRequest = {
+      id,
+      version: 1,
+      method: "spawnpty",
+      session_id: sessionId,
+      term: options.term ?? "xterm-256color",
+      cols: options.cols ?? 80,
+      rows: options.rows ?? 24,
+      env: options.env ?? {},
+    }
+
+    try {
+      const response = await this.sendRequest(request)
+
+      if (response.id !== id) {
+        return { success: false, error: "invalid response" }
+      }
+
+      if (!response.success) {
+        return { success: false, error: response.error ?? "spawn failed" }
+      }
+
+      return {
+        success: true,
+        ptyId: response.data?.pty_id,
+        pid: response.data?.pid,
+      }
+    } catch {
+      return { success: false, error: "broker unavailable" }
+    }
+  }
+
+  /**
+   * Kill a PTY session.
+   *
+   * Terminates the process running in the PTY and cleans up resources.
+   *
+   * @param ptyId - PTY session ID to kill
+   * @returns true if the PTY was killed, false otherwise
+   *
+   * @example
+   * ```typescript
+   * // When user closes terminal tab
+   * await client.killPty(ptyId)
+   * ```
+   */
+  async killPty(ptyId: string): Promise<boolean> {
+    const id = crypto.randomUUID()
+
+    const request: BrokerRequest = {
+      id,
+      version: 1,
+      method: "killpty",
+      pty_id: ptyId,
+    }
+
+    try {
+      const response = await this.sendRequest(request)
+      return response.id === id && response.success
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Resize a PTY session.
+   *
+   * Updates the terminal dimensions for the PTY. The running process
+   * will receive a SIGWINCH signal to notify it of the size change.
+   *
+   * @param ptyId - PTY session ID to resize
+   * @param cols - New column count
+   * @param rows - New row count
+   * @returns true if resize succeeded, false otherwise
+   *
+   * @example
+   * ```typescript
+   * // When browser window is resized
+   * await client.resizePty(ptyId, 120, 40)
+   * ```
+   */
+  async resizePty(ptyId: string, cols: number, rows: number): Promise<boolean> {
+    const id = crypto.randomUUID()
+
+    const request: BrokerRequest = {
+      id,
+      version: 1,
+      method: "resizepty",
+      pty_id: ptyId,
+      cols,
+      rows,
     }
 
     try {
