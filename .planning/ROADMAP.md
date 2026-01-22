@@ -138,10 +138,12 @@ Plans:
   2. Warning displayed when connecting over HTTP on public network
   3. Failed login attempts are rate-limited by IP and username
   4. Option exists to refuse login over insecure HTTP connections
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 07-01: TBD
+- [ ] 07-01-PLAN.md — CSRF protection infrastructure (token generation, middleware, login integration)
+- [ ] 07-02-PLAN.md — Login rate limiting (hono-rate-limiter, security event logging)
+- [ ] 07-03-PLAN.md — HTTP/HTTPS detection and warning (login page warning, require_https enforcement)
 
 ### Phase 8: Session Enhancements
 **Goal**: Users have "remember me" option and can see session status
@@ -210,7 +212,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 4. Authentication Flow | 2/2 | Complete | 2026-01-20 |
 | 5. User Process Execution | 10/10 | Complete | 2026-01-22 |
 | 6. Login UI | 1/1 | Complete | 2026-01-22 |
-| 7. Security Hardening | 0/TBD | Not started | - |
+| 7. Security Hardening | 0/3 | Not started | - |
 | 8. Session Enhancements | 0/TBD | Not started | - |
 | 9. Connection Security UI | 0/TBD | Not started | - |
 | 10. Two-Factor Authentication | 0/TBD | Not started | - |
