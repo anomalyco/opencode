@@ -1955,4 +1955,80 @@ export namespace LSPServer {
       }
     },
   }
+
+  export const Buf: Info = {
+    id: "buf",
+    extensions: [".proto"],
+    root: NearestRoot(["buf.yaml", "buf.gen.yaml"]),
+    async spawn(root) {
+      let bin = Bun.which("buf", {
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+      })
+
+      if (!bin) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("downloading buf from GitHub releases")
+
+        const releaseResponse = await fetch("https://api.github.com/repos/bufbuild/buf/releases/latest")
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch buf release info")
+          return
+        }
+
+        const release = (await releaseResponse.json()) as {
+          assets?: { name?: string; browser_download_url?: string }[]
+        }
+
+        const platform = process.platform
+        const arch = process.arch
+
+        const bufArch =
+          platform === "linux" ? (arch === "arm64" ? "aarch64" : "x86_64") : arch === "arm64" ? "arm64" : "x86_64"
+
+        const platforms: Record<string, string> = { darwin: "Darwin", linux: "Linux", win32: "Windows" }
+        const bufPlatform = platforms[platform]
+        if (!bufPlatform) {
+          log.error(`Platform ${platform} is not supported by buf`)
+          return
+        }
+
+        // buf provides plain binaries (no archive needed)
+        const ext = platform === "win32" ? ".exe" : ""
+        const assetName = `buf-${bufPlatform}-${bufArch}${ext}`
+
+        const assets = release.assets ?? []
+        const asset = assets.find((a) => a.name === assetName)
+        if (!asset?.browser_download_url) {
+          log.error(`Could not find asset ${assetName} in buf release`)
+          return
+        }
+
+        const downloadResponse = await fetch(asset.browser_download_url)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download buf")
+          return
+        }
+
+        bin = path.join(Global.Path.bin, "buf" + ext)
+        await Bun.file(bin).write(downloadResponse)
+
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to download buf binary")
+          return
+        }
+
+        if (platform !== "win32") {
+          await $`chmod +x ${bin}`.quiet().nothrow()
+        }
+
+        log.info("installed buf", { bin })
+      }
+
+      return {
+        process: spawn(bin, ["lsp", "serve"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
 }
