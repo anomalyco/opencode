@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Authentication Flow** - Login endpoint with PAM validation and session-user mapping
 - [x] **Phase 5: User Process Execution** - Commands execute under authenticated user's UID
 - [x] **Phase 6: Login UI** - Web login form with opencode styling
-- [ ] **Phase 7: Security Hardening** - CSRF, rate limiting, HTTPS detection
+- [x] **Phase 7: Security Hardening** - CSRF, rate limiting, HTTPS detection
 - [ ] **Phase 8: Session Enhancements** - Remember me and session activity indicator
 - [ ] **Phase 9: Connection Security UI** - HTTPS/HTTP security badge in UI
 - [ ] **Phase 10: Two-Factor Authentication** - TOTP support via PAM integration
@@ -141,9 +141,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — CSRF protection infrastructure (token generation, middleware, login integration)
-- [ ] 07-02-PLAN.md — Login rate limiting (hono-rate-limiter, security event logging)
-- [ ] 07-03-PLAN.md — HTTP/HTTPS detection and warning (login page warning, require_https enforcement)
+- [x] 07-01-PLAN.md — CSRF protection infrastructure (token generation, middleware, login integration)
+- [x] 07-02-PLAN.md — Login rate limiting (hono-rate-limiter, security event logging)
+- [x] 07-03-PLAN.md — HTTP/HTTPS detection and warning (login page warning, require_https enforcement)
 
 ### Phase 8: Session Enhancements
 **Goal**: Users have "remember me" option and can see session status
@@ -212,7 +212,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 4. Authentication Flow | 2/2 | Complete | 2026-01-20 |
 | 5. User Process Execution | 10/10 | Complete | 2026-01-22 |
 | 6. Login UI | 1/1 | Complete | 2026-01-22 |
-| 7. Security Hardening | 0/3 | Not started | - |
+| 7. Security Hardening | 3/3 | Complete | 2026-01-22 |
 | 8. Session Enhancements | 0/TBD | Not started | - |
 | 9. Connection Security UI | 0/TBD | Not started | - |
 | 10. Two-Factor Authentication | 0/TBD | Not started | - |

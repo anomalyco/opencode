@@ -12,7 +12,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **AUTH-01**: User can log in with username and password via web form
 - [x] **AUTH-02**: Credentials validated against system PAM (supports LDAP/Kerberos transparently)
 - [x] **AUTH-03**: Authenticated session maps to real UNIX user (UID/GID)
-- [ ] **AUTH-04**: Commands and file operations execute under authenticated user's identity
+- [x] **AUTH-04**: Commands and file operations execute under authenticated user's identity
 - [ ] **AUTH-05**: User can optionally enable 2FA via TOTP (PAM module integration)
 
 ### Sessions
@@ -24,10 +24,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Security
 
-- [ ] **SEC-01**: CSRF protection on login form and state-changing operations
-- [ ] **SEC-02**: Warning displayed when connecting over HTTP on public network
-- [ ] **SEC-03**: Rate limiting on failed login attempts (IP and username-based)
-- [ ] **SEC-04**: Option to refuse login over insecure HTTP connections
+- [x] **SEC-01**: CSRF protection on login form and state-changing operations
+- [x] **SEC-02**: Warning displayed when connecting over HTTP on public network
+- [x] **SEC-03**: Rate limiting on failed login attempts (IP-based per user decision)
+- [x] **SEC-04**: Option to refuse login over insecure HTTP connections
 
 ### Infrastructure
 
@@ -38,8 +38,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### User Interface
 
-- [ ] **UI-01**: Login page with username/password form matching opencode design
-- [ ] **UI-02**: Password visibility toggle (eye icon to show/hide)
+- [x] **UI-01**: Login page with username/password form matching opencode design
+- [x] **UI-02**: Password visibility toggle (eye icon to show/hide)
 - [ ] **UI-03**: Session activity indicator showing time remaining before expiry
 - [ ] **UI-04**: Connection security badge (lock icon for HTTPS, warning for HTTP)
 
@@ -85,22 +85,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-01 | Phase 4 | Complete |
 | AUTH-02 | Phase 4 | Complete |
 | AUTH-03 | Phase 4 | Complete |
-| AUTH-04 | Phase 5 | Pending |
+| AUTH-04 | Phase 5 | Complete |
 | AUTH-05 | Phase 10 | Pending |
 | SESS-01 | Phase 2 | Complete |
 | SESS-02 | Phase 2 | Complete |
 | SESS-03 | Phase 2 | Complete |
 | SESS-04 | Phase 8 | Pending |
-| SEC-01 | Phase 7 | Pending |
-| SEC-02 | Phase 7 | Pending |
-| SEC-03 | Phase 7 | Pending |
-| SEC-04 | Phase 7 | Pending |
+| SEC-01 | Phase 7 | Complete |
+| SEC-02 | Phase 7 | Complete |
+| SEC-03 | Phase 7 | Complete |
+| SEC-04 | Phase 7 | Complete |
 | INFRA-01 | Phase 3 | Complete |
 | INFRA-02 | Phase 3 | Complete |
 | INFRA-03 | Phase 1 | Complete |
 | INFRA-04 | Phase 1 | Complete |
-| UI-01 | Phase 6 | Pending |
-| UI-02 | Phase 6 | Pending |
+| UI-01 | Phase 6 | Complete |
+| UI-02 | Phase 6 | Complete |
 | UI-03 | Phase 8 | Pending |
 | UI-04 | Phase 9 | Pending |
 | DOC-01 | Phase 11 | Pending |
@@ -113,4 +113,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-19*
-*Last updated: 2026-01-19 after roadmap creation*
+*Last updated: 2026-01-22 after Phase 7 completion*
