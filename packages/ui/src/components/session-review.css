@@ -70,6 +70,20 @@
     user-select: text;
   }
 
+  [data-slot="session-review-accordion-content"] {
+    position: relative;
+    overflow: hidden;
+  }
+
+  [data-component="popover-content"] {
+    position: absolute !important;
+  }
+
+  .session-review-comment-popover-content {
+    left: auto !important;
+    right: calc(100% + 12px) !important;
+  }
+
   [data-slot="session-review-trigger-content"] {
     display: flex;
     align-items: center;

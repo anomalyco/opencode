@@ -1,5 +1,5 @@
 import { type FileContents, File, FileOptions, LineAnnotation, type SelectedLineRange } from "@pierre/diffs"
-import { ComponentProps, createEffect, createMemo, onCleanup, splitProps } from "solid-js"
+import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, splitProps } from "solid-js"
 import { createDefaultOptions, styleVariables } from "../pierre"
 import { getWorkerPool } from "../pierre/worker"
 
@@ -9,7 +9,9 @@ export type CodeProps<T = {}> = FileOptions<T> & {
   file: FileContents
   annotations?: LineAnnotation<T>[]
   selectedLines?: SelectedLineRange | null
+  commentedLines?: SelectedLineRange[]
   onRendered?: () => void
+  onLineSelectionEnd?: (selection: SelectedLineRange | null) => void
   class?: string
   classList?: ComponentProps<"div">["classList"]
 }
@@ -53,6 +55,8 @@ export function Code<T>(props: CodeProps<T>) {
   let dragStart: number | undefined
   let dragEnd: number | undefined
   let dragMoved = false
+  let lastSelection: SelectedLineRange | null = null
+  let pendingSelectionEnd = false
 
   const [local, others] = splitProps(props, [
     "file",
@@ -60,8 +64,12 @@ export function Code<T>(props: CodeProps<T>) {
     "classList",
     "annotations",
     "selectedLines",
+    "commentedLines",
     "onRendered",
+    "onLineSelectionEnd",
   ])
+
+  const [rendered, setRendered] = createSignal(0)
 
   const handleLineClick: FileOptions<T>["onLineClick"] = (info) => {
     props.onLineClick?.(info)
@@ -93,6 +101,30 @@ export function Code<T>(props: CodeProps<T>) {
     if (!root) return
 
     return root
+  }
+
+  const applyCommentedLines = (ranges: SelectedLineRange[]) => {
+    const root = getRoot()
+    if (!root) return
+
+    const existing = Array.from(root.querySelectorAll("[data-comment-selected]"))
+    for (const node of existing) {
+      if (!(node instanceof HTMLElement)) continue
+      node.removeAttribute("data-comment-selected")
+    }
+
+    for (const range of ranges) {
+      const start = Math.max(1, Math.min(range.start, range.end))
+      const end = Math.max(range.start, range.end)
+
+      for (let line = start; line <= end; line++) {
+        const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"]`))
+        for (const node of nodes) {
+          if (!(node instanceof HTMLElement)) continue
+          node.setAttribute("data-comment-selected", "")
+        }
+      }
+    }
   }
 
   const notifyRendered = () => {
@@ -203,7 +235,12 @@ export function Code<T>(props: CodeProps<T>) {
     if (side) selected.side = side
     if (endSide && side && endSide !== side) selected.endSide = endSide
 
-    file().setSelectedLines(selected)
+    setSelectedLines(selected)
+  }
+
+  const setSelectedLines = (range: SelectedLineRange | null) => {
+    lastSelection = range
+    file().setSelectedLines(range)
   }
 
   const scheduleSelectionUpdate = () => {
@@ -212,6 +249,10 @@ export function Code<T>(props: CodeProps<T>) {
     selectionFrame = requestAnimationFrame(() => {
       selectionFrame = undefined
       updateSelection()
+
+      if (!pendingSelectionEnd) return
+      pendingSelectionEnd = false
+      props.onLineSelectionEnd?.(lastSelection)
     })
   }
 
@@ -221,7 +262,7 @@ export function Code<T>(props: CodeProps<T>) {
     const start = Math.min(dragStart, dragEnd)
     const end = Math.max(dragStart, dragEnd)
 
-    file().setSelectedLines({ start, end })
+    setSelectedLines({ start, end })
   }
 
   const scheduleDragUpdate = () => {
@@ -289,19 +330,22 @@ export function Code<T>(props: CodeProps<T>) {
 
   const handleMouseUp = () => {
     if (props.enableLineSelection !== true) return
+    if (dragStart === undefined) return
 
-    if (dragStart !== undefined) {
-      if (dragMoved) scheduleDragUpdate()
-      dragStart = undefined
-      dragEnd = undefined
-      dragMoved = false
+    if (dragMoved) {
+      pendingSelectionEnd = true
+      scheduleDragUpdate()
+      scheduleSelectionUpdate()
     }
 
-    scheduleSelectionUpdate()
+    dragStart = undefined
+    dragEnd = undefined
+    dragMoved = false
   }
 
   const handleSelectionChange = () => {
     if (props.enableLineSelection !== true) return
+    if (dragStart === undefined) return
 
     const selection = window.getSelection()
     if (!selection || selection.isCollapsed) return
@@ -328,11 +372,18 @@ export function Code<T>(props: CodeProps<T>) {
       containerWrapper: container,
     })
 
+    setRendered((value) => value + 1)
     notifyRendered()
   })
 
   createEffect(() => {
-    file().setSelectedLines(local.selectedLines ?? null)
+    rendered()
+    const ranges = local.commentedLines ?? []
+    requestAnimationFrame(() => applyCommentedLines(ranges))
+  })
+
+  createEffect(() => {
+    setSelectedLines(local.selectedLines ?? null)
   })
 
   createEffect(() => {
@@ -367,6 +418,8 @@ export function Code<T>(props: CodeProps<T>) {
     dragStart = undefined
     dragEnd = undefined
     dragMoved = false
+    lastSelection = null
+    pendingSelectionEnd = false
   })
 
   return (
