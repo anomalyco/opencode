@@ -459,8 +459,10 @@ async fn handle_unregister_session(
 mod tests {
     use super::*;
     use crate::ipc::protocol::{
-        AuthenticateParams, KillPtyParams, PingParams, ResizePtyParams, SpawnPtyParams,
+        AuthenticateParams, KillPtyParams, PingParams, RegisterSessionParams, ResizePtyParams,
+        SpawnPtyParams, UnregisterSessionParams,
     };
+    use crate::session::user::UserInfo;
 
     fn test_config() -> BrokerConfig {
         BrokerConfig {
@@ -714,5 +716,97 @@ mod tests {
             response.error,
             Some("invalid params for spawn_pty".to_string())
         );
+    }
+
+    #[tokio::test]
+    async fn test_register_session_stores_user_info() {
+        let config = test_config();
+        let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
+
+        let request = Request {
+            id: "reg-1".to_string(),
+            version: PROTOCOL_VERSION,
+            method: Method::RegisterSession,
+            params: RequestParams::RegisterSession(RegisterSessionParams {
+                session_id: "session-abc".to_string(),
+                username: "testuser".to_string(),
+                uid: 1000,
+                gid: 1000,
+                home: "/home/testuser".to_string(),
+                shell: "/bin/bash".to_string(),
+            }),
+        };
+
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+
+        assert!(response.success);
+
+        // Verify session was stored
+        let user = user_sessions.get("session-abc").expect("should be registered");
+        assert_eq!(user.username, "testuser");
+        assert_eq!(user.uid, 1000);
+        assert_eq!(user.home, "/home/testuser");
+    }
+
+    #[tokio::test]
+    async fn test_unregister_session_removes_user_info() {
+        let config = test_config();
+        let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
+
+        // First register
+        user_sessions.register(
+            "session-abc",
+            UserInfo {
+                username: "testuser".to_string(),
+                uid: 1000,
+                gid: 1000,
+                home: "/home/testuser".to_string(),
+                shell: "/bin/bash".to_string(),
+            },
+        );
+
+        // Then unregister
+        let request = Request {
+            id: "unreg-1".to_string(),
+            version: PROTOCOL_VERSION,
+            method: Method::UnregisterSession,
+            params: RequestParams::UnregisterSession(UnregisterSessionParams {
+                session_id: "session-abc".to_string(),
+            }),
+        };
+
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+
+        assert!(response.success);
+        assert!(user_sessions.get("session-abc").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_unregister_nonexistent_session_succeeds() {
+        let config = test_config();
+        let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
+
+        let request = Request {
+            id: "unreg-2".to_string(),
+            version: PROTOCOL_VERSION,
+            method: Method::UnregisterSession,
+            params: RequestParams::UnregisterSession(UnregisterSessionParams {
+                session_id: "nonexistent".to_string(),
+            }),
+        };
+
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+
+        // Should succeed even if session doesn't exist (idempotent)
+        assert!(response.success);
     }
 }
