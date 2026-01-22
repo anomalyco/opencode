@@ -1125,13 +1125,23 @@ export default function Layout(props: ParentProps) {
     setBusy(directory, false)
     dismiss()
 
-    const href = `/${base64Encode(directory)}/session`
-    navigate(href)
-    layout.mobileSidebar.hide()
-
     showToast({
       title: language.t("workspace.reset.success.title"),
       description: language.t("workspace.reset.success.description"),
+      actions: [
+        {
+          label: language.t("command.session.new"),
+          onClick: () => {
+            const href = `/${base64Encode(directory)}/session`
+            navigate(href)
+            layout.mobileSidebar.hide()
+          },
+        },
+        {
+          label: language.t("common.dismiss"),
+          onClick: "dismiss",
+        },
+      ],
     })
   }
 
