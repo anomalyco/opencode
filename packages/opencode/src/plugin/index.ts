@@ -20,11 +20,25 @@ export namespace Plugin {
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin]
 
+  function getAuthorizationHeader(): string | undefined {
+    const password = Flag.OPENCODE_SERVER_PASSWORD
+    if (!password) return undefined
+    const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+    return `Basic ${btoa(`${username}:${password}`)}`
+  }
+
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
       // @ts-ignore - fetch type incompatibility
-      fetch: async (...args) => Server.App().fetch(...args),
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const auth = getAuthorizationHeader()
+        if (auth && !request.headers.has("authorization")) {
+          request.headers.set("Authorization", auth)
+        }
+        return Server.App().fetch(request)
+      },
     })
     const config = await Config.get()
     const hooks: Hooks[] = []
