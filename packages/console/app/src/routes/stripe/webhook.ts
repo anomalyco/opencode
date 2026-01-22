@@ -421,7 +421,10 @@ export async function POST(input: APIEvent) {
       })
     }
     if (body.type === "invoice.payment_succeeded") {
-      if (body.data.object.billing_reason === "subscription_cycle" || body.data.object.billing_reason === "subscription_create") {
+      if (
+        body.data.object.billing_reason === "subscription_cycle" ||
+        body.data.object.billing_reason === "subscription_create"
+      ) {
         const invoiceID = body.data.object.id as string
         const amountInCents = body.data.object.amount_paid
         const customerID = body.data.object.customer as string

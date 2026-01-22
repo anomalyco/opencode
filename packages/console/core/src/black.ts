@@ -28,28 +28,37 @@ export namespace BlackData {
     return input
   })
 
-  export const getLimits = fn(z.object({
+  export const getLimits = fn(
+    z.object({
       plan: z.enum(SubscriptionPlan),
-    }), ({ plan }) => {
-    const json = JSON.parse(Resource.ZEN_BLACK_LIMITS.value)
-    return Schema.parse(json)[plan]
-  })
+    }),
+    ({ plan }) => {
+      const json = JSON.parse(Resource.ZEN_BLACK_LIMITS.value)
+      return Schema.parse(json)[plan]
+    },
+  )
 
-  export const planToPriceID = fn(z.object({
+  export const planToPriceID = fn(
+    z.object({
       plan: z.enum(SubscriptionPlan),
-    }), ({ plan }) => {
-    if (plan === "200") return Resource.ZEN_BLACK_PRICE.plan200
-    if (plan === "100") return Resource.ZEN_BLACK_PRICE.plan100
-    return Resource.ZEN_BLACK_PRICE.plan20
-  })
+    }),
+    ({ plan }) => {
+      if (plan === "200") return Resource.ZEN_BLACK_PRICE.plan200
+      if (plan === "100") return Resource.ZEN_BLACK_PRICE.plan100
+      return Resource.ZEN_BLACK_PRICE.plan20
+    },
+  )
 
-  export const priceIDToPlan = fn(z.object({
-    priceID: z.string(),
-  }), ({ priceID }) => {
-    if (priceID === Resource.ZEN_BLACK_PRICE.plan200) return "200"
-    if (priceID === Resource.ZEN_BLACK_PRICE.plan100) return "100"
-    return "20"
-  })
+  export const priceIDToPlan = fn(
+    z.object({
+      priceID: z.string(),
+    }),
+    ({ priceID }) => {
+      if (priceID === Resource.ZEN_BLACK_PRICE.plan200) return "200"
+      if (priceID === Resource.ZEN_BLACK_PRICE.plan100) return "100"
+      return "20"
+    },
+  )
 }
 
 export namespace Black {

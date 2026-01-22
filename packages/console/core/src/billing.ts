@@ -290,65 +290,68 @@ export namespace Billing {
     },
   )
 
-  export const subscribe = fn(z.object({
-    seats: z.number(),
-    coupon: z.string().optional(),
-  }), async ({ seats, coupon }) => {
-    const user = Actor.assert("user")
-    const billing = await Database.use((tx) =>
-      tx
-        .select({
-          customerID: BillingTable.customerID,
-          paymentMethodID: BillingTable.paymentMethodID,
-          subscriptionID: BillingTable.subscriptionID,
-          subscriptionPlan: BillingTable.subscriptionPlan,
-          timeSubscriptionSelected: BillingTable.timeSubscriptionSelected,
-        })
-        .from(BillingTable)
-        .where(eq(BillingTable.workspaceID, Actor.workspace()))
-        .then((rows) => rows[0]),
-    )
+  export const subscribe = fn(
+    z.object({
+      seats: z.number(),
+      coupon: z.string().optional(),
+    }),
+    async ({ seats, coupon }) => {
+      const user = Actor.assert("user")
+      const billing = await Database.use((tx) =>
+        tx
+          .select({
+            customerID: BillingTable.customerID,
+            paymentMethodID: BillingTable.paymentMethodID,
+            subscriptionID: BillingTable.subscriptionID,
+            subscriptionPlan: BillingTable.subscriptionPlan,
+            timeSubscriptionSelected: BillingTable.timeSubscriptionSelected,
+          })
+          .from(BillingTable)
+          .where(eq(BillingTable.workspaceID, Actor.workspace()))
+          .then((rows) => rows[0]),
+      )
 
-    if (!billing) throw new Error("Billing record not found")
-    if (!billing.timeSubscriptionSelected) throw new Error("Not selected for subscription")
-    if (billing.subscriptionID) throw new Error("Already subscribed")
-    if (!billing.customerID) throw new Error("No customer ID")
-    if (!billing.paymentMethodID) throw new Error("No payment method")
-    if (!billing.subscriptionPlan) throw new Error("No subscription plan")
+      if (!billing) throw new Error("Billing record not found")
+      if (!billing.timeSubscriptionSelected) throw new Error("Not selected for subscription")
+      if (billing.subscriptionID) throw new Error("Already subscribed")
+      if (!billing.customerID) throw new Error("No customer ID")
+      if (!billing.paymentMethodID) throw new Error("No payment method")
+      if (!billing.subscriptionPlan) throw new Error("No subscription plan")
 
-    const subscription = await Billing.stripe().subscriptions.create({
-      customer: billing.customerID,
-      default_payment_method: billing.paymentMethodID,
-      items: [{ price: BlackData.planToPriceID({ plan: billing.subscriptionPlan }) }],
-      metadata: {
-        workspaceID: Actor.workspace(),
-      },
-    })
-
-    await Database.transaction(async (tx) => {
-      await tx
-        .update(BillingTable)
-        .set({
-          subscriptionID: subscription.id,
-          subscription: {
-            status: "subscribed",
-            coupon,
-            seats,
-            plan: billing.subscriptionPlan!,
-          },
-          subscriptionPlan: null,
-          timeSubscriptionBooked: null,
-          timeSubscriptionSelected: null,
-        })
-        .where(eq(BillingTable.workspaceID, Actor.workspace()))
-
-      await tx.insert(SubscriptionTable).values({
-        workspaceID: Actor.workspace(),
-        id: Identifier.create("subscription"),
-        userID: user.properties.userID,
+      const subscription = await Billing.stripe().subscriptions.create({
+        customer: billing.customerID,
+        default_payment_method: billing.paymentMethodID,
+        items: [{ price: BlackData.planToPriceID({ plan: billing.subscriptionPlan }) }],
+        metadata: {
+          workspaceID: Actor.workspace(),
+        },
       })
-    })
 
-    return subscription.id
-  })
+      await Database.transaction(async (tx) => {
+        await tx
+          .update(BillingTable)
+          .set({
+            subscriptionID: subscription.id,
+            subscription: {
+              status: "subscribed",
+              coupon,
+              seats,
+              plan: billing.subscriptionPlan!,
+            },
+            subscriptionPlan: null,
+            timeSubscriptionBooked: null,
+            timeSubscriptionSelected: null,
+          })
+          .where(eq(BillingTable.workspaceID, Actor.workspace()))
+
+        await tx.insert(SubscriptionTable).values({
+          workspaceID: Actor.workspace(),
+          id: Identifier.create("subscription"),
+          userID: user.properties.userID,
+        })
+      })
+
+      return subscription.id
+    },
+  )
 }
