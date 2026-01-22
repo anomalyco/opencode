@@ -65,6 +65,7 @@ interface PromptInputProps {
   ref?: (el: HTMLDivElement) => void
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
+  onSubmit?: () => void
 }
 
 const EXAMPLES = [
@@ -1109,6 +1110,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (session) navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
     }
     if (!session) return
+
+    props.onSubmit?.()
 
     const model = {
       modelID: currentModel.id,

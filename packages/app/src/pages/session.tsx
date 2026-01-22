@@ -909,6 +909,11 @@ export default function Page() {
     overflowAnchor: "dynamic",
   })
 
+  const resumeScroll = () => {
+    setStore("messageId", undefined)
+    autoScroll.forceScrollToBottom()
+  }
+
   // When the user returns to the bottom, treat the active message as "latest".
   createEffect(
     on(
@@ -1535,6 +1540,7 @@ export default function Page() {
                   }}
                   newSessionWorktree={newSessionWorktree()}
                   onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+                  onSubmit={resumeScroll}
                 />
               </Show>
             </div>
