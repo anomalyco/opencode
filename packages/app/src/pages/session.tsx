@@ -509,7 +509,10 @@ export default function Page() {
       description: language.t("command.terminal.new.description"),
       category: language.t("command.category.terminal"),
       keybind: "ctrl+alt+t",
-      onSelect: () => terminal.new(),
+      onSelect: () => {
+        if (terminal.all().length > 0) terminal.new()
+        view().terminal.open()
+      },
     },
     {
       id: "steps.toggle",
