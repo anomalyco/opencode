@@ -152,17 +152,20 @@ fn get_sidecar_port() -> u32 {
         }) as u32
 }
 
-fn spawn_sidecar(app: &AppHandle, port: u32, password: &str) -> CommandChild {
+fn spawn_sidecar(app: &AppHandle, hostname: &str, port: u32, password: &str) -> CommandChild {
     let log_state = app.state::<LogState>();
     let log_state_clone = log_state.inner().clone();
 
     println!("spawning sidecar on port {port}");
 
-    let (mut rx, child) = cli::create_command(app, format!("serve --port {port}").as_str())
-        .env("OPENCODE_SERVER_USERNAME", "opencode")
-        .env("OPENCODE_SERVER_PASSWORD", password)
-        .spawn()
-        .expect("Failed to spawn opencode");
+    let (mut rx, child) = cli::create_command(
+        app,
+        format!("serve --hostname {hostname} --port {port}").as_str(),
+    )
+    .env("OPENCODE_SERVER_USERNAME", "opencode")
+    .env("OPENCODE_SERVER_PASSWORD", password)
+    .spawn()
+    .expect("Failed to spawn opencode");
 
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
@@ -400,17 +403,37 @@ pub fn run() {
         });
 }
 
+/// Converts a bind address hostname to a valid URL hostname for connection.
+/// - `0.0.0.0` and `::` are wildcard bind addresses, not valid connect targets
+/// - IPv6 addresses need brackets in URLs (e.g., `::1` -> `[::1]`)
+fn normalize_hostname_for_url(hostname: &str) -> String {
+    // Wildcard bind addresses -> localhost equivalents
+    if hostname == "0.0.0.0" {
+        return "127.0.0.1".to_string();
+    }
+    if hostname == "::" {
+        return "[::1]".to_string();
+    }
+
+    // IPv6 addresses need brackets in URLs
+    if hostname.contains(':') && !hostname.starts_with('[') {
+        return format!("[{}]", hostname);
+    }
+
+    hostname.to_string()
+}
+
 fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
     let server = config.server.as_ref()?;
     let port = server.port?;
     println!("server.port found in OC config: {port}");
-    let hostname = server.hostname.as_ref();
+    let hostname = server
+        .hostname
+        .as_ref()
+        .map(|v| normalize_hostname_for_url(v))
+        .unwrap_or_else(|| "127.0.0.1".to_string());
 
-    Some(format!(
-        "http://{}:{}",
-        hostname.map(|v| v.as_str()).unwrap_or("127.0.0.1"),
-        port
-    ))
+    Some(format!("http://{}:{}", hostname, port))
 }
 
 async fn setup_server_connection(
@@ -450,12 +473,13 @@ async fn setup_server_connection(
     }
 
     let local_port = get_sidecar_port();
-    let local_url = format!("http://127.0.0.1:{local_port}");
+    let hostname = "127.0.0.1";
+    let local_url = format!("http://{hostname}:{local_port}");
 
     if !check_server_health(&local_url, None).await {
         let password = uuid::Uuid::new_v4().to_string();
 
-        match spawn_local_server(app, local_port, &password).await {
+        match spawn_local_server(app, hostname, local_port, &password).await {
             Ok(child) => Ok((
                 Some(child),
                 ServerReadyData {
@@ -478,11 +502,12 @@ async fn setup_server_connection(
 
 async fn spawn_local_server(
     app: &AppHandle,
+    hostname: &str,
     port: u32,
     password: &str,
 ) -> Result<CommandChild, String> {
-    let child = spawn_sidecar(app, port, password);
-    let url = format!("http://127.0.0.1:{port}");
+    let child = spawn_sidecar(app, hostname, port, password);
+    let url = format!("http://{hostname}:{port}");
 
     let timestamp = Instant::now();
     loop {
