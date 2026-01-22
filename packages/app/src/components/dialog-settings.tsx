@@ -3,6 +3,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsPermissions } from "./settings-permissions"
@@ -14,6 +15,7 @@ import { SettingsMcp } from "./settings-mcp"
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
+  const platform = usePlatform()
 
   return (
     <Dialog size="x-large">
@@ -23,22 +25,35 @@ export const DialogSettings: Component = () => {
             style={{
               display: "flex",
               "flex-direction": "column",
-              gap: "12px",
+              "justify-content": "space-between",
+              height: "100%",
               width: "100%",
-              "padding-top": "12px",
-              "padding-bottom": "12px",
             }}
           >
-            <Tabs.SectionTitle>{language.t("settings.section.desktop")}</Tabs.SectionTitle>
-            <div style={{ display: "flex", "flex-direction": "column", gap: "6px", width: "100%" }}>
-              <Tabs.Trigger value="general">
-                <Icon name="sliders" />
-                {language.t("settings.tab.general")}
-              </Tabs.Trigger>
-              <Tabs.Trigger value="shortcuts">
-                <Icon name="keyboard" />
-                {language.t("settings.tab.shortcuts")}
-              </Tabs.Trigger>
+            <div
+              style={{
+                display: "flex",
+                "flex-direction": "column",
+                gap: "12px",
+                width: "100%",
+                "padding-top": "12px",
+              }}
+            >
+              <Tabs.SectionTitle>{language.t("settings.section.desktop")}</Tabs.SectionTitle>
+              <div style={{ display: "flex", "flex-direction": "column", gap: "6px", width: "100%" }}>
+                <Tabs.Trigger value="general">
+                  <Icon name="sliders" />
+                  {language.t("settings.tab.general")}
+                </Tabs.Trigger>
+                <Tabs.Trigger value="shortcuts">
+                  <Icon name="keyboard" />
+                  {language.t("settings.tab.shortcuts")}
+                </Tabs.Trigger>
+              </div>
+            </div>
+            <div class="flex flex-col gap-1 pl-1 py-1 text-12-medium text-text-weak">
+              <span>OpenCode Desktop</span>
+              <span class="text-11-regular">v{platform.version}</span>
             </div>
           </div>
           {/* <Tabs.SectionTitle>Server</Tabs.SectionTitle> */}
