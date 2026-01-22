@@ -5,9 +5,9 @@
   "mainBinaryName": "OpenCode",
   "version": "../package.json",
   "build": {
-    "beforeDevCommand": "~/.bun/bin/bun run dev",
+    "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "~/.bun/bin/bun run build",
+    "beforeBuildCommand": "bun run build",
     "frontendDist": "../dist"
   },
   "app": {
