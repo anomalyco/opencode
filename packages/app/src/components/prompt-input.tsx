@@ -65,6 +65,7 @@ interface PromptInputProps {
   ref?: (el: HTMLDivElement) => void
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
+  onSubmit?: () => void
 }
 
 const EXAMPLES = [
@@ -550,6 +551,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
   })
 
+  const selectPopoverActive = () => {
+    if (store.popover === "at") {
+      const items = atFlat()
+      if (items.length === 0) return
+      const active = atActive()
+      const item = items.find((entry) => atKey(entry) === active) ?? items[0]
+      handleAtSelect(item)
+      return
+    }
+
+    if (store.popover === "slash") {
+      const items = slashFlat()
+      if (items.length === 0) return
+      const active = slashActive()
+      const item = items.find((entry) => entry.id === active) ?? items[0]
+      handleSlashSelect(item)
+    }
+  }
+
   createEffect(
     on(
       () => prompt.current(),
@@ -910,14 +930,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    if (store.popover && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
-      if (store.popover === "at") {
-        atOnKeyDown(event)
-      } else {
-        slashOnKeyDown(event)
+    if (store.popover) {
+      if (event.key === "Tab") {
+        selectPopoverActive()
+        event.preventDefault()
+        return
       }
-      event.preventDefault()
-      return
+      if (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter") {
+        if (store.popover === "at") {
+          atOnKeyDown(event)
+          event.preventDefault()
+          return
+        }
+        if (store.popover === "slash") {
+          slashOnKeyDown(event)
+        }
+        event.preventDefault()
+        return
+      }
     }
 
     const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
@@ -1080,6 +1110,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (session) navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
     }
     if (!session) return
+
+    props.onSubmit?.()
 
     const model = {
       modelID: currentModel.id,
@@ -1458,6 +1490,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     variant="ghost"
                     class="h-6 w-6"
                     onClick={() => prompt.context.removeActive()}
+                    aria-label={language.t("prompt.context.removeActiveFile")}
                   />
                 </div>
               )}
@@ -1495,6 +1528,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     variant="ghost"
                     class="h-6 w-6"
                     onClick={() => prompt.context.remove(item.key)}
+                    aria-label={language.t("prompt.context.removeFile")}
                   />
                 </div>
               )}
@@ -1527,6 +1561,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     type="button"
                     onClick={() => removeImageAttachment(attachment.id)}
                     class="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-surface-raised-stronger-non-alpha border border-border-base flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-surface-raised-base-hover"
+                    aria-label={language.t("prompt.attachment.remove")}
                   >
                     <Icon name="close" class="size-3 text-text-weak" />
                   </button>
@@ -1545,6 +1580,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               editorRef = el
               props.ref?.(el)
             }}
+            role="textbox"
+            aria-multiline="true"
+            aria-label={
+              store.mode === "shell"
+                ? language.t("prompt.placeholder.shell")
+                : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })
+            }
             contenteditable="true"
             onInput={handleInput}
             onPaste={handlePaste}
@@ -1609,21 +1651,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </TooltipKeybind>
                   }
                 >
-                  <ModelSelectorPopover>
-                    <TooltipKeybind
-                      placement="top"
-                      title={language.t("command.model.choose")}
-                      keybind={command.keybind("model.choose")}
-                    >
-                      <Button as="div" variant="ghost">
-                        <Show when={local.model.current()?.provider?.id}>
-                          <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
-                        </Show>
-                        {local.model.current()?.name ?? language.t("dialog.model.select.title")}
-                        <Icon name="chevron-down" size="small" />
-                      </Button>
-                    </TooltipKeybind>
-                  </ModelSelectorPopover>
+                  <TooltipKeybind
+                    placement="top"
+                    title={language.t("command.model.choose")}
+                    keybind={command.keybind("model.choose")}
+                  >
+                    <ModelSelectorPopover triggerAs={Button} triggerProps={{ variant: "ghost" }}>
+                      <Show when={local.model.current()?.provider?.id}>
+                        <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
+                      </Show>
+                      {local.model.current()?.name ?? language.t("dialog.model.select.title")}
+                      <Icon name="chevron-down" size="small" />
+                    </ModelSelectorPopover>
+                  </TooltipKeybind>
                 </Show>
                 <Show when={local.model.variant.list().length > 0}>
                   <TooltipKeybind
@@ -1654,6 +1694,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         "text-text-base": !permission.isAutoAccepting(params.id!, sdk.directory),
                         "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!, sdk.directory),
                       }}
+                      aria-label={
+                        permission.isAutoAccepting(params.id!, sdk.directory)
+                          ? language.t("command.permissions.autoaccept.disable")
+                          : language.t("command.permissions.autoaccept.enable")
+                      }
+                      aria-pressed={permission.isAutoAccepting(params.id!, sdk.directory)}
                     >
                       <Icon
                         name="chevron-double-right"
@@ -1682,7 +1728,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               <SessionContextUsage />
               <Show when={store.mode === "normal"}>
                 <Tooltip placement="top" value={language.t("prompt.action.attachFile")}>
-                  <Button type="button" variant="ghost" class="size-6" onClick={() => fileInputRef.click()}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    class="size-6"
+                    onClick={() => fileInputRef.click()}
+                    aria-label={language.t("prompt.action.attachFile")}
+                  >
                     <Icon name="photo" class="size-4.5" />
                   </Button>
                 </Tooltip>
@@ -1696,7 +1748,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Match when={working()}>
                     <div class="flex items-center gap-2">
                       <span>{language.t("prompt.action.stop")}</span>
-                      <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
+                      <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
                     </div>
                   </Match>
                   <Match when={true}>
@@ -1714,6 +1766,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
                 class="h-6 w-4.5"
+                aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
               />
             </Tooltip>
           </div>

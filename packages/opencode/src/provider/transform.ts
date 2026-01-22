@@ -248,6 +248,8 @@ export namespace ProviderTransform {
       model.providerID === "anthropic" ||
       model.api.id.includes("anthropic") ||
       model.api.id.includes("claude") ||
+      model.id.includes("anthropic") ||
+      model.id.includes("claude") ||
       model.api.npm === "@ai-sdk/anthropic"
     ) {
       msgs = applyCaching(msgs, model.providerID)
@@ -578,15 +580,15 @@ export namespace ProviderTransform {
     }
 
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
-      if (input.model.providerID.includes("codex")) {
-        result["store"] = false
-      }
-
-      if (!input.model.api.id.includes("codex") && !input.model.api.id.includes("gpt-5-pro")) {
+      if (!input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
       }
 
-      if (input.model.api.id.endsWith("gpt-5.") && input.model.providerID !== "azure") {
+      if (
+        input.model.api.id.includes("gpt-5.") &&
+        !input.model.api.id.includes("codex") &&
+        input.model.providerID !== "azure"
+      ) {
         result["textVerbosity"] = "low"
       }
 
@@ -596,6 +598,11 @@ export namespace ProviderTransform {
         result["reasoningSummary"] = "auto"
       }
     }
+
+    if (input.model.providerID === "venice") {
+      result["promptCacheKey"] = input.sessionID
+    }
+
     return result
   }
 

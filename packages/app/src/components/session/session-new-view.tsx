@@ -53,7 +53,7 @@ export function NewSessionView(props: NewSessionViewProps) {
       <div class="text-20-medium text-text-weaker">{language.t("command.session.new")}</div>
       <div class="flex justify-center items-center gap-3">
         <Icon name="folder" size="small" />
-        <div class="text-12-medium text-text-weak">
+        <div class="text-12-medium text-text-weak select-text">
           {getDirectory(projectRoot())}
           <span class="text-text-strong">{getFilename(projectRoot())}</span>
         </div>

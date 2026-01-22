@@ -429,6 +429,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                   event.stopPropagation()
                   handleCopy()
                 }}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               />
             </Tooltip>
           </div>
@@ -672,14 +673,40 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 
 PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
+  const i18n = useI18n()
   const part = props.part as TextPart
   const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
   const throttledText = createThrottledValue(displayText)
+  const [copied, setCopied] = createSignal(false)
+
+  const handleCopy = async () => {
+    const content = displayText()
+    if (!content) return
+    await navigator.clipboard.writeText(content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
     <Show when={throttledText()}>
       <div data-component="text-part">
-        <Markdown text={throttledText()} cacheKey={part.id} />
+        <div data-slot="text-part-body">
+          <Markdown text={throttledText()} cacheKey={part.id} />
+          <div data-slot="text-part-copy-wrapper">
+            <Tooltip
+              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              placement="top"
+              gutter={8}
+            >
+              <IconButton
+                icon={copied() ? "check" : "copy"}
+                variant="secondary"
+                onClick={handleCopy}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              />
+            </Tooltip>
+          </div>
+        </div>
       </div>
     </Show>
   )
@@ -1025,7 +1052,8 @@ ToolRegistry.register({
           <div data-component="edit-trigger">
             <div data-slot="message-part-title-area">
               <div data-slot="message-part-title">
-                {i18n.t("ui.messagePart.title.edit")} {filename()}
+                <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.edit")}</span>
+                <span data-slot="message-part-title-filename">{filename()}</span>
               </div>
               <Show when={props.input.filePath?.includes("/")}>
                 <div data-slot="message-part-path">
@@ -1077,7 +1105,8 @@ ToolRegistry.register({
           <div data-component="write-trigger">
             <div data-slot="message-part-title-area">
               <div data-slot="message-part-title">
-                {i18n.t("ui.messagePart.title.write")} {filename()}
+                <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.write")}</span>
+                <span data-slot="message-part-title-filename">{filename()}</span>
               </div>
               <Show when={props.input.filePath?.includes("/")}>
                 <div data-slot="message-part-path">
