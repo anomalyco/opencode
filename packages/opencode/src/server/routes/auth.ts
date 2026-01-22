@@ -4,13 +4,53 @@ import { getCookie } from "hono/cookie"
 import z from "zod"
 import { UserSession } from "../../session/user-session"
 import { clearSessionCookie, setSessionCookie, type AuthEnv } from "../middleware/auth"
+import { setCSRFCookie, clearCSRFCookie } from "../middleware/csrf"
 import { lazy } from "../../util/lazy"
 import { BrokerClient, type UserInfo } from "../../auth/broker-client"
 import { getUserInfo } from "../../auth/user-info"
 import { ServerAuth } from "../../config/server-auth"
 import { Log } from "../../util/log"
+import { createLoginRateLimiter, getClientIP } from "../security/rate-limit"
+import { parseDuration } from "../../util/duration"
 
 const log = Log.create({ service: "auth-routes" })
+
+/**
+ * Security event types for logging.
+ */
+interface SecurityEvent {
+  type: "login_failed" | "login_success" | "rate_limit" | "csrf_violation"
+  ip: string
+  username?: string
+  reason?: string
+  timestamp: string
+  userAgent?: string
+}
+
+/**
+ * Log a security event with privacy masking.
+ */
+function logSecurityEvent(event: SecurityEvent): void {
+  // Mask username for privacy (pe*** format)
+  const maskedUsername = event.username ? maskUsername(event.username) : undefined
+  log.warn("[SECURITY]", {
+    event_type: event.type,
+    ip: event.ip,
+    username: maskedUsername,
+    reason: event.reason,
+    timestamp: event.timestamp,
+    user_agent: event.userAgent,
+  })
+}
+
+/**
+ * Mask username to protect privacy.
+ * Format: first 2 chars + *** + last char (pe***r)
+ */
+function maskUsername(username: string): string {
+  if (username.length <= 3) return "***"
+  return username.slice(0, 2) + "***" + username.slice(-1)
+}
 
 /**
  * Login request schema - accepts username and password.
@@ -19,6 +59,22 @@ const loginRequestSchema = z.object({
   username: z.string().min(1).max(32),
   password: z.string().min(1),
   returnUrl: z.string().optional(),
+})
+
+/**
+ * Lazy-initialized rate limiter for login endpoint.
+ * Only created when auth is enabled and rate limiting is not disabled.
+ */
+const loginRateLimiter = lazy(() => {
+  const authConfig = ServerAuth.get()
+  if (!authConfig.enabled || authConfig.rateLimiting === false) {
+    return undefined
+  }
+  const windowMs = parseDuration(authConfig.rateLimitWindow ?? "15m") ?? 15 * 60 * 1000
+  return createLoginRateLimiter({
+    windowMs,
+    limit: authConfig.rateLimitMax ?? 5,
+  })
 })
 
 /**
@@ -343,6 +399,7 @@ export const AuthRoutes = lazy(() =>
           400: { description: "Bad request (missing fields or invalid returnUrl)" },
           401: { description: "Authentication failed" },
           403: { description: "Authentication disabled" },
+          429: { description: "Rate limit exceeded" },
         },
       }),
       async (c) => {
@@ -352,13 +409,29 @@ export const AuthRoutes = lazy(() =>
           return c.json({ error: "auth_disabled", message: "Authentication is not enabled" }, 403)
         }
 
-        // 2. Check X-Requested-With header for basic CSRF protection
+        // 2. Apply rate limiting if enabled
+        const rateLimiter = loginRateLimiter()
+        if (rateLimiter) {
+          const rateLimitResult = await rateLimiter(c, async () => {})
+          if (rateLimitResult) {
+            return rateLimitResult
+          }
+        }
+
+        // 3. Check X-Requested-With header for basic CSRF protection
         const xrw = c.req.header("X-Requested-With")
         if (!xrw) {
+          const ip = getClientIP(c)
+          logSecurityEvent({
+            type: "csrf_violation",
+            ip,
+            timestamp: new Date().toISOString(),
+            userAgent: c.req.header("User-Agent"),
+          })
           return c.json({ error: "csrf_missing", message: "X-Requested-With header required" }, 400)
         }
 
-        // 3. Parse body based on Content-Type
+        // 4. Parse body based on Content-Type
         let body: { username?: string; password?: string; returnUrl?: string }
         const contentType = c.req.header("Content-Type") ?? ""
 
@@ -378,35 +451,56 @@ export const AuthRoutes = lazy(() =>
           )
         }
 
-        // 4. Validate body
+        // 5. Validate body
         const parsed = loginRequestSchema.safeParse(body)
         if (!parsed.success) {
           return c.json({ error: "invalid_request", message: "Username and password are required" }, 400)
         }
         const { username, password, returnUrl } = parsed.data
 
-        // 5. Validate returnUrl (same-origin only)
+        // 6. Validate returnUrl (same-origin only)
         if (returnUrl && !isValidReturnUrl(returnUrl)) {
           return c.json({ error: "invalid_return_url", message: "Invalid return URL" }, 400)
         }
 
-        // 6. Authenticate via broker
+        // 7. Authenticate via broker
         const broker = new BrokerClient()
         const authResult = await broker.authenticate(username, password)
 
+        const ip = getClientIP(c)
+        const timestamp = new Date().toISOString()
+        const userAgent = c.req.header("User-Agent")
+
         if (!authResult.success) {
+          // Log failed login attempt
+          logSecurityEvent({
+            type: "login_failed",
+            ip,
+            username,
+            reason: "invalid_credentials",
+            timestamp,
+            userAgent,
+          })
           // Generic error message - no user enumeration
           return c.json({ error: "auth_failed", message: "Authentication failed" }, 401)
         }
 
-        // 7. Look up user info (UID, GID, home, shell)
+        // 8. Look up user info (UID, GID, home, shell)
         const userInfo = await getUserInfo(username)
         if (!userInfo) {
           // User authenticated but not found in passwd - shouldn't happen but handle gracefully
+          logSecurityEvent({
+            type: "login_failed",
+            ip,
+            username,
+            reason: "user_info_not_found",
+            timestamp,
+            userAgent,
+          })
           return c.json({ error: "auth_failed", message: "Authentication failed" }, 401)
         }
 
-        // 8. Create session with full user info
+        // 9. Create session with full user info
         const session = UserSession.create(username, c.req.header("User-Agent"), {
           uid: userInfo.uid,
           gid: userInfo.gid,
@@ -414,10 +508,13 @@ export const AuthRoutes = lazy(() =>
           shell: userInfo.shell,
         })
 
-        // 9. Set session cookie
+        // 10. Set session cookie
         setSessionCookie(c, session.id)
 
-        // 10. Register session with broker for PTY operations (fire-and-forget)
+        // 10a. Set CSRF cookie (regenerate token after successful login)
+        setCSRFCookie(c, session.id)
+
+        // 11. Register session with broker for PTY operations (fire-and-forget)
         // If broker registration fails, user can still use web interface
         // PTY operations will fail gracefully with "session not found"
         const userInfoForBroker: UserInfo = {
@@ -432,7 +529,16 @@ export const AuthRoutes = lazy(() =>
           log.warn("Failed to register session with broker", { error: err })
         })
 
-        // 11. Return success with user info
+        // 12. Log successful login
+        logSecurityEvent({
+          type: "login_success",
+          ip,
+          username,
+          timestamp,
+          userAgent,
+        })
+
+        // 13. Return success with user info
         return c.json({
           success: true as const,
           user: {
@@ -502,6 +608,7 @@ export const AuthRoutes = lazy(() =>
           UserSession.remove(sessionId)
         }
         clearSessionCookie(c)
+        clearCSRFCookie(c)
         return c.redirect("/auth/login")
       },
     )
@@ -534,6 +641,7 @@ export const AuthRoutes = lazy(() =>
           UserSession.removeAllForUser(session.username)
         }
         clearSessionCookie(c)
+        clearCSRFCookie(c)
         return c.redirect("/auth/login")
       },
     )

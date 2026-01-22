@@ -41,6 +41,7 @@ import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { AuthRoutes } from "./routes/auth"
 import { authMiddleware } from "./middleware/auth"
+import { csrfMiddleware } from "./middleware/csrf"
 import { MDNS } from "./mdns"
 import { ServerAuth } from "../config/server-auth"
 
@@ -130,6 +131,7 @@ export namespace Server {
           }),
         )
         .use(authMiddleware)
+        .use(csrfMiddleware)
         .route("/global", GlobalRoutes())
         .route("/auth", AuthRoutes())
         .use(async (c, next) => {
