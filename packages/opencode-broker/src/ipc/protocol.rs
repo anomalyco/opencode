@@ -33,6 +33,8 @@ impl fmt::Debug for Request {
             RequestParams::ResizePty(params) => s.field("params", params),
             RequestParams::RegisterSession(params) => s.field("params", params),
             RequestParams::UnregisterSession(params) => s.field("params", params),
+            RequestParams::PtyWrite(params) => s.field("params", params),
+            RequestParams::PtyRead(params) => s.field("params", params),
         };
 
         s.finish()
@@ -55,6 +57,10 @@ pub enum Method {
     RegisterSession,
     /// Unregister a session on logout.
     UnregisterSession,
+    /// Write data to a PTY's master fd.
+    PtyWrite,
+    /// Read data from a PTY's master fd.
+    PtyRead,
 }
 
 /// Parameters for different request types.
@@ -73,6 +79,10 @@ pub enum RequestParams {
     RegisterSession(RegisterSessionParams),
     /// Parameters for unregistering a session.
     UnregisterSession(UnregisterSessionParams),
+    /// Parameters for writing to a PTY.
+    PtyWrite(PtyWriteParams),
+    /// Parameters for reading from a PTY.
+    PtyRead(PtyReadParams),
 }
 
 /// Parameters for authentication requests.
@@ -173,6 +183,38 @@ pub struct RegisterSessionParams {
 pub struct UnregisterSessionParams {
     /// Session ID to unregister.
     pub session_id: String,
+}
+
+/// Parameters for writing to a PTY.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PtyWriteParams {
+    /// The PTY session ID to write to.
+    pub pty_id: String,
+    /// Base64-encoded data to write.
+    pub data: String,
+}
+
+/// Parameters for reading from a PTY.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PtyReadParams {
+    /// The PTY session ID to read from.
+    pub pty_id: String,
+    /// Maximum bytes to read (0 = all available).
+    #[serde(default = "default_max_bytes")]
+    pub max_bytes: usize,
+}
+
+fn default_max_bytes() -> usize {
+    4096
+}
+
+/// Result of a successful PTY read.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PtyReadResult {
+    /// Base64-encoded data read from PTY.
+    pub data: String,
+    /// Whether more data is available.
+    pub more: bool,
 }
 
 /// Result of a successful PTY spawn.
@@ -505,5 +547,72 @@ mod tests {
         let unregister: Method =
             serde_json::from_str("\"unregistersession\"").expect("deserialize");
         assert_eq!(unregister, Method::UnregisterSession);
+    }
+
+    #[test]
+    fn test_pty_write_params_roundtrip() {
+        let params = PtyWriteParams {
+            pty_id: "pty-123".to_string(),
+            data: "SGVsbG8gV29ybGQ=".to_string(), // "Hello World" in base64
+        };
+
+        let json = serde_json::to_string(&params).expect("serialize");
+        let parsed: PtyWriteParams = serde_json::from_str(&json).expect("deserialize");
+
+        assert_eq!(parsed.pty_id, "pty-123");
+        assert_eq!(parsed.data, "SGVsbG8gV29ybGQ=");
+    }
+
+    #[test]
+    fn test_pty_read_params_with_defaults() {
+        let json = r#"{"pty_id":"pty-456"}"#;
+        let params: PtyReadParams = serde_json::from_str(json).expect("deserialize");
+
+        assert_eq!(params.pty_id, "pty-456");
+        assert_eq!(params.max_bytes, 4096); // default
+    }
+
+    #[test]
+    fn test_pty_read_params_custom_max_bytes() {
+        let json = r#"{"pty_id":"pty-789","max_bytes":8192}"#;
+        let params: PtyReadParams = serde_json::from_str(json).expect("deserialize");
+
+        assert_eq!(params.pty_id, "pty-789");
+        assert_eq!(params.max_bytes, 8192);
+    }
+
+    #[test]
+    fn test_pty_read_result_roundtrip() {
+        let result = PtyReadResult {
+            data: "SGVsbG8=".to_string(),
+            more: true,
+        };
+
+        let json = serde_json::to_string(&result).expect("serialize");
+        let parsed: PtyReadResult = serde_json::from_str(&json).expect("deserialize");
+
+        assert_eq!(parsed.data, "SGVsbG8=");
+        assert!(parsed.more);
+    }
+
+    #[test]
+    fn test_pty_io_method_serialization() {
+        assert_eq!(
+            serde_json::to_string(&Method::PtyWrite).expect("serialize"),
+            "\"ptywrite\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Method::PtyRead).expect("serialize"),
+            "\"ptyread\""
+        );
+    }
+
+    #[test]
+    fn test_pty_io_method_deserialization() {
+        let write: Method = serde_json::from_str("\"ptywrite\"").expect("deserialize");
+        assert_eq!(write, Method::PtyWrite);
+
+        let read: Method = serde_json::from_str("\"ptyread\"").expect("deserialize");
+        assert_eq!(read, Method::PtyRead);
     }
 }

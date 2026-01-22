@@ -20,6 +20,7 @@ libc = "0.2"
 uuid = { version = "1", features = ["v4"] }
 dashmap = "6"
 futures = "0.3"
+base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3"

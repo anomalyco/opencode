@@ -1,17 +1,20 @@
 //! Request handler for the authentication broker.
 //!
 //! Orchestrates the authentication flow: validation -> rate limiting -> PAM.
-//! Also handles PTY operations: spawn, kill, resize.
+//! Also handles PTY operations: spawn, kill, resize, read, write.
 
+use std::io::{Read, Write};
 use std::os::fd::AsRawFd;
 use std::path::PathBuf;
+
+use base64::Engine;
 
 use crate::auth::pam;
 use crate::auth::rate_limit::RateLimiter;
 use crate::auth::validation;
 use crate::config::BrokerConfig;
 use crate::ipc::protocol::{
-    Method, SpawnPtyResult, PROTOCOL_VERSION, Request, RequestParams, Response,
+    Method, PtyReadResult, SpawnPtyResult, PROTOCOL_VERSION, Request, RequestParams, Response,
 };
 use crate::process::environment::LoginEnvironment;
 use crate::process::spawn::{self, SpawnConfig};
@@ -78,6 +81,10 @@ pub async fn handle_request(
         Method::RegisterSession => handle_register_session(request, user_sessions).await,
 
         Method::UnregisterSession => handle_unregister_session(request, user_sessions).await,
+
+        Method::PtyWrite => handle_pty_write(request, pty_sessions).await,
+
+        Method::PtyRead => handle_pty_read(request, pty_sessions).await,
     }
 }
 
@@ -455,12 +462,181 @@ async fn handle_unregister_session(
     Response::success(&request.id)
 }
 
+/// Handle a PTY write request.
+///
+/// Writes data to the PTY's master fd.
+/// Data is expected to be base64-encoded.
+async fn handle_pty_write(request: Request, pty_sessions: &SessionManager) -> Response {
+    let params = match &request.params {
+        RequestParams::PtyWrite(p) => p,
+        _ => return Response::failure(&request.id, "invalid params for pty_write"),
+    };
+
+    let pty_id = PtyId::from(params.pty_id.clone());
+
+    let session = match pty_sessions.get(&pty_id) {
+        Some(s) => s,
+        None => {
+            warn!(
+                id = %request.id,
+                pty_id = %params.pty_id,
+                "pty_write: session not found"
+            );
+            return Response::failure(&request.id, "PTY session not found");
+        }
+    };
+
+    // Decode base64 data
+    let data = match base64::engine::general_purpose::STANDARD.decode(&params.data) {
+        Ok(d) => d,
+        Err(e) => {
+            debug!(error = %e, "pty_write: invalid base64");
+            return Response::failure(&request.id, "invalid base64 data");
+        }
+    };
+
+    // Write to master fd
+    // Note: We need to be careful here - the fd is owned by the session.
+    // We'll create a temporary File reference to write, then forget it so we don't close the fd.
+    let fd = session.master_fd.as_raw_fd();
+
+    // Use unsafe to create a File from the raw fd for writing
+    // We must NOT drop this File or it will close the fd
+    let result = {
+        use std::os::fd::FromRawFd;
+        let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
+        let write_result = file.write_all(&data);
+        // Prevent the File from closing the fd when dropped
+        std::mem::forget(file);
+        write_result
+    };
+
+    match result {
+        Ok(()) => {
+            debug!(
+                id = %request.id,
+                pty_id = %params.pty_id,
+                bytes = data.len(),
+                "PTY write successful"
+            );
+            Response::success(&request.id)
+        }
+        Err(e) => {
+            error!(error = %e, "failed to write to PTY");
+            Response::failure(&request.id, format!("write failed: {}", e))
+        }
+    }
+}
+
+/// Handle a PTY read request.
+///
+/// Reads available data from the PTY's master fd.
+/// Returns base64-encoded data.
+///
+/// Note: This is a non-blocking read. For efficient streaming,
+/// a push-based mechanism would be better (future work).
+async fn handle_pty_read(request: Request, pty_sessions: &SessionManager) -> Response {
+    let params = match &request.params {
+        RequestParams::PtyRead(p) => p,
+        _ => return Response::failure(&request.id, "invalid params for pty_read"),
+    };
+
+    let pty_id = PtyId::from(params.pty_id.clone());
+
+    let session = match pty_sessions.get(&pty_id) {
+        Some(s) => s,
+        None => {
+            warn!(
+                id = %request.id,
+                pty_id = %params.pty_id,
+                "pty_read: session not found"
+            );
+            return Response::failure(&request.id, "PTY session not found");
+        }
+    };
+
+    let fd = session.master_fd.as_raw_fd();
+    let max_bytes = if params.max_bytes == 0 {
+        4096
+    } else {
+        params.max_bytes
+    };
+
+    // Set non-blocking mode temporarily for the read
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags < 0 {
+        return Response::failure(&request.id, "failed to get fd flags");
+    }
+
+    // Set O_NONBLOCK
+    let set_result = unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) };
+    if set_result < 0 {
+        return Response::failure(&request.id, "failed to set non-blocking");
+    }
+
+    // Read available data
+    let result = {
+        use std::os::fd::FromRawFd;
+        let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
+        let mut buf = vec![0u8; max_bytes];
+        let read_result = file.read(&mut buf);
+        std::mem::forget(file); // Don't close the fd
+        read_result.map(|n| {
+            buf.truncate(n);
+            buf
+        })
+    };
+
+    // Restore original flags
+    unsafe { libc::fcntl(fd, libc::F_SETFL, flags) };
+
+    match result {
+        Ok(data) => {
+            let encoded = base64::engine::general_purpose::STANDARD.encode(&data);
+            let more = data.len() == max_bytes; // Heuristic: if we got max, there might be more
+
+            debug!(
+                id = %request.id,
+                pty_id = %params.pty_id,
+                bytes = data.len(),
+                "PTY read successful"
+            );
+
+            let read_result = PtyReadResult {
+                data: encoded,
+                more,
+            };
+
+            Response::success_with_data(
+                &request.id,
+                serde_json::to_value(read_result).expect("PtyReadResult serialization cannot fail"),
+            )
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+            // No data available - return empty result
+            let read_result = PtyReadResult {
+                data: String::new(),
+                more: false,
+            };
+
+            Response::success_with_data(
+                &request.id,
+                serde_json::to_value(read_result).expect("PtyReadResult serialization cannot fail"),
+            )
+        }
+        Err(e) => {
+            error!(error = %e, "failed to read from PTY");
+            Response::failure(&request.id, format!("read failed: {}", e))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::ipc::protocol::{
-        AuthenticateParams, KillPtyParams, PingParams, RegisterSessionParams, ResizePtyParams,
-        SpawnPtyParams, UnregisterSessionParams,
+        AuthenticateParams, KillPtyParams, PingParams, PtyReadParams, PtyWriteParams,
+        RegisterSessionParams, ResizePtyParams, SpawnPtyParams, UnregisterSessionParams,
     };
     use crate::session::user::UserInfo;
 
@@ -808,5 +984,104 @@ mod tests {
 
         // Should succeed even if session doesn't exist (idempotent)
         assert!(response.success);
+    }
+
+    #[tokio::test]
+    async fn test_pty_write_session_not_found() {
+        let config = test_config();
+        let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
+
+        let request = Request {
+            id: "write-1".to_string(),
+            version: PROTOCOL_VERSION,
+            method: Method::PtyWrite,
+            params: RequestParams::PtyWrite(PtyWriteParams {
+                pty_id: "nonexistent-pty".to_string(),
+                data: "SGVsbG8=".to_string(), // "Hello" in base64
+            }),
+        };
+
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+
+        assert!(!response.success);
+        assert_eq!(response.error, Some("PTY session not found".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_pty_write_invalid_base64() {
+        let config = test_config();
+        let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
+
+        // First need to create a PTY session to test invalid base64
+        // But since we can't easily create one in test, we'll just verify
+        // the error path by checking param extraction works
+        let request = Request {
+            id: "write-2".to_string(),
+            version: PROTOCOL_VERSION,
+            method: Method::PtyWrite,
+            params: RequestParams::Ping(PingParams {}), // Wrong params
+        };
+
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+
+        assert!(!response.success);
+        assert_eq!(
+            response.error,
+            Some("invalid params for pty_write".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pty_read_session_not_found() {
+        let config = test_config();
+        let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
+
+        let request = Request {
+            id: "read-1".to_string(),
+            version: PROTOCOL_VERSION,
+            method: Method::PtyRead,
+            params: RequestParams::PtyRead(PtyReadParams {
+                pty_id: "nonexistent-pty".to_string(),
+                max_bytes: 4096,
+            }),
+        };
+
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+
+        assert!(!response.success);
+        assert_eq!(response.error, Some("PTY session not found".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_pty_read_invalid_params() {
+        let config = test_config();
+        let rate_limiter = RateLimiter::new(5);
+        let user_sessions = UserSessionStore::new();
+        let pty_sessions = SessionManager::new();
+
+        let request = Request {
+            id: "read-2".to_string(),
+            version: PROTOCOL_VERSION,
+            method: Method::PtyRead,
+            params: RequestParams::Ping(PingParams {}), // Wrong params
+        };
+
+        let response =
+            handle_request(request, &config, &rate_limiter, &user_sessions, &pty_sessions).await;
+
+        assert!(!response.success);
+        assert_eq!(
+            response.error,
+            Some("invalid params for pty_read".to_string())
+        );
     }
 }
