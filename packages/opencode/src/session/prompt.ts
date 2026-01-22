@@ -406,20 +406,46 @@ export namespace SessionPrompt {
             })
           },
         }
-        const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
-          executionError = error
-          log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+        const result = await taskTool.execute(taskArgs, taskCtx).catch(async (error) => {
+          const errorOutput: {
+            error: Error
+            result?: { title: string; output: string; metadata: any }
+          } = {
+            error: error as Error,
+            result: undefined,
+          }
+          await Plugin.trigger(
+            "tool.execute.error",
+            {
+              tool: "task",
+              sessionID,
+              callID: part.id,
+              args: taskArgs,
+            },
+            errorOutput,
+          )
+          if (errorOutput.result) {
+            return errorOutput.result
+          }
+          executionError = errorOutput.error
+          log.error("subtask execution failed", {
+            error: errorOutput.error,
+            agent: task.agent,
+            description: task.description,
+          })
           return undefined
         })
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: "task",
-            sessionID,
-            callID: part.id,
-          },
-          result,
-        )
+        if (result) {
+          await Plugin.trigger(
+            "tool.execute.after",
+            {
+              tool: "task",
+              sessionID,
+              callID: part.id,
+            },
+            result,
+          )
+        }
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -432,7 +458,7 @@ export namespace SessionPrompt {
               title: result.title,
               metadata: result.metadata,
               output: result.output,
-              attachments: result.attachments,
+              attachments: "attachments" in result ? result.attachments : undefined,
               time: {
                 ...part.state.time,
                 end: Date.now(),
@@ -715,17 +741,41 @@ export namespace SessionPrompt {
               args,
             },
           )
-          const result = await item.execute(args, ctx)
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
-            },
-            result,
-          )
-          return result
+          try {
+            const result = await item.execute(args, ctx)
+            await Plugin.trigger(
+              "tool.execute.after",
+              {
+                tool: item.id,
+                sessionID: ctx.sessionID,
+                callID: ctx.callID,
+              },
+              result,
+            )
+            return result
+          } catch (error) {
+            const errorOutput: {
+              error: Error
+              result?: { title: string; output: string; metadata: any }
+            } = {
+              error: error as Error,
+              result: undefined,
+            }
+            await Plugin.trigger(
+              "tool.execute.error",
+              {
+                tool: item.id,
+                sessionID: ctx.sessionID,
+                callID: ctx.callID,
+                args,
+              },
+              errorOutput,
+            )
+            if (errorOutput.result) {
+              return errorOutput.result
+            }
+            throw errorOutput.error
+          }
         },
       })
     }
@@ -757,65 +807,89 @@ export namespace SessionPrompt {
           always: ["*"],
         })
 
-        const result = await execute(args, opts)
+        try {
+          const result = await execute(args, opts)
 
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
-          },
-          result,
-        )
+          await Plugin.trigger(
+            "tool.execute.after",
+            {
+              tool: key,
+              sessionID: ctx.sessionID,
+              callID: opts.toolCallId,
+            },
+            result,
+          )
 
-        const textParts: string[] = []
-        const attachments: MessageV2.FilePart[] = []
+          const textParts: string[] = []
+          const attachments: MessageV2.FilePart[] = []
 
-        for (const contentItem of result.content) {
-          if (contentItem.type === "text") {
-            textParts.push(contentItem.text)
-          } else if (contentItem.type === "image") {
-            attachments.push({
-              id: Identifier.ascending("part"),
-              sessionID: input.session.id,
-              messageID: input.processor.message.id,
-              type: "file",
-              mime: contentItem.mimeType,
-              url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
-            })
-          } else if (contentItem.type === "resource") {
-            const { resource } = contentItem
-            if (resource.text) {
-              textParts.push(resource.text)
-            }
-            if (resource.blob) {
+          for (const contentItem of result.content) {
+            if (contentItem.type === "text") {
+              textParts.push(contentItem.text)
+            } else if (contentItem.type === "image") {
               attachments.push({
                 id: Identifier.ascending("part"),
                 sessionID: input.session.id,
                 messageID: input.processor.message.id,
                 type: "file",
-                mime: resource.mimeType ?? "application/octet-stream",
-                url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
-                filename: resource.uri,
+                mime: contentItem.mimeType,
+                url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
               })
+            } else if (contentItem.type === "resource") {
+              const { resource } = contentItem
+              if (resource.text) {
+                textParts.push(resource.text)
+              }
+              if (resource.blob) {
+                attachments.push({
+                  id: Identifier.ascending("part"),
+                  sessionID: input.session.id,
+                  messageID: input.processor.message.id,
+                  type: "file",
+                  mime: resource.mimeType ?? "application/octet-stream",
+                  url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
+                  filename: resource.uri,
+                })
+              }
             }
           }
-        }
 
-        const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
-        const metadata = {
-          ...(result.metadata ?? {}),
-          truncated: truncated.truncated,
-          ...(truncated.truncated && { outputPath: truncated.outputPath }),
-        }
+          const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
+          const metadata = {
+            ...(result.metadata ?? {}),
+            truncated: truncated.truncated,
+            ...(truncated.truncated && { outputPath: truncated.outputPath }),
+          }
 
-        return {
-          title: "",
-          metadata,
-          output: truncated.content,
-          attachments,
-          content: result.content, // directly return content to preserve ordering when outputting to model
+          return {
+            title: "",
+            metadata,
+            output: truncated.content,
+            attachments,
+            content: result.content, // directly return content to preserve ordering when outputting to model
+          }
+        } catch (error) {
+          const errorOutput: {
+            error: Error
+            result?: { title: string; output: string; metadata: any }
+          } = {
+            error: error as Error,
+            result: undefined,
+          }
+          await Plugin.trigger(
+            "tool.execute.error",
+            {
+              tool: key,
+              sessionID: ctx.sessionID,
+              callID: opts.toolCallId,
+              args,
+            },
+            errorOutput,
+          )
+          if (errorOutput.result) {
+            return errorOutput.result
+          }
+          throw errorOutput.error
         }
       }
       tools[key] = item
