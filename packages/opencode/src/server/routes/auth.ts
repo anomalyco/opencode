@@ -274,16 +274,19 @@ const loginPageHtml = `<!DOCTYPE html>
           }),
         });
         if (res.ok) {
+          // Keep button disabled during redirect
+          submitBtn.textContent = 'Redirecting...';
           window.location.href = '/';
         } else {
           const data = await res.json();
           errorDiv.textContent = data.message || 'Authentication failed';
           errorDiv.classList.add('visible');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign In';
         }
       } catch (err) {
         errorDiv.textContent = 'Connection error';
         errorDiv.classList.add('visible');
-      } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Sign In';
       }
