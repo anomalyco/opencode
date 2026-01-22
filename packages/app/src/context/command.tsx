@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, onCleanup, onMount, type Access
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { Persist, persisted } from "@/utils/persist"
 
@@ -154,6 +155,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
   init: () => {
     const dialog = useDialog()
     const settings = useSettings()
+    const language = useLanguage()
     const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
     const [suspendCount, setSuspendCount] = createSignal(0)
 
@@ -213,7 +215,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         ...suggested.map((x) => ({
           ...x,
           id: SUGGESTED_PREFIX + x.id,
-          category: "Suggested",
+          category: language.t("command.category.suggested"),
         })),
         ...resolved,
       ]

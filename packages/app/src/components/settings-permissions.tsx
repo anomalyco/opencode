@@ -2,6 +2,7 @@ import { Select } from "@opencode-ai/ui/select"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Component, For, createMemo, type JSX } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
+import { useLanguage } from "@/context/language"
 
 type PermissionAction = "allow" | "ask" | "deny"
 
@@ -15,30 +16,94 @@ type PermissionItem = {
   description: string
 }
 
-const ACTIONS: Array<{ value: PermissionAction; label: string }> = [
-  { value: "allow", label: "Allow" },
-  { value: "ask", label: "Ask" },
-  { value: "deny", label: "Deny" },
-]
+const ACTIONS = [
+  { value: "allow", label: "settings.permissions.action.allow" },
+  { value: "ask", label: "settings.permissions.action.ask" },
+  { value: "deny", label: "settings.permissions.action.deny" },
+] as const
 
-const ITEMS: PermissionItem[] = [
-  { id: "read", title: "Read", description: "Reading a file (matches the file path)" },
-  { id: "edit", title: "Edit", description: "Modify files, including edits, writes, patches, and multi-edits" },
-  { id: "glob", title: "Glob", description: "Match files using glob patterns" },
-  { id: "grep", title: "Grep", description: "Search file contents using regular expressions" },
-  { id: "list", title: "List", description: "List files within a directory" },
-  { id: "bash", title: "Bash", description: "Run shell commands" },
-  { id: "task", title: "Task", description: "Launch sub-agents" },
-  { id: "skill", title: "Skill", description: "Load a skill by name" },
-  { id: "lsp", title: "LSP", description: "Run language server queries" },
-  { id: "todoread", title: "Todo Read", description: "Read the todo list" },
-  { id: "todowrite", title: "Todo Write", description: "Update the todo list" },
-  { id: "webfetch", title: "Web Fetch", description: "Fetch content from a URL" },
-  { id: "websearch", title: "Web Search", description: "Search the web" },
-  { id: "codesearch", title: "Code Search", description: "Search code on the web" },
-  { id: "external_directory", title: "External Directory", description: "Access files outside the project directory" },
-  { id: "doom_loop", title: "Doom Loop", description: "Detect repeated tool calls with identical input" },
-]
+const ITEMS = [
+  {
+    id: "read",
+    title: "settings.permissions.tool.read.title",
+    description: "settings.permissions.tool.read.description",
+  },
+  {
+    id: "edit",
+    title: "settings.permissions.tool.edit.title",
+    description: "settings.permissions.tool.edit.description",
+  },
+  {
+    id: "glob",
+    title: "settings.permissions.tool.glob.title",
+    description: "settings.permissions.tool.glob.description",
+  },
+  {
+    id: "grep",
+    title: "settings.permissions.tool.grep.title",
+    description: "settings.permissions.tool.grep.description",
+  },
+  {
+    id: "list",
+    title: "settings.permissions.tool.list.title",
+    description: "settings.permissions.tool.list.description",
+  },
+  {
+    id: "bash",
+    title: "settings.permissions.tool.bash.title",
+    description: "settings.permissions.tool.bash.description",
+  },
+  {
+    id: "task",
+    title: "settings.permissions.tool.task.title",
+    description: "settings.permissions.tool.task.description",
+  },
+  {
+    id: "skill",
+    title: "settings.permissions.tool.skill.title",
+    description: "settings.permissions.tool.skill.description",
+  },
+  {
+    id: "lsp",
+    title: "settings.permissions.tool.lsp.title",
+    description: "settings.permissions.tool.lsp.description",
+  },
+  {
+    id: "todoread",
+    title: "settings.permissions.tool.todoread.title",
+    description: "settings.permissions.tool.todoread.description",
+  },
+  {
+    id: "todowrite",
+    title: "settings.permissions.tool.todowrite.title",
+    description: "settings.permissions.tool.todowrite.description",
+  },
+  {
+    id: "webfetch",
+    title: "settings.permissions.tool.webfetch.title",
+    description: "settings.permissions.tool.webfetch.description",
+  },
+  {
+    id: "websearch",
+    title: "settings.permissions.tool.websearch.title",
+    description: "settings.permissions.tool.websearch.description",
+  },
+  {
+    id: "codesearch",
+    title: "settings.permissions.tool.codesearch.title",
+    description: "settings.permissions.tool.codesearch.description",
+  },
+  {
+    id: "external_directory",
+    title: "settings.permissions.tool.external_directory.title",
+    description: "settings.permissions.tool.external_directory.description",
+  },
+  {
+    id: "doom_loop",
+    title: "settings.permissions.tool.doom_loop.title",
+    description: "settings.permissions.tool.doom_loop.description",
+  },
+] as const
 
 const VALID_ACTIONS = new Set<PermissionAction>(["allow", "ask", "deny"])
 
@@ -67,6 +132,15 @@ function getRuleDefault(value: unknown): PermissionAction | undefined {
 
 export const SettingsPermissions: Component = () => {
   const globalSync = useGlobalSync()
+  const language = useLanguage()
+
+  const actions = createMemo(
+    (): Array<{ value: PermissionAction; label: string }> =>
+      ACTIONS.map((action) => ({
+        value: action.value,
+        label: language.t(action.label),
+      })),
+  )
 
   const permission = createMemo(() => {
     return toMap(globalSync.data.config.permission)
@@ -95,34 +169,41 @@ export const SettingsPermissions: Component = () => {
     globalSync.updateConfig({ permission: { [id]: nextValue } }).catch((err: unknown) => {
       globalSync.set("config", "permission", before)
       const message = err instanceof Error ? err.message : String(err)
-      showToast({ title: "Failed to update permissions", description: message })
+      showToast({ title: language.t("settings.permissions.toast.updateFailed.title"), description: message })
     })
   }
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
-      <div class="sticky top-0 z-10 bg-background-base border-b border-border-weak-base">
+      <div
+        class="sticky top-0 z-10"
+        style={{
+          background:
+            "linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha) calc(100% - 24px), transparent)",
+        }}
+      >
         <div class="flex flex-col gap-1 p-8 max-w-[720px]">
-          <h2 class="text-16-medium text-text-strong">Permissions</h2>
-          <p class="text-14-regular text-text-weak">Control what tools the server can use by default.</p>
+          <h2 class="text-16-medium text-text-strong">{language.t("settings.permissions.title")}</h2>
+          <p class="text-14-regular text-text-weak">{language.t("settings.permissions.description")}</p>
         </div>
       </div>
 
       <div class="flex flex-col gap-6 p-8 pt-6 max-w-[720px]">
         <div class="flex flex-col gap-2">
-          <h3 class="text-14-medium text-text-strong">Appearance</h3>
+          <h3 class="text-14-medium text-text-strong">{language.t("settings.permissions.section.tools")}</h3>
           <div class="border border-border-weak-base rounded-lg overflow-hidden">
             <For each={ITEMS}>
               {(item) => (
-                <SettingsRow title={item.title} description={item.description}>
+                <SettingsRow title={language.t(item.title)} description={language.t(item.description)}>
                   <Select
-                    options={ACTIONS}
-                    current={ACTIONS.find((o) => o.value === actionFor(item.id))}
+                    options={actions()}
+                    current={actions().find((o) => o.value === actionFor(item.id))}
                     value={(o) => o.value}
                     label={(o) => o.label}
                     onSelect={(option) => option && setPermission(item.id, option.value)}
                     variant="secondary"
                     size="small"
+                    triggerVariant="settings"
                   />
                 </SettingsRow>
               )}

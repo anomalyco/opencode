@@ -1,9 +1,11 @@
 import { createMemo, Show } from "solid-js"
 import { useSync } from "@/context/sync"
+import { useLanguage } from "@/context/language"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 
 export function SessionLspIndicator() {
   const sync = useSync()
+  const language = useLanguage()
 
   const lspStats = createMemo(() => {
     const lsp = sync.data.lsp ?? []
@@ -15,7 +17,7 @@ export function SessionLspIndicator() {
 
   const tooltipContent = createMemo(() => {
     const lsp = sync.data.lsp ?? []
-    if (lsp.length === 0) return "No LSP servers"
+    if (lsp.length === 0) return language.t("lsp.tooltip.none")
     return lsp.map((s) => s.name).join(", ")
   })
 
@@ -30,7 +32,9 @@ export function SessionLspIndicator() {
               "bg-icon-success-base": !lspStats().hasError && lspStats().connected > 0,
             }}
           />
-          <span class="text-12-regular text-text-weak">{lspStats().connected} LSP</span>
+          <span class="text-12-regular text-text-weak">
+            {language.t("lsp.label.connected", { count: lspStats().connected })}
+          </span>
         </div>
       </Tooltip>
     </Show>
