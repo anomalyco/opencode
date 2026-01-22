@@ -1,5 +1,5 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import { Component, createMemo, createSignal, JSX, Show } from "solid-js"
+import { Component, ComponentProps, createMemo, createSignal, JSX, Show, ValidComponent } from "solid-js"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
@@ -8,8 +8,10 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tag } from "@opencode-ai/ui/tag"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogManageModels } from "./dialog-manage-models"
+import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 
 const ModelList: Component<{
@@ -46,6 +48,22 @@ const ModelList: Component<{
         if (!popularProviders.includes(aProvider) && popularProviders.includes(bProvider)) return 1
         return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
       }}
+      itemWrapper={(item, node) => (
+        <Tooltip
+          class="w-full"
+          placement="right-start"
+          gutter={12}
+          value={
+            <ModelTooltip
+              model={item}
+              latest={item.latest}
+              free={item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)}
+            />
+          }
+        >
+          {node}
+        </Tooltip>
+      )}
       onSelect={(x) => {
         local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
           recent: true,
@@ -68,10 +86,12 @@ const ModelList: Component<{
   )
 }
 
-export const ModelSelectorPopover: Component<{
+export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
   provider?: string
-  children: JSX.Element
-}> = (props) => {
+  children?: JSX.Element
+  triggerAs?: T
+  triggerProps?: ComponentProps<T>
+}) {
   const [open, setOpen] = createSignal(false)
   const dialog = useDialog()
 
@@ -83,7 +103,9 @@ export const ModelSelectorPopover: Component<{
 
   return (
     <Kobalte open={open()} onOpenChange={setOpen} placement="top-start" gutter={8}>
-      <Kobalte.Trigger as="div">{props.children}</Kobalte.Trigger>
+      <Kobalte.Trigger as={props.triggerAs ?? "div"} {...(props.triggerProps as any)}>
+        {props.children}
+      </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content class="w-72 h-80 flex flex-col rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden">
           <Kobalte.Title class="sr-only">{language.t("dialog.model.select.title")}</Kobalte.Title>
@@ -97,8 +119,8 @@ export const ModelSelectorPopover: Component<{
                 variant="ghost"
                 iconSize="normal"
                 class="size-6"
-                aria-label="Manage models"
-                title="Manage models"
+                aria-label={language.t("dialog.model.manage")}
+                title={language.t("dialog.model.manage")}
                 onClick={handleManage}
               />
             }

@@ -111,6 +111,35 @@
     border: 0.5px solid var(--border-weak-base);
   }
 
+  [data-component="markdown-code"] {
+    position: relative;
+  }
+
+  [data-slot="markdown-copy-button"] {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 1;
+  }
+
+  [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"] {
+    opacity: 1;
+  }
+
+  [data-slot="markdown-copy-button"] [data-slot="check-icon"] {
+    display: none;
+  }
+
+  [data-slot="markdown-copy-button"][data-copied="true"] [data-slot="copy-icon"] {
+    display: none;
+  }
+
+  [data-slot="markdown-copy-button"][data-copied="true"] [data-slot="check-icon"] {
+    display: inline-flex;
+  }
+
   pre {
     margin-top: 2rem;
     margin-bottom: 2rem;

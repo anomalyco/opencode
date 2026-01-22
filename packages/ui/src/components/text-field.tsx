@@ -103,6 +103,7 @@ export function TextField(props: TextFieldProps) {
               variant="ghost"
               onClick={handleCopy}
               data-slot="input-copy-button"
+              aria-label={copied() ? i18n.t("ui.textField.copied") : i18n.t("ui.textField.copyToClipboard")}
             />
           </Tooltip>
         </Show>
