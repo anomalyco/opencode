@@ -367,7 +367,12 @@ export const AuthRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const session = c.get("session")
+        // Auth middleware skips /auth/* routes, so manually look up session
+        const sessionId = getCookie(c, "opencode_session")
+        if (!sessionId) {
+          return c.json({ error: "Not authenticated" }, 401)
+        }
+        const session = UserSession.get(sessionId)
         if (!session) {
           return c.json({ error: "Not authenticated" }, 401)
         }
@@ -376,6 +381,10 @@ export const AuthRoutes = lazy(() =>
           username: session.username,
           createdAt: session.createdAt,
           lastAccessTime: session.lastAccessTime,
+          uid: session.uid,
+          gid: session.gid,
+          home: session.home,
+          shell: session.shell,
         })
       },
     ),
