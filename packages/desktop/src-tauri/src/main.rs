@@ -52,7 +52,7 @@ fn configure_display_backend() -> Option<String> {
 }
 
 fn main() {
-    unsafe { std::env::set_var("NO_PROXY", "no_proxy=127.0.0.1,localhost,::1") };
+    unsafe { std::env::set_var("NO_PROXY", "127.0.0.1,localhost,::1") };
 
     #[cfg(target_os = "linux")]
     {
