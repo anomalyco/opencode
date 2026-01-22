@@ -3,6 +3,7 @@ import { createStore, reconcile } from "solid-js/store"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -257,7 +258,7 @@ export function StatusPopover(props: StatusPopoverProps = {}) {
                             <Tag>{language.t("common.default")}</Tag>
                           </Show>
                           <Show when={isActive()}>
-                            <span class="ml-8 text-text-strong text-lg">✓</span>
+                            <Icon name="check" size="small" class="ml-8 text-icon-base" />
                           </Show>
                         </div>
                       )
@@ -353,7 +354,7 @@ export function StatusPopover(props: StatusPopoverProps = {}) {
                   when={lspItems().length > 0}
                   fallback={
                     <div class="w-full h-full flex items-center justify-center text-14-regular text-text-weak py-6 text-center">
-                      LSPs auto-detected from file types
+                      {language.t("status.lsp.empty")}
                     </div>
                   }
                 >
