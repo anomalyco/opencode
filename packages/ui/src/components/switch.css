@@ -109,7 +109,7 @@
   }
 
   &[data-disabled] {
-    cursor: not-allowed;
+    cursor: default;
   }
 
   &[data-disabled] [data-slot="switch-control"] {
