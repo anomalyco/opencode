@@ -233,13 +233,13 @@ export function StatusPopover(props: StatusPopoverProps = {}) {
                   </div>
                 }
               >
-                <div class="flex flex-col gap-2">
+                <div class="flex flex-col gap-2 max-h-28 overflow-y-auto -mr-5">
                   <For each={serverItems()}>
                     {(url) => {
                       const isDefault = () => defaultServerUrl() === url
                       const isActive = () => server.url === url
                       return (
-                        <div class="flex items-center gap-3 py-1 whitespace-nowrap">
+                        <div class="flex items-center gap-3 py-1 whitespace-nowrap pr-4">
                           <div
                             classList={{
                               "size-1.5 rounded-full shrink-0": true,
@@ -257,8 +257,9 @@ export function StatusPopover(props: StatusPopoverProps = {}) {
                           <Show when={isDefault()}>
                             <Tag>{language.t("common.default")}</Tag>
                           </Show>
+                          <div class="flex-1" />
                           <Show when={isActive()}>
-                            <Icon name="check" size="small" class="ml-8 text-icon-base" />
+                            <Icon name="check" class="text-text-strong" />
                           </Show>
                         </div>
                       )
@@ -293,7 +294,7 @@ export function StatusPopover(props: StatusPopoverProps = {}) {
                     </div>
                   }
                 >
-                  <div class="flex flex-col gap-2 max-h-64 overflow-y-auto">
+                  <div class="flex flex-col gap-2 max-h-28 overflow-y-auto -mr-5">
                     <For each={mcpItems()}>
                       {(item) => {
                         const mcpStatus = () => props.sync!.data.mcp[item.name]
@@ -358,7 +359,7 @@ export function StatusPopover(props: StatusPopoverProps = {}) {
                     </div>
                   }
                 >
-                  <div class="flex flex-col gap-2 max-h-64 overflow-y-auto">
+                  <div class="flex flex-col gap-2 max-h-28 overflow-y-auto -mr-5">
                     <For each={lspItems()}>
                       {(item) => (
                         <div class="flex items-center gap-3 py-1">
@@ -395,7 +396,7 @@ export function StatusPopover(props: StatusPopoverProps = {}) {
                     </div>
                   }
                 >
-                  <div class="flex flex-col gap-2">
+                  <div class="flex flex-col gap-2 max-h-28 overflow-y-auto -mr-5">
                     <For each={pluginItems()}>
                       {(name) => (
                         <div class="flex items-center gap-3 py-1 whitespace-nowrap">
