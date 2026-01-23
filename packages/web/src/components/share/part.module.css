@@ -205,6 +205,20 @@
       font-weight: 500;
       max-width: var(--md-tool-width);
     }
+
+    [data-slot="attachment-image"] {
+      max-width: var(--md-tool-width);
+      max-height: 300px;
+      width: auto;
+      height: auto;
+      border-radius: 0.25rem;
+      border: 1px solid var(--sl-color-divider);
+      object-fit: contain;
+    }
+
+    &[data-type="image"] {
+      gap: 0.5rem;
+    }
   }
 
   [data-component="button-text"] {

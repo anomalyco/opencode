@@ -87,7 +87,7 @@ function createGlobalSync() {
         project: "",
         provider: { all: [], connected: [], default: {} },
         config: {},
-        path: { state: "", config: "", worktree: "", directory: "", home: "" },
+        path: { state: "", config: "", worktree: "", directory, home: "" },
         status: "loading" as const,
         agent: [],
         command: [],

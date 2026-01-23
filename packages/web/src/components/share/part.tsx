@@ -169,15 +169,19 @@ export function Part(props: PartProps) {
           </div>
         )}
         {props.message.role === "user" && props.part.type === "file" && (
-          <div data-component="attachment">
-            <div data-slot="copy">Attachment</div>
-            <div data-slot="filename">{props.part.filename}</div>
-          </div>
-        )}
-        {props.message.role === "user" && props.part.type === "file" && (
-          <div data-component="attachment">
-            <div data-slot="copy">Attachment</div>
-            <div data-slot="filename">{props.part.filename}</div>
+          <div data-component="attachment" data-type={props.part.mime.startsWith("image/") ? "image" : "file"}>
+            <Show
+              when={props.part.mime.startsWith("image/") && props.part.url}
+              fallback={
+                <>
+                  <div data-slot="copy">Attachment</div>
+                  <div data-slot="filename">{props.part.filename}</div>
+                </>
+              }
+            >
+              <img data-slot="attachment-image" src={props.part.url} alt={props.part.filename ?? "attachment"} />
+              <div data-slot="filename">{props.part.filename}</div>
+            </Show>
           </div>
         )}
         {props.part.type === "step-start" && props.message.role === "assistant" && (

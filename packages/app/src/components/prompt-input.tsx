@@ -1,7 +1,18 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match, createMemo } from "solid-js"
+import {
+  createEffect,
+  on,
+  Component,
+  Show,
+  For,
+  onMount,
+  onCleanup,
+  Switch,
+  Match,
+  createMemo,
+  createSignal,
+} from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
 import { useFile, type FileSelection } from "@/context/file"
 import {
@@ -40,9 +51,6 @@ import { createOpencodeClient, type Message, type Part } from "@opencode-ai/sdk/
 import { Binary } from "@opencode-ai/util/binary"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
-
-const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
-const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
 
 interface PromptInputProps {
   class?: string
@@ -246,19 +254,74 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onCleanup(() => clearInterval(interval))
   })
 
-  const isFocused = createFocusSignal(() => editorRef)
+  // Custom focus signal that properly handles late-bound refs
+  // (createFocusSignal from solid-primitives has a bug with accessor functions)
+  const [isFocused, setIsFocused] = createSignal(false)
+  onMount(() => {
+    const onFocus = () => setIsFocused(true)
+    const onBlur = () => setIsFocused(false)
+    editorRef.addEventListener("focus", onFocus)
+    editorRef.addEventListener("blur", onBlur)
+    // Set initial state
+    setIsFocused(document.activeElement === editorRef)
+    onCleanup(() => {
+      editorRef.removeEventListener("focus", onFocus)
+      editorRef.removeEventListener("blur", onBlur)
+    })
+  })
 
-  const addImageAttachment = async (file: File) => {
-    if (!ACCEPTED_FILE_TYPES.includes(file.type)) return
+  const getMimeType = (file: File): string => {
+    if (file.type) return file.type
+    const ext = file.name.split(".").pop()?.toLowerCase()
+    const mimeMap: Record<string, string> = {
+      // Images
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      gif: "image/gif",
+      webp: "image/webp",
+      svg: "image/svg+xml",
+      // Documents
+      pdf: "application/pdf",
+      txt: "text/plain",
+      md: "text/markdown",
+      json: "application/json",
+      xml: "application/xml",
+      html: "text/html",
+      css: "text/css",
+      csv: "text/csv",
+      // Code
+      js: "text/javascript",
+      ts: "text/typescript",
+      jsx: "text/javascript",
+      tsx: "text/typescript",
+      py: "text/x-python",
+      rb: "text/x-ruby",
+      go: "text/x-go",
+      rs: "text/x-rust",
+      java: "text/x-java",
+      c: "text/x-c",
+      cpp: "text/x-c++",
+      h: "text/x-c",
+      hpp: "text/x-c++",
+      sh: "text/x-shellscript",
+      yaml: "text/yaml",
+      yml: "text/yaml",
+      toml: "text/toml",
+    }
+    return mimeMap[ext ?? ""] || "application/octet-stream"
+  }
 
+  const addFileAttachment = async (file: File) => {
     const reader = new FileReader()
+    const mime = getMimeType(file)
     reader.onload = () => {
       const dataUrl = reader.result as string
       const attachment: ImageAttachmentPart = {
         type: "image",
-        id: crypto.randomUUID(),
+        id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         filename: file.name,
-        mime: file.type,
+        mime,
         dataUrl,
       }
       setStore(
@@ -284,14 +347,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!clipboardData) return
 
     const items = Array.from(clipboardData.items)
-    const imageItems = items.filter((item) => ACCEPTED_FILE_TYPES.includes(item.type))
+    const fileItems = items.filter((item) => item.kind === "file")
 
-    if (imageItems.length > 0) {
+    if (fileItems.length > 0) {
       event.preventDefault()
       event.stopPropagation()
-      for (const item of imageItems) {
+      for (const item of fileItems) {
         const file = item.getAsFile()
-        if (file) await addImageAttachment(file)
+        if (file) await addFileAttachment(file)
       }
       return
     }
@@ -325,9 +388,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!dropped) return
 
     for (const file of Array.from(dropped)) {
-      if (ACCEPTED_FILE_TYPES.includes(file.type)) {
-        await addImageAttachment(file)
-      }
+      await addFileAttachment(file)
     }
   }
 
@@ -1627,7 +1688,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     when={attachment.mime.startsWith("image/")}
                     fallback={
                       <div class="size-16 rounded-md bg-surface-base flex items-center justify-center border border-border-base">
-                        <Icon name="folder" class="size-6 text-text-weak" />
+                        <Icon name="code-lines" class="size-6 text-text-weak" />
                       </div>
                     }
                   >
@@ -1763,20 +1824,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <input
               ref={(el) => (fileInputRef = el)}
               type="file"
-              accept={ACCEPTED_IMAGE_TYPES.join(",")}
-              class="hidden"
+              class="sr-only"
+              style={{
+                position: "absolute",
+                width: "1px",
+                height: "1px",
+                padding: 0,
+                margin: "-1px",
+                overflow: "hidden",
+                clip: "rect(0,0,0,0)",
+                "white-space": "nowrap",
+                border: 0,
+              }}
               onChange={(e) => {
                 const file = e.currentTarget.files?.[0]
-                if (file) addImageAttachment(file)
+                if (file) addFileAttachment(file)
                 e.currentTarget.value = ""
               }}
             />
             <div class="flex items-center gap-2">
               <SessionContextUsage />
               <Show when={store.mode === "normal"}>
-                <Tooltip placement="top" value="Attach image">
+                <Tooltip placement="top" value="Attach file">
                   <Button type="button" variant="ghost" class="size-6" onClick={() => fileInputRef.click()}>
-                    <Icon name="photo" class="size-4.5" />
+                    <Icon name="plus-small" class="size-4.5" />
                   </Button>
                 </Tooltip>
               </Show>
