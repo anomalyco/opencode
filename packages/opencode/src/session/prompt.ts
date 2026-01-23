@@ -422,6 +422,23 @@ export namespace SessionPrompt {
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
         if (result && part.state.status === "running") {
+          // Check if the subagent is in a retry state
+          if (result.metadata?.status?.type === "retry") {
+            // Propagate the retry status to the primary agent
+            SessionStatus.set(sessionID, {
+              type: "retry",
+              attempt: result.metadata.status.attempt,
+              message: `Subagent retrying: ${result.metadata.status.message}`,
+              next: result.metadata.status.next,
+            })
+            log.info("subagent retry detected", {
+              sessionID,
+              subagentSessionID: result.metadata.sessionId,
+              attempt: result.metadata.status.attempt,
+              message: result.metadata.status.message,
+            })
+          }
+          
           await Session.updatePart({
             ...part,
             state: {

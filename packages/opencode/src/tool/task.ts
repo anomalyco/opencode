@@ -11,6 +11,7 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
+import { SessionStatus } from "../session/status"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -173,6 +174,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         }))
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
+      // Get the current status of the subagent session
+      const subagentStatus = SessionStatus.get(session.id)
+
       const output = text + "\n\n" + ["<task_metadata>", `session_id: ${session.id}`, "</task_metadata>"].join("\n")
 
       return {
@@ -180,6 +184,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         metadata: {
           summary,
           sessionId: session.id,
+          status: subagentStatus,
         },
         output,
       }
