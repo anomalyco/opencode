@@ -113,10 +113,10 @@ export namespace Skill {
       }
     }
     
-    if (!Flag.OPENCODE_DISABLE_NODE_MODULE_SKILLS) {
+    if (!Flag.OPENCODE_DISABLE_NODE_MODULES_SKILLS) {
       for (const dir of claudeDirs) {
         const matches = await Array.fromAsync(
-          NODE_MODULE_SKILL_GLOB.scan({
+          NODE_MODULES_SKILL_GLOB.scan({
             cwd: dir,
             absolute: true,
             onlyFiles: true,
