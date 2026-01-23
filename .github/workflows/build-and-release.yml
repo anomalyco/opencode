@@ -46,6 +46,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Rename binaries for unique filenames
+        run: |
+          mkdir -p release-artifacts
+          for dir in packages/opencode/dist/*/bin; do
+            platform=$(basename $(dirname "$dir"))
+            for bin in "$dir"/*; do
+              if [ -f "$bin" ]; then
+                basename=$(basename "$bin")
+                cp "$bin" "release-artifacts/${platform}-${basename}"
+              fi
+            done
+          done
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -53,8 +66,6 @@ jobs:
           name: ${{ steps.version.outputs.release_name }}
           draft: false
           prerelease: true
-          make_latest: false
-          files: |
-            packages/opencode/dist/*/bin/opencode*
+          files: release-artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
