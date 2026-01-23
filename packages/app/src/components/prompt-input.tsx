@@ -1681,7 +1681,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 return (
                   <div
                     classList={{
-                      "group shrink-0 flex flex-col gap-0.5 rounded-[6px] bg-background-stronger border border-border-base pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all": true,
+                      "group shrink-0 flex flex-col gap-0.5 rounded-[6px] bg-background-stronger pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all shadow-xs-border hover:shadow-xs-border-hover": true,
                       "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID,
                     }}
                     onClick={() => {
@@ -1793,14 +1793,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onKeyDown={handleKeyDown}
             classList={{
               "select-text": true,
-              "w-full px-2 py-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "w-full p-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&_[data-type=file]]:text-syntax-property": true,
               "[&_[data-type=agent]]:text-syntax-type": true,
               "font-mono!": store.mode === "shell",
             }}
           />
           <Show when={!prompt.dirty()}>
-            <div class="absolute top-0 inset-x-0 px-2 py-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
+            <div class="absolute top-0 inset-x-0 p-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
                 : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })}
