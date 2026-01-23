@@ -1029,6 +1029,14 @@ export namespace Config {
             error: "For custom LSP servers, 'extensions' array is required.",
           },
         ),
+      diagnostics: z
+        .object({
+          disabled: z
+            .boolean()
+            .optional()
+            .describe("Disable LSP diagnostics output in edit/write tool results (default: false)"),
+        })
+        .optional(),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),

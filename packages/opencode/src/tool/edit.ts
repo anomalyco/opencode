@@ -14,6 +14,7 @@ import { Bus } from "../bus"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
+import { Config } from "../config/config"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
 
@@ -125,11 +126,12 @@ export const EditTool = Tool.define("edit", {
     const normalizedFilePath = Filesystem.normalizePath(filePath)
     const issues = diagnostics[normalizedFilePath] ?? []
     const errors = issues.filter((item) => item.severity === 1)
-    if (errors.length > 0) {
+    const cfg = await Config.get()
+    if (errors.length > 0 && cfg.lsp !== false && !cfg.diagnostics?.disabled) {
       const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
       const suffix =
         errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-      output += `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${filePath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
+      output += `\n\nNote: the edit was applied successfully. The following pre-existing or new LSP diagnostics were detected in this file (informational only — not caused by a failed edit):\n<diagnostics file="${filePath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
     }
 
     return {
