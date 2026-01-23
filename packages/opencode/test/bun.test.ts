@@ -80,11 +80,12 @@ describe("BunProc.install provider tracking", () => {
     expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
   })
 
-  test("should install package in node_modules", async () => {
+  test("should install package and return module path", async () => {
     const { BunProc } = await import("../src/bun")
 
-    await BunProc.install("zod", "latest", "anthropic")
+    const mod = await BunProc.install("zod", "latest", "anthropic")
 
+    expect(mod).toContain("node_modules/zod")
     expect(await pkgExists("zod")).toBe(true)
     const pkgJson = await readPkgJson()
     expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
@@ -114,6 +115,10 @@ describe("BunProc.install provider tracking", () => {
 
     expect(await pkgExists("zod")).toBe(false)
     expect(await pkgExists("superstruct")).toBe(true)
+
+    const pkgJson = await readPkgJson()
+    expect(pkgJson.dependencies?.zod).toBeUndefined()
+    expect(isExactVersion(pkgJson.dependencies?.superstruct)).toBe(true)
   })
 
   test("should remove old package even when new package is already cached", async () => {
@@ -132,6 +137,8 @@ describe("BunProc.install provider tracking", () => {
     const pkgJson = await readPkgJson()
     expect(pkgJson.opencode?.providers?.["provider-a"]).toBe("superstruct")
     expect(pkgJson.opencode?.providers?.["provider-b"]).toBe("superstruct")
+    expect(pkgJson.dependencies?.zod).toBeUndefined()
+    expect(isExactVersion(pkgJson.dependencies?.superstruct)).toBe(true)
   })
 
   test("should not remove package if provider is not switching", async () => {
@@ -183,6 +190,8 @@ describe("BunProc.install provider tracking", () => {
     const pkgJson = await readPkgJson()
     expect(pkgJson.opencode?.providers?.anthropic).toBe("superstruct")
     expect(pkgJson.opencode?.providers?.openai).toBe("zod")
+    expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
+    expect(isExactVersion(pkgJson.dependencies?.superstruct)).toBe(true)
   })
 
   test("should work when package.json exists without opencode section", async () => {
