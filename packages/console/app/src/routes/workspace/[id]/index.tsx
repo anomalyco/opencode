@@ -43,23 +43,20 @@ export default function () {
           </span>
           <Show when={userInfo()?.isAdmin}>
             <span data-slot="billing-info">
-              <Switch>
-                <Match when={!billingInfo()?.customerID}>
-                  <button
-                    data-color="primary"
-                    data-size="sm"
-                    disabled={checkoutSubmission.pending || store.checkoutRedirecting}
-                    onClick={onClickCheckout}
-                  >
-                    {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Enable billing"}
-                  </button>
-                </Match>
-                <Match when={!billingInfo()?.subscriptionID}>
-                  <span data-slot="balance">
-                    Current balance <b>${balance()}</b>
-                  </span>
-                </Match>
-              </Switch>
+              <Show when={billingInfo()?.customerID} fallback={
+                <button
+                  data-color="primary"
+                  data-size="sm"
+                  disabled={checkoutSubmission.pending || store.checkoutRedirecting}
+                  onClick={onClickCheckout}
+                >
+                  {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Enable billing"}
+                </button>
+              }>
+                <span data-slot="balance">
+                  Current balance <b>${balance()}</b>
+                </span>
+              </Show>
             </span>
           </Show>
         </p>
