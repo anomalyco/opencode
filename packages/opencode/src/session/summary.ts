@@ -120,7 +120,7 @@ export namespace SessionSummary {
     },
   )
 
-  async function computeDiff(input: { messages: MessageV2.WithParts[] }) {
+  export async function computeDiff(input: { messages: MessageV2.WithParts[] }) {
     let from: string | undefined
     let to: string | undefined
 

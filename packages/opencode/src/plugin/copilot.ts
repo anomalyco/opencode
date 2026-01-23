@@ -3,7 +3,9 @@ import { Installation } from "@/installation"
 import { iife } from "@/util/iife"
 
 const CLIENT_ID = "Ov23li8tweQw6odWQebz"
-
+// Add a small safety buffer when polling to avoid hitting the server
+// slightly too early due to clock skew / timer drift.
+const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000 // 3 seconds
 function normalizeDomain(url: string) {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "")
 }
@@ -16,6 +18,7 @@ function getUrls(domain: string) {
 }
 
 export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
+  const sdk = input.client
   return {
     auth: {
       provider: "github-copilot",
@@ -80,11 +83,11 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             })
 
             const headers: Record<string, string> = {
+              "x-initiator": isAgent ? "agent" : "user",
               ...(init?.headers as Record<string, string>),
               "User-Agent": `opencode/${Installation.VERSION}`,
               Authorization: `Bearer ${info.refresh}`,
               "Openai-Intent": "conversation-edits",
-              "X-Initiator": isAgent ? "agent" : "user",
             }
 
             if (isVision) {
@@ -204,6 +207,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                   const data = (await response.json()) as {
                     access_token?: string
                     error?: string
+                    interval?: number
                   }
 
                   if (data.access_token) {
@@ -230,13 +234,29 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                   }
 
                   if (data.error === "authorization_pending") {
-                    await new Promise((resolve) => setTimeout(resolve, deviceData.interval * 1000))
+                    await Bun.sleep(deviceData.interval * 1000 + OAUTH_POLLING_SAFETY_MARGIN_MS)
+                    continue
+                  }
+
+                  if (data.error === "slow_down") {
+                    // Based on the RFC spec, we must add 5 seconds to our current polling interval.
+                    // (See https://www.rfc-editor.org/rfc/rfc8628#section-3.5)
+                    let newInterval = (deviceData.interval + 5) * 1000
+
+                    // GitHub OAuth API may return the new interval in seconds in the response.
+                    // We should try to use that if provided with safety margin.
+                    const serverInterval = data.interval
+                    if (serverInterval && typeof serverInterval === "number" && serverInterval > 0) {
+                      newInterval = serverInterval * 1000
+                    }
+
+                    await Bun.sleep(newInterval + OAUTH_POLLING_SAFETY_MARGIN_MS)
                     continue
                   }
 
                   if (data.error) return { type: "failed" as const }
 
-                  await new Promise((resolve) => setTimeout(resolve, deviceData.interval * 1000))
+                  await Bun.sleep(deviceData.interval * 1000 + OAUTH_POLLING_SAFETY_MARGIN_MS)
                   continue
                 }
               },
@@ -244,6 +264,20 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
           },
         },
       ],
+    },
+    "chat.headers": async (input, output) => {
+      if (!input.model.providerID.includes("github-copilot")) return
+      const session = await sdk.session
+        .get({
+          path: {
+            id: input.sessionID,
+          },
+          throwOnError: true,
+        })
+        .catch(() => undefined)
+      if (!session || !session.data.parentID) return
+      // mark subagent sessions as agent initiated matching standard that other copilot tools have
+      output.headers["x-initiator"] = "agent"
     },
   }
 }

@@ -1,0 +1,92 @@
+export const dict = {
+  "ui.sessionReview.title": "تغييرات الجلسة",
+  "ui.sessionReview.diffStyle.unified": "موجد",
+  "ui.sessionReview.diffStyle.split": "منقسم",
+  "ui.sessionReview.expandAll": "توسيع الكل",
+  "ui.sessionReview.collapseAll": "طي الكل",
+
+  "ui.sessionTurn.steps.show": "إظهار الخطوات",
+  "ui.sessionTurn.steps.hide": "إخفاء الخطوات",
+  "ui.sessionTurn.summary.response": "استجابة",
+  "ui.sessionTurn.diff.showMore": "إظهار المزيد من التغييرات ({{count}})",
+
+  "ui.sessionTurn.retry.retrying": "إعادة المحاولة",
+  "ui.sessionTurn.retry.inSeconds": "خلال {{seconds}} ثواني",
+
+  "ui.sessionTurn.status.delegating": "تفويض العمل",
+  "ui.sessionTurn.status.planning": "تخطيط الخطوات التالية",
+  "ui.sessionTurn.status.gatheringContext": "جمع السياق",
+  "ui.sessionTurn.status.searchingCodebase": "البحث في قاعدة التعليمات البرمجية",
+  "ui.sessionTurn.status.searchingWeb": "البحث في الويب",
+  "ui.sessionTurn.status.makingEdits": "إجراء تعديلات",
+  "ui.sessionTurn.status.runningCommands": "تشغيل الأوامر",
+  "ui.sessionTurn.status.thinking": "تفكير",
+  "ui.sessionTurn.status.thinkingWithTopic": "تفكير - {{topic}}",
+  "ui.sessionTurn.status.gatheringThoughts": "جمع الأفكار",
+  "ui.sessionTurn.status.consideringNextSteps": "النظر في الخطوات التالية",
+
+  "ui.messagePart.diagnostic.error": "خطأ",
+  "ui.messagePart.title.edit": "تحرير",
+  "ui.messagePart.title.write": "كتابة",
+  "ui.messagePart.option.typeOwnAnswer": "اكتب إجابتك الخاصة",
+  "ui.messagePart.review.title": "مراجعة إجاباتك",
+
+  "ui.list.loading": "جارٍ التحميل",
+  "ui.list.empty": "لا توجد نتائج",
+  "ui.list.clearFilter": "مسح عامل التصفية",
+  "ui.list.emptyWithFilter.prefix": "لا توجد نتائج لـ",
+  "ui.list.emptyWithFilter.suffix": "",
+
+  "ui.messageNav.newMessage": "رسالة جديدة",
+
+  "ui.textField.copyToClipboard": "نسخ إلى الحافظة",
+  "ui.textField.copied": "تم النسخ",
+
+  "ui.imagePreview.alt": "معاينة الصورة",
+
+  "ui.tool.read": "قراءة",
+  "ui.tool.list": "قائمة",
+  "ui.tool.glob": "Glob",
+  "ui.tool.grep": "Grep",
+  "ui.tool.webfetch": "جلب الويب",
+  "ui.tool.shell": "Shell",
+  "ui.tool.patch": "تصحيح",
+  "ui.tool.todos": "المهام",
+  "ui.tool.todos.read": "قراءة المهام",
+  "ui.tool.questions": "أسئلة",
+  "ui.tool.agent": "وكيل {{type}}",
+
+  "ui.common.file.one": "ملف",
+  "ui.common.file.other": "ملفات",
+  "ui.common.question.one": "سؤال",
+  "ui.common.question.other": "أسئلة",
+
+  "ui.common.add": "إضافة",
+  "ui.common.cancel": "إلغاء",
+  "ui.common.confirm": "تأكيد",
+  "ui.common.dismiss": "رفض",
+  "ui.common.close": "إغلاق",
+  "ui.common.next": "التالي",
+  "ui.common.submit": "إرسال",
+
+  "ui.permission.deny": "رفض",
+  "ui.permission.allowAlways": "السماح دائمًا",
+  "ui.permission.allowOnce": "السماح مرة واحدة",
+
+  "ui.message.expand": "توسيع الرسالة",
+  "ui.message.collapse": "طي الرسالة",
+  "ui.message.copy": "نسخ",
+  "ui.message.copied": "تم النسخ!",
+  "ui.message.attachment.alt": "مرفق",
+
+  "ui.patch.action.deleted": "محذوف",
+  "ui.patch.action.created": "تم الإنشاء",
+  "ui.patch.action.moved": "منقول",
+  "ui.patch.action.patched": "مصحح",
+
+  "ui.question.subtitle.answered": "{{count}} أجيب",
+  "ui.question.answer.none": "(لا توجد إجابة)",
+  "ui.question.review.notAnswered": "(لم يتم الرد)",
+  "ui.question.multiHint": "(حدد كل ما ينطبق)",
+  "ui.question.custom.placeholder": "اكتب إجابتك...",
+}

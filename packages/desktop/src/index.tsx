@@ -1,4 +1,5 @@
 // @refresh reload
+import "./webview-zoom"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
@@ -12,12 +13,13 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
-import { Logo } from "@opencode-ai/ui/logo"
+import { Splash } from "@opencode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
 
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
 import pkg from "../package.json"
+import "./styles.css"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -25,6 +27,17 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
     "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
   )
 }
+
+// Floating UI can call getComputedStyle with non-elements (e.g., null refs, virtual elements).
+// This happens on all platforms (WebView2 on Windows, WKWebView on macOS), not just Windows.
+const originalGetComputedStyle = window.getComputedStyle
+window.getComputedStyle = ((elt: Element, pseudoElt?: string | null) => {
+  if (!(elt instanceof Element)) {
+    // Fall back to a safe element when a non-element is passed.
+    return originalGetComputedStyle(document.documentElement, pseudoElt ?? undefined)
+  }
+  return originalGetComputedStyle(elt, pseudoElt ?? undefined)
+}) as typeof window.getComputedStyle
 
 let update: Update | null = null
 
@@ -82,6 +95,21 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     const storeCache = new Map<string, Promise<StoreLike>>()
     const apiCache = new Map<string, AsyncStorage & { flush: () => Promise<void> }>()
     const memoryCache = new Map<string, StoreLike>()
+
+    const flushAll = async () => {
+      const apis = Array.from(apiCache.values())
+      await Promise.all(apis.map((api) => api.flush().catch(() => undefined)))
+    }
+
+    if ("addEventListener" in globalThis) {
+      const handleVisibility = () => {
+        if (document.visibilityState !== "hidden") return
+        void flushAll()
+      }
+
+      window.addEventListener("pagehide", () => void flushAll())
+      document.addEventListener("visibilitychange", handleVisibility)
+    }
 
     const createMemoryStore = () => {
       const data = new Map<string, string>()
@@ -242,7 +270,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
       .then(() => {
         const notification = new Notification(title, {
           body: description ?? "",
-          icon: "https://opencode.ai/favicon-96x96.png",
+          icon: "https://opencode.ai/favicon-96x96-v3.png",
         })
         notification.onclick = () => {
           const win = getCurrentWindow()
@@ -288,14 +316,13 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   setDefaultServerUrl: async (url: string | null) => {
     await invoke("set_default_server_url", { url })
   },
+
+  parseMarkdown: async (markdown: string) => {
+    return invoke<string>("parse_markdown_command", { markdown })
+  },
 })
 
 createMenu()
-
-// Stops mousewheel events from reaching Tauri's pinch-to-zoom handler
-root?.addEventListener("mousewheel", (e) => {
-  e.stopPropagation()
-})
 
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
@@ -337,7 +364,11 @@ type ServerReadyData = { url: string; password: string | null }
 
 // Gate component that waits for the server to be ready
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
-  const [serverData] = createResource<ServerReadyData>(() => invoke("ensure_server_ready"))
+  const [serverData] = createResource<ServerReadyData>(() =>
+    invoke("ensure_server_ready").then((v) => {
+      return new Promise((res) => setTimeout(() => res(v as ServerReadyData), 2000))
+    }),
+  )
 
   return (
     // Not using suspense as not all components are compatible with it (undefined refs)
@@ -345,8 +376,8 @@ function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.
       when={serverData.state !== "pending" && serverData()}
       fallback={
         <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-          <Logo class="w-xl opacity-12 animate-pulse" />
-          <div class="mt-8 text-14-regular text-text-weak">Initializing...</div>
+          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+          <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
         </div>
       }
     >

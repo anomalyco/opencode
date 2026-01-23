@@ -78,6 +78,14 @@ Permission patterns use simple wildcard matching:
 - `?` matches exactly one character
 - All other characters match literally
 
+### Home Directory Expansion
+
+You can use `~` or `$HOME` at the start of a pattern to reference your home directory. This is particularly useful for `external_directory` rules.
+
+- `~/projects/*` -> `/Users/username/projects/*`
+- `$HOME/projects/*` -> `/Users/username/projects/*`
+- `~` -> `/Users/username`
+
 ---
 
 ## Available Permissions
@@ -174,7 +182,7 @@ Refer to the [Granular Rules (Object Syntax)](#granular-rules-object-syntax) sec
 
 You can also configure agent permissions in Markdown:
 
-```markdown title="~/.config/opencode/agent/review.md"
+```markdown title="~/.config/opencode/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

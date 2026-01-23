@@ -1,6 +1,7 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Keybind } from "@opencode-ai/ui/keybind"
 import { List } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { useParams } from "@solidjs/router"
@@ -8,6 +9,7 @@ import { createMemo, createSignal, onCleanup, Show } from "solid-js"
 import { formatKeybind, useCommand, type CommandOption } from "@/context/command"
 import { useLayout } from "@/context/layout"
 import { useFile } from "@/context/file"
+import { useLanguage } from "@/context/language"
 
 type EntryType = "command" | "file"
 
@@ -17,23 +19,31 @@ type Entry = {
   title: string
   description?: string
   keybind?: string
-  category: "Commands" | "Files"
+  category: string
   option?: CommandOption
   path?: string
 }
 
 export function DialogSelectFile() {
   const command = useCommand()
+  const language = useLanguage()
   const layout = useLayout()
   const file = useFile()
   const dialog = useDialog()
   const params = useParams()
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey()))
-  const view = createMemo(() => layout.view(sessionKey()))
+  const tabs = createMemo(() => layout.tabs(sessionKey))
+  const view = createMemo(() => layout.view(sessionKey))
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const [grouped, setGrouped] = createSignal(false)
-  const common = ["session.new", "session.previous", "session.next", "terminal.toggle", "review.toggle"]
+  const common = [
+    "session.new",
+    "workspace.new",
+    "session.previous",
+    "session.next",
+    "terminal.toggle",
+    "review.toggle",
+  ]
   const limit = 5
 
   const allowed = createMemo(() =>
@@ -48,7 +58,7 @@ export function DialogSelectFile() {
     title: option.title,
     description: option.description,
     keybind: option.keybind,
-    category: "Commands",
+    category: language.t("palette.group.commands"),
     option,
   })
 
@@ -56,7 +66,7 @@ export function DialogSelectFile() {
     id: "file:" + path,
     type: "file",
     title: path,
-    category: "Files",
+    category: language.t("palette.group.files"),
     path,
   })
 
@@ -133,14 +143,20 @@ export function DialogSelectFile() {
   })
 
   return (
-    <Dialog title="Search">
+    <Dialog class="pt-3 pb-0 !max-h-[480px]">
       <List
-        search={{ placeholder: "Search files and commands", autofocus: true }}
-        emptyMessage="No results found"
+        search={{
+          placeholder: language.t("palette.search.placeholder"),
+          autofocus: true,
+          hideIcon: true,
+          class: "pl-3 pr-2 !mb-0",
+        }}
+        emptyMessage={language.t("palette.empty")}
+        loadingMessage={language.t("common.loading")}
         items={items}
         key={(item) => item.id}
         filterKeys={["title", "description", "category"]}
-        groupBy={(item) => (grouped() ? item.category : "")}
+        groupBy={(item) => item.category}
         onMove={handleMove}
         onSelect={handleSelect}
       >
@@ -148,7 +164,7 @@ export function DialogSelectFile() {
           <Show
             when={item.type === "command"}
             fallback={
-              <div class="w-full flex items-center justify-between rounded-md">
+              <div class="w-full flex items-center justify-between rounded-md pl-1">
                 <div class="flex items-center gap-x-3 grow min-w-0">
                   <FileIcon node={{ path: item.path ?? "", type: "file" }} class="shrink-0 size-4" />
                   <div class="flex items-center text-14-regular">
@@ -161,7 +177,7 @@ export function DialogSelectFile() {
               </div>
             }
           >
-            <div class="w-full flex items-center justify-between gap-4">
+            <div class="w-full flex items-center justify-between gap-4 pl-1">
               <div class="flex items-center gap-2 min-w-0">
                 <span class="text-14-regular text-text-strong whitespace-nowrap">{item.title}</span>
                 <Show when={item.description}>
@@ -169,7 +185,7 @@ export function DialogSelectFile() {
                 </Show>
               </div>
               <Show when={item.keybind}>
-                <span class="text-12-regular text-text-subtle shrink-0">{formatKeybind(item.keybind ?? "")}</span>
+                <Keybind class="rounded-[4px]">{formatKeybind(item.keybind ?? "")}</Keybind>
               </Show>
             </div>
           </Show>
