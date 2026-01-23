@@ -182,10 +182,28 @@ export function StatusPopover(props: StatusPopoverProps = {}) {
   }
 
   const tabs: { value: TabValue; label: () => string }[] = [
-    { value: "servers", label: () => `${serverCount()} ${serverCount() === 1 ? "Server" : "Servers"}` },
-    { value: "mcp", label: () => `${mcpCount()} MCP` },
-    { value: "lsp", label: () => `${lspCount()} LSP` },
-    { value: "plugins", label: () => `${pluginCount()} ${pluginCount() === 1 ? "Plugin" : "Plugins"}` },
+    {
+      value: "servers",
+      label: () =>
+        language.t(serverCount() === 1 ? "status.tab.servers.one" : "status.tab.servers.other", {
+          count: serverCount(),
+        }),
+    },
+    {
+      value: "mcp",
+      label: () => language.t(mcpCount() === 1 ? "status.tab.mcp.one" : "status.tab.mcp.other", { count: mcpCount() }),
+    },
+    {
+      value: "lsp",
+      label: () => language.t(lspCount() === 1 ? "status.tab.lsp.one" : "status.tab.lsp.other", { count: lspCount() }),
+    },
+    {
+      value: "plugins",
+      label: () =>
+        language.t(pluginCount() === 1 ? "status.tab.plugins.one" : "status.tab.plugins.other", {
+          count: pluginCount(),
+        }),
+    },
   ]
 
   return (
