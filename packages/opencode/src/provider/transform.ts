@@ -420,7 +420,9 @@ export namespace ProviderTransform {
         )
 
       case "@ai-sdk/anthropic":
-        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
+      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
+      case "@ai-sdk/google-vertex/anthropic":
+        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
         return {
           high: {
             thinking: {
@@ -643,7 +645,7 @@ export namespace ProviderTransform {
     const modelCap = modelLimit || globalLimit
     const standardLimit = Math.min(modelCap, globalLimit)
 
-    if (npm === "@ai-sdk/anthropic") {
+    if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
       const thinking = options?.["thinking"]
       const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
       const enabled = thinking?.["type"] === "enabled"
