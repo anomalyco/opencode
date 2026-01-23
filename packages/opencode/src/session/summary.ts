@@ -35,13 +35,26 @@ export namespace SessionSummary {
   )
 
   async function summarizeSession(input: { sessionID: string; messages: MessageV2.WithParts[] }) {
-    const files = new Set(
-      input.messages
-        .flatMap((x) => x.parts)
-        .filter((x) => x.type === "patch")
-        .flatMap((x) => x.files)
-        .map((x) => path.relative(Instance.worktree, x)),
-    )
+    const patchFiles = input.messages
+      .flatMap((x) => x.parts)
+      .filter((x) => x.type === "patch")
+      .flatMap((x) => x.files)
+      .map((x) => path.relative(Instance.worktree, x))
+
+    const toolParts = input.messages
+      .flatMap((x) => x.parts)
+      .filter((x): x is MessageV2.ToolPart => x.type === "tool" && x.state?.status === "completed")
+
+    const toolFiles: string[] = []
+    for (const part of toolParts) {
+      const metadata = (part.state as any).metadata
+      if (metadata?.filediff) {
+        const filediff = metadata.filediff as Snapshot.FileDiff
+        toolFiles.push(path.relative(Instance.worktree, filediff.file))
+      }
+    }
+
+    const files = new Set([...patchFiles, ...toolFiles])
     const diffs = await computeDiff({ messages: input.messages }).then((x) =>
       x.filter((x) => {
         return files.has(x.file)
@@ -121,30 +134,67 @@ export namespace SessionSummary {
   )
 
   export async function computeDiff(input: { messages: MessageV2.WithParts[] }) {
-    let from: string | undefined
-    let to: string | undefined
+    if (Instance.project.vcs === "git") {
+      let from: string | undefined
+      let to: string | undefined
 
-    // scan assistant messages to find earliest from and latest to
-    // snapshot
-    for (const item of input.messages) {
-      if (!from) {
+      // scan assistant messages to find earliest from and latest to
+      // snapshot
+      for (const item of input.messages) {
+        if (!from) {
+          for (const part of item.parts) {
+            if (part.type === "step-start" && part.snapshot) {
+              from = part.snapshot
+              break
+            }
+          }
+        }
+
         for (const part of item.parts) {
-          if (part.type === "step-start" && part.snapshot) {
-            from = part.snapshot
+          if (part.type === "step-finish" && part.snapshot) {
+            to = part.snapshot
             break
           }
         }
       }
 
-      for (const part of item.parts) {
-        if (part.type === "step-finish" && part.snapshot) {
-          to = part.snapshot
-          break
+      if (from && to) return Snapshot.diffFull(from, to)
+    }
+
+    return aggregateToolDiffs(input.messages)
+  }
+
+  function aggregateToolDiffs(messages: MessageV2.WithParts[]): Snapshot.FileDiff[] {
+    const fileMap = new Map<string, Snapshot.FileDiff>()
+
+    for (const msg of messages) {
+      for (const part of msg.parts) {
+        if (part.type !== "tool") continue
+        if (part.state?.status !== "completed") continue
+
+        const metadata = (part.state as any).metadata
+        const filediff = metadata?.filediff as Snapshot.FileDiff | undefined
+        if (!filediff) continue
+
+        const relativeFile = path.relative(Instance.worktree, filediff.file)
+
+        const existing = fileMap.get(relativeFile)
+        if (existing) {
+          existing.after = filediff.after
+          existing.additions += filediff.additions
+          existing.deletions += filediff.deletions
+        } else {
+          fileMap.set(relativeFile, {
+            file: relativeFile,
+            before: filediff.before,
+            after: filediff.after,
+            additions: filediff.additions,
+            deletions: filediff.deletions,
+          })
         }
       }
     }
 
-    if (from && to) return Snapshot.diffFull(from, to)
-    return []
+    return Array.from(fileMap.values())
   }
 }

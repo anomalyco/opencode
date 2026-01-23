@@ -2,7 +2,7 @@ import z from "zod"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
-import { createTwoFilesPatch } from "diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./write.txt"
 import { Bus } from "../bus"
 import { File } from "../file"
@@ -11,6 +11,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectory } from "./external-directory"
+import { Snapshot } from "../snapshot"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -47,6 +48,18 @@ export const WriteTool = Tool.define("write", {
     })
     FileTime.read(ctx.sessionID, filepath)
 
+    const filediff: Snapshot.FileDiff = {
+      file: filepath,
+      before: contentOld,
+      after: params.content,
+      additions: 0,
+      deletions: 0,
+    }
+    for (const change of diffLines(contentOld, params.content)) {
+      if (change.added) filediff.additions += change.count || 0
+      if (change.removed) filediff.deletions += change.count || 0
+    }
+
     let output = "Wrote file successfully."
     await LSP.touchFile(filepath, true)
     const diagnostics = await LSP.diagnostics()
@@ -73,6 +86,7 @@ export const WriteTool = Tool.define("write", {
         diagnostics,
         filepath,
         exists: exists,
+        filediff,
       },
       output,
     }
