@@ -28,6 +28,7 @@ import {
   batch,
   createContext,
   createEffect,
+  untrack,
   getOwner,
   runWithOwner,
   useContext,
@@ -44,11 +45,24 @@ import { usePlatform } from "./platform"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 
+type ProjectMeta = {
+  name?: string
+  icon?: {
+    override?: string
+    color?: string
+  }
+  commands?: {
+    start?: string
+  }
+}
+
 type State = {
   status: "loading" | "partial" | "complete"
   agent: Agent[]
   command: Command[]
   project: string
+  projectMeta: ProjectMeta | undefined
+  icon: string | undefined
   provider: ProviderListResponse
   config: Config
   path: Path
@@ -89,6 +103,18 @@ type VcsCache = {
   ready: Accessor<boolean>
 }
 
+type MetaCache = {
+  store: Store<{ value: ProjectMeta | undefined }>
+  setStore: SetStoreFunction<{ value: ProjectMeta | undefined }>
+  ready: Accessor<boolean>
+}
+
+type IconCache = {
+  store: Store<{ value: string | undefined }>
+  setStore: SetStoreFunction<{ value: string | undefined }>
+  ready: Accessor<boolean>
+}
+
 type ChildOptions = {
   bootstrap?: boolean
 }
@@ -100,6 +126,25 @@ function createGlobalSync() {
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
   const vcsCache = new Map<string, VcsCache>()
+  const metaCache = new Map<string, MetaCache>()
+  const iconCache = new Map<string, IconCache>()
+
+  const [projectCache, setProjectCache, , projectCacheReady] = persisted(
+    Persist.global("globalSync.project", ["globalSync.project.v1"]),
+    createStore({ value: [] as Project[] }),
+  )
+
+  const sanitizeProject = (project: Project) => {
+    if (!project.icon?.url && !project.icon?.override) return project
+    return {
+      ...project,
+      icon: {
+        ...project.icon,
+        url: undefined,
+        override: undefined,
+      },
+    }
+  }
   const [globalStore, setGlobalStore] = createStore<{
     ready: boolean
     error?: InitError
@@ -112,13 +157,31 @@ function createGlobalSync() {
   }>({
     ready: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
-    project: [],
+    project: projectCache.value,
     provider: { all: [], connected: [], default: {} },
     provider_auth: {},
     config: {},
     reload: undefined,
   })
   let bootstrapQueue: string[] = []
+
+  createEffect(() => {
+    if (!projectCacheReady()) return
+    if (globalStore.project.length !== 0) return
+    const cached = projectCache.value
+    if (cached.length === 0) return
+    setGlobalStore("project", cached)
+  })
+
+  createEffect(() => {
+    if (!projectCacheReady()) return
+    const projects = globalStore.project
+    if (projects.length === 0) {
+      const cachedLength = untrack(() => projectCache.value.length)
+      if (cachedLength !== 0) return
+    }
+    setProjectCache("value", projects.map(sanitizeProject))
+  })
 
   createEffect(async () => {
     if (globalStore.reload !== "complete") return
@@ -149,9 +212,29 @@ function createGlobalSync() {
       if (!cache) throw new Error("Failed to create persisted cache")
       vcsCache.set(directory, { store: cache[0], setStore: cache[1], ready: cache[3] })
 
+      const meta = runWithOwner(owner, () =>
+        persisted(
+          Persist.workspace(directory, "project", ["project.v1"]),
+          createStore({ value: undefined as ProjectMeta | undefined }),
+        ),
+      )
+      if (!meta) throw new Error("Failed to create persisted project metadata")
+      metaCache.set(directory, { store: meta[0], setStore: meta[1], ready: meta[3] })
+
+      const icon = runWithOwner(owner, () =>
+        persisted(
+          Persist.workspace(directory, "icon", ["icon.v1"]),
+          createStore({ value: undefined as string | undefined }),
+        ),
+      )
+      if (!icon) throw new Error("Failed to create persisted project icon")
+      iconCache.set(directory, { store: icon[0], setStore: icon[1], ready: icon[3] })
+
       const init = () => {
-        children[directory] = createStore<State>({
+        const child = createStore<State>({
           project: "",
+          projectMeta: meta[0].value,
+          icon: icon[0].value,
           provider: { all: [], connected: [], default: {} },
           config: {},
           path: { state: "", config: "", worktree: "", directory: "", home: "" },
@@ -171,6 +254,16 @@ function createGlobalSync() {
           limit: 5,
           message: {},
           part: {},
+        })
+
+        children[directory] = child
+
+        createEffect(() => {
+          child[1]("projectMeta", meta[0].value)
+        })
+
+        createEffect(() => {
+          child[1]("icon", icon[0].value)
         })
       }
 
@@ -253,6 +346,8 @@ function createGlobalSync() {
       const [store, setStore] = ensureChild(directory)
       const cache = vcsCache.get(directory)
       if (!cache) return
+      const meta = metaCache.get(directory)
+      if (!meta) return
       const sdk = createOpencodeClient({
         baseUrl: globalSDK.url,
         fetch: platform.fetch,
@@ -268,6 +363,8 @@ function createGlobalSync() {
         if (!cached?.branch) return
         setStore("vcs", (value) => value ?? cached)
       })
+
+      // projectMeta is synced from persisted storage in ensureChild.
 
       const blockingRequests = {
         project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
@@ -473,6 +570,20 @@ function createGlobalSync() {
             draft.splice(result.index, 0, event.properties.info)
           }),
         )
+        break
+      }
+      case "session.deleted": {
+        const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+        if (result.found) {
+          setStore(
+            "session",
+            produce((draft) => {
+              draft.splice(result.index, 1)
+            }),
+          )
+        }
+        if (event.properties.info.parentID) break
+        setStore("sessionTotal", (value) => Math.max(0, value - 1))
         break
       }
       case "session.diff":
@@ -711,6 +822,32 @@ function createGlobalSync() {
     bootstrap()
   })
 
+  function projectMeta(directory: string, patch: ProjectMeta) {
+    const [store, setStore] = ensureChild(directory)
+    const cached = metaCache.get(directory)
+    if (!cached) return
+    const previous = store.projectMeta ?? {}
+    const icon = patch.icon ? { ...(previous.icon ?? {}), ...patch.icon } : previous.icon
+    const commands = patch.commands ? { ...(previous.commands ?? {}), ...patch.commands } : previous.commands
+    const next = {
+      ...previous,
+      ...patch,
+      icon,
+      commands,
+    }
+    cached.setStore("value", next)
+    setStore("projectMeta", next)
+  }
+
+  function projectIcon(directory: string, value: string | undefined) {
+    const [store, setStore] = ensureChild(directory)
+    const cached = iconCache.get(directory)
+    if (!cached) return
+    if (store.icon === value) return
+    cached.setStore("value", value)
+    setStore("icon", value)
+  }
+
   return {
     data: globalStore,
     set: setGlobalStore,
@@ -732,6 +869,8 @@ function createGlobalSync() {
     },
     project: {
       loadSessions,
+      meta: projectMeta,
+      icon: projectIcon,
     },
   }
 }

@@ -143,7 +143,17 @@ export function DialogConnectProvider(props: { provider: string }) {
   }
 
   return (
-    <Dialog title={<IconButton tabIndex={-1} icon="arrow-left" variant="ghost" onClick={goBack} />}>
+    <Dialog
+      title={
+        <IconButton
+          tabIndex={-1}
+          icon="arrow-left"
+          variant="ghost"
+          onClick={goBack}
+          aria-label={language.t("common.goBack")}
+        />
+      }
+    >
       <div class="flex flex-col gap-6 px-2.5 pb-3">
         <div class="px-2.5 flex gap-4 items-center">
           <ProviderIcon id={props.provider as IconName} class="size-5 shrink-0 icon-strong-base" />
@@ -363,6 +373,9 @@ export function DialogConnectProvider(props: { provider: string }) {
                     })
 
                     onMount(async () => {
+                      if (store.authorization?.url) {
+                        platform.openLink(store.authorization.url)
+                      }
                       const result = await globalSDK.client.provider.oauth
                         .callback({
                           providerID: props.provider,

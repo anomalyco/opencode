@@ -88,6 +88,8 @@ export const dict = {
   "dialog.provider.group.other": "آخر",
   "dialog.provider.tag.recommended": "موصى به",
   "dialog.provider.anthropic.note": "اتصل باستخدام Claude Pro/Max أو مفتاح API",
+  "dialog.provider.openai.note": "اتصل باستخدام ChatGPT Pro/Plus أو مفتاح API",
+  "dialog.provider.copilot.note": "اتصل باستخدام Copilot أو مفتاح API",
 
   "dialog.model.select.title": "تحديد نموذج",
   "dialog.model.search.placeholder": "البحث عن نماذج",
@@ -153,6 +155,7 @@ export const dict = {
   "model.tooltip.context": "حد السياق {{limit}}",
 
   "common.search.placeholder": "بحث",
+  "common.goBack": "رجوع",
   "common.loading": "جارٍ التحميل",
   "common.loading.ellipsis": "...",
   "common.cancel": "إلغاء",
@@ -199,7 +202,10 @@ export const dict = {
   "prompt.slash.badge.custom": "مخصص",
   "prompt.context.active": "نشط",
   "prompt.context.includeActiveFile": "تضمين الملف النشط",
+  "prompt.context.removeActiveFile": "إزالة الملف النشط من السياق",
+  "prompt.context.removeFile": "إزالة الملف من السياق",
   "prompt.action.attachFile": "إرفاق ملف",
+  "prompt.attachment.remove": "إزالة المرفق",
   "prompt.action.send": "إرسال",
   "prompt.action.stop": "توقف",
 
@@ -243,6 +249,7 @@ export const dict = {
   "dialog.server.default.none": "لم يتم تحديد خادم",
   "dialog.server.default.set": "تعيين الخادم الحالي كافتراضي",
   "dialog.server.default.clear": "مسح",
+  "dialog.server.action.remove": "إزالة الخادم",
 
   "dialog.project.edit.title": "تحرير المشروع",
   "dialog.project.edit.name": "الاسم",
@@ -251,6 +258,7 @@ export const dict = {
   "dialog.project.edit.icon.hint": "انقر أو اسحب صورة",
   "dialog.project.edit.icon.recommended": "موصى به: 128x128px",
   "dialog.project.edit.color": "لون",
+  "dialog.project.edit.color.select": "اختر لون {{color}}",
 
   "context.breakdown.title": "تفصيل السياق",
   "context.breakdown.note": 'تفصيل تقريبي لرموز الإدخال. يشمل "أخرى" تعريفات الأدوات والنفقات العامة.',
@@ -284,6 +292,7 @@ export const dict = {
   "context.usage.usage": "استخدام",
   "context.usage.cost": "تكلفة",
   "context.usage.clickToView": "انقر لعرض السياق",
+  "context.usage.view": "عرض استخدام السياق",
 
   "language.en": "الإنجليزية",
   "language.zh": "الصينية (المبسطة)",
@@ -297,6 +306,8 @@ export const dict = {
   "language.ru": "الروسية",
   "language.pl": "البولندية",
   "language.ar": "العربية",
+  "language.no": "النرويجية",
+  "language.br": "البرتغالية (البرازيل)",
 
   "toast.language.title": "لغة",
   "toast.language.description": "تم التبديل إلى {{language}}",
@@ -385,6 +396,7 @@ export const dict = {
   "session.tab.session": "جلسة",
   "session.tab.review": "مراجعة",
   "session.tab.context": "سياق",
+  "session.panel.reviewAndFiles": "المراجعة والملفات",
   "session.review.filesChanged": "تم تغيير {{count}} ملفات",
   "session.review.loadingChanges": "جارٍ تحميل التغييرات...",
   "session.review.empty": "لا توجد تغييرات في هذه الجلسة بعد",
@@ -402,6 +414,7 @@ export const dict = {
   "session.new.lastModified": "آخر تعديل",
 
   "session.header.search.placeholder": "بحث {{project}}",
+  "session.header.searchFiles": "بحث عن الملفات",
 
   "session.share.popover.title": "نشر على الويب",
   "session.share.popover.description.shared": "هذه الجلسة عامة على الويب. يمكن لأي شخص لديه الرابط الوصول إليها.",
@@ -422,6 +435,7 @@ export const dict = {
   "terminal.loading": "جارٍ تحميل المحطة الطرفية...",
   "terminal.title": "محطة طرفية",
   "terminal.title.numbered": "محطة طرفية {{number}}",
+  "terminal.close": "إغلاق المحطة الطرفية",
   "terminal.connectionLost.title": "فقد الاتصال",
   "terminal.connectionLost.description": "انقطع اتصال المحطة الطرفية. يمكن أن يحدث هذا عند إعادة تشغيل الخادم.",
 
@@ -432,6 +446,7 @@ export const dict = {
   "common.learnMore": "اعرف المزيد",
   "common.rename": "إعادة تسمية",
   "common.reset": "إعادة تعيين",
+  "common.archive": "أرشفة",
   "common.delete": "حذف",
   "common.close": "إغلاق",
   "common.edit": "تحرير",
@@ -439,6 +454,7 @@ export const dict = {
   "common.key.esc": "ESC",
 
   "sidebar.menu.toggle": "تبديل القائمة",
+  "sidebar.nav.projectsAndSessions": "المشاريع والجلسات",
   "sidebar.settings": "الإعدادات",
   "sidebar.help": "مساعدة",
   "sidebar.workspaces.enable": "تمكين مساحات العمل",
@@ -607,6 +623,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "الوصول إلى الملفات خارج دليل المشروع",
   "settings.permissions.tool.doom_loop.title": "حلقة الموت",
   "settings.permissions.tool.doom_loop.description": "اكتشاف استدعاءات الأدوات المتكررة بمدخلات متطابقة",
+
+  "session.delete.failed.title": "فشل حذف الجلسة",
+  "session.delete.title": "حذف الجلسة",
+  "session.delete.confirm": 'حذف الجلسة "{{name}}"؟',
+  "session.delete.button": "حذف الجلسة",
 
   "workspace.new": "مساحة عمل جديدة",
   "workspace.type.local": "محلي",

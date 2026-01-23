@@ -56,6 +56,7 @@ import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { playSound, soundSrc } from "@/utils/sound"
+import { Worktree as WorktreeState } from "@/utils/worktree"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
@@ -332,6 +333,18 @@ export default function Layout(props: ParentProps) {
     const cooldownMs = 5000
 
     const unsub = globalSDK.event.listen((e) => {
+      if (e.details?.type === "worktree.ready") {
+        setBusy(e.name, false)
+        WorktreeState.ready(e.name)
+        return
+      }
+
+      if (e.details?.type === "worktree.failed") {
+        setBusy(e.name, false)
+        WorktreeState.failed(e.name, e.details.properties?.message ?? language.t("common.requestFailed"))
+        return
+      }
+
       if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked") return
       const title =
         e.details.type === "permission.asked"
@@ -551,6 +564,7 @@ export default function Layout(props: ParentProps) {
     const project = currentProject()
     if (!project) return
 
+    const local = project.worktree
     const dirs = [project.worktree, ...(project.sandboxes ?? [])]
     const existing = store.workspaceOrder[project.worktree]
     if (!existing) {
@@ -558,9 +572,9 @@ export default function Layout(props: ParentProps) {
       return
     }
 
-    const keep = existing.filter((d) => dirs.includes(d))
-    const missing = dirs.filter((d) => !existing.includes(d))
-    const merged = [...keep, ...missing]
+    const keep = existing.filter((d) => d !== local && dirs.includes(d))
+    const missing = dirs.filter((d) => d !== local && !existing.includes(d))
+    const merged = [local, ...missing, ...keep]
 
     if (merged.length !== existing.length) {
       setStore("workspaceOrder", project.worktree, merged)
@@ -819,6 +833,49 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  async function deleteSession(session: Session) {
+    const [store, setStore] = globalSync.child(session.directory)
+    const sessions = (store.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
+    const index = sessions.findIndex((s) => s.id === session.id)
+    const nextSession = sessions[index + 1] ?? sessions[index - 1]
+
+    const result = await globalSDK.client.session
+      .delete({ directory: session.directory, sessionID: session.id })
+      .then((x) => x.data)
+      .catch((err) => {
+        showToast({
+          title: language.t("session.delete.failed.title"),
+          description: errorMessage(err),
+        })
+        return false
+      })
+
+    if (!result) return
+
+    setStore(
+      produce((draft) => {
+        const removed = new Set<string>([session.id])
+        const collect = (parentID: string) => {
+          for (const item of draft.session) {
+            if (item.parentID !== parentID) continue
+            removed.add(item.id)
+            collect(item.id)
+          }
+        }
+        collect(session.id)
+        draft.session = draft.session.filter((s) => !removed.has(s.id))
+      }),
+    )
+
+    if (session.id === params.id) {
+      if (nextSession) {
+        navigate(`/${params.dir}/session/${nextSession.id}`)
+      } else {
+        navigate(`/${params.dir}/session`)
+      }
+    }
+  }
+
   command.register(() => {
     const commands: CommandOption[] = [
       {
@@ -975,11 +1032,16 @@ export default function Layout(props: ParentProps) {
   const displayName = (project: LocalProject) => project.name || getFilename(project.worktree)
 
   async function renameProject(project: LocalProject, next: string) {
-    if (!project.id) return
     const current = displayName(project)
     if (next === current) return
     const name = next === getFilename(project.worktree) ? "" : next
-    await globalSDK.client.project.update({ projectID: project.id, directory: project.worktree, name })
+
+    if (project.id && project.id !== "global") {
+      await globalSDK.client.project.update({ projectID: project.id, directory: project.worktree, name })
+      return
+    }
+
+    globalSync.project.meta(project.worktree, { name })
   }
 
   async function renameSession(session: Session, next: string) {
@@ -1125,14 +1187,51 @@ export default function Layout(props: ParentProps) {
     setBusy(directory, false)
     dismiss()
 
-    const href = `/${base64Encode(directory)}/session`
-    navigate(href)
-    layout.mobileSidebar.hide()
-
     showToast({
       title: language.t("workspace.reset.success.title"),
       description: language.t("workspace.reset.success.description"),
+      actions: [
+        {
+          label: language.t("command.session.new"),
+          onClick: () => {
+            const href = `/${base64Encode(directory)}/session`
+            navigate(href)
+            layout.mobileSidebar.hide()
+          },
+        },
+        {
+          label: language.t("common.dismiss"),
+          onClick: "dismiss",
+        },
+      ],
     })
+  }
+
+  function DialogDeleteSession(props: { session: Session }) {
+    const handleDelete = async () => {
+      await deleteSession(props.session)
+      dialog.close()
+    }
+
+    return (
+      <Dialog title={language.t("session.delete.title")} fit>
+        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
+          <div class="flex flex-col gap-1">
+            <span class="text-14-regular text-text-strong">
+              {language.t("session.delete.confirm", { name: props.session.title })}
+            </span>
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              {language.t("common.cancel")}
+            </Button>
+            <Button variant="primary" size="large" onClick={handleDelete}>
+              {language.t("session.delete.button")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
   }
 
   function DialogDeleteWorkspace(props: { directory: string }) {
@@ -1161,9 +1260,9 @@ export default function Layout(props: ParentProps) {
         })
     })
 
-    const handleDelete = async () => {
-      await deleteWorkspace(props.directory)
+    const handleDelete = () => {
       dialog.close()
+      void deleteWorkspace(props.directory)
     }
 
     const description = () => {
@@ -1349,17 +1448,22 @@ export default function Layout(props: ParentProps) {
 
   function workspaceIds(project: LocalProject | undefined) {
     if (!project) return []
-    const dirs = [project.worktree, ...(project.sandboxes ?? [])]
+    const local = project.worktree
+    const dirs = [local, ...(project.sandboxes ?? [])]
     const active = currentProject()
     const directory = active?.worktree === project.worktree && params.dir ? base64Decode(params.dir) : undefined
-    const next = directory && directory !== project.worktree && !dirs.includes(directory) ? [...dirs, directory] : dirs
+    const extra = directory && directory !== local && !dirs.includes(directory) ? directory : undefined
+    const pending = extra ? WorktreeState.get(extra)?.status === "pending" : false
 
     const existing = store.workspaceOrder[project.worktree]
-    if (!existing) return next
+    if (!existing) return extra ? [...dirs, extra] : dirs
 
-    const keep = existing.filter((d) => next.includes(d))
-    const missing = next.filter((d) => !existing.includes(d))
-    return [...keep, ...missing]
+    const keep = existing.filter((d) => d !== local && dirs.includes(d))
+    const missing = dirs.filter((d) => d !== local && !existing.includes(d))
+    const merged = [local, ...(pending && extra ? [extra] : []), ...missing, ...keep]
+    if (!extra) return merged
+    if (pending) return merged
+    return [...merged, extra]
   }
 
   function handleWorkspaceDragStart(event: unknown) {
@@ -1475,6 +1579,8 @@ export default function Layout(props: ParentProps) {
     const hoverAllowed = createMemo(() => !props.mobile && layout.sidebar.opened())
     const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
     const isActive = createMemo(() => props.session.id === params.id)
+    const [menuOpen, setMenuOpen] = createSignal(false)
+    const [pendingRename, setPendingRename] = createSignal(false)
 
     const messageLabel = (message: Message) => {
       const parts = sessionStore.part[message.id] ?? []
@@ -1485,9 +1591,10 @@ export default function Layout(props: ParentProps) {
     const item = (
       <A
         href={`${props.slug}/session/${props.session.id}`}
-        class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
+        class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${menuOpen() ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
         onMouseEnter={() => prefetchSession(props.session, "high")}
         onFocus={() => prefetchSession(props.session, "high")}
+        onClick={() => setHoverSession(undefined)}
       >
         <div class="flex items-center gap-1 w-full">
           <div
@@ -1555,42 +1662,111 @@ export default function Layout(props: ParentProps) {
               when={hoverReady()}
               fallback={<div class="text-12-regular text-text-weak">{language.t("session.messages.loading")}</div>}
             >
-              <MessageNav
-                messages={hoverMessages() ?? []}
-                current={undefined}
-                getLabel={messageLabel}
-                onMessageSelect={(message) => {
-                  if (!isActive()) {
-                    sessionStorage.setItem("opencode.pendingMessage", `${props.session.id}|${message.id}`)
-                    navigate(`${props.slug}/session/${props.session.id}`)
-                    return
-                  }
-                  window.history.replaceState(null, "", `#message-${message.id}`)
-                  window.dispatchEvent(new HashChangeEvent("hashchange"))
-                }}
-                size="normal"
-                class="w-60"
-              />
+              <div class="overflow-y-auto max-h-72 h-full">
+                <MessageNav
+                  messages={hoverMessages() ?? []}
+                  current={undefined}
+                  getLabel={messageLabel}
+                  onMessageSelect={(message) => {
+                    if (!isActive()) {
+                      sessionStorage.setItem("opencode.pendingMessage", `${props.session.id}|${message.id}`)
+                      navigate(`${props.slug}/session/${props.session.id}`)
+                      return
+                    }
+                    window.history.replaceState(null, "", `#message-${message.id}`)
+                    window.dispatchEvent(new HashChangeEvent("hashchange"))
+                  }}
+                  size="normal"
+                  class="w-60"
+                />
+              </div>
             </Show>
           </HoverCard>
         </Show>
         <div
-          class={`hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"}`}
+          class={`absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"} flex items-center gap-0.5 transition-opacity`}
+          classList={{
+            "opacity-100 pointer-events-auto": menuOpen(),
+            "opacity-0 pointer-events-none": !menuOpen(),
+            "group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
+            "group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
+          }}
         >
-          <TooltipKeybind
-            placement={props.mobile ? "bottom" : "right"}
-            title={language.t("command.session.archive")}
-            keybind={command.keybind("session.archive")}
-            gutter={8}
-          >
-            <IconButton
-              icon="archive"
-              variant="ghost"
-              onClick={() => archiveSession(props.session)}
-              aria-label={language.t("command.session.archive")}
-            />
-          </TooltipKeybind>
+          <DropdownMenu open={menuOpen()} onOpenChange={setMenuOpen}>
+            <Tooltip value={language.t("common.moreOptions")} placement="top">
+              <DropdownMenu.Trigger
+                as={IconButton}
+                icon="dot-grid"
+                variant="ghost"
+                class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                aria-label={language.t("common.moreOptions")}
+              />
+            </Tooltip>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                onCloseAutoFocus={(event) => {
+                  if (!pendingRename()) return
+                  event.preventDefault()
+                  setPendingRename(false)
+                  openEditor(`session:${props.session.id}`, props.session.title)
+                }}
+              >
+                <DropdownMenu.Item
+                  onSelect={() => {
+                    setPendingRename(true)
+                    setMenuOpen(false)
+                  }}
+                >
+                  <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => archiveSession(props.session)}>
+                  <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator />
+                <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogDeleteSession session={props.session} />)}>
+                  <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu>
         </div>
+      </div>
+    )
+  }
+
+  const NewSessionItem = (props: { slug: string; mobile?: boolean; dense?: boolean }): JSX.Element => {
+    const label = language.t("command.session.new")
+    const tooltip = () => props.mobile || !layout.sidebar.opened()
+    const item = (
+      <A
+        href={`${props.slug}/session`}
+        end
+        class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
+        onClick={() => setHoverSession(undefined)}
+      >
+        <div class="flex items-center gap-1 w-full">
+          <div class="shrink-0 size-6 flex items-center justify-center">
+            <Icon name="plus-small" size="small" class="text-icon-weak" />
+          </div>
+          <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
+            {label}
+          </span>
+        </div>
+      </A>
+    )
+
+    return (
+      <div class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3 hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active">
+        <Show
+          when={!tooltip()}
+          fallback={
+            <Tooltip placement={props.mobile ? "bottom" : "right"} value={label} gutter={10}>
+              {item}
+            </Tooltip>
+          }
+        >
+          {item}
+        </Show>
       </div>
     )
   }
@@ -1781,9 +1957,6 @@ export default function Layout(props: ParentProps) {
                           openEditor(`workspace:${props.directory}`, workspaceValue())
                         }}
                       >
-                        <DropdownMenu.Item onSelect={() => navigate(`/${slug()}/session`)}>
-                          <DropdownMenu.ItemLabel>{language.t("command.session.new")}</DropdownMenu.ItemLabel>
-                        </DropdownMenu.Item>
                         <DropdownMenu.Item
                           disabled={local()}
                           onSelect={() => {
@@ -1808,19 +1981,6 @@ export default function Layout(props: ParentProps) {
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
                   </DropdownMenu>
-                  <TooltipKeybind
-                    placement="right"
-                    title={language.t("command.session.new")}
-                    keybind={command.keybind("session.new")}
-                  >
-                    <IconButton
-                      icon="plus-small"
-                      variant="ghost"
-                      class="size-6 rounded-md"
-                      onClick={() => navigate(`/${slug()}/session`)}
-                      aria-label={language.t("command.session.new")}
-                    />
-                  </TooltipKeybind>
                 </div>
               </div>
             </div>
@@ -1828,16 +1988,9 @@ export default function Layout(props: ParentProps) {
 
           <Collapsible.Content>
             <nav class="flex flex-col gap-1 px-2">
-              <Button
-                as={A}
-                href={`${slug()}/session`}
-                variant="ghost"
-                size="large"
-                icon="edit"
-                class="hidden _flex w-full text-left justify-start text-text-base rounded-md px-3"
-              >
-                {language.t("command.session.new")}
-              </Button>
+              <Show when={workspaceSetting()}>
+                <NewSessionItem slug={slug()} mobile={props.mobile} />
+              </Show>
               <Show when={loading()}>
                 <SessionSkeleton />
               </Show>
@@ -1916,6 +2069,7 @@ export default function Layout(props: ParentProps) {
           "bg-surface-base-hover border border-border-weak-base": !selected() && open(),
         }}
         onClick={() => navigateToProject(props.project.worktree)}
+        onBlur={() => setOpen(false)}
       >
         <ProjectIcon project={props.project} notify />
       </button>
@@ -1937,7 +2091,22 @@ export default function Layout(props: ParentProps) {
           }}
         >
           <div class="-m-3 p-2 flex flex-col w-72">
-            <div class="px-4 pt-2 pb-1 text-14-medium text-text-strong truncate">{displayName(props.project)}</div>
+            <div class="px-4 pt-2 pb-1 flex items-center gap-2">
+              <div class="text-14-medium text-text-strong truncate grow">{displayName(props.project)}</div>
+              <Tooltip value={language.t("common.close")} placement="top" gutter={6}>
+                <IconButton
+                  icon="circle-x"
+                  variant="ghost"
+                  class="shrink-0"
+                  aria-label={language.t("common.close")}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setOpen(false)
+                    closeProject(props.project.worktree)
+                  }}
+                />
+              </Tooltip>
+            </div>
             <div class="px-4 pb-2 text-12-medium text-text-weak">{language.t("sidebar.project.recentSessions")}</div>
             <div class="px-2 pb-2 flex flex-col gap-2">
               <Show
@@ -1986,11 +2155,11 @@ export default function Layout(props: ParentProps) {
                 variant="ghost"
                 class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
                 onClick={() => {
+                  layout.sidebar.open()
                   if (selected()) {
                     setOpen(false)
                     return
                   }
-                  layout.sidebar.open()
                   navigateToProject(props.project.worktree)
                 }}
               >
@@ -2028,6 +2197,9 @@ export default function Layout(props: ParentProps) {
         style={{ "overflow-anchor": "none" }}
       >
         <nav class="flex flex-col gap-1 px-2">
+          <Show when={workspaceSetting()}>
+            <NewSessionItem slug={slug()} mobile={props.mobile} />
+          </Show>
           <Show when={loading()}>
             <SessionSkeleton />
           </Show>
@@ -2084,8 +2256,19 @@ export default function Layout(props: ParentProps) {
 
       if (!created?.directory) return
 
+      setBusy(created.directory, true)
+      WorktreeState.pending(created.directory)
+      setStore("workspaceExpanded", created.directory, true)
+      setStore("workspaceOrder", current.worktree, (prev) => {
+        const existing = prev ?? []
+        const local = current.worktree
+        const next = existing.filter((d) => d !== local && d !== created.directory)
+        return [local, created.directory, ...next]
+      })
+
       globalSync.child(created.directory)
       navigate(`/${base64Encode(created.directory)}/session`)
+      layout.mobileSidebar.hide()
     }
 
     command.register(() => [
@@ -2194,7 +2377,7 @@ export default function Layout(props: ParentProps) {
                         />
 
                         <Tooltip
-                          placement={sidebarProps.mobile ? "bottom" : "top"}
+                          placement="bottom"
                           gutter={2}
                           value={project()?.worktree}
                           class="shrink-0"
@@ -2343,7 +2526,8 @@ export default function Layout(props: ParentProps) {
     <div class="relative bg-background-base flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       <Titlebar />
       <div class="flex-1 min-h-0 flex">
-        <div
+        <nav
+          aria-label={language.t("sidebar.nav.projectsAndSessions")}
           classList={{
             "hidden xl:block": true,
             "relative shrink-0": true,
@@ -2364,7 +2548,7 @@ export default function Layout(props: ParentProps) {
               onCollapse={layout.sidebar.close}
             />
           </Show>
-        </div>
+        </nav>
         <div class="xl:hidden">
           <div
             classList={{
@@ -2376,7 +2560,8 @@ export default function Layout(props: ParentProps) {
               if (e.target === e.currentTarget) layout.mobileSidebar.hide()
             }}
           />
-          <div
+          <nav
+            aria-label={language.t("sidebar.nav.projectsAndSessions")}
             classList={{
               "@container fixed top-10 bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
               "translate-x-0": layout.mobileSidebar.opened(),
@@ -2385,7 +2570,7 @@ export default function Layout(props: ParentProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <SidebarContent mobile />
-          </div>
+          </nav>
         </div>
 
         <main
