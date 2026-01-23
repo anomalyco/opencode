@@ -93,13 +93,18 @@ export namespace ModelsDev {
     }
 
     // Only expose the allowed providers (non-destructive runtime filter)
-    const allowed = new Set(["github-copilot"])
-    const providers = (result as Record<string, Provider>) || {}
-    const filtered = Object.fromEntries(
-      Object.entries(providers).filter(([key, val]) => allowed.has(key) || (val && typeof val === "object" && allowed.has((val as any).id))),
-    ) as Record<string, Provider>
+    // Make filter opt-in via OPENCODE_ONLY_GITHUB to avoid breaking tests and local tooling
+    if (process.env.OPENCODE_ONLY_GITHUB) {
+      const allowed = new Set(["github-copilot"])
+      const providers = (result as Record<string, Provider>) || {}
+      const filtered = Object.fromEntries(
+        Object.entries(providers).filter(([key, val]) => allowed.has(key) || (val && typeof val === "object" && allowed.has((val as any).id))),
+      ) as Record<string, Provider>
 
-    return filtered
+      return filtered
+    }
+
+    return result as Record<string, Provider>
   }
 
   export async function refresh() {
