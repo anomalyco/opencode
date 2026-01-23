@@ -999,8 +999,8 @@ export function Session() {
                               paddingLeft={2}
                               backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
                             >
-                              <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
-                              <text fg={theme.textMuted}>
+                              <text fg={theme.textMuted} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>{revert()!.reverted.length} message reverted</text>
+                              <text fg={theme.textMuted} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>
                                 <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
                                 restore
                               </text>
@@ -1008,7 +1008,7 @@ export function Session() {
                                 <box marginTop={1}>
                                   <For each={revert()!.diffFiles}>
                                     {(file) => (
-                                      <text fg={theme.text}>
+                                      <text fg={theme.text} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>
                                         {file.filename}
                                         <Show when={file.additions > 0}>
                                           <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
@@ -1164,7 +1164,7 @@ function UserMessage(props: {
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
-            <text fg={theme.text}>{text()?.text}</text>
+            <text fg={theme.text} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>{text()?.text}</text>
             <Show when={files().length}>
               <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
@@ -1175,7 +1175,7 @@ function UserMessage(props: {
                       return theme.secondary
                     })
                     return (
-                      <text fg={theme.text}>
+                      <text fg={theme.text} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>
                         <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
                         <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
                       </text>
@@ -1262,13 +1262,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.error}
         >
-          <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
+          <text fg={theme.textMuted} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>{props.message.error?.data.message}</text>
         </box>
       </Show>
       <Switch>
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
           <box paddingLeft={3}>
-            <text marginTop={1}>
+            <text marginTop={1} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>
               <span
                 style={{
                   fg:
@@ -1328,6 +1328,8 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           content={"_Thinking:_ " + content()}
           conceal={ctx.conceal()}
           fg={theme.textMuted}
+          selectionBg={theme.selection}
+          selectionFg={theme.selectionForeground}
         />
       </box>
     </Show>
@@ -1347,6 +1349,8 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               streaming={true}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
+              selectionBg={theme.selection}
+              selectionFg={theme.selectionForeground}
             />
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
@@ -1358,6 +1362,8 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
               fg={theme.text}
+              selectionBg={theme.selection}
+              selectionFg={theme.selectionForeground}
             />
           </Match>
         </Switch>
@@ -1474,7 +1480,7 @@ function GenericTool(props: ToolProps<any>) {
 function ToolTitle(props: { fallback: string; when: any; icon: string; children: JSX.Element }) {
   const { theme } = useTheme()
   return (
-    <text paddingLeft={3} fg={props.when ? theme.textMuted : theme.text}>
+    <text paddingLeft={3} fg={props.when ? theme.textMuted : theme.text} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>
       <Show fallback={<>~ {props.fallback}</>} when={props.when}>
         <span style={{ bold: true }}>{props.icon}</span> {props.children}
       </Show>
@@ -1543,13 +1549,13 @@ function InlineTool(props: {
         }
       }}
     >
-      <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+      <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>
         <Show fallback={<>~ {props.pending}</>} when={props.complete}>
           <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
         </Show>
       </text>
       <Show when={error() && !denied()}>
-        <text fg={theme.error}>{error()}</text>
+        <text fg={theme.error} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>{error()}</text>
       </Show>
     </box>
   )
@@ -1578,12 +1584,12 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
         props.onClick?.()
       }}
     >
-      <text paddingLeft={3} fg={theme.textMuted}>
+      <text paddingLeft={3} fg={theme.textMuted} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>
         {props.title}
       </text>
       {props.children}
       <Show when={error()}>
-        <text fg={theme.error}>{error()}</text>
+        <text fg={theme.error} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>{error()}</text>
       </Show>
     </box>
   )
@@ -1635,10 +1641,10 @@ function Bash(props: ToolProps<typeof BashTool>) {
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <text fg={theme.text}>$ {props.input.command}</text>
-            <text fg={theme.text}>{limited()}</text>
+            <text fg={theme.text} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>$ {props.input.command}</text>
+            <text fg={theme.text} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>{limited()}</text>
             <Show when={overflow()}>
-              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+              <text fg={theme.textMuted} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
             </Show>
           </box>
         </BlockTool>
@@ -1675,12 +1681,14 @@ function Write(props: ToolProps<typeof WriteTool>) {
               filetype={filetype(props.input.filePath!)}
               syntaxStyle={syntax()}
               content={code()}
+              selectionBg={theme.selection}
+              selectionFg={theme.selectionForeground}
             />
           </line_number>
           <Show when={diagnostics().length}>
             <For each={diagnostics()}>
               {(diagnostic) => (
-                <text fg={theme.error}>
+                <text fg={theme.error} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>
                   Error [{diagnostic.range.start.line}:{diagnostic.range.start.character}]: {diagnostic.message}
                 </text>
               )}
@@ -1806,17 +1814,17 @@ function Task(props: ToolProps<typeof TaskTool>) {
           part={props.part}
         >
           <box>
-            <text style={{ fg: theme.textMuted }}>
+            <text style={{ fg: theme.textMuted }} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>
               {props.input.description} ({props.metadata.summary?.length} toolcalls)
             </text>
             <Show when={current()}>
-              <text style={{ fg: current()!.state.status === "error" ? theme.error : theme.textMuted }}>
+              <text style={{ fg: current()!.state.status === "error" ? theme.error : theme.textMuted }} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>
                 └ {Locale.titlecase(current()!.tool)}{" "}
                 {current()!.state.status === "completed" ? current()!.state.title : ""}
               </text>
             </Show>
           </box>
-          <text fg={theme.text}>
+          <text fg={theme.text} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>
             {keybind.print("session_child_cycle")}
             <span style={{ fg: theme.textMuted }}> view subagents</span>
           </text>
@@ -1888,7 +1896,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
             <box>
               <For each={diagnostics()}>
                 {(diagnostic) => (
-                  <text fg={theme.error}>
+                  <text fg={theme.error} selectionBg={theme.selection} selectionFg={theme.selectionForeground}>
                     Error [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}]{" "}
                     {diagnostic.message}
                   </text>

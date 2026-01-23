@@ -15,6 +15,8 @@ export function TodoItem(props: TodoItemProps) {
         style={{
           fg: props.status === "in_progress" ? theme.warning : theme.textMuted,
         }}
+        selectionBg={theme.selection}
+        selectionFg={theme.selectionForeground}
       >
         [{props.status === "completed" ? "✓" : props.status === "in_progress" ? "•" : " "}]{" "}
       </text>
@@ -24,6 +26,8 @@ export function TodoItem(props: TodoItemProps) {
         style={{
           fg: props.status === "in_progress" ? theme.warning : theme.textMuted,
         }}
+        selectionBg={theme.selection}
+        selectionFg={theme.selectionForeground}
       >
         {props.content}
       </text>

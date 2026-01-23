@@ -81,6 +81,14 @@
       "dark": "#0a0a0a",
       "light": "#ffffff"
     },
+    "selection": {
+      "dark": "darkOrange",
+      "light": "lightStep10"
+    },
+    "selectionForeground": {
+      "dark": "darkStep1",
+      "light": "#ffffff"
+    },
     "background": {
       "dark": "darkStep1",
       "light": "lightStep1"

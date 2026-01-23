@@ -54,6 +54,8 @@ type ThemeColors = {
   text: RGBA
   textMuted: RGBA
   selectedListItemText: RGBA
+  selection: RGBA
+  selectionForeground: RGBA
   background: RGBA
   backgroundPanel: RGBA
   backgroundElement: RGBA
@@ -131,9 +133,11 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
+  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu" | "selection" | "selectionForeground"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
+    selection?: ColorValue
+    selectionForeground?: ColorValue
     thinkingOpacity?: number
   }
 }
@@ -197,9 +201,10 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     return resolveColor(c[mode])
   }
 
+  const optionalKeys = ["selectedListItemText", "backgroundMenu", "selection", "selectionForeground", "thinkingOpacity"]
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
+      .filter(([key]) => !optionalKeys.includes(key))
       .map(([key, value]) => {
         return [key, resolveColor(value as ColorValue)]
       }),
@@ -220,6 +225,24 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu)
   } else {
     resolved.backgroundMenu = resolved.backgroundElement
+  }
+
+  // Handle selection colors - optional with smart fallbacks for good contrast
+  if (theme.theme.selection !== undefined) {
+    resolved.selection = resolveColor(theme.theme.selection)
+  } else {
+    // Default selection background to primary color for visibility
+    resolved.selection = resolved.primary
+  }
+
+  if (theme.theme.selectionForeground !== undefined) {
+    resolved.selectionForeground = resolveColor(theme.theme.selectionForeground)
+  } else {
+    // Calculate contrasting foreground based on selection background luminance
+    const sel = resolved.selection!
+    const luminance = 0.299 * sel.r + 0.587 * sel.g + 0.114 * sel.b
+    // Use white text on dark backgrounds, black text on light backgrounds
+    resolved.selectionForeground = luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
   }
 
   // Handle thinkingOpacity - optional with default of 0.6
@@ -478,6 +501,10 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       text: fg,
       textMuted,
       selectedListItemText: bg,
+
+      // Selection colors - use cyan background with contrasting foreground
+      selection: ansiColors.cyan,
+      selectionForeground: isDark ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255),
 
       // Background colors
       background: bg,
