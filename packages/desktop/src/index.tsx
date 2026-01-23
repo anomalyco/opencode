@@ -327,10 +327,9 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     await invoke("set_default_server_url", { url })
   },
 
-  parseMarkdown: async (markdown: string) => {
-    if (!isTauri) return markdown // Fallback to raw markdown in browser
-    return invoke<string>("parse_markdown_command", { markdown })
-  },
+  parseMarkdown: isTauri
+    ? async (markdown: string) => invoke<string>("parse_markdown_command", { markdown })
+    : undefined,
 })
 
 createMenu()
