@@ -15,6 +15,7 @@ import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { ServerProvider, useServer } from "@/context/server"
 import { SessionProvider } from "@/context/session"
+import { SessionExpiredOverlay } from "@/components/session-expired-overlay"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptProvider } from "@/context/prompt"
 import { FileProvider } from "@/context/file"
@@ -80,6 +81,7 @@ export function AppInterface(props: { defaultUrl?: string }) {
     <ServerProvider defaultUrl={defaultServerUrl()}>
       <ServerKey>
         <SessionProvider>
+          <SessionExpiredOverlay />
           <GlobalSDKProvider>
             <GlobalSyncProvider>
               <Router
