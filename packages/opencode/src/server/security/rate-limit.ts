@@ -65,15 +65,17 @@ export function createLoginRateLimiter(config?: RateLimitConfig) {
 
       // Set Retry-After header (in seconds)
       const retryAfterSeconds = Math.ceil(windowMs / 1000)
-      c.header("Retry-After", retryAfterSeconds.toString())
 
-      // Return 429 with error message
+      // Return 429 with error message and Retry-After header
       return c.json(
         {
           error: "rate_limit_exceeded",
           message: "Too many login attempts. Please try again later.",
         },
         429,
+        {
+          "Retry-After": retryAfterSeconds.toString(),
+        },
       )
     },
   })
