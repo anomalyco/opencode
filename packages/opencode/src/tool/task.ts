@@ -10,6 +10,7 @@ import { SessionPrompt } from "../session/prompt"
 import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
+import { Storage } from "../storage/storage"
 import { PermissionNext } from "@/permission/next"
 
 const parameters = z.object({
@@ -18,6 +19,7 @@ const parameters = z.object({
   subagent_type: z.string().describe("The type of specialized agent to use for this task"),
   session_id: z.string().describe("Existing Task session to continue").optional(),
   command: z.string().describe("The command that triggered this task").optional(),
+  reset: z.boolean().describe("If true, ignore previous session history and start fresh").optional(),
 })
 
 export const TaskTool = Tool.define("task", async (ctx) => {
@@ -61,11 +63,23 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const session = await iife(async () => {
         if (params.session_id) {
-          const found = await Session.get(params.session_id).catch(() => {})
+          const found = await Session.get(params.session_id).catch(() => { })
           if (found) return found
         }
 
-        return await Session.create({
+        // Try to find existing session for this subagent type
+        if (!params.reset) {
+          try {
+            const map = await Storage.read<Record<string, string>>(["subagents", ctx.sessionID])
+            const existingID = map[params.subagent_type]
+            if (existingID) {
+              const found = await Session.get(existingID).catch(() => { })
+              if (found) return found
+            }
+          } catch { }
+        }
+
+        const newSession = await Session.create({
           parentID: ctx.sessionID,
           title: params.description + ` (@${agent.name} subagent)`,
           permission: [
@@ -82,12 +96,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             ...(hasTaskPermission
               ? []
               : [
-                  {
-                    permission: "task" as const,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
+                {
+                  permission: "task" as const,
+                  pattern: "*" as const,
+                  action: "deny" as const,
+                },
+              ]),
             ...(config.experimental?.primary_tools?.map((t) => ({
               pattern: "*",
               action: "allow" as const,
@@ -95,6 +109,17 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             })) ?? []),
           ],
         })
+
+        // Persist the new session ID
+        try {
+          await Storage.update<Record<string, string>>(["subagents", ctx.sessionID], (draft) => {
+            draft[params.subagent_type] = newSession.id
+          })
+        } catch {
+          await Storage.write(["subagents", ctx.sessionID], { [params.subagent_type]: newSession.id }).catch(() => { })
+        }
+
+        return newSession
       })
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
