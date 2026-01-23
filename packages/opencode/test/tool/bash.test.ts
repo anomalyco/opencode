@@ -408,4 +408,109 @@ describe("tool.bash truncation", () => {
       },
     })
   })
+
+  test("output_filter captures matching lines in memory for small output", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        // Small build output with warnings/errors - stays in memory
+        const result = await bash.execute(
+          {
+            command: `echo "compiling..."; echo "warning: unused variable"; echo "done"; echo "error: type mismatch"`,
+            output_filter: "^(warning|error):",
+            description: "Build with filter (small)",
+          },
+          ctx,
+        )
+
+        // Should NOT be truncated (small output stays in memory)
+        expect((result.metadata as any).truncated).toBe(false)
+        expect((result.metadata as any).filtered).toBe(true)
+        expect((result.metadata as any).matchCount).toBe(2)
+
+        // The output should contain only the filtered lines
+        expect(result.output).toContain("warning: unused variable")
+        expect(result.output).toContain("error: type mismatch")
+        expect(result.output).not.toContain("compiling...")
+        expect(result.output).not.toContain("done")
+      },
+    })
+  })
+
+  test("output_filter streams to file when output exceeds threshold", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        // Generate large output that exceeds threshold
+        const byteCount = Truncate.MAX_BYTES * 2
+        const result = await bash.execute(
+          {
+            command: `head -c ${byteCount} /dev/zero | tr '\\0' 'x'; echo ""; echo "warning: this is a warning"`,
+            output_filter: "^warning:",
+            description: "Build with filter (large)",
+          },
+          ctx,
+        )
+
+        // Should be truncated (large output spills to file)
+        expect((result.metadata as any).truncated).toBe(true)
+        expect((result.metadata as any).filtered).toBe(true)
+        const filepath = (result.metadata as any).outputPath
+        expect(filepath).toBeTruthy()
+
+        // The inline output should contain only the filtered line
+        expect(result.output).toContain("warning: this is a warning")
+        expect(result.output).toContain("Filtered 1 matching line")
+
+        // The full output file should contain everything
+        const saved = await Bun.file(filepath).text()
+        expect(saved.length).toBeGreaterThan(byteCount)
+        expect(saved).toContain("warning: this is a warning")
+      },
+    })
+  })
+
+  test("output_filter with no matches returns empty filtered output", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: `echo "all good"; echo "no problems here"`,
+            output_filter: "^(warning|error):",
+            description: "Build with no matches",
+          },
+          ctx,
+        )
+
+        // Small output stays in memory, no truncation
+        expect((result.metadata as any).truncated).toBe(false)
+        expect((result.metadata as any).filtered).toBe(true)
+        expect((result.metadata as any).matchCount).toBe(0)
+        expect(result.output).toContain("[no matches for filter:")
+      },
+    })
+  })
+
+  test("invalid output_filter regex throws error", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        await expect(
+          bash.execute(
+            {
+              command: `echo test`,
+              output_filter: "[invalid(regex",
+              description: "Invalid regex test",
+            },
+            ctx,
+          ),
+        ).rejects.toThrow("Invalid output_filter regex")
+      },
+    })
+  })
 })

@@ -30,6 +30,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
+import { formatSize } from "@/util/format"
 import type { Tool } from "@/tool/tool"
 import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
@@ -1608,6 +1609,14 @@ function Bash(props: ToolProps<typeof BashTool>) {
     return [...lines().slice(0, 10), "…"].join("\n")
   })
 
+  const filterInfo = createMemo(() => {
+    if (!props.metadata.filtered) return undefined
+    const total = formatSize(props.metadata.totalBytes ?? 0)
+    const omitted = formatSize(props.metadata.omittedBytes ?? 0)
+    const matches = props.metadata.matchCount ?? 0
+    return `Filtered: ${matches} match${matches === 1 ? "" : "es"} from ${total} (${omitted} omitted)`
+  })
+
   const workdirDisplay = createMemo(() => {
     const workdir = props.input.workdir
     if (!workdir || workdir === ".") return undefined
@@ -1644,6 +1653,9 @@ function Bash(props: ToolProps<typeof BashTool>) {
           <box gap={1}>
             <text fg={theme.text}>$ {props.input.command}</text>
             <text fg={theme.text}>{limited()}</text>
+            <Show when={filterInfo()}>
+              <text fg={theme.textMuted}>{filterInfo()}</text>
+            </Show>
             <Show when={overflow()}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
             </Show>

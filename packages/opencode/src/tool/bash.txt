@@ -25,6 +25,7 @@ Usage notes:
   - You can specify an optional timeout in milliseconds. If not specified, commands will time out after 120000ms (2 minutes).
   - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
   - If the output exceeds ${maxLines} lines or ${maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Because of this, you do NOT need to use `head`, `tail`, or other truncation commands to limit output - just run the command directly.
+  - For build commands (make, cargo build, npm run build, tsc, etc.) that produce lots of output where you only care about warnings/errors, use the `output_filter` parameter with a regex like "^(warning|error|WARN|ERROR):". This streams full output to a file while returning only matching lines inline, saving you from having to grep the output afterward.
 
   - Avoid using Bash with the `find`, `grep`, `cat`, `head`, `tail`, `sed`, `awk`, or `echo` commands, unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
     - File search: Use Glob (NOT find or ls)

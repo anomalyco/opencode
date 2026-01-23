@@ -12,11 +12,16 @@ const log = Log.create({ service: "truncation" })
 
 export interface StreamingOutputOptions {
   threshold?: number
+  /** Optional regex to filter output lines. Matching lines are collected separately. */
+  filter?: RegExp
 }
 
 /**
  * Streaming output accumulator that spills to disk when threshold is exceeded.
  * Avoids O(n²) memory growth from string concatenation.
+ *
+ * Optionally supports line filtering - when a filter regex is provided, matching
+ * lines are collected separately while full output still streams to file.
  */
 export class StreamingOutput {
   private output = ""
@@ -24,9 +29,15 @@ export class StreamingOutput {
   private streamFile: { fd: number; path: string } | undefined
   private streamedBytes = 0
   private threshold: number
+  private filter?: RegExp
+  private filtered = ""
+  private filteredBytes = 0
+  private filteredCount = 0
+  private lineBuffer = ""
 
   constructor(options: StreamingOutputOptions = {}) {
     this.threshold = options.threshold ?? Truncate.MAX_BYTES
+    this.filter = options.filter
   }
 
   /** Append a chunk of output. Returns the current preview string. */
@@ -46,11 +57,30 @@ export class StreamingOutput {
       this.output += text
     }
 
+    // Process filter if active
+    if (this.filter) {
+      this.lineBuffer += text
+      const lines = this.lineBuffer.split("\n")
+      this.lineBuffer = lines.pop() || ""
+      for (const line of lines) {
+        if (this.filter.test(line)) {
+          const entry = line + "\n"
+          this.filtered += entry
+          this.filteredBytes += Buffer.byteLength(entry, "utf-8")
+          this.filteredCount++
+        }
+      }
+    }
+
     return this.preview()
   }
 
-  /** Get current preview - either full output or streaming indicator */
+  /** Get current preview - either full output, streaming indicator, or filter status */
   preview(): string {
+    if (this.filter) {
+      if (this.filtered) return this.filtered
+      return `[filtering: ${this.outputBytes} bytes, ${this.matchCount} matches...]\n`
+    }
     if (this.streamFile) {
       return `[streaming to file: ${this.streamedBytes} bytes written...]\n`
     }
@@ -77,8 +107,37 @@ export class StreamingOutput {
     return this.output
   }
 
+  /** Get filtered output (only when filter is active) */
+  get filteredOutput(): string {
+    return this.filtered
+  }
+
+  /** Number of lines matching the filter */
+  get matchCount(): number {
+    return this.filteredCount
+  }
+
+  /** Bytes omitted by filtering */
+  get omittedBytes(): number {
+    return this.totalBytes - this.filteredBytes
+  }
+
+  /** Whether a filter is active */
+  get hasFilter(): boolean {
+    return this.filter !== undefined
+  }
+
   /** Close the stream file if open. Call this after command completes. */
   close(): void {
+    // Process any remaining content in line buffer
+    if (this.filter && this.lineBuffer) {
+      if (this.filter.test(this.lineBuffer)) {
+        const entry = this.lineBuffer + "\n"
+        this.filtered += entry
+        this.filteredBytes += Buffer.byteLength(entry, "utf-8")
+        this.filteredCount++
+      }
+    }
     if (this.streamFile) {
       fsSync.closeSync(this.streamFile.fd)
     }
@@ -94,7 +153,13 @@ export class StreamingOutput {
   }
 
   /** Get final output string (for non-truncated) or hint message (for truncated) */
-  finalize(): string {
+  finalize(filterPattern?: string): string {
+    if (this.filter) {
+      if (this.streamFile) {
+        return `Filtered ${this.matchCount} matching lines from ${this.totalBytes} bytes of output.\nFull output saved to: ${this.streamFile.path}\nUse Grep to search or Read with offset/limit to view specific sections.\nNote: This file will be deleted after a few more commands. Copy it if you need to preserve it.`
+      }
+      return this.filtered || `[no matches for filter: ${filterPattern}]`
+    }
     if (this.streamFile) {
       return `The command output was ${this.streamedBytes} bytes and was truncated (inline limit: ${this.threshold} bytes).\nFull output saved to: ${this.streamFile.path}\nUse Grep to search the full content or Read with offset/limit to view specific sections.\nNote: This file will be deleted after a few more commands. Copy it if you need to preserve it.`
     }

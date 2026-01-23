@@ -27,6 +27,11 @@ export interface BashMetadata {
   description: string
   truncated?: boolean
   outputPath?: string
+  filtered?: boolean
+  filterPattern?: string
+  matchCount?: number
+  totalBytes?: number
+  omittedBytes?: number
 }
 
 const resolveWasm = (asset: string) => {
@@ -75,6 +80,12 @@ export const BashTool = Tool.define("bash", async () => {
           `The working directory to run the command in. Defaults to ${Instance.directory}. Use this instead of 'cd' commands.`,
         )
         .optional(),
+      output_filter: z
+        .string()
+        .describe(
+          `Optional regex pattern to filter output. When set, full output streams to a file while lines matching the pattern are returned inline. Useful for build commands where you only care about warnings/errors. Example: "^(warning|error|WARN|ERROR):.*" to capture compiler diagnostics. The regex is matched against each line.`,
+        )
+        .optional(),
       description: z
         .string()
         .describe(
@@ -88,6 +99,15 @@ export const BashTool = Tool.define("bash", async () => {
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
 
+      // Parse output_filter regex if provided
+      let filter: RegExp | undefined
+      if (params.output_filter) {
+        try {
+          filter = new RegExp(params.output_filter)
+        } catch (e) {
+          throw new Error(`Invalid output_filter regex: ${params.output_filter}. ${e}`)
+        }
+      }
       const tree = await parser().then((p) => p.parse(params.command))
       if (!tree) {
         throw new Error("Failed to parse command")
@@ -162,7 +182,7 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
-      const streaming = new StreamingOutput()
+      const streaming = new StreamingOutput({ filter })
 
       const proc = spawn(params.command, {
         shell,
@@ -258,6 +278,30 @@ export const BashTool = Tool.define("bash", async () => {
         streaming.appendMetadata("\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>")
       }
 
+      // If using filter, return filtered lines
+      if (streaming.hasFilter) {
+        const output = streaming.truncated
+          ? `${streaming.filteredOutput}\n${streaming.finalize(params.output_filter)}`
+          : streaming.finalize(params.output_filter)
+
+        return {
+          title: params.description,
+          metadata: {
+            output: streaming.filteredOutput || `[no matches for filter: ${params.output_filter}]`,
+            exit: proc.exitCode,
+            description: params.description,
+            truncated: streaming.truncated,
+            outputPath: streaming.outputPath,
+            filtered: true,
+            filterPattern: params.output_filter,
+            matchCount: streaming.matchCount,
+            totalBytes: streaming.totalBytes,
+            omittedBytes: streaming.omittedBytes,
+          } as BashMetadata,
+          output,
+        }
+      }
+
       // If we streamed to a file (threshold exceeded), return truncated result
       if (streaming.truncated) {
         return {
@@ -268,6 +312,7 @@ export const BashTool = Tool.define("bash", async () => {
             description: params.description,
             truncated: true,
             outputPath: streaming.outputPath,
+            totalBytes: streaming.totalBytes,
           } as BashMetadata,
           output: streaming.finalize(),
         }
