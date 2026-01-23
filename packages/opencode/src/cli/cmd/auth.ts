@@ -1,4 +1,5 @@
 import { Auth } from "../../auth"
+import { AuthBrowser } from "../../auth/browser"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
@@ -163,7 +164,13 @@ export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
   builder: (yargs) =>
-    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
+    yargs
+      .command(AuthLoginCommand)
+      .command(AuthLogoutCommand)
+      .command(AuthListCommand)
+      .command(AuthBrowserCommand)
+      .command(AuthRenameCommand)
+      .demandCommand(),
   async handler() {},
 })
 
@@ -396,5 +403,263 @@ export const AuthLogoutCommand = cmd({
     if (prompts.isCancel(providerID)) throw new UI.CancelledError()
     await Auth.remove(providerID)
     prompts.outro("Logout successful")
+  },
+})
+
+// Browser session commands for auto-relogin
+export const AuthBrowserCommand = cmd({
+  command: "browser",
+  describe: "manage browser sessions for auto-relogin",
+  builder: (yargs) =>
+    yargs
+      .command(AuthBrowserListCommand)
+      .command(AuthBrowserSetupCommand)
+      .command(AuthBrowserRefreshCommand)
+      .command(AuthBrowserRemoveCommand)
+      .demandCommand(),
+  async handler() {},
+})
+
+export const AuthBrowserListCommand = cmd({
+  command: "list",
+  aliases: ["ls"],
+  describe: "list browser sessions",
+  async handler() {
+    UI.empty()
+    prompts.intro("Browser Sessions")
+    const sessions = await AuthBrowser.listAll()
+    const accounts = await Auth.OAuthPool.list("anthropic", "default")
+    const accountMap = new Map(accounts.map((a) => [a.id, a]))
+
+    if (sessions.length === 0) {
+      prompts.log.warn("No browser sessions configured")
+      prompts.outro("Use 'opencode auth browser setup' to configure one")
+      return
+    }
+
+    for (const session of sessions) {
+      const account = accountMap.get(session.recordId)
+      const name = account?.label || `Account ${session.recordId.slice(0, 8)}`
+      const status = session.isConfigured ? UI.Style.TEXT_SUCCESS + "configured" : UI.Style.TEXT_DIM + "not configured"
+      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}(${session.recordId})${UI.Style.TEXT_NORMAL} - ${status}`)
+    }
+
+    prompts.outro(`${sessions.length} session(s)`)
+  },
+})
+
+export const AuthBrowserSetupCommand = cmd({
+  command: "setup [recordId]",
+  describe: "setup or rebind a browser session",
+  builder: (yargs) =>
+    yargs.positional("recordId", {
+      describe: "account record ID (will prompt if not provided)",
+      type: "string",
+    }),
+  async handler(args) {
+    UI.empty()
+    prompts.intro("Browser Session Setup")
+
+    let recordId = args.recordId
+    if (!recordId) {
+      const accounts = await Auth.OAuthPool.list("anthropic", "default")
+      if (accounts.length === 0) {
+        prompts.log.error("No OAuth accounts found. Add an account first with 'opencode auth login'")
+        return
+      }
+      const selected = await prompts.select({
+        message: "Select account",
+        options: accounts.map((a, i) => ({
+          label: a.label || `Account ${i + 1}`,
+          value: a.id,
+          hint: a.id.slice(0, 8),
+        })),
+      })
+      if (prompts.isCancel(selected)) throw new UI.CancelledError()
+      recordId = selected
+    }
+
+    const spinner = prompts.spinner()
+    spinner.start("Opening browser...")
+
+    try {
+      const tokens = await AuthBrowser.setup(recordId, (msg) => {
+        spinner.message(msg)
+      })
+
+      // Update the auth store with new tokens
+      await Auth.OAuthPool.updateRecord("anthropic", recordId, "default", {
+        access: tokens.access,
+        refresh: tokens.refresh,
+        expires: tokens.expires,
+      })
+
+      spinner.stop("Browser session configured successfully!")
+      prompts.outro("Done")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      spinner.stop(`Setup failed: ${message}`, 1)
+    }
+  },
+})
+
+export const AuthBrowserRefreshCommand = cmd({
+  command: "refresh [recordId]",
+  aliases: ["test"],
+  describe: "test/refresh tokens via browser session",
+  builder: (yargs) =>
+    yargs.positional("recordId", {
+      describe: "account record ID (will prompt if not provided)",
+      type: "string",
+    }),
+  async handler(args) {
+    UI.empty()
+    prompts.intro("Browser Session Refresh")
+
+    let recordId = args.recordId
+    if (!recordId) {
+      const sessions = await AuthBrowser.listAll()
+      const configured = sessions.filter((s) => s.isConfigured)
+      if (configured.length === 0) {
+        prompts.log.error("No configured browser sessions. Run 'opencode auth browser setup' first.")
+        return
+      }
+      const accounts = await Auth.OAuthPool.list("anthropic", "default")
+      const accountMap = new Map(accounts.map((a) => [a.id, a]))
+
+      const selected = await prompts.select({
+        message: "Select session to refresh",
+        options: configured.map((s) => {
+          const account = accountMap.get(s.recordId)
+          return {
+            label: account?.label || `Account ${s.recordId.slice(0, 8)}`,
+            value: s.recordId,
+          }
+        }),
+      })
+      if (prompts.isCancel(selected)) throw new UI.CancelledError()
+      recordId = selected
+    }
+
+    const spinner = prompts.spinner()
+    spinner.start("Refreshing tokens...")
+
+    try {
+      const tokens = await AuthBrowser.refresh(recordId)
+
+      // Update the auth store with new tokens
+      await Auth.OAuthPool.updateRecord("anthropic", recordId, "default", {
+        access: tokens.access,
+        refresh: tokens.refresh,
+        expires: tokens.expires,
+      })
+
+      spinner.stop("Tokens refreshed successfully!")
+      prompts.outro("Done")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      spinner.stop(`Refresh failed: ${message}`, 1)
+    }
+  },
+})
+
+export const AuthBrowserRemoveCommand = cmd({
+  command: "remove [recordId]",
+  aliases: ["rm"],
+  describe: "remove a browser session",
+  builder: (yargs) =>
+    yargs.positional("recordId", {
+      describe: "account record ID (will prompt if not provided)",
+      type: "string",
+    }),
+  async handler(args) {
+    UI.empty()
+    prompts.intro("Remove Browser Session")
+
+    let recordId = args.recordId
+    if (!recordId) {
+      const sessions = await AuthBrowser.listAll()
+      if (sessions.length === 0) {
+        prompts.log.error("No browser sessions found")
+        return
+      }
+      const accounts = await Auth.OAuthPool.list("anthropic", "default")
+      const accountMap = new Map(accounts.map((a) => [a.id, a]))
+
+      const selected = await prompts.select({
+        message: "Select session to remove",
+        options: sessions.map((s) => {
+          const account = accountMap.get(s.recordId)
+          return {
+            label: account?.label || `Account ${s.recordId.slice(0, 8)}`,
+            value: s.recordId,
+            hint: s.isConfigured ? "configured" : "not configured",
+          }
+        }),
+      })
+      if (prompts.isCancel(selected)) throw new UI.CancelledError()
+      recordId = selected
+    }
+
+    await AuthBrowser.remove(recordId)
+    prompts.log.success("Browser session removed")
+    prompts.outro("Done")
+  },
+})
+
+// Rename account command
+export const AuthRenameCommand = cmd({
+  command: "rename [recordId] [name]",
+  describe: "rename an OAuth account",
+  builder: (yargs) =>
+    yargs
+      .positional("recordId", {
+        describe: "account record ID (will prompt if not provided)",
+        type: "string",
+      })
+      .positional("name", {
+        describe: "new name for the account",
+        type: "string",
+      }),
+  async handler(args) {
+    UI.empty()
+    prompts.intro("Rename Account")
+
+    let recordId = args.recordId
+    if (!recordId) {
+      const accounts = await Auth.OAuthPool.list("anthropic", "default")
+      if (accounts.length === 0) {
+        prompts.log.error("No OAuth accounts found")
+        return
+      }
+      const selected = await prompts.select({
+        message: "Select account to rename",
+        options: accounts.map((a, i) => ({
+          label: a.label || `Account ${i + 1}`,
+          value: a.id,
+          hint: a.id.slice(0, 8),
+        })),
+      })
+      if (prompts.isCancel(selected)) throw new UI.CancelledError()
+      recordId = selected
+    }
+
+    let name = args.name
+    if (!name) {
+      const input = await prompts.text({
+        message: "Enter new name",
+        validate: (x) => (x && x.length > 0 ? undefined : "Name is required"),
+      })
+      if (prompts.isCancel(input)) throw new UI.CancelledError()
+      name = input
+    }
+
+    const success = await Auth.OAuthPool.updateRecord("anthropic", recordId, "default", { label: name })
+    if (success) {
+      prompts.log.success(`Account renamed to "${name}"`)
+    } else {
+      prompts.log.error("Failed to rename account")
+    }
+    prompts.outro("Done")
   },
 })

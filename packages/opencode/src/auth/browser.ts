@@ -6,6 +6,10 @@ import { generatePKCE } from "@openauthjs/openauth/pkce"
 
 const log = Log.create({ service: "auth.browser" })
 
+// Track if puppeteer-extra has been initialized with stealth plugin
+let puppeteerInitialized = false
+let cachedPuppeteer: any = null
+
 /**
  * Install puppeteer and download Chromium automatically
  */
@@ -74,15 +78,24 @@ async function installPuppeteer(onProgress?: (msg: string) => void): Promise<boo
 }
 
 /**
- * Get puppeteer-extra with stealth plugin
+ * Get puppeteer-extra with stealth plugin (cached to prevent multiple plugin additions)
  */
 async function getPuppeteer(onProgress?: (msg: string) => void) {
+  // Return cached instance if already initialized
+  if (puppeteerInitialized && cachedPuppeteer) {
+    return cachedPuppeteer
+  }
+
   // First try to import from normal node_modules
   try {
     const puppeteerExtra = await import("puppeteer-extra")
     const stealthPlugin = await import("puppeteer-extra-plugin-stealth")
-    puppeteerExtra.default.use(stealthPlugin.default())
-    return puppeteerExtra.default
+    if (!puppeteerInitialized) {
+      puppeteerExtra.default.use(stealthPlugin.default())
+      puppeteerInitialized = true
+    }
+    cachedPuppeteer = puppeteerExtra.default
+    return cachedPuppeteer
   } catch {
     // Not in normal path
   }
@@ -95,8 +108,12 @@ async function getPuppeteer(onProgress?: (msg: string) => void) {
   try {
     const puppeteerExtra = await import(puppeteerExtraPath)
     const stealthPlugin = await import(stealthPath)
-    puppeteerExtra.default.use(stealthPlugin.default())
-    return puppeteerExtra.default
+    if (!puppeteerInitialized) {
+      puppeteerExtra.default.use(stealthPlugin.default())
+      puppeteerInitialized = true
+    }
+    cachedPuppeteer = puppeteerExtra.default
+    return cachedPuppeteer
   } catch {
     // Not installed yet
   }
@@ -127,8 +144,12 @@ async function ensurePuppeteer(onProgress?: (msg: string) => void) {
     try {
       const puppeteerExtra = await import(puppeteerExtraPath)
       const stealthPlugin = await import(stealthPath)
-      puppeteerExtra.default.use(stealthPlugin.default())
-      puppeteer = puppeteerExtra.default
+      if (!puppeteerInitialized) {
+        puppeteerExtra.default.use(stealthPlugin.default())
+        puppeteerInitialized = true
+      }
+      cachedPuppeteer = puppeteerExtra.default
+      puppeteer = cachedPuppeteer
     } catch (e) {
       throw new Error("Puppeteer was installed but could not be loaded. Please restart and try again.")
     }
@@ -145,6 +166,25 @@ const OAUTH_CALLBACK_ALT = "https://platform.claude.com/oauth/code/callback"
 
 // Lock to prevent concurrent browser operations on same profile
 const browserLocks = new Map<string, Promise<any>>()
+
+// Timeout for browser launch operations
+const BROWSER_LAUNCH_TIMEOUT_MS = 30000
+
+/**
+ * Launch browser with timeout to prevent hanging
+ */
+async function launchBrowserWithTimeout(
+  puppeteer: any,
+  options: any,
+  timeoutMs: number = BROWSER_LAUNCH_TIMEOUT_MS,
+): Promise<any> {
+  return Promise.race([
+    puppeteer.launch(options),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Browser launch timed out after ${timeoutMs}ms`)), timeoutMs),
+    ),
+  ])
+}
 
 export interface OAuthTokens {
   access: string
@@ -263,19 +303,44 @@ export namespace AuthBrowser {
     if (!browser) return
 
     try {
+      // First try to get the browser process for direct kill if needed
+      const browserProcess = browser.process?.()
+
       // Set a timeout for browser.close()
       await Promise.race([
         browser.close(),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Browser close timeout")), 5000)),
       ])
-    } catch {
+    } catch (closeError) {
       // Force kill if close fails or times out
-      log.warn("Browser close failed, force killing", { profilePath })
+      log.warn("Browser close failed, force killing", { profilePath, error: String(closeError) })
+
+      try {
+        // Try to kill via browser process first (more reliable)
+        const browserProcess = browser.process?.()
+        if (browserProcess && !browserProcess.killed) {
+          browserProcess.kill("SIGKILL")
+          log.info("Killed browser process via SIGKILL")
+        }
+      } catch {
+        // Process might already be dead
+      }
+
+      // Also try pkill as backup
       try {
         const { execSync } = await import("child_process")
-        execSync(`pkill -f "${profilePath}"`, { stdio: "ignore" })
+        // Use more specific matching
+        execSync(`pkill -9 -f "chrome.*${path.basename(profilePath)}"`, { stdio: "ignore" })
       } catch {
-        // Ignore pkill errors
+        // Ignore pkill errors - process might already be dead
+      }
+
+      // Clean up SingletonLock file
+      try {
+        const lockFile = path.join(profilePath, "SingletonLock")
+        await fs.rm(lockFile, { force: true })
+      } catch {
+        // Lock file might not exist
       }
     }
   }
@@ -297,16 +362,23 @@ export namespace AuthBrowser {
 
     onProgress?.("Opening browser window...")
 
-    const browser = await puppeteer.launch({
-      headless: false, // User needs to see the browser to log in
-      userDataDir: profilePath,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-blink-features=AutomationControlled",
-        "--window-size=1280,800",
-      ],
-    })
+    let browser
+    try {
+      browser = await launchBrowserWithTimeout(puppeteer, {
+        headless: false, // User needs to see the browser to log in
+        userDataDir: profilePath,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-blink-features=AutomationControlled",
+          "--window-size=1280,800",
+        ],
+      })
+    } catch (launchError) {
+      const msg = launchError instanceof Error ? launchError.message : String(launchError)
+      log.error("Browser launch failed", { recordId, error: msg })
+      throw new Error(`Failed to launch browser: ${msg}`)
+    }
 
     const page = await browser.newPage()
     await page.setViewport({ width: 1280, height: 800 })
@@ -447,13 +519,15 @@ export namespace AuthBrowser {
     // Ensure puppeteer is available
     const puppeteer = await ensurePuppeteer()
 
+    const launchOptions = {
+      headless: true, // Run headless for auto-refresh
+      userDataDir: profilePath,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-blink-features=AutomationControlled"],
+    }
+
     let browser
     try {
-      browser = await puppeteer.launch({
-        headless: true, // Run headless for auto-refresh
-        userDataDir: profilePath,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-blink-features=AutomationControlled"],
-      })
+      browser = await launchBrowserWithTimeout(puppeteer, launchOptions)
     } catch (launchError) {
       const msg = launchError instanceof Error ? launchError.message : String(launchError)
       if (msg.includes("already running") || msg.includes("SingletonLock")) {
@@ -461,17 +535,19 @@ export namespace AuthBrowser {
         // Try to kill any chrome processes and retry
         try {
           const { execSync } = await import("child_process")
-          execSync(`pkill -f "${profilePath}"`, { stdio: "ignore" })
+          execSync(`pkill -9 -f "chrome.*${path.basename(profilePath)}"`, { stdio: "ignore" })
           await new Promise((r) => setTimeout(r, 1000))
+          // Also remove lock file
+          const lockFile = path.join(profilePath, "SingletonLock")
+          await fs.rm(lockFile, { force: true })
         } catch {
           // pkill might fail if no matching processes
         }
-        // Retry launch
-        browser = await puppeteer.launch({
-          headless: true,
-          userDataDir: profilePath,
-          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-blink-features=AutomationControlled"],
-        })
+        // Retry launch with timeout
+        browser = await launchBrowserWithTimeout(puppeteer, launchOptions)
+      } else if (msg.includes("timed out")) {
+        log.error("Browser launch timed out", { recordId })
+        throw new Error(`Browser launch timed out for record ${recordId}. Chrome might be stuck.`)
       } else {
         throw launchError
       }

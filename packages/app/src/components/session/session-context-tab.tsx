@@ -207,7 +207,7 @@ function AnthropicUsageSection() {
                           <Show when={isSwitching()}>
                             <Spinner class="size-3 mr-1 inline" />
                           </Show>
-                          Account {index() + 1}
+                          {account.label && account.label !== "default" ? account.label : `Account ${index() + 1}`}
                           <Show when={account.isActive}>
                             <span class="ml-1 text-10-regular">(active)</span>
                           </Show>

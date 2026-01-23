@@ -115,7 +115,10 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
   const [browserSessions, setBrowserSessions] = createSignal<Record<string, BrowserSessionStatus>>({})
   const [settingUpBrowser, setSettingUpBrowser] = createSignal<string | null>(null)
   const [refreshingBrowser, setRefreshingBrowser] = createSignal<string | null>(null)
+  const [rebindingBrowser, setRebindingBrowser] = createSignal<string | null>(null)
   const [removingBrowser, setRemovingBrowser] = createSignal<string | null>(null)
+  const [renamingAccount, setRenamingAccount] = createSignal<string | null>(null)
+  const [renameInput, setRenameInput] = createSignal("")
 
   const doFetch = platform.fetch ?? fetch
 
@@ -170,6 +173,51 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
       }
     } finally {
       setRefreshingBrowser(null)
+    }
+  }
+
+  const rebindBrowserSession = async (recordId: string) => {
+    setRebindingBrowser(recordId)
+    try {
+      const result = await doFetch(`${globalSDK.url}/provider/auth/browser/sessions/${recordId}/setup`, {
+        method: "POST",
+      })
+      if (result.ok) {
+        await refetch()
+        await loadBrowserSessions()
+      }
+    } finally {
+      setRebindingBrowser(null)
+    }
+  }
+
+  const startRename = (recordId: string, currentLabel?: string) => {
+    setRenamingAccount(recordId)
+    setRenameInput(currentLabel && currentLabel !== "default" ? currentLabel : "")
+  }
+
+  const cancelRename = () => {
+    setRenamingAccount(null)
+    setRenameInput("")
+  }
+
+  const submitRename = async (recordId: string) => {
+    const label = renameInput().trim()
+    if (!label) {
+      cancelRename()
+      return
+    }
+    try {
+      const result = await doFetch(`${globalSDK.url}/provider/auth/account`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providerID: props.providerID, recordID: recordId, label }),
+      })
+      if (result.ok) {
+        await refetch()
+      }
+    } finally {
+      cancelRename()
     }
   }
 
@@ -351,35 +399,85 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
                           "bg-fill-success-ghost border border-fill-success-base": account.isActive,
                         }}
                       >
-                        <button
-                          type="button"
-                          disabled={!canSwitch() && !account.isActive}
-                          onClick={() => canSwitch() && switchAccount(account.id)}
-                          class="flex-1 flex items-center justify-between text-left transition-all"
-                          classList={{
-                            "hover:opacity-80 cursor-pointer": canSwitch(),
-                            "opacity-60": !canSwitch() && !account.isActive,
-                          }}
+                        <Show
+                          when={renamingAccount() === account.id}
+                          fallback={
+                            <button
+                              type="button"
+                              disabled={!canSwitch() && !account.isActive}
+                              onClick={() => canSwitch() && switchAccount(account.id)}
+                              class="flex-1 flex items-center justify-between text-left transition-all"
+                              classList={{
+                                "hover:opacity-80 cursor-pointer": canSwitch(),
+                                "opacity-60": !canSwitch() && !account.isActive,
+                              }}
+                            >
+                              <div class="flex items-center gap-2">
+                                <Show when={isSwitching()}>
+                                  <Spinner class="size-3" />
+                                </Show>
+                                <span class="text-12-medium text-text-base">
+                                  {account.label && account.label !== "default"
+                                    ? account.label
+                                    : `Account ${index() + 1}`}
+                                </span>
+                                <Show when={account.isActive}>
+                                  <span class="text-10-medium text-fill-success-base">Active</span>
+                                </Show>
+                                <Show when={isInCooldown()}>
+                                  <span class="text-10-medium text-fill-danger-base">
+                                    Cooldown {cooldownRemaining()}
+                                  </span>
+                                </Show>
+                              </div>
+                              <div class="flex items-center gap-2">
+                                <span class="text-11-regular text-text-muted">
+                                  {account.health.successCount} requests
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    startRename(account.id, account.label)
+                                  }}
+                                  class="p-1 rounded hover:bg-fill-ghost-strong text-icon-muted hover:text-text-base transition-colors"
+                                  title="Rename account"
+                                >
+                                  <Icon name="edit" class="size-3" />
+                                </button>
+                              </div>
+                            </button>
+                          }
                         >
-                          <div class="flex items-center gap-2">
-                            <Show when={isSwitching()}>
-                              <Spinner class="size-3" />
-                            </Show>
-                            <span class="text-12-medium text-text-base">
-                              Account {index() + 1}
-                              <Show when={account.label && account.label !== "default"}>
-                                <span class="text-text-muted"> ({account.label})</span>
-                              </Show>
-                            </span>
-                            <Show when={account.isActive}>
-                              <span class="text-10-medium text-fill-success-base">Active</span>
-                            </Show>
-                            <Show when={isInCooldown()}>
-                              <span class="text-10-medium text-fill-danger-base">Cooldown {cooldownRemaining()}</span>
-                            </Show>
+                          <div class="flex-1 flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={renameInput()}
+                              onInput={(e) => setRenameInput(e.currentTarget.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") submitRename(account.id)
+                                if (e.key === "Escape") cancelRename()
+                              }}
+                              placeholder={`Account ${index() + 1}`}
+                              class="flex-1 px-2 py-1 text-12-medium bg-fill-ghost-base border border-border-base rounded focus:outline-none focus:border-border-strong"
+                              autofocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => submitRename(account.id)}
+                              class="px-2 py-1 rounded text-10-medium bg-fill-interactive-base text-white hover:bg-fill-interactive-strong transition-colors"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelRename}
+                              class="px-2 py-1 rounded text-10-medium bg-fill-ghost-strong text-text-base hover:bg-fill-ghost-base transition-colors"
+                            >
+                              Cancel
+                            </button>
                           </div>
-                          <span class="text-11-regular text-text-muted">{account.health.successCount} requests</span>
-                        </button>
+                        </Show>
                         {/* Delete button */}
                         <Show when={isConfirming()}>
                           <div class="flex items-center gap-1">
@@ -481,6 +579,14 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
                                 class="text-11-medium text-text-interactive-base hover:text-text-interactive-strong transition-colors disabled:opacity-50"
                               >
                                 {isRefreshing() ? "..." : "Test"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => rebindBrowserSession(account.id)}
+                                disabled={rebindingBrowser() === account.id}
+                                class="text-11-medium text-text-interactive-base hover:text-text-interactive-strong transition-colors disabled:opacity-50"
+                              >
+                                {rebindingBrowser() === account.id ? "..." : "Rebind"}
                               </button>
                               <button
                                 type="button"

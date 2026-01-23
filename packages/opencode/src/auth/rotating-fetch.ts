@@ -101,51 +101,23 @@ function isAuthExpiredStatus(status: number): boolean {
   return status === 401 || status === 403
 }
 
+// Timeout for auto-relogin operation (2 minutes)
+const AUTO_RELOGIN_TIMEOUT_MS = 120000
+
 /**
  * Attempt to refresh tokens via browser session.
  * Returns true if successful and tokens were updated.
+ * Has a global timeout to prevent hanging indefinitely.
  */
 async function attemptBrowserRelogin(providerID: string, recordID: string, namespace: string): Promise<boolean> {
   try {
-    const { AuthBrowser } = await import("./browser")
-
-    const session = await AuthBrowser.status(recordID)
-    if (!session.isConfigured) {
-      log.info("no browser session configured for auto-relogin", { providerID, recordID })
-      return false
-    }
-
-    log.info("attempting auto-relogin via browser session", { providerID, recordID })
-
-    // Show toast notification
-    const { Bus } = await import("../bus")
-    const { TuiEvent } = await import("../cli/cmd/tui/event")
-    await Bus.publish(TuiEvent.ToastShow, {
-      title: "Auto-Relogin",
-      message: "Token expired. Attempting automatic refresh...",
-      variant: "info",
-      duration: 5000,
-    }).catch(() => {})
-
-    const tokens = await AuthBrowser.refresh(recordID)
-
-    // Update the auth store with new tokens
-    await Auth.OAuthPool.updateRecord(providerID, recordID, namespace, {
-      access: tokens.access,
-      refresh: tokens.refresh,
-      expires: tokens.expires,
-    })
-
-    log.info("auto-relogin successful", { providerID, recordID })
-
-    await Bus.publish(TuiEvent.ToastShow, {
-      title: "Auto-Relogin",
-      message: "Token refreshed successfully!",
-      variant: "success",
-      duration: 3000,
-    }).catch(() => {})
-
-    return true
+    // Wrap the entire operation in a timeout to prevent app from hanging
+    return await Promise.race([
+      doAttemptBrowserRelogin(providerID, recordID, namespace),
+      new Promise<boolean>((_, reject) =>
+        setTimeout(() => reject(new Error("Auto-relogin timed out")), AUTO_RELOGIN_TIMEOUT_MS),
+      ),
+    ])
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     log.warn("auto-relogin failed", { providerID, recordID, error: message })
@@ -156,7 +128,9 @@ async function attemptBrowserRelogin(providerID: string, recordID: string, names
       const { TuiEvent } = await import("../cli/cmd/tui/event")
       await Bus.publish(TuiEvent.ToastShow, {
         title: "Auto-Relogin Failed",
-        message: "Please run 'opencode auth browser setup' to re-authenticate.",
+        message: message.includes("timed out")
+          ? "Browser refresh timed out. Please run setup again."
+          : "Please run 'opencode auth browser setup' to re-authenticate.",
         variant: "error",
         duration: 10000,
       }).catch(() => {})
@@ -164,6 +138,48 @@ async function attemptBrowserRelogin(providerID: string, recordID: string, names
 
     return false
   }
+}
+
+async function doAttemptBrowserRelogin(providerID: string, recordID: string, namespace: string): Promise<boolean> {
+  const { AuthBrowser } = await import("./browser")
+
+  const session = await AuthBrowser.status(recordID)
+  if (!session.isConfigured) {
+    log.info("no browser session configured for auto-relogin", { providerID, recordID })
+    return false
+  }
+
+  log.info("attempting auto-relogin via browser session", { providerID, recordID })
+
+  // Show toast notification
+  const { Bus } = await import("../bus")
+  const { TuiEvent } = await import("../cli/cmd/tui/event")
+  await Bus.publish(TuiEvent.ToastShow, {
+    title: "Auto-Relogin",
+    message: "Token expired. Attempting automatic refresh...",
+    variant: "info",
+    duration: 5000,
+  }).catch(() => {})
+
+  const tokens = await AuthBrowser.refresh(recordID)
+
+  // Update the auth store with new tokens
+  await Auth.OAuthPool.updateRecord(providerID, recordID, namespace, {
+    access: tokens.access,
+    refresh: tokens.refresh,
+    expires: tokens.expires,
+  })
+
+  log.info("auto-relogin successful", { providerID, recordID })
+
+  await Bus.publish(TuiEvent.ToastShow, {
+    title: "Auto-Relogin",
+    message: "Token refreshed successfully!",
+    variant: "success",
+    duration: 3000,
+  }).catch(() => {})
+
+  return true
 }
 
 export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any) => Promise<Response>>(

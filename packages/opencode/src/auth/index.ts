@@ -639,7 +639,7 @@ export namespace Auth {
       providerID: string,
       recordID: string,
       namespace: string,
-      update: { access?: string; refresh?: string; expires?: number },
+      update: { access?: string; refresh?: string; expires?: number; label?: string },
     ): Promise<boolean> {
       return updateStore((store) => {
         const provider = store.providers[providerID]
@@ -651,6 +651,7 @@ export namespace Auth {
         if (update.access !== undefined) record.access = update.access
         if (update.refresh !== undefined) record.refresh = update.refresh
         if (update.expires !== undefined) record.expires = update.expires
+        if (update.label !== undefined) record.label = update.label
         record.updatedAt = Date.now()
 
         return { value: true, changed: true }

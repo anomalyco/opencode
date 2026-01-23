@@ -279,6 +279,44 @@ export const ProviderRoutes = lazy(() =>
         return c.json({ success: result.removed, remaining: result.remaining })
       },
     )
+    .patch(
+      "/auth/account",
+      describeRoute({
+        summary: "Update OAuth account",
+        description: "Update an OAuth account's label/name.",
+        operationId: "auth.updateAccount",
+        responses: {
+          200: {
+            description: "Account updated",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    success: z.boolean(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          providerID: z.string(),
+          recordID: z.string(),
+          namespace: z.string().optional(),
+          label: z.string().optional(),
+        }),
+      ),
+      async (c) => {
+        const { providerID, recordID, namespace, label } = c.req.valid("json")
+        const ns = namespace ?? "default"
+        const success = await Auth.OAuthPool.updateRecord(providerID, recordID, ns, { label })
+        return c.json({ success })
+      },
+    )
     // Browser session routes for auto-relogin
     .get(
       "/auth/browser/sessions",
