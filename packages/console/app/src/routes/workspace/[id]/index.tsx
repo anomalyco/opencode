@@ -1,4 +1,4 @@
-import { Show, createMemo } from "solid-js"
+import { Match, Show, Switch, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createAsync, useParams, useAction, useSubmission } from "@solidjs/router"
 import { NewUserSection } from "./new-user-section"
@@ -43,9 +43,8 @@ export default function () {
           </span>
           <Show when={userInfo()?.isAdmin}>
             <span data-slot="billing-info">
-              <Show
-                when={billingInfo()?.reload}
-                fallback={
+              <Switch>
+                <Match when={!billingInfo()?.customerID}>
                   <button
                     data-color="primary"
                     data-size="sm"
@@ -54,12 +53,13 @@ export default function () {
                   >
                     {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Enable billing"}
                   </button>
-                }
-              >
-                <span data-slot="balance">
-                  Current balance <b>${balance()}</b>
-                </span>
-              </Show>
+                </Match>
+                <Match when={!billingInfo()?.subscriptionID}>
+                  <span data-slot="balance">
+                    Current balance <b>${balance()}</b>
+                  </span>
+                </Match>
+              </Switch>
             </span>
           </Show>
         </p>

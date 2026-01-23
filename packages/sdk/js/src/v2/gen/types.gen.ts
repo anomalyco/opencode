@@ -25,7 +25,14 @@ export type Project = {
   name?: string
   icon?: {
     url?: string
+    override?: string
     color?: string
+  }
+  commands?: {
+    /**
+     * Startup script to run when creating a new workspace (worktree)
+     */
+    start?: string
   }
   time: {
     created: number
@@ -44,6 +51,20 @@ export type EventServerInstanceDisposed = {
   type: "server.instance.disposed"
   properties: {
     directory: string
+  }
+}
+
+export type EventServerConnected = {
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventGlobalDisposed = {
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -845,17 +866,18 @@ export type EventPtyDeleted = {
   }
 }
 
-export type EventGlobalDisposed = {
-  type: "global.disposed"
+export type EventWorktreeReady = {
+  type: "worktree.ready"
   properties: {
-    [key: string]: unknown
+    name: string
+    branch: string
   }
 }
 
-export type EventServerConnected = {
-  type: "server.connected"
+export type EventWorktreeFailed = {
+  type: "worktree.failed"
   properties: {
-    [key: string]: unknown
+    message: string
   }
 }
 
@@ -864,6 +886,8 @@ export type Event =
   | EventInstallationUpdateAvailable
   | EventProjectUpdated
   | EventServerInstanceDisposed
+  | EventServerConnected
+  | EventGlobalDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventFileEdited
@@ -898,8 +922,8 @@ export type Event =
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
-  | EventGlobalDisposed
-  | EventServerConnected
+  | EventWorktreeReady
+  | EventWorktreeFailed
 
 export type GlobalEvent = {
   directory: string
@@ -1905,6 +1929,9 @@ export type Worktree = {
 
 export type WorktreeCreateInput = {
   name?: string
+  /**
+   * Additional startup script to run after the project's start command
+   */
   startCommand?: string
 }
 
@@ -2229,7 +2256,14 @@ export type ProjectUpdateData = {
     name?: string
     icon?: {
       url?: string
+      override?: string
       color?: string
+    }
+    commands?: {
+      /**
+       * Startup script to run when creating a new workspace (worktree)
+       */
+      start?: string
     }
   }
   path: {

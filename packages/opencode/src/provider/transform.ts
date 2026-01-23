@@ -123,11 +123,8 @@ export namespace ProviderTransform {
       return result
     }
 
-    if (
-      model.capabilities.interleaved &&
-      typeof model.capabilities.interleaved === "object" &&
-      model.capabilities.interleaved.field === "reasoning_content"
-    ) {
+    if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
+      const field = model.capabilities.interleaved.field
       return msgs.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
           const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
@@ -136,7 +133,7 @@ export namespace ProviderTransform {
           // Filter out reasoning parts from content
           const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
 
-          // Include reasoning_content directly on the message for all assistant messages
+          // Include reasoning_content | reasoning_details directly on the message for all assistant messages
           if (reasoningText) {
             return {
               ...msg,
@@ -145,7 +142,7 @@ export namespace ProviderTransform {
                 ...msg.providerOptions,
                 openaiCompatible: {
                   ...(msg.providerOptions as any)?.openaiCompatible,
-                  reasoning_content: reasoningText,
+                  [field]: reasoningText,
                 },
               },
             }
@@ -251,6 +248,8 @@ export namespace ProviderTransform {
       model.providerID === "anthropic" ||
       model.api.id.includes("anthropic") ||
       model.api.id.includes("claude") ||
+      model.id.includes("anthropic") ||
+      model.id.includes("claude") ||
       model.api.npm === "@ai-sdk/anthropic"
     ) {
       msgs = applyCaching(msgs, model.providerID)
@@ -421,7 +420,9 @@ export namespace ProviderTransform {
         )
 
       case "@ai-sdk/anthropic":
-        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
+      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
+      case "@ai-sdk/google-vertex/anthropic":
+        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
         return {
           high: {
             thinking: {
@@ -601,15 +602,15 @@ export namespace ProviderTransform {
     }
 
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
-      if (input.model.providerID.includes("codex")) {
-        result["store"] = false
-      }
-
-      if (!input.model.api.id.includes("codex") && !input.model.api.id.includes("gpt-5-pro")) {
+      if (!input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
       }
 
-      if (input.model.api.id.endsWith("gpt-5.") && input.model.providerID !== "azure") {
+      if (
+        input.model.api.id.includes("gpt-5.") &&
+        !input.model.api.id.includes("codex") &&
+        input.model.providerID !== "azure"
+      ) {
         result["textVerbosity"] = "low"
       }
 
@@ -619,6 +620,11 @@ export namespace ProviderTransform {
         result["reasoningSummary"] = "auto"
       }
     }
+
+    if (input.model.providerID === "venice") {
+      result["promptCacheKey"] = input.sessionID
+    }
+
     return result
   }
 
@@ -659,7 +665,7 @@ export namespace ProviderTransform {
     const modelCap = modelLimit || globalLimit
     const standardLimit = Math.min(modelCap, globalLimit)
 
-    if (npm === "@ai-sdk/anthropic") {
+    if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
       const thinking = options?.["thinking"]
       const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
       const enabled = thinking?.["type"] === "enabled"
