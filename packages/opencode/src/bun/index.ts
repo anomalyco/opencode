@@ -92,24 +92,21 @@ export namespace BunProc {
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
     const parsed = await readPackageJson()
     const oldPkg = provider ? parsed.opencode?.providers?.[provider] : undefined
-    const pkgSwitched = oldPkg && oldPkg !== pkg
+    const switched = oldPkg && oldPkg !== pkg
 
-    if (pkgSwitched) {
-      const providers = parsed.opencode?.providers ?? {}
-      const used = Object.entries(providers).some(([p, name]) => p !== provider && name === oldPkg)
-      if (used) {
-        log.info("provider package changed but still used", { provider, old: oldPkg, new: pkg })
-      } else {
-        log.info("provider package changed", { provider, old: oldPkg, new: pkg })
-        await BunProc.run(["remove", "--cwd", Global.Path.cache, oldPkg]).catch(() => {})
-      }
-    }
-
-    // Re-read after potential remove, check if already installed
-    const current = pkgSwitched ? await readPackageJson() : parsed
-    const installed = current.dependencies?.[pkg]
+    // Check if already installed
+    const installed = parsed.dependencies?.[pkg]
     if (installed && (version === "latest" || installed === version) && (await Filesystem.exists(mod))) {
       if (provider) await track(provider, pkg)
+      // Remove old package after tracking update, only if not used by others
+      if (switched) {
+        const providers = parsed.opencode?.providers ?? {}
+        const used = Object.entries(providers).some(([p, name]) => p !== provider && name === oldPkg)
+        if (!used) {
+          log.info("removing unused package", { pkg: oldPkg })
+          await BunProc.run(["remove", "--cwd", Global.Path.cache, oldPkg]).catch(() => {})
+        }
+      }
       return mod
     } else if (version === "latest") {
       const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
@@ -131,13 +128,20 @@ export namespace BunProc {
     log.info("installing package", { pkg, version })
 
     await BunProc.run(args, { cwd: Global.Path.cache }).catch((e) => {
-      if (pkgSwitched && provider) {
-        log.info("install failed, keeping old provider package tracking", { provider, old: oldPkg })
-      }
       throw new InstallFailedError({ pkg, version }, { cause: e })
     })
 
+    // Install succeeded - update tracking and remove old package
     if (provider) await track(provider, pkg)
+    if (switched) {
+      const current = await readPackageJson()
+      const providers = current.opencode?.providers ?? {}
+      const used = Object.entries(providers).some(([p, name]) => p !== provider && name === oldPkg)
+      if (!used) {
+        log.info("removing unused package", { pkg: oldPkg })
+        await BunProc.run(["remove", "--cwd", Global.Path.cache, oldPkg!]).catch(() => {})
+      }
+    }
     return mod
   }
 }
