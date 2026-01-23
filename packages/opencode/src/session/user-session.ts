@@ -20,6 +20,7 @@ export namespace UserSession {
       createdAt: z.number(),
       lastAccessTime: z.number(),
       userAgent: z.string().optional(),
+      rememberMe: z.boolean().optional(), // Extended session persistence
     })
     .meta({ ref: "UserSessionInfo" })
 
@@ -37,11 +38,13 @@ export namespace UserSession {
    * @param username - The username for the session
    * @param maybeUserAgent - Optional User-Agent string from the client
    * @param maybeUserInfo - Optional UNIX user info (uid, gid, home, shell)
+   * @param maybeRememberMe - Optional remember me flag for extended session duration
    */
   export function create(
     username: string,
     maybeUserAgent?: string,
     maybeUserInfo?: { uid: number; gid: number; home: string; shell: string },
+    maybeRememberMe?: boolean,
   ): Info {
     const id = crypto.randomUUID()
     const now = Date.now()
@@ -55,6 +58,7 @@ export namespace UserSession {
       createdAt: now,
       lastAccessTime: now,
       userAgent: maybeUserAgent,
+      rememberMe: maybeRememberMe ?? false,
     }
 
     sessions.set(id, session)
