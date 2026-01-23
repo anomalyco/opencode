@@ -1260,9 +1260,9 @@ export default function Layout(props: ParentProps) {
         })
     })
 
-    const handleDelete = async () => {
-      await deleteWorkspace(props.directory)
+    const handleDelete = () => {
       dialog.close()
+      void deleteWorkspace(props.directory)
     }
 
     const description = () => {
