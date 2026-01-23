@@ -33,16 +33,28 @@ jobs:
         id: version
         run: |
           VERSION=$(node -p "require('./packages/opencode/package.json').version")
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "tag=dev-${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=dev-nfs-${VERSION}-${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "release_name=OpenCode ${VERSION} (Dev NFS)" >> $GITHUB_OUTPUT
+
+      - name: Delete existing release (if any)
+        if: always()
+        run: |
+          gh release delete ${{ steps.version.outputs.tag }} --yes || true
+          git push origin :refs/tags/${{ steps.version.outputs.tag }} || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: OpenCode ${{ steps.version.outputs.version }} (Dev)
+          name: ${{ steps.version.outputs.release_name }}
           draft: false
           prerelease: true
-          files: packages/opencode/dist/*/bin/*
+          make_latest: false
+          files: |
+            packages/opencode/dist/*/bin/opencode*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
