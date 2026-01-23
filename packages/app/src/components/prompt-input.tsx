@@ -161,6 +161,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
+
+  const selectionPreview = (path: string, selection: FileSelection | undefined, preview: string | undefined) => {
+    if (preview) return preview
+    if (!selection) return undefined
+    const content = files.get(path)?.content?.content
+    if (!content) return undefined
+    const start = Math.max(1, Math.min(selection.startLine, selection.endLine))
+    const end = Math.max(selection.startLine, selection.endLine)
+    const lines = content.split("\n").slice(start - 1, end)
+    if (lines.length === 0) return undefined
+    return lines.slice(0, 2).join("\n")
+  }
+
   const recent = createMemo(() => {
     const all = tabs().all()
     const active = tabs().active()
