@@ -212,7 +212,12 @@ export namespace Config {
     const hasGitIgnore = await Bun.file(gitignore).exists()
     if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
 
-    const bunArgs = ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION), "--exact"]
+    const bunArgs = ["add"]
+    // Support disabling --force (useful when dependencies are stable or in NFS)
+    if (!Flag.OPENCODE_BUN_NO_FORCE) {
+      bunArgs.push("--force")
+    }
+    bunArgs.push("@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION), "--exact")
     // Support custom backend (e.g., --backend=copyfile for NFS)
     if (Flag.OPENCODE_BUN_BACKEND) {
       bunArgs.push("--backend=" + Flag.OPENCODE_BUN_BACKEND)

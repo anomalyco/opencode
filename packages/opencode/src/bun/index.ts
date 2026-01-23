@@ -88,7 +88,8 @@ export namespace BunProc {
     // Build command arguments
     const args = [
       "add",
-      "--force",
+      // Support disabling --force (useful when dependencies are stable or in NFS)
+      ...(!Flag.OPENCODE_BUN_NO_FORCE ? ["--force"] : []),
       "--exact",
       // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
       ...(proxied ? ["--no-cache"] : []),
