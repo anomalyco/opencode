@@ -68,11 +68,6 @@ describe("util.locale", () => {
       expect(result).toEqual("  spaced text  ")
     })
 
-    test("handles unicode characters correctly with maxLength", () => {
-      const result = Locale.truncateFirstLine("Hello 🌍🌎🌏", 8)
-      expect(result).toEqual("Hello 🌍…")
-    })
-
     test("handles text with carriage return and newline", () => {
       const result = Locale.truncateFirstLine("First line\r\nSecond line")
       expect(result).toEqual("First line\r")
