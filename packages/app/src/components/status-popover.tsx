@@ -83,10 +83,16 @@ export function StatusPopover(props: StatusPopoverProps = {}) {
 
   const serverItems = createMemo(() => {
     const current = server.url
+    const def = defaultServerUrl()
     const list = server.list
-    if (!current) return list
-    if (!list.includes(current)) return [current, ...list]
-    return [current, ...list.filter((x) => x !== current)]
+    const all = current && !list.includes(current) ? [current, ...list] : list
+    return all.slice().sort((a, b) => {
+      if (a === def) return -1
+      if (b === def) return 1
+      if (a === current) return -1
+      if (b === current) return 1
+      return 0
+    })
   })
 
   const serverCount = createMemo(() => serverItems().length)
@@ -258,9 +264,11 @@ export function StatusPopover(props: StatusPopoverProps = {}) {
                             <Tag>{language.t("common.default")}</Tag>
                           </Show>
                           <div class="flex-1" />
-                          <Show when={isActive()}>
-                            <Icon name="check" class="text-text-strong" />
-                          </Show>
+                          <div class="w-5 shrink-0">
+                            <Show when={isActive()}>
+                              <Icon name="check" class="text-text-strong" />
+                            </Show>
+                          </div>
                         </div>
                       )
                     }}
@@ -301,7 +309,7 @@ export function StatusPopover(props: StatusPopoverProps = {}) {
                         const status = () => mcpStatus()?.status
                         const enabled = () => status() === "connected"
                         return (
-                          <div class="flex items-center justify-between gap-3 py-1">
+                          <div class="flex items-center gap-3 py-1 pr-4">
                             <div class="flex items-center gap-3 min-w-0 flex-1">
                               <div
                                 classList={{
