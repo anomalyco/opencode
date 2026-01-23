@@ -55,3 +55,21 @@
   scrollbar-width: thin !important;
   scrollbar-color: var(--border-weak-base) transparent !important;
 }
+
+.status-popover-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-strong) transparent;
+}
+
+.status-popover-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.status-popover-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.status-popover-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--text-strong);
+  border-radius: 3px;
+}
