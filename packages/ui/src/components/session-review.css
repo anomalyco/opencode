@@ -79,7 +79,7 @@
     position: absolute;
     top: 0;
     right: calc(100% + 12px);
-    z-index: 40;
+    z-index: 6;
     min-width: 200px;
     max-width: min(320px, calc(100vw - 48px));
     border-radius: var(--radius-md);
@@ -223,7 +223,7 @@
   [data-slot="session-review-comment-anchor"] {
     position: absolute;
     right: 12px;
-    z-index: 30;
+    z-index: 5;
   }
 
   [data-slot="session-review-comment-button"] {
