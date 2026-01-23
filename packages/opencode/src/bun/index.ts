@@ -89,6 +89,7 @@ export namespace BunProc {
       "add",
       "--force",
       "--exact",
+      "--backend=copyfile",
       // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
       ...(proxied ? ["--no-cache"] : []),
       "--cwd",
