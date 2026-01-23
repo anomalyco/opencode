@@ -129,15 +129,15 @@ export function AppInterface(props: { defaultUrl?: string }) {
                   component={(p) => (
                     <Show when={p.params.id ?? "new"}>
                       <TerminalProvider>
-                         <FileProvider>
-                           <PromptProvider>
-                             <CommentsProvider>
-                             <Suspense fallback={<Loading />}>
-                               <Session />
-                             </Suspense>
-                             </CommentsProvider>
-                           </PromptProvider>
-                         </FileProvider>
+                        <FileProvider>
+                          <PromptProvider>
+                            <CommentsProvider>
+                              <Suspense fallback={<Loading />}>
+                                <Session />
+                              </Suspense>
+                            </CommentsProvider>
+                          </PromptProvider>
+                        </FileProvider>
                       </TerminalProvider>
                     </Show>
                   )}
