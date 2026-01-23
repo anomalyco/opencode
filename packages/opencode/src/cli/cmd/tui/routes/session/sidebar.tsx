@@ -2,19 +2,20 @@ import { useSync } from "@tui/context/sync"
 import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
-import { Locale } from "@/util/locale"
-import path from "path"
-import type { AssistantMessage } from "@opencode-ai/sdk/v2"
-import { Global } from "@/global"
+import type { AssistantMessage, ToolPart } from "@opencode-ai/sdk/v2"
 import { Installation } from "@/installation"
-import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { useRoute } from "../../context/route"
+import { useToast } from "../../ui/toast"
+import { SubagentList, type SubagentGroup } from "../../component/subagent-list"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
+  const route = useRoute()
   const { theme } = useTheme()
+  const toast = useToast()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
@@ -25,7 +26,48 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     diff: true,
     todo: true,
     lsp: true,
+    subagents: true,
   })
+
+  const subagents = createMemo(() => {
+    const parts = new Map<string, ToolPart>()
+    for (const message of messages()) {
+      for (const part of sync.data.part[message.id] ?? []) {
+        if (part.type === "tool" && part.state.input?.subagent_type) {
+          parts.set(part.id, part)
+        }
+      }
+    }
+    return Array.from(parts.values())
+  })
+
+  // Group subagents by type for sidebar display
+  const subagentGroups = (): SubagentGroup[] => {
+    const groups = new Map<string, ToolPart[]>()
+    for (const part of subagents()) {
+      const type = part.state.input?.subagent_type as string
+      if (!groups.has(type)) groups.set(type, [])
+      groups.get(type)!.push(part)
+    }
+    return Array.from(groups.entries()).map(([name, parts]) => ({
+      name,
+      parts: parts.map((part) => {
+        const input = part.state.input as Record<string, unknown>
+        return {
+          id: part.id,
+          status: () => part.state.status as "pending" | "running" | "completed" | "error",
+          description: (input?.description as string) ?? "",
+          sessionId: () => {
+            const metadata =
+              part.state.status === "completed"
+                ? part.state.metadata
+                : ((part.state as { metadata?: Record<string, unknown> }).metadata ?? {})
+            return (metadata?.sessionId as string) ?? undefined
+          },
+        }
+      }),
+    }))
+  }
 
   // Sort MCP servers alphabetically for consistent display order
   const mcpEntries = createMemo(() => Object.entries(sync.data.mcp).sort(([a], [b]) => a.localeCompare(b)))
@@ -98,6 +140,41 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
+
+            {/* Subagents Section */}
+            <Show when={subagentGroups().length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => setExpanded("subagents", !expanded.subagents)}
+                >
+                  <text fg={theme.text}>{expanded.subagents ? "▼" : "▶"}</text>
+                  <text fg={theme.text}>
+                    <b>Subagents</b>
+                    <Show when={!expanded.subagents}>
+                      <span style={{ fg: theme.textMuted }}> ({subagentGroups().length} types)</span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={expanded.subagents}>
+                  <SubagentList
+                    groups={subagentGroups()}
+                    theme={{ text: theme.text, textMuted: theme.textMuted, success: theme.success, backgroundHover: theme.backgroundElement }}
+                    onNavigate={async (sessionId) => {
+                      try {
+                        await sync.session.sync(sessionId)
+                        route.navigate({ type: "session", sessionID: sessionId })
+                      } catch (e) {
+                        console.error("Failed to sync subagent session:", e)
+                        toast.show({ message: "Session not found", variant: "error" })
+                      }
+                    }}
+                  />
+                </Show>
+              </box>
+            </Show>
+
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box
