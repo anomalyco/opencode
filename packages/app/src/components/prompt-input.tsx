@@ -1697,9 +1697,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         class="flex-1 flex items-center text-11-regular min-w-0"
                         style={{ "font-weight": "var(--font-weight-medium)" }}
                       >
-                        <span class="truncate min-w-0">
-                          <span class="text-text-weak">{getDirectory(item.path)}</span>
-                          <span class="text-text-strong">{getFilename(item.path)}</span>
+                        <span class="truncate min-w-0" style={{ direction: "rtl", "text-align": "left" }}>
+                          <bdi>
+                            <span class="text-text-weak">{getDirectory(item.path)}</span>
+                            <span class="text-text-strong">{getFilename(item.path)}</span>
+                          </bdi>
                         </span>
                         <Show when={item.selection}>
                           {(sel) => (
