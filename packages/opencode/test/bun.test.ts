@@ -166,4 +166,23 @@ describe("BunProc.install provider tracking", () => {
     expect(await pkgExists("zod")).toBe(true)
     expect(await pkgExists("superstruct")).toBe(true)
   })
+
+  test("should not remove package if another provider still uses it", async () => {
+    const { BunProc } = await import("../src/bun")
+
+    // Both providers use zod
+    await BunProc.install("zod", "latest", "anthropic")
+    await BunProc.install("zod", "latest", "openai")
+
+    // anthropic switches to superstruct
+    await BunProc.install("superstruct", "latest", "anthropic")
+
+    // zod should still exist because openai uses it
+    expect(await pkgExists("zod")).toBe(true)
+    expect(await pkgExists("superstruct")).toBe(true)
+
+    const pkgJson = await readPkgJson()
+    expect(pkgJson.opencode?.providers?.anthropic).toBe("superstruct")
+    expect(pkgJson.opencode?.providers?.openai).toBe("zod")
+  })
 })

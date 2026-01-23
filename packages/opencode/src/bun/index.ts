@@ -94,9 +94,22 @@ export namespace BunProc {
     const oldPkg = provider ? parsed.opencode?.providers?.[provider] : undefined
     const pkgSwitched = oldPkg && oldPkg !== pkg
 
-    if (!modExists || !cachedVersion) {
-      // continue to install
-    } else if (version !== "latest" && cachedVersion === version) {
+    if (pkgSwitched) {
+      const providers = parsed.opencode?.providers ?? {}
+      const used = Object.entries(providers).some(([p, name]) => p !== provider && name === oldPkg)
+      if (used) {
+        log.info("provider package changed but still used", { provider, old: oldPkg, new: pkg })
+      } else {
+        log.info("provider package changed", { provider, old: oldPkg, new: pkg })
+        await BunProc.run(["remove", "--cwd", Global.Path.cache, oldPkg]).catch(() => {})
+      }
+    }
+
+    // Re-read after potential remove, check if already installed
+    const current = pkgSwitched ? await readPackageJson() : parsed
+    const installed = current.dependencies?.[pkg]
+    if (installed && (version === "latest" || installed === version) && (await Filesystem.exists(mod))) {
+      if (provider) await track(provider, pkg)
       return mod
     } else if (version === "latest") {
       const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
