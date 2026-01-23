@@ -1681,7 +1681,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 return (
                   <div
                     classList={{
-                      "group shrink-0 flex flex-col gap-1 rounded-[6px] bg-background-stronger border border-border-base pl-2 pr-1 py-1 max-w-[200px]": true,
+                      "group shrink-0 flex flex-col gap-1 rounded-[6px] bg-background-stronger border border-border-base pl-2 pr-1 py-1 max-w-[200px] transition-all": true,
                       "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID,
                     }}
                     onClick={() => {
@@ -1713,7 +1713,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         type="button"
                         icon="close-small"
                         variant="ghost"
-                        class="h-5 w-5 opacity-0 group-hover:opacity-100"
+                        class="h-5 w-5 opacity-0 group-hover:opacity-100 transition-all"
                         onClick={(e) => {
                           e.stopPropagation()
                           if (item.commentID) comments.remove(item.path, item.commentID)
