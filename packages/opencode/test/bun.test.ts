@@ -63,6 +63,13 @@ describe("BunProc.install provider tracking", () => {
       .catch(() => false)
   }
 
+  const SEMVER_REGEX =
+    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+
+  function isExactVersion(v: string) {
+    return typeof v === "string" && SEMVER_REGEX.test(v)
+  }
+
   test("should track provider in opencode.providers section", async () => {
     const { BunProc } = await import("../src/bun")
 
@@ -70,6 +77,7 @@ describe("BunProc.install provider tracking", () => {
 
     const pkgJson = await readPkgJson()
     expect(pkgJson.opencode?.providers?.anthropic).toBe("zod")
+    expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
   })
 
   test("should install package in node_modules", async () => {
@@ -78,18 +86,22 @@ describe("BunProc.install provider tracking", () => {
     await BunProc.install("zod", "latest", "anthropic")
 
     expect(await pkgExists("zod")).toBe(true)
+    const pkgJson = await readPkgJson()
+    expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
   })
 
   test("should update tracking when provider switches packages", async () => {
     const { BunProc } = await import("../src/bun")
 
     await BunProc.install("zod", "latest", "anthropic")
-    let pkgJson = await readPkgJson()
-    expect(pkgJson.opencode?.providers?.anthropic).toBe("zod")
+    const pkgJson1 = await readPkgJson()
+    expect(pkgJson1.opencode?.providers?.anthropic).toBe("zod")
+    expect(isExactVersion(pkgJson1.dependencies?.zod)).toBe(true)
 
     await BunProc.install("superstruct", "latest", "anthropic")
-    pkgJson = await readPkgJson()
-    expect(pkgJson.opencode?.providers?.anthropic).toBe("superstruct")
+    const pkgJson2 = await readPkgJson()
+    expect(pkgJson2.opencode?.providers?.anthropic).toBe("superstruct")
+    expect(isExactVersion(pkgJson2.dependencies?.superstruct)).toBe(true)
   })
 
   test("should remove old package when provider switches", async () => {
@@ -100,30 +112,23 @@ describe("BunProc.install provider tracking", () => {
 
     await BunProc.install("superstruct", "latest", "anthropic")
 
-    // Old package should be removed
     expect(await pkgExists("zod")).toBe(false)
-    // New package should be installed
     expect(await pkgExists("superstruct")).toBe(true)
   })
 
   test("should remove old package even when new package is already cached", async () => {
     const { BunProc } = await import("../src/bun")
 
-    // Install zod for provider-a
     await BunProc.install("zod", "latest", "provider-a")
     expect(await pkgExists("zod")).toBe(true)
 
-    // Install superstruct for provider-b (now superstruct is cached)
     await BunProc.install("superstruct", "latest", "provider-b")
     expect(await pkgExists("superstruct")).toBe(true)
 
-    // Switch provider-a from zod to superstruct (superstruct already cached)
     await BunProc.install("superstruct", "latest", "provider-a")
 
-    // zod should be removed since provider-a no longer uses it
     expect(await pkgExists("zod")).toBe(false)
 
-    // Tracking should be updated
     const pkgJson = await readPkgJson()
     expect(pkgJson.opencode?.providers?.["provider-a"]).toBe("superstruct")
     expect(pkgJson.opencode?.providers?.["provider-b"]).toBe("superstruct")
@@ -132,13 +137,9 @@ describe("BunProc.install provider tracking", () => {
   test("should not remove package if provider is not switching", async () => {
     const { BunProc } = await import("../src/bun")
 
-    // Install zod for anthropic
+    await BunProc.install("zod", "latest", "anthropic")
     await BunProc.install("zod", "latest", "anthropic")
 
-    // Install same package again (e.g., version check)
-    await BunProc.install("zod", "latest", "anthropic")
-
-    // Package should still exist
     expect(await pkgExists("zod")).toBe(true)
   })
 
@@ -149,8 +150,8 @@ describe("BunProc.install provider tracking", () => {
 
     expect(await pkgExists("zod")).toBe(true)
     const pkgJson = await readPkgJson()
-    // No provider tracking when providerID not provided
     expect(pkgJson.opencode?.providers).toBeUndefined()
+    expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
   })
 
   test("should track multiple providers independently", async () => {
@@ -165,19 +166,17 @@ describe("BunProc.install provider tracking", () => {
 
     expect(await pkgExists("zod")).toBe(true)
     expect(await pkgExists("superstruct")).toBe(true)
+    expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
+    expect(isExactVersion(pkgJson.dependencies?.superstruct)).toBe(true)
   })
 
   test("should not remove package if another provider still uses it", async () => {
     const { BunProc } = await import("../src/bun")
 
-    // Both providers use zod
     await BunProc.install("zod", "latest", "anthropic")
     await BunProc.install("zod", "latest", "openai")
-
-    // anthropic switches to superstruct
     await BunProc.install("superstruct", "latest", "anthropic")
 
-    // zod should still exist because openai uses it
     expect(await pkgExists("zod")).toBe(true)
     expect(await pkgExists("superstruct")).toBe(true)
 
@@ -189,7 +188,6 @@ describe("BunProc.install provider tracking", () => {
   test("should work when package.json exists without opencode section", async () => {
     const { BunProc } = await import("../src/bun")
 
-    // Create package.json without opencode section
     await fs.writeFile(path.join(tempDir, "package.json"), JSON.stringify({ dependencies: {} }, null, 2))
 
     await BunProc.install("zod", "latest", "anthropic")
@@ -197,18 +195,29 @@ describe("BunProc.install provider tracking", () => {
     const pkgJson = await readPkgJson()
     expect(pkgJson.opencode?.providers?.anthropic).toBe("zod")
     expect(await pkgExists("zod")).toBe(true)
+    expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
   })
 
   test("should work when opencode section exists without providers", async () => {
     const { BunProc } = await import("../src/bun")
 
-    // Create package.json with opencode but no providers
     await fs.writeFile(path.join(tempDir, "package.json"), JSON.stringify({ dependencies: {}, opencode: {} }, null, 2))
 
     await BunProc.install("zod", "latest", "anthropic")
 
     const pkgJson = await readPkgJson()
     expect(pkgJson.opencode?.providers?.anthropic).toBe("zod")
+    expect(await pkgExists("zod")).toBe(true)
+    expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
+  })
+
+  test("should install exact version when specific version provided", async () => {
+    const { BunProc } = await import("../src/bun")
+
+    await BunProc.install("zod", "3.23.0", "anthropic")
+
+    const pkgJson = await readPkgJson()
+    expect(pkgJson.dependencies?.zod).toBe("3.23.0")
     expect(await pkgExists("zod")).toBe(true)
   })
 })
