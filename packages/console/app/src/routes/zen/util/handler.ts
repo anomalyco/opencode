@@ -417,6 +417,7 @@ export async function handler(
             timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
             reloadTrigger: BillingTable.reloadTrigger,
             timeReloadLockedTill: BillingTable.timeReloadLockedTill,
+            subscription: BillingTable.subscription,
           },
           user: {
             id: UserTable.id,
@@ -467,6 +468,7 @@ export async function handler(
       api_key: data.apiKey,
       workspace: data.workspaceID,
       isSubscription: data.subscription ? true : false,
+      subscription: data.billing.subscription?.plan,
     })
 
     return {
@@ -488,10 +490,9 @@ export async function handler(
     if (modelInfo.allowAnonymous) return
 
     // Validate subscription billing
-    if (authInfo.subscription) {
-      const black = BlackData.get()
+    if (authInfo.billing.subscription && authInfo.subscription) {
       const sub = authInfo.subscription
-      const now = new Date()
+      const plan = authInfo.billing.subscription.plan
 
       const formatRetryTime = (seconds: number) => {
         const days = Math.floor(seconds / 86400)
@@ -505,6 +506,7 @@ export async function handler(
       // Check weekly limit
       if (sub.fixedUsage && sub.timeFixedUpdated) {
         const result = Black.analyzeWeeklyUsage({
+          plan,
           usage: sub.fixedUsage,
           timeUpdated: sub.timeFixedUpdated,
         })
@@ -518,6 +520,7 @@ export async function handler(
       // Check rolling limit
       if (sub.rollingUsage && sub.timeRollingUpdated) {
         const result = Black.analyzeRollingUsage({
+          plan,
           usage: sub.rollingUsage,
           timeUpdated: sub.timeRollingUpdated,
         })
@@ -666,7 +669,8 @@ export async function handler(
           .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
         ...(authInfo.subscription
           ? (() => {
-              const black = BlackData.get()
+              const plan = authInfo.billing.subscription!.plan
+              const black = BlackData.getLimits({ plan })
               const week = getWeekBounds(new Date())
               const rollingWindowSeconds = black.rollingWindow * 3600
               return [

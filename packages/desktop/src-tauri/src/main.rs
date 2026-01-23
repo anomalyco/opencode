@@ -52,6 +52,8 @@ fn configure_display_backend() -> Option<String> {
 }
 
 fn main() {
+    unsafe { std::env::set_var("NO_PROXY", "127.0.0.1,localhost,::1") };
+
     #[cfg(target_os = "linux")]
     {
         if let Some(backend_note) = configure_display_backend() {
