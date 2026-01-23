@@ -162,18 +162,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
 
-  const selectionPreview = (path: string, selection: FileSelection | undefined, preview: string | undefined) => {
-    if (preview) return preview
-    if (!selection) return undefined
-    const content = files.get(path)?.content?.content
-    if (!content) return undefined
-    const start = Math.max(1, Math.min(selection.startLine, selection.endLine))
-    const end = Math.max(selection.startLine, selection.endLine)
-    const lines = content.split("\n").slice(start - 1, end)
-    if (lines.length === 0) return undefined
-    return lines.slice(0, 2).join("\n")
-  }
-
   const recent = createMemo(() => {
     const all = tabs().all()
     const active = tabs().active()
@@ -1288,6 +1276,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           id: string
           type: "text"
           text: string
+          synthetic?: boolean
         }
       | {
           id: string
@@ -1325,6 +1314,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           id: Identifier.ascending("part"),
           type: "text",
           text: commentNote(input.path, input.selection, comment),
+          synthetic: true,
         })
       }
 
@@ -1572,7 +1562,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <div class="flex flex-nowrap items-start gap-1.5 px-3 pt-3 overflow-x-auto no-scrollbar">
             <For each={prompt.context.items()}>
               {(item) => {
-                const preview = createMemo(() => selectionPreview(item.path, item.selection, item.preview))
                 return (
                   <div
                     classList={{
@@ -1616,13 +1605,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </div>
                     <Show when={item.comment}>
                       {(comment) => <div class="text-11-regular text-text-strong">{comment()}</div>}
-                    </Show>
-                    <Show when={preview()}>
-                      {(content) => (
-                        <pre class="text-10-regular text-text-weak font-mono whitespace-pre-wrap leading-4">
-                          {content()}
-                        </pre>
-                      )}
                     </Show>
                   </div>
                 )
