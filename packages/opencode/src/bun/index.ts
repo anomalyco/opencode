@@ -7,6 +7,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
 import { createRequire } from "module"
 import { Lock } from "../util/lock"
+import { Flag } from "../flag/flag"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
@@ -89,9 +90,10 @@ export namespace BunProc {
       "add",
       "--force",
       "--exact",
-      "--backend=copyfile",
       // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
       ...(proxied ? ["--no-cache"] : []),
+      // Support custom backend (e.g., --backend=copyfile for NFS)
+      ...(Flag.OPENCODE_BUN_BACKEND ? ["--backend=" + Flag.OPENCODE_BUN_BACKEND] : []),
       "--cwd",
       Global.Path.cache,
       pkg + "@" + version,

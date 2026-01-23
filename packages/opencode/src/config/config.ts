@@ -212,16 +212,23 @@ export namespace Config {
     const hasGitIgnore = await Bun.file(gitignore).exists()
     if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
 
-    await BunProc.run(
-      ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION), "--exact"],
-      {
-        cwd: dir,
-      },
-    ).catch(() => {})
+    const bunArgs = ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION), "--exact"]
+    // Support custom backend (e.g., --backend=copyfile for NFS)
+    if (Flag.OPENCODE_BUN_BACKEND) {
+      bunArgs.push("--backend=" + Flag.OPENCODE_BUN_BACKEND)
+    }
+
+    await BunProc.run(bunArgs, {
+      cwd: dir,
+    }).catch(() => {})
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
+    const installArgs = ["install"]
+    if (Flag.OPENCODE_BUN_BACKEND) {
+      installArgs.push("--backend=" + Flag.OPENCODE_BUN_BACKEND)
+    }
+    await BunProc.run(installArgs, { cwd: dir }).catch(() => {})
   }
 
   function rel(item: string, patterns: string[]) {
