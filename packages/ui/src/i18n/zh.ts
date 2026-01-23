@@ -37,6 +37,7 @@ export const dict = {
 
   "ui.list.loading": "加载中",
   "ui.list.empty": "无结果",
+  "ui.list.clearFilter": "清除筛选",
   "ui.list.emptyWithFilter.prefix": "没有关于",
   "ui.list.emptyWithFilter.suffix": "的结果",
 
@@ -68,6 +69,7 @@ export const dict = {
   "ui.common.cancel": "取消",
   "ui.common.confirm": "确认",
   "ui.common.dismiss": "忽略",
+  "ui.common.close": "关闭",
   "ui.common.next": "下一步",
   "ui.common.submit": "提交",
 
