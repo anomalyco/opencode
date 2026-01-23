@@ -6,6 +6,10 @@
 - API 访问不重复前缀
 - 本地静态资源可直接加载
 
+## 背景与关键经验
+- 旧 UI 版本（例如 1.1.30）**不会使用** `window.__OPENCODE_BASE_URL__` 拼 API，会导致请求打到根路径（如 `/global/health`），在反向代理下直接 404。
+- 因此仅更新二进制不够，必须同步最新 `packages/app/dist`，并设置 `OPENCODE_APP_DIR` 指向本地 UI 目录。
+
 ## 版本基线（本次固定）
 - 官方基线：`release: v1.1.34`（commit `c130dd425`）
 - 分支：`mo-release/v1.1.34`
@@ -32,6 +36,25 @@
 前端读取 `window.__OPENCODE_BASE_URL__`：
 - Router `base` 由该值派生
 - SDK 默认 `baseUrl = origin + basePath`
+
+### 4) 自动打开项目（目录级路由）
+在 `DirectoryLayout` 中自动调用 `layout.projects.open(dir)`，避免手动点击“+”：
+```
+createEffect(() => {
+  if (!server.ready()) return
+  const dir = directory()
+  if (dir) {
+    layout.projects.open(dir)
+  }
+})
+```
+
+### 5) JupyterLab 扩展 URL
+JupyterLab 侧使用 base64 编码目录路径，确保 URL 合规：
+```
+const workDir = btoa('/home/jovyan/work')
+this.iframe.url = `${OPENCODE_URL_PREFIX}${res.data.hub_name}/${workDir}/session`
+```
 
 ## 典型 URL 示例
 ```

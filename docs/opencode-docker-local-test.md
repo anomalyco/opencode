@@ -6,6 +6,12 @@
 - 项目自动打开与会话创建
 - 消息请求正常返回
 
+## 验收标准
+- UI 能在 basePath 下正常加载（/L2hvbWU.../session）
+- 项目列表可见且包含 worktree
+- 自动打开项目，无需手动“+”
+- 会话可创建并正常收到回复
+
 ## 环境要求
 - Node >= 20.19（本机可用 `v20.19.4`）
 - Bun（建议 >= 1.3.x）
@@ -54,6 +60,12 @@ curl -sS http://127.0.0.1:14097/hub_api/opencode/test-token/project
 ```
 http://127.0.0.1:14097/hub_api/opencode/test-token/L2hvbWUvam92eWFuL3dvcms=/session
 ```
+
+## 调试方法（可选）
+- Console：确认无路由错误，`server.ready()` 为 true
+- Network：接口不应出现双重 basePath
+  - `/global/health` / `/project` / `/session`
+- SSE：`/global/event` 有心跳（30s）
 
 ## 常见问题
 - **Node 版本过低**：Vite 7 需要 >= 20.19。
