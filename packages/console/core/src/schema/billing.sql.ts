@@ -31,6 +31,7 @@ export const BillingTable = mysqlTable(
     subscriptionID: varchar("subscription_id", { length: 28 }),
     subscriptionPlan: mysqlEnum("subscription_plan", SubscriptionPlan),
     timeSubscriptionBooked: utc("time_subscription_booked"),
+    timeSubscriptionSelected: utc("time_subscription_selected"),
   },
   (table) => [
     ...workspaceIndexes(table),

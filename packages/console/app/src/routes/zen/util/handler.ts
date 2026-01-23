@@ -468,6 +468,7 @@ export async function handler(
       api_key: data.apiKey,
       workspace: data.workspaceID,
       isSubscription: data.subscription ? true : false,
+      subscription: data.billing.subscription?.plan,
     })
 
     return {
@@ -669,7 +670,7 @@ export async function handler(
         ...(authInfo.subscription
           ? (() => {
               const plan = authInfo.billing.subscription!.plan
-              const black = BlackData.get({ plan })
+              const black = BlackData.getLimits({ plan })
               const week = getWeekBounds(new Date())
               const rollingWindowSeconds = black.rollingWindow * 3600
               return [

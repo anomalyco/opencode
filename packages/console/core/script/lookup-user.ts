@@ -129,14 +129,17 @@ async function printWorkspace(workspaceID: string) {
           booked: BillingTable.timeSubscriptionBooked,
           enrichment: BillingTable.subscription,
         },
+        timeSubscriptionSelected: BillingTable.timeSubscriptionSelected,
       })
       .from(BillingTable)
       .where(eq(BillingTable.workspaceID, workspace.id))
       .then(
         (rows) =>
           rows.map((row) => ({
-            ...row,
             balance: `$${(row.balance / 100000000).toFixed(2)}`,
+            reload: row.reload ? "yes" : "no",
+            customerID: row.customerID,
+            subscriptionID: row.subscriptionID,
             subscription: row.subscriptionID
               ? [
                   `Black ${row.subscription.enrichment!.plan}`,
@@ -145,7 +148,7 @@ async function printWorkspace(workspaceID: string) {
                   `(ref: ${row.subscriptionID})`,
                 ].join(" ")
               : row.subscription.booked
-                ? `Waitlist ${row.subscription.plan} plan`
+                ? `Waitlist ${row.subscription.plan} plan${row.timeSubscriptionSelected ? " (selected)" : ""}`
                 : undefined,
           }))[0],
       ),
@@ -244,7 +247,7 @@ function getSubscriptionStatus(row: {
     return { weekly: null, rolling: null, rateLimited: null, retryIn: null }
   }
 
-  const black = BlackData.get({ plan: row.subscription.plan })
+  const black = BlackData.getLimits({ plan: row.subscription.plan })
   const now = new Date()
   const week = getWeekBounds(now)
 
