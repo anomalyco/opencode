@@ -79,15 +79,27 @@ export namespace ModelsDev {
   export async function get() {
     refresh()
     const file = Bun.file(filepath)
-    const result = await file.json().catch(() => {})
-    if (result) return result as Record<string, Provider>
-    if (typeof data === "function") {
+    let result = await file.json().catch(() => {})
+
+    if (!result && typeof data === "function") {
       const json = await data()
-      return JSON.parse(json) as Record<string, Provider>
+      result = JSON.parse(json)
     }
-    const url = Global.Path.modelsDevUrl
-    const json = await fetch(`${url}/api.json`).then((x) => x.text())
-    return JSON.parse(json) as Record<string, Provider>
+
+    if (!result) {
+      const url = Global.Path.modelsDevUrl
+      const json = await fetch(`${url}/api.json`).then((x) => x.text())
+      result = JSON.parse(json)
+    }
+
+    // Only expose the allowed providers (non-destructive runtime filter)
+    const allowed = new Set(["github-copilot"])
+    const providers = (result as Record<string, Provider>) || {}
+    const filtered = Object.fromEntries(
+      Object.entries(providers).filter(([key, val]) => allowed.has(key) || (val && typeof val === "object" && allowed.has((val as any).id))),
+    ) as Record<string, Provider>
+
+    return filtered
   }
 
   export async function refresh() {
