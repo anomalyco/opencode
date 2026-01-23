@@ -126,7 +126,7 @@ export function AppInterface(props: { defaultUrl?: string }) {
                 <Route
                   path="/session/:id?"
                   component={(p) => (
-                    <Show when={p.params.id ?? "new"} keyed>
+                    <Show when={p.params.id ?? "new"}>
                       <TerminalProvider>
                         <FileProvider>
                           <PromptProvider>
