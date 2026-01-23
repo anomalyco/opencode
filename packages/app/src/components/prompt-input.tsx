@@ -1394,7 +1394,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             />
                             <div class="flex items-center text-14-regular min-w-0">
                               <span class="text-text-weak whitespace-nowrap truncate min-w-0">
-                                {getDirectory((item as { type: "file"; path: string }).path)}
+                                {(() => {
+                                  const path = (item as { type: "file"; path: string }).path
+                                  return path.endsWith("/") ? path : getDirectory(path)
+                                })()}
                               </span>
                               <Show when={!(item as { type: "file"; path: string }).path.endsWith("/")}>
                                 <span class="text-text-strong whitespace-nowrap">
