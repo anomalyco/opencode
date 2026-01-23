@@ -1,6 +1,7 @@
 import { Show } from "solid-js"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { useSession } from "@/context/session"
 import { useServer } from "@/context/server"
 
@@ -44,9 +45,10 @@ export function SessionIndicator() {
           as={Button}
           variant="ghost"
           size="small"
-          class="text-text-base hover:bg-surface-base-active"
+          class="text-text-base hover:bg-surface-base-active flex items-center gap-1"
         >
           {session.username()}
+          <Icon name="chevron-down" size="small" />
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content class="mt-1">
