@@ -18,6 +18,13 @@
 
 ---
 
+### Fork Notes
+
+This fork adds:
+
+- Windows Terminal: paste clipboard images directly into the prompt input.
+- TUI: double-press `esc` to clear prompt input.
+
 ### Installation
 
 ```bash
