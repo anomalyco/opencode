@@ -145,8 +145,8 @@ jobs:
           files: |
             release-binaries/*
             install-opencode.sh
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos:
     runs-on: macos-latest
