@@ -122,14 +122,12 @@ function createPromptSession(dir: string, id: string | undefined) {
       prompt: Prompt
       cursor?: number
       context: {
-        activeTab: boolean
         items: (ContextItem & { key: string })[]
       }
     }>({
       prompt: clonePrompt(DEFAULT_PROMPT),
       cursor: undefined,
       context: {
-        activeTab: true,
         items: [],
       },
     }),
@@ -157,14 +155,7 @@ function createPromptSession(dir: string, id: string | undefined) {
     cursor: createMemo(() => store.cursor),
     dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
     context: {
-      activeTab: createMemo(() => store.context.activeTab),
       items: createMemo(() => store.context.items),
-      addActive() {
-        setStore("context", "activeTab", true)
-      },
-      removeActive() {
-        setStore("context", "activeTab", false)
-      },
       add(item: ContextItem) {
         const key = keyForItem(item)
         if (store.context.items.find((x) => x.key === key)) return
@@ -243,10 +234,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       cursor: () => session().cursor(),
       dirty: () => session().dirty(),
       context: {
-        activeTab: () => session().context.activeTab(),
         items: () => session().context.items(),
-        addActive: () => session().context.addActive(),
-        removeActive: () => session().context.removeActive(),
         add: (item: ContextItem) => session().context.add(item),
         remove: (key: string) => session().context.remove(key),
       },

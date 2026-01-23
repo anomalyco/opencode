@@ -1810,8 +1810,6 @@ export default function Page() {
                     let pending: { x: number; y: number } | undefined
                     let codeScroll: HTMLElement[] = []
 
-                    const [selectionPopoverTop, setSelectionPopoverTop] = createSignal<number | undefined>()
-
                     const path = createMemo(() => file.pathFromTab(tab))
                     const state = createMemo(() => {
                       const p = path()
@@ -1854,17 +1852,6 @@ export default function Page() {
                       if (!p) return null
                       if (file.ready()) return file.selectedLines(p) ?? null
                       return handoff.files[p] ?? null
-                    })
-                    const selection = createMemo(() => {
-                      const range = selectedLines()
-                      if (!range) return
-                      return selectionFromLines(range)
-                    })
-                    const selectionLabel = createMemo(() => {
-                      const sel = selection()
-                      if (!sel) return
-                      if (sel.startLine === sel.endLine) return `L${sel.startLine}`
-                      return `L${sel.startLine}-${sel.endLine}`
                     })
 
                     let wrap: HTMLDivElement | undefined
@@ -1991,7 +1978,6 @@ export default function Page() {
                           commentedLines={commentedLines()}
                           onRendered={() => {
                             requestAnimationFrame(restoreScroll)
-                            requestAnimationFrame(updateSelectionPopover)
                             requestAnimationFrame(scheduleComments)
                           }}
                           onLineSelected={(range: SelectedLineRange | null) => {
@@ -2117,61 +2103,6 @@ export default function Page() {
                           )}
                         </Show>
                       </div>
-                    )
-
-                    const updateSelectionPopover = () => {
-                      const el = scroll
-                      if (!el) {
-                        setSelectionPopoverTop(undefined)
-                        return
-                      }
-
-                      const sel = selection()
-                      if (!sel) {
-                        setSelectionPopoverTop(undefined)
-                        return
-                      }
-
-                      const host = el.querySelector("diffs-container")
-                      if (!(host instanceof HTMLElement)) {
-                        setSelectionPopoverTop(undefined)
-                        return
-                      }
-
-                      const root = host.shadowRoot
-                      if (!root) {
-                        setSelectionPopoverTop(undefined)
-                        return
-                      }
-
-                      const marker =
-                        (root.querySelector(
-                          '[data-selected-line="last"], [data-selected-line="single"]',
-                        ) as HTMLElement | null) ?? (root.querySelector("[data-selected-line]") as HTMLElement | null)
-
-                      if (!marker) {
-                        setSelectionPopoverTop(undefined)
-                        return
-                      }
-
-                      const containerRect = el.getBoundingClientRect()
-                      const markerRect = marker.getBoundingClientRect()
-                      setSelectionPopoverTop(markerRect.bottom - containerRect.top + el.scrollTop + 8)
-                    }
-
-                    createEffect(
-                      on(
-                        selection,
-                        (sel) => {
-                          if (!sel) {
-                            setSelectionPopoverTop(undefined)
-                            return
-                          }
-
-                          requestAnimationFrame(updateSelectionPopover)
-                        },
-                        { defer: true },
-                      ),
                     )
 
                     const getCodeScroll = () => {
@@ -2312,41 +2243,9 @@ export default function Page() {
                         ref={(el: HTMLDivElement) => {
                           scroll = el
                           restoreScroll()
-                          updateSelectionPopover()
                         }}
                         onScroll={handleScroll}
                       >
-                        <Show when={activeTab() === tab}>
-                          <Show when={selectionPopoverTop() !== undefined && selection()}>
-                            {(sel) => (
-                              <div class="absolute z-20 right-6" style={{ top: `${selectionPopoverTop() ?? 0}px` }}>
-                                <TooltipKeybind
-                                  placement="bottom"
-                                  title="Add selection to context"
-                                  keybind={command.keybind("context.addSelection")}
-                                >
-                                  <button
-                                    type="button"
-                                    class="group relative flex items-center gap-2 h-6 px-2.5 rounded-md bg-surface-raised-stronger-non-alpha border border-border-weak-base text-12-medium text-text-strong shadow-xs-border whitespace-nowrap hover:bg-surface-raised-stronger-hover hover:border-border-hover focus:outline-none focus-visible:shadow-xs-border-focus"
-                                    onClick={() => {
-                                      const p = path()
-                                      if (!p) return
-                                      addSelectionToContext(p, sel())
-                                    }}
-                                  >
-                                    <span class="pointer-events-none absolute -left-1 top-1/2 size-2.5 -translate-y-1/2 rotate-45 bg-surface-raised-stronger-non-alpha border-l border-b border-border-weak-base group-hover:bg-surface-raised-stronger-hover group-hover:border-border-hover" />
-                                    <Icon name="plus-small" size="small" />
-                                    <span>
-                                      {language.t("session.context.addToContext", {
-                                        selection: selectionLabel() ?? "",
-                                      })}
-                                    </span>
-                                  </button>
-                                </TooltipKeybind>
-                              </div>
-                            )}
-                          </Show>
-                        </Show>
                         <Switch>
                           <Match when={state()?.loaded && isImage()}>
                             <div class="px-6 py-4 pb-40">
