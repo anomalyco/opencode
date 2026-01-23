@@ -1388,10 +1388,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       model,
     }
 
-    const setSyncStore = sessionDirectory === projectDirectory ? sync.set : globalSync.child(sessionDirectory)[1]
-
     const addOptimisticMessage = () => {
-      setSyncStore(
+      if (sessionDirectory === projectDirectory) {
+        sync.set(
+          produce((draft) => {
+            const messages = draft.message[session.id]
+            if (!messages) {
+              draft.message[session.id] = [optimisticMessage]
+            } else {
+              const result = Binary.search(messages, messageID, (m) => m.id)
+              messages.splice(result.index, 0, optimisticMessage)
+            }
+            draft.part[messageID] = optimisticParts
+              .filter((p) => !!p?.id)
+              .slice()
+              .sort((a, b) => a.id.localeCompare(b.id))
+          }),
+        )
+        return
+      }
+
+      globalSync.child(sessionDirectory)[1](
         produce((draft) => {
           const messages = draft.message[session.id]
           if (!messages) {
@@ -1409,7 +1426,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     const removeOptimisticMessage = () => {
-      setSyncStore(
+      if (sessionDirectory === projectDirectory) {
+        sync.set(
+          produce((draft) => {
+            const messages = draft.message[session.id]
+            if (messages) {
+              const result = Binary.search(messages, messageID, (m) => m.id)
+              if (result.found) messages.splice(result.index, 1)
+            }
+            delete draft.part[messageID]
+          }),
+        )
+        return
+      }
+
+      globalSync.child(sessionDirectory)[1](
         produce((draft) => {
           const messages = draft.message[session.id]
           if (messages) {

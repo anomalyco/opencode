@@ -101,15 +101,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         })
     }
 
-    const set: (...args: Parameters<Setter>) => ReturnType<Setter> = (...args) => {
-      return current()[1](...args)
-    }
-
     return {
       get data() {
         return current()[0]
       },
-      set,
+      get set(): Setter {
+        return current()[1]
+      },
       get status() {
         return current()[0].status
       },
