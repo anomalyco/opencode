@@ -23,14 +23,46 @@
   overflow: hidden;
   padding: 0 12px;
 
-  [data-slot="list-search"] {
+  [data-slot="list-search-wrapper"] {
     display: flex;
     flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+    align-self: stretch;
+    margin-bottom: 4px;
+    padding-right: 4px;
+
+    > [data-component="icon-button"] {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      background-color: transparent;
+      opacity: 0.5;
+      transition: opacity 0.15s ease;
+
+      &:hover:not(:disabled),
+      &:focus:not(:disabled),
+      &:active:not(:disabled) {
+        background-color: transparent;
+        opacity: 0.7;
+      }
+
+      &:hover:not(:disabled) [data-slot="icon-svg"] {
+        color: var(--icon-hover);
+      }
+
+      &:active:not(:disabled) [data-slot="icon-svg"] {
+        color: var(--icon-active);
+      }
+    }
+  }
+
+  [data-slot="list-search"] {
+    display: flex;
+    flex: 1;
     padding: 8px;
     align-items: center;
     gap: 12px;
-    align-self: stretch;
-    margin-bottom: 4px;
 
     border-radius: var(--radius-md);
     background: var(--surface-base);

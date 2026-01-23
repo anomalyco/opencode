@@ -1,5 +1,5 @@
 import { createStore, produce } from "solid-js/store"
-import { batch, createEffect, createMemo, onCleanup, onMount } from "solid-js"
+import { batch, createEffect, createMemo, on, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
@@ -222,13 +222,36 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const metadata = projectID
         ? globalSync.data.project.find((x) => x.id === projectID)
         : globalSync.data.project.find((x) => x.worktree === project.worktree)
-      return {
+
+      const local = childStore.projectMeta
+      const localOverride =
+        local?.name !== undefined ||
+        local?.commands?.start !== undefined ||
+        local?.icon?.override !== undefined ||
+        local?.icon?.color !== undefined
+
+      const base = {
         ...(metadata ?? {}),
         ...project,
         icon: {
           url: metadata?.icon?.url,
-          override: metadata?.icon?.override,
+          override: metadata?.icon?.override ?? childStore.icon,
           color: metadata?.icon?.color,
+        },
+      }
+
+      const isGlobal = projectID === "global" || (metadata?.id === undefined && localOverride)
+      if (!isGlobal) return base
+
+      return {
+        ...base,
+        id: base.id ?? "global",
+        name: local?.name,
+        commands: local?.commands,
+        icon: {
+          url: base.icon?.url,
+          override: local?.icon?.override,
+          color: local?.icon?.color,
         },
       }
     }
@@ -283,6 +306,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const projects = enriched()
       if (projects.length === 0) return
 
+      if (globalSync.ready) {
+        for (const project of projects) {
+          if (!project.id) continue
+          if (project.id === "global") continue
+          globalSync.project.icon(project.worktree, project.icon?.override)
+        }
+      }
+
       const used = new Set<string>()
       for (const project of projects) {
         const color = project.icon?.color ?? colors[project.worktree]
@@ -291,12 +322,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
       for (const project of projects) {
         if (project.icon?.color) continue
-        if (colors[project.worktree]) continue
-        const color = pickAvailableColor(used)
-        used.add(color)
-        setColors(project.worktree, color)
+        const existing = colors[project.worktree]
+        const color = existing ?? pickAvailableColor(used)
+        if (!existing) {
+          used.add(color)
+          setColors(project.worktree, color)
+        }
         if (!project.id) continue
-        void globalSdk.client.project.update({ projectID: project.id, icon: { color } })
+        if (project.id === "global") {
+          globalSync.project.meta(project.worktree, { icon: { color } })
+          continue
+        }
+        void globalSdk.client.project.update({ projectID: project.id, directory: project.worktree, icon: { color } })
       }
     })
 
@@ -395,10 +432,24 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("mobileSidebar", "opened", (x) => !x)
         },
       },
-      view(sessionKey: string) {
-        touch(sessionKey)
-        scroll.seed(sessionKey)
-        const s = createMemo(() => store.sessionView[sessionKey] ?? { scroll: {} })
+      view(sessionKey: string | Accessor<string>) {
+        const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
+
+        touch(key())
+        scroll.seed(key())
+
+        createEffect(
+          on(
+            key,
+            (value) => {
+              touch(value)
+              scroll.seed(value)
+            },
+            { defer: true },
+          ),
+        )
+
+        const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
 
@@ -428,10 +479,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
         return {
           scroll(tab: string) {
-            return scroll.scroll(sessionKey, tab)
+            return scroll.scroll(key(), tab)
           },
           setScroll(tab: string, pos: SessionScroll) {
-            scroll.setScroll(sessionKey, tab, pos)
+            scroll.setScroll(key(), tab, pos)
           },
           terminal: {
             opened: terminalOpened,
@@ -460,9 +511,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           review: {
             open: createMemo(() => s().reviewOpen),
             setOpen(open: string[]) {
-              const current = store.sessionView[sessionKey]
+              const session = key()
+              const current = store.sessionView[session]
               if (!current) {
-                setStore("sessionView", sessionKey, {
+                setStore("sessionView", session, {
                   scroll: {},
                   reviewOpen: open,
                 })
@@ -470,93 +522,111 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               }
 
               if (same(current.reviewOpen, open)) return
-              setStore("sessionView", sessionKey, "reviewOpen", open)
+              setStore("sessionView", session, "reviewOpen", open)
             },
           },
         }
       },
-      tabs(sessionKey: string) {
-        touch(sessionKey)
-        const tabs = createMemo(() => store.sessionTabs[sessionKey] ?? { all: [] })
+      tabs(sessionKey: string | Accessor<string>) {
+        const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
+
+        touch(key())
+
+        createEffect(
+          on(
+            key,
+            (value) => {
+              touch(value)
+            },
+            { defer: true },
+          ),
+        )
+
+        const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
         return {
           tabs,
           active: createMemo(() => tabs().active),
           all: createMemo(() => tabs().all),
           setActive(tab: string | undefined) {
-            if (!store.sessionTabs[sessionKey]) {
-              setStore("sessionTabs", sessionKey, { all: [], active: tab })
+            const session = key()
+            if (!store.sessionTabs[session]) {
+              setStore("sessionTabs", session, { all: [], active: tab })
             } else {
-              setStore("sessionTabs", sessionKey, "active", tab)
+              setStore("sessionTabs", session, "active", tab)
             }
           },
           setAll(all: string[]) {
-            if (!store.sessionTabs[sessionKey]) {
-              setStore("sessionTabs", sessionKey, { all, active: undefined })
+            const session = key()
+            if (!store.sessionTabs[session]) {
+              setStore("sessionTabs", session, { all, active: undefined })
             } else {
-              setStore("sessionTabs", sessionKey, "all", all)
+              setStore("sessionTabs", session, "all", all)
             }
           },
           async open(tab: string) {
-            const current = store.sessionTabs[sessionKey] ?? { all: [] }
+            const session = key()
+            const current = store.sessionTabs[session] ?? { all: [] }
 
             if (tab === "review") {
-              if (!store.sessionTabs[sessionKey]) {
-                setStore("sessionTabs", sessionKey, { all: [], active: tab })
+              if (!store.sessionTabs[session]) {
+                setStore("sessionTabs", session, { all: [], active: tab })
                 return
               }
-              setStore("sessionTabs", sessionKey, "active", tab)
+              setStore("sessionTabs", session, "active", tab)
               return
             }
 
             if (tab === "context") {
               const all = [tab, ...current.all.filter((x) => x !== tab)]
-              if (!store.sessionTabs[sessionKey]) {
-                setStore("sessionTabs", sessionKey, { all, active: tab })
+              if (!store.sessionTabs[session]) {
+                setStore("sessionTabs", session, { all, active: tab })
                 return
               }
-              setStore("sessionTabs", sessionKey, "all", all)
-              setStore("sessionTabs", sessionKey, "active", tab)
+              setStore("sessionTabs", session, "all", all)
+              setStore("sessionTabs", session, "active", tab)
               return
             }
 
             if (!current.all.includes(tab)) {
-              if (!store.sessionTabs[sessionKey]) {
-                setStore("sessionTabs", sessionKey, { all: [tab], active: tab })
+              if (!store.sessionTabs[session]) {
+                setStore("sessionTabs", session, { all: [tab], active: tab })
                 return
               }
-              setStore("sessionTabs", sessionKey, "all", [...current.all, tab])
-              setStore("sessionTabs", sessionKey, "active", tab)
+              setStore("sessionTabs", session, "all", [...current.all, tab])
+              setStore("sessionTabs", session, "active", tab)
               return
             }
 
-            if (!store.sessionTabs[sessionKey]) {
-              setStore("sessionTabs", sessionKey, { all: current.all, active: tab })
+            if (!store.sessionTabs[session]) {
+              setStore("sessionTabs", session, { all: current.all, active: tab })
               return
             }
-            setStore("sessionTabs", sessionKey, "active", tab)
+            setStore("sessionTabs", session, "active", tab)
           },
           close(tab: string) {
-            const current = store.sessionTabs[sessionKey]
+            const session = key()
+            const current = store.sessionTabs[session]
             if (!current) return
 
             const all = current.all.filter((x) => x !== tab)
             batch(() => {
-              setStore("sessionTabs", sessionKey, "all", all)
+              setStore("sessionTabs", session, "all", all)
               if (current.active !== tab) return
 
               const index = current.all.findIndex((f) => f === tab)
               const next = all[index - 1] ?? all[0]
-              setStore("sessionTabs", sessionKey, "active", next)
+              setStore("sessionTabs", session, "active", next)
             })
           },
           move(tab: string, to: number) {
-            const current = store.sessionTabs[sessionKey]
+            const session = key()
+            const current = store.sessionTabs[session]
             if (!current) return
             const index = current.all.findIndex((f) => f === tab)
             if (index === -1) return
             setStore(
               "sessionTabs",
-              sessionKey,
+              session,
               "all",
               produce((opened) => {
                 opened.splice(to, 0, opened.splice(index, 1)[0])
