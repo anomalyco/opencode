@@ -23,12 +23,6 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build opencode
-        run: cd packages/opencode && bun run build
-
       - name: Get version
         id: version
         run: |
@@ -46,18 +40,39 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Rename binaries for unique filenames
+      - name: Create install script
         run: |
-          mkdir -p release-artifacts
-          for dir in packages/opencode/dist/*/bin; do
-            platform=$(basename $(dirname "$dir"))
-            for bin in "$dir"/*; do
-              if [ -f "$bin" ]; then
-                basename=$(basename "$bin")
-                cp "$bin" "release-artifacts/${platform}-${basename}"
-              fi
-            done
-          done
+          cat > install-opencode.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          echo "Installing OpenCode dev binary..."
+          cd /tmp
+          curl -L -o opencode "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/opencode"
+          chmod +x opencode
+          mkdir -p ~/.opencode/bin
+          mv opencode ~/.opencode/bin/opencode
+          echo "OpenCode installed to ~/.opencode/bin/opencode"
+          echo ""
+          echo "Add to your PATH:"
+          echo '  export PATH="$HOME/.opencode/bin:$PATH"'
+          echo ""
+          echo "Run with: opencode"
+          EOF
+          chmod +x install-opencode.sh
+
+      - name: Build full project
+        run: bun install
+
+      - name: Build linux x64 binary
+        run: |
+          cd packages/opencode
+          bun run build --single
+
+      - name: Copy binary and make executable
+        run: |
+          BINARY=$(find packages/opencode/dist -name "opencode" -type f | head -1)
+          cp "$BINARY" opencode
+          chmod +x opencode
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -66,6 +81,134 @@ jobs:
           name: ${{ steps.version.outputs.release_name }}
           draft: false
           prerelease: true
-          files: release-artifacts/*
+          files: |
+            opencode
+            install-opencode.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./packages/opencode/package.json').version")
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "tag=dev-nfs-${VERSION}-${TIMESTAMP}" >> $GITHUB_OUTPUT
+
+      - name: Build full project
+        run: bun install
+
+      - name: Build macOS arm64 binary
+        run: |
+          cd packages/opencode
+          bun run build --single
+
+      - name: Copy binary and make executable
+        run: |
+          BINARY=$(find packages/opencode/dist -name "opencode" -type f | head -1)
+          cp "$BINARY" opencode-macos-arm64
+          chmod +x opencode-macos-arm64
+
+      - name: Upload macOS binary to existing release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: opencode-macos-arm64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos-intel:
+    runs-on: macos-13
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./packages/opencode/package.json').version")
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "tag=dev-nfs-${VERSION}-${TIMESTAMP}" >> $GITHUB_OUTPUT
+
+      - name: Build full project
+        run: bun install
+
+      - name: Build macOS x64 binary
+        run: |
+          cd packages/opencode
+          bun run build --single
+
+      - name: Copy binary and make executable
+        run: |
+          BINARY=$(find packages/opencode/dist -name "opencode" -type f | head -1)
+          cp "$BINARY" opencode-macos-x64
+          chmod +x opencode-macos-x64
+
+      - name: Upload macOS Intel binary to existing release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: opencode-macos-x64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./packages/opencode/package.json').version")
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "tag=dev-nfs-${VERSION}-${TIMESTAMP}" >> $GITHUB_OUTPUT
+
+      - name: Build full project
+        run: bun install
+
+      - name: Build Windows x64 binary
+        run: |
+          cd packages/opencode
+          bun run build --single
+
+      - name: Copy binary
+        shell: pwsh
+        run: |
+          $binary = Get-ChildItem -Path packages/opencode/dist -Filter opencode.exe -File | Select-Object -First 1
+          Copy-Item $binary.FullName opencode.exe
+
+      - name: Upload Windows binary to existing release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: opencode.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
