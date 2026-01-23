@@ -85,6 +85,65 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         })
     }
 
+    const loadMoreMessagesWithOffset = async (sessionID: string, count: number) => {
+      if (meta.loading[sessionID]) return
+      if (meta.complete[sessionID]) return
+
+      const currentMessages = store.message[sessionID] ?? []
+      const currentCount = currentMessages.length
+      const offset = currentCount
+
+      setMeta("loading", sessionID, true)
+      await retry(() => sdk.client.session.messages({ sessionID, limit: count, offset }))
+        .then((messages) => {
+          const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
+          const newMessages = items
+            .map((x) => x.info)
+            .filter((m) => !!m?.id)
+
+          if (newMessages.length === 0) {
+            setMeta("complete", sessionID, true)
+            return
+          }
+
+          batch(() => {
+            setStore(
+              "message",
+              sessionID,
+              produce((draft) => {
+                for (const msg of newMessages) {
+                  const result = Binary.search(draft, msg.id, (m) => m.id)
+                  if (!result.found) {
+                    draft.splice(result.index, 0, msg)
+                  }
+                }
+              }),
+            )
+
+            for (const message of items) {
+              setStore(
+                "part",
+                message.info.id,
+                reconcile(
+                  message.parts
+                    .filter((p) => !!p?.id)
+                    .slice()
+                    .sort((a, b) => a.id.localeCompare(b.id)),
+                  { key: "id" },
+                ),
+              )
+            }
+
+            const newLimit = (meta.limit[sessionID] ?? chunk) + count
+            setMeta("limit", sessionID, newLimit)
+            setMeta("complete", sessionID, newMessages.length < count)
+          })
+        })
+        .finally(() => {
+          setMeta("loading", sessionID, false)
+        })
+    }
+
     return {
       data: store,
       set: setStore,
@@ -218,11 +277,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             return meta.loading[sessionID] ?? false
           },
           async loadMore(sessionID: string, count = chunk) {
-            if (meta.loading[sessionID]) return
-            if (meta.complete[sessionID]) return
-
-            const current = meta.limit[sessionID] ?? chunk
-            await loadMessages(sessionID, current + count)
+            await loadMoreMessagesWithOffset(sessionID, count)
           },
         },
         fetch: async (count = 10) => {

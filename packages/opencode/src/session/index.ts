@@ -303,10 +303,18 @@ export namespace Session {
     z.object({
       sessionID: Identifier.schema("session"),
       limit: z.number().optional(),
+      offset: z.number().optional(),
     }),
     async (input) => {
       const result = [] as MessageV2.WithParts[]
+      let skipped = 0
+      const offset = input.offset ?? 0
       for await (const msg of MessageV2.stream(input.sessionID)) {
+        // Skip messages until we reach the offset
+        if (skipped < offset) {
+          skipped++
+          continue
+        }
         if (input.limit && result.length >= input.limit) break
         result.push(msg)
       }
