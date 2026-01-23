@@ -12,6 +12,13 @@ import { proxied } from "@/util/proxied"
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
 
+  interface PackageJson {
+    dependencies?: Record<string, string>
+    opencode?: {
+      providers?: Record<string, string>
+    }
+  }
+
   export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
     log.info("running", {
       cmd: [which(), ...cmd],
@@ -61,21 +68,31 @@ export namespace BunProc {
     }),
   )
 
-  export async function install(pkg: string, version = "latest") {
-    // Use lock to ensure only one install at a time
+  async function readPackageJson(): Promise<PackageJson> {
+    const file = Bun.file(path.join(Global.Path.cache, "package.json"))
+    return file.json().catch(() => ({}))
+  }
+
+  async function writePackageJson(parsed: PackageJson) {
+    const file = Bun.file(path.join(Global.Path.cache, "package.json"))
+    await Bun.write(file.name!, JSON.stringify(parsed, null, 2))
+  }
+
+  async function track(provider: string, pkg: string) {
+    const parsed = await readPackageJson()
+    if (!parsed.opencode) parsed.opencode = {}
+    if (!parsed.opencode.providers) parsed.opencode.providers = {}
+    parsed.opencode.providers[provider] = pkg
+    await writePackageJson(parsed)
+  }
+
+  export async function install(pkg: string, version = "latest", provider?: string) {
     using _ = await Lock.write("bun-install")
 
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
-    const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
-    const parsed = await pkgjson.json().catch(async () => {
-      const result = { dependencies: {} }
-      await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
-      return result
-    })
-    const dependencies = parsed.dependencies ?? {}
-    if (!parsed.dependencies) parsed.dependencies = dependencies
-    const modExists = await Filesystem.exists(mod)
-    const cachedVersion = dependencies[pkg]
+    const parsed = await readPackageJson()
+    const oldPkg = provider ? parsed.opencode?.providers?.[provider] : undefined
+    const pkgSwitched = oldPkg && oldPkg !== pkg
 
     if (!modExists || !cachedVersion) {
       // continue to install
@@ -87,7 +104,6 @@ export namespace BunProc {
       log.info("Cached version is outdated, proceeding with install", { pkg, cachedVersion })
     }
 
-    // Build command arguments
     const args = [
       "add",
       "--force",
@@ -99,39 +115,16 @@ export namespace BunProc {
       pkg + "@" + version,
     ]
 
-    // Let Bun handle registry resolution:
-    // - If .npmrc files exist, Bun will use them automatically
-    // - If no .npmrc files exist, Bun will default to https://registry.npmjs.org
-    // - No need to pass --registry flag
-    log.info("installing package using Bun's default registry resolution", {
-      pkg,
-      version,
-    })
+    log.info("installing package", { pkg, version })
 
-    await BunProc.run(args, {
-      cwd: Global.Path.cache,
-    }).catch((e) => {
-      throw new InstallFailedError(
-        { pkg, version },
-        {
-          cause: e,
-        },
-      )
-    })
-
-    // Resolve actual version from installed package when using "latest"
-    // This ensures subsequent starts use the cached version until explicitly updated
-    let resolvedVersion = version
-    if (version === "latest") {
-      const installedPkgJson = Bun.file(path.join(mod, "package.json"))
-      const installedPkg = await installedPkgJson.json().catch(() => null)
-      if (installedPkg?.version) {
-        resolvedVersion = installedPkg.version
+    await BunProc.run(args, { cwd: Global.Path.cache }).catch((e) => {
+      if (pkgSwitched && provider) {
+        log.info("install failed, keeping old provider package tracking", { provider, old: oldPkg })
       }
-    }
+      throw new InstallFailedError({ pkg, version }, { cause: e })
+    })
 
-    parsed.dependencies[pkg] = resolvedVersion
-    await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
+    if (provider) await track(provider, pkg)
     return mod
   }
 }
