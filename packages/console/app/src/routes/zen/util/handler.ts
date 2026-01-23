@@ -533,7 +533,7 @@ export async function handler(
         }
 
         return "subscription"
-      } catch(e) {
+      } catch (e) {
         if (!authInfo.billing.subscription.useBalance) throw e
       }
     }
