@@ -14,9 +14,6 @@ import { dict as da } from "@/i18n/da"
 import { dict as ja } from "@/i18n/ja"
 import { dict as pl } from "@/i18n/pl"
 import { dict as ru } from "@/i18n/ru"
-import { dict as ar } from "@/i18n/ar"
-import { dict as no } from "@/i18n/no"
-import { dict as br } from "@/i18n/br"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
 import { dict as uiZht } from "@opencode-ai/ui/i18n/zht"
@@ -28,16 +25,13 @@ import { dict as uiDa } from "@opencode-ai/ui/i18n/da"
 import { dict as uiJa } from "@opencode-ai/ui/i18n/ja"
 import { dict as uiPl } from "@opencode-ai/ui/i18n/pl"
 import { dict as uiRu } from "@opencode-ai/ui/i18n/ru"
-import { dict as uiAr } from "@opencode-ai/ui/i18n/ar"
-import { dict as uiNo } from "@opencode-ai/ui/i18n/no"
-import { dict as uiBr } from "@opencode-ai/ui/i18n/br"
 
-export type Locale = "en" | "zh" | "zht" | "ko" | "de" | "es" | "fr" | "da" | "ja" | "pl" | "ru" | "ar" | "no" | "br"
+export type Locale = "en" | "zh" | "zht" | "ko" | "de" | "es" | "fr" | "da" | "ja" | "pl" | "ru"
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
 
-const LOCALES: readonly Locale[] = ["en", "zh", "zht", "ko", "de", "es", "fr", "da", "ja", "pl", "ru", "ar", "no", "br"]
+const LOCALES: readonly Locale[] = ["en", "zh", "zht", "ko", "de", "es", "fr", "da", "ja", "pl", "ru"]
 
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
@@ -57,14 +51,6 @@ function detectLocale(): Locale {
     if (language.toLowerCase().startsWith("ja")) return "ja"
     if (language.toLowerCase().startsWith("pl")) return "pl"
     if (language.toLowerCase().startsWith("ru")) return "ru"
-    if (language.toLowerCase().startsWith("ar")) return "ar"
-    if (
-      language.toLowerCase().startsWith("no") ||
-      language.toLowerCase().startsWith("nb") ||
-      language.toLowerCase().startsWith("nn")
-    )
-      return "no"
-    if (language.toLowerCase().startsWith("pt")) return "br"
   }
 
   return "en"
@@ -91,9 +77,6 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       if (store.locale === "ja") return "ja"
       if (store.locale === "pl") return "pl"
       if (store.locale === "ru") return "ru"
-      if (store.locale === "ar") return "ar"
-      if (store.locale === "no") return "no"
-      if (store.locale === "br") return "br"
       return "en"
     })
 
@@ -115,9 +98,6 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       if (locale() === "ja") return { ...base, ...i18n.flatten({ ...ja, ...uiJa }) }
       if (locale() === "pl") return { ...base, ...i18n.flatten({ ...pl, ...uiPl }) }
       if (locale() === "ru") return { ...base, ...i18n.flatten({ ...ru, ...uiRu }) }
-      if (locale() === "ar") return { ...base, ...i18n.flatten({ ...ar, ...uiAr }) }
-      if (locale() === "no") return { ...base, ...i18n.flatten({ ...no, ...uiNo }) }
-      if (locale() === "br") return { ...base, ...i18n.flatten({ ...br, ...uiBr }) }
       return { ...base, ...i18n.flatten({ ...ko, ...uiKo }) }
     })
 
@@ -135,9 +115,6 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       ja: "language.ja",
       pl: "language.pl",
       ru: "language.ru",
-      ar: "language.ar",
-      no: "language.no",
-      br: "language.br",
     }
 
     const label = (value: Locale) => t(labelKey[value])
