@@ -909,13 +909,7 @@ export namespace Provider {
     // detect and populate models
     await Promise.all(
       Object.entries(providers).map(async ([providerID, provider]) => {
-        try {
-          await ProviderModelDetection.populateModels(provider, config.provider?.[providerID], modelsDev[providerID])
-          log.info("detect models", { providerID })
-        }
-        catch (error) {
-          log.warn(`failed to detect models\n${error}`, { providerID })
-        }
+        await ProviderModelDetection.populateModels(provider, config.provider?.[providerID], modelsDev[providerID])
       })
     )
 
