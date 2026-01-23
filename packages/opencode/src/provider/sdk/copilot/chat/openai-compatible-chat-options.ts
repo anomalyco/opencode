@@ -18,6 +18,11 @@ export const openaiCompatibleProviderOptions = z.object({
    * Controls the verbosity of the generated text. Defaults to `medium`.
    */
   textVerbosity: z.string().optional(),
+
+  /**
+   * Copilot thinking_budget used for Anthropic models.
+   */
+  thinking_budget: z.number().optional(),
 });
 
 export type OpenAICompatibleProviderOptions = z.infer<

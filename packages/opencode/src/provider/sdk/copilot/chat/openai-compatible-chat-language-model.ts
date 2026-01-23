@@ -116,7 +116,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
     // Parse provider options
     const compatibleOptions = Object.assign(
       (await parseProviderOptions({
-        provider: 'openai-compatible',
+        provider: 'copilot',
         providerOptions,
         schema: openaiCompatibleProviderOptions,
       })) ?? {},
@@ -202,6 +202,9 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
         // tools:
         tools: openaiTools,
         tool_choice: openaiToolChoice,
+
+        // thinking_budget
+        thinking_budget: compatibleOptions.thinking_budget,
       },
       warnings: [...warnings, ...toolWarnings],
     };
