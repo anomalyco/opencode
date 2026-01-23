@@ -12,6 +12,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      release_name: ${{ steps.version.outputs.release_name }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -89,6 +92,8 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    needs: build
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -99,13 +104,6 @@ jobs:
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-
-      - name: Get version
-        id: version
-        run: |
-          VERSION=$(node -p "require('./packages/opencode/package.json').version")
-          TIMESTAMP=$(date +%Y%m%d%H%M%S)
-          echo "tag=dev-nfs-${VERSION}-${TIMESTAMP}" >> $GITHUB_OUTPUT
 
       - name: Build full project
         run: bun install
@@ -124,13 +122,15 @@ jobs:
       - name: Upload macOS binary to existing release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
+          tag_name: ${{ needs.build.outputs.tag }}
           files: opencode-macos-arm64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos-intel:
     runs-on: macos-13
+    needs: build
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -141,13 +141,6 @@ jobs:
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-
-      - name: Get version
-        id: version
-        run: |
-          VERSION=$(node -p "require('./packages/opencode/package.json').version")
-          TIMESTAMP=$(date +%Y%m%d%H%M%S)
-          echo "tag=dev-nfs-${VERSION}-${TIMESTAMP}" >> $GITHUB_OUTPUT
 
       - name: Build full project
         run: bun install
@@ -166,13 +159,15 @@ jobs:
       - name: Upload macOS Intel binary to existing release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
+          tag_name: ${{ needs.build.outputs.tag }}
           files: opencode-macos-x64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-windows:
     runs-on: windows-latest
+    needs: build
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -183,13 +178,6 @@ jobs:
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-
-      - name: Get version
-        id: version
-        run: |
-          VERSION=$(node -p "require('./packages/opencode/package.json').version")
-          TIMESTAMP=$(date +%Y%m%d%H%M%S)
-          echo "tag=dev-nfs-${VERSION}-${TIMESTAMP}" >> $GITHUB_OUTPUT
 
       - name: Build full project
         run: bun install
@@ -208,7 +196,7 @@ jobs:
       - name: Upload Windows binary to existing release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
+          tag_name: ${{ needs.build.outputs.tag }}
           files: opencode.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
