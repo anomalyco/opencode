@@ -48,7 +48,7 @@ Port 3000 is already in use. Trying 3001 instead.
 If the local preview doesn’t align with production, update the CLI:
 
 ```bash
-npm mint update
+npm i -g mint@latest
 ```
 
 ## Code formatting
@@ -71,17 +71,17 @@ mint broken-links
 <AccordionGroup>
 	<Accordion title='Error: Could not load the "sharp" module using the darwin-arm64 runtime'>
 
-    	This may be due to an outdated version of Node. Try the following:
-    	1. Remove the currently-installed CLI: `npm remove -g mint`
-    	2. Upgrade to Node v19 or higher.
-    	3. Reinstall the CLI: `npm i -g mint`
+		This may be due to an outdated version of Node. Try the following:
+		1. Remove the currently-installed CLI: `npm remove -g mint`
+		2. Upgrade to Node v19 or higher.
+		3. Reinstall the CLI: `npm i -g mint`
 
-    </Accordion>
+	</Accordion>
 
-    <Accordion title="Issue: Encountering an unknown error">
+	<Accordion title="Issue: Encountering an unknown error">
 
-    	Solution: Delete the `~/.mintlify` folder and run `mint dev` again.
-    </Accordion>
+		Solution: Delete the `~/.mintlify` folder and run `mint dev` again.
+	</Accordion>
 
 </AccordionGroup>
 
