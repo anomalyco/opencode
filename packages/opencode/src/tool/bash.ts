@@ -155,7 +155,7 @@ ${DESCRIPTION.replace(/\$\{shellName\} command/g, `${shellName} command`)
         }
 
         // not an exhaustive list, but covers most common cases
-        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown"].includes(command[0])) {
+        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
             const resolved = await $`realpath ${arg}`

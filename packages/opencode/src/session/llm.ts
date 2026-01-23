@@ -208,7 +208,7 @@ export namespace LLM {
       topP: params.topP,
       topK: params.topK,
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid" && x !== "_noop"),
+      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       tools,
       maxOutputTokens,
       abortSignal: input.abort,

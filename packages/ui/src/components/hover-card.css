@@ -34,7 +34,7 @@
   [data-slot="hover-card-body"] {
     padding: 4px;
     max-height: inherit;
-    overflow-y: auto;
+    overflow: hidden;
   }
 }
 

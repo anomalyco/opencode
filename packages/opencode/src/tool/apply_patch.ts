@@ -159,11 +159,13 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     }
 
     // Check permissions if needed
+    const relativePaths = fileChanges.map((c) => path.relative(Instance.worktree, c.filePath))
     await ctx.ask({
       permission: "edit",
-      patterns: fileChanges.map((c) => path.relative(Instance.worktree, c.filePath)),
+      patterns: relativePaths,
       always: ["*"],
       metadata: {
+        filepath: relativePaths.join(", "),
         diff: totalDiff,
       },
     })
