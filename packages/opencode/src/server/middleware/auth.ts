@@ -34,15 +34,31 @@ const DEFAULT_TIMEOUT_MS = 604800000 // 7 days
 
 /**
  * Set session cookie with security options.
+ *
+ * @param c - Hono context
+ * @param sessionId - Session ID to set
+ * @param rememberMe - If true, set persistent cookie with rememberMeDuration
  */
-export function setSessionCookie(c: Context, sessionId: string): void {
+export function setSessionCookie(c: Context, sessionId: string, rememberMe?: boolean): void {
   const isHttps = c.req.url.startsWith("https://")
-  setCookie(c, COOKIE_NAME, sessionId, {
+  const authConfig = ServerAuth.get()
+
+  const cookieOptions: Parameters<typeof setCookie>[3] = {
     path: "/",
     httpOnly: true,
     sameSite: "Strict",
     secure: isHttps,
-  })
+  }
+
+  // Add maxAge for persistent cookies when rememberMe is true
+  if (rememberMe) {
+    const rememberMeDurationStr = authConfig.rememberMeDuration ?? "90d"
+    const durationMs = parseDuration(rememberMeDurationStr) ?? 7776000000 // 90 days default
+    // CRITICAL: Hono uses seconds for maxAge, not milliseconds
+    cookieOptions.maxAge = Math.floor(durationMs / 1000)
+  }
+
+  setCookie(c, COOKIE_NAME, sessionId, cookieOptions)
 }
 
 /**
@@ -108,8 +124,10 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     return c.redirect("/auth/login")
   }
 
-  // Check idle timeout
-  const timeoutStr = authConfig.sessionTimeout ?? "7d"
+  // Check idle timeout - use rememberMeDuration for remember-me sessions
+  const timeoutStr = session.rememberMe
+    ? (authConfig.rememberMeDuration ?? "90d")
+    : (authConfig.sessionTimeout ?? "7d")
   const timeout = parseDuration(timeoutStr) ?? DEFAULT_TIMEOUT_MS
   const elapsed = Date.now() - session.lastAccessTime
 
