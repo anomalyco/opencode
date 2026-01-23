@@ -767,7 +767,8 @@ export namespace SessionPrompt {
         const textParts: string[] = []
         const attachments: MessageV2.FilePart[] = []
 
-        for (const contentItem of result.content) {
+        const contentArray = Array.isArray(result.content) ? result.content : []
+        for (const contentItem of contentArray) {
           if (contentItem.type === "text") {
             textParts.push(contentItem.text)
           } else if (contentItem.type === "image") {
