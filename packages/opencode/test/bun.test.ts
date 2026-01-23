@@ -185,4 +185,30 @@ describe("BunProc.install provider tracking", () => {
     expect(pkgJson.opencode?.providers?.anthropic).toBe("superstruct")
     expect(pkgJson.opencode?.providers?.openai).toBe("zod")
   })
+
+  test("should work when package.json exists without opencode section", async () => {
+    const { BunProc } = await import("../src/bun")
+
+    // Create package.json without opencode section
+    await fs.writeFile(path.join(tempDir, "package.json"), JSON.stringify({ dependencies: {} }, null, 2))
+
+    await BunProc.install("zod", "latest", "anthropic")
+
+    const pkgJson = await readPkgJson()
+    expect(pkgJson.opencode?.providers?.anthropic).toBe("zod")
+    expect(await pkgExists("zod")).toBe(true)
+  })
+
+  test("should work when opencode section exists without providers", async () => {
+    const { BunProc } = await import("../src/bun")
+
+    // Create package.json with opencode but no providers
+    await fs.writeFile(path.join(tempDir, "package.json"), JSON.stringify({ dependencies: {}, opencode: {} }, null, 2))
+
+    await BunProc.install("zod", "latest", "anthropic")
+
+    const pkgJson = await readPkgJson()
+    expect(pkgJson.opencode?.providers?.anthropic).toBe("zod")
+    expect(await pkgExists("zod")).toBe(true)
+  })
 })
