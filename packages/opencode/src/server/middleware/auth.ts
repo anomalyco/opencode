@@ -68,9 +68,29 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     return next()
   }
 
-  // Skip auth for auth routes (login, status, etc.)
+  // Handle auth routes specially
   const path = c.req.path
   if (path.startsWith("/auth/")) {
+    // For logout routes, still try to set sessionId if session exists
+    // This is needed for CSRF validation (HMAC signature check)
+    if (path === "/auth/logout" || path === "/auth/logout/all") {
+      const sessionId = getCookie(c, COOKIE_NAME)
+      if (sessionId) {
+        const session = UserSession.get(sessionId)
+        if (session) {
+          c.set("session", session)
+          c.set("username", session.username)
+          c.set("sessionId", session.id)
+          c.set("auth", {
+            sessionId: session.id,
+            username: session.username,
+            uid: session.uid,
+            gid: session.gid,
+          } as AuthContext)
+        }
+      }
+    }
+    // Don't block - auth routes handle their own auth requirements
     return next()
   }
 
