@@ -854,7 +854,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setStore("popover", null)
   }
 
-  const abort = () => {
+  const abort = async () => {
     const sessionID = params.id
     if (!sessionID) return Promise.resolve()
     const queued = pending.get(sessionID)
@@ -1463,12 +1463,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const worktree = WorktreeState.get(sessionDirectory)
       if (!worktree || worktree.status !== "pending") return true
 
-      setSyncStore("session_status", session.id, { type: "busy" })
+      if (sessionDirectory === projectDirectory) {
+        sync.set("session_status", session.id, { type: "busy" })
+      }
 
       const controller = new AbortController()
 
       const cleanup = () => {
-        setSyncStore("session_status", session.id, { type: "idle" })
+        if (sessionDirectory === projectDirectory) {
+          sync.set("session_status", session.id, { type: "idle" })
+        }
         removeOptimisticMessage()
         for (const item of commentItems) {
           prompt.context.add({
@@ -1528,7 +1532,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     void send().catch((err) => {
       pending.delete(session.id)
-      setSyncStore("session_status", session.id, { type: "idle" })
+      if (sessionDirectory === projectDirectory) {
+        sync.set("session_status", session.id, { type: "idle" })
+      }
       showToast({
         title: language.t("prompt.toast.promptSendFailed.title"),
         description: errorMessage(err),
