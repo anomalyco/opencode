@@ -194,7 +194,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
     }
 
     const openaiOptions = await parseProviderOptions({
-      provider: "openai",
+      provider: this.config.provider.replace(".responses", ""),
       providerOptions,
       schema: openaiResponsesProviderOptionsSchema,
     })

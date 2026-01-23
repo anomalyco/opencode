@@ -1033,6 +1033,12 @@ export namespace Provider {
           name: model.providerID,
           ...options,
         })
+        if (model.api.npm.includes("@ai-sdk/openai-compatible") && model.options["responsesApiSupported"] === true) {
+          log.debug(`using responses api for ${model.id}`)
+          // the copilot openai compatible override is the only who exposes the responses api
+          // not even upstream @ai-sk/openai-compatible does
+          loaded.languageModel = createGitHubCopilotOpenAICompatible({name: model.providerID, ...options}).responses
+        }
         s.sdk.set(key, loaded)
         return loaded as SDK
       }
