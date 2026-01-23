@@ -3,6 +3,7 @@ import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Installation } from "../../installation"
 import { Global } from "../../global"
+import { formatSize } from "../../util/format"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
@@ -339,13 +340,6 @@ async function getDirectorySize(dir: string): Promise<number> {
 
   await walk(dir)
   return total
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }
 
 function shortenPath(p: string): string {
