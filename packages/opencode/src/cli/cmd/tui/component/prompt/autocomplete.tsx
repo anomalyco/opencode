@@ -616,7 +616,7 @@ export function Autocomplete(props: {
       <Show when={store.showDescriptionModal}>
           <box
             position="absolute"
-            left={dimensions().width/4-5}
+            left={dimensions().width/4}
             top={1}
             width={dimensions().width/4}
             height={dimensions().height/4}
