@@ -33,6 +33,7 @@ export const dict = {
 
   "ui.list.loading": "読み込み中",
   "ui.list.empty": "結果なし",
+  "ui.list.clearFilter": "フィルターをクリア",
   "ui.list.emptyWithFilter.prefix": "次の検索結果はありません: ",
   "ui.list.emptyWithFilter.suffix": "",
 
@@ -64,6 +65,7 @@ export const dict = {
   "ui.common.cancel": "キャンセル",
   "ui.common.confirm": "確認",
   "ui.common.dismiss": "閉じる",
+  "ui.common.close": "閉じる",
   "ui.common.next": "次へ",
   "ui.common.submit": "送信",
 

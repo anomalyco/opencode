@@ -47,16 +47,15 @@ jobs:
           TODAY'S DATE: ${TODAY}
 
           STEP 1: Gather PR data
-          Run these commands to gather PR information:
+          Run these commands to gather PR information. ONLY include PRs created or updated TODAY (${TODAY}):
 
-          # Open PRs with bug fix labels or 'fix' in title
-          gh pr list --repo ${{ github.repository }} --state open --search \"fix in:title\" --json number,title,author,labels,createdAt,updatedAt,reviewDecision,isDraft,additions,deletions --limit 100
+          # PRs created today
+          gh pr list --repo ${{ github.repository }} --state all --search \"created:${TODAY}\" --json number,title,author,labels,createdAt,updatedAt,reviewDecision,isDraft,additions,deletions --limit 100
 
-          # PRs with high activity (get comments separately to filter bots)
-          gh pr list --repo ${{ github.repository }} --state open --json number,title,author,labels,createdAt,updatedAt,reviewDecision,isDraft --limit 100
+          # PRs with activity today (updated today)
+          gh pr list --repo ${{ github.repository }} --state open --search \"updated:${TODAY}\" --json number,title,author,labels,createdAt,updatedAt,reviewDecision,isDraft,additions,deletions --limit 100
 
-          # Recently merged bug fixes
-          gh pr list --repo ${{ github.repository }} --state merged --search \"merged:${TODAY} fix in:title\" --json number,title,author,mergedAt --limit 50
+
 
           STEP 2: For high-activity PRs, check comment counts
           For promising PRs, run:
@@ -66,21 +65,20 @@ jobs:
           - copilot-pull-request-reviewer
           - github-actions
 
-          STEP 3: Identify what matters
+          STEP 3: Identify what matters (ONLY from today's PRs)
 
-          **Bug Fixes We Might Miss:**
-          - PRs with 'fix' or 'bug' in title that have been open 2+ days
+          **Bug Fixes From Today:**
+          - PRs with 'fix' or 'bug' in title created/updated today
           - Small bug fixes (< 100 lines changed) that are easy to review
-          - Bug fixes from community contributors (not core team)
+          - Bug fixes from community contributors
 
-          **High Activity PRs:**
-          - PRs with 5+ human comments (excluding bots listed above)
-          - PRs with back-and-forth discussion
-          - Controversial or complex changes getting attention
+          **High Activity Today:**
+          - PRs with significant human comments today (excluding bots listed above)
+          - PRs with back-and-forth discussion today
 
           **Quick Wins:**
           - Small PRs (< 50 lines) that are approved or nearly approved
-          - Bug fixes that just need a final review
+          - PRs that just need a final review
 
           STEP 4: Generate the recap
           Create a structured recap:
@@ -88,17 +86,14 @@ jobs:
           ===DISCORD_START===
           **Daily PR Recap - ${TODAY}**
 
-          **Bug Fixes Needing Attention**
-          [PRs fixing bugs that might be overlooked - prioritize by age and size]
+          **New PRs Today**
+          [PRs opened today - group by type: bug fixes, features, etc.]
 
-          **High Activity** (5+ human comments)
-          [PRs with significant discussion - exclude bot comments]
+          **Active PRs Today**
+          [PRs with activity/updates today - significant discussion]
 
-          **Quick Wins** (small, ready to merge)
-          [Easy PRs that just need a review/merge]
-
-          **Merged Bug Fixes Today**
-          [What bug fixes shipped]
+          **Quick Wins**
+          [Small PRs ready to merge]
           ===DISCORD_END===
 
           STEP 5: Format for Discord
