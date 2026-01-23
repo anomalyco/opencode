@@ -2,7 +2,7 @@
   var themeId = localStorage.getItem("opencode-theme-id")
   if (!themeId) return
 
-  var scheme = localStorage.getItem("opencode-color-scheme") || "system"
+  var scheme = localStorage.getItem("opencode-color-scheme") || "light"
   var isDark = scheme === "dark" || (scheme === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
   var mode = isDark ? "dark" : "light"
 

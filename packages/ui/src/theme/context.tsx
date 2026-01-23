@@ -72,8 +72,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES as Record<string, DesktopTheme>,
       themeId: props.defaultTheme ?? "oc-1",
-      colorScheme: "system" as ColorScheme,
-      mode: getSystemMode(),
+      colorScheme: "light" as ColorScheme,
+      mode: "light",
       previewThemeId: null as string | null,
       previewScheme: null as ColorScheme | null,
     })
