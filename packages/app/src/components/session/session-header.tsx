@@ -9,6 +9,7 @@ import { useLanguage } from "@/context/language"
 // import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { usePlatform } from "@/context/platform"
 import { useSync } from "@/context/sync"
+import { useSDK } from "@/context/sdk"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getFilename } from "@opencode-ai/util/path"
 import { base64Decode } from "@opencode-ai/util/encode"
@@ -20,9 +21,11 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Popover } from "@opencode-ai/ui/popover"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Keybind } from "@opencode-ai/ui/keybind"
+import { StatusPopover } from "@/components/status-popover"
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
+  const sdk = useSDK()
   const layout = useLayout()
   const params = useParams()
   const command = useCommand()
@@ -244,6 +247,9 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
+              <Show when={currentSession()}>
+                <StatusPopover sync={sync} sdk={sdk} />
+              </Show>
               <Show when={showShare()}>
                 <div class="flex items-center">
                   <Popover
