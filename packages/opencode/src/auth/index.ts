@@ -729,10 +729,10 @@ export namespace Auth {
       const record = provider.records.find((r) => r.id === activeID && r.namespace === namespace)
       if (!record?.access) return null
 
-      try {
-        const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 5000)
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 5000)
 
+      try {
         const response = await fetch("https://api.anthropic.com/api/oauth/usage", {
           method: "GET",
           headers: {
@@ -743,8 +743,6 @@ export namespace Auth {
           },
           signal: controller.signal,
         })
-
-        clearTimeout(timeout)
 
         if (!response.ok) return null
 
@@ -767,6 +765,8 @@ export namespace Auth {
         }
       } catch {
         return null
+      } finally {
+        clearTimeout(timeout)
       }
     }
   }
