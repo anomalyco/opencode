@@ -235,7 +235,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         ...project,
         icon: {
           url: metadata?.icon?.url,
-          override: metadata?.icon?.override,
+          override: metadata?.icon?.override ?? childStore.icon,
           color: metadata?.icon?.color,
         },
       }
@@ -305,6 +305,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     createEffect(() => {
       const projects = enriched()
       if (projects.length === 0) return
+
+      if (globalSync.ready) {
+        for (const project of projects) {
+          if (!project.id) continue
+          if (project.id === "global") continue
+          globalSync.project.icon(project.worktree, project.icon?.override)
+        }
+      }
 
       const used = new Set<string>()
       for (const project of projects) {

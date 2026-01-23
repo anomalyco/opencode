@@ -61,6 +61,7 @@ type State = {
   command: Command[]
   project: string
   projectMeta: ProjectMeta | undefined
+  icon: string | undefined
   provider: ProviderListResponse
   config: Config
   path: Path
@@ -107,6 +108,12 @@ type MetaCache = {
   ready: Accessor<boolean>
 }
 
+type IconCache = {
+  store: Store<{ value: string | undefined }>
+  setStore: SetStoreFunction<{ value: string | undefined }>
+  ready: Accessor<boolean>
+}
+
 type ChildOptions = {
   bootstrap?: boolean
 }
@@ -119,6 +126,7 @@ function createGlobalSync() {
   if (!owner) throw new Error("GlobalSync must be created within owner")
   const vcsCache = new Map<string, VcsCache>()
   const metaCache = new Map<string, MetaCache>()
+  const iconCache = new Map<string, IconCache>()
 
   const [projectCache, setProjectCache, , projectCacheReady] = persisted(
     Persist.global("globalSync.project", ["globalSync.project.v1"]),
@@ -126,12 +134,13 @@ function createGlobalSync() {
   )
 
   const sanitizeProject = (project: Project) => {
-    if (!project.icon?.url) return project
+    if (!project.icon?.url && !project.icon?.override) return project
     return {
       ...project,
       icon: {
         ...project.icon,
         url: undefined,
+        override: undefined,
       },
     }
   }
@@ -207,10 +216,20 @@ function createGlobalSync() {
       if (!meta) throw new Error("Failed to create persisted project metadata")
       metaCache.set(directory, { store: meta[0], setStore: meta[1], ready: meta[3] })
 
+      const icon = runWithOwner(owner, () =>
+        persisted(
+          Persist.workspace(directory, "icon", ["icon.v1"]),
+          createStore({ value: undefined as string | undefined }),
+        ),
+      )
+      if (!icon) throw new Error("Failed to create persisted project icon")
+      iconCache.set(directory, { store: icon[0], setStore: icon[1], ready: icon[3] })
+
       const init = () => {
         const child = createStore<State>({
           project: "",
           projectMeta: meta[0].value,
+          icon: icon[0].value,
           provider: { all: [], connected: [], default: {} },
           config: {},
           path: { state: "", config: "", worktree: "", directory: "", home: "" },
@@ -236,6 +255,10 @@ function createGlobalSync() {
 
         createEffect(() => {
           child[1]("projectMeta", meta[0].value)
+        })
+
+        createEffect(() => {
+          child[1]("icon", icon[0].value)
         })
       }
 
@@ -811,6 +834,15 @@ function createGlobalSync() {
     setStore("projectMeta", next)
   }
 
+  function projectIcon(directory: string, value: string | undefined) {
+    const [store, setStore] = ensureChild(directory)
+    const cached = iconCache.get(directory)
+    if (!cached) return
+    if (store.icon === value) return
+    cached.setStore("value", value)
+    setStore("icon", value)
+  }
+
   return {
     data: globalStore,
     set: setGlobalStore,
@@ -833,6 +865,7 @@ function createGlobalSync() {
     project: {
       loadSessions,
       meta: projectMeta,
+      icon: projectIcon,
     },
   }
 }

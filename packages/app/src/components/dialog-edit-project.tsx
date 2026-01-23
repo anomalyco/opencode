@@ -85,6 +85,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
         icon: { color: store.color, override: store.iconUrl },
         commands: { start },
       })
+      globalSync.project.icon(props.project.worktree, store.iconUrl || undefined)
       setStore("saving", false)
       dialog.close()
       return
