@@ -127,8 +127,8 @@ jobs:
             binary="$dir/opencode"
             if [ -f "$binary" ]; then
               platform=$(basename $(dirname "$dir"))
-              cp "$binary" "release-binaries/opencode-${platform}"
-              chmod +x "release-binaries/opencode-${platform}"
+              cp "$binary" "release-binaries/${platform}"
+              chmod +x "release-binaries/${platform}"
             fi
           done
           ls -la release-binaries/
