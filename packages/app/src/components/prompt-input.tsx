@@ -30,6 +30,7 @@ import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
+import { useComments } from "@/context/comments"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -47,6 +48,7 @@ import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
 import { Identifier } from "@/utils/id"
+import { Worktree as WorktreeState } from "@/utils/worktree"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
@@ -59,6 +61,13 @@ import { base64Encode } from "@opencode-ai/util/encode"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
+
+type PendingPrompt = {
+  abort: AbortController
+  cleanup: VoidFunction
+}
+
+const pending = new Map<string, PendingPrompt>()
 
 interface PromptInputProps {
   class?: string
@@ -115,6 +124,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const files = useFile()
   const prompt = usePrompt()
   const layout = useLayout()
+  const comments = useComments()
   const params = useParams()
   const dialog = useDialog()
   const providers = useProviders()
@@ -157,11 +167,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey()))
-  const activeFile = createMemo(() => {
-    const tab = tabs().active()
-    if (!tab) return
-    return files.pathFromTab(tab)
+  const tabs = createMemo(() => layout.tabs(sessionKey))
+  const view = createMemo(() => layout.view(sessionKey))
+
+  const recent = createMemo(() => {
+    const all = tabs().all()
+    const active = tabs().active()
+    const order = active ? [active, ...all.filter((x) => x !== active)] : all
+    const seen = new Set<string>()
+    const paths: string[] = []
+
+    for (const tab of order) {
+      const path = files.pathFromTab(tab)
+      if (!path) continue
+      if (seen.has(path)) continue
+      seen.add(path)
+      paths.push(path)
+    }
+
+    return paths
   })
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const status = createMemo(
@@ -382,7 +406,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!isFocused()) setComposing(false)
   })
 
-  type AtOption = { type: "agent"; name: string; display: string } | { type: "file"; path: string; display: string }
+  type AtOption =
+    | { type: "agent"; name: string; display: string }
+    | { type: "file"; path: string; display: string; recent?: boolean }
 
   const agentList = createMemo(() =>
     sync.data.agent
@@ -413,12 +439,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   } = useFilteredList<AtOption>({
     items: async (query) => {
       const agents = agentList()
+      const open = recent()
+      const seen = new Set(open)
+      const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
       const paths = await files.searchFilesAndDirectories(query)
-      const fileOptions: AtOption[] = paths.map((path) => ({ type: "file", path, display: path }))
-      return [...agents, ...fileOptions]
+      const fileOptions: AtOption[] = paths
+        .filter((path) => !seen.has(path))
+        .map((path) => ({ type: "file", path, display: path }))
+      return [...agents, ...pinned, ...fileOptions]
     },
     key: atKey,
     filterKeys: ["display"],
+    groupBy: (item) => {
+      if (item.type === "agent") return "agent"
+      if (item.recent) return "recent"
+      return "file"
+    },
+    sortGroupsBy: (a, b) => {
+      const rank = (category: string) => {
+        if (category === "agent") return 0
+        if (category === "recent") return 1
+        return 2
+      }
+      return rank(a.category) - rank(b.category)
+    },
     onSelect: handleAtSelect,
   })
 
@@ -810,12 +854,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setStore("popover", null)
   }
 
-  const abort = () =>
-    sdk.client.session
+  const abort = async () => {
+    const sessionID = params.id
+    if (!sessionID) return Promise.resolve()
+    const queued = pending.get(sessionID)
+    if (queued) {
+      queued.abort.abort()
+      queued.cleanup()
+      pending.delete(sessionID)
+      return Promise.resolve()
+    }
+    return sdk.client.session
       .abort({
-        sessionID: params.id!,
+        sessionID,
       })
       .catch(() => {})
+  }
 
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     const text = prompt
@@ -1075,6 +1129,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           })
           return
         }
+        WorktreeState.pending(createdWorktree.directory)
         sessionDirectory = createdWorktree.directory
       }
 
@@ -1231,37 +1286,69 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const usedUrls = new Set(fileAttachmentParts.map((part) => part.url))
 
-    const contextFileParts: Array<{
-      id: string
-      type: "file"
-      mime: string
-      url: string
-      filename?: string
-    }> = []
+    const context = prompt.context.items().slice()
 
-    const addContextFile = (path: string, selection?: FileSelection) => {
-      const absolute = toAbsolutePath(path)
-      const query = selection ? `?start=${selection.startLine}&end=${selection.endLine}` : ""
+    const commentItems = context.filter((item) => item.type === "file" && !!item.comment?.trim())
+
+    const contextParts: Array<
+      | {
+          id: string
+          type: "text"
+          text: string
+          synthetic?: boolean
+        }
+      | {
+          id: string
+          type: "file"
+          mime: string
+          url: string
+          filename?: string
+        }
+    > = []
+
+    const commentNote = (path: string, selection: FileSelection | undefined, comment: string) => {
+      const start = selection ? Math.min(selection.startLine, selection.endLine) : undefined
+      const end = selection ? Math.max(selection.startLine, selection.endLine) : undefined
+      const range =
+        start === undefined || end === undefined
+          ? "this file"
+          : start === end
+            ? `line ${start}`
+            : `lines ${start} through ${end}`
+
+      return `The user made the following comment regarding ${range} of ${path}: ${comment}`
+    }
+
+    const addContextFile = (input: { path: string; selection?: FileSelection; comment?: string }) => {
+      const absolute = toAbsolutePath(input.path)
+      const query = input.selection ? `?start=${input.selection.startLine}&end=${input.selection.endLine}` : ""
       const url = `file://${absolute}${query}`
-      if (usedUrls.has(url)) return
+
+      const comment = input.comment?.trim()
+      if (!comment && usedUrls.has(url)) return
       usedUrls.add(url)
-      contextFileParts.push({
+
+      if (comment) {
+        contextParts.push({
+          id: Identifier.ascending("part"),
+          type: "text",
+          text: commentNote(input.path, input.selection, comment),
+          synthetic: true,
+        })
+      }
+
+      contextParts.push({
         id: Identifier.ascending("part"),
         type: "file",
         mime: "text/plain",
         url,
-        filename: getFilename(path),
+        filename: getFilename(input.path),
       })
     }
 
-    const activePath = activeFile()
-    if (activePath && prompt.context.activeTab()) {
-      addContextFile(activePath)
-    }
-
-    for (const item of prompt.context.items()) {
+    for (const item of context) {
       if (item.type !== "file") continue
-      addContextFile(item.path, item.selection)
+      addContextFile({ path: item.path, selection: item.selection, comment: item.comment })
     }
 
     const imageAttachmentParts = images.map((attachment) => ({
@@ -1281,7 +1368,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const requestParts = [
       textPart,
       ...fileAttachmentParts,
-      ...contextFileParts,
+      ...contextParts,
       ...agentAttachmentParts,
       ...imageAttachmentParts,
     ]
@@ -1301,10 +1388,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       model,
     }
 
-    const setSyncStore = sessionDirectory === projectDirectory ? sync.set : globalSync.child(sessionDirectory)[1]
-
     const addOptimisticMessage = () => {
-      setSyncStore(
+      if (sessionDirectory === projectDirectory) {
+        sync.set(
+          produce((draft) => {
+            const messages = draft.message[session.id]
+            if (!messages) {
+              draft.message[session.id] = [optimisticMessage]
+            } else {
+              const result = Binary.search(messages, messageID, (m) => m.id)
+              messages.splice(result.index, 0, optimisticMessage)
+            }
+            draft.part[messageID] = optimisticParts
+              .filter((p) => !!p?.id)
+              .slice()
+              .sort((a, b) => a.id.localeCompare(b.id))
+          }),
+        )
+        return
+      }
+
+      globalSync.child(sessionDirectory)[1](
         produce((draft) => {
           const messages = draft.message[session.id]
           if (!messages) {
@@ -1322,7 +1426,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     const removeOptimisticMessage = () => {
-      setSyncStore(
+      if (sessionDirectory === projectDirectory) {
+        sync.set(
+          produce((draft) => {
+            const messages = draft.message[session.id]
+            if (messages) {
+              const result = Binary.search(messages, messageID, (m) => m.id)
+              if (result.found) messages.splice(result.index, 1)
+            }
+            delete draft.part[messageID]
+          }),
+        )
+        return
+      }
+
+      globalSync.child(sessionDirectory)[1](
         produce((draft) => {
           const messages = draft.message[session.id]
           if (messages) {
@@ -1334,11 +1452,75 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       )
     }
 
+    for (const item of commentItems) {
+      prompt.context.remove(item.key)
+    }
+
     clearInput()
     addOptimisticMessage()
 
-    client.session
-      .prompt({
+    const waitForWorktree = async () => {
+      const worktree = WorktreeState.get(sessionDirectory)
+      if (!worktree || worktree.status !== "pending") return true
+
+      if (sessionDirectory === projectDirectory) {
+        sync.set("session_status", session.id, { type: "busy" })
+      }
+
+      const controller = new AbortController()
+
+      const cleanup = () => {
+        if (sessionDirectory === projectDirectory) {
+          sync.set("session_status", session.id, { type: "idle" })
+        }
+        removeOptimisticMessage()
+        for (const item of commentItems) {
+          prompt.context.add({
+            type: "file",
+            path: item.path,
+            selection: item.selection,
+            comment: item.comment,
+            commentID: item.commentID,
+            preview: item.preview,
+          })
+        }
+        restoreInput()
+      }
+
+      pending.set(session.id, { abort: controller, cleanup })
+
+      const abort = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
+        if (controller.signal.aborted) {
+          resolve({ status: "failed", message: "aborted" })
+          return
+        }
+        controller.signal.addEventListener(
+          "abort",
+          () => {
+            resolve({ status: "failed", message: "aborted" })
+          },
+          { once: true },
+        )
+      })
+
+      const timeoutMs = 5 * 60 * 1000
+      const timeout = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
+        setTimeout(() => {
+          resolve({ status: "failed", message: "Workspace is still preparing" })
+        }, timeoutMs)
+      })
+
+      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abort, timeout])
+      pending.delete(session.id)
+      if (controller.signal.aborted) return false
+      if (result.status === "failed") throw new Error(result.message)
+      return true
+    }
+
+    const send = async () => {
+      const ok = await waitForWorktree()
+      if (!ok) return
+      await client.session.prompt({
         sessionID: session.id,
         agent,
         model,
@@ -1346,14 +1528,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         parts: requestParts,
         variant,
       })
-      .catch((err) => {
-        showToast({
-          title: language.t("prompt.toast.promptSendFailed.title"),
-          description: errorMessage(err),
-        })
-        removeOptimisticMessage()
-        restoreInput()
+    }
+
+    void send().catch((err) => {
+      pending.delete(session.id)
+      if (sessionDirectory === projectDirectory) {
+        sync.set("session_status", session.id, { type: "idle" })
+      }
+      showToast({
+        title: language.t("prompt.toast.promptSendFailed.title"),
+        description: errorMessage(err),
       })
+      removeOptimisticMessage()
+      for (const item of commentItems) {
+        prompt.context.add({
+          type: "file",
+          path: item.path,
+          selection: item.selection,
+          comment: item.comment,
+          commentID: item.commentID,
+          preview: item.preview,
+        })
+      }
+      restoreInput()
+    })
   }
 
   return (
@@ -1394,7 +1592,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             />
                             <div class="flex items-center text-14-regular min-w-0">
                               <span class="text-text-weak whitespace-nowrap truncate min-w-0">
-                                {getDirectory((item as { type: "file"; path: string }).path)}
+                                {(() => {
+                                  const path = (item as { type: "file"; path: string }).path
+                                  return path.endsWith("/") ? path : getDirectory(path)
+                                })()}
                               </span>
                               <Show when={!(item as { type: "file"; path: string }).path.endsWith("/")}>
                                 <span class="text-text-strong whitespace-nowrap">
@@ -1473,65 +1674,57 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </div>
         </Show>
-        <Show when={false && (prompt.context.items().length > 0 || !!activeFile())}>
-          <div class="flex flex-wrap items-center gap-2 px-3 pt-3">
-            <Show when={prompt.context.activeTab() ? activeFile() : undefined}>
-              {(path) => (
-                <div class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base max-w-full">
-                  <FileIcon node={{ path: path(), type: "file" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-12-regular min-w-0">
-                    <span class="text-text-weak whitespace-nowrap truncate min-w-0">{getDirectory(path())}</span>
-                    <span class="text-text-strong whitespace-nowrap">{getFilename(path())}</span>
-                    <span class="text-text-weak whitespace-nowrap ml-1">{language.t("prompt.context.active")}</span>
-                  </div>
-                  <IconButton
-                    type="button"
-                    icon="close"
-                    variant="ghost"
-                    class="h-6 w-6"
-                    onClick={() => prompt.context.removeActive()}
-                    aria-label={language.t("prompt.context.removeActiveFile")}
-                  />
-                </div>
-              )}
-            </Show>
-            <Show when={!prompt.context.activeTab() && !!activeFile()}>
-              <button
-                type="button"
-                class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base text-12-regular text-text-weak hover:bg-surface-raised-base-hover"
-                onClick={() => prompt.context.addActive()}
-              >
-                <Icon name="plus-small" size="small" />
-                <span>{language.t("prompt.context.includeActiveFile")}</span>
-              </button>
-            </Show>
+        <Show when={prompt.context.items().length > 0}>
+          <div class="flex flex-nowrap items-start gap-1.5 px-3 pt-3 overflow-x-auto no-scrollbar">
             <For each={prompt.context.items()}>
-              {(item) => (
-                <div class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base max-w-full">
-                  <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-12-regular min-w-0">
-                    <span class="text-text-weak whitespace-nowrap truncate min-w-0">{getDirectory(item.path)}</span>
-                    <span class="text-text-strong whitespace-nowrap">{getFilename(item.path)}</span>
-                    <Show when={item.selection}>
-                      {(sel) => (
-                        <span class="text-text-weak whitespace-nowrap ml-1">
-                          {sel().startLine === sel().endLine
-                            ? `:${sel().startLine}`
-                            : `:${sel().startLine}-${sel().endLine}`}
-                        </span>
-                      )}
+              {(item) => {
+                return (
+                  <div
+                    classList={{
+                      "shrink-0 flex flex-col gap-1 rounded-md bg-surface-base border border-border-base px-2 py-1 max-w-[320px]": true,
+                      "cursor-pointer hover:bg-surface-raised-base-hover": !!item.commentID,
+                    }}
+                    onClick={() => {
+                      if (!item.commentID) return
+                      comments.setFocus({ file: item.path, id: item.commentID })
+                      view().reviewPanel.open()
+                      tabs().open("review")
+                    }}
+                  >
+                    <div class="flex items-center gap-1.5">
+                      <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
+                      <div class="flex items-center text-11-regular min-w-0">
+                        <span class="text-text-weak whitespace-nowrap truncate min-w-0">{getDirectory(item.path)}</span>
+                        <span class="text-text-strong whitespace-nowrap">{getFilename(item.path)}</span>
+                        <Show when={item.selection}>
+                          {(sel) => (
+                            <span class="text-text-weak whitespace-nowrap ml-1">
+                              {sel().startLine === sel().endLine
+                                ? `:${sel().startLine}`
+                                : `:${sel().startLine}-${sel().endLine}`}
+                            </span>
+                          )}
+                        </Show>
+                      </div>
+                      <IconButton
+                        type="button"
+                        icon="close"
+                        variant="ghost"
+                        class="h-5 w-5"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (item.commentID) comments.remove(item.path, item.commentID)
+                          prompt.context.remove(item.key)
+                        }}
+                        aria-label={language.t("prompt.context.removeFile")}
+                      />
+                    </div>
+                    <Show when={item.comment}>
+                      {(comment) => <div class="text-11-regular text-text-strong">{comment()}</div>}
                     </Show>
                   </div>
-                  <IconButton
-                    type="button"
-                    icon="close"
-                    variant="ghost"
-                    class="h-6 w-6"
-                    onClick={() => prompt.context.remove(item.key)}
-                    aria-label={language.t("prompt.context.removeFile")}
-                  />
-                </div>
-              )}
+                )
+              }}
             </For>
           </div>
         </Show>
