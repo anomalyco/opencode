@@ -1018,11 +1018,16 @@ export default function Layout(props: ParentProps) {
   const displayName = (project: LocalProject) => project.name || getFilename(project.worktree)
 
   async function renameProject(project: LocalProject, next: string) {
-    if (!project.id) return
     const current = displayName(project)
     if (next === current) return
     const name = next === getFilename(project.worktree) ? "" : next
-    await globalSDK.client.project.update({ projectID: project.id, directory: project.worktree, name })
+
+    if (project.id && project.id !== "global") {
+      await globalSDK.client.project.update({ projectID: project.id, directory: project.worktree, name })
+      return
+    }
+
+    globalSync.project.meta(project.worktree, { name })
   }
 
   async function renameSession(session: Session, next: string) {
