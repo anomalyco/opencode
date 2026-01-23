@@ -20,7 +20,6 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
-import { clone } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
@@ -570,26 +569,34 @@ export namespace SessionPrompt {
         })
       }
 
-      const sessionMessages = clone(msgs)
-
       // Ephemerally wrap queued user messages with a reminder to stay on track
-      if (step > 1 && lastFinished) {
-        for (const msg of sessionMessages) {
-          if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
-          for (const part of msg.parts) {
-            if (part.type !== "text" || part.ignored || part.synthetic) continue
-            if (!part.text.trim()) continue
-            part.text = [
-              "<system-reminder>",
-              "The user sent the following message:",
-              part.text,
-              "",
-              "Please address this message and continue with your tasks.",
-              "</system-reminder>",
-            ].join("\n")
-          }
-        }
-      }
+      // Use lazy shallow copying: only copy messages/parts that need modification
+      const sessionMessages =
+        step > 1 && lastFinished
+          ? msgs.map((msg) => {
+            if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) return msg
+
+            let modified = false
+            const newParts = msg.parts.map((part) => {
+              if (part.type !== "text" || part.ignored || part.synthetic) return part
+              if (!part.text.trim()) return part
+              modified = true
+              return {
+                ...part,
+                text: [
+                  "<system-reminder>",
+                  "The user sent the following message:",
+                  part.text,
+                  "",
+                  "Please address this message and continue with your tasks.",
+                  "</system-reminder>",
+                ].join("\n"),
+              }
+            })
+
+            return modified ? { ...msg, parts: newParts } : msg
+          })
+          : msgs
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
@@ -603,11 +610,11 @@ export namespace SessionPrompt {
           ...MessageV2.toModelMessages(sessionMessages, model),
           ...(isLastStep
             ? [
-                {
-                  role: "assistant" as const,
-                  content: MAX_STEPS,
-                },
-              ]
+              {
+                role: "assistant" as const,
+                content: MAX_STEPS,
+              },
+            ]
             : []),
         ],
         tools,
@@ -1008,8 +1015,8 @@ export namespace SessionPrompt {
                       agent: input.agent!,
                       messageID: info.id,
                       extra: { bypassCwdCheck: true, model },
-                      metadata: async () => {},
-                      ask: async () => {},
+                      metadata: async () => { },
+                      ask: async () => { },
                     }
                     const result = await t.execute(args, readCtx)
                     pieces.push({
@@ -1069,8 +1076,8 @@ export namespace SessionPrompt {
                   agent: input.agent!,
                   messageID: info.id,
                   extra: { bypassCwdCheck: true },
-                  metadata: async () => {},
-                  ask: async () => {},
+                  metadata: async () => { },
+                  ask: async () => { },
                 }
                 const result = await ListTool.init().then((t) => t.execute(args, listCtx))
                 return [
@@ -1685,19 +1692,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const isSubtask = (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
     const parts = isSubtask
       ? [
-          {
-            type: "subtask" as const,
-            agent: agent.name,
-            description: command.description ?? "",
-            command: input.command,
-            model: {
-              providerID: taskModel.providerID,
-              modelID: taskModel.modelID,
-            },
-            // TODO: how can we make task tool accept a more complex input?
-            prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
+        {
+          type: "subtask" as const,
+          agent: agent.name,
+          description: command.description ?? "",
+          command: input.command,
+          model: {
+            providerID: taskModel.providerID,
+            modelID: taskModel.modelID,
           },
-        ]
+          // TODO: how can we make task tool accept a more complex input?
+          prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
+        },
+      ]
       : [...templateParts, ...(input.parts ?? [])]
 
     const userAgent = isSubtask ? (input.agent ?? (await Agent.defaultAgent())) : agentName
