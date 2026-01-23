@@ -90,7 +90,7 @@ export const dict = {
   "dialog.provider.group.other": "기타",
   "dialog.provider.tag.recommended": "추천",
   "dialog.provider.anthropic.note": "Claude Pro/Max 또는 API 키로 연결",
-  "dialog.provider.openai.note": "Codex 또는 API 키로 연결",
+  "dialog.provider.openai.note": "ChatGPT Pro/Plus 또는 API 키로 연결",
   "dialog.provider.copilot.note": "Copilot 또는 API 키로 연결",
 
   "dialog.model.select.title": "모델 선택",

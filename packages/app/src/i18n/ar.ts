@@ -88,7 +88,7 @@ export const dict = {
   "dialog.provider.group.other": "آخر",
   "dialog.provider.tag.recommended": "موصى به",
   "dialog.provider.anthropic.note": "اتصل باستخدام Claude Pro/Max أو مفتاح API",
-  "dialog.provider.openai.note": "اتصل باستخدام Codex أو مفتاح API",
+  "dialog.provider.openai.note": "اتصل باستخدام ChatGPT Pro/Plus أو مفتاح API",
   "dialog.provider.copilot.note": "اتصل باستخدام Copilot أو مفتاح API",
 
   "dialog.model.select.title": "تحديد نموذج",
