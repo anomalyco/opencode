@@ -1691,10 +1691,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       tabs().open("review")
                     }}
                   >
-                    <div class="flex items-center gap-1.5">
+                    <div class="flex items-center gap-2">
                       <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
                       <div
-                        class="flex-1 flex items-center text-11-regular min-w-0"
+                        class="flex-1 flex items-center text-11-regular min-w-0 truncate"
                         style={{ "font-weight": "var(--font-weight-medium)" }}
                       >
                         <span class="text-text-weak whitespace-nowrap truncate min-w-0">{getDirectory(item.path)}</span>
@@ -1723,7 +1723,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       />
                     </div>
                     <Show when={item.comment}>
-                      {(comment) => <div class="text-11-regular text-text-strong ml-5 truncate">{comment()}</div>}
+                      {(comment) => <div class="text-11-regular text-text-strong ml-5 pr-1 truncate">{comment()}</div>}
                     </Show>
                   </div>
                 )
