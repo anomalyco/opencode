@@ -9,6 +9,22 @@
 ## 背景与关键经验
 - 旧 UI 版本（例如 1.1.30）**不会使用** `window.__OPENCODE_BASE_URL__` 拼 API，会导致请求打到根路径（如 `/global/health`），在反向代理下直接 404。
 - 因此仅更新二进制不够，必须同步最新 `packages/app/dist`，并设置 `OPENCODE_APP_DIR` 指向本地 UI 目录。
+## 补丁必要性与后续收敛
+### 当前必要性
+在官方 `release: v1.1.34`（`c130dd425`）中：
+- 前端 `AppInterface` 未读取 `window.__OPENCODE_BASE_URL__`，默认 `baseUrl` 仍是 `window.location.origin`；
+- 服务端无 `basePath` 注入/重写逻辑。
+因此 **没有本补丁时**，basePath 环境会继续打到根路径并 404。
+
+### 何时可以移除补丁
+当官方版本同时满足以下条件时，本补丁可移除：
+1. 前端在 `AppInterface` 中使用 `window.__OPENCODE_BASE_URL__` 设置 Router `base` 与 SDK `baseUrl`；  
+2. 服务端支持 `basePath` 参数，并在 HTML/JS/CSS 中注入 `<base>` 与 `window.__OPENCODE_BASE_URL__`。
+
+### 快速验收
+- 打开页面后 `window.__OPENCODE_BASE_URL__` 有值；
+- Network 中 API 路径带 `/hub_api/opencode/<token>/` 前缀；
+- 不需要额外前端补丁即可正常打开项目与会话。
 
 ## 版本基线（本次固定）
 - 官方基线：`release: v1.1.34`（commit `c130dd425`）
