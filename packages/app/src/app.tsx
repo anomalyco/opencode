@@ -19,6 +19,7 @@ import { SettingsProvider } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptProvider } from "@/context/prompt"
 import { FileProvider } from "@/context/file"
+import { CommentsProvider } from "@/context/comments"
 import { NotificationProvider } from "@/context/notification"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
@@ -126,13 +127,15 @@ export function AppInterface(props: { defaultUrl?: string }) {
                 <Route
                   path="/session/:id?"
                   component={(p) => (
-                    <Show when={p.params.id ?? "new"} keyed>
+                    <Show when={p.params.id ?? "new"}>
                       <TerminalProvider>
                         <FileProvider>
                           <PromptProvider>
-                            <Suspense fallback={<Loading />}>
-                              <Session />
-                            </Suspense>
+                            <CommentsProvider>
+                              <Suspense fallback={<Loading />}>
+                                <Session />
+                              </Suspense>
+                            </CommentsProvider>
                           </PromptProvider>
                         </FileProvider>
                       </TerminalProvider>

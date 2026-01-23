@@ -86,6 +86,8 @@ export const dict = {
   "dialog.provider.group.other": "Andre",
   "dialog.provider.tag.recommended": "Anbefalet",
   "dialog.provider.anthropic.note": "Forbind med Claude Pro/Max eller API-nøgle",
+  "dialog.provider.openai.note": "Forbind med ChatGPT Pro/Plus eller API-nøgle",
+  "dialog.provider.copilot.note": "Forbind med Copilot eller API-nøgle",
 
   "dialog.model.select.title": "Vælg model",
   "dialog.model.search.placeholder": "Søg modeller",
