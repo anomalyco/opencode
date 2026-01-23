@@ -151,12 +151,15 @@ Plans:
 **Requirements**: SESS-04, UI-03
 **Success Criteria** (what must be TRUE):
   1. "Remember me" checkbox extends session lifetime
-  2. Session activity indicator shows time remaining
+  2. Session activity indicator shows username with logout access
   3. Session refreshes on user activity (prevents unexpected logout)
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 08-01: TBD
+- [ ] 08-01-PLAN.md — Remember me backend (persistent cookies, extended session timeout)
+- [ ] 08-02-PLAN.md — Session context and username indicator (SessionProvider, SessionIndicator)
+- [ ] 08-03-PLAN.md — Expiration warning and overlay (toast notification, session expired dialog)
+- [ ] 08-04-PLAN.md — Layout integration (SessionIndicator in header, polished dropdown)
 
 ### Phase 9: Connection Security UI
 **Goal**: Users can see at a glance whether their connection is secure
@@ -213,7 +216,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 5. User Process Execution | 10/10 | Complete | 2026-01-22 |
 | 6. Login UI | 1/1 | Complete | 2026-01-22 |
 | 7. Security Hardening | 3/3 | Complete | 2026-01-22 |
-| 8. Session Enhancements | 0/TBD | Not started | - |
+| 8. Session Enhancements | 0/4 | Not started | - |
 | 9. Connection Security UI | 0/TBD | Not started | - |
 | 10. Two-Factor Authentication | 0/TBD | Not started | - |
 | 11. Documentation | 0/TBD | Not started | - |
