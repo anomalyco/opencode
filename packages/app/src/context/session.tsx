@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onMount, onCleanup, type ParentProps } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useServer } from "@/context/server"
+import { showToast, toaster } from "@opencode-ai/ui/toast"
 
 /**
  * Session information from /auth/session endpoint.
@@ -26,6 +27,12 @@ const DEFAULT_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000
  */
 const POLL_INTERVAL_MS = 60 * 1000
 
+/**
+ * Warning threshold: 15 minutes in milliseconds.
+ * Show warning toast when session has less than this time remaining.
+ */
+const WARNING_THRESHOLD_MS = 15 * 60 * 1000
+
 export const { use: useSession, provider: SessionProvider } = createSimpleContext({
   name: "Session",
   init: (props: ParentProps) => {
@@ -33,6 +40,8 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const [sessionInfo, setSessionInfo] = createSignal<SessionInfo | undefined>(undefined)
     const [isExpired, setIsExpired] = createSignal(false)
     let intervalId: number | undefined
+    let warningShown = false
+    let warningToastId: number | undefined
 
     /**
      * Fetch session information from the server.
@@ -68,6 +77,58 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     }
 
     /**
+     * Check if session is expiring soon and show warning toast.
+     */
+    function checkExpirationWarning(): void {
+      const remaining = remainingMs()
+      if (remaining === undefined) return
+
+      // Show warning when below threshold but session not yet expired
+      if (remaining < WARNING_THRESHOLD_MS && remaining > 0 && !warningShown) {
+        warningShown = true
+        warningToastId = showToast({
+          title: "Session expiring soon",
+          description: "Your session will expire in about 15 minutes",
+          persistent: true,
+          actions: [
+            {
+              label: "Extend session",
+              onClick: async () => {
+                const url = server.url
+                if (!url) return
+
+                try {
+                  // Fetch /auth/session to trigger UserSession.touch() via middleware
+                  await fetch(`${url}/auth/session`, {
+                    credentials: "include",
+                  })
+                  // Polling will pick up the new lastAccessTime
+                  // Reset warning state
+                  warningShown = false
+                  if (warningToastId !== undefined) {
+                    toaster.dismiss(warningToastId)
+                    warningToastId = undefined
+                  }
+                } catch (err) {
+                  console.warn("Failed to extend session:", err)
+                }
+              },
+            },
+          ],
+        })
+      }
+
+      // Reset warning state when session is extended (back above threshold)
+      if (remaining >= WARNING_THRESHOLD_MS && warningShown) {
+        warningShown = false
+        if (warningToastId !== undefined) {
+          toaster.dismiss(warningToastId)
+          warningToastId = undefined
+        }
+      }
+    }
+
+    /**
      * Start polling session status.
      */
     function startPolling(): void {
@@ -80,6 +141,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         if (document.hidden) return
 
         void fetchSession()
+        checkExpirationWarning()
       }, POLL_INTERVAL_MS)
     }
 
