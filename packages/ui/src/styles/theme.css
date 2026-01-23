@@ -182,6 +182,7 @@
   --text-on-brand-weak: var(--smoke-light-alpha-9);
   --text-on-brand-weaker: var(--smoke-light-alpha-8);
   --text-on-brand-strong: var(--smoke-light-alpha-12);
+  --button-primary-base: var(--smoke-light-12);
   --button-secondary-base: #fdfcfc;
   --button-secondary-hover: #faf9f9;
   --border-base: var(--smoke-light-alpha-7);
@@ -438,6 +439,7 @@
     --text-on-brand-weak: var(--smoke-dark-alpha-9);
     --text-on-brand-weaker: var(--smoke-dark-alpha-8);
     --text-on-brand-strong: var(--smoke-dark-alpha-12);
+    --button-primary-base: var(--smoke-dark-12);
     --button-secondary-base: #231f1f;
     --button-secondary-hover: #2a2727;
     --border-base: var(--smoke-dark-alpha-7);

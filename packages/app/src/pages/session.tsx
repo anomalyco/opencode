@@ -2087,7 +2087,7 @@ export default function Page() {
                                       </Button>
                                       <Button
                                         size="small"
-                                        variant="secondary"
+                                        variant="primary"
                                         disabled={draft().trim().length === 0}
                                         onClick={() => {
                                           const value = draft().trim()
