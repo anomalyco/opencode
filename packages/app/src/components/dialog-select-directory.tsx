@@ -25,6 +25,8 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   const start = createMemo(() => sync.data.path.home || sync.data.path.directory)
 
+  const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
+
   function normalize(input: string) {
     const v = input.replaceAll("\\", "/")
     if (v.startsWith("//") && !v.startsWith("///")) return "//" + v.slice(2).replace(/\/+/g, "/")
@@ -40,6 +42,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   function trimTrailing(input: string) {
     const v = normalizeDriveRoot(input)
     if (v === "/") return v
+    if (v === "//") return v
     if (/^[A-Za-z]:\/$/.test(v)) return v
     return v.replace(/\/+$/, "")
   }
@@ -61,12 +64,6 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return ""
   }
 
-  function isRoot(input: string) {
-    const v = trimTrailing(input)
-    if (v === "/") return true
-    return /^[A-Za-z]:\/$/.test(v)
-  }
-
   function display(path: string) {
     const full = trimTrailing(path)
     const h = home()
@@ -80,53 +77,95 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return full
   }
 
-  function parse(filter: string) {
+  function scoped(filter: string) {
     const base = start()
     if (!base) return
 
     const raw = normalizeDriveRoot(filter.trim())
-    if (!raw) return { directory: trimTrailing(base), query: "" }
+    if (!raw) return { directory: trimTrailing(base), path: "" }
 
     const h = home()
-    const expanded = raw === "~" ? h : raw.startsWith("~/") ? (h ? join(h, raw.slice(2)) : raw.slice(2)) : raw
-    const absolute = rootOf(expanded) ? expanded : join(base, expanded)
-    const abs = normalizeDriveRoot(absolute)
+    if (raw === "~") return { directory: trimTrailing(h ?? base), path: "" }
+    if (raw.startsWith("~/")) return { directory: trimTrailing(h ?? base), path: raw.slice(2) }
 
-    if (abs.endsWith("/")) return { directory: trimTrailing(abs), query: "" }
-    const i = abs.lastIndexOf("/")
-    if (i === -1) return { directory: trimTrailing(base), query: abs }
-
-    const dir = i === 0 ? "/" : /^[A-Za-z]:$/.test(abs.slice(0, i)) ? abs.slice(0, i) + "/" : abs.slice(0, i)
-    return { directory: trimTrailing(dir), query: abs.slice(i + 1) }
+    const root = rootOf(raw)
+    if (root) return { directory: trimTrailing(root), path: raw.slice(root.length) }
+    return { directory: trimTrailing(base), path: raw }
   }
 
-  async function fetchDirs(input: { directory: string; query: string }) {
-    if (isRoot(input.directory)) {
-      const nodes = await sdk.client.file
-        .list({ directory: input.directory, path: "" })
-        .then((x) => x.data ?? [])
-        .catch(() => [])
+  async function dirs(dir: string) {
+    const key = trimTrailing(dir)
+    const existing = cache.get(key)
+    if (existing) return existing
 
-      const dirs = nodes.filter((n) => n.type === "directory").map((n) => n.name)
-      const sorted = input.query
-        ? fuzzysort.go(input.query, dirs, { limit: 50 }).map((x) => x.target)
-        : dirs.slice().sort((a, b) => a.localeCompare(b))
-
-      return sorted.slice(0, 50).map((name) => join(input.directory, name))
-    }
-
-    const results = await sdk.client.find
-      .files({ directory: input.directory, query: input.query, type: "directory", limit: 50 })
+    const request = sdk.client.file
+      .list({ directory: key, path: "" })
       .then((x) => x.data ?? [])
       .catch(() => [])
+      .then((nodes) =>
+        nodes
+          .filter((n) => n.type === "directory")
+          .map((n) => ({
+            name: n.name,
+            absolute: trimTrailing(normalizeDriveRoot(n.absolute)),
+          })),
+      )
 
-    return results.map((rel) => join(input.directory, rel))
+    cache.set(key, request)
+    return request
+  }
+
+  async function match(dir: string, query: string, limit: number) {
+    const items = await dirs(dir)
+    if (!query) return items.slice(0, limit).map((x) => x.absolute)
+    return fuzzysort.go(query, items, { key: "name", limit }).map((x) => x.obj.absolute)
   }
 
   const directories = async (filter: string) => {
-    const input = parse(filter)
+    const input = scoped(filter)
     if (!input) return [] as string[]
-    return fetchDirs(input)
+
+    const raw = normalizeDriveRoot(filter.trim())
+    const isPath = raw.startsWith("~") || !!rootOf(raw) || raw.includes("/")
+
+    const query = normalizeDriveRoot(input.path)
+
+    if (!isPath) {
+      const results = await sdk.client.find
+        .files({ directory: input.directory, query, type: "directory", limit: 50 })
+        .then((x) => x.data ?? [])
+        .catch(() => [])
+
+      return results.map((rel) => join(input.directory, rel)).slice(0, 50)
+    }
+
+    const segments = query.replace(/^\/+/, "").split("/")
+    const head = segments.slice(0, segments.length - 1).filter((x) => x && x !== ".")
+    const tail = segments[segments.length - 1] ?? ""
+
+    const cap = 12
+    const branch = 4
+    let paths = [input.directory]
+    for (const part of head) {
+      if (part === "..") {
+        paths = paths.map((p) => {
+          const v = trimTrailing(p)
+          if (v === "/") return v
+          if (/^[A-Za-z]:\/$/.test(v)) return v
+          const i = v.lastIndexOf("/")
+          if (i <= 0) return "/"
+          return v.slice(0, i)
+        })
+        continue
+      }
+
+      const next = (await Promise.all(paths.map((p) => match(p, part, branch)))).flat()
+      paths = Array.from(new Set(next)).slice(0, cap)
+      if (paths.length === 0) return [] as string[]
+    }
+
+    const out = (await Promise.all(paths.map((p) => match(p, tail, 50)))).flat()
+    return Array.from(new Set(out)).slice(0, 50)
   }
 
   function resolve(absolute: string) {
