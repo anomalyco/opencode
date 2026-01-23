@@ -123,6 +123,8 @@ export const dict = {
     "Скопируйте и перейдите по ссылке ниже, чтобы получить код авторизации и использовать модели {{provider}} в OpenCode.",
   "provider.connect.oauth.url.label": "URL авторизации",
   "provider.connect.oauth.url.open": "Открыть в браузере",
+  "provider.connect.oauth.url.copied": "URL скопирован в буфер обмена",
+  "provider.connect.oauth.url.copy": "Копировать URL",
   "provider.connect.oauth.code.label": "{{method}} код авторизации",
   "provider.connect.oauth.code.placeholder": "Код авторизации",
   "provider.connect.oauth.code.required": "Код авторизации обязателен",

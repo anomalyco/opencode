@@ -129,6 +129,8 @@ export const dict = {
   "provider.connect.oauth.auto.confirmationCode": "确认码",
   "provider.connect.oauth.url.label": "授权链接",
   "provider.connect.oauth.url.open": "在浏览器中打开",
+  "provider.connect.oauth.url.copied": "链接已复制到剪贴板",
+  "provider.connect.oauth.url.copy": "复制链接",
   "provider.connect.toast.connected.title": "{{provider}} 已连接",
   "provider.connect.toast.connected.description": "现在可以使用 {{provider}} 模型了。",
 

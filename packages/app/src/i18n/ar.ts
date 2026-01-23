@@ -123,6 +123,8 @@ export const dict = {
     "انسخ الرابط أدناه وقم بزيارته للحصول على رمز التفويض واستخدام نماذج {{provider}} في OpenCode.",
   "provider.connect.oauth.url.label": "رابط التفويض",
   "provider.connect.oauth.url.open": "فتح في المتصفح",
+  "provider.connect.oauth.url.copied": "تم نسخ الرابط إلى الحافظة",
+  "provider.connect.oauth.url.copy": "نسخ الرابط",
   "provider.connect.oauth.code.label": "رمز تفويض {{method}}",
   "provider.connect.oauth.code.placeholder": "رمز التفويض",
   "provider.connect.oauth.code.required": "رمز التفويض مطلوب",

@@ -126,6 +126,8 @@ export const dict = {
     "Kopier og besøk lenken nedenfor for å hente autorisasjonskoden din og bruke {{provider}}-modeller i OpenCode.",
   "provider.connect.oauth.url.label": "Autorisasjons-URL",
   "provider.connect.oauth.url.open": "Åpne i nettleser",
+  "provider.connect.oauth.url.copied": "URL kopiert til utklippstavlen",
+  "provider.connect.oauth.url.copy": "Kopier URL",
   "provider.connect.oauth.code.label": "{{method}} autorisasjonskode",
   "provider.connect.oauth.code.placeholder": "Autorisasjonskode",
   "provider.connect.oauth.code.required": "Autorisasjonskode er påkrevd",

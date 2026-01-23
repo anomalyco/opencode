@@ -123,6 +123,8 @@ export const dict = {
     "아래 링크를 복사하여 방문하고 인증 코드를 받아 OpenCode에서 {{provider}} 모델을 사용하세요.",
   "provider.connect.oauth.url.label": "인증 URL",
   "provider.connect.oauth.url.open": "브라우저에서 열기",
+  "provider.connect.oauth.url.copied": "URL이 클립보드에 복사되었습니다",
+  "provider.connect.oauth.url.copy": "URL 복사",
   "provider.connect.oauth.code.label": "{{method}} 인증 코드",
   "provider.connect.oauth.code.placeholder": "인증 코드",
   "provider.connect.oauth.code.required": "인증 코드가 필요합니다",

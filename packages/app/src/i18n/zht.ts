@@ -123,6 +123,8 @@ export const dict = {
     "複製並造訪下方連結，以取得授權碼並在 OpenCode 中使用 {{provider}} 模型。",
   "provider.connect.oauth.url.label": "授權網址",
   "provider.connect.oauth.url.open": "在瀏覽器中開啟",
+  "provider.connect.oauth.url.copied": "連結已複製到剪貼簿",
+  "provider.connect.oauth.url.copy": "複製連結",
   "provider.connect.oauth.code.label": "{{method}} 授權碼",
   "provider.connect.oauth.code.placeholder": "授權碼",
   "provider.connect.oauth.code.required": "授權碼為必填",

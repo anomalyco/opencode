@@ -124,6 +124,8 @@ export const dict = {
     "Kopieren und besuchen Sie den untenstehenden Link, um Ihren Autorisierungscode zu erhalten und {{provider}} Modelle in OpenCode zu nutzen.",
   "provider.connect.oauth.url.label": "Autorisierungs-URL",
   "provider.connect.oauth.url.open": "Im Browser öffnen",
+  "provider.connect.oauth.url.copied": "URL in Zwischenablage kopiert",
+  "provider.connect.oauth.url.copy": "URL kopieren",
   "provider.connect.oauth.code.label": "{{method}} Autorisierungscode",
   "provider.connect.oauth.code.placeholder": "Autorisierungscode",
   "provider.connect.oauth.code.required": "Autorisierungscode ist erforderlich",

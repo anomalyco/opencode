@@ -130,6 +130,8 @@ export const dict = {
   "provider.connect.oauth.auto.confirmationCode": "Confirmation code",
   "provider.connect.oauth.url.label": "Authorization URL",
   "provider.connect.oauth.url.open": "Open in browser",
+  "provider.connect.oauth.url.copied": "URL copied to clipboard",
+  "provider.connect.oauth.url.copy": "Copy URL",
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
 

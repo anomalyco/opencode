@@ -123,6 +123,8 @@ export const dict = {
     "Copie e visite o link abaixo para obter seu código de autorização e usar modelos do {{provider}} no OpenCode.",
   "provider.connect.oauth.url.label": "URL de autorização",
   "provider.connect.oauth.url.open": "Abrir no navegador",
+  "provider.connect.oauth.url.copied": "URL copiada para a área de transferência",
+  "provider.connect.oauth.url.copy": "Copiar URL",
   "provider.connect.oauth.code.label": "Código de autorização {{method}}",
   "provider.connect.oauth.code.placeholder": "Código de autorização",
   "provider.connect.oauth.code.required": "O código de autorização é obrigatório",

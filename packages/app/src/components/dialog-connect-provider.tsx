@@ -10,6 +10,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
+import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { iife } from "@opencode-ai/util/iife"
 import { createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
@@ -96,11 +97,27 @@ export function DialogConnectProvider(props: { provider: string }) {
   }
 
   let listRef: ListRef | undefined
+  async function copyAuthUrl() {
+    if (store.authorization?.url) {
+      await navigator.clipboard.writeText(store.authorization.url)
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("provider.connect.oauth.url.copied"),
+      })
+    }
+  }
+
   function handleKey(e: KeyboardEvent) {
     if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
       return
     }
     if (e.key === "Escape") return
+    if (e.key === "c" && store.authorization?.url && !(e.target instanceof HTMLInputElement)) {
+      e.preventDefault()
+      copyAuthUrl()
+      return
+    }
     listRef?.onKeyDown(e)
   }
 
@@ -339,13 +356,20 @@ export function DialogConnectProvider(props: { provider: string }) {
                           {language.t("provider.connect.oauth.code.visit.description", { provider: provider().name })}
                         </div>
                         <div class="flex flex-col gap-2">
-                          <TextField
-                            label={language.t("provider.connect.oauth.url.label")}
-                            class="font-mono text-xs"
-                            value={store.authorization!.url}
-                            readOnly
-                            copyable
-                          />
+                          <TooltipKeybind
+                            title={language.t("provider.connect.oauth.url.copy")}
+                            keybind="c"
+                            placement="top"
+                            gutter={8}
+                          >
+                            <TextField
+                              label={language.t("provider.connect.oauth.url.label")}
+                              class="font-mono text-xs"
+                              value={store.authorization!.url}
+                              readOnly
+                              copyable
+                            />
+                          </TooltipKeybind>
                           <div class="text-14-regular text-text-base">
                             <Link href={store.authorization!.url}>
                               {language.t("provider.connect.oauth.url.open")}
@@ -407,13 +431,20 @@ export function DialogConnectProvider(props: { provider: string }) {
                           {language.t("provider.connect.oauth.auto.visit.description", { provider: provider().name })}
                         </div>
                         <div class="flex flex-col gap-2">
-                          <TextField
-                            label={language.t("provider.connect.oauth.url.label")}
-                            class="font-mono text-xs"
-                            value={store.authorization!.url}
-                            readOnly
-                            copyable
-                          />
+                          <TooltipKeybind
+                            title={language.t("provider.connect.oauth.url.copy")}
+                            keybind="c"
+                            placement="top"
+                            gutter={8}
+                          >
+                            <TextField
+                              label={language.t("provider.connect.oauth.url.label")}
+                              class="font-mono text-xs"
+                              value={store.authorization!.url}
+                              readOnly
+                              copyable
+                            />
+                          </TooltipKeybind>
                           <div class="text-14-regular text-text-base">
                             <Link href={store.authorization!.url}>
                               {language.t("provider.connect.oauth.url.open")}

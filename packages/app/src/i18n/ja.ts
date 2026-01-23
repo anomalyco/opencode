@@ -119,6 +119,8 @@ export const dict = {
     "下記のリンクをコピーしてアクセスし、認証コードを取得してOpenCodeで{{provider}}モデルを使用してください。",
   "provider.connect.oauth.url.label": "認証URL",
   "provider.connect.oauth.url.open": "ブラウザで開く",
+  "provider.connect.oauth.url.copied": "URLをクリップボードにコピーしました",
+  "provider.connect.oauth.url.copy": "URLをコピー",
   "provider.connect.oauth.code.label": "{{method}} 認証コード",
   "provider.connect.oauth.code.placeholder": "認証コード",
   "provider.connect.oauth.code.required": "認証コードが必要です",

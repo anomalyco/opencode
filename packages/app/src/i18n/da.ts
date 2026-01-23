@@ -120,6 +120,8 @@ export const dict = {
     "Kopier og besøg linket nedenfor for at hente din godkendelseskode og bruge {{provider}} modeller i OpenCode.",
   "provider.connect.oauth.url.label": "Godkendelses-URL",
   "provider.connect.oauth.url.open": "Åbn i browser",
+  "provider.connect.oauth.url.copied": "URL kopieret til udklipsholder",
+  "provider.connect.oauth.url.copy": "Kopier URL",
   "provider.connect.oauth.code.label": "{{method}} godkendelseskode",
   "provider.connect.oauth.code.placeholder": "Godkendelseskode",
   "provider.connect.oauth.code.required": "Godkendelseskode er påkrævet",
