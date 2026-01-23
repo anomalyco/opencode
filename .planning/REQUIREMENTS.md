@@ -20,7 +20,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **SESS-01**: Session stored as secure cookie (HttpOnly, Secure, SameSite=Strict)
 - [ ] **SESS-02**: User can log out, clearing session cookie and server-side state
 - [ ] **SESS-03**: Session expires after configurable idle timeout
-- [ ] **SESS-04**: "Remember me" option extends session lifetime for trusted devices
+- [x] **SESS-04**: "Remember me" option extends session lifetime for trusted devices
 
 ### Security
 
@@ -40,7 +40,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **UI-01**: Login page with username/password form matching opencode design
 - [x] **UI-02**: Password visibility toggle (eye icon to show/hide)
-- [ ] **UI-03**: Session activity indicator showing time remaining before expiry
+- [x] **UI-03**: Session activity indicator showing username with logout access
 - [ ] **UI-04**: Connection security badge (lock icon for HTTPS, warning for HTTP)
 
 ### Documentation
@@ -90,7 +90,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SESS-01 | Phase 2 | Complete |
 | SESS-02 | Phase 2 | Complete |
 | SESS-03 | Phase 2 | Complete |
-| SESS-04 | Phase 8 | Pending |
+| SESS-04 | Phase 8 | Complete |
 | SEC-01 | Phase 7 | Complete |
 | SEC-02 | Phase 7 | Complete |
 | SEC-03 | Phase 7 | Complete |
@@ -101,7 +101,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFRA-04 | Phase 1 | Complete |
 | UI-01 | Phase 6 | Complete |
 | UI-02 | Phase 6 | Complete |
-| UI-03 | Phase 8 | Pending |
+| UI-03 | Phase 8 | Complete |
 | UI-04 | Phase 9 | Pending |
 | DOC-01 | Phase 11 | Pending |
 | DOC-02 | Phase 11 | Pending |
@@ -113,4 +113,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-19*
-*Last updated: 2026-01-22 after Phase 7 completion*
+*Last updated: 2026-01-23 after Phase 8 completion*

@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: User Process Execution** - Commands execute under authenticated user's UID
 - [x] **Phase 6: Login UI** - Web login form with opencode styling
 - [x] **Phase 7: Security Hardening** - CSRF, rate limiting, HTTPS detection
-- [ ] **Phase 8: Session Enhancements** - Remember me and session activity indicator
+- [x] **Phase 8: Session Enhancements** - Remember me and session activity indicator
 - [ ] **Phase 9: Connection Security UI** - HTTPS/HTTP security badge in UI
 - [ ] **Phase 10: Two-Factor Authentication** - TOTP support via PAM integration
 - [ ] **Phase 11: Documentation** - Reverse proxy and PAM configuration guides
@@ -156,10 +156,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Remember me backend (persistent cookies, extended session timeout)
-- [ ] 08-02-PLAN.md — Session context and username indicator (SessionProvider, SessionIndicator)
-- [ ] 08-03-PLAN.md — Expiration warning and overlay (toast notification, session expired dialog)
-- [ ] 08-04-PLAN.md — Layout integration (SessionIndicator in header, polished dropdown)
+- [x] 08-01-PLAN.md — Remember me backend (persistent cookies, extended session timeout)
+- [x] 08-02-PLAN.md — Session context and username indicator (SessionProvider, SessionIndicator)
+- [x] 08-03-PLAN.md — Expiration warning and overlay (toast notification, session expired dialog)
+- [x] 08-04-PLAN.md — Layout integration (SessionIndicator in header, polished dropdown)
 
 ### Phase 9: Connection Security UI
 **Goal**: Users can see at a glance whether their connection is secure
@@ -216,7 +216,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 5. User Process Execution | 10/10 | Complete | 2026-01-22 |
 | 6. Login UI | 1/1 | Complete | 2026-01-22 |
 | 7. Security Hardening | 3/3 | Complete | 2026-01-22 |
-| 8. Session Enhancements | 0/4 | Not started | - |
+| 8. Session Enhancements | 4/4 | Complete | 2026-01-23 |
 | 9. Connection Security UI | 0/TBD | Not started | - |
 | 10. Two-Factor Authentication | 0/TBD | Not started | - |
 | 11. Documentation | 0/TBD | Not started | - |
