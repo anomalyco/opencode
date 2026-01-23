@@ -1681,7 +1681,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 return (
                   <div
                     classList={{
-                      "group shrink-0 flex flex-col gap-1 rounded-[6px] bg-background-stronger border border-border-base pl-2 pr-1 py-1 max-w-[320px]": true,
+                      "group shrink-0 flex flex-col gap-1 rounded-[6px] bg-background-stronger border border-border-base pl-2 pr-1 py-1 max-w-[200px]": true,
                       "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID,
                     }}
                     onClick={() => {
@@ -1720,7 +1720,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       />
                     </div>
                     <Show when={item.comment}>
-                      {(comment) => <div class="text-11-regular text-text-strong ml-5">{comment()}</div>}
+                      {(comment) => <div class="text-11-regular text-text-strong ml-5 truncate">{comment()}</div>}
                     </Show>
                   </div>
                 )
