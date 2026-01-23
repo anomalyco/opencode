@@ -316,6 +316,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   setDefaultServerUrl: async (url: string | null) => {
     await invoke("set_default_server_url", { url })
   },
+
+  parseMarkdown: async (markdown: string) => {
+    return invoke<string>("parse_markdown_command", { markdown })
+  },
 })
 
 createMenu()
