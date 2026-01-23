@@ -54,12 +54,13 @@ function maskUsername(username: string): string {
 }
 
 /**
- * Login request schema - accepts username and password.
+ * Login request schema - accepts username, password, and optional rememberMe.
  */
 const loginRequestSchema = z.object({
   username: z.string().min(1).max(32),
   password: z.string().min(1),
   returnUrl: z.string().optional(),
+  rememberMe: z.boolean().optional(),
 })
 
 /**
@@ -335,7 +336,7 @@ function generateLoginPageHtml(securityContext: {
       </div>
 
       <div class="checkbox-wrapper">
-        <input type="checkbox" id="rememberMe" name="rememberMe" ${shouldBlock ? 'disabled' : ''}>
+        <input type="checkbox" id="rememberMe" name="rememberMe" checked ${shouldBlock ? 'disabled' : ''}>
         <label for="rememberMe" class="checkbox-label">Remember me</label>
       </div>
 
@@ -409,6 +410,7 @@ function generateLoginPageHtml(securityContext: {
           body: JSON.stringify({
             username: usernameInput.value,
             password: passwordInput.value,
+            rememberMe: document.getElementById('rememberMe').checked,
           }),
         });
         if (res.ok) {
@@ -540,7 +542,7 @@ export const AuthRoutes = lazy(() =>
         }
 
         // 4. Parse body based on Content-Type
-        let body: { username?: string; password?: string; returnUrl?: string }
+        let body: { username?: string; password?: string; returnUrl?: string; rememberMe?: boolean }
         const contentType = c.req.header("Content-Type") ?? ""
 
         if (contentType.includes("application/json")) {
@@ -551,6 +553,7 @@ export const AuthRoutes = lazy(() =>
             username: form.username ? String(form.username) : undefined,
             password: form.password ? String(form.password) : undefined,
             returnUrl: form.returnUrl ? String(form.returnUrl) : undefined,
+            rememberMe: form.rememberMe === "on" || form.rememberMe === "true",
           }
         } else {
           return c.json(
@@ -564,7 +567,7 @@ export const AuthRoutes = lazy(() =>
         if (!parsed.success) {
           return c.json({ error: "invalid_request", message: "Username and password are required" }, 400)
         }
-        const { username, password, returnUrl } = parsed.data
+        const { username, password, returnUrl, rememberMe } = parsed.data
 
         // 6. Validate returnUrl (same-origin only)
         if (returnUrl && !isValidReturnUrl(returnUrl)) {
@@ -609,15 +612,20 @@ export const AuthRoutes = lazy(() =>
         }
 
         // 9. Create session with full user info
-        const session = UserSession.create(username, c.req.header("User-Agent"), {
-          uid: userInfo.uid,
-          gid: userInfo.gid,
-          home: userInfo.home,
-          shell: userInfo.shell,
-        })
+        const session = UserSession.create(
+          username,
+          c.req.header("User-Agent"),
+          {
+            uid: userInfo.uid,
+            gid: userInfo.gid,
+            home: userInfo.home,
+            shell: userInfo.shell,
+          },
+          rememberMe ?? false,
+        )
 
         // 10. Set session cookie
-        setSessionCookie(c, session.id)
+        setSessionCookie(c, session.id, rememberMe ?? false)
 
         // 10a. Set CSRF cookie (regenerate token after successful login)
         setCSRFCookie(c, session.id)
