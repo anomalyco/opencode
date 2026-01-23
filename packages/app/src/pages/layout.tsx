@@ -56,6 +56,7 @@ import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { playSound, soundSrc } from "@/utils/sound"
+import { Worktree as WorktreeState } from "@/utils/worktree"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
@@ -332,6 +333,18 @@ export default function Layout(props: ParentProps) {
     const cooldownMs = 5000
 
     const unsub = globalSDK.event.listen((e) => {
+      if (e.details?.type === "worktree.ready") {
+        setBusy(e.name, false)
+        WorktreeState.ready(e.name)
+        return
+      }
+
+      if (e.details?.type === "worktree.failed") {
+        setBusy(e.name, false)
+        WorktreeState.failed(e.name, e.details.properties?.message ?? language.t("common.requestFailed"))
+        return
+      }
+
       if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked") return
       const title =
         e.details.type === "permission.asked"
@@ -551,6 +564,7 @@ export default function Layout(props: ParentProps) {
     const project = currentProject()
     if (!project) return
 
+    const local = project.worktree
     const dirs = [project.worktree, ...(project.sandboxes ?? [])]
     const existing = store.workspaceOrder[project.worktree]
     if (!existing) {
@@ -558,9 +572,9 @@ export default function Layout(props: ParentProps) {
       return
     }
 
-    const keep = existing.filter((d) => dirs.includes(d))
-    const missing = dirs.filter((d) => !existing.includes(d))
-    const merged = [...keep, ...missing]
+    const keep = existing.filter((d) => d !== local && dirs.includes(d))
+    const missing = dirs.filter((d) => d !== local && !existing.includes(d))
+    const merged = [local, ...missing, ...keep]
 
     if (merged.length !== existing.length) {
       setStore("workspaceOrder", project.worktree, merged)
@@ -1434,17 +1448,22 @@ export default function Layout(props: ParentProps) {
 
   function workspaceIds(project: LocalProject | undefined) {
     if (!project) return []
-    const dirs = [project.worktree, ...(project.sandboxes ?? [])]
+    const local = project.worktree
+    const dirs = [local, ...(project.sandboxes ?? [])]
     const active = currentProject()
     const directory = active?.worktree === project.worktree && params.dir ? base64Decode(params.dir) : undefined
-    const next = directory && directory !== project.worktree && !dirs.includes(directory) ? [...dirs, directory] : dirs
+    const extra = directory && directory !== local && !dirs.includes(directory) ? directory : undefined
+    const pending = extra ? WorktreeState.get(extra)?.status === "pending" : false
 
     const existing = store.workspaceOrder[project.worktree]
-    if (!existing) return next
+    if (!existing) return extra ? [...dirs, extra] : dirs
 
-    const keep = existing.filter((d) => next.includes(d))
-    const missing = next.filter((d) => !existing.includes(d))
-    return [...keep, ...missing]
+    const keep = existing.filter((d) => d !== local && dirs.includes(d))
+    const missing = dirs.filter((d) => d !== local && !existing.includes(d))
+    const merged = [local, ...(pending && extra ? [extra] : []), ...missing, ...keep]
+    if (!extra) return merged
+    if (pending) return merged
+    return [...merged, extra]
   }
 
   function handleWorkspaceDragStart(event: unknown) {
@@ -2237,8 +2256,19 @@ export default function Layout(props: ParentProps) {
 
       if (!created?.directory) return
 
+      setBusy(created.directory, true)
+      WorktreeState.pending(created.directory)
+      setStore("workspaceExpanded", created.directory, true)
+      setStore("workspaceOrder", current.worktree, (prev) => {
+        const existing = prev ?? []
+        const local = current.worktree
+        const next = existing.filter((d) => d !== local && d !== created.directory)
+        return [local, created.directory, ...next]
+      })
+
       globalSync.child(created.directory)
       navigate(`/${base64Encode(created.directory)}/session`)
+      layout.mobileSidebar.hide()
     }
 
     command.register(() => [

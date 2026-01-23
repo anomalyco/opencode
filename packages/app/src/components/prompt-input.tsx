@@ -48,6 +48,7 @@ import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
 import { Identifier } from "@/utils/id"
+import { Worktree as WorktreeState } from "@/utils/worktree"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
@@ -60,6 +61,13 @@ import { base64Encode } from "@opencode-ai/util/encode"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
+
+type PendingPrompt = {
+  abort: AbortController
+  cleanup: VoidFunction
+}
+
+const pending = new Map<string, PendingPrompt>()
 
 interface PromptInputProps {
   class?: string
@@ -846,12 +854,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setStore("popover", null)
   }
 
-  const abort = () =>
-    sdk.client.session
+  const abort = () => {
+    const sessionID = params.id
+    if (!sessionID) return Promise.resolve()
+    const queued = pending.get(sessionID)
+    if (queued) {
+      queued.abort.abort()
+      queued.cleanup()
+      pending.delete(sessionID)
+      return Promise.resolve()
+    }
+    return sdk.client.session
       .abort({
-        sessionID: params.id!,
+        sessionID,
       })
       .catch(() => {})
+  }
 
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     const text = prompt
@@ -1111,6 +1129,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           })
           return
         }
+        WorktreeState.pending(createdWorktree.directory)
         sessionDirectory = createdWorktree.directory
       }
 
@@ -1409,20 +1428,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     clearInput()
     addOptimisticMessage()
 
-    client.session
-      .prompt({
-        sessionID: session.id,
-        agent,
-        model,
-        messageID,
-        parts: requestParts,
-        variant,
-      })
-      .catch((err) => {
-        showToast({
-          title: language.t("prompt.toast.promptSendFailed.title"),
-          description: errorMessage(err),
-        })
+    const waitForWorktree = async () => {
+      const worktree = WorktreeState.get(sessionDirectory)
+      if (!worktree || worktree.status !== "pending") return true
+
+      setSyncStore("session_status", session.id, { type: "busy" })
+
+      const controller = new AbortController()
+
+      const cleanup = () => {
+        setSyncStore("session_status", session.id, { type: "idle" })
         removeOptimisticMessage()
         for (const item of commentItems) {
           prompt.context.add({
@@ -1435,7 +1450,71 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           })
         }
         restoreInput()
+      }
+
+      pending.set(session.id, { abort: controller, cleanup })
+
+      const abort = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
+        if (controller.signal.aborted) {
+          resolve({ status: "failed", message: "aborted" })
+          return
+        }
+        controller.signal.addEventListener(
+          "abort",
+          () => {
+            resolve({ status: "failed", message: "aborted" })
+          },
+          { once: true },
+        )
       })
+
+      const timeoutMs = 5 * 60 * 1000
+      const timeout = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
+        setTimeout(() => {
+          resolve({ status: "failed", message: "Workspace is still preparing" })
+        }, timeoutMs)
+      })
+
+      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abort, timeout])
+      pending.delete(session.id)
+      if (controller.signal.aborted) return false
+      if (result.status === "failed") throw new Error(result.message)
+      return true
+    }
+
+    const send = async () => {
+      const ok = await waitForWorktree()
+      if (!ok) return
+      await client.session.prompt({
+        sessionID: session.id,
+        agent,
+        model,
+        messageID,
+        parts: requestParts,
+        variant,
+      })
+    }
+
+    void send().catch((err) => {
+      pending.delete(session.id)
+      setSyncStore("session_status", session.id, { type: "idle" })
+      showToast({
+        title: language.t("prompt.toast.promptSendFailed.title"),
+        description: errorMessage(err),
+      })
+      removeOptimisticMessage()
+      for (const item of commentItems) {
+        prompt.context.add({
+          type: "file",
+          path: item.path,
+          selection: item.selection,
+          comment: item.comment,
+          commentID: item.commentID,
+          preview: item.preview,
+        })
+      }
+      restoreInput()
+    })
   }
 
   return (
