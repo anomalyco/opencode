@@ -94,9 +94,9 @@ export namespace BunProc {
     const oldPkg = provider ? parsed.opencode?.providers?.[provider] : undefined
     const switched = oldPkg && oldPkg !== pkg
 
-    // Check if already installed
+    // Check if already installed with exact version
     const installed = parsed.dependencies?.[pkg]
-    if (installed && (version === "latest" || installed === version) && (await Filesystem.exists(mod))) {
+    if (installed && version !== "latest" && installed === version && (await Filesystem.exists(mod))) {
       if (provider) await track(provider, pkg)
       // Remove old package after tracking update, only if not used by others
       if (switched) {
