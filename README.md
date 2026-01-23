@@ -18,10 +18,15 @@
 
 ---
 
-### Fork Notes
+## 🔱 Fork Notes
 
-Feature: clipboard image paste (Windows Terminal) — fixes image paste failing by pulling image data into the prompt.
-Feature: double-press esc to clear — prevents accidental prompt wipes while keeping a quick clear path.
+> [!IMPORTANT]
+> **Enhanced features in this fork:**
+>
+> - **Clipboard image paste (Windows Terminal)** — Fixes image paste failing by pulling image data into the prompt.
+> - **Double-press `esc` to clear** — Prevents accidental prompt wipes while keeping a quick clear path.
+
+---
 
 ### Installation
 
