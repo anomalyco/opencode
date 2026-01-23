@@ -1,8 +1,6 @@
 import { convertToOpenAICompatibleChatMessages as convertToCopilotMessages } from "@/provider/sdk/copilot/chat/convert-to-openai-compatible-chat-messages"
 import { describe, test, expect } from "bun:test"
 
-const CACHE_CONTROL = { copilot_cache_control: { type: "ephemeral" as const } }
-
 describe("user messages", () => {
   test("should convert messages with only a text part to a string content", () => {
     const result = convertToCopilotMessages([
@@ -12,7 +10,7 @@ describe("user messages", () => {
       },
     ])
 
-    expect(result).toEqual([{ role: "user", content: "Hello", ...CACHE_CONTROL }])
+    expect(result).toEqual([{ role: "user", content: "Hello" }])
   })
 
   test("should convert messages with image parts", () => {
@@ -40,7 +38,6 @@ describe("user messages", () => {
             image_url: { url: "data:image/png;base64,AAECAw==" },
           },
         ],
-        ...CACHE_CONTROL,
       },
     ])
   })
@@ -70,7 +67,6 @@ describe("user messages", () => {
             image_url: { url: "data:image/png;base64,AAECAw==" },
           },
         ],
-        ...CACHE_CONTROL,
       },
     ])
   })
@@ -98,7 +94,6 @@ describe("user messages", () => {
             image_url: { url: "https://example.com/image.jpg" },
           },
         ],
-        ...CACHE_CONTROL,
       },
     ])
   })
@@ -121,31 +116,6 @@ describe("user messages", () => {
           { type: "text", text: "Part 1" },
           { type: "text", text: "Part 2" },
         ],
-        ...CACHE_CONTROL,
-      },
-    ])
-  })
-})
-
-describe("system messages", () => {
-  test("should convert system messages with cache control", () => {
-    const result = convertToCopilotMessages([
-      {
-        role: "system",
-        content: "You are a helpful assistant.",
-      },
-    ])
-
-    expect(result).toEqual([
-      {
-        role: "system",
-        content: [
-          {
-            type: "text",
-            text: "You are a helpful assistant.",
-            copilot_cache_control: { type: "ephemeral" },
-          },
-        ],
       },
     ])
   })
@@ -167,7 +137,6 @@ describe("assistant messages", () => {
         tool_calls: undefined,
         reasoning_text: undefined,
         reasoning_opaque: undefined,
-        ...CACHE_CONTROL,
       },
     ])
   })
@@ -203,7 +172,6 @@ describe("assistant messages", () => {
         ],
         reasoning_text: undefined,
         reasoning_opaque: undefined,
-        ...CACHE_CONTROL,
       },
     ])
   })
@@ -266,13 +234,11 @@ describe("tool calls", () => {
         ],
         reasoning_text: undefined,
         reasoning_opaque: undefined,
-        ...CACHE_CONTROL,
       },
       {
         role: "tool",
         tool_call_id: "quux",
         content: JSON.stringify({ oof: "321rab" }),
-        ...CACHE_CONTROL,
       },
     ])
   })
@@ -297,7 +263,6 @@ describe("tool calls", () => {
         role: "tool",
         tool_call_id: "call-1",
         content: "It is sunny today",
-        ...CACHE_CONTROL,
       },
     ])
   })
@@ -328,13 +293,11 @@ describe("tool calls", () => {
       role: "tool",
       tool_call_id: "call1",
       content: "Result 1",
-      ...CACHE_CONTROL,
     })
     expect(result[1]).toEqual({
       role: "tool",
       tool_call_id: "call2",
       content: "Result 2",
-      ...CACHE_CONTROL,
     })
   })
 
@@ -385,7 +348,6 @@ describe("tool calls", () => {
         ],
         reasoning_text: undefined,
         reasoning_opaque: undefined,
-        ...CACHE_CONTROL,
       },
     ])
   })
@@ -410,7 +372,6 @@ describe("reasoning (copilot-specific)", () => {
         tool_calls: undefined,
         reasoning_text: "Let me think about this...",
         reasoning_opaque: undefined,
-        ...CACHE_CONTROL,
       },
     ])
   })
@@ -439,7 +400,6 @@ describe("reasoning (copilot-specific)", () => {
         tool_calls: undefined,
         reasoning_text: "Thinking...",
         reasoning_opaque: "opaque-signature-123",
-        ...CACHE_CONTROL,
       },
     ])
   })
@@ -467,7 +427,6 @@ describe("reasoning (copilot-specific)", () => {
         tool_calls: undefined,
         reasoning_text: "Just thinking, no response yet",
         reasoning_opaque: "sig-abc",
-        ...CACHE_CONTROL,
       },
     ])
   })
@@ -505,21 +464,8 @@ describe("full conversation", () => {
 
     expect(result).toHaveLength(4)
 
-    // Verify cache control placement
-    // System message has cache control in content array
-    const systemMsg = result[0] as {
-      role: "system"
-      content: Array<{ copilot_cache_control: { type: string } }>
-    }
+    const systemMsg = result[0];
     expect(systemMsg.role).toBe("system")
-    expect(systemMsg.content[0].copilot_cache_control).toEqual({
-      type: "ephemeral",
-    })
-
-    // User, assistant, and tool messages have cache control at message level
-    for (const msg of result.slice(1)) {
-      expect((msg as { copilot_cache_control?: { type: string } }).copilot_cache_control).toEqual({ type: "ephemeral" })
-    }
 
     // Assistant message should have reasoning fields
     const assistantMsg = result[2] as {

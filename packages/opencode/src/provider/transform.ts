@@ -182,6 +182,9 @@ export namespace ProviderTransform {
       openaiCompatible: {
         cache_control: { type: "ephemeral" },
       },
+      copilot: {
+        copilot_cache_control: { type: "ephemeral" },
+      },
     }
 
     for (const msg of unique([...system, ...final])) {

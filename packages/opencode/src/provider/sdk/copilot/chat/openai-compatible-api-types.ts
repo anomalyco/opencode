@@ -15,9 +15,6 @@ type JsonRecord<T = never> = Record<
   JSONValue | JSONValue[] | T | T[] | undefined
 >;
 
-// Copilot-specific cache control type
-type CopilotCacheControl = { copilot_cache_control?: { type: 'ephemeral' } };
-
 export interface OpenAICompatibleSystemMessage
   extends JsonRecord<OpenAICompatibleSystemContentPart> {
   role: 'system';
@@ -25,15 +22,13 @@ export interface OpenAICompatibleSystemMessage
 }
 
 export interface OpenAICompatibleSystemContentPart
-  extends JsonRecord,
-    CopilotCacheControl {
+  extends JsonRecord {
   type: 'text';
   text: string;
 }
 
 export interface OpenAICompatibleUserMessage
-  extends JsonRecord<OpenAICompatibleContentPart>,
-    CopilotCacheControl {
+  extends JsonRecord<OpenAICompatibleContentPart> {
   role: 'user';
   content: string | Array<OpenAICompatibleContentPart>;
 }
@@ -53,8 +48,7 @@ export interface OpenAICompatibleContentPartText extends JsonRecord {
 }
 
 export interface OpenAICompatibleAssistantMessage
-  extends JsonRecord<OpenAICompatibleMessageToolCall>,
-    CopilotCacheControl {
+  extends JsonRecord<OpenAICompatibleMessageToolCall> {
   role: 'assistant';
   content?: string | null;
   tool_calls?: Array<OpenAICompatibleMessageToolCall>;
@@ -73,8 +67,7 @@ export interface OpenAICompatibleMessageToolCall extends JsonRecord {
 }
 
 export interface OpenAICompatibleToolMessage
-  extends JsonRecord,
-    CopilotCacheControl {
+  extends JsonRecord {
   role: 'tool';
   content: string;
   tool_call_id: string;

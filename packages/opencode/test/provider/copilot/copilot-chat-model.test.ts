@@ -499,54 +499,6 @@ describe("doStream", () => {
 })
 
 describe("request body", () => {
-  test("should send messages with copilot_cache_control", async () => {
-    let capturedBody: unknown
-    const mockFetch = mock(async (_url: string, init?: RequestInit) => {
-      capturedBody = JSON.parse(init?.body as string)
-      return new Response(
-        new ReadableStream({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode(`data: [DONE]\n\n`))
-            controller.close()
-          },
-        }),
-        { status: 200, headers: { "Content-Type": "text/event-stream" } },
-      )
-    })
-
-    const model = createModel(mockFetch)
-
-    await model.doStream({
-      prompt: [
-        { role: "system", content: "You are a helpful assistant." },
-        { role: "user", content: [{ type: "text", text: "Hello" }] },
-      ],
-      includeRawChunks: false,
-    })
-
-    expect(capturedBody).toMatchObject({
-      model: "test-model",
-      stream: true,
-      messages: [
-        {
-          role: "system",
-          content: [
-            {
-              type: "text",
-              text: "You are a helpful assistant.",
-              copilot_cache_control: { type: "ephemeral" },
-            },
-          ],
-        },
-        {
-          role: "user",
-          content: "Hello",
-          copilot_cache_control: { type: "ephemeral" },
-        },
-      ],
-    })
-  })
-
   test("should send tools in OpenAI format", async () => {
     let capturedBody: unknown
     const mockFetch = mock(async (_url: string, init?: RequestInit) => {
