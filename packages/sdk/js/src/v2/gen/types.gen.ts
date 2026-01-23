@@ -982,6 +982,10 @@ export type KeybindsConfig = {
    */
   status_view?: string
   /**
+   * View token usage statistics
+   */
+  stats_view?: string
+  /**
    * Export session to editor
    */
   session_export?: string
