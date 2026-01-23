@@ -991,7 +991,7 @@ export namespace Provider {
             options.apiKey = cached.key
             provider.options.apiKey = cached.key
           } else {
-            const proc = Bun.spawn(["bash", "-c", options.apiKeyHelper], {
+            const proc = Bun.spawn(["sh", "-c", options.apiKeyHelper], {
               stdout: "pipe",
               stderr: "inherit",
             })
