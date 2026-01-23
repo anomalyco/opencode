@@ -222,13 +222,36 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const metadata = projectID
         ? globalSync.data.project.find((x) => x.id === projectID)
         : globalSync.data.project.find((x) => x.worktree === project.worktree)
-      return {
+
+      const local = childStore.projectMeta
+      const localOverride =
+        local?.name !== undefined ||
+        local?.commands?.start !== undefined ||
+        local?.icon?.override !== undefined ||
+        local?.icon?.color !== undefined
+
+      const base = {
         ...(metadata ?? {}),
         ...project,
         icon: {
           url: metadata?.icon?.url,
-          override: metadata?.icon?.override,
+          override: metadata?.icon?.override ?? childStore.icon,
           color: metadata?.icon?.color,
+        },
+      }
+
+      const isGlobal = projectID === "global" || (metadata?.id === undefined && localOverride)
+      if (!isGlobal) return base
+
+      return {
+        ...base,
+        id: base.id ?? "global",
+        name: local?.name,
+        commands: local?.commands,
+        icon: {
+          url: base.icon?.url,
+          override: local?.icon?.override,
+          color: local?.icon?.color,
         },
       }
     }
@@ -283,6 +306,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const projects = enriched()
       if (projects.length === 0) return
 
+      if (globalSync.ready) {
+        for (const project of projects) {
+          if (!project.id) continue
+          if (project.id === "global") continue
+          globalSync.project.icon(project.worktree, project.icon?.override)
+        }
+      }
+
       const used = new Set<string>()
       for (const project of projects) {
         const color = project.icon?.color ?? colors[project.worktree]
@@ -291,11 +322,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
       for (const project of projects) {
         if (project.icon?.color) continue
-        if (colors[project.worktree]) continue
-        const color = pickAvailableColor(used)
-        used.add(color)
-        setColors(project.worktree, color)
+        const existing = colors[project.worktree]
+        const color = existing ?? pickAvailableColor(used)
+        if (!existing) {
+          used.add(color)
+          setColors(project.worktree, color)
+        }
         if (!project.id) continue
+        if (project.id === "global") {
+          globalSync.project.meta(project.worktree, { icon: { color } })
+          continue
+        }
         void globalSdk.client.project.update({ projectID: project.id, directory: project.worktree, icon: { color } })
       }
     })

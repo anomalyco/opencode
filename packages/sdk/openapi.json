@@ -183,7 +183,7 @@
           }
         ],
         "summary": "Update project",
-        "description": "Update project properties such as name, icon and color.",
+        "description": "Update project properties such as name, icon, and commands.",
         "responses": {
           "200": {
             "description": "Updated project information",
@@ -235,6 +235,15 @@
                         "type": "string"
                       },
                       "color": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "commands": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "description": "Startup script to run when creating a new workspace (worktree)",
                         "type": "string"
                       }
                     }
@@ -850,7 +859,7 @@
           }
         ],
         "summary": "Create worktree",
-        "description": "Create a new git worktree for the current project.",
+        "description": "Create a new git worktree for the current project and run any configured startup scripts.",
         "responses": {
           "200": {
             "description": "Worktree created",
@@ -5807,6 +5816,15 @@
               }
             }
           },
+          "commands": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "description": "Startup script to run when creating a new workspace (worktree)",
+                "type": "string"
+              }
+            }
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -10094,6 +10112,7 @@
             "type": "string"
           },
           "startCommand": {
+            "description": "Additional startup script to run after the project's start command",
             "type": "string"
           }
         }
