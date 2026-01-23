@@ -18,6 +18,7 @@ import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup }
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
 import { isTauri, getOSType } from "./utils/platform"
+import { getServerUrl } from "./utils/server-discovery"
 import pkg from "../package.json"
 import "./styles.css"
 
@@ -376,8 +377,9 @@ type ServerReadyData = { url: string; password: string | null }
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
   const [serverData] = createResource<ServerReadyData>(() => {
     if (!isTauri) {
-      // In browser mode, return mock data pointing to the OpenCode server
-      return Promise.resolve({ url: "http://127.0.0.1:4096", password: null })
+      // In browser mode, use configured server URL
+      const url = getServerUrl()
+      return Promise.resolve({ url, password: null })
     }
     return invoke("ensure_server_ready").then((v) => {
       return new Promise((res) => setTimeout(() => res(v as ServerReadyData), 2000))
@@ -391,6 +393,27 @@ function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.
       fallback={
         <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
           <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+          <Show when={serverData.error}>
+            <div class="mt-4 text-red-400 text-sm max-w-xl px-4 text-center">
+              <p class="font-semibold text-base">Could not connect to OpenCode server</p>
+              <p class="mt-2 text-gray-400">Expected server at: {getServerUrl()}</p>
+
+              <div class="mt-4 bg-gray-800 p-4 rounded text-left">
+                <p class="text-gray-300 mb-2">Start the server:</p>
+                <code class="block text-green-400 text-xs">
+                  bun run --cwd packages/opencode dev
+                </code>
+              </div>
+
+              <div class="mt-3 bg-gray-800 p-4 rounded text-left">
+                <p class="text-gray-300 mb-2">Using a different port?</p>
+                <code class="block text-blue-400 text-xs break-all">
+                  VITE_OPENCODE_SERVER_URL=http://127.0.0.1:YOUR_PORT bun run --cwd packages/desktop
+                  dev
+                </code>
+              </div>
+            </div>
+          </Show>
           <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
         </div>
       }
