@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Secure remote access to your opencode instance from anywhere — authenticate once with your system credentials, work on your projects from any device.
-**Current focus:** Phase 8 (Session Enhancements) - Not started
+**Current focus:** Phase 8 (Session Enhancements) - In progress
 
 ## Current Position
 
-Phase: 7 of 11 (Security Hardening) - Complete
-Plan: All plans verified
-Status: Phase 7 verified and complete
-Last activity: 2026-01-22 - Phase 7 verification passed
+Phase: 8 of 11 (Session Enhancements) - In progress
+Plan: 2 of 4
+Status: Completed 08-02-PLAN.md
+Last activity: 2026-01-23 - Completed 08-02-PLAN.md
 
-Progress: [███████░░░] ~64%
+Progress: [████████░░] ~69%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 28
-- Average duration: 6.7 min
-- Total execution time: 186 min
+- Total plans completed: 30
+- Average duration: 6.4 min
+- Total execution time: 192 min
 
 **By Phase:**
 
@@ -34,10 +34,11 @@ Progress: [███████░░░] ~64%
 | 5. User Process Execution | 10 | 83 min | 8.3 min |
 | 6. Login UI | 1 | 25 min | 25 min |
 | 7. Security Hardening | 3 | 20 min | 6.7 min |
+| 8. Session Enhancements | 2 | 6 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 06-01 (25 min), 07-01 (6 min), 07-02 (8 min), 07-03 (6 min)
-- Trend: Security features consistent at 6-8 min
+- Last 5 plans: 07-01 (6 min), 07-02 (8 min), 07-03 (6 min), 08-01 (3 min), 08-02 (3 min)
+- Trend: Phase 8 frontend work very fast (~3 min)
 
 *Updated after each plan completion*
 
@@ -113,6 +114,10 @@ Recent decisions affecting current work:
 | 07-03 | trustProxy controls X-Forwarded-Proto | Only trust proxy headers when explicitly configured |
 | 07-03 | sessionStorage for warning dismissal | Session-scoped persistence appropriate for security warnings |
 | 07-03 | Disabled form in block mode | Clear UX - form disabled with error message when HTTPS required |
+| 08-02 | Poll interval: 60 seconds | Balances server load with timely session updates |
+| 08-02 | Page Visibility API for polling | Prevents polling when user switches tabs |
+| 08-02 | Remaining time calculation | Uses (lastAccessTime + timeout) - Date.now() for accurate countdown |
+| 08-02 | Dropdown pattern with @kobalte | Use existing UI library for consistency |
 
 ### Pending Todos
 
@@ -131,10 +136,10 @@ From research summary (Phase 2, 3 flags):
 
 ## Session Continuity
 
-Last session: 2026-01-22
-Stopped at: Phase 7 verified and complete
+Last session: 2026-01-23
+Stopped at: Completed 08-02-PLAN.md
 Resume file: None
-Next: Plan and execute Phase 8 (Session Enhancements)
+Next: Continue Phase 8 (Plans 08-03 and 08-04)
 
 ## Phase 6 Progress
 
@@ -147,3 +152,11 @@ Next: Plan and execute Phase 8 (Session Enhancements)
 - [x] Plan 01: CSRF Protection (6 min)
 - [x] Plan 02: Rate Limiting (8 min)
 - [x] Plan 03: HTTPS Detection (6 min)
+
+## Phase 8 Progress
+
+**Session Enhancements - In progress:**
+- [x] Plan 01: Remember me functionality (3 min)
+- [x] Plan 02: Session context and username indicator (3 min)
+- [ ] Plan 03: Session expiration warnings
+- [ ] Plan 04: Session expired overlay
