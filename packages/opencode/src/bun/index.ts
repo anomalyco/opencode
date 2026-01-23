@@ -94,11 +94,10 @@ export namespace BunProc {
     const oldPkg = provider ? parsed.opencode?.providers?.[provider] : undefined
     const switched = oldPkg && oldPkg !== pkg
 
-    // Check if already installed with exact version
+    // Skip install if exact version already cached (always reinstall with "latest")
     const installed = parsed.dependencies?.[pkg]
     if (installed && version !== "latest" && installed === version && (await Filesystem.exists(mod))) {
       if (provider) await track(provider, pkg)
-      // Remove old package after tracking update, only if not used by others
       if (switched) {
         const providers = parsed.opencode?.providers ?? {}
         const used = Object.entries(providers).some(([p, name]) => p !== provider && name === oldPkg)
@@ -131,7 +130,6 @@ export namespace BunProc {
       throw new InstallFailedError({ pkg, version }, { cause: e })
     })
 
-    // Install succeeded - update tracking and remove old package
     if (provider) await track(provider, pkg)
     if (switched) {
       const current = await readPackageJson()
