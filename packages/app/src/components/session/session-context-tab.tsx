@@ -282,7 +282,9 @@ export function SessionContextTab(props: SessionContextTabProps) {
       }
     })
 
-    return <Code file={file()} overflow="wrap" class="select-text" />
+    return (
+      <Code file={file()} overflow="wrap" class="select-text" onRendered={() => requestAnimationFrame(restoreScroll)} />
+    )
   }
 
   function RawMessage(msgProps: { message: Message }) {
@@ -314,18 +316,12 @@ export function SessionContextTab(props: SessionContextTabProps) {
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
 
-  const restoreScroll = (retries = 0) => {
+  const restoreScroll = () => {
     const el = scroll
     if (!el) return
 
     const s = props.view()?.scroll("context")
     if (!s) return
-
-    // Wait for content to be scrollable - content may not have rendered yet
-    if (el.scrollHeight <= el.clientHeight && retries < 10) {
-      requestAnimationFrame(() => restoreScroll(retries + 1))
-      return
-    }
 
     if (el.scrollTop !== s.y) el.scrollTop = s.y
     if (el.scrollLeft !== s.x) el.scrollLeft = s.x

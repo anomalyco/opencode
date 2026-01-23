@@ -195,20 +195,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const root = directory()
       const prefix = root.endsWith("/") ? root : root + "/"
 
-      let path = input
-
-      // Only strip protocol and decode if it's a file URI
-      if (path.startsWith("file://")) {
-        const raw = stripQueryAndHash(stripFileProtocol(path))
-        try {
-          // Attempt to treat as a standard URI
-          path = decodeURIComponent(raw)
-        } catch {
-          // Fallback for legacy paths that might contain invalid URI sequences (e.g. "100%")
-          // In this case, we treat the path as raw, but still strip the protocol
-          path = raw
-        }
-      }
+      let path = stripQueryAndHash(stripFileProtocol(input))
 
       if (path.startsWith(prefix)) {
         path = path.slice(prefix.length)
@@ -231,8 +218,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     function tab(input: string) {
       const path = normalize(input)
-      const encoded = path.split("/").map(encodeURIComponent).join("/")
-      return `file://${encoded}`
+      return `file://${path}`
     }
 
     function pathFromTab(tabValue: string) {
