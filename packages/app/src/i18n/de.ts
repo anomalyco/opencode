@@ -120,18 +120,16 @@ export const dict = {
     "Mit einem einzigen API-Schlüssel erhalten Sie Zugriff auf Modelle wie Claude, GPT, Gemini, GLM und mehr.",
   "provider.connect.opencodeZen.visit.prefix": "Besuchen Sie ",
   "provider.connect.opencodeZen.visit.suffix": ", um Ihren API-Schlüssel zu erhalten.",
-  "provider.connect.oauth.code.visit.prefix": "Besuchen Sie ",
-  "provider.connect.oauth.code.visit.link": "diesen Link",
-  "provider.connect.oauth.code.visit.suffix":
-    ", um Ihren Autorisierungscode zu erhalten, Ihr Konto zu verbinden und {{provider}} Modelle in OpenCode zu nutzen.",
+  "provider.connect.oauth.code.visit.description":
+    "Kopieren und besuchen Sie den untenstehenden Link, um Ihren Autorisierungscode zu erhalten und {{provider}} Modelle in OpenCode zu nutzen.",
+  "provider.connect.oauth.url.label": "Autorisierungs-URL",
+  "provider.connect.oauth.url.open": "Im Browser öffnen",
   "provider.connect.oauth.code.label": "{{method}} Autorisierungscode",
   "provider.connect.oauth.code.placeholder": "Autorisierungscode",
   "provider.connect.oauth.code.required": "Autorisierungscode ist erforderlich",
   "provider.connect.oauth.code.invalid": "Ungültiger Autorisierungscode",
-  "provider.connect.oauth.auto.visit.prefix": "Besuchen Sie ",
-  "provider.connect.oauth.auto.visit.link": "diesen Link",
-  "provider.connect.oauth.auto.visit.suffix":
-    " und geben Sie den untenstehenden Code ein, um Ihr Konto zu verbinden und {{provider}} Modelle in OpenCode zu nutzen.",
+  "provider.connect.oauth.auto.visit.description":
+    "Kopieren und besuchen Sie den untenstehenden Link, dann geben Sie den Code ein, um {{provider}} Modelle in OpenCode zu nutzen.",
   "provider.connect.oauth.auto.confirmationCode": "Bestätigungscode",
   "provider.connect.toast.connected.title": "{{provider}} verbunden",
   "provider.connect.toast.connected.description": "{{provider}} Modelle sind jetzt verfügbar.",

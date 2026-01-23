@@ -119,18 +119,16 @@ export const dict = {
   "provider.connect.opencodeZen.visit.prefix": "Visite ",
   "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
   "provider.connect.opencodeZen.visit.suffix": " para obter sua chave de API.",
-  "provider.connect.oauth.code.visit.prefix": "Visite ",
-  "provider.connect.oauth.code.visit.link": "este link",
-  "provider.connect.oauth.code.visit.suffix":
-    " para obter seu código de autorização e conectar sua conta para usar modelos do {{provider}} no OpenCode.",
+  "provider.connect.oauth.code.visit.description":
+    "Copie e visite o link abaixo para obter seu código de autorização e usar modelos do {{provider}} no OpenCode.",
+  "provider.connect.oauth.url.label": "URL de autorização",
+  "provider.connect.oauth.url.open": "Abrir no navegador",
   "provider.connect.oauth.code.label": "Código de autorização {{method}}",
   "provider.connect.oauth.code.placeholder": "Código de autorização",
   "provider.connect.oauth.code.required": "O código de autorização é obrigatório",
   "provider.connect.oauth.code.invalid": "Código de autorização inválido",
-  "provider.connect.oauth.auto.visit.prefix": "Visite ",
-  "provider.connect.oauth.auto.visit.link": "este link",
-  "provider.connect.oauth.auto.visit.suffix":
-    " e digite o código abaixo para conectar sua conta e usar modelos do {{provider}} no OpenCode.",
+  "provider.connect.oauth.auto.visit.description":
+    "Copie e visite o link abaixo, depois digite o código para usar modelos do {{provider}} no OpenCode.",
   "provider.connect.oauth.auto.confirmationCode": "Código de confirmação",
   "provider.connect.toast.connected.title": "{{provider}} conectado",
   "provider.connect.toast.connected.description": "Modelos do {{provider}} agora estão disponíveis para uso.",

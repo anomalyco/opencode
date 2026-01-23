@@ -119,18 +119,16 @@ export const dict = {
   "provider.connect.opencodeZen.visit.prefix": "Odwiedź ",
   "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
   "provider.connect.opencodeZen.visit.suffix": ", aby odebrać swój klucz API.",
-  "provider.connect.oauth.code.visit.prefix": "Odwiedź ",
-  "provider.connect.oauth.code.visit.link": "ten link",
-  "provider.connect.oauth.code.visit.suffix":
-    ", aby odebrać kod autoryzacyjny, połączyć konto i używać modeli {{provider}} w OpenCode.",
+  "provider.connect.oauth.code.visit.description":
+    "Skopiuj i odwiedź poniższy link, aby odebrać kod autoryzacyjny i używać modeli {{provider}} w OpenCode.",
+  "provider.connect.oauth.url.label": "URL autoryzacji",
+  "provider.connect.oauth.url.open": "Otwórz w przeglądarce",
   "provider.connect.oauth.code.label": "Kod autoryzacyjny {{method}}",
   "provider.connect.oauth.code.placeholder": "Kod autoryzacyjny",
   "provider.connect.oauth.code.required": "Kod autoryzacyjny jest wymagany",
   "provider.connect.oauth.code.invalid": "Nieprawidłowy kod autoryzacyjny",
-  "provider.connect.oauth.auto.visit.prefix": "Odwiedź ",
-  "provider.connect.oauth.auto.visit.link": "ten link",
-  "provider.connect.oauth.auto.visit.suffix":
-    " i wprowadź poniższy kod, aby połączyć konto i używać modeli {{provider}} w OpenCode.",
+  "provider.connect.oauth.auto.visit.description":
+    "Skopiuj i odwiedź poniższy link, następnie wprowadź kod, aby używać modeli {{provider}} w OpenCode.",
   "provider.connect.oauth.auto.confirmationCode": "Kod potwierdzający",
   "provider.connect.toast.connected.title": "Połączono {{provider}}",
   "provider.connect.toast.connected.description": "Modele {{provider}} są teraz dostępne do użycia.",

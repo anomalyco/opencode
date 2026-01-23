@@ -119,18 +119,16 @@ export const dict = {
   "provider.connect.opencodeZen.line2": "단일 API 키로 Claude, GPT, Gemini, GLM 등 다양한 모델에 액세스할 수 있습니다.",
   "provider.connect.opencodeZen.visit.prefix": "",
   "provider.connect.opencodeZen.visit.suffix": "를 방문하여 API 키를 받으세요.",
-  "provider.connect.oauth.code.visit.prefix": "",
-  "provider.connect.oauth.code.visit.link": "이 링크",
-  "provider.connect.oauth.code.visit.suffix":
-    "를 방문하여 인증 코드를 받아 계정을 연결하고 OpenCode에서 {{provider}} 모델을 사용하세요.",
+  "provider.connect.oauth.code.visit.description":
+    "아래 링크를 복사하여 방문하고 인증 코드를 받아 OpenCode에서 {{provider}} 모델을 사용하세요.",
+  "provider.connect.oauth.url.label": "인증 URL",
+  "provider.connect.oauth.url.open": "브라우저에서 열기",
   "provider.connect.oauth.code.label": "{{method}} 인증 코드",
   "provider.connect.oauth.code.placeholder": "인증 코드",
   "provider.connect.oauth.code.required": "인증 코드가 필요합니다",
   "provider.connect.oauth.code.invalid": "유효하지 않은 인증 코드",
-  "provider.connect.oauth.auto.visit.prefix": "",
-  "provider.connect.oauth.auto.visit.link": "이 링크",
-  "provider.connect.oauth.auto.visit.suffix":
-    "를 방문하고 아래 코드를 입력하여 계정을 연결하고 OpenCode에서 {{provider}} 모델을 사용하세요.",
+  "provider.connect.oauth.auto.visit.description":
+    "아래 링크를 복사하여 방문하고 코드를 입력하여 OpenCode에서 {{provider}} 모델을 사용하세요.",
   "provider.connect.oauth.auto.confirmationCode": "확인 코드",
   "provider.connect.toast.connected.title": "{{provider}} 연결됨",
   "provider.connect.toast.connected.description": "이제 {{provider}} 모델을 사용할 수 있습니다.",

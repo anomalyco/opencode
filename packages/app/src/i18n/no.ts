@@ -122,18 +122,16 @@ export const dict = {
   "provider.connect.opencodeZen.visit.prefix": "Besøk ",
   "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
   "provider.connect.opencodeZen.visit.suffix": " for å hente API-nøkkelen din.",
-  "provider.connect.oauth.code.visit.prefix": "Besøk ",
-  "provider.connect.oauth.code.visit.link": "denne lenken",
-  "provider.connect.oauth.code.visit.suffix":
-    " for å hente autorisasjonskoden din for å koble til kontoen din og bruke {{provider}}-modeller i OpenCode.",
+  "provider.connect.oauth.code.visit.description":
+    "Kopier og besøk lenken nedenfor for å hente autorisasjonskoden din og bruke {{provider}}-modeller i OpenCode.",
+  "provider.connect.oauth.url.label": "Autorisasjons-URL",
+  "provider.connect.oauth.url.open": "Åpne i nettleser",
   "provider.connect.oauth.code.label": "{{method}} autorisasjonskode",
   "provider.connect.oauth.code.placeholder": "Autorisasjonskode",
   "provider.connect.oauth.code.required": "Autorisasjonskode er påkrevd",
   "provider.connect.oauth.code.invalid": "Ugyldig autorisasjonskode",
-  "provider.connect.oauth.auto.visit.prefix": "Besøk ",
-  "provider.connect.oauth.auto.visit.link": "denne lenken",
-  "provider.connect.oauth.auto.visit.suffix":
-    " og skriv inn koden nedenfor for å koble til kontoen din og bruke {{provider}}-modeller i OpenCode.",
+  "provider.connect.oauth.auto.visit.description":
+    "Kopier og besøk lenken nedenfor, deretter skriv inn koden for å bruke {{provider}}-modeller i OpenCode.",
   "provider.connect.oauth.auto.confirmationCode": "Bekreftelseskode",
   "provider.connect.toast.connected.title": "{{provider}} tilkoblet",
   "provider.connect.toast.connected.description": "{{provider}}-modeller er nå tilgjengelige.",

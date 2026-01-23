@@ -118,17 +118,17 @@ export const dict = {
   "provider.connect.opencodeZen.line2": "只需一个 API 密钥，你就能使用 Claude、GPT、Gemini、GLM 等模型。",
   "provider.connect.opencodeZen.visit.prefix": "访问 ",
   "provider.connect.opencodeZen.visit.suffix": " 获取你的 API 密钥。",
-  "provider.connect.oauth.code.visit.prefix": "访问 ",
-  "provider.connect.oauth.code.visit.link": "此链接",
-  "provider.connect.oauth.code.visit.suffix": " 获取授权码，以连接你的帐户并在 OpenCode 中使用 {{provider}} 模型。",
+  "provider.connect.oauth.code.visit.description":
+    "复制并访问下方链接，以获取授权码，连接你的帐户并在 OpenCode 中使用 {{provider}} 模型。",
   "provider.connect.oauth.code.label": "{{method}} 授权码",
   "provider.connect.oauth.code.placeholder": "授权码",
   "provider.connect.oauth.code.required": "授权码为必填项",
   "provider.connect.oauth.code.invalid": "授权码无效",
-  "provider.connect.oauth.auto.visit.prefix": "访问 ",
-  "provider.connect.oauth.auto.visit.link": "此链接",
-  "provider.connect.oauth.auto.visit.suffix": " 并输入以下代码，以连接你的帐户并在 OpenCode 中使用 {{provider}} 模型。",
+  "provider.connect.oauth.auto.visit.description":
+    "复制并访问下方链接，然后输入代码，以连接你的帐户并在 OpenCode 中使用 {{provider}} 模型。",
   "provider.connect.oauth.auto.confirmationCode": "确认码",
+  "provider.connect.oauth.url.label": "授权链接",
+  "provider.connect.oauth.url.open": "在浏览器中打开",
   "provider.connect.toast.connected.title": "{{provider}} 已连接",
   "provider.connect.toast.connected.description": "现在可以使用 {{provider}} 模型了。",
 

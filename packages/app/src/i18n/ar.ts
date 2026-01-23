@@ -119,18 +119,16 @@ export const dict = {
   "provider.connect.opencodeZen.visit.prefix": "قم بزيارة ",
   "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
   "provider.connect.opencodeZen.visit.suffix": " للحصول على مفتاح API الخاص بك.",
-  "provider.connect.oauth.code.visit.prefix": "قم بزيارة ",
-  "provider.connect.oauth.code.visit.link": "هذا الرابط",
-  "provider.connect.oauth.code.visit.suffix":
-    " للحصول على رمز التفويض الخاص بك لتوصيل حسابك واستخدام نماذج {{provider}} في OpenCode.",
+  "provider.connect.oauth.code.visit.description":
+    "انسخ الرابط أدناه وقم بزيارته للحصول على رمز التفويض واستخدام نماذج {{provider}} في OpenCode.",
+  "provider.connect.oauth.url.label": "رابط التفويض",
+  "provider.connect.oauth.url.open": "فتح في المتصفح",
   "provider.connect.oauth.code.label": "رمز تفويض {{method}}",
   "provider.connect.oauth.code.placeholder": "رمز التفويض",
   "provider.connect.oauth.code.required": "رمز التفويض مطلوب",
   "provider.connect.oauth.code.invalid": "رمز التفويض غير صالح",
-  "provider.connect.oauth.auto.visit.prefix": "قم بزيارة ",
-  "provider.connect.oauth.auto.visit.link": "هذا الرابط",
-  "provider.connect.oauth.auto.visit.suffix":
-    " وأدخل الرمز أدناه لتوصيل حسابك واستخدام نماذج {{provider}} في OpenCode.",
+  "provider.connect.oauth.auto.visit.description":
+    "انسخ الرابط أدناه وقم بزيارته، ثم أدخل الرمز لاستخدام نماذج {{provider}} في OpenCode.",
   "provider.connect.oauth.auto.confirmationCode": "رمز التأكيد",
   "provider.connect.toast.connected.title": "تم توصيل {{provider}}",
   "provider.connect.toast.connected.description": "نماذج {{provider}} متاحة الآن للاستخدام.",

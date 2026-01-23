@@ -119,18 +119,16 @@ export const dict = {
   "provider.connect.opencodeZen.visit.prefix": "Посетите ",
   "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
   "provider.connect.opencodeZen.visit.suffix": " чтобы получить ваш API ключ.",
-  "provider.connect.oauth.code.visit.prefix": "Посетите ",
-  "provider.connect.oauth.code.visit.link": "эту ссылку",
-  "provider.connect.oauth.code.visit.suffix":
-    " чтобы получить код авторизации для подключения аккаунта и использования моделей {{provider}} в OpenCode.",
+  "provider.connect.oauth.code.visit.description":
+    "Скопируйте и перейдите по ссылке ниже, чтобы получить код авторизации и использовать модели {{provider}} в OpenCode.",
+  "provider.connect.oauth.url.label": "URL авторизации",
+  "provider.connect.oauth.url.open": "Открыть в браузере",
   "provider.connect.oauth.code.label": "{{method}} код авторизации",
   "provider.connect.oauth.code.placeholder": "Код авторизации",
   "provider.connect.oauth.code.required": "Код авторизации обязателен",
   "provider.connect.oauth.code.invalid": "Неверный код авторизации",
-  "provider.connect.oauth.auto.visit.prefix": "Посетите ",
-  "provider.connect.oauth.auto.visit.link": "эту ссылку",
-  "provider.connect.oauth.auto.visit.suffix":
-    " и введите код ниже для подключения аккаунта и использования моделей {{provider}} в OpenCode.",
+  "provider.connect.oauth.auto.visit.description":
+    "Скопируйте и перейдите по ссылке ниже, затем введите код для использования моделей {{provider}} в OpenCode.",
   "provider.connect.oauth.auto.confirmationCode": "Код подтверждения",
   "provider.connect.toast.connected.title": "{{provider}} подключён",
   "provider.connect.toast.connected.description": "Модели {{provider}} теперь доступны.",

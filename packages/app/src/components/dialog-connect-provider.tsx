@@ -336,11 +336,21 @@ export function DialogConnectProvider(props: { provider: string }) {
                     return (
                       <div class="flex flex-col gap-6">
                         <div class="text-14-regular text-text-base">
-                          {language.t("provider.connect.oauth.code.visit.prefix")}
-                          <Link href={store.authorization!.url}>
-                            {language.t("provider.connect.oauth.code.visit.link")}
-                          </Link>
-                          {language.t("provider.connect.oauth.code.visit.suffix", { provider: provider().name })}
+                          {language.t("provider.connect.oauth.code.visit.description", { provider: provider().name })}
+                        </div>
+                        <div class="flex flex-col gap-2">
+                          <TextField
+                            label={language.t("provider.connect.oauth.url.label")}
+                            class="font-mono text-xs"
+                            value={store.authorization!.url}
+                            readOnly
+                            copyable
+                          />
+                          <div class="text-14-regular text-text-base">
+                            <Link href={store.authorization!.url}>
+                              {language.t("provider.connect.oauth.url.open")}
+                            </Link>
+                          </div>
                         </div>
                         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
                           <TextField
@@ -394,11 +404,21 @@ export function DialogConnectProvider(props: { provider: string }) {
                     return (
                       <div class="flex flex-col gap-6">
                         <div class="text-14-regular text-text-base">
-                          {language.t("provider.connect.oauth.auto.visit.prefix")}
-                          <Link href={store.authorization!.url}>
-                            {language.t("provider.connect.oauth.auto.visit.link")}
-                          </Link>
-                          {language.t("provider.connect.oauth.auto.visit.suffix", { provider: provider().name })}
+                          {language.t("provider.connect.oauth.auto.visit.description", { provider: provider().name })}
+                        </div>
+                        <div class="flex flex-col gap-2">
+                          <TextField
+                            label={language.t("provider.connect.oauth.url.label")}
+                            class="font-mono text-xs"
+                            value={store.authorization!.url}
+                            readOnly
+                            copyable
+                          />
+                          <div class="text-14-regular text-text-base">
+                            <Link href={store.authorization!.url}>
+                              {language.t("provider.connect.oauth.url.open")}
+                            </Link>
+                          </div>
                         </div>
                         <TextField
                           label={language.t("provider.connect.oauth.auto.confirmationCode")}

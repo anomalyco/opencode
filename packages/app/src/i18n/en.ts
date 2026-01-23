@@ -119,19 +119,17 @@ export const dict = {
   "provider.connect.opencodeZen.visit.prefix": "Visit ",
   "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
   "provider.connect.opencodeZen.visit.suffix": " to collect your API key.",
-  "provider.connect.oauth.code.visit.prefix": "Visit ",
-  "provider.connect.oauth.code.visit.link": "this link",
-  "provider.connect.oauth.code.visit.suffix":
-    " to collect your authorization code to connect your account and use {{provider}} models in OpenCode.",
+  "provider.connect.oauth.code.visit.description":
+    "Copy and visit the link below to collect your authorization code to connect your account and use {{provider}} models in OpenCode.",
   "provider.connect.oauth.code.label": "{{method}} authorization code",
   "provider.connect.oauth.code.placeholder": "Authorization code",
   "provider.connect.oauth.code.required": "Authorization code is required",
   "provider.connect.oauth.code.invalid": "Invalid authorization code",
-  "provider.connect.oauth.auto.visit.prefix": "Visit ",
-  "provider.connect.oauth.auto.visit.link": "this link",
-  "provider.connect.oauth.auto.visit.suffix":
-    " and enter the code below to connect your account and use {{provider}} models in OpenCode.",
+  "provider.connect.oauth.auto.visit.description":
+    "Copy and visit the link below, then enter the code to connect your account and use {{provider}} models in OpenCode.",
   "provider.connect.oauth.auto.confirmationCode": "Confirmation code",
+  "provider.connect.oauth.url.label": "Authorization URL",
+  "provider.connect.oauth.url.open": "Open in browser",
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
 
