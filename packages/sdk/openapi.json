@@ -8121,6 +8121,47 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.worktree.ready": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "worktree.ready"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "branch"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.worktree.failed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "worktree.failed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event": {
         "anyOf": [
           {
@@ -8242,6 +8283,12 @@
           },
           {
             "$ref": "#/components/schemas/Event.pty.deleted"
+          },
+          {
+            "$ref": "#/components/schemas/Event.worktree.ready"
+          },
+          {
+            "$ref": "#/components/schemas/Event.worktree.failed"
           }
         ]
       },
