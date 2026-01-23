@@ -355,3 +355,20 @@ export const pint: Info = {
     return false
   },
 }
+
+export const mago: Info = {
+  name: "mago",
+  command: ["./vendor/bin/mago", "fmt", "$FILE"],
+  extensions: [".php"],
+  async enabled() {
+    const configs = await Filesystem.findUp("mago.toml", Instance.directory, Instance.worktree)
+    if (configs.length === 0) return false
+    const items = await Filesystem.findUp("composer.json", Instance.directory, Instance.worktree)
+    for (const item of items) {
+      const json = await Bun.file(item).json()
+      if (json.require?.["carthage-software/mago"]) return true
+      if (json["require-dev"]?.["carthage-software/mago"]) return true
+    }
+    return false
+  },
+}
