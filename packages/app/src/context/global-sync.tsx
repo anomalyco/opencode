@@ -119,6 +119,22 @@ function createGlobalSync() {
   if (!owner) throw new Error("GlobalSync must be created within owner")
   const vcsCache = new Map<string, VcsCache>()
   const metaCache = new Map<string, MetaCache>()
+
+  const [projectCache, setProjectCache, , projectCacheReady] = persisted(
+    Persist.global("globalSync.project", ["globalSync.project.v1"]),
+    createStore({ value: [] as Project[] }),
+  )
+
+  const sanitizeProject = (project: Project) => {
+    if (!project.icon?.url) return project
+    return {
+      ...project,
+      icon: {
+        ...project.icon,
+        url: undefined,
+      },
+    }
+  }
   const [globalStore, setGlobalStore] = createStore<{
     ready: boolean
     error?: InitError
@@ -131,13 +147,27 @@ function createGlobalSync() {
   }>({
     ready: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
-    project: [],
+    project: projectCache.value,
     provider: { all: [], connected: [], default: {} },
     provider_auth: {},
     config: {},
     reload: undefined,
   })
   let bootstrapQueue: string[] = []
+
+  createEffect(() => {
+    if (!projectCacheReady()) return
+    if (globalStore.project.length !== 0) return
+    const cached = projectCache.value
+    if (cached.length === 0) return
+    setGlobalStore("project", cached)
+  })
+
+  createEffect(() => {
+    if (!projectCacheReady()) return
+    if (globalStore.project.length === 0 && projectCache.value.length !== 0) return
+    setProjectCache("value", globalStore.project.map(sanitizeProject))
+  })
 
   createEffect(async () => {
     if (globalStore.reload !== "complete") return
@@ -178,7 +208,7 @@ function createGlobalSync() {
       metaCache.set(directory, { store: meta[0], setStore: meta[1], ready: meta[3] })
 
       const init = () => {
-        children[directory] = createStore<State>({
+        const child = createStore<State>({
           project: "",
           projectMeta: meta[0].value,
           provider: { all: [], connected: [], default: {} },
@@ -200,6 +230,12 @@ function createGlobalSync() {
           limit: 5,
           message: {},
           part: {},
+        })
+
+        children[directory] = child
+
+        createEffect(() => {
+          child[1]("projectMeta", meta[0].value)
         })
       }
 
@@ -300,12 +336,7 @@ function createGlobalSync() {
         setStore("vcs", (value) => value ?? cached)
       })
 
-      createEffect(() => {
-        if (!meta.ready()) return
-        const cached = meta.store.value
-        if (!cached) return
-        setStore("projectMeta", (value) => value ?? cached)
-      })
+      // projectMeta is synced from persisted storage in ensureChild.
 
       const blockingRequests = {
         project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),

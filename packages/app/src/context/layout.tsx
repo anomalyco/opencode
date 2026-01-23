@@ -223,6 +223,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         ? globalSync.data.project.find((x) => x.id === projectID)
         : globalSync.data.project.find((x) => x.worktree === project.worktree)
 
+      const local = childStore.projectMeta
+      const localOverride =
+        local?.name !== undefined ||
+        local?.commands?.start !== undefined ||
+        local?.icon?.override !== undefined ||
+        local?.icon?.color !== undefined
+
       const base = {
         ...(metadata ?? {}),
         ...project,
@@ -233,11 +240,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       }
 
-      if (projectID !== "global") return base
+      const isGlobal = projectID === "global" || (metadata?.id === undefined && localOverride)
+      if (!isGlobal) return base
 
-      const local = childStore.projectMeta
       return {
         ...base,
+        id: base.id ?? "global",
         name: local?.name,
         commands: local?.commands,
         icon: {
@@ -306,10 +314,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
       for (const project of projects) {
         if (project.icon?.color) continue
-        if (colors[project.worktree]) continue
-        const color = pickAvailableColor(used)
-        used.add(color)
-        setColors(project.worktree, color)
+        const existing = colors[project.worktree]
+        const color = existing ?? pickAvailableColor(used)
+        if (!existing) {
+          used.add(color)
+          setColors(project.worktree, color)
+        }
         if (!project.id) continue
         if (project.id === "global") {
           globalSync.project.meta(project.worktree, { icon: { color } })
