@@ -1,13 +1,13 @@
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu"
-import { type as ostype } from "@tauri-apps/plugin-os"
 import { invoke } from "@tauri-apps/api/core"
 import { relaunch } from "@tauri-apps/plugin-process"
 
 import { runUpdater, UPDATER_ENABLED } from "./updater"
 import { installCli } from "./cli"
+import { isTauri, getOSType } from "./utils/platform"
 
 export async function createMenu() {
-  if (ostype() !== "macos") return
+  if (!isTauri || getOSType() !== "macos") return
 
   const menu = await Menu.new({
     items: [

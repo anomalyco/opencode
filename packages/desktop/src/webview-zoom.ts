@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 import { invoke } from "@tauri-apps/api/core"
-import { type as ostype } from "@tauri-apps/plugin-os"
+import { isTauri, getOSType } from "./utils/platform"
 
-const OS_NAME = ostype()
+const OS_NAME = getOSType()
 
 let zoomLevel = 1
 
@@ -13,6 +13,8 @@ const MAX_ZOOM_LEVEL = 10
 const MIN_ZOOM_LEVEL = 0.2
 
 window.addEventListener("keydown", (event) => {
+  if (!isTauri) return // Only handle zoom in Tauri context
+
   if (OS_NAME === "macos" ? event.metaKey : event.ctrlKey) {
     if (event.key === "-") {
       zoomLevel -= 0.2

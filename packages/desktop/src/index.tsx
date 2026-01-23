@@ -4,7 +4,6 @@ import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
-import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWindow } from "@tauri-apps/api/window"
@@ -18,6 +17,7 @@ import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup }
 
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
+import { isTauri, getOSType } from "./utils/platform"
 import pkg from "../package.json"
 import "./styles.css"
 
@@ -43,14 +43,11 @@ let update: Update | null = null
 
 const createPlatform = (password: Accessor<string | null>): Platform => ({
   platform: "desktop",
-  os: (() => {
-    const type = ostype()
-    if (type === "macos" || type === "windows" || type === "linux") return type
-    return undefined
-  })(),
+  os: getOSType(),
   version: pkg.version,
 
   async openDirectoryPickerDialog(opts) {
+    if (!isTauri) return null
     const result = await open({
       directory: true,
       multiple: opts?.multiple ?? false,
@@ -60,6 +57,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   },
 
   async openFilePickerDialog(opts) {
+    if (!isTauri) return null
     const result = await open({
       directory: false,
       multiple: opts?.multiple ?? false,
@@ -69,6 +67,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   },
 
   async saveFilePickerDialog(opts) {
+    if (!isTauri) return null
     const result = await save({
       title: opts?.title ?? "Save file",
       defaultPath: opts?.defaultPath,
@@ -77,6 +76,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   },
 
   openLink(url: string) {
+    if (!isTauri) {
+      window.open(url, "_blank")
+      return
+    }
     void shellOpen(url).catch(() => undefined)
   },
 
@@ -234,7 +237,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   })(),
 
   checkUpdate: async () => {
-    if (!UPDATER_ENABLED) return { updateAvailable: false }
+    if (!isTauri || !UPDATER_ENABLED) return { updateAvailable: false }
     const next = await check().catch(() => null)
     if (!next) return { updateAvailable: false }
     const ok = await next
@@ -248,16 +251,19 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
   update: async () => {
     if (!UPDATER_ENABLED || !update) return
-    if (ostype() === "windows") await invoke("kill_sidecar").catch(() => undefined)
+    if (isTauri && getOSType() === "windows") await invoke("kill_sidecar").catch(() => undefined)
     await update.install().catch(() => undefined)
   },
 
   restart: async () => {
+    if (!isTauri) return
     await invoke("kill_sidecar").catch(() => undefined)
     await relaunch()
   },
 
   notify: async (title, description, href) => {
+    if (!isTauri) return // Notifications not supported in browser mode
+
     const granted = await isPermissionGranted().catch(() => false)
     const permission = granted ? "granted" : await requestPermission().catch(() => "denied")
     if (permission !== "granted") return
@@ -297,11 +303,12 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
     if (input instanceof Request) {
       if (pw) addHeader(input.headers, pw)
-      return tauriFetch(input)
+      return isTauri ? tauriFetch(input) : fetch(input)
     } else {
       const headers = new Headers(init?.headers)
       if (pw) addHeader(headers, pw)
-      return tauriFetch(input, {
+      const fetchFn = isTauri ? tauriFetch : fetch
+      return fetchFn(input, {
         ...(init as any),
         headers: headers,
       })
@@ -309,15 +316,18 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   },
 
   getDefaultServerUrl: async () => {
+    if (!isTauri) return null
     const result = await invoke<string | null>("get_default_server_url").catch(() => null)
     return result
   },
 
   setDefaultServerUrl: async (url: string | null) => {
+    if (!isTauri) return
     await invoke("set_default_server_url", { url })
   },
 
   parseMarkdown: async (markdown: string) => {
+    if (!isTauri) return markdown // Fallback to raw markdown in browser
     return invoke<string>("parse_markdown_command", { markdown })
   },
 })
@@ -364,11 +374,15 @@ type ServerReadyData = { url: string; password: string | null }
 
 // Gate component that waits for the server to be ready
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
-  const [serverData] = createResource<ServerReadyData>(() =>
-    invoke("ensure_server_ready").then((v) => {
+  const [serverData] = createResource<ServerReadyData>(() => {
+    if (!isTauri) {
+      // In browser mode, return mock data pointing to the OpenCode server
+      return Promise.resolve({ url: "http://127.0.0.1:4096", password: null })
+    }
+    return invoke("ensure_server_ready").then((v) => {
       return new Promise((res) => setTimeout(() => res(v as ServerReadyData), 2000))
-    }),
-  )
+    })
+  })
 
   return (
     // Not using suspense as not all components are compatible with it (undefined refs)
