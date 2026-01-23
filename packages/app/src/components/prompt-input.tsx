@@ -1681,7 +1681,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 return (
                   <div
                     classList={{
-                      "group shrink-0 flex flex-col gap-1 rounded-[6px] bg-background-stronger border border-border-base pl-2 pr-1 py-1 max-w-[200px] transition-all": true,
+                      "group shrink-0 flex flex-col gap-0.5 rounded-[6px] bg-background-stronger border border-border-base pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all": true,
                       "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID,
                     }}
                     onClick={() => {
@@ -1694,14 +1694,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <div class="flex items-center gap-2">
                       <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
                       <div
-                        class="flex-1 flex items-center text-11-regular min-w-0 truncate"
+                        class="flex-1 flex items-center text-11-regular min-w-0"
                         style={{ "font-weight": "var(--font-weight-medium)" }}
                       >
-                        <span class="text-text-weak whitespace-nowrap truncate min-w-0">{getDirectory(item.path)}</span>
-                        <span class="text-text-strong whitespace-nowrap">{getFilename(item.path)}</span>
+                        <span class="truncate min-w-0">
+                          <span class="text-text-weak">{getDirectory(item.path)}</span>
+                          <span class="text-text-strong">{getFilename(item.path)}</span>
+                        </span>
                         <Show when={item.selection}>
                           {(sel) => (
-                            <span class="text-text-weak whitespace-nowrap ml-1">
+                            <span class="text-text-weak whitespace-nowrap shrink-0">
                               {sel().startLine === sel().endLine
                                 ? `:${sel().startLine}`
                                 : `:${sel().startLine}-${sel().endLine}`}
