@@ -41,6 +41,9 @@ export namespace Skill {
   const OPENCODE_SKILL_GLOB = new Bun.Glob("{skill,skills}/**/SKILL.md")
   const CLAUDE_SKILL_GLOB = new Bun.Glob("skills/**/SKILL.md")
 
+  // Only go one level deep to avoid scanning too many files or pulling in skills from transitive dependencies
+  const NODE_MODULES_SKILL_GLOB = new Bun.Glob("node_modules/*/SKILL.md")
+
   export const state = Instance.state(async () => {
     const skills: Record<string, Info> = {}
 
@@ -101,6 +104,27 @@ export namespace Skill {
           }),
         ).catch((error) => {
           log.error("failed .claude directory scan for skills", { dir, error })
+          return []
+        })
+
+        for (const match of matches) {
+          await addSkill(match)
+        }
+      }
+    }
+    
+    if (!Flag.OPENCODE_DISABLE_NODE_MODULE_SKILLS) {
+      for (const dir of claudeDirs) {
+        const matches = await Array.fromAsync(
+          NODE_MODULE_SKILL_GLOB.scan({
+            cwd: dir,
+            absolute: true,
+            onlyFiles: true,
+            followSymlinks: true,
+            dot: true,
+          }),
+        ).catch((error) => {
+          log.error("failed node_module directory scan for skills", { dir, error })
           return []
         })
 
