@@ -268,7 +268,8 @@ describe("tool.bash truncation", () => {
         )
         expect((result.metadata as any).truncated).toBe(true)
         expect(result.output).toContain("truncated")
-        expect(result.output).toContain("The tool call succeeded but the output was truncated")
+        // Streaming truncation uses different message format
+        expect(result.output).toContain("Full output saved to:")
       },
     })
   })
@@ -314,6 +315,96 @@ describe("tool.bash truncation", () => {
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")
         expect(lines[lineCount - 1]).toBe(String(lineCount))
+      },
+    })
+  })
+
+  test("streams to file during execution for very large output", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        // Generate 100KB of data - well over the 50KB threshold
+        const byteCount = Truncate.MAX_BYTES * 2
+        const result = await bash.execute(
+          {
+            command: `head -c ${byteCount} /dev/zero | tr '\\0' 'x'`,
+            description: "Generate large streaming output",
+          },
+          ctx,
+        )
+        expect((result.metadata as any).truncated).toBe(true)
+        const filepath = (result.metadata as any).outputPath
+        expect(filepath).toBeTruthy()
+
+        // Verify the full output was saved
+        const saved = await Bun.file(filepath).text()
+        expect(saved.length).toBe(byteCount)
+        expect(saved[0]).toBe("x")
+        expect(saved[byteCount - 1]).toBe("x")
+      },
+    })
+  })
+
+  test("preserves exit code when streaming to file", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const byteCount = Truncate.MAX_BYTES * 2
+        const result = await bash.execute(
+          {
+            command: `head -c ${byteCount} /dev/zero | tr '\\0' 'x'; exit 42`,
+            description: "Generate large output with non-zero exit",
+          },
+          ctx,
+        )
+        expect((result.metadata as any).truncated).toBe(true)
+        expect((result.metadata as any).exit).toBe(42)
+      },
+    })
+  })
+
+  test("streams stderr to file", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const byteCount = Truncate.MAX_BYTES * 2
+        const result = await bash.execute(
+          {
+            command: `head -c ${byteCount} /dev/zero | tr '\\0' 'e' >&2`,
+            description: "Generate large stderr output",
+          },
+          ctx,
+        )
+        expect((result.metadata as any).truncated).toBe(true)
+        const filepath = (result.metadata as any).outputPath
+        expect(filepath).toBeTruthy()
+
+        const saved = await Bun.file(filepath).text()
+        expect(saved.length).toBe(byteCount)
+        expect(saved[0]).toBe("e")
+      },
+    })
+  })
+
+  test("output message contains file path when streaming", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const byteCount = Truncate.MAX_BYTES * 2
+        const result = await bash.execute(
+          {
+            command: `head -c ${byteCount} /dev/zero | tr '\\0' 'x'`,
+            description: "Check output message format",
+          },
+          ctx,
+        )
+        const filepath = (result.metadata as any).outputPath
+        expect(result.output).toContain("Full output saved to:")
+        expect(result.output).toContain(filepath)
       },
     })
   })
