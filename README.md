@@ -20,10 +20,8 @@
 
 ### Fork Notes
 
-This fork adds:
-
-- Windows Terminal: paste clipboard images directly into the prompt input.
-- TUI: double-press `esc` to clear prompt input.
+Feature: clipboard image paste (Windows Terminal) — fixes image paste failing by pulling image data into the prompt.
+Feature: double-press esc to clear — prevents accidental prompt wipes while keeping a quick clear path.
 
 ### Installation
 
