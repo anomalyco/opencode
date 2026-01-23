@@ -2010,7 +2010,10 @@ export default function Page() {
                             >
                               <button
                                 type="button"
-                                class="size-5 rounded-md flex items-center justify-center bg-surface-warning-base border border-border-warning-base text-icon-warning-active shadow-xs hover:bg-surface-warning-weak hover:border-border-warning-hover focus:outline-none focus-visible:shadow-xs-border-focus"
+                                class="size-5 rounded-md flex items-center justify-center shadow-xs focus:outline-none focus-visible:shadow-xs-border-focus"
+                                style={{
+                                  background: "var(--icon-interactive-base)",
+                                }}
                                 onMouseEnter={() => {
                                   const p = path()
                                   if (!p) return
@@ -2024,7 +2027,7 @@ export default function Page() {
                                   file.setSelectedLines(p, comment.selection)
                                 }}
                               >
-                                <Icon name="speech-bubble" size="small" />
+                                <Icon name="comment" size="small" style={{ color: "var(--white)" }} />
                               </button>
                               <Show when={openedComment() === comment.id}>
                                 <div class="absolute top-0 right-[calc(100%+12px)] z-40 min-w-[200px] max-w-[320px] rounded-md bg-surface-raised-stronger-non-alpha border border-border-base shadow-md p-3">
