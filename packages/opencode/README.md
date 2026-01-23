@@ -1,15 +1,36 @@
-# js
+# OpenCode Core
 
-To install dependencies:
+This package contains the OpenCode CLI and local server runtime.
+
+## What’s inside
+
+- CLI entrypoint and commands (`src/index.ts`, `src/cli/cmd/*`)
+- Local HTTP server and routes (`src/server/*`)
+- Providers/models, sessions, tools, permissions, filesystem, MCP integrations
+
+## Development (from repo root)
 
 ```bash
 bun install
+bun dev
 ```
 
-To run:
+Common commands:
 
 ```bash
-bun run index.ts
+bun dev --help
+bun dev serve
+bun dev web
 ```
 
-This project was created using `bun init` in bun v1.2.12. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+## Build
+
+```bash
+./packages/opencode/script/build.ts --single
+```
+
+## Tests
+
+```bash
+bun run --cwd packages/opencode test
+```

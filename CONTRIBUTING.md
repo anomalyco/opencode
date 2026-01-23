@@ -24,6 +24,11 @@ If you are unsure if a PR would be accepted, feel free to ask a maintainer or lo
 
 Want to take on an issue? Leave a comment and a maintainer may assign it to you unless it is something we are already working on.
 
+## Documentation ownership
+
+- User-facing docs published at https://opencode.ai/docs live in `packages/web/src/content/docs`.
+- `packages/docs` contains a Mintlify preview config and minimal docs pages (including the OpenAPI reference). Keep it aligned when you update public docs.
+
 ## Developing OpenCode
 
 - Requirements: Bun 1.3+

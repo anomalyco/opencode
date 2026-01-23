@@ -1,11 +1,11 @@
 ---
 title: "Development"
-description: "Preview changes locally to update your docs"
+description: "Preview and validate OpenCode docs locally"
 ---
 
-<Info>**Prerequisites**: - Node.js version 19 or higher - A docs repository with a `docs.json` file</Info>
+<Info>**Prerequisites**: Node.js 19+ and a docs workspace with `packages/docs/docs.json`.</Info>
 
-Follow these steps to install and run Mintlify on your operating system.
+This folder uses Mintlify for a lightweight preview of OpenCode documentation and the API reference. The production docs at https://opencode.ai/docs are sourced from `packages/web/src/content/docs`.
 
 <Steps>
 <Step title="Install the Mintlify CLI">
@@ -16,28 +16,28 @@ npm i -g mint
 
 </Step>
 
-<Step title="Preview locally">
+<Step title="Run the local docs preview">
 
-Navigate to your docs directory where your `docs.json` file is located, and run the following command:
+From `packages/docs`, run:
 
 ```bash
 mint dev
 ```
 
-A local preview of your documentation will be available at `http://localhost:3000`.
+The preview is available at `http://localhost:3000`.
 
 </Step>
 </Steps>
 
 ## Custom ports
 
-By default, Mintlify uses port 3000. You can customize the port Mintlify runs on by using the `--port` flag. For example, to run Mintlify on port 3333, use this command:
+Use the `--port` flag when you need a different port:
 
 ```bash
 mint dev --port 3333
 ```
 
-If you attempt to run Mintlify on a port that's already in use, it will use the next available port:
+If the default port is in use, Mintlify will pick the next available port and print a message like:
 
 ```md
 Port 3000 is already in use. Trying 3001 instead.
@@ -45,52 +45,49 @@ Port 3000 is already in use. Trying 3001 instead.
 
 ## Mintlify versions
 
-Please note that each CLI release is associated with a specific version of Mintlify. If your local preview does not align with the production version, please update the CLI:
+If the local preview doesn’t align with production, update the CLI:
 
 ```bash
 npm mint update
 ```
 
+## Code formatting
+
+For MDX syntax highlighting and formatting in VS Code, install:
+
+- [MDX VSCode extension](https://marketplace.visualstudio.com/items?itemName=unifiedjs.vscode-mdx)
+- [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+
 ## Validating links
 
-The CLI can assist with validating links in your documentation. To identify any broken links, use the following command:
+Check for broken links before opening a PR:
 
 ```bash
 mint broken-links
 ```
 
-## Deployment
-
-If the deployment is successful, you should see the following:
-
-<Frame>
-  <img
-    src="/images/checks-passed.png"
-    alt="Screenshot of a deployment confirmation message that says All checks have passed."
-    style={{ borderRadius: "0.5rem" }}
-  />
-</Frame>
-
-## Code formatting
-
-We suggest using extensions on your IDE to recognize and format MDX. If you're a VSCode user, consider the [MDX VSCode extension](https://marketplace.visualstudio.com/items?itemName=unifiedjs.vscode-mdx) for syntax highlighting, and [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode) for code formatting.
-
 ## Troubleshooting
 
 <AccordionGroup>
-  <Accordion title='Error: Could not load the "sharp" module using the darwin-arm64 runtime'>
+	<Accordion title='Error: Could not load the "sharp" module using the darwin-arm64 runtime'>
 
-    This may be due to an outdated version of node. Try the following:
-    1. Remove the currently-installed version of the CLI: `npm remove -g mint`
-    2. Upgrade to Node v19 or higher.
-    3. Reinstall the CLI: `npm i -g mint`
+    	This may be due to an outdated version of Node. Try the following:
+    	1. Remove the currently-installed CLI: `npm remove -g mint`
+    	2. Upgrade to Node v19 or higher.
+    	3. Reinstall the CLI: `npm i -g mint`
 
-  </Accordion>
+    </Accordion>
 
-  <Accordion title="Issue: Encountering an unknown error">
-  
-    Solution: Go to the root of your device and delete the `~/.mintlify` folder. Then run `mint dev` again.
-  </Accordion>
+    <Accordion title="Issue: Encountering an unknown error">
+
+    	Solution: Delete the `~/.mintlify` folder and run `mint dev` again.
+    </Accordion>
+
 </AccordionGroup>
 
-Curious about what changed in the latest CLI version? Check out the [CLI changelog](https://www.npmjs.com/package/mintlify?activeTab=versions).
+If the preview still fails to boot, remove the Mintlify cache and retry:
+
+```bash
+rm -rf ~/.mintlify
+mint dev
+```
