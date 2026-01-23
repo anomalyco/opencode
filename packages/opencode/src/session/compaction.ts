@@ -33,6 +33,13 @@ export namespace SessionCompaction {
     const context = input.model.limit.context
     if (context === 0) return false
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
+  
+    // Absolute token threshold
+    if (config.compaction?.token_threshold && count > config.compaction.token_threshold) return true
+
+    // Context percentage threshold
+    if (config.compaction?.context_threshold && count > context * config.compaction.context_threshold) return true
+
     const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
     const usable = input.model.limit.input || context - output
     return count > usable

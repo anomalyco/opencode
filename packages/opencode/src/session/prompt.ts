@@ -5,6 +5,7 @@ import z from "zod"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
+import { Config } from "../config/config"
 import { SessionRevert } from "./revert"
 import { Session } from "."
 import { Agent } from "../agent/agent"
@@ -269,6 +270,7 @@ export namespace SessionPrompt {
     let step = 0
     const session = await Session.get(sessionID)
     while (true) {
+      const config = await Config.get()
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
@@ -496,9 +498,13 @@ export namespace SessionPrompt {
       }
 
       // context overflow, needs compaction
+      const lastSummaryIndex = msgs.findLastIndex((m) => m.info.role === "assistant" && m.info.summary)
+      const messagesSinceSummary = lastSummaryIndex === -1 ? Infinity : msgs.length - 1 - lastSummaryIndex
+
       if (
         lastFinished &&
         lastFinished.summary !== true &&
+        messagesSinceSummary > (config.compaction?.min_messages ?? 5) &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
       ) {
         await SessionCompaction.create({
@@ -615,12 +621,14 @@ export namespace SessionPrompt {
       })
       if (result === "stop") break
       if (result === "compact") {
-        await SessionCompaction.create({
-          sessionID,
-          agent: lastUser.agent,
-          model: lastUser.model,
-          auto: true,
-        })
+        if (messagesSinceSummary > (config.compaction?.min_messages ?? 5)) {
+          await SessionCompaction.create({
+            sessionID,
+            agent: lastUser.agent,
+            model: lastUser.model,
+            auto: true,
+          })
+        }
       }
       continue
     }

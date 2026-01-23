@@ -1042,6 +1042,9 @@ export namespace Config {
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
+          token_threshold: z.number().int().positive().optional().describe("Trigger compaction when total token count exceeds this absolute number"),
+          context_threshold: z.number().gt(0).lte(1).optional().describe("Trigger compaction when token usage exceeds this fraction of the model context window (e.g. 0.8 = 80%)"),
+          min_messages: z.number().int().positive().optional().describe("Minimum number of messages to wait before next compaction (default: 5)"),
         })
         .optional(),
       experimental: z
