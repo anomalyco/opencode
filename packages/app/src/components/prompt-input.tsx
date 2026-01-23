@@ -1720,7 +1720,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       />
                     </div>
                     <Show when={item.comment}>
-                      {(comment) => <div class="text-11-regular text-text-strong">{comment()}</div>}
+                      {(comment) => <div class="text-11-regular text-text-strong ml-5">{comment()}</div>}
                     </Show>
                   </div>
                 )
