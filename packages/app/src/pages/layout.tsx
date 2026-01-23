@@ -15,6 +15,7 @@ import {
   type Accessor,
   type JSX,
 } from "solid-js"
+import { Portal } from "solid-js/web"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
@@ -63,6 +64,7 @@ import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { Titlebar } from "@/components/titlebar"
+import { SessionIndicator } from "@/components/session-indicator"
 import { useServer } from "@/context/server"
 
 export default function Layout(props: ParentProps) {
@@ -1758,9 +1760,18 @@ export default function Layout(props: ParentProps) {
     )
   }
 
+  const titlebarRightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
+
   return (
     <div class="relative bg-background-base flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       <Titlebar />
+      <Show when={titlebarRightMount()}>
+        {(mount) => (
+          <Portal mount={mount()}>
+            <SessionIndicator />
+          </Portal>
+        )}
+      </Show>
       <div class="flex-1 min-h-0 flex">
         <div
           classList={{
