@@ -6,8 +6,12 @@ import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
+import { Log } from "../util/log"
+import { PluginCommand } from "../plugin/command"
 
 export namespace Command {
+  const log = Log.create({ service: "command" })
+
   export const Event = {
     Executed: BusEvent.define(
       "command.executed",
@@ -39,6 +43,7 @@ export namespace Command {
 
   // for some reason zod is inferring `string` for z.promise(z.string()).or(z.string()) so we have to manually override it
   export type Info = Omit<z.infer<typeof Info>, "template"> & { template: Promise<string> | string }
+  export type Entry = Info & { mode?: PluginCommand.Mode }
 
   export function hints(template: string): string[] {
     const result: string[] = []
@@ -58,7 +63,7 @@ export namespace Command {
   const state = Instance.state(async () => {
     const cfg = await Config.get()
 
-    const result: Record<string, Info> = {
+    const result: Record<string, Entry> = {
       [Default.INIT]: {
         name: Default.INIT,
         description: "create/update AGENTS.md",
@@ -115,6 +120,24 @@ export namespace Command {
           })
         },
         hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
+      }
+    }
+
+    const plugins = await PluginCommand.list()
+    for (const item of Object.values(plugins)) {
+      if (result[item.name]) {
+        log.warn("plugin command ignored due to collision", { command: item.name, plugin: item.source })
+        continue
+      }
+      result[item.name] = {
+        name: item.name,
+        description: item.description,
+        agent: item.agent,
+        model: item.model,
+        subtask: item.subtask,
+        hints: item.hints,
+        template: item.template,
+        mode: item.mode,
       }
     }
 

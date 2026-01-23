@@ -34,6 +34,34 @@ export type PluginInput = {
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>
 
+export type PluginCommandMode = "llm" | "plugin"
+
+export type PluginCommand = {
+  name: string
+  description?: string
+  agent?: string
+  model?: string
+  subtask?: boolean
+  hints: string[]
+  template?: string | Promise<string>
+  mode?: PluginCommandMode
+}
+
+export type PluginCommandInput = {
+  sessionID: string
+  command: string
+  arguments: string
+  messageID?: string
+  agent: string
+  model?: string
+  variant?: string
+  parts?: Part[]
+}
+
+export type PluginCommandOutput = {
+  parts: Part[]
+}
+
 export type AuthHook = {
   provider: string
   loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
@@ -151,6 +179,7 @@ export interface Hooks {
   tool?: {
     [key: string]: ToolDefinition
   }
+  command?: PluginCommand[]
   auth?: AuthHook
   /**
    * Called when a new message is received
@@ -181,6 +210,7 @@ export interface Hooks {
     input: { command: string; sessionID: string; arguments: string },
     output: { parts: Part[] },
   ) => Promise<void>
+  "command.execute"?: (input: PluginCommandInput) => Promise<PluginCommandOutput | undefined>
   "tool.execute.before"?: (
     input: { tool: string; sessionID: string; callID: string },
     output: { args: any },

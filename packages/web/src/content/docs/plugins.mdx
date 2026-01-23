@@ -288,6 +288,47 @@ Your custom tools will be available to opencode alongside built-in tools.
 
 ---
 
+### Plugin commands
+
+Plugin commands let plugins trigger functionality directly from the prompt (`/command`), which is useful for managing plugin state or running server-side actions without prompting the LLM.
+
+```ts title=".opencode/plugins/toggle.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const TogglePlugin: Plugin = async () => {
+  return {
+    command: [
+      {
+        name: "toggle",
+        description: "toggle plugin state",
+        hints: ["$ARGUMENTS"],
+        mode: "plugin",
+      },
+    ],
+    "command.execute": async (input) => {
+      if (input.command !== "toggle") return undefined
+      const value = input.arguments.trim() || "off"
+      return {
+        parts: [
+          {
+            type: "text",
+            text: `toggle:${value}`,
+          },
+        ],
+      }
+    },
+  }
+}
+```
+
+Benefits:
+
+- Visible commands in the slash menu
+- A clean entry point for plugin-managed state
+- Deterministic outputs without LLM variability
+
+---
+
 ### Logging
 
 Use `client.app.log()` instead of `console.log` for structured logging:

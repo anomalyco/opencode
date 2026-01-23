@@ -16,6 +16,7 @@ import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
 import { Plugin } from "../plugin"
+import { PluginCommandService } from "../plugin/command-service"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
@@ -1595,7 +1596,98 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
+    if (!command) {
+      const error = new NamedError.Unknown({ message: `Command not found: "${input.command}".` })
+      Bus.publish(Session.Event.Error, {
+        sessionID: input.sessionID,
+        error: error.toObject(),
+      })
+      throw error
+    }
+    const mode = command.mode ?? "llm"
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
+
+    const taskModel = await (async () => {
+      if (command.model) {
+        return Provider.parseModel(command.model)
+      }
+      if (command.agent) {
+        const cmdAgent = await Agent.get(command.agent)
+        if (cmdAgent?.model) {
+          return cmdAgent.model
+        }
+      }
+      if (input.model) return Provider.parseModel(input.model)
+      return await lastModel(input.sessionID)
+    })()
+
+    try {
+      await Provider.getModel(taskModel.providerID, taskModel.modelID)
+    } catch (e) {
+      if (Provider.ModelNotFoundError.isInstance(e)) {
+        const { providerID, modelID, suggestions } = e.data
+        const hint = suggestions?.length ? ` Did you mean: ${suggestions.join(", ")}?` : ""
+        Bus.publish(Session.Event.Error, {
+          sessionID: input.sessionID,
+          error: new NamedError.Unknown({ message: `Model not found: ${providerID}/${modelID}.${hint}` }).toObject(),
+        })
+      }
+      throw e
+    }
+    const agent = await Agent.get(agentName)
+    if (!agent) {
+      const available = await Agent.list().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
+      const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+      const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
+      Bus.publish(Session.Event.Error, {
+        sessionID: input.sessionID,
+        error: error.toObject(),
+      })
+      throw error
+    }
+
+    if (mode === "plugin") {
+      const summary = ["/" + input.command, input.arguments.trim()].filter(Boolean).join(" ")
+      const commandParts = summary
+        ? [
+            {
+              type: "text" as const,
+              text: summary,
+            },
+          ]
+        : []
+      const parts: PromptInput["parts"] = [...commandParts, ...(input.parts ?? [])]
+      const userAgent = agentName
+      const userModel = taskModel
+
+      await Plugin.trigger(
+        "command.execute.before",
+        {
+          command: input.command,
+          sessionID: input.sessionID,
+          arguments: input.arguments,
+        },
+        { parts },
+      )
+
+      const userMessage = (await prompt({
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        model: userModel,
+        agent: userAgent,
+        parts,
+        variant: input.variant,
+        noReply: true,
+      })) as MessageV2.WithParts
+
+      return await PluginCommandService.execute({
+        command,
+        request: input,
+        agent: agent.name,
+        model: userModel,
+        userMessage,
+      })
+    }
 
     const raw = input.arguments.match(argsRegex) ?? []
     const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
@@ -1641,45 +1733,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       template = template.replace(bashRegex, () => results[index++])
     }
     template = template.trim()
-
-    const taskModel = await (async () => {
-      if (command.model) {
-        return Provider.parseModel(command.model)
-      }
-      if (command.agent) {
-        const cmdAgent = await Agent.get(command.agent)
-        if (cmdAgent?.model) {
-          return cmdAgent.model
-        }
-      }
-      if (input.model) return Provider.parseModel(input.model)
-      return await lastModel(input.sessionID)
-    })()
-
-    try {
-      await Provider.getModel(taskModel.providerID, taskModel.modelID)
-    } catch (e) {
-      if (Provider.ModelNotFoundError.isInstance(e)) {
-        const { providerID, modelID, suggestions } = e.data
-        const hint = suggestions?.length ? ` Did you mean: ${suggestions.join(", ")}?` : ""
-        Bus.publish(Session.Event.Error, {
-          sessionID: input.sessionID,
-          error: new NamedError.Unknown({ message: `Model not found: ${providerID}/${modelID}.${hint}` }).toObject(),
-        })
-      }
-      throw e
-    }
-    const agent = await Agent.get(agentName)
-    if (!agent) {
-      const available = await Agent.list().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
-      const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-      const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
-      Bus.publish(Session.Event.Error, {
-        sessionID: input.sessionID,
-        error: error.toObject(),
-      })
-      throw error
-    }
 
     const templateParts = await resolvePromptParts(template)
     const isSubtask = (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true

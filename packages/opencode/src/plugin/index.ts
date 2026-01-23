@@ -14,11 +14,17 @@ import { CopilotAuthPlugin } from "./copilot"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
+  const names = new WeakMap<Hooks, string>()
 
   const BUILTIN = ["opencode-anthropic-auth@0.0.9", "@gitlab/opencode-gitlab-auth@1.3.2"]
 
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin]
+
+  const register = (hook: Hooks, name: string, hooks: Hooks[]) => {
+    names.set(hook, name)
+    hooks.push(hook)
+  }
 
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
@@ -40,7 +46,8 @@ export namespace Plugin {
     for (const plugin of INTERNAL_PLUGINS) {
       log.info("loading internal plugin", { name: plugin.name })
       const init = await plugin(input)
-      hooks.push(init)
+      const name = plugin.name || "internal"
+      register(init, name, hooks)
     }
 
     const plugins = [...(config.plugin ?? [])]
@@ -77,6 +84,7 @@ export namespace Plugin {
         if (!plugin) continue
       }
       const mod = await import(plugin)
+      const pluginName = Config.getPluginName(plugin)
       // Prevent duplicate initialization when plugins export the same function
       // as both a named export and default export (e.g., `export const X` and `export default X`).
       // Object.entries(mod) would return both entries pointing to the same function reference.
@@ -85,7 +93,7 @@ export namespace Plugin {
         if (seen.has(fn)) continue
         seen.add(fn)
         const init = await fn(input)
-        hooks.push(init)
+        register(init, pluginName, hooks)
       }
     }
 
@@ -96,7 +104,7 @@ export namespace Plugin {
   })
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool" | "command">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
@@ -114,6 +122,10 @@ export namespace Plugin {
 
   export async function list() {
     return state().then((x) => x.hooks)
+  }
+
+  export function name(hook: Hooks) {
+    return names.get(hook) ?? "plugin"
   }
 
   export async function init() {
