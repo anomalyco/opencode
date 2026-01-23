@@ -1681,7 +1681,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 return (
                   <div
                     classList={{
-                      "group shrink-0 flex flex-col gap-0.5 rounded-[6px] bg-background-stronger pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all shadow-xs-border hover:shadow-xs-border-hover": true,
+                      "group shrink-0 flex flex-col rounded-[6px] bg-background-stronger pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all shadow-xs-border hover:shadow-xs-border-hover": true,
                       "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID,
                     }}
                     onClick={() => {
