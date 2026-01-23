@@ -33,6 +33,7 @@ export const dict = {
 
   "ui.list.loading": "Chargement",
   "ui.list.empty": "Aucun résultat",
+  "ui.list.clearFilter": "Effacer le filtre",
   "ui.list.emptyWithFilter.prefix": "Aucun résultat pour",
   "ui.list.emptyWithFilter.suffix": "",
 
@@ -64,6 +65,7 @@ export const dict = {
   "ui.common.cancel": "Annuler",
   "ui.common.confirm": "Confirmer",
   "ui.common.dismiss": "Ignorer",
+  "ui.common.close": "Fermer",
   "ui.common.next": "Suivant",
   "ui.common.submit": "Soumettre",
 

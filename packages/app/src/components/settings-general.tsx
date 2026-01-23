@@ -5,6 +5,7 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { useLanguage } from "@/context/language"
 import { useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
+import { Link } from "./link"
 
 export const SettingsGeneral: Component = () => {
   const theme = useTheme()
@@ -107,9 +108,7 @@ export const SettingsGeneral: Component = () => {
               description={
                 <>
                   {language.t("settings.general.row.theme.description")}{" "}
-                  <a href="#" class="text-text-interactive-base">
-                    {language.t("common.learnMore")}
-                  </a>
+                  <Link href="https://opencode.ai/docs/themes/">{language.t("common.learnMore")}</Link>
                 </>
               }
             >

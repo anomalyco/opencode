@@ -262,7 +262,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("converts assistant tool completion into tool-call + tool-result messages and emits attachment message", () => {
+  test("converts assistant tool completion into tool-call + tool-result messages with attachments", () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
 
@@ -304,7 +304,7 @@ describe("session.message-v2.toModelMessage", () => {
                   type: "file",
                   mime: "image/png",
                   filename: "attachment.png",
-                  url: "https://example.com/attachment.png",
+                  url: "data:image/png;base64,Zm9v",
                 },
               ],
             },
@@ -318,18 +318,6 @@ describe("session.message-v2.toModelMessage", () => {
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
-      },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "The tool bash returned the following attachments:" },
-          {
-            type: "file",
-            mediaType: "image/png",
-            filename: "attachment.png",
-            data: "https://example.com/attachment.png",
-          },
-        ],
       },
       {
         role: "assistant",
@@ -352,7 +340,13 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-result",
             toolCallId: "call-1",
             toolName: "bash",
-            output: { type: "text", value: "ok" },
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "ok" },
+                { type: "media", mediaType: "image/png", data: "Zm9v" },
+              ],
+            },
             providerOptions: { openai: { tool: "meta" } },
           },
         ],
