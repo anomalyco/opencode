@@ -90,6 +90,8 @@ export const dict = {
   "dialog.provider.group.other": "Andere",
   "dialog.provider.tag.recommended": "Empfohlen",
   "dialog.provider.anthropic.note": "Mit Claude Pro/Max oder API-Schlüssel verbinden",
+  "dialog.provider.openai.note": "Mit ChatGPT Pro/Plus oder API-Schlüssel verbinden",
+  "dialog.provider.copilot.note": "Mit Copilot oder API-Schlüssel verbinden",
 
   "dialog.model.select.title": "Modell auswählen",
   "dialog.model.search.placeholder": "Modelle durchsuchen",

@@ -407,6 +407,9 @@ export function DialogConnectProvider(props: { provider: string }) {
                     })
 
                     onMount(async () => {
+                      if (store.authorization?.url) {
+                        platform.openLink(store.authorization.url)
+                      }
                       const result = await globalSDK.client.provider.oauth
                         .callback({
                           providerID: props.provider,
