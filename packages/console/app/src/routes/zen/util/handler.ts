@@ -84,6 +84,7 @@ export async function handler(
     const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
     const stickyProvider = await stickyTracker?.get()
     const authInfo = await authenticate(modelInfo)
+    const billingSource = validateBilling(authInfo, modelInfo)
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
       const providerInfo = selectProvider(
@@ -96,7 +97,6 @@ export async function handler(
         retry,
         stickyProvider,
       )
-      validateBilling(authInfo, modelInfo)
       validateModelSettings(authInfo)
       updateProviderKey(authInfo, providerInfo)
       logger.metric({ provider: providerInfo.id })
@@ -183,7 +183,7 @@ export async function handler(
       const tokensInfo = providerInfo.normalizeUsage(json.usage)
       await trialLimiter?.track(tokensInfo)
       await rateLimiter?.track()
-      const costInfo = await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
+      const costInfo = await trackUsage(authInfo, modelInfo, providerInfo, billingSource, tokensInfo)
       await reload(authInfo, costInfo)
       return new Response(body, {
         status: resStatus,
@@ -219,7 +219,7 @@ export async function handler(
                 if (usage) {
                   const tokensInfo = providerInfo.normalizeUsage(usage)
                   await trialLimiter?.track(tokensInfo)
-                  const costInfo = await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
+                  const costInfo = await trackUsage(authInfo, modelInfo, providerInfo, billingSource, tokensInfo)
                   await reload(authInfo, costInfo)
                 }
                 c.close()
@@ -484,54 +484,58 @@ export async function handler(
   }
 
   function validateBilling(authInfo: AuthInfo, modelInfo: ModelInfo) {
-    if (!authInfo) return
-    if (authInfo.provider?.credentials) return
-    if (authInfo.isFree) return
-    if (modelInfo.allowAnonymous) return
+    if (!authInfo) return "anonymous"
+    if (authInfo.provider?.credentials) return "free"
+    if (authInfo.isFree) return "free"
+    if (modelInfo.allowAnonymous) return "free"
 
     // Validate subscription billing
     if (authInfo.billing.subscription && authInfo.subscription) {
-      const sub = authInfo.subscription
-      const plan = authInfo.billing.subscription.plan
+      try {
+        const sub = authInfo.subscription
+        const plan = authInfo.billing.subscription.plan
 
-      const formatRetryTime = (seconds: number) => {
-        const days = Math.floor(seconds / 86400)
-        if (days >= 1) return `${days} day${days > 1 ? "s" : ""}`
-        const hours = Math.floor(seconds / 3600)
-        const minutes = Math.ceil((seconds % 3600) / 60)
-        if (hours >= 1) return `${hours}hr ${minutes}min`
-        return `${minutes}min`
+        const formatRetryTime = (seconds: number) => {
+          const days = Math.floor(seconds / 86400)
+          if (days >= 1) return `${days} day${days > 1 ? "s" : ""}`
+          const hours = Math.floor(seconds / 3600)
+          const minutes = Math.ceil((seconds % 3600) / 60)
+          if (hours >= 1) return `${hours}hr ${minutes}min`
+          return `${minutes}min`
+        }
+
+        // Check weekly limit
+        if (sub.fixedUsage && sub.timeFixedUpdated) {
+          const result = Black.analyzeWeeklyUsage({
+            plan,
+            usage: sub.fixedUsage,
+            timeUpdated: sub.timeFixedUpdated,
+          })
+          if (result.status === "rate-limited")
+            throw new SubscriptionError(
+              `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+              result.resetInSec,
+            )
+        }
+
+        // Check rolling limit
+        if (sub.rollingUsage && sub.timeRollingUpdated) {
+          const result = Black.analyzeRollingUsage({
+            plan,
+            usage: sub.rollingUsage,
+            timeUpdated: sub.timeRollingUpdated,
+          })
+          if (result.status === "rate-limited")
+            throw new SubscriptionError(
+              `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+              result.resetInSec,
+            )
+        }
+
+        return "subscription"
+      } catch(e) {
+        if (!authInfo.billing.subscription.useBalance) throw e
       }
-
-      // Check weekly limit
-      if (sub.fixedUsage && sub.timeFixedUpdated) {
-        const result = Black.analyzeWeeklyUsage({
-          plan,
-          usage: sub.fixedUsage,
-          timeUpdated: sub.timeFixedUpdated,
-        })
-        if (result.status === "rate-limited")
-          throw new SubscriptionError(
-            `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
-            result.resetInSec,
-          )
-      }
-
-      // Check rolling limit
-      if (sub.rollingUsage && sub.timeRollingUpdated) {
-        const result = Black.analyzeRollingUsage({
-          plan,
-          usage: sub.rollingUsage,
-          timeUpdated: sub.timeRollingUpdated,
-        })
-        if (result.status === "rate-limited")
-          throw new SubscriptionError(
-            `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
-            result.resetInSec,
-          )
-      }
-
-      return
     }
 
     // Validate pay as you go billing
@@ -571,6 +575,8 @@ export async function handler(
       throw new UserLimitError(
         `You have reached your monthly spending limit of $${authInfo.user.monthlyLimit}. Manage your limits here: https://opencode.ai/workspace/${authInfo.workspaceID}/members`,
       )
+
+    return "balance"
   }
 
   function validateModelSettings(authInfo: AuthInfo) {
@@ -587,6 +593,7 @@ export async function handler(
     authInfo: AuthInfo,
     modelInfo: ModelInfo,
     providerInfo: ProviderInfo,
+    billingSource: ReturnType<typeof validateBilling>,
     usageInfo: UsageInfo,
   ) {
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
@@ -643,7 +650,8 @@ export async function handler(
       "cost.total": Math.round(totalCostInCent),
     })
 
-    if (!authInfo) return
+    if (billingSource === "anonymous") return
+    authInfo = authInfo!
 
     const cost = authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
     await Database.use((db) =>
@@ -661,13 +669,13 @@ export async function handler(
           cacheWrite1hTokens,
           cost,
           keyID: authInfo.apiKeyId,
-          enrichment: authInfo.subscription ? { plan: "sub" } : undefined,
+          enrichment: billingSource === "subscription" ? { plan: "sub" } : undefined,
         }),
         db
           .update(KeyTable)
           .set({ timeUsed: sql`now()` })
           .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
-        ...(authInfo.subscription
+        ...(billingSource === "subscription"
           ? (() => {
               const plan = authInfo.billing.subscription!.plan
               const black = BlackData.getLimits({ plan })
