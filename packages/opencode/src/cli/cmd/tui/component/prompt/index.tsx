@@ -791,38 +791,30 @@ export function Prompt(props: PromptProps) {
                 if (keybind.match("input_delete_to_line_start", e)) {
                   const text = input.plainText
                   const offset = input.cursorOffset
-                  const lineStart = text.lastIndexOf("\n", offset - 1) + 1
-                  if (offset > lineStart) {
-                    const next = text.slice(0, lineStart) + text.slice(offset)
-                    input.setText(next)
-                    input.cursorOffset = lineStart
-                    e.preventDefault()
-                    return
+                  const start = text.lastIndexOf("\n", offset - 1) + 1
+                  const target = offset > start ? start : Math.max(0, start - 1)
+
+                  if (offset !== target) {
+                    input.setText(text.slice(0, target) + text.slice(offset))
+                    input.cursorOffset = target
                   }
-                  if (lineStart === 0) {
-                    e.preventDefault()
-                    return
-                  }
-                  const next = text.slice(0, lineStart - 1) + text.slice(offset)
-                  input.setText(next)
-                  input.cursorOffset = lineStart - 1
                   e.preventDefault()
                   return
                 }
                 if (keybind.match("input_delete_word_backward", e)) {
                   const text = input.plainText
                   const offset = input.cursorOffset
-                  const lineStart = text.lastIndexOf("\n", offset - 1) + 1
-                  const slice = text.slice(lineStart, offset)
-                  if (!/\S/.test(slice)) return
-                  const trimmed = slice.replace(/\s+$/, "")
-                  const word = trimmed.match(/\S+$/)
-                  const start = word ? lineStart + trimmed.length - word[0].length : lineStart
-                  if (start === offset) return
-                  const next = text.slice(0, start) + text.slice(offset)
-                  input.setText(next)
-                  input.cursorOffset = start
-                  e.preventDefault()
+                  const start = text.lastIndexOf("\n", offset - 1) + 1
+                  const slice = text.slice(start, offset)
+                  const match = slice.match(/(\S+)\s*$/)
+                  if (match) {
+                    const pos = start + match.index!
+                    input.setText(text.slice(0, pos) + text.slice(offset))
+                    input.cursorOffset = pos
+                    e.preventDefault()
+                    return
+                  }
+                  // Fallthrough to default behavior if no word found (e.g. at line start)
                   return
                 }
                 // Handle clipboard paste (Ctrl+V) - check for images first on Windows
