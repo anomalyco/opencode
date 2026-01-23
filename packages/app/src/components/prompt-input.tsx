@@ -1675,13 +1675,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </div>
         </Show>
         <Show when={prompt.context.items().length > 0}>
-          <div class="flex flex-nowrap items-start gap-1.5 px-3 pt-3 overflow-x-auto no-scrollbar">
+          <div class="flex flex-nowrap items-start gap-2 p-2 overflow-x-auto no-scrollbar">
             <For each={prompt.context.items()}>
               {(item) => {
                 return (
                   <div
                     classList={{
-                      "shrink-0 flex flex-col gap-1 rounded-md bg-surface-base border border-border-base px-2 py-1 max-w-[320px]": true,
+                      "shrink-0 flex flex-col gap-1 rounded-[6px] bg-surface-base border border-border-base px-2 py-1 max-w-[320px]": true,
                       "cursor-pointer hover:bg-surface-raised-base-hover": !!item.commentID,
                     }}
                     onClick={() => {
