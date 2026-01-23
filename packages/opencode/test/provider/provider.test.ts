@@ -22,6 +22,20 @@ mock.module("opencode-copilot-auth", () => ({ default: mockPlugin }))
 mock.module("opencode-anthropic-auth", () => ({ default: mockPlugin }))
 mock.module("@gitlab/opencode-gitlab-auth", () => ({ default: mockPlugin }))
 
+mock.module("google-auth-library", () => ({
+  GoogleAuth: class {
+    async getApplicationDefault() {
+      return {
+        credential: {
+          getAccessToken: async () => ({
+            token: "mock-access-token-12345",
+          }),
+        },
+      }
+    }
+  },
+}))
+
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"

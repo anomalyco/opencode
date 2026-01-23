@@ -358,33 +358,18 @@ export namespace Provider {
       }
     },
     "google-vertex-openapi": async (provider) => {
-      let project =
+      const project =
         provider.options?.project ??
         Env.get("GOOGLE_CLOUD_PROJECT") ??
         Env.get("GCP_PROJECT") ??
         Env.get("GCLOUD_PROJECT")
-
-      if (!project) {
-        try {
-          const proc = Bun.spawn(["gcloud", "config", "get-value", "project"], {
-            stdout: "pipe",
-            stderr: "pipe",
-          })
-          const out = await new Response(proc.stdout).text()
-          if (out && !out.includes("unset")) {
-            project = out.trim()
-          }
-        } catch (e) {}
-      }
 
       const location =
         provider.options?.location ?? Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global"
 
       const autoload = Boolean(project)
 
-      // Always return options if we have a project, or if we want to allow the user to provide it later?
-      // If we don't have a project, we can't construct the baseURL.
-      if (!project) return { autoload: false }
+      if (!autoload) return { autoload: false }
 
       return {
         autoload: true,
@@ -394,24 +379,20 @@ export namespace Provider {
               ? `https://aiplatform.googleapis.com/v1beta1/projects/${project}/locations/${location}/endpoints/openapi`
               : `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${project}/locations/${location}/endpoints/openapi`,
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            try {
-              const proc = Bun.spawn(["gcloud", "auth", "print-access-token"], { stdout: "pipe", stderr: "pipe" })
-              const token = (await new Response(proc.stdout).text()).trim()
-              if (!token) {
-                const stderr = await new Response(proc.stderr).text()
-                throw new Error(`Failed to get gcloud token: ${stderr}`)
-              }
+            const { GoogleAuth } = await import(await BunProc.install("google-auth-library"))
+            const auth = new GoogleAuth()
+            const client = await auth.getApplicationDefault()
+            const credentials = await client.credential
+            const token = await credentials.getAccessToken()
 
-              const headers = new Headers(init?.headers)
-              headers.set("Authorization", `Bearer ${token}`)
+            const headers = new Headers(init?.headers)
+            headers.set("Authorization", `Bearer ${token.token}`)
 
-              return fetch(input, { ...init, headers })
-            } catch (e) {
-              // fallback to default fetch if gcloud fails or not found?
-              // But without token it will fail anyway.
-              throw e
-            }
+            return fetch(input, { ...init, headers })
           },
+        },
+        async getModel(sdk: any, modelID: string) {
+          return sdk(modelID)
         },
       }
     },
