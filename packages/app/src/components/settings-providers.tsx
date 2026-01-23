@@ -402,17 +402,18 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
                         <Show
                           when={renamingAccount() === account.id}
                           fallback={
-                            <button
-                              type="button"
-                              disabled={!canSwitch() && !account.isActive}
-                              onClick={() => canSwitch() && switchAccount(account.id)}
-                              class="flex-1 flex items-center justify-between text-left transition-all"
-                              classList={{
-                                "hover:opacity-80 cursor-pointer": canSwitch(),
-                                "opacity-60": !canSwitch() && !account.isActive,
-                              }}
-                            >
-                              <div class="flex items-center gap-2">
+                            <div class="flex-1 flex items-center justify-between">
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => canSwitch() && switchAccount(account.id)}
+                                onKeyDown={(e) => e.key === "Enter" && canSwitch() && switchAccount(account.id)}
+                                class="flex-1 flex items-center gap-2 cursor-pointer"
+                                classList={{
+                                  "hover:opacity-80": canSwitch(),
+                                  "opacity-60 cursor-default": !canSwitch() && !account.isActive,
+                                }}
+                              >
                                 <Show when={isSwitching()}>
                                   <Spinner class="size-3" />
                                 </Show>
@@ -436,17 +437,14 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
                                 </span>
                                 <button
                                   type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    startRename(account.id, account.label)
-                                  }}
+                                  onClick={() => startRename(account.id, account.label)}
                                   class="p-1 rounded hover:bg-fill-ghost-strong text-icon-muted hover:text-text-base transition-colors"
                                   title="Rename account"
                                 >
                                   <Icon name="edit" class="size-3" />
                                 </button>
                               </div>
-                            </button>
+                            </div>
                           }
                         >
                           <div class="flex-1 flex items-center gap-2">
