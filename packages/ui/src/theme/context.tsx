@@ -73,7 +73,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       themes: DEFAULT_THEMES as Record<string, DesktopTheme>,
       themeId: props.defaultTheme ?? "oc-1",
       colorScheme: "light" as ColorScheme,
-      mode: "light",
+      mode: "light" as "light" | "dark",
       previewThemeId: null as string | null,
       previewScheme: null as ColorScheme | null,
     })
