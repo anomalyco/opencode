@@ -50,7 +50,16 @@ jobs:
           set -e
           echo "Installing OpenCode dev binary..."
           cd /tmp
-          curl -L -o opencode "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/opencode"
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "x86_64" ]; then
+             BINARY="opencode-linux-x64"
+          elif [ "$ARCH" = "aarch64" ]; then
+             BINARY="opencode-linux-arm64"
+          else
+             echo "Unsupported architecture: $ARCH"
+             exit 1
+          fi
+          curl -L -o opencode "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/${BINARY}"
           chmod +x opencode
           mkdir -p ~/.opencode/bin
           mv opencode ~/.opencode/bin/opencode
@@ -66,16 +75,65 @@ jobs:
       - name: Build full project
         run: bun install
 
-      - name: Build linux x64 binary
+      - name: Replace workspace dependencies with file paths
+        run: |
+          # Backup original package.json
+          cp packages/opencode/package.json packages/opencode/package.json.bak
+          
+          # Replace workspace:* with file:../ paths in opencode package.json
+          node -e "
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('packages/opencode/package.json', 'utf8'));
+          
+          // Replace workspace dependencies with file paths
+          if (pkg.dependencies) {
+            if (pkg.dependencies['@opencode-ai/plugin'] === 'workspace:*') {
+              pkg.dependencies['@opencode-ai/plugin'] = 'file:../plugin';
+            }
+            if (pkg.dependencies['@opencode-ai/script'] === 'workspace:*') {
+              pkg.dependencies['@opencode-ai/script'] = 'file:../script';
+            }
+            if (pkg.dependencies['@opencode-ai/sdk'] === 'workspace:*') {
+              pkg.dependencies['@opencode-ai/sdk'] = 'file:../sdk/js';
+            }
+            if (pkg.dependencies['@opencode-ai/util'] === 'workspace:*') {
+              pkg.dependencies['@opencode-ai/util'] = 'file:../util';
+            }
+          }
+          
+          fs.writeFileSync('packages/opencode/package.json', JSON.stringify(pkg, null, 2));
+          "
+          
+          # Reinstall with file paths
+          cd packages/opencode
+          rm -rf node_modules
+          bun install --no-save
+          cd ../..
+
+      - name: Build all linux binaries
         run: |
           cd packages/opencode
-          bun run build --single
-
-      - name: Copy binary and make executable
+          bun run build
+          
+      - name: Restore original package.json
+        if: always()
         run: |
-          BINARY=$(find packages/opencode/dist -name "opencode" -type f | head -1)
-          cp "$BINARY" opencode
-          chmod +x opencode
+          if [ -f packages/opencode/package.json.bak ]; then
+            mv packages/opencode/package.json.bak packages/opencode/package.json
+          fi
+
+      - name: Copy all linux binaries
+        run: |
+          mkdir -p release-binaries
+          for dir in packages/opencode/dist/opencode-linux*/bin; do
+            binary="$dir/opencode"
+            if [ -f "$binary" ]; then
+              platform=$(basename $(dirname "$dir"))
+              cp "$binary" "release-binaries/opencode-${platform}"
+              chmod +x "release-binaries/opencode-${platform}"
+            fi
+          done
+          ls -la release-binaries/
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -85,10 +143,10 @@ jobs:
           draft: false
           prerelease: true
           files: |
-            opencode
+            release-binaries/*
             install-opencode.sh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos:
     runs-on: macos-latest
@@ -107,6 +165,25 @@ jobs:
 
       - name: Build full project
         run: bun install
+
+      - name: Replace workspace dependencies with file paths
+        run: |
+          cp packages/opencode/package.json packages/opencode/package.json.bak
+          node -e "
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('packages/opencode/package.json', 'utf8'));
+          if (pkg.dependencies) {
+            if (pkg.dependencies['@opencode-ai/plugin'] === 'workspace:*') pkg.dependencies['@opencode-ai/plugin'] = 'file:../plugin';
+            if (pkg.dependencies['@opencode-ai/script'] === 'workspace:*') pkg.dependencies['@opencode-ai/script'] = 'file:../script';
+            if (pkg.dependencies['@opencode-ai/sdk'] === 'workspace:*') pkg.dependencies['@opencode-ai/sdk'] = 'file:../sdk/js';
+            if (pkg.dependencies['@opencode-ai/util'] === 'workspace:*') pkg.dependencies['@opencode-ai/util'] = 'file:../util';
+          }
+          fs.writeFileSync('packages/opencode/package.json', JSON.stringify(pkg, null, 2));
+          "
+          cd packages/opencode
+          rm -rf node_modules
+          bun install --no-save
+          cd ../..
 
       - name: Build macOS arm64 binary
         run: |
@@ -145,6 +222,25 @@ jobs:
       - name: Build full project
         run: bun install
 
+      - name: Replace workspace dependencies with file paths
+        run: |
+          cp packages/opencode/package.json packages/opencode/package.json.bak
+          node -e "
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('packages/opencode/package.json', 'utf8'));
+          if (pkg.dependencies) {
+            if (pkg.dependencies['@opencode-ai/plugin'] === 'workspace:*') pkg.dependencies['@opencode-ai/plugin'] = 'file:../plugin';
+            if (pkg.dependencies['@opencode-ai/script'] === 'workspace:*') pkg.dependencies['@opencode-ai/script'] = 'file:../script';
+            if (pkg.dependencies['@opencode-ai/sdk'] === 'workspace:*') pkg.dependencies['@opencode-ai/sdk'] = 'file:../sdk/js';
+            if (pkg.dependencies['@opencode-ai/util'] === 'workspace:*') pkg.dependencies['@opencode-ai/util'] = 'file:../util';
+          }
+          fs.writeFileSync('packages/opencode/package.json', JSON.stringify(pkg, null, 2));
+          "
+          cd packages/opencode
+          rm -rf node_modules
+          bun install --no-save
+          cd ../..
+
       - name: Build macOS x64 binary
         run: |
           cd packages/opencode
@@ -181,6 +277,21 @@ jobs:
 
       - name: Build full project
         run: bun install
+
+      - name: Replace workspace dependencies with file paths
+        shell: pwsh
+        run: |
+          Copy-Item packages/opencode/package.json packages/opencode/package.json.bak
+          $pkg = Get-Content packages/opencode/package.json | ConvertFrom-Json
+          if ($pkg.dependencies.'@opencode-ai/plugin' -eq 'workspace:*') { $pkg.dependencies.'@opencode-ai/plugin' = 'file:../plugin' }
+          if ($pkg.dependencies.'@opencode-ai/script' -eq 'workspace:*') { $pkg.dependencies.'@opencode-ai/script' = 'file:../script' }
+          if ($pkg.dependencies.'@opencode-ai/sdk' -eq 'workspace:*') { $pkg.dependencies.'@opencode-ai/sdk' = 'file:../sdk/js' }
+          if ($pkg.dependencies.'@opencode-ai/util' -eq 'workspace:*') { $pkg.dependencies.'@opencode-ai/util' = 'file:../util' }
+          $pkg | ConvertTo-Json -Depth 100 | Set-Content packages/opencode/package.json
+          cd packages/opencode
+          Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
+          bun install --no-save
+          cd ../..
 
       - name: Build Windows x64 binary
         run: |
