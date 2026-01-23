@@ -6,6 +6,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 import { type LocalProject, getAvatarColors } from "@/context/layout"
 import { getFilename } from "@opencode-ai/util/path"
 import { Avatar } from "@opencode-ai/ui/avatar"
@@ -16,6 +17,7 @@ const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] a
 export function DialogEditProject(props: { project: LocalProject }) {
   const dialog = useDialog()
   const globalSDK = useGlobalSDK()
+  const globalSync = useGlobalSync()
   const language = useLanguage()
 
   const folderName = createMemo(() => getFilename(props.project.worktree))
@@ -71,17 +73,27 @@ export function DialogEditProject(props: { project: LocalProject }) {
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
 
-    if (!props.project.id) return
-
     setStore("saving", true)
     const name = store.name.trim() === folderName() ? "" : store.name.trim()
     const start = store.startup.trim()
-    await globalSDK.client.project.update({
-      projectID: props.project.id,
-      directory: props.project.worktree,
+
+    if (props.project.id && props.project.id !== "global") {
+      await globalSDK.client.project.update({
+        projectID: props.project.id,
+        directory: props.project.worktree,
+        name,
+        icon: { color: store.color, override: store.iconUrl },
+        commands: { start },
+      })
+      setStore("saving", false)
+      dialog.close()
+      return
+    }
+
+    globalSync.project.meta(props.project.worktree, {
       name,
-      icon: { color: store.color, override: store.iconUrl },
-      commands: { start },
+      icon: { color: store.color, override: store.iconUrl || undefined },
+      commands: { start: start || undefined },
     })
     setStore("saving", false)
     dialog.close()

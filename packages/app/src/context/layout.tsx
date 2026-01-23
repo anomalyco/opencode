@@ -222,13 +222,28 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const metadata = projectID
         ? globalSync.data.project.find((x) => x.id === projectID)
         : globalSync.data.project.find((x) => x.worktree === project.worktree)
-      return {
+
+      const base = {
         ...(metadata ?? {}),
         ...project,
         icon: {
           url: metadata?.icon?.url,
           override: metadata?.icon?.override,
           color: metadata?.icon?.color,
+        },
+      }
+
+      if (projectID !== "global") return base
+
+      const local = childStore.projectMeta
+      return {
+        ...base,
+        name: local?.name,
+        commands: local?.commands,
+        icon: {
+          url: base.icon?.url,
+          override: local?.icon?.override,
+          color: local?.icon?.color,
         },
       }
     }
@@ -296,6 +311,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         used.add(color)
         setColors(project.worktree, color)
         if (!project.id) continue
+        if (project.id === "global") {
+          globalSync.project.meta(project.worktree, { icon: { color } })
+          continue
+        }
         void globalSdk.client.project.update({ projectID: project.id, directory: project.worktree, icon: { color } })
       }
     })

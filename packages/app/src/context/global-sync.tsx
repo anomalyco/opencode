@@ -44,11 +44,23 @@ import { usePlatform } from "./platform"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 
+type ProjectMeta = {
+  name?: string
+  icon?: {
+    override?: string
+    color?: string
+  }
+  commands?: {
+    start?: string
+  }
+}
+
 type State = {
   status: "loading" | "partial" | "complete"
   agent: Agent[]
   command: Command[]
   project: string
+  projectMeta: ProjectMeta | undefined
   provider: ProviderListResponse
   config: Config
   path: Path
@@ -89,6 +101,12 @@ type VcsCache = {
   ready: Accessor<boolean>
 }
 
+type MetaCache = {
+  store: Store<{ value: ProjectMeta | undefined }>
+  setStore: SetStoreFunction<{ value: ProjectMeta | undefined }>
+  ready: Accessor<boolean>
+}
+
 type ChildOptions = {
   bootstrap?: boolean
 }
@@ -100,6 +118,7 @@ function createGlobalSync() {
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
   const vcsCache = new Map<string, VcsCache>()
+  const metaCache = new Map<string, MetaCache>()
   const [globalStore, setGlobalStore] = createStore<{
     ready: boolean
     error?: InitError
@@ -149,9 +168,19 @@ function createGlobalSync() {
       if (!cache) throw new Error("Failed to create persisted cache")
       vcsCache.set(directory, { store: cache[0], setStore: cache[1], ready: cache[3] })
 
+      const meta = runWithOwner(owner, () =>
+        persisted(
+          Persist.workspace(directory, "project", ["project.v1"]),
+          createStore({ value: undefined as ProjectMeta | undefined }),
+        ),
+      )
+      if (!meta) throw new Error("Failed to create persisted project metadata")
+      metaCache.set(directory, { store: meta[0], setStore: meta[1], ready: meta[3] })
+
       const init = () => {
         children[directory] = createStore<State>({
           project: "",
+          projectMeta: meta[0].value,
           provider: { all: [], connected: [], default: {} },
           config: {},
           path: { state: "", config: "", worktree: "", directory: "", home: "" },
@@ -253,6 +282,8 @@ function createGlobalSync() {
       const [store, setStore] = ensureChild(directory)
       const cache = vcsCache.get(directory)
       if (!cache) return
+      const meta = metaCache.get(directory)
+      if (!meta) return
       const sdk = createOpencodeClient({
         baseUrl: globalSDK.url,
         fetch: platform.fetch,
@@ -267,6 +298,13 @@ function createGlobalSync() {
         const cached = cache.store.value
         if (!cached?.branch) return
         setStore("vcs", (value) => value ?? cached)
+      })
+
+      createEffect(() => {
+        if (!meta.ready()) return
+        const cached = meta.store.value
+        if (!cached) return
+        setStore("projectMeta", (value) => value ?? cached)
       })
 
       const blockingRequests = {
@@ -725,6 +763,23 @@ function createGlobalSync() {
     bootstrap()
   })
 
+  function projectMeta(directory: string, patch: ProjectMeta) {
+    const [store, setStore] = ensureChild(directory)
+    const cached = metaCache.get(directory)
+    if (!cached) return
+    const previous = store.projectMeta ?? {}
+    const icon = patch.icon ? { ...(previous.icon ?? {}), ...patch.icon } : previous.icon
+    const commands = patch.commands ? { ...(previous.commands ?? {}), ...patch.commands } : previous.commands
+    const next = {
+      ...previous,
+      ...patch,
+      icon,
+      commands,
+    }
+    cached.setStore("value", next)
+    setStore("projectMeta", next)
+  }
+
   return {
     data: globalStore,
     set: setGlobalStore,
@@ -746,6 +801,7 @@ function createGlobalSync() {
     },
     project: {
       loadSessions,
+      meta: projectMeta,
     },
   }
 }
