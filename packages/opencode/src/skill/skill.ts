@@ -17,6 +17,8 @@ export namespace Skill {
     name: z.string(),
     description: z.string(),
     location: z.string(),
+    triggers: z.array(z.string()).optional().describe("Keywords/patterns that auto-trigger this skill"),
+    autoInvoke: z.boolean().optional().default(false).describe("Whether this skill should be auto-invoked when triggers match"),
   })
   export type Info = z.infer<typeof Info>
 
@@ -56,7 +58,7 @@ export namespace Skill {
 
       if (!md) return
 
-      const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
+      const parsed = Info.pick({ name: true, description: true, triggers: true, autoInvoke: true }).safeParse(md.data)
       if (!parsed.success) return
 
       // Warn on duplicate skill names
@@ -72,6 +74,8 @@ export namespace Skill {
         name: parsed.data.name,
         description: parsed.data.description,
         location: match,
+        triggers: parsed.data.triggers,
+        autoInvoke: parsed.data.autoInvoke,
       }
     }
 
@@ -131,5 +135,37 @@ export namespace Skill {
 
   export async function all() {
     return state().then((x) => Object.values(x))
+  }
+
+  /**
+   * Find skills that match the given message based on their triggers
+   */
+  export async function findByTriggers(message: string): Promise<Info[]> {
+    const skills = await all()
+    const loweredMessage = message.toLowerCase()
+
+    return skills.filter((skill) => {
+      if (!skill.triggers || skill.triggers.length === 0) return false
+      if (!skill.autoInvoke) return false
+
+      return skill.triggers.some((trigger) => {
+        const loweredTrigger = trigger.toLowerCase()
+        // Check for word boundary matches to avoid false positives
+        const regex = new RegExp(`\\b${escapeRegex(loweredTrigger)}\\b`, "i")
+        return regex.test(loweredMessage)
+      })
+    })
+  }
+
+  /**
+   * Get all auto-invokable skills
+   */
+  export async function getAutoInvokable(): Promise<Info[]> {
+    const skills = await all()
+    return skills.filter((skill) => skill.autoInvoke && skill.triggers && skill.triggers.length > 0)
+  }
+
+  function escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
   }
 }

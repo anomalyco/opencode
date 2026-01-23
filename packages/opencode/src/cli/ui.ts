@@ -81,4 +81,33 @@ export namespace UI {
   export function markdown(text: string): string {
     return text
   }
+
+  // Color helpers
+  export function green(text: string): string {
+    return Style.TEXT_SUCCESS + text + Style.TEXT_NORMAL
+  }
+
+  export function red(text: string): string {
+    return Style.TEXT_DANGER + text + Style.TEXT_NORMAL
+  }
+
+  export function yellow(text: string): string {
+    return Style.TEXT_WARNING + text + Style.TEXT_NORMAL
+  }
+
+  export function blue(text: string): string {
+    return Style.TEXT_INFO + text + Style.TEXT_NORMAL
+  }
+
+  export function dim(text: string): string {
+    return Style.TEXT_DIM + text + Style.TEXT_NORMAL
+  }
+
+  export function bold(text: string): string {
+    return Style.TEXT_NORMAL_BOLD + text + Style.TEXT_NORMAL
+  }
+
+  // Symbols
+  export const checkmark = "✓"
+  export const cross = "✗"
 }

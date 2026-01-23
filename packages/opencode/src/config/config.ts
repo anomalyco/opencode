@@ -824,6 +824,70 @@ export namespace Config {
       ref: "ServerConfig",
     })
 
+  // VPS SSH Authentication Configuration
+  export const VpsAuthKey = z
+    .object({
+      type: z.literal("key"),
+      keyPath: z.string().describe("Path to SSH private key file (supports ~ expansion)"),
+      passphrase: z.string().optional().describe("Passphrase for encrypted private key"),
+    })
+    .strict()
+    .meta({ ref: "VpsAuthKeyConfig" })
+
+  export const VpsAuthPassword = z
+    .object({
+      type: z.literal("password"),
+      password: z.string().optional().describe("SSH password (not recommended, use key-based auth)"),
+      promptPassword: z.boolean().default(true).describe("Prompt for password interactively"),
+    })
+    .strict()
+    .meta({ ref: "VpsAuthPasswordConfig" })
+
+  export const VpsAuthAgent = z
+    .object({
+      type: z.literal("agent"),
+    })
+    .strict()
+    .describe("Use SSH agent for authentication")
+    .meta({ ref: "VpsAuthAgentConfig" })
+
+  export const VpsAuth = z.discriminatedUnion("type", [VpsAuthKey, VpsAuthPassword, VpsAuthAgent]).meta({
+    ref: "VpsAuthConfig",
+  })
+  export type VpsAuth = z.infer<typeof VpsAuth>
+
+  // VPS Connection Configuration
+  export const VpsConnection = z
+    .object({
+      host: z.string().describe("Hostname or IP address of the VPS"),
+      port: z.number().int().positive().default(22).describe("SSH port (default: 22)"),
+      user: z.string().describe("SSH username"),
+      auth: VpsAuth.describe("Authentication method"),
+      nickname: z.string().optional().describe("Friendly display name for this VPS"),
+      env: z.record(z.string(), z.string()).optional().describe("Environment variables to set on the remote server"),
+      forwardAgent: z.boolean().default(false).describe("Enable SSH agent forwarding"),
+      keepAliveInterval: z.number().default(30000).describe("Keep-alive interval in milliseconds"),
+      defaultDirectory: z.string().optional().describe("Default working directory on the remote server"),
+    })
+    .strict()
+    .meta({ ref: "VpsConnectionConfig" })
+
+  export type VpsConnection = z.infer<typeof VpsConnection>
+
+  // Skill Configuration for Auto-Detection
+  export const Skill = z
+    .object({
+      name: z.string().describe("Display name of the skill"),
+      description: z.string().describe("Description of what this skill does"),
+      triggers: z.array(z.string()).describe("Keywords/patterns that trigger this skill"),
+      enabled: z.boolean().default(true).describe("Whether this skill is enabled"),
+      steps: z.array(z.string()).optional().describe("Steps to execute when triggered"),
+    })
+    .strict()
+    .meta({ ref: "SkillConfig" })
+
+  export type Skill = z.infer<typeof Skill>
+
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
   })
@@ -1044,6 +1108,14 @@ export namespace Config {
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
         })
         .optional(),
+      vps: z
+        .record(z.string(), VpsConnection)
+        .optional()
+        .describe("VPS connection configurations for remote SSH access"),
+      skill: z
+        .record(z.string(), Skill)
+        .optional()
+        .describe("Custom skills for auto-detection and execution"),
       experimental: z
         .object({
           hook: z
