@@ -7,17 +7,16 @@ import { useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 
-
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
   timeout: undefined as NodeJS.Timeout | undefined,
 }
 
-// To prevent audio from overlapping/playing very quickly when navigating the settings menus, 
+// To prevent audio from overlapping/playing very quickly when navigating the settings menus,
 // delay the playback by 100ms during quick selection changes and pause existing sounds.
 const playDemoSound = (src: string) => {
   if (demoSoundState.cleanup) {
-    demoSoundState.cleanup();
+    demoSoundState.cleanup()
   }
 
   clearTimeout(demoSoundState.timeout)
