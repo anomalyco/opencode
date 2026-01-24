@@ -65,6 +65,7 @@ You can also access our models through the following API endpoints.
 | Model              | Model ID           | Endpoint                                           | AI SDK Package              |
 | ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
 | GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.2 Codex      | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.1            | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.1 Codex      | gpt-5.1-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.1 Codex Max  | gpt-5.1-codex-max  | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
@@ -78,20 +79,18 @@ You can also access our models through the following API endpoints.
 | Claude Haiku 3.5   | claude-3-5-haiku   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Opus 4.5    | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| MiniMax M2.1       | minimax-m2.1-free  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Gemini 3 Pro       | gemini-3-pro       | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
 | Gemini 3 Flash     | gemini-3-flash     | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| GLM 4.7            | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 4.6            | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 4.7            | glm-4.7-free       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2            | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2 Thinking   | kimi-k2-thinking   | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Qwen3 Coder 480B   | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Grok Code Fast 1   | grok-code          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Big Pickle         | big-pickle         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
 The [model id](/docs/config/#models) in your OpenCode config
-uses the format `opencode/<model-id>`. For example, for GPT 5.1 Codex, you would
-use `opencode/gpt-5.1-codex` in your config.
+uses the format `opencode/<model-id>`. For example, for GPT 5.2 Codex, you would
+use `opencode/gpt-5.2-codex` in your config.
 
 ---
 
@@ -112,9 +111,7 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | Model                             | Input  | Output | Cached Read | Cached Write |
 | --------------------------------- | ------ | ------ | ----------- | ------------ |
 | Big Pickle                        | Free   | Free   | Free        | -            |
-| Grok Code Fast 1                  | Free   | Free   | Free        | -            |
-| MiniMax M2.1                      | Free   | Free   | Free        | -            |
-| GLM 4.7                           | Free   | Free   | Free        | -            |
+| GLM 4.7                           | $0.60  | $2.20  | $0.10       | -            |
 | GLM 4.6                           | $0.60  | $2.20  | $0.10       | -            |
 | Kimi K2                           | $0.40  | $2.50  | -           | -            |
 | Kimi K2 Thinking                  | $0.40  | $2.50  | -           | -            |
@@ -131,6 +128,7 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | Gemini 3 Pro (> 200K tokens)      | $4.00  | $18.00 | $0.40       | -            |
 | Gemini 3 Flash                    | $0.50  | $3.00  | $0.05       | -            |
 | GPT 5.2                           | $1.75  | $14.00 | $0.175      | -            |
+| GPT 5.2 Codex                     | $1.75  | $14.00 | $0.175      | -            |
 | GPT 5.1                           | $1.07  | $8.50  | $0.107      | -            |
 | GPT 5.1 Codex                     | $1.07  | $8.50  | $0.107      | -            |
 | GPT 5.1 Codex Max                 | $1.25  | $10.00 | $0.125      | -            |
@@ -147,9 +145,6 @@ Credit card fees are passed along at cost (4.4% + $0.30 per transaction); we don
 
 The free models:
 
-- Grok Code Fast 1 is currently free on OpenCode for a limited time. The xAI team is using this time to collect feedback and improve Grok Code.
-- GLM 4.7 is currently free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
-- MiniMax M2.1 is currently free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Big Pickle is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 
 <a href={email}>Contact us</a> if you have any questions.
@@ -179,9 +174,6 @@ charging you more than $20 if your balance goes below $5.
 
 All our models are hosted in the US. Our providers follow a zero-retention policy and do not use your data for model training, with the following exceptions:
 
-- Grok Code Fast 1: During its free period, collected data may be used to improve Grok Code.
-- GLM 4.7: During its free period, collected data may be used to improve the model.
-- MiniMax M2.1: During its free period, collected data may be used to improve the model.
 - Big Pickle: During its free period, collected data may be used to improve the model.
 - OpenAI APIs: Requests are retained for 30 days in accordance with [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs: Requests are retained for 30 days in accordance with [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).

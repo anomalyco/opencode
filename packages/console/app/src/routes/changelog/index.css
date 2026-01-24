@@ -32,7 +32,6 @@
   font-family: var(--font-mono);
   color: var(--color-text);
   padding-bottom: 5rem;
-  overflow-x: hidden;
 
   @media (prefers-color-scheme: dark) {
     --color-background: hsl(0, 9%, 7%);

@@ -12,7 +12,7 @@
   white-space: nowrap;
 
   &[data-variant="primary"] {
-    background-color: var(--icon-strong-base);
+    background-color: var(--button-primary-base);
     border-color: var(--border-weak-base);
     color: var(--icon-invert-base);
 

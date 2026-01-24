@@ -6,9 +6,46 @@ import { Global } from "../global"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import { Scheduler } from "../scheduler"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
+  const hour = 60 * 60 * 1000
+  const prune = "7.days"
+
+  export function init() {
+    Scheduler.register({
+      id: "snapshot.cleanup",
+      interval: hour,
+      run: cleanup,
+      scope: "instance",
+    })
+  }
+
+  export async function cleanup() {
+    if (Instance.project.vcs !== "git") return
+    const cfg = await Config.get()
+    if (cfg.snapshot === false) return
+    const git = gitdir()
+    const exists = await fs
+      .stat(git)
+      .then(() => true)
+      .catch(() => false)
+    if (!exists) return
+    const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} gc --prune=${prune}`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+    if (result.exitCode !== 0) {
+      log.warn("cleanup failed", {
+        exitCode: result.exitCode,
+        stderr: result.stderr.toString(),
+        stdout: result.stdout.toString(),
+      })
+      return
+    }
+    log.info("cleanup", { prune })
+  }
 
   export async function track() {
     if (Instance.project.vcs !== "git") return
