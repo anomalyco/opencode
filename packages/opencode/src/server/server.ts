@@ -128,6 +128,7 @@ export namespace Server {
 
               return
             },
+            credentials: true,
           }),
         )
         .use(authMiddleware)
