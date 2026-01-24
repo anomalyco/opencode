@@ -519,7 +519,7 @@ export async function POST(input: APIEvent) {
         if (!workspaceID) throw new Error("Workspace ID not found")
         if (!invoiceID) throw new Error("Invoice ID not found")
 
-        const paymentIntent = await Billing.stripe().paymentIntents.retrieve(invoiceID);
+        const paymentIntent = await Billing.stripe().paymentIntents.retrieve(invoiceID)
         console.log(JSON.stringify(paymentIntent))
         const errorMessage =
           typeof paymentIntent === "object" && paymentIntent !== null
