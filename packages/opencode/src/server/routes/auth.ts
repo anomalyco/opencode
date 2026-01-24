@@ -950,6 +950,28 @@ function generate2FASetupPageHtml(params: {
       padding: 0.25rem 0.5rem;
       border-radius: 4px;
     }
+    .safety-info {
+      padding: 0.75rem;
+      font-size: 0.75rem;
+      line-height: 1.5;
+      color: #a3a3a3;
+    }
+    .safety-info p {
+      margin: 0 0 0.5rem 0;
+    }
+    .safety-info p:last-child {
+      margin-bottom: 0;
+    }
+    .safety-info strong {
+      color: #e5e5e5;
+    }
+    .safety-info code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #0a0a0a;
+      padding: 0.125rem 0.375rem;
+      border-radius: 3px;
+      font-size: 0.7rem;
+    }
     .verify-form {
       display: flex;
       flex-direction: column;
@@ -1070,6 +1092,15 @@ function generate2FASetupPageHtml(params: {
       <p class="note">Run this command on the server to enable 2FA for your account:</p>
       <div class="command-display">${escapeHtml(setupCommand)}</div>
       <p class="note">This creates ~/.google_authenticator with your secret.</p>
+      <details class="install-details">
+        <summary>Is this safe? Will it affect my system login?</summary>
+        <div class="safety-info">
+          <p><strong>No, this will not affect your system login.</strong></p>
+          <p>The command only creates a file at <code>~/.google_authenticator</code> containing your TOTP secret. This file is completely inert by itself.</p>
+          <p>It only affects authentication when a PAM service explicitly loads it. Your system's login, sudo, and SSH use their own PAM configs which remain untouched. Opencode uses a separate PAM service file (<code>opencode-otp</code>) that only opencode reads.</p>
+          <p><strong>Reversibility:</strong> Simply run <code>rm ~/.google_authenticator</code> to undo.</p>
+        </div>
+      </details>
     </div>
 
     <div class="step">
