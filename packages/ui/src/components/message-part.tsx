@@ -605,7 +605,12 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 
   const input = () => part.state?.input ?? emptyInput
   // @ts-expect-error
-  const metadata = () => part.state?.metadata ?? emptyMetadata
+  const partMetadata = () => part.state?.metadata ?? emptyMetadata
+  const metadata = () => {
+    const perm = permission()
+    if (perm?.metadata) return { ...perm.metadata, ...partMetadata() }
+    return partMetadata()
+  }
 
   const render = ToolRegistry.render(part.tool) ?? GenericTool
 
