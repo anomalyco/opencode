@@ -217,7 +217,17 @@ export namespace Storage {
           cwd: path.join(dir, ...prefix),
           onlyFiles: true,
         }),
-      ).then((results) => results.map((x) => [...prefix, ...x.slice(0, -5).split(path.sep)]))
+      ).then((results) =>
+        results.map((x) => {
+          // Get relative path without .json extension
+          const relative = path.relative(path.join(dir, ...prefix), x)
+          const withoutExt = relative.slice(0, -5) // Remove .json
+          // Split by both separators for cross-platform compatibility
+          // This handles synced data from Windows (\) on Unix-like systems (/) and vice versa
+          const parts = withoutExt.split(/[\/\\]/)
+          return [...prefix, ...parts]
+        })
+      )
       result.sort()
       return result
     } catch {
