@@ -2,9 +2,10 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
+import { Button } from "@opencode-ai/ui/button"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import fuzzysort from "fuzzysort"
-import { createMemo } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -20,6 +21,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const sdk = useGlobalSDK()
   const dialog = useDialog()
   const language = useLanguage()
+  const [searchQuery, setSearchQuery] = createSignal("")
 
   const home = createMemo(() => sync.data.path.home)
 
@@ -173,14 +175,37 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     dialog.close()
   }
 
+  function resolvePath() {
+    const query = searchQuery()
+    const input = scoped(query)
+    if (!input) return
+
+    const raw = normalizeDriveRoot(query.trim())
+    const isPath = raw.startsWith("~") || !!rootOf(raw) || raw.includes("/")
+
+    if (isPath) {
+      resolve(join(input.directory, input.path))
+    }
+  }
+
   return (
     <Dialog title={props.title ?? language.t("command.project.open")}>
       <List
         search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: true }}
-        emptyMessage={language.t("dialog.directory.empty")}
+        emptyMessage={
+          <div class="flex flex-col gap-2 items-center justify-center py-4">
+            <span class="text-text-weak">{language.t("dialog.directory.empty")}</span>
+            <Show when={searchQuery().includes("/") || searchQuery().includes("\\") || searchQuery().startsWith("~")}>
+              <Button variant="secondary" onClick={() => resolvePath()}>
+                Open "{searchQuery()}"
+              </Button>
+            </Show>
+          </div>
+        }
         loadingMessage={language.t("common.loading")}
         items={directories}
         key={(x) => x}
+        onSearch={setSearchQuery}
         onSelect={(path) => {
           if (!path) return
           resolve(path)
