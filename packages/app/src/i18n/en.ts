@@ -88,6 +88,8 @@ export const dict = {
   "dialog.provider.group.other": "Other",
   "dialog.provider.tag.recommended": "Recommended",
   "dialog.provider.anthropic.note": "Connect with Claude Pro/Max or API key",
+  "dialog.provider.openai.note": "Connect with ChatGPT Pro/Plus or API key",
+  "dialog.provider.copilot.note": "Connect with Copilot or API key",
 
   "dialog.model.select.title": "Select model",
   "dialog.model.search.placeholder": "Search models",
@@ -492,6 +494,7 @@ export const dict = {
   "font.option.hack": "Hack",
   "font.option.inconsolata": "Inconsolata",
   "font.option.intelOneMono": "Intel One Mono",
+  "font.option.iosevka": "Iosevka",
   "font.option.jetbrainsMono": "JetBrains Mono",
   "font.option.mesloLgs": "Meslo LGS",
   "font.option.robotoMono": "Roboto Mono",
