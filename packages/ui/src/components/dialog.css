@@ -20,6 +20,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 
   [data-slot="dialog-container"] {
     position: relative;
@@ -41,6 +42,7 @@
       max-height: 100%;
       min-height: 280px;
       overflow: auto;
+      pointer-events: auto;
 
       /* Hide scrollbar */
       scrollbar-width: none;

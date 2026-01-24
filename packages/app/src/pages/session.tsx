@@ -199,8 +199,8 @@ export default function Page() {
   const permission = usePermission()
   const [pendingMessage, setPendingMessage] = createSignal<string | undefined>(undefined)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey()))
-  const view = createMemo(() => layout.view(sessionKey()))
+  const tabs = createMemo(() => layout.tabs(sessionKey))
+  const view = createMemo(() => layout.view(sessionKey))
 
   if (import.meta.env.DEV) {
     createEffect(
@@ -2010,7 +2010,10 @@ export default function Page() {
                             >
                               <button
                                 type="button"
-                                class="size-5 rounded-md flex items-center justify-center bg-surface-warning-base border border-border-warning-base text-icon-warning-active shadow-xs hover:bg-surface-warning-weak hover:border-border-warning-hover focus:outline-none focus-visible:shadow-xs-border-focus"
+                                class="size-5 rounded-md flex items-center justify-center shadow-xs focus:outline-none focus-visible:shadow-xs-border-focus"
+                                style={{
+                                  background: "var(--icon-interactive-base)",
+                                }}
                                 onMouseEnter={() => {
                                   const p = path()
                                   if (!p) return
@@ -2024,16 +2027,16 @@ export default function Page() {
                                   file.setSelectedLines(p, comment.selection)
                                 }}
                               >
-                                <Icon name="speech-bubble" size="small" />
+                                <Icon name="comment" size="small" style={{ color: "var(--white)" }} />
                               </button>
                               <Show when={openedComment() === comment.id}>
-                                <div class="absolute top-0 right-[calc(100%+12px)] z-40 min-w-[200px] max-w-[320px] rounded-md bg-surface-raised-stronger-non-alpha border border-border-base shadow-md p-3">
+                                <div class="absolute top-[calc(100%+4px)] right-[-8px] z-40 min-w-[200px] max-w-[320px] rounded-[14px] bg-surface-raised-stronger-non-alpha shadow-lg-border-base p-3">
                                   <div class="flex flex-col gap-1.5">
-                                    <div class="text-12-medium text-text-strong whitespace-nowrap">
-                                      {getFilename(comment.file)}:{commentLabel(comment.selection)}
-                                    </div>
-                                    <div class="text-12-regular text-text-base whitespace-pre-wrap">
+                                    <div class="text-14-regular text-text-strong whitespace-pre-wrap">
                                       {comment.comment}
+                                    </div>
+                                    <div class="text-12-medium text-text-weak whitespace-nowrap">
+                                      Comment on {commentLabel(comment.selection)}
                                     </div>
                                   </div>
                                 </div>
@@ -2047,24 +2050,37 @@ export default function Page() {
                               <div class="absolute right-6 z-30" style={{ top: `${draftTop() ?? 0}px` }}>
                                 <button
                                   type="button"
-                                  class="size-5 rounded-md flex items-center justify-center bg-surface-warning-base border border-border-warning-base text-icon-warning-active shadow-xs hover:bg-surface-warning-weak hover:border-border-warning-hover focus:outline-none focus-visible:shadow-xs-border-focus"
+                                  class="size-5 rounded-md flex items-center justify-center shadow-xs focus:outline-none focus-visible:shadow-xs-border-focus"
+                                  style={{
+                                    background: "var(--icon-interactive-base)",
+                                    color: "var(--white)",
+                                  }}
                                   onClick={() => textarea?.focus()}
                                 >
-                                  <Icon name="speech-bubble" size="small" />
+                                  <Icon name="comment" size="small" style={{ color: "var(--white)" }} />
                                 </button>
-                                <div class="absolute top-0 right-[calc(100%+12px)] z-40 min-w-[200px] max-w-[320px] rounded-md bg-surface-raised-stronger-non-alpha border border-border-base shadow-md p-3">
+                                <div
+                                  class="absolute top-[calc(100%+4px)] right-[-8px] z-40 w-[380px] rounded-[14px] bg-surface-raised-stronger-non-alpha shadow-lg-border-base p-2"
+                                  onFocusOut={(e) => {
+                                    const target = e.relatedTarget as Node | null
+                                    if (!target || !e.currentTarget.contains(target)) {
+                                      setCommenting(null)
+                                    }
+                                  }}
+                                >
                                   <div class="flex flex-col gap-2">
-                                    <div class="text-12-medium text-text-strong">
-                                      Commenting on {getFilename(path() ?? "")}:{commentLabel(range())}
-                                    </div>
                                     <textarea
                                       ref={textarea}
-                                      class="w-[320px] max-w-[calc(100vw-48px)] resize-vertical p-2 rounded-sm bg-surface-base border border-border-base text-text-strong text-12-regular leading-5 focus:outline-none focus:shadow-xs-border-focus"
+                                      class="w-full resize-vertical p-2 rounded-[6px] bg-surface-base border border-border-base text-text-strong text-12-regular leading-5 focus:outline-none focus:shadow-xs-border-select"
                                       rows={3}
-                                      placeholder="Add a comment"
+                                      placeholder="Add comment"
                                       value={draft()}
                                       onInput={(e) => setDraft(e.currentTarget.value)}
                                       onKeyDown={(e) => {
+                                        if (e.key === "Escape") {
+                                          setCommenting(null)
+                                          return
+                                        }
                                         if (e.key !== "Enter") return
                                         if (e.shiftKey) return
                                         e.preventDefault()
@@ -2076,13 +2092,17 @@ export default function Page() {
                                         setCommenting(null)
                                       }}
                                     />
-                                    <div class="flex justify-end gap-2">
+                                    <div class="flex items-center gap-2">
+                                      <div class="text-12-medium text-text-weak ml-1">
+                                        Commenting on {commentLabel(range())}
+                                      </div>
+                                      <div class="flex-1" />
                                       <Button size="small" variant="ghost" onClick={() => setCommenting(null)}>
                                         Cancel
                                       </Button>
                                       <Button
                                         size="small"
-                                        variant="secondary"
+                                        variant="primary"
                                         disabled={draft().trim().length === 0}
                                         onClick={() => {
                                           const value = draft().trim()
