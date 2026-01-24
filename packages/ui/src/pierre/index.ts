@@ -49,8 +49,8 @@ const unsafeCSS = `
 }
 
 [data-diffs] [data-comment-selected] [data-column-number] {
-  background-color: var(--diffs-bg-selection-number) !important;
-  color: var(--diffs-selection-number-fg) !important;
+  background-color: var(--diffs-bg-selection-number);
+  color: var(--diffs-selection-number-fg);
 }
 
 [data-diffs] [data-selected-line] {
@@ -59,15 +59,15 @@ const unsafeCSS = `
 }
 
 [data-diffs] [data-selected-line] [data-column-number] {
-  background-color: var(--diffs-bg-selection-number) !important;
-  color: var(--diffs-selection-number-fg) !important;
+  background-color: var(--diffs-bg-selection-number);
+  color: var(--diffs-selection-number-fg);
 }
 
 [data-diffs] [data-line-type='context'][data-selected-line] [data-column-number],
 [data-diffs] [data-line-type='context-expanded'][data-selected-line] [data-column-number],
 [data-diffs] [data-line-type='change-addition'][data-selected-line] [data-column-number],
 [data-diffs] [data-line-type='change-deletion'][data-selected-line] [data-column-number] {
-  color: var(--diffs-selection-number-fg) !important;
+  color: var(--diffs-selection-number-fg);
 }
 
 @media (prefers-color-scheme: dark) {
