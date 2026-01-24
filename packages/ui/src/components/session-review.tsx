@@ -586,10 +586,10 @@ export const SessionReview = (props: SessionReviewProps) => {
                             <Show when={isCommentOpen(comment)}>
                               <div data-slot="session-review-comment-popover-content">
                                 <div data-slot="session-review-comment-popover">
+                                  <div data-slot="session-review-comment-popover-text">{comment.comment}</div>
                                   <div data-slot="session-review-comment-popover-label">
                                     {getFilename(comment.file)}:{selectionLabel(comment.selection)}
                                   </div>
-                                  <div data-slot="session-review-comment-popover-text">{comment.comment}</div>
                                 </div>
                               </div>
                             </Show>

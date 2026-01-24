@@ -2032,11 +2032,11 @@ export default function Page() {
                               <Show when={openedComment() === comment.id}>
                                 <div class="absolute top-0 right-[calc(100%+12px)] z-40 min-w-[200px] max-w-[320px] rounded-md bg-surface-raised-stronger-non-alpha border border-border-base shadow-md p-3">
                                   <div class="flex flex-col gap-1.5">
-                                    <div class="text-12-medium text-text-strong whitespace-nowrap">
-                                      {getFilename(comment.file)}:{commentLabel(comment.selection)}
-                                    </div>
                                     <div class="text-12-regular text-text-base whitespace-pre-wrap">
                                       {comment.comment}
+                                    </div>
+                                    <div class="text-12-medium text-text-strong whitespace-nowrap">
+                                      {getFilename(comment.file)}:{commentLabel(comment.selection)}
                                     </div>
                                   </div>
                                 </div>
