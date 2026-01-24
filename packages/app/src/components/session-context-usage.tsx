@@ -85,9 +85,6 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         <span class="text-text-invert-strong">{cost()}</span>
         <span class="text-text-invert-base">{language.t("context.usage.cost")}</span>
       </div>
-      <Show when={variant() === "button"}>
-        <div class="text-11-regular text-text-invert-base mt-1">{language.t("context.usage.clickToView")}</div>
-      </Show>
     </div>
   )
 
