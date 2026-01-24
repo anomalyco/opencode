@@ -36,6 +36,7 @@ export const SettingsGeneral: Component = () => {
     { value: "hack", label: "font.option.hack" },
     { value: "inconsolata", label: "font.option.inconsolata" },
     { value: "intel-one-mono", label: "font.option.intelOneMono" },
+    { value: "iosevka", label: "font.option.iosevka" },
     { value: "jetbrains-mono", label: "font.option.jetbrainsMono" },
     { value: "meslo-lgs", label: "font.option.mesloLgs" },
     { value: "roboto-mono", label: "font.option.robotoMono" },

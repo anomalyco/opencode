@@ -494,6 +494,7 @@ export const dict = {
   "font.option.hack": "Hack",
   "font.option.inconsolata": "Inconsolata",
   "font.option.intelOneMono": "Intel One Mono",
+  "font.option.iosevka": "Iosevka",
   "font.option.jetbrainsMono": "JetBrains Mono",
   "font.option.mesloLgs": "Meslo LGS",
   "font.option.robotoMono": "Roboto Mono",

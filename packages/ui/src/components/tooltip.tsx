@@ -39,13 +39,13 @@ export function Tooltip(props: TooltipProps) {
   onMount(() => {
     const childElements = c()
     if (childElements instanceof HTMLElement) {
-      childElements.addEventListener("focus", () => setOpen(true))
-      childElements.addEventListener("blur", () => setOpen(false))
+      childElements.addEventListener("focusin", () => setOpen(true))
+      childElements.addEventListener("focusout", () => setOpen(false))
     } else if (Array.isArray(childElements)) {
       for (const child of childElements) {
         if (child instanceof HTMLElement) {
-          child.addEventListener("focus", () => setOpen(true))
-          child.addEventListener("blur", () => setOpen(false))
+          child.addEventListener("focusin", () => setOpen(true))
+          child.addEventListener("focusout", () => setOpen(false))
         }
       }
     }
