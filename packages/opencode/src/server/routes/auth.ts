@@ -431,12 +431,25 @@ function generateLoginPageHtml(securityContext: {
             rememberMe: document.getElementById('rememberMe').checked,
           }),
         });
-        if (res.ok) {
+        const data = await res.json();
+
+        // Check for 2FA required
+        if (data.error === '2fa_required') {
+          submitBtn.textContent = 'Redirecting...';
+          const params = new URLSearchParams({
+            token: data.twoFactorToken,
+            username: data.username,
+            timeout: String(data.timeoutSeconds),
+          });
+          window.location.href = '/auth/2fa?' + params.toString();
+          return;
+        }
+
+        if (res.ok && data.success) {
           // Keep button disabled during redirect
           submitBtn.textContent = 'Redirecting...';
           window.location.href = '/';
         } else {
-          const data = await res.json();
           errorDiv.textContent = data.message || 'Authentication failed';
           errorDiv.classList.add('visible');
           submitBtn.disabled = false;
