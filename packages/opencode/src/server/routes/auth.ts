@@ -1312,6 +1312,55 @@ export const AuthRoutes = lazy(() =>
         })
       },
     )
+    .get(
+      "/device-trust/status",
+      describeRoute({
+        summary: "Get device trust status",
+        description: "Check if 2FA is enabled and if the current device is trusted.",
+        operationId: "auth.deviceTrustStatus",
+        responses: {
+          200: {
+            description: "Device trust status",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    twoFactorEnabled: z.boolean(),
+                    deviceTrusted: z.boolean(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const authConfig = ServerAuth.get()
+        const twoFactorEnabled = authConfig.enabled && authConfig.twoFactorEnabled === true
+
+        // Check for device trust cookie
+        let deviceTrusted = false
+        if (twoFactorEnabled) {
+          const deviceTrustCookie = getCookie(c, "opencode_device_trust")
+          if (deviceTrustCookie) {
+            // Verify the cookie is valid
+            const userAgent = c.req.header("User-Agent") ?? ""
+            const fingerprint = createDeviceFingerprint(userAgent)
+            const trustedUser = await verifyDeviceTrustToken(
+              deviceTrustCookie,
+              fingerprint,
+              getTokenSecret(),
+            )
+            deviceTrusted = trustedUser !== null
+          }
+        }
+
+        return c.json({
+          twoFactorEnabled,
+          deviceTrusted,
+        })
+      },
+    )
     .post(
       "/device-trust/revoke",
       describeRoute({
