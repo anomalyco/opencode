@@ -48,6 +48,47 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     }).format(total)
   })
 
+  // Provider usage statistics (including Antigravity)
+  const providerUsage = createMemo(() => {
+    const usage: Record<string, { input: number; output: number; cost: number; requests: number }> = {}
+    
+    for (const msg of messages()) {
+      if (msg.role !== "assistant") continue
+      const assistant = msg as AssistantMessage
+      
+      // Determine provider name
+      let providerName = assistant.providerID || "unknown"
+      const modelID = assistant.modelID || ""
+      
+      // Check if it's an Antigravity model
+      if (modelID.includes("antigravity") || providerName.includes("antigravity")) {
+        providerName = "antigravity"
+      } else if (providerName === "google" && modelID.includes("antigravity")) {
+        providerName = "antigravity"
+      }
+      
+      if (!usage[providerName]) {
+        usage[providerName] = { input: 0, output: 0, cost: 0, requests: 0 }
+      }
+      
+      usage[providerName].input += assistant.tokens.input + assistant.tokens.cache.read
+      usage[providerName].output += assistant.tokens.output + assistant.tokens.reasoning
+      usage[providerName].cost += assistant.cost
+      usage[providerName].requests += 1
+    }
+    
+    // Sort by total tokens descending
+    return Object.entries(usage)
+      .map(([provider, stats]) => ({ provider, ...stats, total: stats.input + stats.output }))
+      .sort((a, b) => b.total - a.total)
+  })
+
+  const formatTokens = (n: number) => {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+    return n.toString()
+  }
+
   const context = createMemo(() => {
     const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
     if (!last) return
@@ -97,6 +138,40 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
+            <Show when={providerUsage().length > 0}>
+              <box>
+                <text fg={theme.text}>
+                  <b>Provider Usage</b>
+                </text>
+                <For each={providerUsage()}>
+                  {(item) => {
+                    const providerIcon = () => {
+                      switch (item.provider.toLowerCase()) {
+                        case "antigravity": return "🌌"
+                        case "anthropic": return "🟣"
+                        case "google": return "🔵"
+                        case "openai": return "🟢"
+                        default: return "⚪"
+                      }
+                    }
+                    const percentage = () => {
+                      const total = providerUsage().reduce((sum, p) => sum + p.total, 0)
+                      return total > 0 ? Math.round((item.total / total) * 100) : 0
+                    }
+                    return (
+                      <box flexDirection="row" gap={1} justifyContent="space-between">
+                        <text fg={theme.text} wrapMode="char">
+                          {providerIcon()} {item.provider}
+                        </text>
+                        <text fg={theme.textMuted} flexShrink={0}>
+                          {formatTokens(item.total)} ({percentage()}%)
+                        </text>
+                      </box>
+                    )
+                  }}
+                </For>
+              </box>
+            </Show>
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box
