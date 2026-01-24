@@ -14,6 +14,8 @@ import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
+import { Skill } from "../skill/skill"
+import { ConfigMarkdown } from "../config/markdown"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
@@ -238,6 +240,23 @@ export namespace Agent {
         result[name].permission,
         PermissionNext.fromConfig({ external_directory: { [Truncate.DIR]: "allow", [Truncate.GLOB]: "allow" } }),
       )
+    }
+
+    for (const skill of await Skill.all()) {
+      if (result[skill.name]) continue
+
+      try {
+        const md = await ConfigMarkdown.parse(skill.location)
+        result[skill.name] = {
+          name: skill.name,
+          description: skill.description,
+          mode: "primary",
+          permission: PermissionNext.merge(defaults, user),
+          prompt: md.content,
+          options: {},
+          native: false,
+        }
+      } catch {}
     }
 
     return result
