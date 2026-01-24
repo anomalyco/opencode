@@ -9,9 +9,9 @@ use std::path::PathBuf;
 
 use base64::Engine;
 
-use crate::auth::pam;
 use crate::auth::rate_limit::RateLimiter;
 use crate::auth::validation;
+use crate::auth::{has_2fa_configured, pam, validate_otp};
 use crate::config::BrokerConfig;
 use crate::ipc::protocol::{
     Method, PROTOCOL_VERSION, PtyReadResult, Request, RequestParams, Response, SpawnPtyResult,
@@ -71,6 +71,10 @@ pub async fn handle_request(
         }
 
         Method::Authenticate => handle_authenticate(request, config, rate_limiter).await,
+
+        Method::AuthenticateOtp => handle_authenticate_otp(request, config, rate_limiter).await,
+
+        Method::Check2fa => handle_check_2fa(request).await,
 
         Method::SpawnPty => handle_spawn_pty(request, user_sessions, pty_sessions).await,
 
@@ -154,6 +158,114 @@ async fn handle_authenticate(
             // Generic error to prevent user enumeration
             Response::auth_failure(&request.id)
         }
+    }
+}
+
+/// Handle an OTP authentication request.
+///
+/// Flow: Validate username -> Check rate limit -> Call PAM OTP -> Return result
+///
+/// Uses the same rate limiter as password auth to prevent brute force attacks.
+async fn handle_authenticate_otp(
+    request: Request,
+    config: &BrokerConfig,
+    rate_limiter: &RateLimiter,
+) -> Response {
+    // Extract params
+    let (username, code) = match &request.params {
+        RequestParams::AuthenticateOtp(params) => (&params.username, &params.code),
+        _ => {
+            return Response::failure(&request.id, "invalid params for authenticate_otp");
+        }
+    };
+
+    // Log attempt (never log the OTP code)
+    info!(
+        id = %request.id,
+        username = %username,
+        "OTP authentication attempt"
+    );
+
+    // 1. Validate username
+    if let Err(e) = validation::validate_username(username) {
+        debug!(
+            id = %request.id,
+            username = %username,
+            error = %e,
+            "username validation failed"
+        );
+        return Response::auth_failure(&request.id);
+    }
+
+    // 2. Check rate limit BEFORE OTP validation (same limiter as password auth)
+    if let Err(e) = rate_limiter.check(username) {
+        warn!(
+            id = %request.id,
+            username = %username,
+            "rate limit exceeded for OTP"
+        );
+        return Response::failure(&request.id, e.to_string());
+    }
+
+    // 3. Validate OTP via PAM
+    match validate_otp(&config.pam_service, username, code).await {
+        Ok(()) => {
+            info!(
+                id = %request.id,
+                username = %username,
+                "OTP authentication successful"
+            );
+            Response::success(&request.id)
+        }
+        Err(e) => {
+            debug!(
+                id = %request.id,
+                username = %username,
+                error = %e,
+                "OTP authentication failed"
+            );
+            // Generic error to prevent enumeration
+            Response::auth_failure(&request.id)
+        }
+    }
+}
+
+/// Handle a 2FA configuration check request.
+///
+/// Checks if the user has a .google_authenticator file in their home directory.
+/// This is a simple file existence check, no authentication required.
+async fn handle_check_2fa(request: Request) -> Response {
+    let (username, home) = match &request.params {
+        RequestParams::Check2fa(params) => (&params.username, &params.home),
+        _ => {
+            return Response::failure(&request.id, "invalid params for check_2fa");
+        }
+    };
+
+    debug!(
+        id = %request.id,
+        username = %username,
+        home = %home,
+        "checking 2FA configuration"
+    );
+
+    let has_2fa = has_2fa_configured(home);
+
+    if has_2fa {
+        info!(
+            id = %request.id,
+            username = %username,
+            "user has 2FA configured"
+        );
+        Response::success(&request.id)
+    } else {
+        debug!(
+            id = %request.id,
+            username = %username,
+            "user does not have 2FA configured"
+        );
+        // Use failure to indicate no 2FA - client checks success field
+        Response::failure(&request.id, "2FA not configured")
     }
 }
 

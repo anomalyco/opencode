@@ -27,6 +27,8 @@ impl fmt::Debug for Request {
 
         match &self.params {
             RequestParams::Authenticate(params) => s.field("params", params),
+            RequestParams::AuthenticateOtp(params) => s.field("params", params),
+            RequestParams::Check2fa(params) => s.field("params", params),
             RequestParams::Ping(params) => s.field("params", params),
             RequestParams::SpawnPty(params) => s.field("params", params),
             RequestParams::KillPty(params) => s.field("params", params),
@@ -46,6 +48,10 @@ impl fmt::Debug for Request {
 #[serde(rename_all = "lowercase")]
 pub enum Method {
     Authenticate,
+    /// Validate OTP code for two-factor authentication.
+    AuthenticateOtp,
+    /// Check if user has 2FA configured.
+    Check2fa,
     Ping,
     /// Spawn a new PTY session for a user.
     SpawnPty,
@@ -70,11 +76,14 @@ pub enum Method {
 /// - Variants with MORE required fields come BEFORE variants with fewer
 /// - `RegisterSession` (6 required) before `SpawnPty` (1 required + defaults)
 /// - `UnregisterSession` (1 required + deny_unknown_fields) before `SpawnPty`
+/// - `Check2fa` (2 required) before `Ping`
 /// - `Ping` must be LAST because `PingParams` is empty and matches any JSON
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RequestParams {
     Authenticate(AuthenticateParams),
+    /// AuthenticateOtp has 2 required fields - must come after Authenticate.
+    AuthenticateOtp(AuthenticateOtpParams),
     /// RegisterSession has 6 required fields - must come before SpawnPty.
     RegisterSession(RegisterSessionParams),
     /// UnregisterSession uses deny_unknown_fields - must come before SpawnPty.
@@ -89,6 +98,8 @@ pub enum RequestParams {
     PtyWrite(PtyWriteParams),
     /// Parameters for reading from a PTY.
     PtyRead(PtyReadParams),
+    /// Check2fa has 2 required fields - must come before Ping.
+    Check2fa(Check2faParams),
     /// Ping must be last - empty params match any JSON with untagged serde.
     Ping(PingParams),
 }
@@ -110,6 +121,35 @@ impl fmt::Debug for AuthenticateParams {
         f.debug_struct("AuthenticateParams")
             .field("username", &self.username)
             .field("password", &"[REDACTED]")
+            .finish()
+    }
+}
+
+/// Parameters for checking if user has 2FA configured.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Check2faParams {
+    /// Username to check.
+    pub username: String,
+    /// User's home directory for .google_authenticator check.
+    pub home: String,
+}
+
+/// Parameters for OTP validation.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AuthenticateOtpParams {
+    /// Username to validate OTP for.
+    pub username: String,
+    /// The TOTP code entered by user.
+    /// Redacted in Debug output like password.
+    #[serde(skip_serializing)]
+    pub code: String,
+}
+
+impl fmt::Debug for AuthenticateOtpParams {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AuthenticateOtpParams")
+            .field("username", &self.username)
+            .field("code", &"[REDACTED]")
             .finish()
     }
 }
@@ -629,5 +669,74 @@ mod tests {
 
         let read: Method = serde_json::from_str("\"ptyread\"").expect("deserialize");
         assert_eq!(read, Method::PtyRead);
+    }
+
+    #[test]
+    fn test_check2fa_params_roundtrip() {
+        let params = Check2faParams {
+            username: "testuser".to_string(),
+            home: "/home/testuser".to_string(),
+        };
+
+        let json = serde_json::to_string(&params).expect("serialize");
+        let parsed: Check2faParams = serde_json::from_str(&json).expect("deserialize");
+
+        assert_eq!(parsed.username, "testuser");
+        assert_eq!(parsed.home, "/home/testuser");
+    }
+
+    #[test]
+    fn test_authenticate_otp_params_code_not_serialized() {
+        let params = AuthenticateOtpParams {
+            username: "testuser".to_string(),
+            code: "123456".to_string(),
+        };
+
+        // Serialize should NOT include code
+        let json = serde_json::to_string(&params).expect("serialize");
+        assert!(json.contains("testuser"));
+        assert!(!json.contains("123456"), "code should not be serialized");
+    }
+
+    #[test]
+    fn test_authenticate_otp_params_deserialization() {
+        let json = r#"{"username":"testuser","code":"654321"}"#;
+        let params: AuthenticateOtpParams = serde_json::from_str(json).expect("deserialize");
+
+        assert_eq!(params.username, "testuser");
+        assert_eq!(params.code, "654321");
+    }
+
+    #[test]
+    fn test_authenticate_otp_code_redaction_in_debug() {
+        let params = AuthenticateOtpParams {
+            username: "testuser".to_string(),
+            code: "123456".to_string(),
+        };
+
+        let debug_output = format!("{:?}", params);
+        assert!(debug_output.contains("[REDACTED]"));
+        assert!(!debug_output.contains("123456"));
+    }
+
+    #[test]
+    fn test_2fa_method_serialization() {
+        assert_eq!(
+            serde_json::to_string(&Method::Check2fa).expect("serialize"),
+            "\"check2fa\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Method::AuthenticateOtp).expect("serialize"),
+            "\"authenticateotp\""
+        );
+    }
+
+    #[test]
+    fn test_2fa_method_deserialization() {
+        let check: Method = serde_json::from_str("\"check2fa\"").expect("deserialize");
+        assert_eq!(check, Method::Check2fa);
+
+        let otp: Method = serde_json::from_str("\"authenticateotp\"").expect("deserialize");
+        assert_eq!(otp, Method::AuthenticateOtp);
     }
 }
