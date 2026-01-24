@@ -908,6 +908,48 @@ function generate2FASetupPageHtml(params: {
       color: #a3a3a3;
       margin-top: 0.5rem;
     }
+    .install-details {
+      margin-top: 0.75rem;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #1a1a1a;
+    }
+    .install-details summary {
+      padding: 0.75rem;
+      cursor: pointer;
+      font-size: 0.75rem;
+      color: #0ea5e9;
+    }
+    .install-details summary:hover {
+      color: #38bdf8;
+    }
+    .install-details[open] summary {
+      border-bottom: 1px solid #333;
+    }
+    .install-commands {
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .install-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      font-size: 0.75rem;
+    }
+    .install-row .os {
+      color: #737373;
+      min-width: 100px;
+      flex-shrink: 0;
+    }
+    .install-row code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #a3a3a3;
+      background: #0a0a0a;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+    }
     .verify-form {
       display: flex;
       flex-direction: column;
@@ -1009,14 +1051,29 @@ function generate2FASetupPageHtml(params: {
     </div>
 
     <div class="step">
-      <div class="step-title">Step 2: Run Setup Command</div>
+      <div class="step-title">Step 2: Install google-authenticator (if needed)</div>
+      <p class="note">The <code>google-authenticator</code> command is part of <strong>libpam-google-authenticator</strong>, an open source PAM module.</p>
+      <details class="install-details">
+        <summary>Installation instructions</summary>
+        <div class="install-commands">
+          <div class="install-row"><span class="os">Ubuntu/Debian:</span><code>sudo apt install libpam-google-authenticator</code></div>
+          <div class="install-row"><span class="os">Fedora/RHEL:</span><code>sudo dnf install google-authenticator</code></div>
+          <div class="install-row"><span class="os">Arch Linux:</span><code>sudo pacman -S libpam-google-authenticator</code></div>
+          <div class="install-row"><span class="os">macOS:</span><code>brew install google-authenticator-libpam</code></div>
+        </div>
+        <p class="note" style="margin-top: 0.75rem;">This is free, open source software: <a href="https://github.com/google/google-authenticator-libpam" target="_blank" rel="noopener">github.com/google/google-authenticator-libpam</a></p>
+      </details>
+    </div>
+
+    <div class="step">
+      <div class="step-title">Step 3: Run Setup Command</div>
       <p class="note">Run this command on the server to enable 2FA for your account:</p>
       <div class="command-display">${escapeHtml(setupCommand)}</div>
       <p class="note">This creates ~/.google_authenticator with your secret.</p>
     </div>
 
     <div class="step">
-      <div class="step-title">Step 3: Verify Setup</div>
+      <div class="step-title">Step 4: Verify Setup</div>
       <p class="note">Enter a code from your authenticator app to verify it's working:</p>
       <form id="verifyForm" class="verify-form">
         <div id="error" class="error"></div>
