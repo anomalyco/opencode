@@ -7,6 +7,7 @@ import { Provider } from "../provider/provider"
 import { MessageV2 } from "./message-v2"
 import z from "zod"
 import { SessionPrompt } from "./prompt"
+import { SystemPrompt } from "./system"
 import { Token } from "../util/token"
 import { Log } from "../util/log"
 import { SessionProcessor } from "./processor"
@@ -147,7 +148,7 @@ export namespace SessionCompaction {
       abort: input.abort,
       sessionID: input.sessionID,
       tools: {},
-      system: [],
+      system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
       messages: [
         ...MessageV2.toModelMessages(input.messages, model),
         {
