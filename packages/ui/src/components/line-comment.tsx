@@ -25,6 +25,7 @@ export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
       data-component="line-comment"
       data-variant={variant()}
       data-comment-id={props.id}
+      data-open={props.open ? "" : undefined}
       classList={{
         [props.class ?? ""]: !!props.class,
       }}

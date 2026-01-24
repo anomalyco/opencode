@@ -4,6 +4,10 @@
   z-index: var(--line-comment-z, 30);
 }
 
+[data-component="line-comment"][data-open] {
+  z-index: var(--line-comment-open-z, 100);
+}
+
 [data-component="line-comment"] [data-slot="line-comment-button"] {
   width: 20px;
   height: 20px;
