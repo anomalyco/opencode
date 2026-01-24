@@ -36,6 +36,7 @@ export const dict = {
   "ui.sessionTurn.status.thinkingWithTopic": "Denken - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Gedanken sammeln",
   "ui.sessionTurn.status.consideringNextSteps": "Nächste Schritte erwägen",
+  "ui.sessionTurn.status.working": "Arbeiten",
 
   "ui.messagePart.diagnostic.error": "Fehler",
   "ui.messagePart.title.edit": "Bearbeiten",

@@ -32,6 +32,7 @@ export const dict = {
   "ui.sessionTurn.status.thinkingWithTopic": "思考中 - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "考えをまとめています",
   "ui.sessionTurn.status.consideringNextSteps": "次のステップを検討中",
+  "ui.sessionTurn.status.working": "作業中",
 
   "ui.messagePart.diagnostic.error": "エラー",
   "ui.messagePart.title.edit": "編集",

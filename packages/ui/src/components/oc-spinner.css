@@ -1,0 +1,6 @@
+[data-component="oc-spinner"] {
+  color: var(--text-base);
+  flex-shrink: 0;
+  width: 20px;
+  aspect-ratio: 1;
+}

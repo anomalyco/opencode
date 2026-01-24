@@ -34,6 +34,7 @@ import { useComments } from "@/context/comments"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { OCSpinner } from "@opencode-ai/ui/oc-spinner"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
@@ -1618,6 +1619,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
+      <Show when={working()}>
+        <div class="flex items-center gap-3 p-0">
+          <OCSpinner class="w-8 h-8 text-text-strong" style={{ "margin-left": "-2px" }} />
+          <div class="text-text-weak">{language.t("ui.sessionTurn.status.working")}...</div>
+        </div>
+      </Show>
       <Show when={store.popover}>
         <div
           ref={(el) => {

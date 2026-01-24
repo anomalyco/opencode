@@ -35,6 +35,7 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.status.thinkingWithTopic": "Tenker - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Samler tanker",
   "ui.sessionTurn.status.consideringNextSteps": "Vurderer neste trinn",
+  "ui.sessionTurn.status.working": "Arbeider",
 
   "ui.messagePart.diagnostic.error": "Feil",
   "ui.messagePart.title.edit": "Rediger",
