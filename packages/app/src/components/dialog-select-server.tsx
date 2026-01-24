@@ -54,13 +54,24 @@ async function checkHealth(url: string, platform: ReturnType<typeof usePlatform>
 function AddRow(props: AddRowProps) {
   return (
     <div class="flex items-center px-4 min-h-14 py-3 min-w-0 flex-1">
-      <div class="relative flex-1 min-w-0">
+      <div class="flex-1 min-w-0 [&_[data-slot=input-wrapper]]:relative">
         <div
           classList={{
-            "size-1.5 rounded-full absolute left-3 top-1/2 -translate-y-1/2": true,
+            "size-1.5 rounded-full absolute left-3 z-10 pointer-events-none": true,
             "bg-icon-success-base": props.status === true,
             "bg-icon-critical-base": props.status === false,
             "bg-border-weak-base": props.status === undefined,
+          }}
+          style={{ top: "50%", transform: "translateY(-50%)" }}
+          ref={(el) => {
+            // Position relative to input-wrapper
+            requestAnimationFrame(() => {
+              const wrapper = el.parentElement?.querySelector('[data-slot="input-wrapper"]')
+              if (wrapper instanceof HTMLElement) {
+                wrapper.style.position = "relative"
+                wrapper.appendChild(el)
+              }
+            })
           }}
         />
         <TextField
@@ -346,7 +357,7 @@ export function DialogSelectServer() {
 
   return (
     <Dialog title={language.t("dialog.server.title")}>
-      <div class="flex flex-col gap-2 pb-5">
+      <div class="flex flex-col gap-2">
         <List
           search={{ placeholder: language.t("dialog.server.search.placeholder"), autofocus: false }}
           noInitialSelection
@@ -546,7 +557,7 @@ export function DialogSelectServer() {
           }}
         </List>
 
-        <div class="px-5">
+        <div class="px-5 pb-5">
           <Button
             variant="secondary"
             icon="plus-small"
