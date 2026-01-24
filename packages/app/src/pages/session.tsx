@@ -1,6 +1,5 @@
 import {
   For,
-  Index,
   onCleanup,
   onMount,
   Show,
@@ -41,7 +40,6 @@ import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
 import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
 import { findLast } from "@opencode-ai/util/array"
-import { getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
@@ -67,7 +65,6 @@ import {
   SortableTerminalTab,
   NewSessionView,
 } from "@/components/session"
-import { usePlatform } from "@/context/platform"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
 
@@ -103,7 +100,7 @@ function SessionReviewTab(props: SessionReviewTabProps) {
 
   const sdk = useSDK()
 
-  const readFile = (path: string) => {
+  const readFile = async (path: string) => {
     return sdk.client.file
       .read({ path })
       .then((x) => x.data)
@@ -192,7 +189,6 @@ export default function Page() {
   const codeComponent = useCodeComponent()
   const command = useCommand()
   const language = useLanguage()
-  const platform = usePlatform()
   const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
@@ -745,7 +741,7 @@ export default function Page() {
         const sessionID = params.id
         if (!sessionID) return
         if (status()?.type !== "idle") {
-          await sdk.client.session.abort({ sessionID }).catch(() => {})
+          await sdk.client.session.abort({ sessionID }).catch(() => { })
         }
         const revert = info()?.revert?.messageID
         // Find the last user message that's not already reverted
@@ -828,69 +824,69 @@ export default function Page() {
     },
     ...(sync.data.config.share !== "disabled"
       ? [
-          {
-            id: "session.share",
-            title: "Share session",
-            description: "Share this session and copy the URL to clipboard",
-            category: "Session",
-            slash: "share",
-            disabled: !params.id || !!info()?.share?.url,
-            onSelect: async () => {
-              if (!params.id) return
-              await sdk.client.session
-                .share({ sessionID: params.id })
-                .then((res) => {
-                  navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
-                    showToast({
-                      title: "Failed to copy URL to clipboard",
-                      variant: "error",
-                    }),
-                  )
-                })
-                .then(() =>
+        {
+          id: "session.share",
+          title: "Share session",
+          description: "Share this session and copy the URL to clipboard",
+          category: "Session",
+          slash: "share",
+          disabled: !params.id || !!info()?.share?.url,
+          onSelect: async () => {
+            if (!params.id) return
+            await sdk.client.session
+              .share({ sessionID: params.id })
+              .then((res) => {
+                navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
                   showToast({
-                    title: "Session shared",
-                    description: "Share URL copied to clipboard!",
-                    variant: "success",
-                  }),
-                )
-                .catch(() =>
-                  showToast({
-                    title: "Failed to share session",
-                    description: "An error occurred while sharing the session",
+                    title: "Failed to copy URL to clipboard",
                     variant: "error",
                   }),
                 )
-            },
+              })
+              .then(() =>
+                showToast({
+                  title: "Session shared",
+                  description: "Share URL copied to clipboard!",
+                  variant: "success",
+                }),
+              )
+              .catch(() =>
+                showToast({
+                  title: "Failed to share session",
+                  description: "An error occurred while sharing the session",
+                  variant: "error",
+                }),
+              )
           },
-          {
-            id: "session.unshare",
-            title: "Unshare session",
-            description: "Stop sharing this session",
-            category: "Session",
-            slash: "unshare",
-            disabled: !params.id || !info()?.share?.url,
-            onSelect: async () => {
-              if (!params.id) return
-              await sdk.client.session
-                .unshare({ sessionID: params.id })
-                .then(() =>
-                  showToast({
-                    title: "Session unshared",
-                    description: "Session unshared successfully!",
-                    variant: "success",
-                  }),
-                )
-                .catch(() =>
-                  showToast({
-                    title: "Failed to unshare session",
-                    description: "An error occurred while unsharing the session",
-                    variant: "error",
-                  }),
-                )
-            },
+        },
+        {
+          id: "session.unshare",
+          title: "Unshare session",
+          description: "Stop sharing this session",
+          category: "Session",
+          slash: "unshare",
+          disabled: !params.id || !info()?.share?.url,
+          onSelect: async () => {
+            if (!params.id) return
+            await sdk.client.session
+              .unshare({ sessionID: params.id })
+              .then(() =>
+                showToast({
+                  title: "Session unshared",
+                  description: "Session unshared successfully!",
+                  variant: "success",
+                }),
+              )
+              .catch(() =>
+                showToast({
+                  title: "Failed to unshare session",
+                  description: "An error occurred while unsharing the session",
+                  variant: "error",
+                }),
+              )
           },
-        ]
+        },
+      ]
       : []),
   ])
 
@@ -2475,13 +2471,11 @@ export default function Page() {
                         }}
                       >
                         <Show when={pty.id} keyed>
-                          {() => (
-                            <Terminal
-                              pty={pty}
-                              onCleanup={terminal.update}
-                              onConnectError={() => terminal.clone(pty.id)}
-                            />
-                          )}
+                          <Terminal
+                            pty={pty}
+                            onCleanup={terminal.update}
+                            onConnectError={() => terminal.clone(pty.id)}
+                          />
                         </Show>
                       </div>
                     )}
