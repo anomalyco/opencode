@@ -368,6 +368,13 @@ export function Autocomplete(props: {
     }))
   })
 
+  const isRemoteDomain = (text: string): boolean => {
+    // Match: localhost, localhost:3000, example.com, example.com:8080
+    // Optionally followed by /agent-name
+    const domainPattern = /^(localhost(:\d+)?|[\w.-]+\.\w+(:\d+)?)(\/[\w-]+)?$/
+    return domainPattern.test(text)
+  }
+
   const options = createMemo((prev: AutocompleteOption[] | undefined) => {
     const filesValue = files()
     const agentsValue = agents()
@@ -404,7 +411,28 @@ export function Autocomplete(props: {
       },
     })
 
-    return result.map((arr) => arr.obj)
+    const options = result.map((arr) => arr.obj)
+
+    if (store.visible === "@" && currentFilter && isRemoteDomain(currentFilter)) {
+      const remoteOption: AutocompleteOption = {
+        display: "@" + currentFilter + " (remote)",
+        description: "Invoke remote agent",
+        onSelect: () => {
+          insertPart(currentFilter, {
+            type: "agent",
+            name: "@" + currentFilter,
+            source: {
+              start: 0,
+              end: 0,
+              value: "",
+            },
+          })
+        },
+      }
+      options.unshift(remoteOption)
+    }
+
+    return options
   })
 
   createEffect(() => {

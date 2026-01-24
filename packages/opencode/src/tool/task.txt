@@ -3,7 +3,9 @@ Launch a new agent to handle complex, multistep tasks autonomously.
 Available agent types and the tools they have access to:
 {agents}
 
-When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
+Remote agents can also be invoked using the @domain.com or @domain.com/agent syntax (e.g., @localhost:3000 or @example.com/code-review). Remote agents execute on external servers and stream their results back.
+
+When using the Task tool, you must specify a subagent_type parameter to select which agent type to use. For remote agents, include the full @domain syntax (e.g., subagent_type: "@localhost:3000" or "@example.com/code-review").
 
 When to use the Task tool:
 - When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")

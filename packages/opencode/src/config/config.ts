@@ -1088,6 +1088,12 @@ export namespace Config {
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
         .optional(),
+      remoteAgents: z
+        .object({
+          domains: z.array(z.string()).optional().describe("List of trusted domains for remote agents"),
+        })
+        .optional()
+        .describe("Configuration for remote subagents accessible via @domain.com syntax"),
     })
     .strict()
     .meta({

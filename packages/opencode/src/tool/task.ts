@@ -11,6 +11,7 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
+import { RemoteDiscovery, RemoteStream, RemoteTrust } from "../remote"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -40,6 +41,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
+
+      // Check if this is a remote agent reference
+      const remoteRef = RemoteDiscovery.parseAgentRef(params.subagent_type)
+      if (remoteRef) {
+        return executeRemoteAgent(params, ctx, remoteRef)
+      }
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
@@ -186,3 +193,89 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     },
   }
 })
+
+async function executeRemoteAgent(
+  params: z.infer<typeof parameters>,
+  ctx: Tool.Context,
+  remoteRef: { domain: string; agentName: string },
+) {
+  const { domain, agentName } = remoteRef
+
+  // Check trust
+  const isTrusted = await RemoteTrust.isTrusted(domain)
+  if (!isTrusted) {
+    await ctx.ask({
+      permission: "remote_agent",
+      patterns: [domain],
+      always: [],
+      metadata: {
+        domain,
+        agentName,
+        description: params.description,
+      },
+    })
+    RemoteTrust.trustForSession(domain)
+  }
+
+  // Discover and get agent info
+  const agentInfo = await RemoteDiscovery.getAgent(domain, agentName)
+
+  // Create session for tracking
+  const session = await Session.create({
+    parentID: ctx.sessionID,
+    title: `${params.description} (@${domain}${agentName !== "default" ? ":" + agentName : ""} remote)`,
+    permission: [],
+  })
+
+  ctx.metadata({
+    title: params.description,
+    metadata: {
+      sessionId: session.id,
+      remote: { domain, agent: agentName },
+    },
+  })
+
+  const messageID = Identifier.ascending("message")
+
+  const result = await RemoteStream.invoke(domain, agentInfo, params.prompt, {
+    session,
+    messageID,
+    parentMessageID: ctx.messageID,
+    abort: ctx.abort,
+    onToolUpdate: (summary) => {
+      ctx.metadata({
+        title: params.description,
+        metadata: {
+          summary: [...summary],
+          sessionId: session.id,
+          remote: { domain, agent: agentName },
+        },
+      })
+    },
+  })
+
+  const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+  const output =
+    text + "\n\n" + ["<task_metadata>", `session_id: ${session.id}`, `remote: ${domain}/${agentName}`, "</task_metadata>"].join("\n")
+
+  const summary = result.parts
+    .filter((x): x is MessageV2.ToolPart => x.type === "tool")
+    .map((part) => ({
+      id: part.id,
+      tool: part.tool,
+      state: {
+        status: part.state.status,
+        title: part.state.status === "completed" ? part.state.title : undefined,
+      },
+    }))
+
+  return {
+    title: params.description,
+    metadata: {
+      summary,
+      sessionId: session.id,
+      remote: { domain, agent: agentName },
+    },
+    output,
+  }
+}
