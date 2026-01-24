@@ -5,6 +5,7 @@ import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
 import { useLayout } from "@/context/layout"
 import { checksum } from "@opencode-ai/util/encode"
+import { findLast } from "@opencode-ai/util/array"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
@@ -26,7 +27,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
   const language = useLanguage()
 
   const ctx = createMemo(() => {
-    const last = props.messages().findLast((x) => {
+    const last = findLast(props.messages(), (x) => {
       if (x.role !== "assistant") return false
       const total = x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
       return total > 0
@@ -81,7 +82,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
   })
 
   const systemPrompt = createMemo(() => {
-    const msg = props.visibleUserMessages().findLast((m) => !!m.system)
+    const msg = findLast(props.visibleUserMessages(), (m) => !!m.system)
     const system = msg?.system
     if (!system) return
     const trimmed = system.trim()

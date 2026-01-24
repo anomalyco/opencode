@@ -20,14 +20,13 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Popover } from "@opencode-ai/ui/popover"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Keybind } from "@opencode-ai/ui/keybind"
+import { StatusPopover } from "../status-popover"
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
   const layout = useLayout()
   const params = useParams()
   const command = useCommand()
-  // const server = useServer()
-  // const dialog = useDialog()
   const sync = useSync()
   const platform = usePlatform()
   const language = useLanguage()
@@ -154,96 +153,7 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-3">
-              {/* <div class="hidden md:flex items-center gap-1"> */}
-              {/*   <Button */}
-              {/*     size="small" */}
-              {/*     variant="ghost" */}
-              {/*     onClick={() => { */}
-              {/*       dialog.show(() => <DialogSelectServer />) */}
-              {/*     }} */}
-              {/*   > */}
-              {/*     <div */}
-              {/*       classList={{ */}
-              {/*         "size-1.5 rounded-full": true, */}
-              {/*         "bg-icon-success-base": server.healthy() === true, */}
-              {/*         "bg-icon-critical-base": server.healthy() === false, */}
-              {/*         "bg-border-weak-base": server.healthy() === undefined, */}
-              {/*       }} */}
-              {/*     /> */}
-              {/*     <Icon name="server" size="small" class="text-icon-weak" /> */}
-              {/*     <span class="text-12-regular text-text-weak truncate max-w-[200px]">{server.name}</span> */}
-              {/*   </Button> */}
-              {/*   <SessionLspIndicator /> */}
-              {/*   <SessionMcpIndicator /> */}
-              {/* </div> */}
-              <div class="flex items-center gap-1">
-                <div class="hidden md:block shrink-0">
-                  <TooltipKeybind
-                    title={language.t("command.review.toggle")}
-                    keybind={command.keybind("review.toggle")}
-                  >
-                    <Button
-                      variant="ghost"
-                      class="group/review-toggle size-6 p-0"
-                      onClick={() => view().reviewPanel.toggle()}
-                      aria-label={language.t("command.review.toggle")}
-                      aria-expanded={view().reviewPanel.opened()}
-                      aria-controls="review-panel"
-                      tabIndex={showReview() ? 0 : -1}
-                    >
-                      <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                        <Icon
-                          size="small"
-                          name={view().reviewPanel.opened() ? "layout-right-full" : "layout-right"}
-                          class="group-hover/review-toggle:hidden"
-                        />
-                        <Icon
-                          size="small"
-                          name="layout-right-partial"
-                          class="hidden group-hover/review-toggle:inline-block"
-                        />
-                        <Icon
-                          size="small"
-                          name={view().reviewPanel.opened() ? "layout-right" : "layout-right-full"}
-                          class="hidden group-active/review-toggle:inline-block"
-                        />
-                      </div>
-                    </Button>
-                  </TooltipKeybind>
-                </div>
-                <TooltipKeybind
-                  class="hidden md:block shrink-0"
-                  title={language.t("command.terminal.toggle")}
-                  keybind={command.keybind("terminal.toggle")}
-                >
-                  <Button
-                    variant="ghost"
-                    class="group/terminal-toggle size-6 p-0"
-                    onClick={() => view().terminal.toggle()}
-                    aria-label={language.t("command.terminal.toggle")}
-                    aria-expanded={view().terminal.opened()}
-                    aria-controls="terminal-panel"
-                  >
-                    <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                      <Icon
-                        size="small"
-                        name={view().terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
-                        class="group-hover/terminal-toggle:hidden"
-                      />
-                      <Icon
-                        size="small"
-                        name="layout-bottom-partial"
-                        class="hidden group-hover/terminal-toggle:inline-block"
-                      />
-                      <Icon
-                        size="small"
-                        name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
-                        class="hidden group-active/terminal-toggle:inline-block"
-                      />
-                    </div>
-                  </Button>
-                </TooltipKeybind>
-              </div>
+              <StatusPopover />
               <Show when={showShare()}>
                 <div class="flex items-center">
                   <Popover
@@ -253,9 +163,11 @@ export function SessionHeader() {
                         ? language.t("session.share.popover.description.shared")
                         : language.t("session.share.popover.description.unshared")
                     }
+                    gutter={8}
                     triggerAs={Button}
                     triggerProps={{
                       variant: "secondary",
+                      class: "rounded-sm w-[60px] h-[24px]",
                       classList: { "rounded-r-none": shareUrl() !== undefined },
                       style: { scale: 1 },
                     }}
@@ -308,7 +220,7 @@ export function SessionHeader() {
                       </Show>
                     </div>
                   </Popover>
-                  <Show when={shareUrl()} fallback={<div class="size-6" aria-hidden="true" />}>
+                  <Show when={shareUrl()} fallback={<div aria-hidden="true" />}>
                     <Tooltip
                       value={
                         state.copied
@@ -334,6 +246,70 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
+              <div class="hidden md:block shrink-0">
+                <TooltipKeybind
+                  title={language.t("command.terminal.toggle")}
+                  keybind={command.keybind("terminal.toggle")}
+                >
+                  <Button
+                    variant="ghost"
+                    class="group/terminal-toggle size-5 p-0"
+                    onClick={() => view().terminal.toggle()}
+                    aria-label={language.t("command.terminal.toggle")}
+                    aria-expanded={view().terminal.opened()}
+                    aria-controls="terminal-panel"
+                  >
+                    <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                      <Icon
+                        size="small"
+                        name={view().terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
+                        class="group-hover/terminal-toggle:hidden"
+                      />
+                      <Icon
+                        size="small"
+                        name="layout-bottom-partial"
+                        class="hidden group-hover/terminal-toggle:inline-block"
+                      />
+                      <Icon
+                        size="small"
+                        name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
+                        class="hidden group-active/terminal-toggle:inline-block"
+                      />
+                    </div>
+                  </Button>
+                </TooltipKeybind>
+              </div>
+              <div class="hidden md:block shrink-0">
+                <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
+                  <Button
+                    variant="ghost"
+                    class="group/review-toggle size-5 p-0"
+                    onClick={() => view().reviewPanel.toggle()}
+                    aria-label={language.t("command.review.toggle")}
+                    aria-expanded={view().reviewPanel.opened()}
+                    aria-controls="review-panel"
+                    tabIndex={showReview() ? 0 : -1}
+                  >
+                    <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                      <Icon
+                        size="small"
+                        name={view().reviewPanel.opened() ? "layout-right-full" : "layout-right"}
+                        class="group-hover/review-toggle:hidden"
+                      />
+                      <Icon
+                        size="small"
+                        name="layout-right-partial"
+                        class="hidden group-hover/review-toggle:inline-block"
+                      />
+                      <Icon
+                        size="small"
+                        name={view().reviewPanel.opened() ? "layout-right" : "layout-right-full"}
+                        class="hidden group-active/review-toggle:inline-block"
+                      />
+                    </div>
+                  </Button>
+                </TooltipKeybind>
+              </div>
             </div>
           </Portal>
         )}
