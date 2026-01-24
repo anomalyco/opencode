@@ -15,7 +15,7 @@ import { IconButton } from "./icon-button"
 
 export interface PopoverProps<T extends ValidComponent = "div">
   extends ParentProps,
-    Omit<ComponentProps<typeof Kobalte>, "children"> {
+  Omit<ComponentProps<typeof Kobalte>, "children"> {
   trigger?: JSXElement
   triggerAs?: T
   triggerProps?: ComponentProps<T>
@@ -116,7 +116,7 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
 
   const content = () => (
     <Kobalte.Content
-      ref={(el: HTMLElement) => setContentRef(el)}
+      ref={(el: HTMLElement | undefined) => setContentRef(el)}
       data-component="popover-content"
       classList={{
         ...(local.classList ?? {}),
