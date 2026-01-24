@@ -618,7 +618,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 />
                                 <div data-slot="session-review-comment-actions">
                                   <div data-slot="session-review-comment-draft-label">
-                                    Commenting on {getFilename(diff.file)}:{selectionLabel(range())}
+                                    Commenting on {selectionLabel(range())}
                                   </div>
                                   <Button size="small" variant="ghost" onClick={() => setCommenting(null)}>
                                     Cancel

@@ -13,7 +13,7 @@
   justify-content: center;
   background: var(--icon-interactive-base);
   box-shadow: var(--shadow-xs);
-  cursor: pointer;
+  cursor: default;
   border: none;
 }
 

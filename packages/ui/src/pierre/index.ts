@@ -87,6 +87,15 @@ const unsafeCSS = `
   }
   [data-column-number] {
     background-color: var(--background-stronger);
+    cursor: default !important;
+  }
+
+  &[data-interactive-line-numbers] [data-column-number] {
+    cursor: default !important;
+  }
+
+  &[data-interactive-lines] [data-line] {
+    cursor: auto !important;
   }
   [data-code] {
     overflow-x: auto !important;
