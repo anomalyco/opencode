@@ -118,10 +118,12 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
   }
 
   // Helper to determine if request is an API call (vs browser navigation)
+  // Browser navigation includes text/html in Accept header
   const isApiCall = () => {
     const accept = c.req.header("Accept") ?? ""
-    const xRequestedWith = c.req.header("X-Requested-With")
-    return accept.includes("application/json") || xRequestedWith === "XMLHttpRequest"
+    // If Accept doesn't include text/html, it's likely an API call
+    // This handles SDK requests that may not set explicit JSON accept
+    return !accept.includes("text/html")
   }
 
   // Helper to return auth error (401 for API, redirect for browser)
