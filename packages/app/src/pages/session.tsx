@@ -15,6 +15,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
+import { createVisualViewport } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 
@@ -157,6 +158,7 @@ export default function Page() {
   const view = createMemo(() => layout.view(sessionKey()))
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
+  const keyboardOffset = createVisualViewport()
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -1048,6 +1050,7 @@ export default function Page() {
             <div
               data-e2e="nav-buttons"
               class="fixed md:absolute right-4 md:right-6 bottom-32 md:bottom-36 z-50 flex flex-col gap-1 pointer-events-auto"
+              style={{ bottom: isDesktop() ? undefined : `calc(8rem + ${keyboardOffset()}px)` }}
             >
               <Tooltip value="Open sidebar" placement="left">
                 <IconButton
@@ -1102,7 +1105,10 @@ export default function Page() {
           </Show>
 
           {/* Prompt input */}
-          <div class="fixed md:absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-8 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none">
+          <div
+            class="fixed md:absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-8 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+            style={{ bottom: isDesktop() ? undefined : `${keyboardOffset()}px` }}
+          >
             <div
               classList={{
                 "w-full md:px-6 pointer-events-auto": true,
