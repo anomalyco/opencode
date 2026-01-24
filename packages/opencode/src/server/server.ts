@@ -546,7 +546,20 @@ export namespace Server {
         return undefined
       }
     }
-    const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
+
+    let server: ReturnType<typeof Bun.serve> | undefined
+    const startPort = opts.port === 0 ? 4096 : opts.port
+    const maxAttempts = 10
+
+    // Try incremental ports starting from the specified/default port
+    for (let i = 0; i < maxAttempts; i++) {
+      server = tryServe(startPort + i)
+      if (server) break
+    }
+
+    // Fall back to OS-assigned port if all attempts fail
+    if (!server) server = tryServe(0)
+
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
     _url = server.url
