@@ -682,8 +682,7 @@ export namespace Provider {
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
-    const enabledModels = config.enabled_models
-    const allowedModels = enabledModels ? new Map(Object.entries(enabledModels)) : null
+    const allowedModels = config.enabled_models ? new Map(Object.entries(config.enabled_models)) : null
     const disabledModels = config.disabled_models ? new Map(Object.entries(config.disabled_models)) : null
 
     function isProviderAllowed(providerID: string): boolean {

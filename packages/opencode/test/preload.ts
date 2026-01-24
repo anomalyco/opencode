@@ -25,7 +25,6 @@ process.env["XDG_STATE_HOME"] = path.join(dir, "state")
 // Import Global after env setup so xdg-basedir picks test paths
 const { Global } = await import("../src/global")
 
-// Pre-fetch models.json so tests don't need the macro fallback
 // Write the cache version file to prevent global/index.ts from clearing the cache
 const cacheDir = path.join(dir, "cache", "opencode")
 await fs.mkdir(cacheDir, { recursive: true })
