@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 Phase: 10 of 11 (Two-Factor Authentication) - In progress
-Plan: 4 of ? (BrokerClient 2FA Methods)
+Plan: 5 of ? (Auth Routes 2FA Flow)
 Status: In progress
-Last activity: 2026-01-24 - Completed 10-04-PLAN.md
+Last activity: 2026-01-24 - Completed 10-05-PLAN.md
 
-Progress: [█████████░] ~88%
+Progress: [█████████░] ~89%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 36
-- Average duration: 5.7 min
-- Total execution time: 203.7 min
+- Total plans completed: 37
+- Average duration: 5.6 min
+- Total execution time: 206.7 min
 
 **By Phase:**
 
@@ -36,10 +36,10 @@ Progress: [█████████░] ~88%
 | 7. Security Hardening | 3 | 20 min | 6.7 min |
 | 8. Session Enhancements | 4 | 11.5 min | 2.9 min |
 | 9. Connection Security UI | 2 | 4.6 min | 2.3 min |
-| 10. Two-Factor Authentication | 4 | 11.7 min | 2.9 min |
+| 10. Two-Factor Authentication | 5 | 14.7 min | 2.9 min |
 
 **Recent Trend:**
-- Last 5 plans: 09-02 (2.1 min), 10-01 (4.7 min), 10-02 (2.3 min), 10-03 (2.7 min), 10-04 (2 min)
+- Last 5 plans: 10-01 (4.7 min), 10-02 (2.3 min), 10-03 (2.7 min), 10-04 (2 min), 10-05 (3 min)
 - Trend: Consistently fast execution
 
 *Updated after each plan completion*
@@ -141,6 +141,10 @@ Recent decisions affecting current work:
 | 10-03 | Added jose library to opencode package | Required for JWT signing/verification - already used in function package |
 | 10-04 | check2fa fails open on error | For detection-only use case, assumes no 2FA when broker unavailable |
 | 10-04 | authenticateOtp follows authenticate() pattern | Consistent error handling and response structure |
+| 10-05 | Token secret generated once at startup via lazy initialization | Acceptable that tokens invalidate on restart, matching session design |
+| 10-05 | 2FA token bound to requesting IP | Security measure to prevent token theft |
+| 10-05 | Device trust cookie uses httpOnly, Strict SameSite | Security best practices for sensitive cookies |
+| 10-05 | 2FA login does not use rememberMe for session | Device trust is separate concept from session persistence |
 
 ### Pending Todos
 
@@ -160,7 +164,7 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-24
-Stopped at: Completed 10-04-PLAN.md
+Stopped at: Completed 10-05-PLAN.md
 Resume file: None
 Next: Continue Phase 10 (Two-Factor Authentication)
 
@@ -197,3 +201,4 @@ Next: Continue Phase 10 (Two-Factor Authentication)
 - [x] Plan 02: Broker protocol 2FA extension (2.3 min)
 - [x] Plan 03: Token utilities (2.7 min)
 - [x] Plan 04: BrokerClient 2FA methods (2 min)
+- [x] Plan 05: Auth Routes 2FA Flow (3 min)
