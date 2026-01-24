@@ -100,7 +100,7 @@ const TIPS = [
   'Set {highlight}"formatter": false{/highlight} in config to disable all auto-formatting',
   "Define custom formatter commands with file extensions in config",
   "OpenCode uses LSP servers for intelligent code analysis",
-  "Create {highlight}.ts{/highlight} files in {highlight}.opencode/tool/{/highlight} to define new LLM tools",
+  "Create {highlight}.ts{/highlight} files in {highlight}.opencode/tools/{/highlight} to define new LLM tools",
   "Tool definitions can invoke scripts written in Python, Go, etc",
   "Add {highlight}.ts{/highlight} files to {highlight}.opencode/plugin/{/highlight} for event hooks",
   "Use plugins to send OS notifications when sessions complete",
