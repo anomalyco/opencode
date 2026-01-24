@@ -1038,6 +1038,12 @@ function generate2FASetupPageHtml(params: {
     const successDiv = document.getElementById('success');
     const verifyBtn = document.getElementById('verifyBtn');
 
+    // Helper to read CSRF token from cookie
+    function getCSRFToken() {
+      const match = document.cookie.match(/opencode_csrf=([^;]+)/);
+      return match ? match[1] : '';
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorDiv.classList.remove('visible');
@@ -1058,6 +1064,7 @@ function generate2FASetupPageHtml(params: {
           headers: {
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-Token': getCSRFToken(),
           },
           body: JSON.stringify({ code }),
         });
