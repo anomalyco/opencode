@@ -457,9 +457,16 @@ export function SessionTurn(
   })
 
   createEffect(() => {
-    const timer = setInterval(() => {
+    const update = () => {
       setStore("duration", duration())
-    }, 1000)
+    }
+
+    update()
+
+    // Only keep ticking while the active (in-progress) turn is running.
+    if (!working()) return
+
+    const timer = setInterval(update, 1000)
     onCleanup(() => clearInterval(timer))
   })
 
@@ -493,6 +500,11 @@ export function SessionTurn(
         statusTimeout = undefined
       }, 2500 - timeSinceLastChange) as unknown as number
     }
+  })
+
+  onCleanup(() => {
+    if (!statusTimeout) return
+    clearTimeout(statusTimeout)
   })
 
   return (
@@ -539,9 +551,28 @@ export function SessionTurn(
                             onClick={props.onStepsExpandedToggle ?? (() => {})}
                             aria-expanded={props.stepsExpanded}
                           >
-                            <Show when={working()}>
-                              <Spinner />
-                            </Show>
+                            <Switch>
+                              <Match when={working()}>
+                                <Spinner />
+                              </Match>
+                              <Match when={true}>
+                                <svg
+                                  width="10"
+                                  height="10"
+                                  viewBox="0 0 10 10"
+                                  fill="none"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  class="text-icon-base"
+                                >
+                                  <path
+                                    d="M8.125 1.875H1.875L5 8.125L8.125 1.875Z"
+                                    fill="currentColor"
+                                    stroke="currentColor"
+                                    stroke-linejoin="round"
+                                  />
+                                </svg>
+                              </Match>
+                            </Switch>
                             <Switch>
                               <Match when={retry()}>
                                 <span data-slot="session-turn-retry-message">
@@ -567,9 +598,6 @@ export function SessionTurn(
                             </Switch>
                             <span aria-hidden="true">·</span>
                             <span aria-live="off">{store.duration}</span>
-                            <Show when={assistantMessages().length > 0}>
-                              <Icon name="chevron-grabber-vertical" size="small" />
-                            </Show>
                           </Button>
                         </div>
                       </Show>

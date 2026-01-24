@@ -24,13 +24,15 @@ export const BillingTable = mysqlTable(
     timeReloadLockedTill: utc("time_reload_locked_till"),
     subscription: json("subscription").$type<{
       status: "subscribed"
-      coupon?: string
       seats: number
       plan: "20" | "100" | "200"
+      useBalance?: boolean
+      coupon?: string
     }>(),
     subscriptionID: varchar("subscription_id", { length: 28 }),
     subscriptionPlan: mysqlEnum("subscription_plan", SubscriptionPlan),
     timeSubscriptionBooked: utc("time_subscription_booked"),
+    timeSubscriptionSelected: utc("time_subscription_selected"),
   },
   (table) => [
     ...workspaceIndexes(table),

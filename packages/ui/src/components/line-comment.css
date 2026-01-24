@@ -1,0 +1,49 @@
+[data-component="line-comment"] {
+  position: absolute;
+  right: 24px;
+  z-index: var(--line-comment-z, 30);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-button"] {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--icon-interactive-base);
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+  border: none;
+}
+
+[data-component="line-comment"] [data-component="icon"] {
+  color: var(--white);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-button"]:focus {
+  outline: none;
+}
+
+[data-component="line-comment"] [data-slot="line-comment-button"]:focus-visible {
+  box-shadow: var(--shadow-xs-border-focus);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-popover"] {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: -8px;
+  z-index: var(--line-comment-popover-z, 40);
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - 48px));
+  border-radius: 14px;
+  background: var(--surface-raised-stronger-non-alpha);
+  box-shadow: var(--shadow-lg-border-base);
+  padding: 12px;
+}
+
+[data-component="line-comment"][data-variant="editor"] [data-slot="line-comment-popover"] {
+  width: 380px;
+  max-width: min(380px, calc(100vw - 48px));
+  padding: 8px;
+}

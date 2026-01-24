@@ -86,6 +86,8 @@ export const dict = {
   "dialog.provider.group.other": "その他",
   "dialog.provider.tag.recommended": "推奨",
   "dialog.provider.anthropic.note": "Claude Pro/MaxまたはAPIキーで接続",
+  "dialog.provider.openai.note": "ChatGPT Pro/PlusまたはAPIキーで接続",
+  "dialog.provider.copilot.note": "CopilotまたはAPIキーで接続",
 
   "dialog.model.select.title": "モデルを選択",
   "dialog.model.search.placeholder": "モデルを検索",
@@ -202,6 +204,9 @@ export const dict = {
   "dialog.mcp.description": "{{total}}個中{{enabled}}個が有効",
   "dialog.mcp.empty": "MCPが設定されていません",
 
+  "dialog.lsp.empty": "ファイルタイプから自動検出されたLSP",
+  "dialog.plugins.empty": "opencode.jsonで設定されたプラグイン",
+
   "mcp.status.connected": "接続済み",
   "mcp.status.failed": "失敗",
   "mcp.status.needs_auth": "認証が必要",
@@ -221,7 +226,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "サーバーに接続できませんでした",
   "dialog.server.add.checking": "確認中...",
-  "dialog.server.add.button": "追加",
+  "dialog.server.add.button": "サーバーを追加",
   "dialog.server.default.title": "デフォルトサーバー",
   "dialog.server.default.description":
     "ローカルサーバーを起動する代わりに、アプリ起動時にこのサーバーに接続します。再起動が必要です。",
@@ -229,6 +234,13 @@ export const dict = {
   "dialog.server.default.set": "現在のサーバーをデフォルトに設定",
   "dialog.server.default.clear": "クリア",
   "dialog.server.action.remove": "サーバーを削除",
+
+  "dialog.server.menu.edit": "編集",
+  "dialog.server.menu.default": "デフォルトに設定",
+  "dialog.server.menu.defaultRemove": "デフォルト設定を解除",
+  "dialog.server.menu.delete": "削除",
+  "dialog.server.current": "現在のサーバー",
+  "dialog.server.status.default": "デフォルト",
 
   "dialog.project.edit.title": "プロジェクトを編集",
   "dialog.project.edit.name": "名前",

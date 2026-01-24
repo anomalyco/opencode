@@ -56,6 +56,12 @@ export const DialogSelectProvider: Component = () => {
             <Show when={i.id === "anthropic"}>
               <div class="text-14-regular text-text-weak">{language.t("dialog.provider.anthropic.note")}</div>
             </Show>
+            <Show when={i.id === "openai"}>
+              <div class="text-14-regular text-text-weak">{language.t("dialog.provider.openai.note")}</div>
+            </Show>
+            <Show when={i.id.startsWith("github-copilot")}>
+              <div class="text-14-regular text-text-weak">{language.t("dialog.provider.copilot.note")}</div>
+            </Show>
           </div>
         )}
       </List>
