@@ -163,7 +163,8 @@ export function SessionHeader() {
                         ? language.t("session.share.popover.description.shared")
                         : language.t("session.share.popover.description.unshared")
                     }
-                    gutter={8}
+                    gutter={6}
+                    class="rounded-xl"
                     triggerAs={Button}
                     triggerProps={{
                       variant: "secondary",
