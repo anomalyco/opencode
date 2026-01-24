@@ -53,7 +53,7 @@ async function checkHealth(url: string, platform: ReturnType<typeof usePlatform>
 
 function AddRow(props: AddRowProps) {
   return (
-    <div class="flex items-center px-4 h-14 min-w-0 flex-1">
+    <div class="flex items-center px-4 min-h-14 py-3 min-w-0 flex-1">
       <div class="relative flex-1 min-w-0">
         <div
           classList={{
