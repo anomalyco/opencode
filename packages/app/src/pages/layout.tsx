@@ -724,7 +724,8 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
 
     const [store] = globalSync.child(directory)
-    if (store.message[session.id] !== undefined) return
+    const cached = untrack(() => store.message[session.id] !== undefined)
+    if (cached) return
 
     const q = queueFor(directory)
     if (q.inflight.has(session.id)) return
@@ -855,14 +856,34 @@ export default function Layout(props: ParentProps) {
     setStore(
       produce((draft) => {
         const removed = new Set<string>([session.id])
-        const collect = (parentID: string) => {
-          for (const item of draft.session) {
-            if (item.parentID !== parentID) continue
-            removed.add(item.id)
-            collect(item.id)
+
+        const byParent = new Map<string, string[]>()
+        for (const item of draft.session) {
+          const parentID = item.parentID
+          if (!parentID) continue
+          const existing = byParent.get(parentID)
+          if (existing) {
+            existing.push(item.id)
+            continue
+          }
+          byParent.set(parentID, [item.id])
+        }
+
+        const stack = [session.id]
+        while (stack.length) {
+          const parentID = stack.pop()
+          if (!parentID) continue
+
+          const children = byParent.get(parentID)
+          if (!children) continue
+
+          for (const child of children) {
+            if (removed.has(child)) continue
+            removed.add(child)
+            stack.push(child)
           }
         }
-        collect(session.id)
+
         draft.session = draft.session.filter((s) => !removed.has(s.id))
       }),
     )

@@ -267,17 +267,36 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return map
     })
 
-    createEffect(() => {
+    const rootFor = (directory: string) => {
       const map = roots()
-      if (map.size === 0) return
+      if (map.size === 0) return directory
 
+      const visited = new Set<string>()
+      const chain = [directory]
+
+      while (chain.length) {
+        const current = chain[chain.length - 1]
+        if (!current) return directory
+
+        const next = map.get(current)
+        if (!next) return current
+
+        if (visited.has(next)) return directory
+        visited.add(next)
+        chain.push(next)
+      }
+
+      return directory
+    }
+
+    createEffect(() => {
       const projects = server.projects.list()
       const seen = new Set(projects.map((project) => project.worktree))
 
       batch(() => {
         for (const project of projects) {
-          const root = map.get(project.worktree)
-          if (!root) continue
+          const root = rootFor(project.worktree)
+          if (root === project.worktree) continue
 
           server.projects.close(project.worktree)
 
@@ -350,7 +369,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       projects: {
         list,
         open(directory: string) {
-          const root = roots().get(directory) ?? directory
+          const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
           globalSync.project.loadSessions(root)
           server.projects.open(root)
@@ -384,7 +403,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("sidebar", "width", width)
         },
         workspaces(directory: string) {
-          return createMemo(() => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false)
+          return () => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
         },
         setWorkspaces(directory: string, value: boolean) {
           setStore("sidebar", "workspaces", directory, value)
