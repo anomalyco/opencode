@@ -2,9 +2,16 @@ import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
 import z from "zod"
-import { data } from "./models-macro" with { type: "macro" }
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
+import { lazy } from "@/util/lazy"
+
+// Try to import bundled snapshot (generated at build time)
+// Falls back to undefined in dev mode when snapshot doesn't exist
+/* @ts-ignore */
+const SNAPSHOT = await import("./models-snapshot")
+  .then((m) => m.snapshot as Record<string, unknown>)
+  .catch(() => undefined)
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
@@ -76,18 +83,24 @@ export namespace ModelsDev {
 
   export type Provider = z.infer<typeof Provider>
 
-  export async function get() {
-    refresh()
+  function url() {
+    return Flag.OPENCODE_MODELS_URL || "https://models.dev"
+  }
+
+  export const Data = lazy(async () => {
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
-    if (result) return result as Record<string, Provider>
-    if (typeof data === "function") {
-      const json = await data()
-      return JSON.parse(json) as Record<string, Provider>
-    }
-    const url = Global.Path.modelsDevUrl
-    const json = await fetch(`${url}/api.json`).then((x) => x.text())
-    return JSON.parse(json) as Record<string, Provider>
+    if (result) return result
+    if (SNAPSHOT) return SNAPSHOT
+    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
+    const json = await fetch(`${url()}/api.json`).then((x) => x.text())
+    return JSON.parse(json)
+  })
+
+  export async function get() {
+    refresh()
+    const result = await Data()
+    return result as Record<string, Provider>
   }
 
   export async function refresh() {
@@ -96,8 +109,7 @@ export namespace ModelsDev {
     log.info("refreshing", {
       file,
     })
-    const url = Global.Path.modelsDevUrl
-    const result = await fetch(`${url}/api.json`, {
+    const result = await fetch(`${url()}/api.json`, {
       headers: {
         "User-Agent": Installation.USER_AGENT,
       },
@@ -107,8 +119,18 @@ export namespace ModelsDev {
         error: e,
       })
     })
-    if (result && result.ok) await Bun.write(file, await result.text())
+    if (result && result.ok) {
+      await Bun.write(file, await result.text())
+      ModelsDev.Data.reset()
+    }
   }
 }
 
-setInterval(() => ModelsDev.refresh(), 60 * 1000 * 60).unref()
+if (!Flag.OPENCODE_DISABLE_MODELS_FETCH) {
+  setInterval(
+    async () => {
+      await ModelsDev.refresh()
+    },
+    60 * 1000 * 60,
+  ).unref()
+}
