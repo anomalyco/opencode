@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Login UI** - Web login form with opencode styling
 - [x] **Phase 7: Security Hardening** - CSRF, rate limiting, HTTPS detection
 - [x] **Phase 8: Session Enhancements** - Remember me and session activity indicator
-- [ ] **Phase 9: Connection Security UI** - HTTPS/HTTP security badge in UI
+- [x] **Phase 9: Connection Security UI** - HTTPS/HTTP security badge in UI
 - [ ] **Phase 10: Two-Factor Authentication** - TOTP support via PAM integration
 - [ ] **Phase 11: Documentation** - Reverse proxy and PAM configuration guides
 
@@ -172,8 +172,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — SecurityBadge component with icons, detection, tooltip, and popover details
-- [ ] 09-02-PLAN.md — HTTP warning banner and layout integration
+- [x] 09-01-PLAN.md — SecurityBadge component with icons, detection, tooltip, and popover details
+- [x] 09-02-PLAN.md — HTTP warning banner and layout integration
 
 ### Phase 10: Two-Factor Authentication
 **Goal**: Users can optionally enable TOTP-based 2FA for login
@@ -218,6 +218,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 6. Login UI | 1/1 | Complete | 2026-01-22 |
 | 7. Security Hardening | 3/3 | Complete | 2026-01-22 |
 | 8. Session Enhancements | 4/4 | Complete | 2026-01-23 |
-| 9. Connection Security UI | 0/2 | Not started | - |
+| 9. Connection Security UI | 2/2 | Complete | 2026-01-24 |
 | 10. Two-Factor Authentication | 0/TBD | Not started | - |
 | 11. Documentation | 0/TBD | Not started | - |
