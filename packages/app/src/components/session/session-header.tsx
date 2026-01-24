@@ -166,7 +166,7 @@ export function SessionHeader() {
                     gutter={6}
                     placement="bottom-end"
                     shift={-64}
-                    class="rounded-xl"
+                    class="rounded-xl [&_[data-slot=popover-close-button]]:hidden"
                     triggerAs={Button}
                     triggerProps={{
                       variant: "secondary",
@@ -234,7 +234,7 @@ export function SessionHeader() {
                       gutter={8}
                     >
                       <IconButton
-                        icon={state.copied ? "check" : "copy"}
+                        icon={state.copied ? "check" : "link"}
                         variant="secondary"
                         class="rounded-l-none"
                         onClick={copyLink}

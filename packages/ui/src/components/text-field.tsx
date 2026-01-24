@@ -99,7 +99,7 @@ export function TextField(props: TextFieldProps) {
           >
             <IconButton
               type="button"
-              icon={copied() ? "check" : "copy"}
+              icon={copied() ? "check" : "link"}
               variant="ghost"
               onClick={handleCopy}
               data-slot="input-copy-button"
