@@ -1,6 +1,6 @@
 [data-component="session-turn"] {
   --session-turn-sticky-height: 0px;
-  --sticky-header-height: calc(var(--session-title-height, 0px) + var(--session-turn-sticky-height, 0px) + 12px);
+  --sticky-header-height: calc(var(--session-title-height, 0px) + var(--session-turn-sticky-height, 0px) + 24px);
   /* flex: 1; */
   height: 100%;
   min-height: 0;
@@ -125,12 +125,8 @@
     padding: 0;
   }
 
-  [data-component="user-message"][data-can-expand="true"]
-    [data-slot="user-message-text"]
-    [data-slot="user-message-expand"],
-  [data-component="user-message"][data-expanded="true"]
-    [data-slot="user-message-text"]
-    [data-slot="user-message-expand"] {
+  [data-component="user-message"][data-can-expand="true"] [data-slot="user-message-text"] [data-slot="user-message-expand"],
+  [data-component="user-message"][data-expanded="true"] [data-slot="user-message-text"] [data-slot="user-message-expand"] {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -147,10 +143,7 @@
     }
   }
 
-  [data-component="user-message"][data-expanded="true"]
-    [data-slot="user-message-text"]
-    [data-slot="user-message-expand"]
-    [data-slot="icon-svg"] {
+  [data-component="user-message"][data-expanded="true"] [data-slot="user-message-text"] [data-slot="user-message-expand"] [data-slot="icon-svg"] {
     transform: rotate(180deg);
   }
 
@@ -234,7 +227,8 @@
   }
 
   [data-slot="session-turn-summary-title"] {
-    font-size: 13px; /* text-12-medium */
+    font-size: 13px;
+    /* text-12-medium */
     font-weight: 500;
     color: var(--text-weak);
   }
@@ -250,97 +244,126 @@
       font-size: 15px;
     }
 
-    &[data-fade="true"] > * {
+    &[data-fade="true"]>* {
       animation: fadeUp 0.4s ease-out forwards;
       opacity: 0;
 
       &:nth-child(1) {
         animation-delay: 0.1s;
       }
+
       &:nth-child(2) {
         animation-delay: 0.2s;
       }
+
       &:nth-child(3) {
         animation-delay: 0.3s;
       }
+
       &:nth-child(4) {
         animation-delay: 0.4s;
       }
+
       &:nth-child(5) {
         animation-delay: 0.5s;
       }
+
       &:nth-child(6) {
         animation-delay: 0.6s;
       }
+
       &:nth-child(7) {
         animation-delay: 0.7s;
       }
+
       &:nth-child(8) {
         animation-delay: 0.8s;
       }
+
       &:nth-child(9) {
         animation-delay: 0.9s;
       }
+
       &:nth-child(10) {
         animation-delay: 1s;
       }
+
       &:nth-child(11) {
         animation-delay: 1.1s;
       }
+
       &:nth-child(12) {
         animation-delay: 1.2s;
       }
+
       &:nth-child(13) {
         animation-delay: 1.3s;
       }
+
       &:nth-child(14) {
         animation-delay: 1.4s;
       }
+
       &:nth-child(15) {
         animation-delay: 1.5s;
       }
+
       &:nth-child(16) {
         animation-delay: 1.6s;
       }
+
       &:nth-child(17) {
         animation-delay: 1.7s;
       }
+
       &:nth-child(18) {
         animation-delay: 1.8s;
       }
+
       &:nth-child(19) {
         animation-delay: 1.9s;
       }
+
       &:nth-child(20) {
         animation-delay: 2s;
       }
+
       &:nth-child(21) {
         animation-delay: 2.1s;
       }
+
       &:nth-child(22) {
         animation-delay: 2.2s;
       }
+
       &:nth-child(23) {
         animation-delay: 2.3s;
       }
+
       &:nth-child(24) {
         animation-delay: 2.4s;
       }
+
       &:nth-child(25) {
         animation-delay: 2.5s;
       }
+
       &:nth-child(26) {
         animation-delay: 2.6s;
       }
+
       &:nth-child(27) {
         animation-delay: 2.7s;
       }
+
       &:nth-child(28) {
         animation-delay: 2.8s;
       }
+
       &:nth-child(29) {
         animation-delay: 2.9s;
       }
+
       &:nth-child(30) {
         animation-delay: 3s;
       }
@@ -369,6 +392,7 @@
 
   [data-component="sticky-accordion-header"] {
     top: var(--sticky-header-height, 0px);
+
     &[data-expanded]::before {
       top: calc(-1 * var(--sticky-header-height, 0px));
     }
@@ -429,7 +453,8 @@
   }
 
   [data-slot="session-turn-accordion-content"] {
-    max-height: 240px; /* max-h-60 */
+    max-height: 240px;
+    /* max-h-60 */
     overflow-y: auto;
     scrollbar-width: none;
   }
@@ -469,19 +494,23 @@
       height: 14px;
     }
   }
+
   [data-slot="session-turn-retry-message"] {
     font-weight: 500;
     color: var(--syntax-critical);
   }
+
   [data-slot="session-turn-retry-seconds"] {
     color: var(--text-weak);
   }
+
   [data-slot="session-turn-retry-attempt"] {
     color: var(--text-weak);
   }
 
   [data-slot="session-turn-details-text"] {
-    font-size: 13px; /* text-12-medium */
+    font-size: 13px;
+    /* text-12-medium */
     font-weight: 500;
   }
 
@@ -499,7 +528,7 @@
     align-self: stretch;
     gap: 12px;
 
-    > :first-child > [data-component="markdown"]:first-child {
+    > :first-child>[data-component="markdown"]:first-child {
       margin-top: 0;
     }
   }
