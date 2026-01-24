@@ -747,6 +747,174 @@ export const AuthRoutes = lazy(() =>
         })
       },
     )
+    .post(
+      "/login/2fa",
+      describeRoute({
+        summary: "Complete 2FA login",
+        description: "Validate OTP code and complete authentication.",
+        operationId: "auth.login2fa",
+        responses: {
+          200: {
+            description: "2FA successful",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    success: z.literal(true),
+                    user: z.object({
+                      username: z.string(),
+                      uid: z.number(),
+                      gid: z.number(),
+                      home: z.string(),
+                      shell: z.string(),
+                    }),
+                  }),
+                ),
+              },
+            },
+          },
+          400: { description: "Bad request (missing fields)" },
+          401: { description: "OTP validation failed or token expired" },
+          403: { description: "2FA not enabled" },
+          429: { description: "Rate limit exceeded" },
+        },
+      }),
+      async (c) => {
+        const authConfig = ServerAuth.get()
+        if (!authConfig.enabled || !authConfig.twoFactorEnabled) {
+          return c.json({ error: "2fa_disabled", message: "Two-factor authentication is not enabled" }, 403)
+        }
+
+        // Check X-Requested-With for CSRF
+        const xrw = c.req.header("X-Requested-With")
+        if (!xrw) {
+          const ip = getClientIP(c)
+          logSecurityEvent({
+            type: "csrf_violation",
+            ip,
+            timestamp: new Date().toISOString(),
+            userAgent: c.req.header("User-Agent"),
+          })
+          return c.json({ error: "csrf_missing", message: "X-Requested-With header required" }, 400)
+        }
+
+        // Parse body
+        const body = await c.req.json()
+        const { twoFactorToken, code, rememberDevice } = body as {
+          twoFactorToken?: string
+          code?: string
+          rememberDevice?: boolean
+        }
+
+        if (!twoFactorToken || !code) {
+          return c.json({ error: "invalid_request", message: "Token and code are required" }, 400)
+        }
+
+        // Verify 2FA token
+        const ip = getClientIP(c)
+        const userInfo = await verify2FAToken(twoFactorToken, getTokenSecret(), ip)
+        if (!userInfo) {
+          return c.json({ error: "token_expired", message: "2FA session expired, please login again" }, 401)
+        }
+
+        // Rate limit OTP attempts
+        const rateLimiter = loginRateLimiter()
+        if (rateLimiter) {
+          const rateLimitResult = await rateLimiter(c as Parameters<typeof rateLimiter>[0], async () => {})
+          if (rateLimitResult) return rateLimitResult
+        }
+
+        // Validate OTP via broker
+        const broker = new BrokerClient()
+        const otpResult = await broker.authenticateOtp(userInfo.username, code)
+
+        const timestamp = new Date().toISOString()
+        const userAgent = c.req.header("User-Agent")
+
+        if (!otpResult.success) {
+          logSecurityEvent({
+            type: "login_failed",
+            ip,
+            username: userInfo.username,
+            reason: "invalid_otp",
+            timestamp,
+            userAgent,
+          })
+          return c.json({ error: "invalid_code", message: "Invalid verification code" }, 401)
+        }
+
+        // Create session
+        const session = UserSession.create(
+          userInfo.username,
+          userAgent,
+          {
+            uid: userInfo.uid,
+            gid: userInfo.gid,
+            home: userInfo.home,
+            shell: userInfo.shell,
+          },
+          false, // 2FA login doesn't use rememberMe for session (device trust is separate)
+        )
+
+        // Set session cookie
+        setSessionCookie(c, session.id, false)
+        setCSRFCookie(c, session.id)
+
+        // Set device trust cookie if requested
+        if (rememberDevice) {
+          const fingerprint = createDeviceFingerprint(userAgent ?? "")
+          const trustDurationMs = parseDuration(authConfig.deviceTrustDuration ?? "30d") ?? 30 * 24 * 60 * 60 * 1000
+          const trustDurationSec = Math.floor(trustDurationMs / 1000)
+
+          const trustToken = await createDeviceTrustToken(
+            userInfo.username,
+            fingerprint,
+            trustDurationSec,
+            getTokenSecret(),
+          )
+
+          setCookie(c, "opencode_device_trust", trustToken, {
+            path: "/",
+            httpOnly: true,
+            secure: c.req.url.startsWith("https"),
+            sameSite: "Strict",
+            maxAge: trustDurationSec,
+          })
+        }
+
+        // Register session with broker
+        const userInfoForBroker: UserInfo = {
+          username: userInfo.username,
+          uid: userInfo.uid,
+          gid: userInfo.gid,
+          home: userInfo.home,
+          shell: userInfo.shell,
+        }
+        broker.registerSession(session.id, userInfoForBroker).catch((err) => {
+          log.warn("Failed to register session with broker", { error: err })
+        })
+
+        // Log successful login
+        logSecurityEvent({
+          type: "login_success",
+          ip,
+          username: userInfo.username,
+          timestamp,
+          userAgent,
+        })
+
+        return c.json({
+          success: true as const,
+          user: {
+            username: userInfo.username,
+            uid: userInfo.uid,
+            gid: userInfo.gid,
+            home: userInfo.home,
+            shell: userInfo.shell,
+          },
+        })
+      },
+    )
     .get(
       "/status",
       describeRoute({
