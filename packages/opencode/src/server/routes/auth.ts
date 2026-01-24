@@ -1040,8 +1040,15 @@ function generate2FASetupPageHtml(params: {
 
     // Helper to read CSRF token from cookie
     function getCSRFToken() {
-      const match = document.cookie.match(/opencode_csrf=([^;]+)/);
-      return match ? match[1] : '';
+      const cookies = document.cookie.split('; ');
+      for (const cookie of cookies) {
+        const [name, ...valueParts] = cookie.split('=');
+        if (name.trim() === 'opencode_csrf') {
+          // Rejoin in case value contains '=' and decode
+          return decodeURIComponent(valueParts.join('='));
+        }
+      }
+      return '';
     }
 
     form.addEventListener('submit', async (e) => {
