@@ -84,7 +84,7 @@
     max-width: min(320px, calc(100vw - 48px));
     border-radius: 14px;
     background-color: var(--surface-raised-stronger-non-alpha);
-    border: 1px solid var(--border-base);
+    box-shadow: var(--shadow-lg-border-base);
     padding: 12px;
   }
 

@@ -2030,7 +2030,7 @@ export default function Page() {
                                 <Icon name="comment" size="small" style={{ color: "var(--white)" }} />
                               </button>
                               <Show when={openedComment() === comment.id}>
-                                <div class="absolute top-[calc(100%+4px)] right-[-8px] z-40 min-w-[200px] max-w-[320px] rounded-[14px] bg-surface-raised-stronger-non-alpha border border-border-base p-3">
+                                <div class="absolute top-[calc(100%+4px)] right-[-8px] z-40 min-w-[200px] max-w-[320px] rounded-[14px] bg-surface-raised-stronger-non-alpha shadow-lg-border-base p-3">
                                   <div class="flex flex-col gap-1.5">
                                     <div class="text-14-regular text-text-strong whitespace-pre-wrap">
                                       {comment.comment}
@@ -2081,7 +2081,7 @@ export default function Page() {
                                       }}
                                     />
                                     <div class="flex items-center gap-2">
-                                      <div class="text-12-medium text-text-weak ml-2">
+                                      <div class="text-12-medium text-text-weak ml-1">
                                         Commenting on {commentLabel(range())}
                                       </div>
                                       <div class="flex-1" />
