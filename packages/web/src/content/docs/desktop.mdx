@@ -1,0 +1,158 @@
+---
+title: Desktop Troubleshooting
+description: Troubleshooting steps for the OpenCode desktop app (Windows, macOS, Linux).
+---
+
+OpenCode Desktop runs a local OpenCode server (the `opencode-cli` sidecar) in the background. Most issues are caused by a misbehaving plugin or a corrupted cache.
+
+---
+
+## Quick checks
+
+- Fully quit and relaunch the app.
+- If the app shows an error screen, click **Restart** and copy the error details for support.
+- macOS only: `OpenCode` menu -> **Reload Webview** (helps if the UI is blank/frozen).
+
+---
+
+## Disable plugins
+
+If the desktop app is crashing on launch, hanging, or behaving strangely, start by disabling plugins.
+
+### Check the global config
+
+Open your global config file and look for a `plugin` key.
+
+- **macOS/Linux** (default): `~/.config/opencode/opencode.jsonc` (or `~/.config/opencode/opencode.json`)
+- **macOS/Linux** (alternate): `~/.local/share/opencode/opencode.jsonc`
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\opencode.jsonc`
+
+If you have plugins configured, temporarily disable them by removing the key or setting it to an empty array:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [],
+}
+```
+
+### Check plugin directories
+
+OpenCode can also load local plugins from disk. Temporarily move these out of the way (or rename the folder) and restart the desktop app:
+
+- **Global plugins**
+  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\plugins`
+- **Project plugins** (only if you use per-project config)
+  - `<your-project>/.opencode/plugins/`
+
+If the app starts working again, re-enable plugins one at a time to find which one is causing the issue.
+
+---
+
+## Clear the cache
+
+If disabling plugins doesn't help (or a plugin install is stuck), clear the cache so OpenCode can rebuild it.
+
+1. Quit OpenCode Desktop completely.
+2. Delete the cache directory:
+
+- **macOS**: Finder -> `Cmd+Shift+G` -> paste `~/.cache/opencode`
+- **Linux**: open your file manager and go to `~/.cache/opencode` (or run `rm -rf ~/.cache/opencode`)
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.cache\opencode`
+
+3. Restart OpenCode Desktop.
+
+---
+
+## Fix server connection issues
+
+OpenCode Desktop can either:
+
+- start its own local server (default), or
+- connect to a server URL you configured.
+
+If you see a **"Connection Failed"** dialog, or the app never gets past the splash screen, check for a custom server URL.
+
+### Clear the desktop default server URL
+
+From the Home screen, click the server name (with the status dot) to open the Server picker. In the **Default server** section, click **Clear**.
+
+### Remove `server.port` / `server.hostname` from your config
+
+If your `opencode.json(c)` contains a `server` section (with `port`), the desktop app may try to connect to that server on startup.
+
+Temporarily remove the `server` section and restart the desktop app.
+
+### Check environment variables
+
+If you have `OPENCODE_PORT` set in your environment, the desktop app will try to use that port for the local server.
+
+- Unset `OPENCODE_PORT` (or pick a free port) and restart.
+
+---
+
+## Linux: Wayland / X11 issues
+
+On Linux, some Wayland setups can cause blank windows or compositor errors.
+
+- If you're on Wayland and the app is blank/crashing, try launching with `OC_ALLOW_WAYLAND=1`.
+- If that makes things worse, remove it and try launching under an X11 session instead.
+
+---
+
+## Windows: WebView2 runtime
+
+On Windows, OpenCode Desktop requires the Microsoft Edge **WebView2 Runtime**. If the app opens to a blank window or won't start, install/update WebView2 and try again.
+
+---
+
+## Notifications not showing
+
+OpenCode Desktop only shows system notifications when:
+
+- notifications are enabled for OpenCode in your OS settings, and
+- the app window is not focused.
+
+---
+
+## Reset desktop app storage (last resort)
+
+If the app won't start and you can't clear settings from inside the UI, reset the desktop app's saved state.
+
+1. Quit OpenCode Desktop.
+2. Find and delete these files (they live in the OpenCode Desktop app data directory):
+
+- `opencode.settings.dat` (desktop default server URL)
+- `opencode.global.dat` and `opencode.workspace.*.dat` (UI state like recent servers/projects)
+
+To find the directory quickly:
+
+- **macOS**: Finder -> `Cmd+Shift+G` -> `~/Library/Application Support` (then search for the filenames above)
+- **Linux**: search under `~/.local/share` for the filenames above
+- **Windows**: Press `WIN+R` -> `%APPDATA%` (then search for the filenames above)
+
+---
+
+## Logs and local files
+
+When reporting an issue, include the newest log file and your OS/app version. Do **not** share secrets (API keys can be stored in `auth.json`).
+
+### Logs
+
+- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode\log`
+
+### Local data
+
+This directory contains session data and auth information:
+
+- **macOS/Linux**: `~/.local/share/opencode/`
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode`
+
+---
+
+## Getting help
+
+- Report bugs: https://github.com/anomalyco/opencode/issues
+- Community support: https://opencode.ai/discord

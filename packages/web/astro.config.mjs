@@ -85,6 +85,7 @@ export default defineConfig({
         "network",
         "enterprise",
         "troubleshooting",
+        "desktop",
         "1-0",
         {
           label: "Usage",
