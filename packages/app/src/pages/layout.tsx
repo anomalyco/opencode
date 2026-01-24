@@ -2156,8 +2156,8 @@ export default function Layout(props: ParentProps) {
                 class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
                 onClick={() => {
                   layout.sidebar.open()
+                  setOpen(false)
                   if (selected()) {
-                    setOpen(false)
                     return
                   }
                   navigateToProject(props.project.worktree)
