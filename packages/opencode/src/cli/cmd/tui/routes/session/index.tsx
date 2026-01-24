@@ -324,17 +324,35 @@ export function Session() {
         name: "share",
       },
       onSelect: async (dialog) => {
-        await sdk.client.session
+        const response = await sdk.client.session
           .share({
             sessionID: route.sessionID,
           })
-          .then((res) =>
-            Clipboard.copy(res.data!.share!.url).catch(() =>
-              toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
-            ),
-          )
-          .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
-          .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
+          .catch(() => {
+            toast.show({ message: "Failed to share session", variant: "error" })
+          })
+        if (!response) {
+          dialog.clear()
+          return
+        }
+        const result = await Clipboard.copy(response.data!.share!.url).catch(() => {
+          toast.show({ message: "Failed to copy URL to clipboard", variant: "error" })
+        })
+        if (!result) {
+          dialog.clear()
+          return
+        }
+        if (result.warning) {
+          toast.show({ message: result.warning, variant: "warning" })
+          dialog.clear()
+          return
+        }
+        if (result.notice) {
+          toast.show({ message: result.notice, variant: "info" })
+          dialog.clear()
+          return
+        }
+        toast.show({ message: "Share URL copied to clipboard!", variant: "success" })
         dialog.clear()
       },
     },
@@ -717,7 +735,7 @@ export function Session() {
       value: "messages.copy",
       keybind: "messages_copy",
       category: "Session",
-      onSelect: (dialog) => {
+      onSelect: async (dialog) => {
         const revertID = session()?.revert?.messageID
         const lastAssistantMessage = messages().findLast(
           (msg) => msg.role === "assistant" && (!revertID || msg.id < revertID),
@@ -749,9 +767,24 @@ export function Session() {
           return
         }
 
-        Clipboard.copy(text)
-          .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
-          .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
+        const result = await Clipboard.copy(text).catch(() => {
+          toast.show({ message: "Failed to copy to clipboard", variant: "error" })
+        })
+        if (!result) {
+          dialog.clear()
+          return
+        }
+        if (result.warning) {
+          toast.show({ message: result.warning, variant: "warning" })
+          dialog.clear()
+          return
+        }
+        if (result.notice) {
+          toast.show({ message: result.notice, variant: "info" })
+          dialog.clear()
+          return
+        }
+        toast.show({ message: "Message copied to clipboard!", variant: "success" })
         dialog.clear()
       },
     },
@@ -763,24 +796,36 @@ export function Session() {
         name: "copy",
       },
       onSelect: async (dialog) => {
-        try {
-          const sessionData = session()
-          if (!sessionData) return
-          const sessionMessages = messages()
-          const transcript = formatTranscript(
-            sessionData,
-            sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
-            {
-              thinking: showThinking(),
-              toolDetails: showDetails(),
-              assistantMetadata: showAssistantMetadata(),
-            },
-          )
-          await Clipboard.copy(transcript)
-          toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
-        } catch (error) {
+        const sessionData = session()
+        if (!sessionData) return
+        const sessionMessages = messages()
+        const transcript = formatTranscript(
+          sessionData,
+          sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
+          {
+            thinking: showThinking(),
+            toolDetails: showDetails(),
+            assistantMetadata: showAssistantMetadata(),
+          },
+        )
+        const result = await Clipboard.copy(transcript).catch(() => {
           toast.show({ message: "Failed to copy session transcript", variant: "error" })
+        })
+        if (!result) {
+          dialog.clear()
+          return
         }
+        if (result.warning) {
+          toast.show({ message: result.warning, variant: "warning" })
+          dialog.clear()
+          return
+        }
+        if (result.notice) {
+          toast.show({ message: result.notice, variant: "info" })
+          dialog.clear()
+          return
+        }
+        toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
         dialog.clear()
       },
     },

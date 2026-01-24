@@ -204,9 +204,24 @@ function App() {
   renderer.console.onCopySelection = async (text: string) => {
     if (!text || text.length === 0) return
 
-    await Clipboard.copy(text)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-      .catch(toast.error)
+    const result = await Clipboard.copy(text).catch((error) => {
+      toast.error(error)
+    })
+    if (!result) {
+      renderer.clearSelection()
+      return
+    }
+    if (result.warning) {
+      toast.show({ message: result.warning, variant: "warning" })
+      renderer.clearSelection()
+      return
+    }
+    if (result.notice) {
+      toast.show({ message: result.notice, variant: "info" })
+      renderer.clearSelection()
+      return
+    }
+    toast.show({ message: "Copied to clipboard", variant: "info" })
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
@@ -673,9 +688,24 @@ function App() {
         }
         const text = renderer.getSelection()?.getSelectedText()
         if (text && text.length > 0) {
-          await Clipboard.copy(text)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-            .catch(toast.error)
+          const result = await Clipboard.copy(text).catch((error) => {
+            toast.error(error)
+          })
+          if (!result) {
+            renderer.clearSelection()
+            return
+          }
+          if (result.warning) {
+            toast.show({ message: result.warning, variant: "warning" })
+            renderer.clearSelection()
+            return
+          }
+          if (result.notice) {
+            toast.show({ message: result.notice, variant: "info" })
+            renderer.clearSelection()
+            return
+          }
+          toast.show({ message: "Copied to clipboard", variant: "info" })
           renderer.clearSelection()
         }
       }}

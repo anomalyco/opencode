@@ -129,7 +129,18 @@ function AutoMethod(props: AutoMethodProps) {
     if (evt.name === "c" && !evt.ctrl && !evt.meta) {
       const code = props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4,5}/)?.[0] ?? props.authorization.url
       Clipboard.copy(code)
-        .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+        .then((result) => {
+          if (!result) return
+          if (result.warning) {
+            toast.show({ message: result.warning, variant: "warning" })
+            return
+          }
+          if (result.notice) {
+            toast.show({ message: result.notice, variant: "info" })
+            return
+          }
+          toast.show({ message: "Copied to clipboard", variant: "info" })
+        })
         .catch(toast.error)
     }
   })
