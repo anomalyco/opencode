@@ -119,6 +119,16 @@ type ChildOptions = {
   bootstrap?: boolean
 }
 
+function normalizeProviderList(input: ProviderListResponse): ProviderListResponse {
+  return {
+    ...input,
+    all: input.all.map((provider) => ({
+      ...provider,
+      models: Object.fromEntries(Object.entries(provider.models).filter(([, info]) => info.status !== "deprecated")),
+    })),
+  }
+}
+
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()
@@ -128,6 +138,21 @@ function createGlobalSync() {
   const vcsCache = new Map<string, VcsCache>()
   const metaCache = new Map<string, MetaCache>()
   const iconCache = new Map<string, IconCache>()
+
+  const sdkCache = new Map<string, ReturnType<typeof createOpencodeClient>>()
+  const sdkFor = (directory: string) => {
+    const cached = sdkCache.get(directory)
+    if (cached) return cached
+
+    const sdk = createOpencodeClient({
+      baseUrl: globalSDK.url,
+      fetch: platform.fetch,
+      directory,
+      throwOnError: true,
+    })
+    sdkCache.set(directory, sdk)
+    return sdk
+  }
 
   const [projectCache, setProjectCache, , projectCacheReady] = persisted(
     Persist.global("globalSync.project", ["globalSync.project.v1"]),
@@ -183,7 +208,7 @@ function createGlobalSync() {
     setProjectCache("value", projects.map(sanitizeProject))
   })
 
-  createEffect(async () => {
+  createEffect(() => {
     if (globalStore.reload !== "complete") return
     if (bootstrapQueue.length) {
       for (const directory of bootstrapQueue) {
@@ -203,14 +228,16 @@ function createGlobalSync() {
   function ensureChild(directory: string) {
     if (!directory) console.error("No directory provided")
     if (!children[directory]) {
-      const cache = runWithOwner(owner, () =>
+      const vcs = runWithOwner(owner, () =>
         persisted(
           Persist.workspace(directory, "vcs", ["vcs.v1"]),
           createStore({ value: undefined as VcsInfo | undefined }),
         ),
       )
-      if (!cache) throw new Error("Failed to create persisted cache")
-      vcsCache.set(directory, { store: cache[0], setStore: cache[1], ready: cache[3] })
+      if (!vcs) throw new Error("Failed to create persisted cache")
+      const vcsStore = vcs[0]
+      const vcsReady = vcs[3]
+      vcsCache.set(directory, { store: vcsStore, setStore: vcs[1], ready: vcsReady })
 
       const meta = runWithOwner(owner, () =>
         persisted(
@@ -250,13 +277,20 @@ function createGlobalSync() {
           question: {},
           mcp: {},
           lsp: [],
-          vcs: cache[0].value,
+          vcs: vcsStore.value,
           limit: 5,
           message: {},
           part: {},
         })
 
         children[directory] = child
+
+        createEffect(() => {
+          if (!vcsReady()) return
+          const cached = vcsStore.value
+          if (!cached?.branch) return
+          child[1]("vcs", (value) => value ?? cached)
+        })
 
         createEffect(() => {
           child[1]("projectMeta", meta[0].value)
@@ -297,7 +331,6 @@ function createGlobalSync() {
         const nonArchived = (x.data ?? [])
           .filter((s) => !!s?.id)
           .filter((s) => !s.time?.archived)
-          .slice()
           .sort((a, b) => a.id.localeCompare(b.id))
 
         // Read the current limit at resolve-time so callers that bump the limit while
@@ -348,38 +381,18 @@ function createGlobalSync() {
       if (!cache) return
       const meta = metaCache.get(directory)
       if (!meta) return
-      const sdk = createOpencodeClient({
-        baseUrl: globalSDK.url,
-        fetch: platform.fetch,
-        directory,
-        throwOnError: true,
-      })
+      const sdk = sdkFor(directory)
 
       setStore("status", "loading")
 
-      createEffect(() => {
-        if (!cache.ready()) return
-        const cached = cache.store.value
-        if (!cached?.branch) return
-        setStore("vcs", (value) => value ?? cached)
-      })
-
       // projectMeta is synced from persisted storage in ensureChild.
+      // vcs is seeded from persisted storage in ensureChild.
 
       const blockingRequests = {
         project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
         provider: () =>
           sdk.provider.list().then((x) => {
-            const data = x.data!
-            setStore("provider", {
-              ...data,
-              all: data.all.map((provider) => ({
-                ...provider,
-                models: Object.fromEntries(
-                  Object.entries(provider.models).filter(([, info]) => info.status !== "deprecated"),
-                ),
-              })),
-            })
+            setStore("provider", normalizeProviderList(x.data!))
           }),
         agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
         config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
@@ -432,10 +445,7 @@ function createGlobalSync() {
                 "permission",
                 sessionID,
                 reconcile(
-                  permissions
-                    .filter((p) => !!p?.id)
-                    .slice()
-                    .sort((a, b) => a.id.localeCompare(b.id)),
+                  permissions.filter((p) => !!p?.id).sort((a, b) => a.id.localeCompare(b.id)),
                   { key: "id" },
                 ),
               )
@@ -464,10 +474,7 @@ function createGlobalSync() {
                 "question",
                 sessionID,
                 reconcile(
-                  questions
-                    .filter((q) => !!q?.id)
-                    .slice()
-                    .sort((a, b) => a.id.localeCompare(b.id)),
+                  questions.filter((q) => !!q?.id).sort((a, b) => a.id.localeCompare(b.id)),
                   { key: "id" },
                 ),
               )
@@ -750,13 +757,9 @@ function createGlobalSync() {
         break
       }
       case "lsp.updated": {
-        const sdk = createOpencodeClient({
-          baseUrl: globalSDK.url,
-          fetch: platform.fetch,
-          directory,
-          throwOnError: true,
-        })
-        sdk.lsp.status().then((x) => setStore("lsp", x.data ?? []))
+        sdkFor(directory)
+          .lsp.status()
+          .then((x) => setStore("lsp", x.data ?? []))
         break
       }
     }
@@ -796,16 +799,7 @@ function createGlobalSync() {
       ),
       retry(() =>
         globalSDK.client.provider.list().then((x) => {
-          const data = x.data!
-          setGlobalStore("provider", {
-            ...data,
-            all: data.all.map((provider) => ({
-              ...provider,
-              models: Object.fromEntries(
-                Object.entries(provider.models).filter(([, info]) => info.status !== "deprecated"),
-              ),
-            })),
-          })
+          setGlobalStore("provider", normalizeProviderList(x.data!))
         }),
       ),
       retry(() =>

@@ -316,12 +316,22 @@ export default function Page() {
     return sync.session.history.loading(id)
   })
   const emptyUserMessages: UserMessage[] = []
-  const userMessages = createMemo(() => messages().filter((m) => m.role === "user") as UserMessage[], emptyUserMessages)
-  const visibleUserMessages = createMemo(() => {
-    const revert = revertMessageID()
-    if (!revert) return userMessages()
-    return userMessages().filter((m) => m.id < revert)
-  }, emptyUserMessages)
+  const userMessages = createMemo(
+    () => messages().filter((m) => m.role === "user") as UserMessage[],
+    emptyUserMessages,
+    { equals: same },
+  )
+  const visibleUserMessages = createMemo(
+    () => {
+      const revert = revertMessageID()
+      if (!revert) return userMessages()
+      return userMessages().filter((m) => m.id < revert)
+    },
+    emptyUserMessages,
+    {
+      equals: same,
+    },
+  )
   const lastUserMessage = createMemo(() => visibleUserMessages().at(-1))
 
   createEffect(
@@ -347,13 +357,19 @@ export default function Page() {
     promptHeight: 0,
   })
 
-  const renderedUserMessages = createMemo(() => {
-    const msgs = visibleUserMessages()
-    const start = store.turnStart
-    if (start <= 0) return msgs
-    if (start >= msgs.length) return emptyUserMessages
-    return msgs.slice(start)
-  }, emptyUserMessages)
+  const renderedUserMessages = createMemo(
+    () => {
+      const msgs = visibleUserMessages()
+      const start = store.turnStart
+      if (start <= 0) return msgs
+      if (start >= msgs.length) return emptyUserMessages
+      return msgs.slice(start)
+    },
+    emptyUserMessages,
+    {
+      equals: same,
+    },
+  )
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
