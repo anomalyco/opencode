@@ -381,20 +381,32 @@ export namespace Auth {
 
       const namespace = "default"
       const provider = ensureOAuthProvider(store, key)
-      const recordID =
-        getOAuthRecordID(key) ??
-        (await findOAuthRecordIDByRefreshToken({ providerID: key, namespace, refresh: info.refresh, provider })) ??
-        provider.active[namespace] ??
-        recordIDsForNamespace(provider, namespace)[0] ??
-        ulid()
+
+      // First check if we have a context-specific recordID (e.g. from browser refresh)
+      const contextRecordID = getOAuthRecordID(key)
+      // Then check if this refresh token already exists (update existing account)
+      const existingRecordID = await findOAuthRecordIDByRefreshToken({
+        providerID: key,
+        namespace,
+        refresh: info.refresh,
+        provider,
+      })
+
+      // Only use active/first record if we found a matching refresh token or have explicit context
+      // Otherwise, this is a NEW account and we should create a new record
+      const recordID = contextRecordID ?? existingRecordID ?? ulid()
 
       const now = Date.now()
       const existing = findOAuthRecord(provider, recordID)
       if (!existing) {
+        // Generate a label based on existing account count
+        const existingCount = provider.records.filter((r) => r.namespace === namespace).length
+        const label = existingCount === 0 ? "default" : `Account ${existingCount + 1}`
+
         provider.records.push({
           id: recordID,
           namespace,
-          label: "default",
+          label,
           accountId: info.accountId,
           enterpriseUrl: info.enterpriseUrl,
           refresh: info.refresh,

@@ -543,7 +543,9 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
                       return (
                         <div class="flex items-center justify-between p-2 rounded bg-surface-base">
                           <div class="flex items-center gap-2">
-                            <span class="text-12-medium text-text-base">Account {index() + 1}</span>
+                            <span class="text-12-medium text-text-base">
+                              {account.label && account.label !== "default" ? account.label : `Account ${index() + 1}`}
+                            </span>
                             <Show
                               when={session()?.isConfigured}
                               fallback={<span class="text-10-medium text-text-muted">Not configured</span>}
