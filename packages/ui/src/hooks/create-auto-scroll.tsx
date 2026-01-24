@@ -15,7 +15,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let settleTimer: ReturnType<typeof setTimeout> | undefined
   let autoTimer: ReturnType<typeof setTimeout> | undefined
   let cleanup: (() => void) | undefined
-  let resizeFrame: number | undefined
   let auto: { top: number; time: number } | undefined
 
   const threshold = () => options.bottomThreshold ?? 10
@@ -152,11 +151,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
     () => {
       if (!active()) return
       if (store.userScrolled) return
-      if (resizeFrame !== undefined) return
-      resizeFrame = requestAnimationFrame(() => {
-        resizeFrame = undefined
-        scrollToBottom(false)
-      })
+      // ResizeObserver fires after layout, before paint.
+      // Keep the bottom locked in the same frame to avoid visible
+      // "jump up then catch up" artifacts while streaming content.
+      scrollToBottom(false)
     },
   )
 
@@ -190,7 +188,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
   onCleanup(() => {
     if (settleTimer) clearTimeout(settleTimer)
     if (autoTimer) clearTimeout(autoTimer)
-    if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
     if (cleanup) cleanup()
   })
 

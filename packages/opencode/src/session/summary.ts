@@ -40,7 +40,7 @@ export namespace SessionSummary {
         .flatMap((x) => x.parts)
         .filter((x) => x.type === "patch")
         .flatMap((x) => x.files)
-        .map((x) => path.relative(Instance.worktree, x)),
+        .map((x) => path.relative(Instance.worktree, x).replaceAll("\\", "/")),
     )
     const diffs = await computeDiff({ messages: input.messages }).then((x) =>
       x.filter((x) => {

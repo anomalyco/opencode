@@ -27,6 +27,7 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
+import { LineCommentAnchor } from "@opencode-ai/ui/line-comment"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
@@ -316,12 +317,22 @@ export default function Page() {
     return sync.session.history.loading(id)
   })
   const emptyUserMessages: UserMessage[] = []
-  const userMessages = createMemo(() => messages().filter((m) => m.role === "user") as UserMessage[], emptyUserMessages)
-  const visibleUserMessages = createMemo(() => {
-    const revert = revertMessageID()
-    if (!revert) return userMessages()
-    return userMessages().filter((m) => m.id < revert)
-  }, emptyUserMessages)
+  const userMessages = createMemo(
+    () => messages().filter((m) => m.role === "user") as UserMessage[],
+    emptyUserMessages,
+    { equals: same },
+  )
+  const visibleUserMessages = createMemo(
+    () => {
+      const revert = revertMessageID()
+      if (!revert) return userMessages()
+      return userMessages().filter((m) => m.id < revert)
+    },
+    emptyUserMessages,
+    {
+      equals: same,
+    },
+  )
   const lastUserMessage = createMemo(() => visibleUserMessages().at(-1))
 
   createEffect(
@@ -347,13 +358,19 @@ export default function Page() {
     promptHeight: 0,
   })
 
-  const renderedUserMessages = createMemo(() => {
-    const msgs = visibleUserMessages()
-    const start = store.turnStart
-    if (start <= 0) return msgs
-    if (start >= msgs.length) return emptyUserMessages
-    return msgs.slice(start)
-  }, emptyUserMessages)
+  const renderedUserMessages = createMemo(
+    () => {
+      const msgs = visibleUserMessages()
+      const start = store.turnStart
+      if (start <= 0) return msgs
+      if (start >= msgs.length) return emptyUserMessages
+      return msgs.slice(start)
+    },
+    emptyUserMessages,
+    {
+      equals: same,
+    },
+  )
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
@@ -519,6 +536,7 @@ export default function Page() {
     selection: SelectedLineRange
     comment: string
     preview?: string
+    origin?: "review" | "file"
   }) => {
     const selection = selectionFromLines(input.selection)
     const preview = input.preview ?? selectionPreview(input.file, selection)
@@ -533,6 +551,7 @@ export default function Page() {
       selection,
       comment: input.comment,
       commentID: saved.id,
+      commentOrigin: input.origin,
       preview,
     })
   }
@@ -1401,7 +1420,7 @@ export default function Page() {
                 classes={{ button: "w-full" }}
                 onClick={() => setStore("mobileTab", "session")}
               >
-                Session
+                {language.t("session.tab.session")}
               </Tabs.Trigger>
               <Tabs.Trigger
                 value="review"
@@ -1410,8 +1429,10 @@ export default function Page() {
                 onClick={() => setStore("mobileTab", "review")}
               >
                 <Switch>
-                  <Match when={hasReview()}>{reviewCount()} Files Changed</Match>
-                  <Match when={true}>Review</Match>
+                  <Match when={hasReview()}>
+                    {language.t("session.review.filesChanged", { count: reviewCount() })}
+                  </Match>
+                  <Match when={true}>{language.t("session.tab.review")}</Match>
                 </Switch>
               </Tabs.Trigger>
             </Tabs.List>
@@ -1441,13 +1462,17 @@ export default function Page() {
                           <Match when={hasReview()}>
                             <Show
                               when={diffsReady()}
-                              fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
+                              fallback={
+                                <div class="px-4 py-4 text-text-weak">
+                                  {language.t("session.review.loadingChanges")}
+                                </div>
+                              }
                             >
                               <SessionReviewTab
                                 diffs={diffs}
                                 view={view}
                                 diffStyle="unified"
-                                onLineComment={addCommentToContext}
+                                onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
                                 comments={comments.all()}
                                 focusedComment={comments.focus()}
                                 onFocusedCommentChange={comments.setFocus}
@@ -1467,7 +1492,9 @@ export default function Page() {
                           <Match when={true}>
                             <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
                               <Mark class="w-14 opacity-10" />
-                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet</div>
+                              <div class="text-13-regular text-text-weak max-w-56">
+                                {language.t("session.review.empty")}
+                              </div>
                             </div>
                           </Match>
                         </Switch>
@@ -1699,7 +1726,7 @@ export default function Page() {
                             <DiffChanges changes={diffs()} variant="bars" />
                           </Show>
                           <div class="flex items-center gap-1.5">
-                            <div>Review</div>
+                            <div>{language.t("session.tab.review")}</div>
                             <Show when={info()?.summary?.files}>
                               <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
                                 {info()?.summary?.files ?? 0}
@@ -1727,7 +1754,7 @@ export default function Page() {
                       >
                         <div class="flex items-center gap-2">
                           <SessionContextUsage variant="indicator" />
-                          <div>Context</div>
+                          <div>{language.t("session.tab.context")}</div>
                         </div>
                       </Tabs.Trigger>
                     </Show>
@@ -1736,7 +1763,7 @@ export default function Page() {
                     </SortableProvider>
                     <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
                       <TooltipKeybind
-                        title="Open file"
+                        title={language.t("command.file.open")}
                         keybind={command.keybind("file.open")}
                         class="flex items-center"
                       >
@@ -1759,14 +1786,18 @@ export default function Page() {
                           <Match when={hasReview()}>
                             <Show
                               when={diffsReady()}
-                              fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
+                              fallback={
+                                <div class="px-6 py-4 text-text-weak">
+                                  {language.t("session.review.loadingChanges")}
+                                </div>
+                              }
                             >
                               <SessionReviewTab
                                 diffs={diffs}
                                 view={view}
                                 diffStyle={layout.review.diffStyle()}
                                 onDiffStyleChange={layout.review.setDiffStyle}
-                                onLineComment={addCommentToContext}
+                                onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
                                 comments={comments.all()}
                                 focusedComment={comments.focus()}
                                 onFocusedCommentChange={comments.setFocus}
@@ -1958,6 +1989,22 @@ export default function Page() {
                       requestAnimationFrame(() => textarea?.focus())
                     })
 
+                    createEffect(() => {
+                      const focus = comments.focus()
+                      const p = path()
+                      if (!focus || !p) return
+                      if (focus.file !== p) return
+                      if (activeTab() !== tab) return
+
+                      const target = fileComments().find((comment) => comment.id === focus.id)
+                      if (!target) return
+
+                      setOpenedComment(target.id)
+                      setCommenting(null)
+                      file.setSelectedLines(p, target.selection)
+                      requestAnimationFrame(() => comments.clearFocus())
+                    })
+
                     const renderCode = (source: string, wrapperClass: string) => (
                       <div
                         ref={(el) => {
@@ -2000,105 +2047,109 @@ export default function Page() {
                         />
                         <For each={fileComments()}>
                           {(comment) => (
-                            <div
-                              class="absolute right-6 z-30"
-                              style={{
-                                top: `${positions()[comment.id] ?? 0}px`,
-                                opacity: positions()[comment.id] === undefined ? 0 : 1,
-                                "pointer-events": positions()[comment.id] === undefined ? "none" : "auto",
+                            <LineCommentAnchor
+                              id={comment.id}
+                              top={positions()[comment.id]}
+                              open={openedComment() === comment.id}
+                              onMouseEnter={() => {
+                                const p = path()
+                                if (!p) return
+                                file.setSelectedLines(p, comment.selection)
+                              }}
+                              onClick={() => {
+                                const p = path()
+                                if (!p) return
+                                setCommenting(null)
+                                setOpenedComment((current) => (current === comment.id ? null : comment.id))
+                                file.setSelectedLines(p, comment.selection)
                               }}
                             >
-                              <button
-                                type="button"
-                                class="size-5 rounded-md flex items-center justify-center bg-surface-warning-base border border-border-warning-base text-icon-warning-active shadow-xs hover:bg-surface-warning-weak hover:border-border-warning-hover focus:outline-none focus-visible:shadow-xs-border-focus"
-                                onMouseEnter={() => {
-                                  const p = path()
-                                  if (!p) return
-                                  file.setSelectedLines(p, comment.selection)
-                                }}
-                                onClick={() => {
-                                  const p = path()
-                                  if (!p) return
-                                  setCommenting(null)
-                                  setOpenedComment((current) => (current === comment.id ? null : comment.id))
-                                  file.setSelectedLines(p, comment.selection)
-                                }}
-                              >
-                                <Icon name="speech-bubble" size="small" />
-                              </button>
-                              <Show when={openedComment() === comment.id}>
-                                <div class="absolute top-0 right-[calc(100%+12px)] z-40 min-w-[200px] max-w-[320px] rounded-md bg-surface-raised-stronger-non-alpha border border-border-base shadow-md p-3">
-                                  <div class="flex flex-col gap-1.5">
-                                    <div class="text-12-medium text-text-strong whitespace-nowrap">
-                                      {getFilename(comment.file)}:{commentLabel(comment.selection)}
-                                    </div>
-                                    <div class="text-12-regular text-text-base whitespace-pre-wrap">
-                                      {comment.comment}
-                                    </div>
-                                  </div>
+                              <div class="flex flex-col gap-1.5">
+                                <div class="text-14-regular text-text-strong whitespace-pre-wrap">
+                                  {comment.comment}
                                 </div>
-                              </Show>
-                            </div>
+                                <div class="text-12-medium text-text-weak whitespace-nowrap">
+                                  Comment on {commentLabel(comment.selection)}
+                                </div>
+                              </div>
+                            </LineCommentAnchor>
                           )}
                         </For>
                         <Show when={commenting()}>
                           {(range) => (
                             <Show when={draftTop() !== undefined}>
-                              <div class="absolute right-6 z-30" style={{ top: `${draftTop() ?? 0}px` }}>
-                                <button
-                                  type="button"
-                                  class="size-5 rounded-md flex items-center justify-center bg-surface-warning-base border border-border-warning-base text-icon-warning-active shadow-xs hover:bg-surface-warning-weak hover:border-border-warning-hover focus:outline-none focus-visible:shadow-xs-border-focus"
-                                  onClick={() => textarea?.focus()}
-                                >
-                                  <Icon name="speech-bubble" size="small" />
-                                </button>
-                                <div class="absolute top-0 right-[calc(100%+12px)] z-40 min-w-[200px] max-w-[320px] rounded-md bg-surface-raised-stronger-non-alpha border border-border-base shadow-md p-3">
-                                  <div class="flex flex-col gap-2">
-                                    <div class="text-12-medium text-text-strong">
-                                      Commenting on {getFilename(path() ?? "")}:{commentLabel(range())}
+                              <LineCommentAnchor
+                                top={draftTop()}
+                                open={true}
+                                variant="editor"
+                                onClick={() => textarea?.focus()}
+                                onPopoverFocusOut={(e) => {
+                                  const target = e.relatedTarget as Node | null
+                                  if (!target || !e.currentTarget.contains(target)) {
+                                    setCommenting(null)
+                                  }
+                                }}
+                              >
+                                <div class="flex flex-col gap-2">
+                                  <textarea
+                                    ref={textarea}
+                                    class="w-full resize-vertical p-2 rounded-[6px] bg-surface-base border border-border-base text-text-strong text-12-regular leading-5 focus:outline-none focus:shadow-xs-border-select"
+                                    rows={3}
+                                    placeholder="Add comment"
+                                    value={draft()}
+                                    onInput={(e) => setDraft(e.currentTarget.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Escape") {
+                                        setCommenting(null)
+                                        return
+                                      }
+                                      if (e.key !== "Enter") return
+                                      if (e.shiftKey) return
+                                      e.preventDefault()
+                                      const value = draft().trim()
+                                      if (!value) return
+                                      const p = path()
+                                      if (!p) return
+                                      addCommentToContext({
+                                        file: p,
+                                        selection: range(),
+                                        comment: value,
+                                        origin: "file",
+                                      })
+                                      setCommenting(null)
+                                    }}
+                                  />
+                                  <div class="flex items-center gap-2">
+                                    <div class="text-12-medium text-text-weak ml-1">
+                                      Commenting on {commentLabel(range())}
                                     </div>
-                                    <textarea
-                                      ref={textarea}
-                                      class="w-[320px] max-w-[calc(100vw-48px)] resize-vertical p-2 rounded-sm bg-surface-base border border-border-base text-text-strong text-12-regular leading-5 focus:outline-none focus:shadow-xs-border-focus"
-                                      rows={3}
-                                      placeholder="Add a comment"
-                                      value={draft()}
-                                      onInput={(e) => setDraft(e.currentTarget.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key !== "Enter") return
-                                        if (e.shiftKey) return
-                                        e.preventDefault()
+                                    <div class="flex-1" />
+                                    <Button size="small" variant="ghost" onClick={() => setCommenting(null)}>
+                                      Cancel
+                                    </Button>
+                                    <Button
+                                      size="small"
+                                      variant="primary"
+                                      disabled={draft().trim().length === 0}
+                                      onClick={() => {
                                         const value = draft().trim()
                                         if (!value) return
                                         const p = path()
                                         if (!p) return
-                                        addCommentToContext({ file: p, selection: range(), comment: value })
+                                        addCommentToContext({
+                                          file: p,
+                                          selection: range(),
+                                          comment: value,
+                                          origin: "file",
+                                        })
                                         setCommenting(null)
                                       }}
-                                    />
-                                    <div class="flex justify-end gap-2">
-                                      <Button size="small" variant="ghost" onClick={() => setCommenting(null)}>
-                                        Cancel
-                                      </Button>
-                                      <Button
-                                        size="small"
-                                        variant="secondary"
-                                        disabled={draft().trim().length === 0}
-                                        onClick={() => {
-                                          const value = draft().trim()
-                                          if (!value) return
-                                          const p = path()
-                                          if (!p) return
-                                          addCommentToContext({ file: p, selection: range(), comment: value })
-                                          setCommenting(null)
-                                        }}
-                                      >
-                                        Comment
-                                      </Button>
-                                    </div>
+                                    >
+                                      Comment
+                                    </Button>
                                   </div>
                                 </div>
-                              </div>
+                              </LineCommentAnchor>
                             </Show>
                           )}
                         </Show>
