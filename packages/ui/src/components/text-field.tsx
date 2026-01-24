@@ -96,6 +96,7 @@ export function TextField(props: TextFieldProps) {
             value={copied() ? i18n.t("ui.textField.copied") : i18n.t("ui.textField.copyLink")}
             placement="top"
             gutter={4}
+            forceOpen={copied()}
           >
             <IconButton
               type="button"
