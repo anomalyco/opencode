@@ -31,6 +31,11 @@ let mockAuthConfig: AuthConfig = {
   sessionPersistence: true,
   csrfVerboseErrors: false,
   csrfAllowlist: [],
+  twoFactorEnabled: false,
+  twoFactorTokenTimeout: "5m",
+  deviceTrustDuration: "30d",
+  otpRateLimitMax: 5,
+  otpRateLimitWindow: "15m",
 }
 
 // Mock for registerSession (fire-and-forget, just needs to not throw)
@@ -67,6 +72,11 @@ mock.module("../../../src/config/server-auth", () => ({
         sessionPersistence: true,
         csrfVerboseErrors: false,
         csrfAllowlist: [],
+        twoFactorEnabled: false,
+        twoFactorTokenTimeout: "5m",
+        deviceTrustDuration: "30d",
+        otpRateLimitMax: 5,
+        otpRateLimitWindow: "15m",
       }
     },
   },
@@ -90,6 +100,11 @@ function setMockAuthConfig(config: Partial<AuthConfig>) {
     sessionPersistence: true,
     csrfVerboseErrors: false,
     csrfAllowlist: [],
+    twoFactorEnabled: false,
+    twoFactorTokenTimeout: "5m",
+    deviceTrustDuration: "30d",
+    otpRateLimitMax: 5,
+    otpRateLimitWindow: "15m",
     ...config,
   }
 }

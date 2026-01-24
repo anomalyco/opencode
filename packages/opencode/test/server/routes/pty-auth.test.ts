@@ -75,6 +75,11 @@ describe("PTY auth enforcement logic", () => {
         sessionPersistence: true,
         csrfVerboseErrors: false,
         csrfAllowlist: [],
+        twoFactorEnabled: false,
+        twoFactorTokenTimeout: "5m",
+        deviceTrustDuration: "30d",
+        otpRateLimitMax: 5,
+        otpRateLimitWindow: "15m",
       })
 
       const app = new Hono<AuthEnv>()
@@ -195,6 +200,11 @@ describe("PTY auth enforcement logic", () => {
           sessionPersistence: true,
           csrfVerboseErrors: false,
           csrfAllowlist: [],
+          twoFactorEnabled: false,
+          twoFactorTokenTimeout: "5m",
+          deviceTrustDuration: "30d",
+          otpRateLimitMax: 5,
+          otpRateLimitWindow: "15m",
         })
       })
 
@@ -253,6 +263,11 @@ describe("PTY auth enforcement logic", () => {
           sessionPersistence: true,
           csrfVerboseErrors: false,
           csrfAllowlist: [],
+          twoFactorEnabled: false,
+          twoFactorTokenTimeout: "5m",
+          deviceTrustDuration: "30d",
+          otpRateLimitMax: 5,
+          otpRateLimitWindow: "15m",
         })
       })
 
@@ -310,6 +325,11 @@ describe("PTY auth enforcement logic", () => {
           sessionPersistence: true,
           csrfVerboseErrors: false,
           csrfAllowlist: [],
+          twoFactorEnabled: false,
+          twoFactorTokenTimeout: "5m",
+          deviceTrustDuration: "30d",
+          otpRateLimitMax: 5,
+          otpRateLimitWindow: "15m",
         })
 
         const { app, mockCreate } = createPtyRouteSimulator()
@@ -353,6 +373,11 @@ describe("PTY auth enforcement logic", () => {
           sessionPersistence: true,
           csrfVerboseErrors: false,
           csrfAllowlist: [],
+          twoFactorEnabled: false,
+          twoFactorTokenTimeout: "5m",
+          deviceTrustDuration: "30d",
+          otpRateLimitMax: 5,
+          otpRateLimitWindow: "15m",
         })
 
         const { app, mockCreate } = createPtyRouteSimulator()

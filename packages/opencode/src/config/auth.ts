@@ -48,6 +48,13 @@ export const AuthConfig = z
       .optional()
       .default([])
       .describe("Additional routes to exclude from CSRF validation"),
+    twoFactorEnabled: z.boolean().optional().default(false).describe("Enable two-factor authentication support"),
+    twoFactorTokenTimeout: Duration.optional()
+      .default("5m")
+      .describe("How long the 2FA token is valid after password success"),
+    deviceTrustDuration: Duration.optional().default("30d").describe("How long 'remember this device' lasts for 2FA"),
+    otpRateLimitMax: z.number().optional().default(5).describe("Maximum OTP attempts per rate limit window"),
+    otpRateLimitWindow: Duration.optional().default("15m").describe("OTP rate limit window duration"),
   })
   .strict()
   .meta({ ref: "AuthConfig" })
