@@ -436,6 +436,7 @@ export namespace MessageV2 {
   export function toModelMessages(input: WithParts[], model: Provider.Model): ModelMessage[] {
     const result: UIMessage[] = []
     const toolNames = new Set<string>()
+    let lastUserMessage: UIMessage | undefined
 
     const toModelOutput = (output: unknown) => {
       if (typeof output === "string") {
@@ -480,6 +481,7 @@ export namespace MessageV2 {
           parts: [],
         }
         result.push(userMessage)
+        lastUserMessage = userMessage
         for (const part of msg.parts) {
           if (part.type === "text" && !part.ignored)
             userMessage.parts.push({
@@ -542,7 +544,32 @@ export namespace MessageV2 {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
               const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
-              const attachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
+              let attachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
+
+              // For Anthropic models, relocate PDF attachments to the preceding user message
+              const ANTHROPIC_SDK_PACKAGES = ["@ai-sdk/anthropic", "@ai-sdk/amazon-bedrock"] as const
+              const shouldRelocatePdfs = ANTHROPIC_SDK_PACKAGES.some((pkg) => model.api.npm === pkg)
+              if (shouldRelocatePdfs && attachments.length > 0 && lastUserMessage && !part.state.time.compacted) {
+                const pdfAttachments = attachments.filter(
+                  (att) => att.mime === "application/pdf" && att.url.startsWith("data:") && att.url.includes(",")
+                )
+
+                for (const pdf of pdfAttachments) {
+                  lastUserMessage.parts.push({
+                    type: "text",
+                    text: `The following PDF was read by the tool: ${pdf.filename ?? "document.pdf"}`,
+                  })
+                  lastUserMessage.parts.push({
+                    type: "file",
+                    url: pdf.url,
+                    mediaType: pdf.mime,
+                    filename: pdf.filename,
+                  })
+                }
+
+                attachments = attachments.filter((att) => att.mime !== "application/pdf")
+              }
+
               const output =
                 attachments.length > 0
                   ? {
