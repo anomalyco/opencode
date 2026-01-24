@@ -246,7 +246,7 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
-              <div class="hidden md:block shrink-0">
+              <div class="hidden md:flex items-center gap-3 ml-2 shrink-0">
                 <TooltipKeybind
                   title={language.t("command.terminal.toggle")}
                   keybind={command.keybind("terminal.toggle")}
