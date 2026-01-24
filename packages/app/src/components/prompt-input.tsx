@@ -39,7 +39,7 @@ import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { getDirectory, getFilename, getFilenameTruncated } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
@@ -1661,7 +1661,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         classList={{
           "group/prompt-input": true,
           "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,
-          "rounded-md overflow-clip focus-within:shadow-xs-border": true,
+          "rounded-[14px] overflow-clip focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.dragging,
           [props.class ?? ""]: !!props.class,
         }}
@@ -1675,54 +1675,74 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </div>
         </Show>
         <Show when={prompt.context.items().length > 0}>
-          <div class="flex flex-nowrap items-start gap-1.5 px-3 pt-3 overflow-x-auto no-scrollbar">
+          <div class="flex flex-nowrap items-start gap-2 p-2 overflow-x-auto no-scrollbar">
             <For each={prompt.context.items()}>
               {(item) => {
                 return (
-                  <div
-                    classList={{
-                      "shrink-0 flex flex-col gap-1 rounded-md bg-surface-base border border-border-base px-2 py-1 max-w-[320px]": true,
-                      "cursor-pointer hover:bg-surface-raised-base-hover": !!item.commentID,
-                    }}
-                    onClick={() => {
-                      if (!item.commentID) return
-                      comments.setFocus({ file: item.path, id: item.commentID })
-                      view().reviewPanel.open()
-                      tabs().open("review")
-                    }}
+                  <Tooltip
+                    value={
+                      <span class="flex max-w-[300px]">
+                        <span
+                          class="text-text-invert-base truncate min-w-0"
+                          style={{ direction: "rtl", "text-align": "left" }}
+                        >
+                          <bdi>{getDirectory(item.path)}</bdi>
+                        </span>
+                        <span class="shrink-0">{getFilename(item.path)}</span>
+                      </span>
+                    }
+                    placement="top"
+                    openDelay={2000}
                   >
-                    <div class="flex items-center gap-1.5">
-                      <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
-                      <div class="flex items-center text-11-regular min-w-0">
-                        <span class="text-text-weak whitespace-nowrap truncate min-w-0">{getDirectory(item.path)}</span>
-                        <span class="text-text-strong whitespace-nowrap">{getFilename(item.path)}</span>
-                        <Show when={item.selection}>
-                          {(sel) => (
-                            <span class="text-text-weak whitespace-nowrap ml-1">
-                              {sel().startLine === sel().endLine
-                                ? `:${sel().startLine}`
-                                : `:${sel().startLine}-${sel().endLine}`}
-                            </span>
-                          )}
-                        </Show>
+                    <div
+                      classList={{
+                        "group shrink-0 flex flex-col rounded-[6px] bg-background-stronger pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all shadow-xs-border hover:shadow-xs-border-hover": true,
+                        "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID,
+                      }}
+                      onClick={() => {
+                        if (!item.commentID) return
+                        comments.setFocus({ file: item.path, id: item.commentID })
+                        view().reviewPanel.open()
+                        tabs().open("review")
+                      }}
+                    >
+                      <div class="flex items-center gap-1.5">
+                        <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
+                        <div
+                          class="flex items-center text-11-regular min-w-0"
+                          style={{ "font-weight": "var(--font-weight-medium)" }}
+                        >
+                          <span class="text-text-strong whitespace-nowrap">{getFilenameTruncated(item.path, 14)}</span>
+                          <Show when={item.selection}>
+                            {(sel) => (
+                              <span class="text-text-weak whitespace-nowrap shrink-0">
+                                {sel().startLine === sel().endLine
+                                  ? `:${sel().startLine}`
+                                  : `:${sel().startLine}-${sel().endLine}`}
+                              </span>
+                            )}
+                          </Show>
+                        </div>
+                        <IconButton
+                          type="button"
+                          icon="close-small"
+                          variant="ghost"
+                          class="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100 transition-all"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (item.commentID) comments.remove(item.path, item.commentID)
+                            prompt.context.remove(item.key)
+                          }}
+                          aria-label={language.t("prompt.context.removeFile")}
+                        />
                       </div>
-                      <IconButton
-                        type="button"
-                        icon="close"
-                        variant="ghost"
-                        class="h-5 w-5"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (item.commentID) comments.remove(item.path, item.commentID)
-                          prompt.context.remove(item.key)
-                        }}
-                        aria-label={language.t("prompt.context.removeFile")}
-                      />
+                      <Show when={item.comment}>
+                        {(comment) => (
+                          <div class="text-12-regular text-text-strong ml-5 pr-1 truncate">{comment()}</div>
+                        )}
+                      </Show>
                     </div>
-                    <Show when={item.comment}>
-                      {(comment) => <div class="text-11-regular text-text-strong">{comment()}</div>}
-                    </Show>
-                  </div>
+                  </Tooltip>
                 )
               }}
             </For>
@@ -1788,14 +1808,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onKeyDown={handleKeyDown}
             classList={{
               "select-text": true,
-              "w-full px-5 py-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "w-full p-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&_[data-type=file]]:text-syntax-property": true,
               "[&_[data-type=agent]]:text-syntax-type": true,
               "font-mono!": store.mode === "shell",
             }}
           />
           <Show when={!prompt.dirty()}>
-            <div class="absolute top-0 inset-x-0 px-5 py-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
+            <div class="absolute top-0 inset-x-0 p-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
                 : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })}

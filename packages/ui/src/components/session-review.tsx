@@ -581,15 +581,15 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 openComment(comment)
                               }}
                             >
-                              <Icon name="speech-bubble" size="small" />
+                              <Icon name="comment" size="small" />
                             </button>
                             <Show when={isCommentOpen(comment)}>
                               <div data-slot="session-review-comment-popover-content">
                                 <div data-slot="session-review-comment-popover">
-                                  <div data-slot="session-review-comment-popover-label">
-                                    {getFilename(comment.file)}:{selectionLabel(comment.selection)}
-                                  </div>
                                   <div data-slot="session-review-comment-popover-text">{comment.comment}</div>
+                                  <div data-slot="session-review-comment-popover-label">
+                                    Comment on {selectionLabel(comment.selection)}
+                                  </div>
                                 </div>
                               </div>
                             </Show>
@@ -606,7 +606,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 data-slot="session-review-comment-button"
                                 onClick={() => textarea?.focus()}
                               >
-                                <Icon name="speech-bubble" size="small" />
+                                <Icon name="comment" size="small" />
                               </button>
                               <div data-slot="session-review-comment-popover-content">
                                 <div data-slot="session-review-comment-popover">
