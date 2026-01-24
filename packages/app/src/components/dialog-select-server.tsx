@@ -11,7 +11,7 @@ import { usePlatform } from "@/context/platform"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { useNavigate } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
-import { Popover } from "@opencode-ai/ui/popover"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useGlobalSDK } from "@/context/global-sdk"
 
@@ -394,7 +394,6 @@ export function DialogSelectServer() {
           }
         >
           {(i) => {
-            const [popoverOpen, setPopoverOpen] = createSignal(false)
             const [truncated, setTruncated] = createSignal(false)
             let nameRef: HTMLSpanElement | undefined
             let versionRef: HTMLSpanElement | undefined
@@ -476,33 +475,19 @@ export function DialogSelectServer() {
                       <p class="text-text-weak text-12-regular">{language.t("dialog.server.current")}</p>
                     </Show>
 
-                    <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-                      <Popover
-                        open={popoverOpen()}
-                        onOpenChange={setPopoverOpen}
-                        placement="bottom-start"
-                        trigger={
-                          <IconButton
-                            icon="dot-grid"
-                            variant="ghost"
-                            class="shrink-0 size-8 hover:bg-surface-base-hover"
-                            classList={{
-                              "bg-transparent": !popoverOpen(),
-                              "bg-surface-base-active": popoverOpen(),
-                            }}
-                            onPointerDown={(event: PointerEvent) => event.stopPropagation()}
-                          />
-                        }
-                        class="w-max !min-w-fit !max-w-none"
-                      >
-                        <div class="flex flex-col gap-1">
-                          <Button
-                            variant="ghost"
-                            size="normal"
-                            class="justify-start text-md"
-                            onClick={(e: MouseEvent) => {
-                              e.stopPropagation()
-                              setPopoverOpen(false)
+                    <DropdownMenu>
+                      <DropdownMenu.Trigger
+                        as={IconButton}
+                        icon="dot-grid"
+                        variant="ghost"
+                        class="shrink-0 size-8 hover:bg-surface-base-hover data-[expanded]:bg-surface-base-active"
+                        onClick={(e: MouseEvent) => e.stopPropagation()}
+                        onPointerDown={(e: PointerEvent) => e.stopPropagation()}
+                      />
+                      <DropdownMenu.Portal>
+                        <DropdownMenu.Content class="mt-1">
+                          <DropdownMenu.Item
+                            onSelect={() => {
                               setStore("editServer", {
                                 id: i,
                                 value: i,
@@ -511,54 +496,42 @@ export function DialogSelectServer() {
                               })
                             }}
                           >
-                            {language.t("dialog.server.menu.edit")}
-                          </Button>
+                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
                           <Show when={isDesktop && defaultUrl() !== i}>
-                            <Button
-                              variant="ghost"
-                              size="normal"
-                              class="justify-start text-md"
-                              onClick={async (e: MouseEvent) => {
-                                e.stopPropagation()
-                                setPopoverOpen(false)
+                            <DropdownMenu.Item
+                              onSelect={async () => {
                                 await platform.setDefaultServerUrl?.(i)
                                 defaultUrlActions.refetch(i)
                               }}
                             >
-                              {language.t("dialog.server.menu.default")}
-                            </Button>
+                              <DropdownMenu.ItemLabel>
+                                {language.t("dialog.server.menu.default")}
+                              </DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
                           </Show>
                           <Show when={isDesktop && defaultUrl() === i}>
-                            <Button
-                              variant="ghost"
-                              size="normal"
-                              class="justify-start text-md"
-                              onClick={async (e: MouseEvent) => {
-                                e.stopPropagation()
-                                setPopoverOpen(false)
+                            <DropdownMenu.Item
+                              onSelect={async () => {
                                 await platform.setDefaultServerUrl?.(null)
                                 defaultUrlActions.refetch(null)
                               }}
                             >
-                              {language.t("dialog.server.menu.defaultRemove")}
-                            </Button>
+                              <DropdownMenu.ItemLabel>
+                                {language.t("dialog.server.menu.defaultRemove")}
+                              </DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
                           </Show>
-                          <div class="h-px bg-border-weak-base my-1" />
-                          <Button
-                            variant="ghost"
-                            size="normal"
-                            class="justify-start text-md text-text-on-critical-base hover:bg-surface-critical-weak"
-                            onClick={(e: MouseEvent) => {
-                              e.stopPropagation()
-                              setPopoverOpen(false)
-                              handleRemove(i)
-                            }}
+                          <DropdownMenu.Separator />
+                          <DropdownMenu.Item
+                            onSelect={() => handleRemove(i)}
+                            class="text-text-on-critical-base hover:bg-surface-critical-weak"
                           >
-                            {language.t("dialog.server.menu.delete")}
-                          </Button>
-                        </div>
-                      </Popover>
-                    </div>
+                            <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.delete")}</DropdownMenu.ItemLabel>
+                          </DropdownMenu.Item>
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Portal>
+                    </DropdownMenu>
                   </div>
                 </Show>
               </div>
