@@ -184,10 +184,17 @@ Plans:
   2. TOTP codes validated via PAM (pam_google_authenticator or similar)
   3. 2FA is optional per-user (configured via PAM, not opencode)
   4. Login fails with clear message if 2FA required but not provided
-**Plans**: TBD
+**Plans**: 8 plans
 
 Plans:
-- [ ] 10-01: TBD
+- [ ] 10-01-PLAN.md — 2FA config and broker OTP module (config schema, has_2fa_configured, validate_otp)
+- [ ] 10-02-PLAN.md — Broker protocol extension (Check2fa, AuthenticateOtp methods)
+- [ ] 10-03-PLAN.md — Token utilities (device trust JWT, 2FA token JWT)
+- [ ] 10-04-PLAN.md — BrokerClient 2FA methods (check2fa, authenticateOtp)
+- [ ] 10-05-PLAN.md — Auth routes 2FA flow (2fa_required response, /login/2fa endpoint)
+- [ ] 10-06-PLAN.md — 2FA verification page (countdown timer, auto-submit, remember device)
+- [ ] 10-07-PLAN.md — Setup wizard (QR code generation, verification)
+- [ ] 10-08-PLAN.md — Device trust UI (revoke device, setup link in dropdown)
 
 ### Phase 11: Documentation
 **Goal**: Users have clear guides for deployment with auth enabled
@@ -219,5 +226,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 7. Security Hardening | 3/3 | Complete | 2026-01-22 |
 | 8. Session Enhancements | 4/4 | Complete | 2026-01-23 |
 | 9. Connection Security UI | 2/2 | Complete | 2026-01-24 |
-| 10. Two-Factor Authentication | 0/TBD | Not started | - |
+| 10. Two-Factor Authentication | 0/8 | Not started | - |
 | 11. Documentation | 0/TBD | Not started | - |
