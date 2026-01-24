@@ -11,6 +11,7 @@ import { type FileDiff } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
+import { findLast } from "@opencode-ai/util/array"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 import { Binary } from "@opencode-ai/util/binary"
@@ -266,7 +267,7 @@ export function SessionTurn(
     const next = nextPermission()
     if (!next || !next.tool) return emptyPermissionParts
 
-    const message = assistantMessages().findLast((m) => m.id === next.tool!.messageID)
+    const message = findLast(assistantMessages(), (m) => m.id === next.tool!.messageID)
     if (!message) return emptyPermissionParts
 
     const parts = data.store.part[message.id] ?? emptyParts

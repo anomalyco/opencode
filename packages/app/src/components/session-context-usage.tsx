@@ -4,6 +4,7 @@ import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Button } from "@opencode-ai/ui/button"
 import { useParams } from "@solidjs/router"
 import { AssistantMessage } from "@opencode-ai/sdk/v2/client"
+import { findLast } from "@opencode-ai/util/array"
 
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
@@ -36,7 +37,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const context = createMemo(() => {
     const locale = language.locale()
-    const last = messages().findLast((x) => {
+    const last = findLast(messages(), (x) => {
       if (x.role !== "assistant") return false
       const total = x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
       return total > 0
