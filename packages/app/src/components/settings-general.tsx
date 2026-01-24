@@ -41,6 +41,7 @@ export const SettingsGeneral: Component = () => {
     { value: "roboto-mono", label: "font.option.robotoMono" },
     { value: "source-code-pro", label: "font.option.sourceCodePro" },
     { value: "ubuntu-mono", label: "font.option.ubuntuMono" },
+    { value: "iosevka", label: "font.option.iosevka" },
   ] as const
   const fontOptionsList = [...fontOptions]
 
