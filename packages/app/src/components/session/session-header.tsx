@@ -50,7 +50,7 @@ export function SessionHeader() {
   const showShare = createMemo(() => shareEnabled() && !!currentSession())
   const showReview = createMemo(() => !!currentSession())
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const view = createMemo(() => layout.view(sessionKey()))
+  const view = createMemo(() => layout.view(sessionKey))
 
   const [state, setState] = createStore({
     share: false,

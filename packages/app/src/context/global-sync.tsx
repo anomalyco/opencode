@@ -28,6 +28,7 @@ import {
   batch,
   createContext,
   createEffect,
+  untrack,
   getOwner,
   runWithOwner,
   useContext,
@@ -174,8 +175,12 @@ function createGlobalSync() {
 
   createEffect(() => {
     if (!projectCacheReady()) return
-    if (globalStore.project.length === 0 && projectCache.value.length !== 0) return
-    setProjectCache("value", globalStore.project.map(sanitizeProject))
+    const projects = globalStore.project
+    if (projects.length === 0) {
+      const cachedLength = untrack(() => projectCache.value.length)
+      if (cachedLength !== 0) return
+    }
+    setProjectCache("value", projects.map(sanitizeProject))
   })
 
   createEffect(async () => {
