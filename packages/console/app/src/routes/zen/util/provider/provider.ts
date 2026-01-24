@@ -22,6 +22,7 @@ import {
   toOaCompatibleChunk,
   toOaCompatibleRequest,
   toOaCompatibleResponse,
+  createKimiAwareChunkParser,
 } from "./openai-compatible"
 
 export type UsageInfo = {
@@ -176,16 +177,35 @@ export function createBodyConverter(from: ZenData.Format, to: ZenData.Format) {
   }
 }
 
-export function createStreamPartConverter(from: ZenData.Format, to: ZenData.Format) {
+export function createStreamPartConverter(from: ZenData.Format, to: ZenData.Format, toolCallFormat?: "kimi") {
+  let kimiParser: ReturnType<typeof createKimiAwareChunkParser> | null =
+    toolCallFormat === "kimi" ? createKimiAwareChunkParser() : null
+
   return (part: any): any => {
-    if (from === to) return part
+    if (from === to && !kimiParser && !part.includes?.("<|tool_call")) return part
+
+    if (from === "oa-compat" && part.includes?.("<|tool_call")) {
+      kimiParser ??= createKimiAwareChunkParser()
+    }
+
+    if (kimiParser && from === "oa-compat") {
+      const chunks = kimiParser.parse(part)
+      if (chunks.length === 0) return null
+
+      const results = chunks.map((chunk) => {
+        if (to === "anthropic") return toAnthropicChunk(chunk)
+        if (to === "openai") return toOpenaiChunk(chunk)
+        return toOaCompatibleChunk(chunk)
+      })
+
+      return results.length === 1 ? results[0] : results
+    }
 
     let raw: CommonChunk | string
     if (from === "anthropic") raw = fromAnthropicChunk(part)
     else if (from === "openai") raw = fromOpenaiChunk(part)
     else raw = fromOaCompatibleChunk(part)
 
-    // If result is a string (error case), pass it through
     if (typeof raw === "string") return raw
 
     if (to === "anthropic") return toAnthropicChunk(raw)
@@ -194,14 +214,14 @@ export function createStreamPartConverter(from: ZenData.Format, to: ZenData.Form
   }
 }
 
-export function createResponseConverter(from: ZenData.Format, to: ZenData.Format) {
+export function createResponseConverter(from: ZenData.Format, to: ZenData.Format, toolCallFormat?: "kimi") {
   return (response: any): any => {
-    if (from === to) return response
+    if (from === to && !toolCallFormat) return response
 
     let raw: CommonResponse
     if (from === "anthropic") raw = fromAnthropicResponse(response)
     else if (from === "openai") raw = fromOpenaiResponse(response)
-    else raw = fromOaCompatibleResponse(response)
+    else raw = fromOaCompatibleResponse(response, toolCallFormat)
 
     if (to === "anthropic") return toAnthropicResponse(raw)
     if (to === "openai") return toOpenaiResponse(raw)

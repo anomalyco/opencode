@@ -173,7 +173,7 @@ export async function handler(
 
     // Handle non-streaming response
     if (!isStream) {
-      const responseConverter = createResponseConverter(providerInfo.format, opts.format)
+      const responseConverter = createResponseConverter(providerInfo.format, opts.format, modelInfo.toolCallFormat)
       const json = await res.json()
       const body = JSON.stringify(responseConverter(json))
       logger.metric({ response_length: body.length })
@@ -193,7 +193,7 @@ export async function handler(
     }
 
     // Handle streaming response
-    const streamConverter = createStreamPartConverter(providerInfo.format, opts.format)
+    const streamConverter = createStreamPartConverter(providerInfo.format, opts.format, modelInfo.toolCallFormat)
     const usageParser = providerInfo.createUsageParser()
     const binaryDecoder = providerInfo.createBinaryStreamDecoder()
     const stream = new ReadableStream({
@@ -251,8 +251,15 @@ export async function handler(
                 usageParser.parse(part)
 
                 if (providerInfo.format !== opts.format) {
-                  part = streamConverter(part)
-                  c.enqueue(encoder.encode(part + "\n\n"))
+                  const converted = streamConverter(part)
+                  if (converted === null) continue
+                  if (Array.isArray(converted)) {
+                    for (const item of converted) {
+                      c.enqueue(encoder.encode(item + "\n\n"))
+                    }
+                  } else {
+                    c.enqueue(encoder.encode(converted + "\n\n"))
+                  }
                 }
               }
 

@@ -39,6 +39,7 @@ export namespace ZenData {
     trial: TrialSchema.optional(),
     rateLimit: z.number().optional(),
     fallbackProvider: z.string().optional(),
+    toolCallFormat: z.enum(["kimi"]).optional(),
     providers: z.array(
       z.object({
         id: z.string(),

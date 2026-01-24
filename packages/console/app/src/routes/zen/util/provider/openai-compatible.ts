@@ -1,4 +1,5 @@
 import { ProviderHelper, CommonRequest, CommonResponse, CommonChunk } from "./provider"
+import { hasKimiToolCalls, processKimiContent, createKimiStreamParser, type KimiToolCall } from "./kimi"
 
 type Usage = {
   prompt_tokens?: number
@@ -211,7 +212,7 @@ export function toOaCompatibleRequest(body: CommonRequest) {
   }
 }
 
-export function fromOaCompatibleResponse(resp: any): CommonResponse {
+export function fromOaCompatibleResponse(resp: any, toolCallFormat?: "kimi"): CommonResponse {
   if (!resp || typeof resp !== "object") return resp
 
   if (!Array.isArray((resp as any).choices)) return resp
@@ -223,9 +224,20 @@ export function fromOaCompatibleResponse(resp: any): CommonResponse {
   if (!message) return resp
 
   const content: any[] = []
+  let kimiToolCalls: KimiToolCall[] = []
 
   if (typeof message.content === "string" && message.content.length > 0) {
-    content.push({ type: "text", text: message.content })
+    // Parse Kimi tool calls if explicitly configured OR auto-detected in content
+    const shouldParseKimi = toolCallFormat === "kimi" || hasKimiToolCalls(message.content)
+    if (shouldParseKimi && hasKimiToolCalls(message.content)) {
+      const processed = processKimiContent(message.content)
+      if (processed.content.length > 0) {
+        content.push({ type: "text", text: processed.content })
+      }
+      kimiToolCalls = processed.toolCalls
+    } else {
+      content.push({ type: "text", text: message.content })
+    }
   }
 
   if (Array.isArray(message.tool_calls)) {
@@ -247,7 +259,23 @@ export function fromOaCompatibleResponse(resp: any): CommonResponse {
     }
   }
 
+  for (const tc of kimiToolCalls) {
+    let input
+    try {
+      input = JSON.parse(tc.function.arguments)
+    } catch {
+      input = tc.function.arguments
+    }
+    content.push({
+      type: "tool_use",
+      id: tc.id,
+      name: tc.function.name,
+      input,
+    })
+  }
+
   const stopReason = (() => {
+    if (kimiToolCalls.length > 0) return "tool_calls"
     const reason = choice.finish_reason
     if (reason === "stop") return "stop"
     if (reason === "tool_calls") return "tool_calls"
@@ -543,4 +571,85 @@ export function toOaCompatibleChunk(chunk: CommonChunk): string {
   }
 
   return `data: ${JSON.stringify(result)}`
+}
+
+export function createKimiAwareChunkParser() {
+  const kimiParser = createKimiStreamParser()
+  let pendingToolCallChunks: CommonChunk[] = []
+
+  return {
+    parse(chunk: string): CommonChunk[] {
+      const baseResult = fromOaCompatibleChunk(chunk)
+      if (typeof baseResult === "string") return []
+
+      const results: CommonChunk[] = []
+      const contentDelta = baseResult.choices[0]?.delta?.content
+
+      if (contentDelta) {
+        const parsed = kimiParser.append(contentDelta)
+
+        if (parsed.textToEmit) {
+          results.push({
+            ...baseResult,
+            choices: [
+              {
+                index: 0,
+                delta: { content: parsed.textToEmit },
+                finish_reason: null,
+              },
+            ],
+          })
+        }
+
+        for (const tc of parsed.toolCalls) {
+          results.push({
+            ...baseResult,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      index: tc.index,
+                      id: tc.id,
+                      type: "function",
+                      function: {
+                        name: tc.function.name,
+                        arguments: tc.function.arguments,
+                      },
+                    },
+                  ],
+                },
+                finish_reason: null,
+              },
+            ],
+          })
+        }
+
+        if (parsed.isComplete && results.length === 0) {
+          results.push({
+            ...baseResult,
+            choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+          })
+        }
+
+        return results
+      }
+
+      if (baseResult.choices[0]?.delta?.tool_calls) {
+        return [baseResult]
+      }
+
+      if (baseResult.choices[0]?.finish_reason) {
+        return [baseResult]
+      }
+
+      return [baseResult]
+    },
+
+    reset() {
+      kimiParser.reset()
+      pendingToolCallChunks = []
+    },
+  }
 }
