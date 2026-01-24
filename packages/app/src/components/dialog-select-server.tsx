@@ -471,7 +471,7 @@ export function DialogSelectServer() {
                   </Tooltip>
                 </Show>
                 <Show when={store.editServer.id !== i}>
-                  <div class="flex items-center justify-center gap-5 px-4">
+                  <div class="flex items-center justify-center gap-5 pl-4">
                     <Show when={current() === i}>
                       <p class="text-text-weak text-12-regular">{language.t("dialog.server.current")}</p>
                     </Show>
