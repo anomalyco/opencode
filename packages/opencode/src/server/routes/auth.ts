@@ -820,6 +820,21 @@ export const AuthRoutes = lazy(() =>
 
       return c.html(generateLoginPageHtml(securityContext))
     })
+    .get("/2fa", (c) => {
+      // Get token, username, timeout from query params
+      const token = c.req.query("token")
+      const username = c.req.query("username")
+      const timeout = c.req.query("timeout")
+
+      // If no token/username, redirect to login
+      if (!token || !username) {
+        return c.redirect("/auth/login")
+      }
+
+      const timeoutSeconds = parseInt(timeout ?? "300", 10)
+
+      return c.html(generate2FAPageHtml({ token, username, timeoutSeconds }))
+    })
     .post(
       "/login",
       describeRoute({
