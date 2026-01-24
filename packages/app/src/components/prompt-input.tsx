@@ -170,6 +170,36 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const tabs = createMemo(() => layout.tabs(sessionKey))
   const view = createMemo(() => layout.view(sessionKey))
 
+  const commentInReview = (path: string) => {
+    const sessionID = params.id
+    if (!sessionID) return false
+
+    const diffs = sync.data.session_diff[sessionID]
+    if (!diffs) return false
+    return diffs.some((diff) => diff.file === path)
+  }
+
+  const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {
+    if (!item.commentID) return
+
+    comments.setFocus({ file: item.path, id: item.commentID })
+    view().reviewPanel.open()
+
+    if (item.commentOrigin === "review") {
+      tabs().open("review")
+      return
+    }
+
+    if (item.commentOrigin !== "file" && commentInReview(item.path)) {
+      tabs().open("review")
+      return
+    }
+
+    const tab = files.tab(item.path)
+    tabs().open(tab)
+    files.load(item.path)
+  }
+
   const recent = createMemo(() => {
     const all = tabs().all()
     const active = tabs().active()
@@ -1481,6 +1511,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             selection: item.selection,
             comment: item.comment,
             commentID: item.commentID,
+            commentOrigin: item.commentOrigin,
             preview: item.preview,
           })
         }
@@ -1547,6 +1578,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           selection: item.selection,
           comment: item.comment,
           commentID: item.commentID,
+          commentOrigin: item.commentOrigin,
           preview: item.preview,
         })
       }
@@ -1700,10 +1732,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID,
                       }}
                       onClick={() => {
-                        if (!item.commentID) return
-                        comments.setFocus({ file: item.path, id: item.commentID })
-                        view().reviewPanel.open()
-                        tabs().open("review")
+                        openComment(item)
                       }}
                     >
                       <div class="flex items-center gap-1.5">

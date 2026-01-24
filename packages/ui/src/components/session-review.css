@@ -75,17 +75,66 @@
     overflow: hidden;
   }
 
-  [data-slot="session-review-comment-popover-content"] {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: -8px;
-    z-index: 6;
-    min-width: 200px;
-    max-width: min(320px, calc(100vw - 48px));
-    border-radius: 10px;
-    background-color: var(--surface-raised-stronger-non-alpha);
-    box-shadow: var(--shadow-lg-border-base);
-    padding: 12px;
+  [data-slot="session-review-comment-content"] {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  [data-slot="session-review-comment-text"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-x-large);
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-strong);
+    white-space: pre-wrap;
+  }
+
+  [data-slot="session-review-comment-label"],
+  [data-slot="session-review-comment-draft-label"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-weak);
+    white-space: nowrap;
+  }
+
+  [data-slot="session-review-comment-draft"] {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  [data-slot="session-review-comment-textarea"] {
+    width: 100%;
+    max-width: min(380px, calc(100vw - 48px));
+    resize: vertical;
+    padding: 8px;
+    border-radius: var(--radius-md);
+    background: var(--surface-base);
+    border: 1px solid var(--border-base);
+    color: var(--text-strong);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-large);
+
+    &:focus {
+      outline: none;
+      box-shadow: var(--shadow-xs-border-select);
+    }
+  }
+
+  [data-slot="session-review-comment-actions"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  [data-slot="session-review-comment-draft-label"] {
+    margin-right: auto;
   }
 
   [data-slot="session-review-trigger-content"] {
@@ -217,103 +266,7 @@
   [data-slot="session-review-diff-wrapper"] {
     position: relative;
     overflow: hidden;
-  }
-
-  [data-slot="session-review-comment-anchor"] {
-    position: absolute;
-    right: 12px;
-    z-index: 5;
-  }
-
-  [data-slot="session-review-comment-button"] {
-    width: 20px;
-    height: 20px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--icon-interactive-base);
-    box-shadow: var(--shadow-xs);
-    cursor: pointer;
-
-    [data-slot="icon-svg"] {
-      color: var(--white);
-    }
-
-    &:focus {
-      outline: none;
-    }
-
-    &:focus-visible {
-      box-shadow: var(--shadow-xs-border-focus);
-    }
-  }
-
-  [data-slot="session-review-comment-hover"] {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    max-width: 320px;
-  }
-
-  [data-slot="session-review-comment-popover"] {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  [data-slot="session-review-comment-hover-label"],
-  [data-slot="session-review-comment-popover-label"] {
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
-    font-weight: var(--font-weight-medium);
-    color: var(--text-weak);
-  }
-
-  [data-slot="session-review-comment-hover-text"],
-  [data-slot="session-review-comment-popover-text"] {
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-base);
-    font-weight: var(--font-weight-regular);
-    color: var(--text-strong);
-    white-space: pre-wrap;
-  }
-
-  [data-slot="session-review-comment-preview"] {
-    margin: 0;
-    padding: 8px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-base);
-    border: 1px solid color-mix(in oklch, var(--border-base) 55%, transparent);
-    color: var(--text-base);
-    font-family: var(--font-family-mono);
-    font-size: var(--font-size-small);
-    line-height: 1.4;
-    white-space: pre-wrap;
-  }
-
-  [data-slot="session-review-comment-textarea"] {
-    width: 320px;
-    max-width: calc(100vw - 48px);
-    resize: vertical;
-    padding: 8px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-base);
-    border: 1px solid color-mix(in oklch, var(--border-base) 55%, transparent);
-    color: var(--text-strong);
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
-    line-height: 1.4;
-
-    &:focus {
-      outline: none;
-      box-shadow: var(--shadow-xs-border-focus);
-    }
-  }
-
-  [data-slot="session-review-comment-actions"] {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
+    --line-comment-z: 5;
+    --line-comment-popover-z: 6;
   }
 }
