@@ -40,7 +40,7 @@ export namespace SessionSummary {
         .flatMap((x) => x.parts)
         .filter((x) => x.type === "patch")
         .flatMap((x) => x.files)
-        .map((x) => path.relative(Instance.worktree, x)),
+        .map((x) => path.relative(Instance.worktree, x).replaceAll("\\", "/")),
     )
     const diffs = await computeDiff({ messages: input.messages }).then((x) =>
       x.filter((x) => {
@@ -77,6 +77,7 @@ export namespace SessionSummary {
     const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
     if (textPart && !userMsg.summary?.title) {
       const agent = await Agent.get("title")
+      if (!agent) return
       const stream = await LLM.stream({
         agent,
         user: userMsg,
@@ -119,7 +120,7 @@ export namespace SessionSummary {
     },
   )
 
-  async function computeDiff(input: { messages: MessageV2.WithParts[] }) {
+  export async function computeDiff(input: { messages: MessageV2.WithParts[] }) {
     let from: string | undefined
     let to: string | undefined
 

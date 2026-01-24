@@ -1,6 +1,7 @@
 mod cli;
 #[cfg(windows)]
 mod job_object;
+mod markdown;
 mod window_customizer;
 
 use cli::{install_cli, sync_cli};
@@ -14,7 +15,9 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewUrl, WebviewWindow};
+use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewWindowBuilder};
+#[cfg(windows)]
+use tauri_plugin_decorum::WebviewWindowExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_store::StoreExt;
@@ -149,16 +152,20 @@ fn get_sidecar_port() -> u32 {
         }) as u32
 }
 
-fn spawn_sidecar(app: &AppHandle, port: u32, password: &str) -> CommandChild {
+fn spawn_sidecar(app: &AppHandle, hostname: &str, port: u32, password: &str) -> CommandChild {
     let log_state = app.state::<LogState>();
     let log_state_clone = log_state.inner().clone();
 
     println!("spawning sidecar on port {port}");
 
-    let (mut rx, child) = cli::create_command(app, format!("serve --port {port}").as_str())
-        .env("OPENCODE_SERVER_PASSWORD", password)
-        .spawn()
-        .expect("Failed to spawn opencode");
+    let (mut rx, child) = cli::create_command(
+        app,
+        format!("serve --hostname {hostname} --port {port}").as_str(),
+    )
+    .env("OPENCODE_SERVER_USERNAME", "opencode")
+    .env("OPENCODE_SERVER_PASSWORD", password)
+    .spawn()
+    .expect("Failed to spawn opencode");
 
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
@@ -197,17 +204,37 @@ fn spawn_sidecar(app: &AppHandle, port: u32, password: &str) -> CommandChild {
     child
 }
 
-async fn check_server_health(url: &str, password: Option<&str>) -> bool {
-    let health_url = format!("{}/global/health", url.trim_end_matches('/'));
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(3))
-        .build();
+fn url_is_localhost(url: &reqwest::Url) -> bool {
+    url.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("localhost")
+            || host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback())
+    })
+}
 
-    let Ok(client) = client else {
+async fn check_server_health(url: &str, password: Option<&str>) -> bool {
+    let Ok(url) = reqwest::Url::parse(url) else {
         return false;
     };
 
-    let mut req = client.get(&health_url);
+    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(3));
+
+    if url_is_localhost(&url) {
+        // Some environments set proxy variables (HTTP_PROXY/HTTPS_PROXY/ALL_PROXY) without
+        // excluding loopback. reqwest respects these by default, which can prevent the desktop
+        // app from reaching its own local sidecar server.
+        builder = builder.no_proxy();
+    };
+
+    let Ok(client) = builder.build() else {
+        return false;
+    };
+    let Ok(health_url) = url.join("/global/health") else {
+        return false;
+    };
+
+    let mut req = client.get(health_url);
 
     if let Some(password) = password {
         req = req.basic_auth("opencode", Some(password));
@@ -223,7 +250,7 @@ async fn check_server_health(url: &str, password: Option<&str>) -> bool {
 pub fn run() {
     let updater_enabled = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
 
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", not(debug_assertions)))]
     let _ = std::process::Command::new("killall")
         .arg("opencode-cli")
         .output();
@@ -237,7 +264,14 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        - tauri_plugin_window_state::StateFlags::DECORATIONS,
+                )
+                .build(),
+        )
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
@@ -247,12 +281,14 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(PinchZoomDisablePlugin)
+        .plugin(tauri_plugin_decorum::init())
         .invoke_handler(tauri::generate_handler![
             kill_sidecar,
             install_cli,
             ensure_server_ready,
             get_default_server_url,
-            set_default_server_url
+            set_default_server_url,
+            markdown::parse_markdown_command
         ])
         .setup(move |app| {
             let app = app.handle().clone();
@@ -268,29 +304,36 @@ pub fn run() {
                 .map(|m| m.size().to_logical(m.scale_factor()))
                 .unwrap_or(LogicalSize::new(1920, 1080));
 
-            #[allow(unused_mut)]
-            let mut window_builder =
-                WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
-                    .title("OpenCode")
-                    .inner_size(size.width as f64, size.height as f64)
-                    .decorations(true)
-                    .zoom_hotkeys_enabled(true)
-                    .disable_drag_drop_handler()
-                    .initialization_script(format!(
-                        r#"
+            let config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|w| w.label == "main")
+                .expect("main window config missing");
+
+            let window_builder = WebviewWindowBuilder::from_config(&app, config)
+                .expect("Failed to create window builder from config")
+                .inner_size(size.width as f64, size.height as f64)
+                .initialization_script(format!(
+                    r#"
                       window.__OPENCODE__ ??= {{}};
                       window.__OPENCODE__.updaterEnabled = {updater_enabled};
                     "#
-                    ));
+                ));
 
             #[cfg(target_os = "macos")]
-            {
-                window_builder = window_builder
-                    .title_bar_style(tauri::TitleBarStyle::Overlay)
-                    .hidden_title(true);
-            }
+            let window_builder = window_builder
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true);
 
-            window_builder.build().expect("Failed to create window");
+            #[cfg(windows)]
+            let window_builder = window_builder.decorations(false);
+
+            let window = window_builder.build().expect("Failed to create window");
+
+            #[cfg(windows)]
+            let _ = window.create_overlay_titlebar();
 
             let (tx, rx) = oneshot::channel();
             app.manage(ServerState::new(None, rx));
@@ -360,17 +403,37 @@ pub fn run() {
         });
 }
 
+/// Converts a bind address hostname to a valid URL hostname for connection.
+/// - `0.0.0.0` and `::` are wildcard bind addresses, not valid connect targets
+/// - IPv6 addresses need brackets in URLs (e.g., `::1` -> `[::1]`)
+fn normalize_hostname_for_url(hostname: &str) -> String {
+    // Wildcard bind addresses -> localhost equivalents
+    if hostname == "0.0.0.0" {
+        return "127.0.0.1".to_string();
+    }
+    if hostname == "::" {
+        return "[::1]".to_string();
+    }
+
+    // IPv6 addresses need brackets in URLs
+    if hostname.contains(':') && !hostname.starts_with('[') {
+        return format!("[{}]", hostname);
+    }
+
+    hostname.to_string()
+}
+
 fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
     let server = config.server.as_ref()?;
     let port = server.port?;
     println!("server.port found in OC config: {port}");
-    let hostname = server.hostname.as_ref();
+    let hostname = server
+        .hostname
+        .as_ref()
+        .map(|v| normalize_hostname_for_url(v))
+        .unwrap_or_else(|| "127.0.0.1".to_string());
 
-    Some(format!(
-        "http://{}:{}",
-        hostname.map(|v| v.as_str()).unwrap_or("127.0.0.1"),
-        port
-    ))
+    Some(format!("http://{}:{}", hostname, port))
 }
 
 async fn setup_server_connection(
@@ -410,12 +473,13 @@ async fn setup_server_connection(
     }
 
     let local_port = get_sidecar_port();
-    let local_url = format!("http://127.0.0.1:{local_port}");
+    let hostname = "127.0.0.1";
+    let local_url = format!("http://{hostname}:{local_port}");
 
     if !check_server_health(&local_url, None).await {
         let password = uuid::Uuid::new_v4().to_string();
 
-        match spawn_local_server(app, local_port, &password).await {
+        match spawn_local_server(app, hostname, local_port, &password).await {
             Ok(child) => Ok((
                 Some(child),
                 ServerReadyData {
@@ -438,11 +502,12 @@ async fn setup_server_connection(
 
 async fn spawn_local_server(
     app: &AppHandle,
+    hostname: &str,
     port: u32,
     password: &str,
 ) -> Result<CommandChild, String> {
-    let child = spawn_sidecar(app, port, password);
-    let url = format!("http://127.0.0.1:{port}");
+    let child = spawn_sidecar(app, hostname, port, password);
+    let url = format!("http://{hostname}:{port}");
 
     let timestamp = Instant::now();
     loop {
