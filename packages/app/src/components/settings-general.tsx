@@ -40,10 +40,10 @@ export const SettingsGeneral: Component = () => {
     { value: "jetbrains-mono", label: "font.option.jetbrainsMono" },
     { value: "meslo-lgs", label: "font.option.mesloLgs" },
     { value: "roboto-mono", label: "font.option.robotoMono" },
+    { value: "source-code-pro", label: "font.option.sourceCodePro" },
     { value: "ubuntu-mono", label: "font.option.ubuntuMono" },
   ] as const
   const fontOptionsList = [...fontOptions]
-
 
   const soundOptions = [...SOUND_OPTIONS]
 
