@@ -13,13 +13,13 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **AUTH-02**: Credentials validated against system PAM (supports LDAP/Kerberos transparently)
 - [x] **AUTH-03**: Authenticated session maps to real UNIX user (UID/GID)
 - [x] **AUTH-04**: Commands and file operations execute under authenticated user's identity
-- [ ] **AUTH-05**: User can optionally enable 2FA via TOTP (PAM module integration)
+- [x] **AUTH-05**: User can optionally enable 2FA via TOTP (PAM module integration)
 
 ### Sessions
 
-- [ ] **SESS-01**: Session stored as secure cookie (HttpOnly, Secure, SameSite=Strict)
-- [ ] **SESS-02**: User can log out, clearing session cookie and server-side state
-- [ ] **SESS-03**: Session expires after configurable idle timeout
+- [x] **SESS-01**: Session stored as secure cookie (HttpOnly, Secure, SameSite=Strict)
+- [x] **SESS-02**: User can log out, clearing session cookie and server-side state
+- [x] **SESS-03**: Session expires after configurable idle timeout
 - [x] **SESS-04**: "Remember me" option extends session lifetime for trusted devices
 
 ### Security
@@ -31,17 +31,17 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Infrastructure
 
-- [ ] **INFRA-01**: Auth broker (setuid helper) handles PAM authentication and user process spawning
-- [ ] **INFRA-02**: Unix socket IPC between unprivileged web server and privileged auth broker
-- [ ] **INFRA-03**: Auth configuration via opencode.json (enabled, sessionTimeout, rememberMe, etc.)
-- [ ] **INFRA-04**: Auth disabled by default; existing single-user behavior unchanged
+- [x] **INFRA-01**: Auth broker (setuid helper) handles PAM authentication and user process spawning
+- [x] **INFRA-02**: Unix socket IPC between unprivileged web server and privileged auth broker
+- [x] **INFRA-03**: Auth configuration via opencode.json (enabled, sessionTimeout, rememberMe, etc.)
+- [x] **INFRA-04**: Auth disabled by default; existing single-user behavior unchanged
 
 ### User Interface
 
 - [x] **UI-01**: Login page with username/password form matching opencode design
 - [x] **UI-02**: Password visibility toggle (eye icon to show/hide)
 - [x] **UI-03**: Session activity indicator showing username with logout access
-- [ ] **UI-04**: Connection security badge (lock icon for HTTPS, warning for HTTP)
+- [x] **UI-04**: Connection security badge (lock icon for HTTPS, warning for HTTP)
 
 ### Documentation
 
@@ -86,7 +86,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-02 | Phase 4 | Complete |
 | AUTH-03 | Phase 4 | Complete |
 | AUTH-04 | Phase 5 | Complete |
-| AUTH-05 | Phase 10 | Pending |
+| AUTH-05 | Phase 10 | Complete |
 | SESS-01 | Phase 2 | Complete |
 | SESS-02 | Phase 2 | Complete |
 | SESS-03 | Phase 2 | Complete |
@@ -102,7 +102,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-01 | Phase 6 | Complete |
 | UI-02 | Phase 6 | Complete |
 | UI-03 | Phase 8 | Complete |
-| UI-04 | Phase 9 | Pending |
+| UI-04 | Phase 9 | Complete |
 | DOC-01 | Phase 11 | Pending |
 | DOC-02 | Phase 11 | Pending |
 
@@ -113,4 +113,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-19*
-*Last updated: 2026-01-23 after Phase 8 completion*
+*Last updated: 2026-01-24 after Phase 10 completion*
