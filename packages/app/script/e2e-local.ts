@@ -60,7 +60,6 @@ const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-"))
 const serverEnv = {
   ...process.env,
   MODELS_DEV_API_JSON: modelsJson,
-  OPENCODE_DISABLE_MODELS_FETCH: "true",
   OPENCODE_DISABLE_SHARE: "true",
   OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
   OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",

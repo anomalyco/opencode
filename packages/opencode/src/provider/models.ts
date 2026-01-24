@@ -104,7 +104,6 @@ export namespace ModelsDev {
   }
 
   export async function refresh() {
-    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return
     const file = Bun.file(filepath)
     log.info("refreshing", {
       file,
