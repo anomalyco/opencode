@@ -84,8 +84,15 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     return next()
   }
 
-  // Handle auth routes specially
+  // Handle public routes that don't require auth
   const path = c.req.path
+
+  // Health check endpoint is always public
+  if (path === "/global/health") {
+    return next()
+  }
+
+  // Auth routes handle their own authentication
   if (path.startsWith("/auth/")) {
     // For logout routes, still try to set sessionId if session exists
     // This is needed for CSRF validation (HMAC signature check)
