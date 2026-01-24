@@ -213,7 +213,7 @@ export function StatusPopover() {
                     return (
                       <button
                         type="button"
-                        class="flex items-center gap-2 w-full p-1.5 rounded-md transition-colors text-left"
+                        class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
                         classList={{
                           "opacity-50": isBlocked(),
                           "hover:bg-surface-raised-base-hover": !isBlocked(),
@@ -236,7 +236,7 @@ export function StatusPopover() {
                         />
                         <span class="text-14-regular text-text-base truncate">{serverDisplayName(url)}</span>
                         <Show when={status()?.version}>
-                          <span class="text-12-regular text-text-weak">{status()?.version}</span>
+                          <span class="text-12-regular text-text-weak truncate">{status()?.version}</span>
                         </Show>
                         <Show when={isDefault()}>
                           <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
@@ -276,7 +276,7 @@ export function StatusPopover() {
                       return (
                         <button
                           type="button"
-                          class="flex items-center gap-2 w-full px-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
+                          class="flex items-center gap-2 w-full h-8 px-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
                           onClick={() => toggleMcp(item.name)}
                           disabled={loading() === item.name}
                         >
