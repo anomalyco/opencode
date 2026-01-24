@@ -12,6 +12,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { useNavigate } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { Popover } from "@opencode-ai/ui/popover"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useGlobalSDK } from "@/context/global-sdk"
 
 type ServerStatus = { healthy: boolean; version?: string }
@@ -52,16 +53,16 @@ async function checkHealth(url: string, platform: ReturnType<typeof usePlatform>
 
 function AddRow(props: AddRowProps) {
   return (
-    <div class="flex items-center gap-3 px-4 min-w-0 flex-1">
-      <div
-        classList={{
-          "size-1.5 rounded-full shrink-0": true,
-          "bg-icon-success-base": props.status === true,
-          "bg-icon-critical-base": props.status === false,
-          "bg-border-weak-base": props.status === undefined,
-        }}
-      />
-      <div class="flex-1 min-w-0">
+    <div class="flex items-center px-3 h-14 min-w-0 flex-1">
+      <div class="relative flex-1 min-w-0">
+        <div
+          classList={{
+            "size-1.5 rounded-full absolute left-3 top-1/2 -translate-y-1/2": true,
+            "bg-icon-success-base": props.status === true,
+            "bg-icon-critical-base": props.status === false,
+            "bg-border-weak-base": props.status === undefined,
+          }}
+        />
         <TextField
           type="text"
           hideLabel
@@ -74,6 +75,7 @@ function AddRow(props: AddRowProps) {
           onChange={props.onChange}
           onKeyDown={props.onKeyDown}
           onBlur={props.onBlur}
+          class="pl-7"
         />
       </div>
     </div>
@@ -344,9 +346,10 @@ export function DialogSelectServer() {
 
   return (
     <Dialog title={language.t("dialog.server.title")}>
-      <div class="flex flex-col gap-2 pb-4">
+      <div class="flex flex-col gap-2 pb-5">
         <List
-          search={{ placeholder: language.t("dialog.server.search.placeholder"), autofocus: true }}
+          search={{ placeholder: language.t("dialog.server.search.placeholder"), autofocus: false }}
+          noInitialSelection
           emptyMessage={language.t("dialog.server.empty")}
           items={sortedItems}
           key={(x) => x}
@@ -354,7 +357,7 @@ export function DialogSelectServer() {
             if (x) select(x)
           }}
           divider={true}
-          class="[&_[data-slot=list-scroll]]:max-h-[300px] [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-raised-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:py-3"
+          class="px-5 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]:max-h-[300px] [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-raised-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:h-14 [&_[data-slot=list-item]]:p-3"
           add={
             store.addServer.showForm
               ? {
@@ -376,6 +379,35 @@ export function DialogSelectServer() {
         >
           {(i) => {
             const [popoverOpen, setPopoverOpen] = createSignal(false)
+            const [truncated, setTruncated] = createSignal(false)
+            let nameRef: HTMLSpanElement | undefined
+            let versionRef: HTMLSpanElement | undefined
+
+            const check = () => {
+              const nameTruncated = nameRef ? nameRef.scrollWidth > nameRef.clientWidth : false
+              const versionTruncated = versionRef ? versionRef.scrollWidth > versionRef.clientWidth : false
+              setTruncated(nameTruncated || versionTruncated)
+            }
+
+            createEffect(() => {
+              check()
+              window.addEventListener("resize", check)
+              onCleanup(() => window.removeEventListener("resize", check))
+            })
+
+            const tooltipValue = () => {
+              const name = serverDisplayName(i)
+              const version = store.status[i]?.version
+              return (
+                <span class="flex items-center gap-2">
+                  <span>{name}</span>
+                  <Show when={version}>
+                    <span class="text-text-invert-base">{version}</span>
+                  </Show>
+                </span>
+              )
+            }
+
             return (
               <div class="flex items-center gap-3 min-w-0 flex-1 group/item">
                 <Show
@@ -393,28 +425,34 @@ export function DialogSelectServer() {
                     />
                   }
                 >
-                  <div
-                    class="flex items-center gap-3 px-4 min-w-0 flex-1"
-                    classList={{ "opacity-50": store.status[i]?.healthy === false }}
-                  >
+                  <Tooltip value={tooltipValue()} placement="top" inactive={!truncated()}>
                     <div
-                      classList={{
-                        "size-1.5 rounded-full shrink-0": true,
-                        "bg-icon-success-base": store.status[i]?.healthy === true,
-                        "bg-icon-critical-base": store.status[i]?.healthy === false,
-                        "bg-border-weak-base": store.status[i] === undefined,
-                      }}
-                    />
-                    <span class="truncate">{serverDisplayName(i)}</span>
-                    <Show when={store.status[i]?.version}>
-                      <span class="text-text-weak text-14-regular">{store.status[i]?.version}</span>
-                    </Show>
-                    <Show when={defaultUrl() === i}>
-                      <span class="text-text-weak bg-surface-base text-14-regular px-1.5 rounded-xs">
-                        {language.t("dialog.server.status.default")}
+                      class="flex items-center gap-3 px-4 min-w-0 flex-1"
+                      classList={{ "opacity-50": store.status[i]?.healthy === false }}
+                    >
+                      <div
+                        classList={{
+                          "size-1.5 rounded-full shrink-0": true,
+                          "bg-icon-success-base": store.status[i]?.healthy === true,
+                          "bg-icon-critical-base": store.status[i]?.healthy === false,
+                          "bg-border-weak-base": store.status[i] === undefined,
+                        }}
+                      />
+                      <span ref={nameRef} class="truncate">
+                        {serverDisplayName(i)}
                       </span>
-                    </Show>
-                  </div>
+                      <Show when={store.status[i]?.version}>
+                        <span ref={versionRef} class="text-text-weak text-14-regular truncate">
+                          {store.status[i]?.version}
+                        </span>
+                      </Show>
+                      <Show when={defaultUrl() === i}>
+                        <span class="text-text-weak bg-surface-base text-14-regular px-1.5 rounded-xs">
+                          {language.t("dialog.server.status.default")}
+                        </span>
+                      </Show>
+                    </div>
+                  </Tooltip>
                 </Show>
                 <Show when={store.editServer.id !== i}>
                   <div class="flex items-center justify-center gap-5 px-4">
@@ -508,7 +546,7 @@ export function DialogSelectServer() {
           }}
         </List>
 
-        <div class="px-6">
+        <div class="px-5">
           <Button
             variant="secondary"
             icon="plus-small"
