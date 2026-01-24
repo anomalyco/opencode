@@ -1,5 +1,15 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import { ComponentProps, JSXElement, ParentProps, Show, splitProps, ValidComponent } from "solid-js"
+import {
+  ComponentProps,
+  JSXElement,
+  ParentProps,
+  Show,
+  createEffect,
+  createSignal,
+  onCleanup,
+  splitProps,
+  ValidComponent,
+} from "solid-js"
 import { useI18n } from "../context/i18n"
 import { IconButton } from "./icon-button"
 
@@ -27,16 +37,95 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
     "description",
     "class",
     "classList",
+    "style",
     "children",
     "portal",
+    "open",
+    "defaultOpen",
+    "onOpenChange",
+    "modal",
   ])
+
+  const [contentRef, setContentRef] = createSignal<HTMLElement | undefined>(undefined)
+  const [triggerRef, setTriggerRef] = createSignal<HTMLElement | undefined>(undefined)
+  const [dismiss, setDismiss] = createSignal<"escape" | "outside" | null>(null)
+
+  const [uncontrolledOpen, setUncontrolledOpen] = createSignal<boolean>(local.defaultOpen ?? false)
+
+  const controlled = () => local.open !== undefined
+  const opened = () => {
+    if (controlled()) return local.open ?? false
+    return uncontrolledOpen()
+  }
+
+  const onOpenChange = (next: boolean) => {
+    if (next) setDismiss(null)
+    if (local.onOpenChange) local.onOpenChange(next)
+    if (controlled()) return
+    setUncontrolledOpen(next)
+  }
+
+  createEffect(() => {
+    if (!opened()) return
+
+    const inside = (node: Node | null | undefined) => {
+      if (!node) return false
+      const content = contentRef()
+      if (content && content.contains(node)) return true
+      const trigger = triggerRef()
+      if (trigger && trigger.contains(node)) return true
+      return false
+    }
+
+    const close = (reason: "escape" | "outside") => {
+      setDismiss(reason)
+      onOpenChange(false)
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      close("escape")
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (inside(target)) return
+      close("outside")
+    }
+
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (inside(target)) return
+      close("outside")
+    }
+
+    window.addEventListener("keydown", onKeyDown, true)
+    window.addEventListener("pointerdown", onPointerDown, true)
+    window.addEventListener("focusin", onFocusIn, true)
+
+    onCleanup(() => {
+      window.removeEventListener("keydown", onKeyDown, true)
+      window.removeEventListener("pointerdown", onPointerDown, true)
+      window.removeEventListener("focusin", onFocusIn, true)
+    })
+  })
 
   const content = () => (
     <Kobalte.Content
+      ref={(el: HTMLElement) => setContentRef(el)}
       data-component="popover-content"
       classList={{
         ...(local.classList ?? {}),
         [local.class ?? ""]: !!local.class,
+      }}
+      style={local.style}
+      onCloseAutoFocus={(event: Event) => {
+        if (dismiss() === "outside") event.preventDefault()
+        setDismiss(null)
       }}
     >
       {/* <Kobalte.Arrow data-slot="popover-arrow" /> */}
@@ -60,8 +149,13 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
   )
 
   return (
-    <Kobalte gutter={4} {...rest}>
-      <Kobalte.Trigger as={local.triggerAs ?? "div"} data-slot="popover-trigger" {...(local.triggerProps as any)}>
+    <Kobalte gutter={4} {...rest} open={opened()} onOpenChange={onOpenChange} modal={local.modal ?? false}>
+      <Kobalte.Trigger
+        ref={(el: HTMLElement) => setTriggerRef(el)}
+        as={local.triggerAs ?? "div"}
+        data-slot="popover-trigger"
+        {...(local.triggerProps as any)}
+      >
         {local.trigger}
       </Kobalte.Trigger>
       <Show when={local.portal ?? true} fallback={content()}>
