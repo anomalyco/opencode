@@ -1451,7 +1451,9 @@ function QuestionPrompt(props: { request: QuestionRequest }) {
     const opt = options()[optIndex]
     if (!opt) return
     if (opt.action?.type === "review") {
-      if (opt.action.path) {
+      if (!opt.action.path) {
+        showToast({ title: "Unable to review file", description: "No file path provided", variant: "error" })
+      } else {
         openReviewDialog(opt.action.path)
       }
       return
