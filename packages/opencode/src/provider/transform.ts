@@ -1,5 +1,5 @@
 import type { APICallError, ModelMessage } from "ai"
-import { unique } from "remeda"
+import { mergeDeep, unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
@@ -186,18 +186,12 @@ export namespace ProviderTransform {
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
         if (lastContent && typeof lastContent === "object") {
-          lastContent.providerOptions = {
-            ...lastContent.providerOptions,
-            ...providerOptions,
-          }
+          lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
           continue
         }
       }
 
-      msg.providerOptions = {
-        ...msg.providerOptions,
-        ...providerOptions,
-      }
+      msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerOptions)
     }
 
     return msgs
