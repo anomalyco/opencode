@@ -1717,9 +1717,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <span class="flex max-w-[300px]">
                         <span
                           class="text-text-invert-base truncate min-w-0"
-                          style={{ direction: "rtl", "text-align": "left" }}
+                          style={{ direction: "rtl", "text-align": "left", "unicode-bidi": "plaintext" }}
                         >
-                          <bdi>{getDirectory(item.path)}</bdi>
+                          {getDirectory(item.path)}
                         </span>
                         <span class="shrink-0">{getFilename(item.path)}</span>
                       </span>
