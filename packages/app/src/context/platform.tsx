@@ -49,6 +49,12 @@ export type Platform = {
 
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>
+
+  /** Get hardware acceleration disabled setting (Windows desktop only) */
+  getDisableHardwareAcceleration?(): Promise<boolean>
+
+  /** Set hardware acceleration disabled setting (Windows desktop only) */
+  setDisableHardwareAcceleration?(disabled: boolean): Promise<void>
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({

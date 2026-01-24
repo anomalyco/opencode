@@ -320,6 +320,18 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   parseMarkdown: async (markdown: string) => {
     return invoke<string>("parse_markdown_command", { markdown })
   },
+
+  // Windows-only: hardware acceleration toggle
+  ...(ostype() === "windows"
+    ? {
+        getDisableHardwareAcceleration: async () => {
+          return invoke<boolean>("get_disable_hardware_acceleration").catch(() => false)
+        },
+        setDisableHardwareAcceleration: async (disabled: boolean) => {
+          await invoke("set_disable_hardware_acceleration", { disabled })
+        },
+      }
+    : {}),
 })
 
 createMenu()

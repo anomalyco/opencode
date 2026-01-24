@@ -527,6 +527,11 @@ export const dict = {
   "settings.general.section.notifications": "System notifications",
   "settings.general.section.updates": "Updates",
   "settings.general.section.sounds": "Sound effects",
+  "settings.general.section.advanced": "Advanced",
+
+  "settings.general.advanced.disableHardwareAcceleration.title": "Disable hardware acceleration",
+  "settings.general.advanced.disableHardwareAcceleration.description":
+    "Disable GPU acceleration. May fix crashes or visual issues. Requires restart.",
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",

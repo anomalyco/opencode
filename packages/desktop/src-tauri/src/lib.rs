@@ -27,6 +27,7 @@ use crate::window_customizer::PinchZoomDisablePlugin;
 
 const SETTINGS_STORE: &str = "opencode.settings.dat";
 const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
+const DISABLE_HARDWARE_ACCEL_KEY: &str = "disableHardwareAcceleration";
 
 #[derive(Clone, serde::Serialize)]
 struct ServerReadyData {
@@ -130,6 +131,36 @@ async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Result<(
             store.delete(DEFAULT_SERVER_URL_KEY);
         }
     }
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
+
+    Ok(())
+}
+
+#[cfg(windows)]
+#[tauri::command]
+fn get_disable_hardware_acceleration(app: AppHandle) -> Result<bool, String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    let value = store.get(DISABLE_HARDWARE_ACCEL_KEY);
+    match value {
+        Some(v) => Ok(v.as_bool().unwrap_or(false)),
+        None => Ok(false),
+    }
+}
+
+#[cfg(windows)]
+#[tauri::command]
+async fn set_disable_hardware_acceleration(app: AppHandle, disabled: bool) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    store.set(DISABLE_HARDWARE_ACCEL_KEY, serde_json::Value::Bool(disabled));
 
     store
         .save()
@@ -282,14 +313,32 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(PinchZoomDisablePlugin)
         .plugin(tauri_plugin_decorum::init())
-        .invoke_handler(tauri::generate_handler![
-            kill_sidecar,
-            install_cli,
-            ensure_server_ready,
-            get_default_server_url,
-            set_default_server_url,
-            markdown::parse_markdown_command
-        ])
+        .invoke_handler({
+            #[cfg(windows)]
+            {
+                tauri::generate_handler![
+                    kill_sidecar,
+                    install_cli,
+                    ensure_server_ready,
+                    get_default_server_url,
+                    set_default_server_url,
+                    get_disable_hardware_acceleration,
+                    set_disable_hardware_acceleration,
+                    markdown::parse_markdown_command
+                ]
+            }
+            #[cfg(not(windows))]
+            {
+                tauri::generate_handler![
+                    kill_sidecar,
+                    install_cli,
+                    ensure_server_ready,
+                    get_default_server_url,
+                    set_default_server_url,
+                    markdown::parse_markdown_command
+                ]
+            }
+        })
         .setup(move |app| {
             let app = app.handle().clone();
 
@@ -312,6 +361,16 @@ pub fn run() {
                 .find(|w| w.label == "main")
                 .expect("main window config missing");
 
+            // Check if hardware acceleration is disabled (Windows only)
+            #[cfg(windows)]
+            let disable_gpu = {
+                let store = app.store(SETTINGS_STORE).ok();
+                store
+                    .and_then(|s| s.get(DISABLE_HARDWARE_ACCEL_KEY))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            };
+
             let window_builder = WebviewWindowBuilder::from_config(&app, config)
                 .expect("Failed to create window builder from config")
                 .inner_size(size.width as f64, size.height as f64)
@@ -321,6 +380,15 @@ pub fn run() {
                       window.__OPENCODE__.updaterEnabled = {updater_enabled};
                     "#
                 ));
+
+            // Apply GPU disable flag on Windows if setting is enabled
+            #[cfg(windows)]
+            let window_builder = if disable_gpu {
+                println!("Hardware acceleration disabled via settings");
+                window_builder.additional_browser_args("--disable-gpu")
+            } else {
+                window_builder
+            };
 
             #[cfg(target_os = "macos")]
             let window_builder = window_builder

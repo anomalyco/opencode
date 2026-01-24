@@ -1,9 +1,10 @@
-import { Component, createMemo, type JSX } from "solid-js"
+import { Component, createMemo, createSignal, Show, type JSX, onMount } from "solid-js"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { useLanguage } from "@/context/language"
 import { useSettings, monoFontFamily } from "@/context/settings"
+import { usePlatform } from "@/context/platform"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 
@@ -30,6 +31,7 @@ export const SettingsGeneral: Component = () => {
   const theme = useTheme()
   const language = useLanguage()
   const settings = useSettings()
+  const platform = usePlatform()
 
   const themeOptions = createMemo(() =>
     Object.entries(theme.themes()).map(([id, def]) => ({ id, name: def.name ?? id })),
@@ -309,6 +311,11 @@ export const SettingsGeneral: Component = () => {
             </SettingsRow>
           </div>
         </div>
+
+        {/* Advanced Section - only show on Windows desktop */}
+        <Show when={platform.os === "windows" && platform.getDisableHardwareAcceleration}>
+          <AdvancedSection />
+        </Show>
       </div>
     </div>
   )
@@ -328,6 +335,56 @@ const SettingsRow: Component<SettingsRowProps> = (props) => {
         <span class="text-12-regular text-text-weak">{props.description}</span>
       </div>
       <div class="flex-shrink-0">{props.children}</div>
+    </div>
+  )
+}
+
+const AdvancedSection: Component = () => {
+  const platform = usePlatform()
+  const language = useLanguage()
+  const [disableGpu, setDisableGpu] = createSignal(false)
+  const [needsRestart, setNeedsRestart] = createSignal(false)
+
+  onMount(async () => {
+    if (platform.getDisableHardwareAcceleration) {
+      const value = await platform.getDisableHardwareAcceleration()
+      setDisableGpu(value)
+    }
+  })
+
+  const handleToggle = async (checked: boolean) => {
+    if (platform.setDisableHardwareAcceleration) {
+      await platform.setDisableHardwareAcceleration(checked)
+      setDisableGpu(checked)
+      setNeedsRestart(true)
+    }
+  }
+
+  return (
+    <div class="flex flex-col gap-1">
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.advanced")}</h3>
+
+      <div class="bg-surface-raised-base px-4 rounded-lg">
+        <SettingsRow
+          title={language.t("settings.general.advanced.disableHardwareAcceleration.title")}
+          description={language.t("settings.general.advanced.disableHardwareAcceleration.description")}
+        >
+          <div class="flex items-center gap-2">
+            <Show when={needsRestart()}>
+              <button
+                class="text-12-regular text-text-info hover:underline"
+                onClick={() => platform.restart?.()}
+              >
+                Restart now
+              </button>
+            </Show>
+            <Switch
+              checked={disableGpu()}
+              onChange={handleToggle}
+            />
+          </div>
+        </SettingsRow>
+      </div>
     </div>
   )
 }
