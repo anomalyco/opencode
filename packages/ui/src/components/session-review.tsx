@@ -588,7 +588,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 <div data-slot="session-review-comment-popover">
                                   <div data-slot="session-review-comment-popover-text">{comment.comment}</div>
                                   <div data-slot="session-review-comment-popover-label">
-                                    {getFilename(comment.file)}:{selectionLabel(comment.selection)}
+                                    Comment on {selectionLabel(comment.selection)}
                                   </div>
                                 </div>
                               </div>

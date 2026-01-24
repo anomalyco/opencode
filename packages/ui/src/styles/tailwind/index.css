@@ -66,6 +66,7 @@
   --shadow-xs-border-select: var(--shadow-xs-border-select);
   --shadow-xs-border-focus: var(--shadow-xs-border-focus);
   --shadow-xs-border-hover: var(--shadow-xs-border-hover);
+  --shadow-lg-border-base: var(--shadow-lg-border-base);
 
   --animate-pulse: var(--animate-pulse);
 }

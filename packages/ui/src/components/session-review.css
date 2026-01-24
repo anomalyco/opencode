@@ -82,10 +82,9 @@
     z-index: 6;
     min-width: 200px;
     max-width: min(320px, calc(100vw - 48px));
-    border-radius: var(--radius-md);
+    border-radius: 14px;
     background-color: var(--surface-raised-stronger-non-alpha);
-    border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);
-    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-base);
     padding: 12px;
   }
 
@@ -271,15 +270,15 @@
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-weight: var(--font-weight-medium);
-    color: var(--text-strong);
+    color: var(--text-weak);
   }
 
   [data-slot="session-review-comment-hover-text"],
   [data-slot="session-review-comment-popover-text"] {
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
+    font-size: var(--font-size-base);
     font-weight: var(--font-weight-regular);
-    color: var(--text-base);
+    color: var(--text-strong);
     white-space: pre-wrap;
   }
 
