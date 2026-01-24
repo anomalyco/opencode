@@ -53,7 +53,7 @@ async function checkHealth(url: string, platform: ReturnType<typeof usePlatform>
 
 function AddRow(props: AddRowProps) {
   return (
-    <div class="flex items-center px-3 h-14 min-w-0 flex-1">
+    <div class="flex items-center px-4 h-14 min-w-0 flex-1">
       <div class="relative flex-1 min-w-0">
         <div
           classList={{
@@ -357,7 +357,7 @@ export function DialogSelectServer() {
             if (x) select(x)
           }}
           divider={true}
-          class="px-5 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]:max-h-[300px] [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-raised-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:h-14 [&_[data-slot=list-item]]:p-3"
+          class="px-5 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]:max-h-[300px] [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-raised-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:h-14 [&_[data-slot=list-item]]:p-3 [&_[data-slot=list-item-add]]:px-0"
           add={
             store.addServer.showForm
               ? {
@@ -555,7 +555,7 @@ export function DialogSelectServer() {
               setStore("addServer", { showForm: true, url: "", error: "" })
               scrollListToBottom()
             }}
-            class="px-3 py-4"
+            class="py-1.5 pl-1.5 pr-3 flex items-center gap-1.5"
           >
             {store.addServer.adding ? language.t("dialog.server.add.checking") : language.t("dialog.server.add.button")}
           </Button>
