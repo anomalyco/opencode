@@ -35,10 +35,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const agent = iife(() => {
       const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
+      const firstAgent = agents()[0]
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
-        current: agents()[0].name,
+        current: firstAgent?.name ?? "build",
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
@@ -54,7 +55,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents()
         },
         current() {
-          return agents().find((x) => x.name === agentStore.current)!
+          const current = agents().find((x) => x.name === agentStore.current)
+          return current ?? agents()[0] ?? createFallbackAgent()
         },
         set(name: string) {
           if (!agents().some((x) => x.name === name))
@@ -82,6 +84,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (index === -1) return colors()[0]
           return colors()[index % colors().length]
         },
+      }
+
+      function createFallbackAgent() {
+        return {
+          name: "build",
+          mode: "primary" as const,
+          native: true,
+          permission: { "*": "ask" },
+          description: "Default agent",
+          providerID: "",
+          model: "",
+        }
       }
     })
 
