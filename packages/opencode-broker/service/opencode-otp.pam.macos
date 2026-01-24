@@ -1,0 +1,3 @@
+# PAM configuration for opencode OTP validation (macOS)
+# Used after password authentication succeeds
+auth required pam_google_authenticator.so nullok
