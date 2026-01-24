@@ -292,10 +292,10 @@
           projectsList.innerHTML = projects
             .slice(0, 5)
             .map((p) => {
-              const name = p.name || p.path.split("/").filter(Boolean).pop()
-              return `<li class="project-item" data-path="${p.path}">
+              const name = p.name || p.worktree.split("/").filter(Boolean).pop()
+              return `<li class="project-item" data-path="${p.worktree}">
                 <div class="name">${p.icon || "📁"} ${name}</div>
-                <div class="path">${p.path}</div>
+                <div class="path">${p.worktree}</div>
               </li>`
             })
             .join("")
