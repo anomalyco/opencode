@@ -81,11 +81,13 @@ export namespace SessionCompaction {
     if (pruned > PRUNE_MINIMUM) {
       for (const part of toPrune) {
         if (part.state.status === "completed") {
+          part.state.output = "[Old tool result content cleared]"
+          part.state.attachments = []
           part.state.time.compacted = Date.now()
           await Session.updatePart(part)
         }
       }
-      log.info("pruned", { count: toPrune.length })
+      log.info("pruned", { count: toPrune.length, estimatedMB: Math.round(pruned / 1024 / 1024) })
     }
   }
 
@@ -189,6 +191,7 @@ export namespace SessionCompaction {
     }
     if (processor.message.error) return "stop"
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
+    if (global.gc) global.gc()
     return "continue"
   }
 

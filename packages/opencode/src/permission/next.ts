@@ -115,6 +115,7 @@ export namespace PermissionNext {
         info: Request
         resolve: () => void
         reject: (e: any) => void
+        timeout: ReturnType<typeof setTimeout>
       }
     > = {}
 
@@ -143,10 +144,28 @@ export namespace PermissionNext {
               id,
               ...request,
             }
+
+            const timeout = setTimeout(
+              () => {
+                if (s.pending[id]) {
+                  delete s.pending[id]
+                  reject(new Error("Permission request timed out"))
+                }
+              },
+              5 * 60 * 1000,
+            )
+
             s.pending[id] = {
               info,
-              resolve,
-              reject,
+              resolve: () => {
+                clearTimeout(timeout)
+                resolve()
+              },
+              reject: (e) => {
+                clearTimeout(timeout)
+                reject(e)
+              },
+              timeout,
             }
             Bus.publish(Event.Asked, info)
           })
@@ -166,6 +185,7 @@ export namespace PermissionNext {
       const s = await state()
       const existing = s.pending[input.requestID]
       if (!existing) return
+      clearTimeout(existing.timeout)
       delete s.pending[input.requestID]
       Bus.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
@@ -178,6 +198,7 @@ export namespace PermissionNext {
         const sessionID = existing.info.sessionID
         for (const [id, pending] of Object.entries(s.pending)) {
           if (pending.info.sessionID === sessionID) {
+            clearTimeout(pending.timeout)
             delete s.pending[id]
             Bus.publish(Event.Replied, {
               sessionID: pending.info.sessionID,
@@ -211,6 +232,7 @@ export namespace PermissionNext {
             (pattern) => evaluate(pending.info.permission, pattern, s.approved).action === "allow",
           )
           if (!ok) continue
+          clearTimeout(pending.timeout)
           delete s.pending[id]
           Bus.publish(Event.Replied, {
             sessionID: pending.info.sessionID,
@@ -276,5 +298,16 @@ export namespace PermissionNext {
 
   export async function list() {
     return state().then((x) => Object.values(x.pending).map((x) => x.info))
+  }
+
+  export async function clearSession(sessionID: string) {
+    const s = await state()
+    for (const [id, pending] of Object.entries(s.pending)) {
+      if (pending.info.sessionID === sessionID) {
+        clearTimeout(pending.timeout)
+        delete s.pending[id]
+        pending.reject(new Error("Session ended"))
+      }
+    }
   }
 }

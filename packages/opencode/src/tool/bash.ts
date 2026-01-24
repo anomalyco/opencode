@@ -164,7 +164,7 @@ export const BashTool = Tool.define("bash", async () => {
         detached: process.platform !== "win32",
       })
 
-      let output = ""
+      const chunks: Buffer[] = []
 
       // Initialize metadata with empty output
       ctx.metadata({
@@ -175,7 +175,8 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const append = (chunk: Buffer) => {
-        output += chunk.toString()
+        chunks.push(chunk)
+        const output = Buffer.concat(chunks).toString()
         ctx.metadata({
           metadata: {
             // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
@@ -240,6 +241,7 @@ export const BashTool = Tool.define("bash", async () => {
         resultMetadata.push("User aborted the command")
       }
 
+      let output = Buffer.concat(chunks).toString()
       if (resultMetadata.length > 0) {
         output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
       }

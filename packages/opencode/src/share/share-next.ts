@@ -6,6 +6,7 @@ import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
 import { Storage } from "@/storage/storage"
 import { Log } from "@/util/log"
+import { Instance } from "@/project/instance"
 import type * as SDK from "@opencode-ai/sdk/v2"
 
 export namespace ShareNext {
@@ -19,50 +20,65 @@ export namespace ShareNext {
 
   export async function init() {
     if (disabled) return
-    Bus.subscribe(Session.Event.Updated, async (evt) => {
-      await sync(evt.properties.info.id, [
-        {
-          type: "session",
-          data: evt.properties.info,
-        },
-      ])
-    })
-    Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
-      await sync(evt.properties.info.sessionID, [
-        {
-          type: "message",
-          data: evt.properties.info,
-        },
-      ])
-      if (evt.properties.info.role === "user") {
-        await sync(evt.properties.info.sessionID, [
-          {
-            type: "model",
-            data: [
-              await Provider.getModel(evt.properties.info.model.providerID, evt.properties.info.model.modelID).then(
-                (m) => m,
-              ),
-            ],
-          },
-        ])
-      }
-    })
-    Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-      await sync(evt.properties.part.sessionID, [
-        {
-          type: "part",
-          data: evt.properties.part,
-        },
-      ])
-    })
-    Bus.subscribe(Session.Event.Diff, async (evt) => {
-      await sync(evt.properties.sessionID, [
-        {
-          type: "session_diff",
-          data: evt.properties.diff,
-        },
-      ])
-    })
+
+    // Use Instance.state to ensure subscriptions are cleaned up when instance is disposed
+    Instance.state(
+      () => {
+        const unsubscribers = [
+          Bus.subscribe(Session.Event.Updated, async (evt) => {
+            await sync(evt.properties.info.id, [
+              {
+                type: "session",
+                data: evt.properties.info,
+              },
+            ])
+          }),
+          Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+            await sync(evt.properties.info.sessionID, [
+              {
+                type: "message",
+                data: evt.properties.info,
+              },
+            ])
+            if (evt.properties.info.role === "user") {
+              await sync(evt.properties.info.sessionID, [
+                {
+                  type: "model",
+                  data: [
+                    await Provider.getModel(
+                      evt.properties.info.model.providerID,
+                      evt.properties.info.model.modelID,
+                    ).then((m) => m),
+                  ],
+                },
+              ])
+            }
+          }),
+          Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+            await sync(evt.properties.part.sessionID, [
+              {
+                type: "part",
+                data: evt.properties.part,
+              },
+            ])
+          }),
+          Bus.subscribe(Session.Event.Diff, async (evt) => {
+            await sync(evt.properties.sessionID, [
+              {
+                type: "session_diff",
+                data: evt.properties.diff,
+              },
+            ])
+          }),
+        ]
+        return { unsubscribers }
+      },
+      async (state) => {
+        for (const unsub of state.unsubscribers) {
+          unsub()
+        }
+      },
+    )()
   }
 
   export async function create(sessionID: string) {

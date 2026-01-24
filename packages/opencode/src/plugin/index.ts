@@ -123,13 +123,22 @@ export namespace Plugin {
       // @ts-expect-error this is because we haven't moved plugin to sdk v2
       await hook.config?.(config)
     }
-    Bus.subscribeAll(async (input) => {
-      const hooks = await state().then((x) => x.hooks)
-      for (const hook of hooks) {
-        hook["event"]?.({
-          event: input,
+
+    Instance.state(
+      () => {
+        const unsubscribe = Bus.subscribeAll(async (input) => {
+          const hooks = await state().then((x) => x.hooks)
+          for (const hook of hooks) {
+            hook["event"]?.({
+              event: input,
+            })
+          }
         })
-      }
-    })
+        return { unsubscribe }
+      },
+      async (state) => {
+        state.unsubscribe()
+      },
+    )()
   }
 }

@@ -86,6 +86,7 @@ export namespace Question {
         info: Request
         resolve: (answers: Answer[]) => void
         reject: (e: any) => void
+        timeout: ReturnType<typeof setTimeout>
       }
     > = {}
 
@@ -111,10 +112,28 @@ export namespace Question {
         questions: input.questions,
         tool: input.tool,
       }
+
+      const timeout = setTimeout(
+        () => {
+          if (s.pending[id]) {
+            delete s.pending[id]
+            reject(new Error("Question timed out"))
+          }
+        },
+        5 * 60 * 1000,
+      )
+
       s.pending[id] = {
         info,
-        resolve,
-        reject,
+        resolve: (answers) => {
+          clearTimeout(timeout)
+          resolve(answers)
+        },
+        reject: (e) => {
+          clearTimeout(timeout)
+          reject(e)
+        },
+        timeout,
       }
       Bus.publish(Event.Asked, info)
     })
@@ -127,6 +146,7 @@ export namespace Question {
       log.warn("reply for unknown request", { requestID: input.requestID })
       return
     }
+    clearTimeout(existing.timeout)
     delete s.pending[input.requestID]
 
     log.info("replied", { requestID: input.requestID, answers: input.answers })
@@ -147,6 +167,7 @@ export namespace Question {
       log.warn("reject for unknown request", { requestID })
       return
     }
+    clearTimeout(existing.timeout)
     delete s.pending[requestID]
 
     log.info("rejected", { requestID })
@@ -167,5 +188,16 @@ export namespace Question {
 
   export async function list() {
     return state().then((x) => Object.values(x.pending).map((x) => x.info))
+  }
+
+  export async function clearSession(sessionID: string) {
+    const s = await state()
+    for (const [id, pending] of Object.entries(s.pending)) {
+      if (pending.info.sessionID === sessionID) {
+        clearTimeout(pending.timeout)
+        delete s.pending[id]
+        pending.reject(new Error("Session ended"))
+      }
+    }
   }
 }

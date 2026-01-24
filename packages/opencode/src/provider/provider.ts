@@ -13,6 +13,7 @@ import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
+import { LRUMap } from "@/util/lru"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -689,11 +690,11 @@ export namespace Provider {
     }
 
     const providers: { [providerID: string]: Info } = {}
-    const languages = new Map<string, LanguageModelV2>()
+    const languages = new LRUMap<string, LanguageModelV2>(100)
     const modelLoaders: {
       [providerID: string]: CustomModelLoader
     } = {}
-    const sdk = new Map<number, SDK>()
+    const sdk = new LRUMap<number, SDK>(50)
 
     log.info("init")
 

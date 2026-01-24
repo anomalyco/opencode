@@ -102,4 +102,12 @@ export class ACPSessionManager {
     this.sessions.set(sessionId, session)
     return session
   }
+
+  remove(sessionId: string) {
+    const deleted = this.sessions.delete(sessionId)
+    if (deleted) {
+      log.info("removed session", { sessionId })
+    }
+    return deleted
+  }
 }

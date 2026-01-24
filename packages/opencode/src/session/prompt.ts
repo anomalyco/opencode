@@ -570,24 +570,39 @@ export namespace SessionPrompt {
         })
       }
 
-      const sessionMessages = clone(msgs)
+      const sessionMessages: MessageV2.WithParts[] = []
 
-      // Ephemerally wrap queued user messages with a reminder to stay on track
-      if (step > 1 && lastFinished) {
-        for (const msg of sessionMessages) {
-          if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
+      for (const msg of msgs) {
+        if (step > 1 && lastFinished && msg.info.role === "user" && msg.info.id > lastFinished.id) {
+          const wrappedParts: MessageV2.Part[] = []
+          let hasWrapped = false
+
           for (const part of msg.parts) {
-            if (part.type !== "text" || part.ignored || part.synthetic) continue
-            if (!part.text.trim()) continue
-            part.text = [
-              "<system-reminder>",
-              "The user sent the following message:",
-              part.text,
-              "",
-              "Please address this message and continue with your tasks.",
-              "</system-reminder>",
-            ].join("\n")
+            if (part.type === "text" && !part.ignored && !part.synthetic && part.text.trim()) {
+              wrappedParts.push({
+                ...part,
+                text: [
+                  "<system-reminder>",
+                  "The user sent the following message:",
+                  part.text,
+                  "",
+                  "Please address this message and continue with your tasks.",
+                  "</system-reminder>",
+                ].join("\n"),
+              })
+              hasWrapped = true
+            } else {
+              wrappedParts.push(part)
+            }
           }
+
+          if (hasWrapped) {
+            sessionMessages.push({ info: msg.info, parts: wrappedParts })
+          } else {
+            sessionMessages.push(msg)
+          }
+        } else {
+          sessionMessages.push(msg)
         }
       }
 

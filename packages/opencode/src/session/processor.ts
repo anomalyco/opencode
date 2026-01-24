@@ -50,6 +50,8 @@ export namespace SessionProcessor {
           try {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+            const reasoningChunks: Record<string, string[]> = {}
+            let textChunks: string[] = []
             const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
@@ -63,6 +65,7 @@ export namespace SessionProcessor {
                   if (value.id in reasoningMap) {
                     continue
                   }
+                  reasoningChunks[value.id] = []
                   reasoningMap[value.id] = {
                     id: Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
@@ -79,7 +82,8 @@ export namespace SessionProcessor {
                 case "reasoning-delta":
                   if (value.id in reasoningMap) {
                     const part = reasoningMap[value.id]
-                    part.text += value.text
+                    reasoningChunks[value.id].push(value.text)
+                    part.text = reasoningChunks[value.id].join("")
                     if (value.providerMetadata) part.metadata = value.providerMetadata
                     if (part.text) await Session.updatePart({ part, delta: value.text })
                   }
@@ -97,6 +101,7 @@ export namespace SessionProcessor {
                     if (value.providerMetadata) part.metadata = value.providerMetadata
                     await Session.updatePart(part)
                     delete reasoningMap[value.id]
+                    delete reasoningChunks[value.id]
                   }
                   break
 
@@ -277,6 +282,7 @@ export namespace SessionProcessor {
                   break
 
                 case "text-start":
+                  textChunks = []
                   currentText = {
                     id: Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
@@ -292,7 +298,8 @@ export namespace SessionProcessor {
 
                 case "text-delta":
                   if (currentText) {
-                    currentText.text += value.text
+                    textChunks.push(value.text)
+                    currentText.text = textChunks.join("")
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
                     if (currentText.text)
                       await Session.updatePart({
@@ -323,6 +330,7 @@ export namespace SessionProcessor {
                     await Session.updatePart(currentText)
                   }
                   currentText = undefined
+                  textChunks = []
                   break
 
                 case "finish":
@@ -361,6 +369,7 @@ export namespace SessionProcessor {
               error: input.assistantMessage.error,
             })
           }
+          for (const id in toolcalls) delete toolcalls[id]
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)
             if (patch.files.length) {

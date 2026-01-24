@@ -3,6 +3,7 @@ import { Installation } from "../installation"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
 import { Log } from "../util/log"
+import { Instance } from "../project/instance"
 
 export namespace Share {
   const log = Log.create({ service: "share" })
@@ -47,23 +48,39 @@ export namespace Share {
   }
 
   export function init() {
-    Bus.subscribe(Session.Event.Updated, async (evt) => {
-      await sync("session/info/" + evt.properties.info.id, evt.properties.info)
-    })
-    Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
-      await sync("session/message/" + evt.properties.info.sessionID + "/" + evt.properties.info.id, evt.properties.info)
-    })
-    Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-      await sync(
-        "session/part/" +
-          evt.properties.part.sessionID +
-          "/" +
-          evt.properties.part.messageID +
-          "/" +
-          evt.properties.part.id,
-        evt.properties.part,
-      )
-    })
+    // Use Instance.state to ensure subscriptions are cleaned up when instance is disposed
+    Instance.state(
+      () => {
+        const unsubscribers = [
+          Bus.subscribe(Session.Event.Updated, async (evt) => {
+            await sync("session/info/" + evt.properties.info.id, evt.properties.info)
+          }),
+          Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+            await sync(
+              "session/message/" + evt.properties.info.sessionID + "/" + evt.properties.info.id,
+              evt.properties.info,
+            )
+          }),
+          Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+            await sync(
+              "session/part/" +
+                evt.properties.part.sessionID +
+                "/" +
+                evt.properties.part.messageID +
+                "/" +
+                evt.properties.part.id,
+              evt.properties.part,
+            )
+          }),
+        ]
+        return { unsubscribers }
+      },
+      async (state) => {
+        for (const unsub of state.unsubscribers) {
+          unsub()
+        }
+      },
+    )()
   }
 
   export const URL =
