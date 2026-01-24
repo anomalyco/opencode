@@ -1420,7 +1420,7 @@ export default function Page() {
                 classes={{ button: "w-full" }}
                 onClick={() => setStore("mobileTab", "session")}
               >
-                Session
+                {language.t("session.tab.session")}
               </Tabs.Trigger>
               <Tabs.Trigger
                 value="review"
@@ -1429,8 +1429,10 @@ export default function Page() {
                 onClick={() => setStore("mobileTab", "review")}
               >
                 <Switch>
-                  <Match when={hasReview()}>{reviewCount()} Files Changed</Match>
-                  <Match when={true}>Review</Match>
+                  <Match when={hasReview()}>
+                    {language.t("session.review.filesChanged", { count: reviewCount() })}
+                  </Match>
+                  <Match when={true}>{language.t("session.tab.review")}</Match>
                 </Switch>
               </Tabs.Trigger>
             </Tabs.List>
@@ -1460,7 +1462,11 @@ export default function Page() {
                           <Match when={hasReview()}>
                             <Show
                               when={diffsReady()}
-                              fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
+                              fallback={
+                                <div class="px-4 py-4 text-text-weak">
+                                  {language.t("session.review.loadingChanges")}
+                                </div>
+                              }
                             >
                               <SessionReviewTab
                                 diffs={diffs}
@@ -1486,7 +1492,9 @@ export default function Page() {
                           <Match when={true}>
                             <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
                               <Mark class="w-14 opacity-10" />
-                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet</div>
+                              <div class="text-13-regular text-text-weak max-w-56">
+                                {language.t("session.review.empty")}
+                              </div>
                             </div>
                           </Match>
                         </Switch>
@@ -1718,7 +1726,7 @@ export default function Page() {
                             <DiffChanges changes={diffs()} variant="bars" />
                           </Show>
                           <div class="flex items-center gap-1.5">
-                            <div>Review</div>
+                            <div>{language.t("session.tab.review")}</div>
                             <Show when={info()?.summary?.files}>
                               <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
                                 {info()?.summary?.files ?? 0}
@@ -1746,7 +1754,7 @@ export default function Page() {
                       >
                         <div class="flex items-center gap-2">
                           <SessionContextUsage variant="indicator" />
-                          <div>Context</div>
+                          <div>{language.t("session.tab.context")}</div>
                         </div>
                       </Tabs.Trigger>
                     </Show>
@@ -1755,7 +1763,7 @@ export default function Page() {
                     </SortableProvider>
                     <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
                       <TooltipKeybind
-                        title="Open file"
+                        title={language.t("command.file.open")}
                         keybind={command.keybind("file.open")}
                         class="flex items-center"
                       >
@@ -1778,7 +1786,11 @@ export default function Page() {
                           <Match when={hasReview()}>
                             <Show
                               when={diffsReady()}
-                              fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
+                              fallback={
+                                <div class="px-6 py-4 text-text-weak">
+                                  {language.t("session.review.loadingChanges")}
+                                </div>
+                              }
                             >
                               <SessionReviewTab
                                 diffs={diffs}
