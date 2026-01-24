@@ -39,7 +39,7 @@ Progress: [█████████░] ~90%
 | 10. Two-Factor Authentication | 8 | 19.6 min | 2.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 10-04 (2 min), 10-05 (3 min), 10-06 (2.4 min), 10-07 (unknown), 10-08 (2.5 min)
+- Last 5 plans: 10-04 (2 min), 10-05 (3 min), 10-06 (2.4 min), 10-07 (3.3 min), 10-08 (2.5 min)
 - Trend: Consistently fast execution
 
 *Updated after each plan completion*
@@ -147,6 +147,9 @@ Recent decisions affecting current work:
 | 10-05 | 2FA login does not use rememberMe for session | Device trust is separate concept from session persistence |
 | 10-06 | escapeHtml helper for username | XSS prevention when displaying user-provided data |
 | 10-06 | Auto-submit only for 6-digit codes | Backup codes may be longer, user should manually submit those |
+| 10-07 | QR code as inline SVG | No external image hosting needed, renders directly in HTML |
+| 10-07 | Custom base32 encoder | Standard RFC 4648 base32, no extra dependency needed |
+| 10-07 | Show google-authenticator CLI command | User must run server command to enable PAM OTP validation |
 | 10-08 | Device trust cookie cleared on all logout paths | Consistency - both /logout and /logout/all clear trust |
 | 10-08 | Status endpoint verifies cookie validity | Prevents false positives for device trust status |
 | 10-08 | 2FA setup opens in new tab | Placeholder URL for future setup page |
@@ -208,4 +211,5 @@ Next: Continue Phase 10 (Two-Factor Authentication)
 - [x] Plan 04: BrokerClient 2FA methods (2 min)
 - [x] Plan 05: Auth Routes 2FA Flow (3 min)
 - [x] Plan 06: 2FA Verification Page UI (2.4 min)
+- [x] Plan 07: 2FA Setup Wizard (3.3 min)
 - [x] Plan 08: Device Trust Management (2.5 min)
