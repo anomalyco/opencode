@@ -11,6 +11,8 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
+import * as A2A from "../a2a"
+import { Instance } from "../project/instance"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -40,6 +42,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
+
+      // Check if this is a remote agent reference
+      const remoteRef = A2A.parseAgentRef(params.subagent_type)
+      if (remoteRef) {
+        return executeRemoteAgent(params, ctx, params.subagent_type)
+      }
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
@@ -180,9 +188,247 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         metadata: {
           summary,
           sessionId: session.id,
+          remote: undefined as { domain: string; agent: string } | undefined,
         },
         output,
       }
     },
   }
 })
+
+async function executeRemoteAgent(params: z.infer<typeof parameters>, ctx: Tool.Context, agentRef: string) {
+  const parsed = A2A.parseAgentRef(agentRef)
+  if (!parsed) throw new Error(`Invalid agent reference: ${agentRef}`)
+
+  const { domain } = parsed
+
+  // Check trust
+  const isTrusted = await A2A.isTrusted(domain)
+  if (!isTrusted) {
+    await ctx.ask({
+      permission: "remote_agent",
+      patterns: [domain],
+      always: [],
+      metadata: {
+        domain,
+        description: params.description,
+      },
+    })
+    A2A.trustForSession(domain)
+  }
+
+  // Fetch agent card
+  const agentCard = await A2A.fetchAgentCard(agentRef)
+  const agentDomain = A2A.getDomainFromAgentUrl(agentCard.url)
+
+  // Create session for tracking
+  const session = await Session.create({
+    parentID: ctx.sessionID,
+    title: `${params.description} (@${agentRef.slice(1)} remote)`,
+    permission: [],
+  })
+
+  ctx.metadata({
+    title: params.description,
+    metadata: {
+      sessionId: session.id,
+      remote: { domain: agentDomain, agent: agentCard.name },
+    },
+  })
+
+  const messageID = Identifier.ascending("message")
+
+  // Get existing contextId for conversation continuity
+  const existingContextId = A2A.getContextId(ctx.sessionID, agentDomain)
+
+  // Create assistant message
+  const assistantMsg: MessageV2.Assistant = {
+    id: messageID,
+    sessionID: session.id,
+    role: "assistant",
+    time: { created: Date.now() },
+    parentID: ctx.messageID,
+    modelID: "remote",
+    providerID: agentDomain,
+    mode: "remote",
+    agent: `${agentDomain}:${agentCard.name}`,
+    path: {
+      cwd: Instance.worktree,
+      root: Instance.worktree,
+    },
+    cost: 0,
+    tokens: {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  }
+  await Session.updateMessage(assistantMsg)
+
+  // Build A2A message
+  const a2aMessage: A2A.Message = {
+    kind: "message",
+    messageId: crypto.randomUUID(),
+    role: "user",
+    parts: [{ kind: "text", text: params.prompt }],
+  }
+
+  let currentTextPart: MessageV2.TextPart | undefined
+  const toolParts = new Map<string, MessageV2.ToolPart>()
+  const toolSummary: Array<{ id: string; tool: string; state: { status: string; title?: string } }> = []
+  let savedContextId: string | undefined
+
+  // Stream the response
+  for await (const event of A2A.streamMessage({
+    agentCard,
+    message: a2aMessage,
+    contextId: existingContextId,
+    signal: ctx.abort,
+  })) {
+    switch (event.type) {
+      case "task": {
+        if (event.task.contextId && !savedContextId) {
+          savedContextId = event.task.contextId
+          A2A.setContextId(ctx.sessionID, agentDomain, event.task.contextId)
+        }
+        break
+      }
+
+      case "statusUpdate": {
+        if (event.contextId && !savedContextId) {
+          savedContextId = event.contextId
+          A2A.setContextId(ctx.sessionID, agentDomain, event.contextId)
+        }
+
+        if (event.message && event.state === "working") {
+          const toolMatch = event.message.match(/Calling tool: (.+)/)
+          if (toolMatch) {
+            const toolName = toolMatch[1]
+            const partId = Identifier.ascending("part")
+            const part: MessageV2.ToolPart = {
+              id: partId,
+              messageID,
+              sessionID: session.id,
+              type: "tool",
+              callID: `remote_${partId}`,
+              tool: toolName,
+              state: {
+                status: "running",
+                input: {},
+                time: { start: Date.now() },
+              },
+            }
+            toolParts.set(toolName, part)
+            await Session.updatePart(part)
+
+            toolSummary.push({
+              id: part.id,
+              tool: toolName,
+              state: { status: "running" },
+            })
+            ctx.metadata({
+              title: params.description,
+              metadata: {
+                summary: [...toolSummary],
+                sessionId: session.id,
+                remote: { domain: agentDomain, agent: agentCard.name },
+              },
+            })
+          }
+        }
+        break
+      }
+
+      case "artifact": {
+        if (event.contextId && !savedContextId) {
+          savedContextId = event.contextId
+          A2A.setContextId(ctx.sessionID, agentDomain, event.contextId)
+        }
+
+        const artifact = event.artifact
+        const artifactText = artifact.parts
+          .filter((p): p is A2A.TextPart => p.kind === "text")
+          .map((p) => p.text)
+          .join("")
+
+        if (artifact.name === "response") {
+          if (!currentTextPart) {
+            currentTextPart = {
+              id: Identifier.ascending("part"),
+              messageID,
+              sessionID: session.id,
+              type: "text",
+              text: artifactText,
+              time: { start: Date.now() },
+            }
+            await Session.updatePart({ part: currentTextPart, delta: artifactText })
+          } else {
+            currentTextPart.text += artifactText
+            await Session.updatePart({ part: currentTextPart, delta: artifactText })
+          }
+        } else if (artifact.name) {
+          // Tool output
+          const existingPart = toolParts.get(artifact.name)
+          if (existingPart && existingPart.state.status === "running") {
+            existingPart.state = {
+              status: "completed",
+              input: existingPart.state.input,
+              output: artifactText,
+              title: "Completed",
+              metadata: {},
+              time: { start: existingPart.state.time.start, end: Date.now() },
+            }
+            await Session.updatePart(existingPart)
+
+            const summaryIdx = toolSummary.findIndex((t) => t.id === existingPart.id)
+            if (summaryIdx >= 0) {
+              toolSummary[summaryIdx].state = { status: "completed", title: "Completed" }
+              ctx.metadata({
+                title: params.description,
+                metadata: {
+                  summary: [...toolSummary],
+                  sessionId: session.id,
+                  remote: { domain: agentDomain, agent: agentCard.name },
+                },
+              })
+            }
+          }
+        }
+        break
+      }
+
+      case "error": {
+        throw new Error(`Remote agent error: ${event.message} (${event.code})`)
+      }
+    }
+  }
+
+  if (currentTextPart && currentTextPart.time) {
+    currentTextPart.time.end = Date.now()
+    await Session.updatePart({ part: currentTextPart, delta: "" })
+  }
+
+  assistantMsg.time.completed = Date.now()
+  await Session.updateMessage(assistantMsg)
+
+  const text = currentTextPart?.text ?? ""
+  const output =
+    text +
+    "\n\n" +
+    ["<task_metadata>", `session_id: ${session.id}`, `remote: ${agentDomain}/${agentCard.name}`, "</task_metadata>"].join("\n")
+
+  return {
+    title: params.description,
+    metadata: {
+      summary: toolSummary.map((t) => ({
+        id: t.id,
+        tool: t.tool,
+        state: { status: t.state.status as string, title: t.state.title },
+      })),
+      sessionId: session.id,
+      remote: { domain: agentDomain, agent: agentCard.name } as { domain: string; agent: string } | undefined,
+    },
+    output,
+  }
+}

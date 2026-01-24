@@ -47,6 +47,7 @@
     "zod-to-json-schema": "3.24.5"
   },
   "dependencies": {
+    "@a2a-js/sdk": "0.3.9",
     "@actions/core": "1.11.1",
     "@actions/github": "6.0.1",
     "@agentclientprotocol/sdk": "0.12.0",
