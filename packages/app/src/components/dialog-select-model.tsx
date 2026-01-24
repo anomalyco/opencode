@@ -167,6 +167,7 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
         if (next) setStore("dismiss", null)
         setStore("open", next)
       }}
+      modal={false}
       placement="top-start"
       gutter={8}
     >
@@ -181,6 +182,20 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
         <Kobalte.Content
           ref={(el) => setStore("content", el)}
           class="w-72 h-80 flex flex-col rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
+          onEscapeKeyDown={(event) => {
+            setStore("dismiss", "escape")
+            setStore("open", false)
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onPointerDownOutside={() => {
+            setStore("dismiss", "outside")
+            setStore("open", false)
+          }}
+          onFocusOutside={() => {
+            setStore("dismiss", "outside")
+            setStore("open", false)
+          }}
           onCloseAutoFocus={(event) => {
             if (store.dismiss === "outside") event.preventDefault()
             setStore("dismiss", null)
