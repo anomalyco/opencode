@@ -65,6 +65,8 @@ import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { Titlebar } from "@/components/titlebar"
 import { SessionIndicator } from "@/components/session-indicator"
+import { SecurityBadge } from "@/components/security-badge"
+import { HttpWarningBanner } from "@/components/http-warning-banner"
 import { useServer } from "@/context/server"
 
 export default function Layout(props: ParentProps) {
@@ -1773,10 +1775,14 @@ export default function Layout(props: ParentProps) {
   return (
     <div class="relative bg-background-base flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       <Titlebar />
+      <HttpWarningBanner />
       <Show when={titlebarRightMount()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <SessionIndicator />
+            <div class="flex items-center gap-2">
+              <SecurityBadge />
+              <SessionIndicator />
+            </div>
           </Portal>
         )}
       </Show>
