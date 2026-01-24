@@ -2059,7 +2059,15 @@ export default function Page() {
                                 >
                                   <Icon name="comment" size="small" style={{ color: "var(--white)" }} />
                                 </button>
-                                <div class="absolute top-[calc(100%+4px)] right-[-8px] z-40 w-[380px] rounded-[14px] bg-surface-raised-stronger-non-alpha shadow-lg-border-base p-2">
+                                <div
+                                  class="absolute top-[calc(100%+4px)] right-[-8px] z-40 w-[380px] rounded-[14px] bg-surface-raised-stronger-non-alpha shadow-lg-border-base p-2"
+                                  onFocusOut={(e) => {
+                                    const target = e.relatedTarget as Node | null
+                                    if (!target || !e.currentTarget.contains(target)) {
+                                      setCommenting(null)
+                                    }
+                                  }}
+                                >
                                   <div class="flex flex-col gap-2">
                                     <textarea
                                       ref={textarea}
@@ -2069,6 +2077,10 @@ export default function Page() {
                                       value={draft()}
                                       onInput={(e) => setDraft(e.currentTarget.value)}
                                       onKeyDown={(e) => {
+                                        if (e.key === "Escape") {
+                                          setCommenting(null)
+                                          return
+                                        }
                                         if (e.key !== "Enter") return
                                         if (e.shiftKey) return
                                         e.preventDefault()
