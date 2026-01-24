@@ -1537,7 +1537,7 @@ export default function Page() {
                         }}
                         onClick={autoScroll.handleInteraction}
                         class="relative min-w-0 w-full h-full overflow-y-auto session-scroller"
-                        style={{ "--session-title-height": (info()?.title || info()?.parentID) ? "40px" : "0px" }}
+                        style={{ "--session-title-height": info()?.title || info()?.parentID ? "40px" : "0px" }}
                       >
                         <Show when={info()?.title || info()?.parentID}>
                           <div
