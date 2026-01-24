@@ -57,6 +57,15 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
+      // Primary agents cannot be invoked as subagents
+      if (agent.mode === "primary") {
+        throw new Error(
+          `Agent "${params.subagent_type}" is a primary agent and cannot be invoked as a subagent. ` +
+            `Primary agents (build, plan, etc.) are designed to be user-facing only. ` +
+            `If you want to invoke this agent programmatically, change its mode to "all" or "subagent" in your configuration.`
+        )
+      }
+
       const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
 
       const session = await iife(async () => {
