@@ -24,6 +24,13 @@ process.env["XDG_STATE_HOME"] = path.join(dir, "state")
 
 const { Global } = await import("../src/global")
 
+if (!Global.Path.data.startsWith(dir)) {
+  throw new Error(
+    `Test isolation failed: Global.Path.data="${Global.Path.data}" expected prefix "${dir}". ` +
+      "Ensure XDG env vars are set before importing from src/.",
+  )
+}
+
 // Pre-fetch models.json so tests don't need the macro fallback
 // Also write the cache version file to prevent global/index.ts from clearing the cache
 const cacheDir = path.join(dir, "cache", "opencode")
