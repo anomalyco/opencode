@@ -6,6 +6,14 @@ import { useSession } from "@/context/session"
 import { useServer } from "@/context/server"
 
 /**
+ * Get CSRF token from cookie.
+ */
+function getCsrfToken(): string | undefined {
+  const match = document.cookie.match(/opencode_csrf=([^;]+)/)
+  return match ? match[1] : undefined
+}
+
+/**
  * Session indicator component that shows the logged-in username
  * with a dropdown menu for logout.
  *
@@ -23,9 +31,16 @@ export function SessionIndicator() {
       const url = server.url
       if (!url) return
 
+      const csrfToken = getCsrfToken()
+      const headers: Record<string, string> = {}
+      if (csrfToken) {
+        headers["X-CSRF-Token"] = csrfToken
+      }
+
       const res = await fetch(`${url}/auth/logout`, {
         method: "POST",
         credentials: "include",
+        headers,
       })
 
       // Logout endpoint returns 302 redirect, but fetch doesn't follow redirects
