@@ -907,6 +907,12 @@ export namespace Config {
         .describe(
           "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
         ),
+      showAllSessions: z
+        .boolean()
+        .optional()
+        .describe(
+          "Show all sessions regardless of directory. Useful when syncing the data directory across multiple platforms where paths differ (e.g., Windows vs macOS/Linux)",
+        ),
       autoshare: z
         .boolean()
         .optional()

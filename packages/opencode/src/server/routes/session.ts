@@ -16,6 +16,7 @@ import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Config } from "../../config/config"
 
 const log = Log.create({ service: "server" })
 
@@ -55,8 +56,9 @@ export const SessionRoutes = lazy(() =>
         const query = c.req.valid("query")
         const term = query.search?.toLowerCase()
         const sessions: Session.Info[] = []
+        const config = await Config.get()
         for await (const session of Session.list()) {
-          if (query.directory !== undefined && session.directory !== query.directory) continue
+          if (!config.showAllSessions && query.directory !== undefined && session.directory !== query.directory) continue
           if (query.roots && session.parentID) continue
           if (query.start !== undefined && session.time.updated < query.start) continue
           if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
