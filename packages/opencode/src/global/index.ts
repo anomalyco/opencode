@@ -7,8 +7,8 @@ const app = "opencode"
 
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
-const state = path.join(xdgState!, app)
+const defaultConfig = path.join(xdgConfig!, app)
+const defaultState = path.join(xdgState!, app)
 
 export namespace Global {
   export const Path = {
@@ -20,8 +20,14 @@ export namespace Global {
     bin: path.join(data, "bin"),
     log: path.join(data, "log"),
     cache,
-    config,
-    state,
+    // Allow override via XDG_CONFIG_HOME for test isolation (reads at runtime)
+    get config() {
+      return process.env.XDG_CONFIG_HOME ? path.join(process.env.XDG_CONFIG_HOME, app) : defaultConfig
+    },
+    // Allow override via XDG_STATE_HOME for test isolation (reads at runtime)
+    get state() {
+      return process.env.XDG_STATE_HOME ? path.join(process.env.XDG_STATE_HOME, app) : defaultState
+    },
     // Allow overriding models.dev URL for offline deployments
     get modelsDevUrl() {
       return process.env.OPENCODE_MODELS_URL || "https://models.dev"
