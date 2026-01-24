@@ -88,6 +88,8 @@ export const dict = {
   "dialog.provider.group.other": "Inne",
   "dialog.provider.tag.recommended": "Zalecane",
   "dialog.provider.anthropic.note": "Połącz z Claude Pro/Max lub kluczem API",
+  "dialog.provider.openai.note": "Połącz z ChatGPT Pro/Plus lub kluczem API",
+  "dialog.provider.copilot.note": "Połącz z Copilot lub kluczem API",
 
   "dialog.model.select.title": "Wybierz model",
   "dialog.model.search.placeholder": "Szukaj modeli",
@@ -153,6 +155,7 @@ export const dict = {
   "model.tooltip.context": "Limit kontekstu {{limit}}",
 
   "common.search.placeholder": "Szukaj",
+  "common.goBack": "Wstecz",
   "common.loading": "Ładowanie",
   "common.loading.ellipsis": "...",
   "common.cancel": "Anuluj",
@@ -199,7 +202,10 @@ export const dict = {
   "prompt.slash.badge.custom": "własne",
   "prompt.context.active": "aktywny",
   "prompt.context.includeActiveFile": "Dołącz aktywny plik",
+  "prompt.context.removeActiveFile": "Usuń aktywny plik z kontekstu",
+  "prompt.context.removeFile": "Usuń plik z kontekstu",
   "prompt.action.attachFile": "Załącz plik",
+  "prompt.attachment.remove": "Usuń załącznik",
   "prompt.action.send": "Wyślij",
   "prompt.action.stop": "Zatrzymaj",
 
@@ -243,6 +249,7 @@ export const dict = {
   "dialog.server.default.none": "Nie wybrano serwera",
   "dialog.server.default.set": "Ustaw bieżący serwer jako domyślny",
   "dialog.server.default.clear": "Wyczyść",
+  "dialog.server.action.remove": "Usuń serwer",
 
   "dialog.project.edit.title": "Edytuj projekt",
   "dialog.project.edit.name": "Nazwa",
@@ -251,6 +258,7 @@ export const dict = {
   "dialog.project.edit.icon.hint": "Kliknij lub przeciągnij obraz",
   "dialog.project.edit.icon.recommended": "Zalecane: 128x128px",
   "dialog.project.edit.color": "Kolor",
+  "dialog.project.edit.color.select": "Wybierz kolor {{color}}",
 
   "context.breakdown.title": "Podział kontekstu",
   "context.breakdown.note": 'Przybliżony podział tokenów wejściowych. "Inne" obejmuje definicje narzędzi i narzut.',
@@ -284,6 +292,7 @@ export const dict = {
   "context.usage.usage": "Użycie",
   "context.usage.cost": "Koszt",
   "context.usage.clickToView": "Kliknij, aby zobaczyć kontekst",
+  "context.usage.view": "Pokaż użycie kontekstu",
 
   "language.en": "Angielski",
   "language.zh": "Chiński",
@@ -294,6 +303,10 @@ export const dict = {
   "language.ja": "Japoński",
   "language.da": "Duński",
   "language.pl": "Polski",
+  "language.ru": "Rosyjski",
+  "language.ar": "Arabski",
+  "language.no": "Norweski",
+  "language.br": "Portugalski (Brazylia)",
 
   "toast.language.title": "Język",
   "toast.language.description": "Przełączono na {{language}}",
@@ -384,6 +397,7 @@ export const dict = {
   "session.tab.session": "Sesja",
   "session.tab.review": "Przegląd",
   "session.tab.context": "Kontekst",
+  "session.panel.reviewAndFiles": "Przegląd i pliki",
   "session.review.filesChanged": "Zmieniono {{count}} plików",
   "session.review.loadingChanges": "Ładowanie zmian...",
   "session.review.empty": "Brak zmian w tej sesji",
@@ -401,6 +415,7 @@ export const dict = {
   "session.new.lastModified": "Ostatnio zmodyfikowano",
 
   "session.header.search.placeholder": "Szukaj {{project}}",
+  "session.header.searchFiles": "Szukaj plików",
 
   "session.share.popover.title": "Opublikuj w sieci",
   "session.share.popover.description.shared":
@@ -423,6 +438,7 @@ export const dict = {
   "terminal.loading": "Ładowanie terminala...",
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
+  "terminal.close": "Zamknij terminal",
   "terminal.connectionLost.title": "Utracono połączenie",
   "terminal.connectionLost.description":
     "Połączenie z terminalem zostało przerwane. Może się to zdarzyć przy restarcie serwera.",
@@ -434,6 +450,7 @@ export const dict = {
   "common.learnMore": "Dowiedz się więcej",
   "common.rename": "Zmień nazwę",
   "common.reset": "Resetuj",
+  "common.archive": "Archiwizuj",
   "common.delete": "Usuń",
   "common.close": "Zamknij",
   "common.edit": "Edytuj",
@@ -441,6 +458,7 @@ export const dict = {
   "common.key.esc": "ESC",
 
   "sidebar.menu.toggle": "Przełącz menu",
+  "sidebar.nav.projectsAndSessions": "Projekty i sesje",
   "sidebar.settings": "Ustawienia",
   "sidebar.help": "Pomoc",
   "sidebar.workspaces.enable": "Włącz przestrzenie robocze",
@@ -610,6 +628,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "Dostęp do plików poza katalogiem projektu",
   "settings.permissions.tool.doom_loop.title": "Zapętlenie",
   "settings.permissions.tool.doom_loop.description": "Wykrywanie powtarzających się wywołań narzędzi (doom loop)",
+
+  "session.delete.failed.title": "Nie udało się usunąć sesji",
+  "session.delete.title": "Usuń sesję",
+  "session.delete.confirm": 'Usunąć sesję "{{name}}"?',
+  "session.delete.button": "Usuń sesję",
 
   "workspace.new": "Nowa przestrzeń robocza",
   "workspace.type.local": "lokalna",

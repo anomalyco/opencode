@@ -19,10 +19,12 @@ import { SettingsProvider } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptProvider } from "@/context/prompt"
 import { FileProvider } from "@/context/file"
+import { CommentsProvider } from "@/context/comments"
 import { NotificationProvider } from "@/context/notification"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
 import { LanguageProvider, useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { Logo } from "@opencode-ai/ui/logo"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
@@ -45,6 +47,11 @@ declare global {
   }
 }
 
+function MarkedProviderWithNativeParser(props: ParentProps) {
+  const platform = usePlatform()
+  return <MarkedProvider nativeParser={platform.parseMarkdown}>{props.children}</MarkedProvider>
+}
+
 export function AppBaseProviders(props: ParentProps) {
   return (
     <MetaProvider>
@@ -54,11 +61,11 @@ export function AppBaseProviders(props: ParentProps) {
           <UiI18nBridge>
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
               <DialogProvider>
-                <MarkedProvider>
+                <MarkedProviderWithNativeParser>
                   <DiffComponentProvider component={Diff}>
                     <CodeComponentProvider component={Code}>{props.children}</CodeComponentProvider>
                   </DiffComponentProvider>
-                </MarkedProvider>
+                </MarkedProviderWithNativeParser>
               </DialogProvider>
             </ErrorBoundary>
           </UiI18nBridge>
@@ -120,13 +127,15 @@ export function AppInterface(props: { defaultUrl?: string }) {
                 <Route
                   path="/session/:id?"
                   component={(p) => (
-                    <Show when={p.params.id ?? "new"} keyed>
+                    <Show when={p.params.id ?? "new"}>
                       <TerminalProvider>
                         <FileProvider>
                           <PromptProvider>
-                            <Suspense fallback={<Loading />}>
-                              <Session />
-                            </Suspense>
+                            <CommentsProvider>
+                              <Suspense fallback={<Loading />}>
+                                <Session />
+                              </Suspense>
+                            </CommentsProvider>
                           </PromptProvider>
                         </FileProvider>
                       </TerminalProvider>

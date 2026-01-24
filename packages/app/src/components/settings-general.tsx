@@ -5,6 +5,7 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { useLanguage } from "@/context/language"
 import { useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
+import { Link } from "./link"
 
 export const SettingsGeneral: Component = () => {
   const theme = useTheme()
@@ -35,6 +36,7 @@ export const SettingsGeneral: Component = () => {
     { value: "hack", label: "font.option.hack" },
     { value: "inconsolata", label: "font.option.inconsolata" },
     { value: "intel-one-mono", label: "font.option.intelOneMono" },
+    { value: "iosevka", label: "font.option.iosevka" },
     { value: "jetbrains-mono", label: "font.option.jetbrainsMono" },
     { value: "meslo-lgs", label: "font.option.mesloLgs" },
     { value: "roboto-mono", label: "font.option.robotoMono" },
@@ -107,9 +109,7 @@ export const SettingsGeneral: Component = () => {
               description={
                 <>
                   {language.t("settings.general.row.theme.description")}{" "}
-                  <a href="#" class="text-text-interactive-base">
-                    {language.t("common.learnMore")}
-                  </a>
+                  <Link href="https://opencode.ai/docs/themes/">{language.t("common.learnMore")}</Link>
                 </>
               }
             >

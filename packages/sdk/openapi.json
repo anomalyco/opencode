@@ -183,7 +183,7 @@
           }
         ],
         "summary": "Update project",
-        "description": "Update project properties such as name, icon and color.",
+        "description": "Update project properties such as name, icon, and commands.",
         "responses": {
           "200": {
             "description": "Updated project information",
@@ -235,6 +235,15 @@
                         "type": "string"
                       },
                       "color": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "commands": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "description": "Startup script to run when creating a new workspace (worktree)",
                         "type": "string"
                       }
                     }
@@ -850,7 +859,7 @@
           }
         ],
         "summary": "Create worktree",
-        "description": "Create a new git worktree for the current project.",
+        "description": "Create a new git worktree for the current project and run any configured startup scripts.",
         "responses": {
           "200": {
             "description": "Worktree created",
@@ -5807,6 +5816,15 @@
               }
             }
           },
+          "commands": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "description": "Startup script to run when creating a new workspace (worktree)",
+                "type": "string"
+              }
+            }
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -8103,6 +8121,47 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.worktree.ready": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "worktree.ready"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "branch"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.worktree.failed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "worktree.failed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event": {
         "anyOf": [
           {
@@ -8224,6 +8283,12 @@
           },
           {
             "$ref": "#/components/schemas/Event.pty.deleted"
+          },
+          {
+            "$ref": "#/components/schemas/Event.worktree.ready"
+          },
+          {
+            "$ref": "#/components/schemas/Event.worktree.failed"
           }
         ]
       },
@@ -10094,6 +10159,7 @@
             "type": "string"
           },
           "startCommand": {
+            "description": "Additional startup script to run after the project's start command",
             "type": "string"
           }
         }

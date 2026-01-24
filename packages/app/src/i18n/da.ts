@@ -86,6 +86,8 @@ export const dict = {
   "dialog.provider.group.other": "Andre",
   "dialog.provider.tag.recommended": "Anbefalet",
   "dialog.provider.anthropic.note": "Forbind med Claude Pro/Max eller API-nøgle",
+  "dialog.provider.openai.note": "Forbind med ChatGPT Pro/Plus eller API-nøgle",
+  "dialog.provider.copilot.note": "Forbind med Copilot eller API-nøgle",
 
   "dialog.model.select.title": "Vælg model",
   "dialog.model.search.placeholder": "Søg modeller",
@@ -136,6 +138,7 @@ export const dict = {
   "model.tag.latest": "Nyeste",
 
   "common.search.placeholder": "Søg",
+  "common.goBack": "Gå tilbage",
   "common.loading": "Indlæser",
   "common.cancel": "Annuller",
   "common.submit": "Indsend",
@@ -181,7 +184,10 @@ export const dict = {
   "prompt.slash.badge.custom": "brugerdefineret",
   "prompt.context.active": "aktiv",
   "prompt.context.includeActiveFile": "Inkluder aktiv fil",
+  "prompt.context.removeActiveFile": "Fjern aktiv fil fra kontekst",
+  "prompt.context.removeFile": "Fjern fil fra kontekst",
   "prompt.action.attachFile": "Vedhæft fil",
+  "prompt.attachment.remove": "Fjern vedhæftning",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
 
@@ -225,6 +231,7 @@ export const dict = {
   "dialog.server.default.none": "Ingen server valgt",
   "dialog.server.default.set": "Sæt nuværende server som standard",
   "dialog.server.default.clear": "Ryd",
+  "dialog.server.action.remove": "Fjern server",
 
   "dialog.project.edit.title": "Rediger projekt",
   "dialog.project.edit.name": "Navn",
@@ -233,6 +240,7 @@ export const dict = {
   "dialog.project.edit.icon.hint": "Klik eller træk et billede",
   "dialog.project.edit.icon.recommended": "Anbefalet: 128x128px",
   "dialog.project.edit.color": "Farve",
+  "dialog.project.edit.color.select": "Vælg farven {{color}}",
 
   "context.breakdown.title": "Kontekstfordeling",
   "context.breakdown.note":
@@ -267,6 +275,7 @@ export const dict = {
   "context.usage.usage": "Forbrug",
   "context.usage.cost": "Omkostning",
   "context.usage.clickToView": "Klik for at se kontekst",
+  "context.usage.view": "Se kontekstforbrug",
 
   "language.en": "Engelsk",
   "language.zh": "Kinesisk (forenklet)",
@@ -279,6 +288,9 @@ export const dict = {
   "language.da": "Dansk",
   "language.ru": "Russisk",
   "language.pl": "Polsk",
+  "language.ar": "Arabisk",
+  "language.no": "Norsk",
+  "language.br": "Portugisisk (Brasilien)",
 
   "toast.language.title": "Sprog",
   "toast.language.description": "Skiftede til {{language}}",
@@ -368,6 +380,7 @@ export const dict = {
   "session.tab.session": "Session",
   "session.tab.review": "Gennemgang",
   "session.tab.context": "Kontekst",
+  "session.panel.reviewAndFiles": "Gennemgang og filer",
   "session.review.filesChanged": "{{count}} Filer ændret",
   "session.review.loadingChanges": "Indlæser ændringer...",
   "session.review.empty": "Ingen ændringer i denne session endnu",
@@ -384,6 +397,7 @@ export const dict = {
   "session.new.lastModified": "Sidst ændret",
 
   "session.header.search.placeholder": "Søg {{project}}",
+  "session.header.searchFiles": "Søg efter filer",
 
   "session.share.popover.title": "Udgiv på nettet",
   "session.share.popover.description.shared":
@@ -406,6 +420,7 @@ export const dict = {
   "terminal.loading": "Indlæser terminal...",
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
+  "terminal.close": "Luk terminal",
 
   "common.closeTab": "Luk fane",
   "common.dismiss": "Afvis",
@@ -414,11 +429,13 @@ export const dict = {
   "common.learnMore": "Lær mere",
   "common.rename": "Omdøb",
   "common.reset": "Nulstil",
+  "common.archive": "Arkivér",
   "common.delete": "Slet",
   "common.close": "Luk",
   "common.edit": "Rediger",
   "common.loadMore": "Indlæs flere",
 
+  "sidebar.nav.projectsAndSessions": "Projekter og sessioner",
   "sidebar.settings": "Indstillinger",
   "sidebar.help": "Hjælp",
   "sidebar.workspaces.enable": "Aktiver arbejdsområder",
@@ -532,6 +549,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "Få adgang til filer uden for projektmappen",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
   "settings.permissions.tool.doom_loop.description": "Opdag gentagne værktøjskald med identisk input",
+
+  "session.delete.failed.title": "Kunne ikke slette session",
+  "session.delete.title": "Slet session",
+  "session.delete.confirm": 'Slet session "{{name}}"?',
+  "session.delete.button": "Slet session",
 
   "workspace.new": "Nyt arbejdsområde",
   "workspace.type.local": "lokal",
