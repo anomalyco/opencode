@@ -120,7 +120,7 @@
   --surface-brand-base: var(--yuzu-light-9);
   --surface-brand-hover: var(--yuzu-light-10);
   --surface-interactive-base: var(--cobalt-light-3);
-  --surface-interactive-hover: #E5F0FF;
+  --surface-interactive-hover: #e5f0ff;
   --surface-interactive-weak: var(--cobalt-light-2);
   --surface-interactive-weak-hover: var(--cobalt-light-3);
   --surface-success-base: var(--apple-light-3);
@@ -377,7 +377,7 @@
     --surface-brand-base: var(--yuzu-light-9);
     --surface-brand-hover: var(--yuzu-light-10);
     --surface-interactive-base: var(--cobalt-dark-3);
-    --surface-interactive-hover: #0A1D4D;
+    --surface-interactive-hover: #0a1d4d;
     --surface-interactive-weak: var(--cobalt-dark-2);
     --surface-interactive-weak-hover: var(--cobalt-light-3);
     --surface-success-base: var(--apple-light-3);
