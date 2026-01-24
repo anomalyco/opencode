@@ -82,7 +82,7 @@
     z-index: 6;
     min-width: 200px;
     max-width: min(320px, calc(100vw - 48px));
-    border-radius: 14px;
+    border-radius: 10px;
     background-color: var(--surface-raised-stronger-non-alpha);
     box-shadow: var(--shadow-lg-border-base);
     padding: 12px;
