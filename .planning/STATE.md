@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Secure remote access to your opencode instance from anywhere — authenticate once with your system credentials, work on your projects from any device.
-**Current focus:** Phase 10 (Two-Factor Authentication) - Not started
+**Current focus:** Phase 10 (Two-Factor Authentication) - In progress
 
 ## Current Position
 
-Phase: 9 of 11 (Connection Security UI) - Complete
-Plan: All plans verified
-Status: Phase 9 verified and complete
-Last activity: 2026-01-24 - Phase 9 verification passed
+Phase: 10 of 11 (Two-Factor Authentication) - In progress
+Plan: 1 of ? (2FA Config and OTP Module)
+Status: In progress
+Last activity: 2026-01-24 - Completed 10-01-PLAN.md
 
-Progress: [█████████░] ~82%
+Progress: [█████████░] ~85%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 32
+- Total plans completed: 33
 - Average duration: 5.9 min
-- Total execution time: 192 min
+- Total execution time: 196.7 min
 
 **By Phase:**
 
@@ -36,10 +36,11 @@ Progress: [█████████░] ~82%
 | 7. Security Hardening | 3 | 20 min | 6.7 min |
 | 8. Session Enhancements | 4 | 11.5 min | 2.9 min |
 | 9. Connection Security UI | 2 | 4.6 min | 2.3 min |
+| 10. Two-Factor Authentication | 1 | 4.7 min | 4.7 min |
 
 **Recent Trend:**
-- Last 5 plans: 08-02 (2 min), 08-03 (3.5 min), 08-04 (2 min), 09-01 (2.5 min), 09-02 (2.1 min)
-- Trend: Consistently fast UI execution
+- Last 5 plans: 08-03 (3.5 min), 08-04 (2 min), 09-01 (2.5 min), 09-02 (2.1 min), 10-01 (4.7 min)
+- Trend: Consistently fast execution
 
 *Updated after each plan completion*
 
@@ -131,6 +132,9 @@ Recent decisions affecting current work:
 | 09-02 | localStorage for banner dismissal | Persistent dismissal provides better UX than session-scoped re-showing warning every session |
 | 09-02 | SecurityBadge before SessionIndicator | Connection security status more fundamental than session info in visual hierarchy |
 | 09-02 | Banner below titlebar | High visibility for security warnings without blocking critical UI |
+| 10-01 | AuthError reuse from pam module | Consistent error handling across auth operations |
+| 10-01 | Separate PAM service for OTP validation | Isolate OTP-only auth from password+OTP combined auth |
+| 10-01 | nullok option in PAM config | Graceful fallback for users without 2FA configured |
 
 ### Pending Todos
 
@@ -150,9 +154,9 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-24
-Stopped at: Completed 09-02-PLAN.md
+Stopped at: Completed 10-01-PLAN.md
 Resume file: None
-Next: Plan and execute Phase 10 (Two-Factor Authentication)
+Next: Continue Phase 10 (Two-Factor Authentication)
 
 ## Phase 6 Progress
 
@@ -179,3 +183,8 @@ Next: Plan and execute Phase 10 (Two-Factor Authentication)
 **Connection Security UI - Complete:**
 - [x] Plan 01: Security badge component with connection status (2.5 min)
 - [x] Plan 02: HTTP warning banner and layout integration (2.1 min)
+
+## Phase 10 Progress
+
+**Two-Factor Authentication - In Progress:**
+- [x] Plan 01: 2FA config and OTP module (4.7 min)
