@@ -21,6 +21,16 @@ export interface ListSearchProps {
   action?: JSX.Element
 }
 
+export interface ListAddProps {
+  class?: string
+  render: () => JSX.Element
+}
+
+export interface ListAddProps {
+  class?: string
+  render: () => JSX.Element
+}
+
 export interface ListProps<T> extends FilteredListProps<T> {
   class?: string
   children: (item: T) => JSX.Element
@@ -32,6 +42,8 @@ export interface ListProps<T> extends FilteredListProps<T> {
   filter?: string
   search?: ListSearchProps | boolean
   itemWrapper?: (item: T, node: JSX.Element) => JSX.Element
+  divider?: boolean
+  add?: ListAddProps
 }
 
 export interface ListRef {
@@ -70,6 +82,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   const searchProps = () => (typeof props.search === "object" ? props.search : {})
   const searchAction = () => searchProps().action
+  const addProps = () => props.add
+  const showAdd = () => !!addProps()
 
   const moved = (event: MouseEvent) => event.movementX !== 0 || event.movementY !== 0
 
@@ -159,6 +173,16 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     setScrollRef,
   })
 
+  const renderAdd = () => {
+    const add = addProps()
+    if (!add) return null
+    return (
+      <div data-slot="list-item-add" classList={{ [add.class ?? ""]: !!add.class }}>
+        {add.render()}
+      </div>
+    )
+  }
+
   function GroupHeader(groupProps: { category: string }): JSX.Element {
     const [stuck, setStuck] = createSignal(false)
     const [header, setHeader] = createSignal<HTMLDivElement | undefined>(undefined)
@@ -243,7 +267,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
       </Show>
       <div ref={setScrollRef} data-slot="list-scroll">
         <Show
-          when={flat().length > 0}
+          when={flat().length > 0 || showAdd()}
           fallback={
             <div data-slot="list-empty-state">
               <div data-slot="list-message">{emptyMessage()}</div>
@@ -251,55 +275,67 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
           }
         >
           <For each={grouped.latest}>
-            {(group) => (
-              <div data-slot="list-group">
-                <Show when={group.category}>
-                  <GroupHeader category={group.category} />
-                </Show>
-                <div data-slot="list-items">
-                  <For each={group.items}>
-                    {(item, i) => {
-                      const node = (
-                        <button
-                          data-slot="list-item"
-                          data-key={props.key(item)}
-                          data-active={props.key(item) === active()}
-                          data-selected={item === props.current}
-                          onClick={() => handleSelect(item, i())}
-                          type="button"
-                          onMouseMove={(event) => {
-                            if (!moved(event)) return
-                            setStore("mouseActive", true)
-                            setActive(props.key(item))
-                          }}
-                          onMouseLeave={() => {
-                            if (!store.mouseActive) return
-                            setActive(null)
-                          }}
-                        >
-                          {props.children(item)}
-                          <Show when={item === props.current}>
-                            <span data-slot="list-item-selected-icon">
-                              <Icon name="check-small" />
-                            </span>
-                          </Show>
-                          <Show when={props.activeIcon}>
-                            {(icon) => (
-                              <span data-slot="list-item-active-icon">
-                                <Icon name={icon()} />
+            {(group, groupIndex) => {
+              const isLastGroup = () => groupIndex() === grouped.latest.length - 1
+              return (
+                <div data-slot="list-group">
+                  <Show when={group.category}>
+                    <GroupHeader category={group.category} />
+                  </Show>
+                  <div data-slot="list-items">
+                    <For each={group.items}>
+                      {(item, i) => {
+                        const node = (
+                          <button
+                            data-slot="list-item"
+                            data-key={props.key(item)}
+                            data-active={props.key(item) === active()}
+                            data-selected={item === props.current}
+                            onClick={() => handleSelect(item, i())}
+                            type="button"
+                            onMouseMove={(event) => {
+                              if (!moved(event)) return
+                              setStore("mouseActive", true)
+                              setActive(props.key(item))
+                            }}
+                            onMouseLeave={() => {
+                              if (!store.mouseActive) return
+                              setActive(null)
+                            }}
+                          >
+                            {props.children(item)}
+                            <Show when={item === props.current}>
+                              <span data-slot="list-item-selected-icon">
+                                <Icon name="check-small" />
                               </span>
+                            </Show>
+                            <Show when={props.activeIcon}>
+                              {(icon) => (
+                                <span data-slot="list-item-active-icon">
+                                  <Icon name={icon()} />
+                                </span>
+                              )}
+                            </Show>
+                            {props.divider && (i() !== group.items.length - 1 || (showAdd() && isLastGroup())) && (
+                              <span data-slot="list-item-divider" />
                             )}
-                          </Show>
-                        </button>
-                      )
-                      if (props.itemWrapper) return props.itemWrapper(item, node)
-                      return node
-                    }}
-                  </For>
+                          </button>
+                        )
+                        if (props.itemWrapper) return props.itemWrapper(item, node)
+                        return node
+                      }}
+                    </For>
+                    <Show when={showAdd() && isLastGroup()}>{renderAdd()}</Show>
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            }}
           </For>
+          <Show when={grouped.latest.length === 0 && showAdd()}>
+            <div data-slot="list-group">
+              <div data-slot="list-items">{renderAdd()}</div>
+            </div>
+          </Show>
         </Show>
       </div>
     </div>

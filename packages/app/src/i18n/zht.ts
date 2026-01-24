@@ -207,6 +207,9 @@ export const dict = {
   "dialog.mcp.description": "已啟用 {{enabled}} / {{total}}",
   "dialog.mcp.empty": "未設定 MCP",
 
+  "dialog.lsp.empty": "已從檔案類型自動偵測到 LSPs",
+  "dialog.plugins.empty": "在 opencode.json 中設定的外掛程式",
+
   "mcp.status.connected": "已連線",
   "mcp.status.failed": "失敗",
   "mcp.status.needs_auth": "需要授權",
@@ -226,13 +229,20 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "無法連線到伺服器",
   "dialog.server.add.checking": "檢查中...",
-  "dialog.server.add.button": "新增",
+  "dialog.server.add.button": "新增伺服器",
   "dialog.server.default.title": "預設伺服器",
   "dialog.server.default.description": "應用程式啟動時連線此伺服器，而不是啟動本地伺服器。需要重新啟動。",
   "dialog.server.default.none": "未選擇伺服器",
   "dialog.server.default.set": "將目前伺服器設為預設",
   "dialog.server.default.clear": "清除",
   "dialog.server.action.remove": "移除伺服器",
+
+  "dialog.server.menu.edit": "編輯",
+  "dialog.server.menu.default": "設為預設",
+  "dialog.server.menu.defaultRemove": "取消預設",
+  "dialog.server.menu.delete": "刪除",
+  "dialog.server.current": "目前伺服器",
+  "dialog.server.status.default": "預設",
 
   "dialog.project.edit.title": "編輯專案",
   "dialog.project.edit.name": "名稱",
