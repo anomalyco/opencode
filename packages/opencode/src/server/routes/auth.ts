@@ -1,6 +1,6 @@
 import { Hono } from "hono"
 import { describeRoute, resolver } from "hono-openapi"
-import { getCookie } from "hono/cookie"
+import { getCookie, setCookie } from "hono/cookie"
 import z from "zod"
 import { UserSession } from "../../session/user-session"
 import { clearSessionCookie, setSessionCookie, type AuthEnv } from "../middleware/auth"
@@ -13,6 +13,9 @@ import { Log } from "../../util/log"
 import { createLoginRateLimiter, getClientIP } from "../security/rate-limit"
 import { parseDuration } from "../../util/duration"
 import { getConnectionSecurityInfo, shouldBlockInsecureLogin } from "../security/https-detection"
+import { create2FAToken, verify2FAToken, type TwoFactorUserInfo } from "../../auth/two-factor-token"
+import { verifyDeviceTrustToken, createDeviceTrustToken, createDeviceFingerprint } from "../../auth/device-trust"
+import { getTokenSecret } from "../security/token-secret"
 
 const log = Log.create({ service: "auth-routes" })
 
@@ -482,24 +485,33 @@ export const AuthRoutes = lazy(() =>
       "/login",
       describeRoute({
         summary: "Login with username and password",
-        description: "Authenticate user credentials via PAM and create session.",
+        description: "Authenticate user credentials via PAM and create session. Returns 2fa_required if user has 2FA enabled.",
         operationId: "auth.login",
         responses: {
           200: {
-            description: "Login successful",
+            description: "Login successful or 2FA required",
             content: {
               "application/json": {
                 schema: resolver(
-                  z.object({
-                    success: z.literal(true),
-                    user: z.object({
-                      username: z.string(),
-                      uid: z.number(),
-                      gid: z.number(),
-                      home: z.string(),
-                      shell: z.string(),
+                  z.union([
+                    z.object({
+                      success: z.literal(true),
+                      user: z.object({
+                        username: z.string(),
+                        uid: z.number(),
+                        gid: z.number(),
+                        home: z.string(),
+                        shell: z.string(),
+                      }),
                     }),
-                  }),
+                    z.object({
+                      success: z.literal(false),
+                      error: z.literal("2fa_required"),
+                      twoFactorToken: z.string(),
+                      username: z.string(),
+                      timeoutSeconds: z.number(),
+                    }),
+                  ]),
                 ),
               },
             },
@@ -624,6 +636,59 @@ export const AuthRoutes = lazy(() =>
             userAgent,
           })
           return c.json({ error: "auth_failed", message: "Authentication failed" }, 401)
+        }
+
+        // 8a. Check if 2FA is required
+        if (authConfig.twoFactorEnabled) {
+          const has2fa = await broker.check2fa(username, userInfo.home)
+
+          if (has2fa) {
+            // Check device trust cookie first
+            const deviceTrustCookie = getCookie(c, "opencode_device_trust")
+            let deviceTrusted = false
+
+            if (deviceTrustCookie) {
+              const fingerprint = createDeviceFingerprint(userAgent ?? "")
+              const trustedUser = await verifyDeviceTrustToken(
+                deviceTrustCookie,
+                fingerprint,
+                getTokenSecret(),
+              )
+              if (trustedUser === username) {
+                // Device is trusted - skip 2FA, continue to session creation
+                deviceTrusted = true
+              }
+            }
+
+            if (!deviceTrusted) {
+              // Device not trusted or token invalid - require 2FA
+              const tfaUserInfo: TwoFactorUserInfo = {
+                username,
+                uid: userInfo.uid,
+                gid: userInfo.gid,
+                home: userInfo.home,
+                shell: userInfo.shell,
+              }
+
+              const timeoutMs = parseDuration(authConfig.twoFactorTokenTimeout ?? "5m") ?? 300000
+              const timeoutSec = Math.floor(timeoutMs / 1000)
+
+              const twoFactorToken = await create2FAToken(
+                tfaUserInfo,
+                timeoutSec,
+                getTokenSecret(),
+                ip, // Bind to requesting IP
+              )
+
+              return c.json({
+                success: false as const,
+                error: "2fa_required" as const,
+                twoFactorToken,
+                username,
+                timeoutSeconds: timeoutSec,
+              }, 200) // 200 because password was valid, just need 2FA
+            }
+          }
         }
 
         // 9. Create session with full user info
