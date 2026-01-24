@@ -20,6 +20,8 @@ interface BrokerRequest {
     | "resizepty"
     | "ptywrite"
     | "ptyread"
+    | "check2fa"
+    | "authenticateotp"
   /** Username for authenticate method */
   username?: string
   /** Password for authenticate method */
@@ -48,6 +50,8 @@ interface BrokerRequest {
   data?: string
   /** Maximum bytes to read for ptyRead */
   max_bytes?: number
+  /** OTP code for authenticateotp */
+  code?: string
 }
 
 /**
