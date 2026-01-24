@@ -2059,7 +2059,7 @@ export default function Page() {
                                 >
                                   <Icon name="comment" size="small" style={{ color: "var(--white)" }} />
                                 </button>
-                                <div class="absolute top-[calc(100%+4px)] right-[-8px] z-40 w-[380px] rounded-[14px] bg-surface-raised-stronger-non-alpha border border-border-base shadow-lg-border-base p-2">
+                                <div class="absolute top-[calc(100%+4px)] right-[-8px] z-40 w-[380px] rounded-[14px] bg-surface-raised-stronger-non-alpha shadow-lg-border-base p-2">
                                   <div class="flex flex-col gap-2">
                                     <textarea
                                       ref={textarea}
