@@ -1,4 +1,5 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
+import { createFocusSignal } from "@solid-primitives/active-element"
 import {
   createEffect,
   on,
@@ -13,7 +14,6 @@ import {
   createSignal,
 } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
 import { useFile, type FileSelection } from "@/context/file"
 import {
@@ -68,7 +68,6 @@ type PendingPrompt = {
 }
 
 const pending = new Map<string, PendingPrompt>()
-
 interface PromptInputProps {
   class?: string
   ref?: (el: HTMLDivElement) => void
@@ -322,17 +321,58 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
-  const addImageAttachment = async (file: File) => {
-    if (!ACCEPTED_FILE_TYPES.includes(file.type)) return
+  const getMimeType = (file: File): string => {
+    if (file.type) return file.type
+    const ext = file.name.split(".").pop()?.toLowerCase()
+    const mimeMap: Record<string, string> = {
+      // Images
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      gif: "image/gif",
+      webp: "image/webp",
+      svg: "image/svg+xml",
+      // Documents
+      pdf: "application/pdf",
+      txt: "text/plain",
+      md: "text/markdown",
+      json: "application/json",
+      xml: "application/xml",
+      html: "text/html",
+      css: "text/css",
+      csv: "text/csv",
+      // Code
+      js: "text/javascript",
+      ts: "text/typescript",
+      jsx: "text/javascript",
+      tsx: "text/typescript",
+      py: "text/x-python",
+      rb: "text/x-ruby",
+      go: "text/x-go",
+      rs: "text/x-rust",
+      java: "text/x-java",
+      c: "text/x-c",
+      cpp: "text/x-c++",
+      h: "text/x-c",
+      hpp: "text/x-c++",
+      sh: "text/x-shellscript",
+      yaml: "text/yaml",
+      yml: "text/yaml",
+      toml: "text/toml",
+    }
+    return mimeMap[ext ?? ""] || "application/octet-stream"
+  }
 
+  const addFileAttachment = async (file: File) => {
     const reader = new FileReader()
+    const mime = getMimeType(file)
     reader.onload = () => {
       const dataUrl = reader.result as string
       const attachment: ImageAttachmentPart = {
         type: "image",
-        id: crypto.randomUUID(),
+        id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         filename: file.name,
-        mime: file.type,
+        mime,
         dataUrl,
       }
       const cursorPosition = prompt.cursor() ?? getCursorPosition(editorRef)
@@ -362,7 +402,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (imageItems.length > 0) {
       for (const item of imageItems) {
         const file = item.getAsFile()
-        if (file) await addImageAttachment(file)
+        if (file) await addFileAttachment(file)
       }
       return
     }
@@ -409,9 +449,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!dropped) return
 
     for (const file of Array.from(dropped)) {
-      if (ACCEPTED_FILE_TYPES.includes(file.type)) {
-        await addImageAttachment(file)
-      }
+      await addFileAttachment(file)
     }
   }
 
@@ -1786,7 +1824,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     when={attachment.mime.startsWith("image/")}
                     fallback={
                       <div class="size-16 rounded-md bg-surface-base flex items-center justify-center border border-border-base">
-                        <Icon name="folder" class="size-6 text-text-weak" />
+                        <Icon name="code-lines" class="size-6 text-text-weak" />
                       </div>
                     }
                   >
@@ -1956,13 +1994,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </div>
           <div class="flex items-center gap-3 absolute right-2 bottom-2">
             <input
-              ref={fileInputRef}
+              ref={(el) => (fileInputRef = el)}
               type="file"
               accept={ACCEPTED_FILE_TYPES.join(",")}
               class="hidden"
               onChange={(e) => {
                 const file = e.currentTarget.files?.[0]
-                if (file) addImageAttachment(file)
+                if (file) addFileAttachment(file)
                 e.currentTarget.value = ""
               }}
             />

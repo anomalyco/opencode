@@ -21,6 +21,7 @@ export namespace Plugin {
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin]
 
   const state = Instance.state(async () => {
+    const start = performance.now()
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
       // @ts-ignore - fetch type incompatibility
@@ -48,16 +49,18 @@ export namespace Plugin {
       plugins.push(...BUILTIN)
     }
 
-    for (let plugin of plugins) {
-      // ignore old codex plugin since it is supported first party now
-      if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
-      log.info("loading plugin", { path: plugin })
-      if (!plugin.startsWith("file://")) {
+    // Install all plugins (Lock in BunProc.install handles concurrency)
+    const installed = await Promise.all(
+      plugins.map(async (plugin) => {
+        // ignore old codex plugin since it is supported first party now
+        if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) return ""
+        if (plugin.startsWith("file://")) return plugin
         const lastAtIndex = plugin.lastIndexOf("@")
         const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
         const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
-        plugin = await BunProc.install(pkg, version).catch((err) => {
+        const installStart = performance.now()
+        const result = await BunProc.install(pkg, version).catch((err) => {
           if (!builtin) throw err
 
           const message = err instanceof Error ? err.message : String(err)
@@ -74,8 +77,15 @@ export namespace Plugin {
 
           return ""
         })
-        if (!plugin) continue
-      }
+        log.info("plugin install", { pkg, duration: `${(performance.now() - installStart).toFixed(0)}ms` })
+        return result
+      }),
+    )
+
+    // Load all installed plugins
+    for (const plugin of installed) {
+      if (!plugin) continue
+      log.info("loading plugin", { path: plugin })
       const mod = await import(plugin)
       // Prevent duplicate initialization when plugins export the same function
       // as both a named export and default export (e.g., `export const X` and `export default X`).
@@ -89,6 +99,7 @@ export namespace Plugin {
       }
     }
 
+    log.info("plugins loaded", { count: hooks.length, duration: `${(performance.now() - start).toFixed(0)}ms` })
     return {
       hooks,
       input,
@@ -96,7 +107,7 @@ export namespace Plugin {
   })
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool" | "command">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
@@ -126,7 +137,7 @@ export namespace Plugin {
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
       for (const hook of hooks) {
-        hook["event"]?.({
+        await hook["event"]?.({
           event: input,
         })
       }

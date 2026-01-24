@@ -30,6 +30,7 @@ import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { LineCommentAnchor } from "@opencode-ai/ui/line-comment"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
+import { createVisualViewport } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { Mark } from "@opencode-ai/ui/logo"
 
@@ -244,6 +245,7 @@ export default function Page() {
   }
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
+  const keyboardOffset = createVisualViewport()
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -664,6 +666,30 @@ export default function Page() {
       keybind: "mod+arrowdown",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(1),
+    },
+    {
+      id: "message.first",
+      title: "First message",
+      description: "Go to the first message",
+      category: "Session",
+      keybind: "home",
+      disabled: !params.id,
+      onSelect: () => {
+        const msgs = visibleUserMessages()
+        if (msgs.length > 0) scrollToMessage(msgs[0], "smooth")
+      },
+    },
+    {
+      id: "message.last",
+      title: "Last message",
+      description: "Go to the last message",
+      category: "Session",
+      keybind: "end",
+      disabled: !params.id,
+      onSelect: () => {
+        const msgs = visibleUserMessages()
+        if (msgs.length > 0) scrollToMessage(msgs[msgs.length - 1], "smooth")
+      },
     },
     {
       id: "model.choose",
@@ -1522,6 +1548,7 @@ export default function Page() {
                       </div>
                       <div
                         ref={setScrollRef}
+                        data-session-scroll
                         onWheel={(e) => markScrollGesture(e.target)}
                         onTouchMove={(e) => markScrollGesture(e.target)}
                         onPointerDown={(e) => {
@@ -1659,10 +1686,70 @@ export default function Page() {
             </Switch>
           </div>
 
+          {/* Navigation buttons */}
+          <Show when={params.id && visibleUserMessages().length > 0}>
+            <div
+              data-e2e="nav-buttons"
+              class="fixed md:absolute right-4 md:right-6 bottom-32 md:bottom-36 z-50 flex flex-col gap-1 pointer-events-auto"
+              style={{ bottom: isDesktop() ? undefined : `calc(8rem + ${keyboardOffset()}px)` }}
+            >
+              <Tooltip value="Open sidebar" placement="left">
+                <IconButton
+                  data-e2e="nav-sidebar"
+                  icon="menu"
+                  variant="ghost"
+                  class="xl:hidden"
+                  onClick={() => layout.mobileSidebar.toggle()}
+                />
+              </Tooltip>
+              <Tooltip value="Go to top" placement="left">
+                <IconButton
+                  data-e2e="nav-top"
+                  icon="chevron-grabber-vertical"
+                  variant="ghost"
+                  class="rotate-180"
+                  onClick={() => {
+                    const container = document.querySelector("[data-session-scroll]")
+                    container?.scrollTo({ top: 0, behavior: "smooth" })
+                  }}
+                />
+              </Tooltip>
+              <Tooltip value="Previous message" placement="left">
+                <IconButton
+                  data-e2e="nav-prev-msg"
+                  icon="chevron-down"
+                  variant="ghost"
+                  class="rotate-180"
+                  onClick={() => navigateMessageByOffset(-1)}
+                />
+              </Tooltip>
+              <Tooltip value="Next message" placement="left">
+                <IconButton
+                  data-e2e="nav-next-msg"
+                  icon="chevron-down"
+                  variant="ghost"
+                  onClick={() => navigateMessageByOffset(1)}
+                />
+              </Tooltip>
+              <Tooltip value="Go to bottom" placement="left">
+                <IconButton
+                  data-e2e="nav-bottom"
+                  icon="chevron-grabber-vertical"
+                  variant="ghost"
+                  onClick={() => {
+                    const container = document.querySelector("[data-session-scroll]")
+                    if (container) container.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
+                  }}
+                />
+              </Tooltip>
+            </div>
+          </Show>
+
           {/* Prompt input */}
           <div
             ref={(el) => (promptDock = el)}
-            class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-6 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+            class="fixed md:absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-6 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+            style={{ bottom: isDesktop() ? undefined : `${keyboardOffset()}px` }}
           >
             <div
               classList={{

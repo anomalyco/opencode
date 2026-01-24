@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenCode Launcher</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        background: #0a0a0a;
+        color: #e5e5e5;
+        min-height: 100vh;
+        padding: 20px;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+        color: #fff;
+      }
+      .subtitle {
+        color: #888;
+        margin-bottom: 1.5rem;
+      }
+      .path-bar {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 1rem;
+        align-items: center;
+      }
+      .path-input {
+        flex: 1;
+        padding: 10px 14px;
+        font-size: 0.9rem;
+        background: #111;
+        border: 1px solid #333;
+        border-radius: 6px;
+        color: #e5e5e5;
+        font-family: monospace;
+      }
+      .path-input:focus {
+        outline: none;
+        border-color: #2563eb;
+      }
+      .go-btn,
+      .open-btn {
+        padding: 10px 20px;
+        font-size: 0.9rem;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .go-btn {
+        background: #333;
+        color: #fff;
+      }
+      .go-btn:hover {
+        background: #444;
+      }
+      .open-btn {
+        background: #2563eb;
+        color: #fff;
+      }
+      .open-btn:hover {
+        background: #1d4ed8;
+      }
+      .breadcrumb {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-bottom: 1rem;
+        font-size: 0.85rem;
+      }
+      .breadcrumb-item {
+        color: #888;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 4px;
+      }
+      .breadcrumb-item:hover {
+        background: #222;
+        color: #fff;
+      }
+      .breadcrumb-sep {
+        color: #444;
+        padding: 4px 0;
+      }
+      .explorer {
+        background: #111;
+        border: 1px solid #222;
+        border-radius: 8px;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .explorer-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        cursor: pointer;
+        border-bottom: 1px solid #1a1a1a;
+        transition: background 0.1s;
+      }
+      .explorer-item:last-child {
+        border-bottom: none;
+      }
+      .explorer-item:hover {
+        background: #1a1a1a;
+      }
+      .explorer-item.selected {
+        background: #1e3a5f;
+      }
+      .explorer-item .icon {
+        font-size: 1.2rem;
+        width: 24px;
+        text-align: center;
+      }
+      .explorer-item .name {
+        flex: 1;
+        font-size: 0.9rem;
+      }
+      .explorer-item.parent {
+        color: #888;
+      }
+      .loading,
+      .error,
+      .empty {
+        padding: 20px;
+        text-align: center;
+        color: #666;
+      }
+      .error {
+        color: #f87171;
+      }
+      .projects {
+        margin-top: 2rem;
+      }
+      .projects h2 {
+        font-size: 1rem;
+        color: #888;
+        margin-bottom: 1rem;
+      }
+      .projects-list {
+        list-style: none;
+        display: grid;
+        gap: 8px;
+      }
+      .project-item {
+        padding: 12px 14px;
+        background: #111;
+        border: 1px solid #222;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .project-item:hover {
+        background: #1a1a1a;
+        border-color: #333;
+      }
+      .project-item .name {
+        color: #fff;
+        font-size: 0.9rem;
+        margin-bottom: 2px;
+      }
+      .project-item .path {
+        color: #555;
+        font-size: 0.75rem;
+        font-family: monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>OpenCode</h1>
+      <p class="subtitle">Browse and select a project folder</p>
+
+      <div class="path-bar">
+        <input type="text" class="path-input" id="pathInput" placeholder="/Users/..." />
+        <button class="go-btn" id="goBtn">Go</button>
+        <button class="open-btn" id="openBtn">Open Here</button>
+      </div>
+
+      <div class="breadcrumb" id="breadcrumb"></div>
+
+      <div class="explorer" id="explorer">
+        <div class="loading">Loading...</div>
+      </div>
+
+      <div class="projects" id="projectsSection">
+        <h2>Recent Projects</h2>
+        <ul class="projects-list" id="projectsList"></ul>
+      </div>
+    </div>
+
+    <script>
+      const pathInput = document.getElementById("pathInput")
+      const goBtn = document.getElementById("goBtn")
+      const openBtn = document.getElementById("openBtn")
+      const breadcrumb = document.getElementById("breadcrumb")
+      const explorer = document.getElementById("explorer")
+      const projectsList = document.getElementById("projectsList")
+
+      let currentPath = "/Users"
+
+      function base64Encode(value) {
+        const bytes = new TextEncoder().encode(value)
+        const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join("")
+        return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
+      }
+
+      function openProject(path) {
+        const encoded = base64Encode(path)
+        // Use the Vite dev server with ?url= pointing to the API server
+        // Use same hostname as current request (e.g., localhost, 192.168.x.x, etc.)
+        const hostname = window.location.hostname
+        const apiUrl = window.location.origin
+        const appUrl = "http://" + hostname + ":3000"
+        window.location.href = appUrl + "/" + encoded + "/session?url=" + encodeURIComponent(apiUrl)
+      }
+
+      function renderBreadcrumb(path) {
+        const parts = path.split("/").filter(Boolean)
+        let html = '<span class="breadcrumb-item" data-path="/">/</span>'
+        let accumulated = ""
+        for (const part of parts) {
+          accumulated += "/" + part
+          html += `<span class="breadcrumb-sep">/</span><span class="breadcrumb-item" data-path="${accumulated}">${part}</span>`
+        }
+        breadcrumb.innerHTML = html
+      }
+
+      async function loadDirectory(path) {
+        currentPath = path
+        pathInput.value = path
+        renderBreadcrumb(path)
+        explorer.innerHTML = '<div class="loading">Loading...</div>'
+
+        try {
+          const res = await fetch(`/launcher/browse?path=${encodeURIComponent(path)}`)
+          if (!res.ok) {
+            const err = await res.json()
+            throw new Error(err.error || "Failed to load directory")
+          }
+          const items = await res.json()
+          renderExplorer(items, path)
+        } catch (err) {
+          explorer.innerHTML = `<div class="error">${err.message}</div>`
+        }
+      }
+
+      function renderExplorer(items, path) {
+        if (path !== "/") {
+          const parent = path.split("/").slice(0, -1).join("/") || "/"
+          items.unshift({ name: "..", path: parent, type: "parent" })
+        }
+
+        if (items.length === 0) {
+          explorer.innerHTML = '<div class="empty">Empty directory</div>'
+          return
+        }
+
+        explorer.innerHTML = items
+          .map((item) => {
+            const icon = item.type === "parent" ? "⬆️" : item.type === "directory" ? "📁" : "📄"
+            const cls = item.type === "parent" ? "explorer-item parent" : "explorer-item"
+            return `<div class="${cls}" data-path="${item.path}" data-type="${item.type}">
+              <span class="icon">${icon}</span>
+              <span class="name">${item.name}</span>
+            </div>`
+          })
+          .join("")
+      }
+
+      async function loadProjects() {
+        try {
+          const res = await fetch("/project")
+          if (!res.ok) throw new Error("Failed to load")
+          const projects = await res.json()
+          if (!projects.length) {
+            projectsList.innerHTML = '<li class="empty">No recent projects</li>'
+            return
+          }
+          projectsList.innerHTML = projects
+            .slice(0, 5)
+            .map((p) => {
+              const name = p.name || p.worktree.split("/").filter(Boolean).pop()
+              return `<li class="project-item" data-path="${p.worktree}">
+                <div class="name">${p.icon || "📁"} ${name}</div>
+                <div class="path">${p.worktree}</div>
+              </li>`
+            })
+            .join("")
+        } catch {
+          projectsList.innerHTML = '<li class="empty">Could not load projects</li>'
+        }
+      }
+
+      goBtn.addEventListener("click", () => {
+        const path = pathInput.value.trim()
+        if (path) loadDirectory(path)
+      })
+
+      pathInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          const path = pathInput.value.trim()
+          if (path) loadDirectory(path)
+        }
+      })
+
+      openBtn.addEventListener("click", () => {
+        const path = pathInput.value.trim() || currentPath
+        openProject(path)
+      })
+
+      breadcrumb.addEventListener("click", (e) => {
+        const item = e.target.closest(".breadcrumb-item")
+        if (item) loadDirectory(item.dataset.path)
+      })
+
+      explorer.addEventListener("click", (e) => {
+        const item = e.target.closest(".explorer-item")
+        if (!item) return
+        const type = item.dataset.type
+        const path = item.dataset.path
+        if (type === "directory" || type === "parent") {
+          loadDirectory(path)
+        }
+      })
+
+      explorer.addEventListener("dblclick", (e) => {
+        const item = e.target.closest(".explorer-item")
+        if (item && item.dataset.type === "directory") {
+          openProject(item.dataset.path)
+        }
+      })
+
+      projectsList.addEventListener("click", (e) => {
+        const item = e.target.closest(".project-item")
+        if (item) openProject(item.dataset.path)
+      })
+
+      // Start at home directory
+      loadDirectory("/Users")
+      loadProjects()
+    </script>
+  </body>
+</html>

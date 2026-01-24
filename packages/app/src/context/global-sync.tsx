@@ -767,10 +767,11 @@ function createGlobalSync() {
   onCleanup(unsub)
 
   async function bootstrap() {
-    const health = await globalSDK.client.global
-      .health()
-      .then((x) => x.data)
-      .catch(() => undefined)
+    const health = await retry(() => globalSDK.client.global.health().then((x) => x.data), {
+      attempts: 3,
+      delay: 1000,
+      retryIf: () => true,
+    }).catch(() => undefined)
     if (!health?.healthy) {
       setGlobalStore("error", new Error(language.t("error.globalSync.connectFailed", { url: globalSDK.url })))
       return
@@ -814,6 +815,17 @@ function createGlobalSync() {
 
   onMount(() => {
     bootstrap()
+
+    // Re-check connection when page becomes visible (handles Android app switch)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && globalStore.error) {
+        // Clear error and retry bootstrap when returning to the app
+        setGlobalStore("error", undefined)
+        bootstrap()
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    onCleanup(() => document.removeEventListener("visibilitychange", handleVisibilityChange))
   })
 
   function projectMeta(directory: string, patch: ProjectMeta) {

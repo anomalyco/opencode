@@ -52,6 +52,28 @@ function MarkedProviderWithNativeParser(props: ParentProps) {
   return <MarkedProvider nativeParser={platform.parseMarkdown}>{props.children}</MarkedProvider>
 }
 
+// URL persistence from upstream - persists server URL across page refreshes
+const PERSISTED_URL_KEY = "opencode-server-url"
+
+function getPersistedUrl(): string | null {
+  // Check URL param first - if provided, persist it for future reloads
+  const param = new URLSearchParams(document.location.search).get("url")
+  if (param) {
+    try {
+      localStorage.setItem(PERSISTED_URL_KEY, param)
+    } catch {}
+    return param
+  }
+
+  // Check for previously persisted URL (survives page refresh)
+  try {
+    const persisted = localStorage.getItem(PERSISTED_URL_KEY)
+    if (persisted) return persisted
+  } catch {}
+
+  return null
+}
+
 export function AppBaseProviders(props: ParentProps) {
   return (
     <MetaProvider>
@@ -87,6 +109,11 @@ function ServerKey(props: ParentProps) {
 export function AppInterface(props: { defaultUrl?: string }) {
   const defaultServerUrl = () => {
     if (props.defaultUrl) return props.defaultUrl
+
+    // Check for persisted URL from localStorage/URL param
+    const persisted = getPersistedUrl()
+    if (persisted) return persisted
+
     if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
     if (import.meta.env.DEV)
       return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`

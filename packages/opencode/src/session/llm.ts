@@ -105,9 +105,9 @@ export namespace LLM {
         })
     const options: Record<string, any> = pipe(
       base,
-      mergeDeep(input.model.options),
-      mergeDeep(input.agent.options),
-      mergeDeep(variant),
+      mergeDeep(input.model.options ?? {}),
+      mergeDeep(input.agent.options ?? {}),
+      mergeDeep(variant ?? {}),
     )
     if (isCodex) {
       options.instructions = SystemPrompt.instructions()

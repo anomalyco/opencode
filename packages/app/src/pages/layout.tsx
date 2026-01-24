@@ -1418,6 +1418,14 @@ export default function Layout(props: ParentProps) {
     ),
   )
 
+  // Auto-open project when navigating via URL
+  createEffect(() => {
+    if (!params.dir) return
+    const directory = base64Decode(params.dir)
+    if (!directory) return
+    untrack(() => layout.projects.open(directory))
+  })
+
   createEffect(() => {
     const project = currentProject()
     if (!project) return

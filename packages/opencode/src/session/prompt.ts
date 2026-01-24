@@ -270,7 +270,7 @@ export namespace SessionPrompt {
     const session = await Session.get(sessionID)
     while (true) {
       SessionStatus.set(sessionID, { type: "busy" })
-      log.info("loop", { step, sessionID })
+      log.info("loop iteration start", { step, sessionID })
       if (abort.aborted) break
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
 
@@ -297,8 +297,58 @@ export namespace SessionPrompt {
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
         lastUser.id < lastAssistant.id
       ) {
-        log.info("exiting loop", { sessionID })
-        break
+        // Extract last assistant message text for completion promise checking
+        const lastAssistantMsg = msgs.find((m) => m.info.id === lastAssistant.id)
+        const lastAssistantText = lastAssistantMsg?.parts
+          .filter((p): p is MessageV2.TextPart => p.type === "text")
+          .map((p) => p.text)
+          .join("\n")
+
+        const stopOutput = {
+          stop: true,
+          prompt: undefined as string | undefined,
+          systemMessage: undefined as string | undefined,
+        }
+        await Plugin.trigger(
+          "session.stop",
+          {
+            sessionID,
+            step,
+            lastAssistantText,
+          },
+          stopOutput,
+        )
+        log.info("session.stop hook result", { sessionID, step, stop: stopOutput.stop })
+        if (stopOutput.stop === true) {
+          log.info("exiting loop", { sessionID })
+          break
+        }
+        log.info("plugin requested loop continue", { sessionID, step, prompt: stopOutput.prompt?.slice(0, 50) })
+        // plugin asked to continue; inject a synthetic user message to prompt the AI
+        const continueUserMsg: MessageV2.User = {
+          id: Identifier.ascending("message"),
+          sessionID,
+          role: "user",
+          time: {
+            created: Date.now(),
+          },
+          agent: lastUser.agent,
+          model: lastUser.model,
+        }
+        await Session.updateMessage(continueUserMsg)
+
+        // Use custom prompt from plugin if provided, otherwise default
+        const promptText = stopOutput.prompt ?? "Continue working on the task."
+        const systemPrefix = stopOutput.systemMessage ? `${stopOutput.systemMessage}\n\n` : ""
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: continueUserMsg.id,
+          sessionID,
+          type: "text",
+          text: systemPrefix + promptText,
+          synthetic: true,
+        } satisfies MessageV2.TextPart)
+        continue
       }
 
       step++
@@ -1717,6 +1767,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       { parts },
     )
 
+    // Publish command.executed BEFORE the prompt loop starts so plugins can initialize state
+    const userMessageID = input.messageID ?? Identifier.ascending("message")
+    await Bus.publish(Command.Event.Executed, {
+      name: input.command,
+      sessionID: input.sessionID,
+      arguments: input.arguments,
+      messageID: userMessageID,
+    })
+
     const result = (await prompt({
       sessionID: input.sessionID,
       messageID: input.messageID,
@@ -1725,13 +1784,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       parts,
       variant: input.variant,
     })) as MessageV2.WithParts
-
-    Bus.publish(Command.Event.Executed, {
-      name: input.command,
-      sessionID: input.sessionID,
-      arguments: input.arguments,
-      messageID: result.info.id,
-    })
 
     return result
   }
