@@ -117,10 +117,25 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     return next()
   }
 
+  // Helper to determine if request is an API call (vs browser navigation)
+  const isApiCall = () => {
+    const accept = c.req.header("Accept") ?? ""
+    const xRequestedWith = c.req.header("X-Requested-With")
+    return accept.includes("application/json") || xRequestedWith === "XMLHttpRequest"
+  }
+
+  // Helper to return auth error (401 for API, redirect for browser)
+  const authError = (message: string) => {
+    if (isApiCall()) {
+      return c.json({ error: message }, 401)
+    }
+    return c.redirect("/auth/login")
+  }
+
   // Get session ID from cookie
   const sessionId = getCookie(c, COOKIE_NAME)
   if (!sessionId) {
-    return c.redirect("/auth/login")
+    return authError("Not authenticated")
   }
 
   // Get session from store
@@ -128,7 +143,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
   if (!session) {
     // Stale cookie - clear it
     clearSessionCookie(c)
-    return c.redirect("/auth/login")
+    return authError("Session not found")
   }
 
   // Check idle timeout - use rememberMeDuration for remember-me sessions
@@ -142,7 +157,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     // Session expired - clean up and redirect
     UserSession.remove(sessionId)
     clearSessionCookie(c)
-    return c.redirect("/auth/login")
+    return authError("Session expired")
   }
 
   // Update lastAccessTime (sliding expiration)
