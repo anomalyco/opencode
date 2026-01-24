@@ -97,6 +97,7 @@ export function TextField(props: TextFieldProps) {
             placement="top"
             gutter={4}
             forceOpen={copied()}
+            skipDelayDuration={0}
           >
             <IconButton
               type="button"
