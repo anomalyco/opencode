@@ -200,7 +200,7 @@ export function StatusPopover() {
 
           <Tabs.Content value="servers">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base rounded min-h-14">
+              <div class="flex flex-col p-2 bg-background-base rounded-sm min-h-14">
                 <For each={sortedServers()}>
                   {(url) => {
                     const isActive = () => url === server.url
@@ -262,7 +262,7 @@ export function StatusPopover() {
 
           <Tabs.Content value="mcp">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base rounded min-h-14">
+              <div class="flex flex-col p-2 bg-background-base rounded-sm min-h-14">
                 <Show
                   when={mcpItems().length > 0}
                   fallback={
@@ -308,7 +308,7 @@ export function StatusPopover() {
 
           <Tabs.Content value="lsp">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base rounded min-h-14">
+              <div class="flex flex-col p-2 bg-background-base rounded-sm min-h-14">
                 <Show
                   when={lspItems().length > 0}
                   fallback={
@@ -338,7 +338,7 @@ export function StatusPopover() {
 
           <Tabs.Content value="plugins">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base rounded min-h-14">
+              <div class="flex flex-col p-2 bg-background-base rounded-sm min-h-14">
                 <Show
                   when={plugins().length > 0}
                   fallback={
