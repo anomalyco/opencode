@@ -8,6 +8,9 @@ import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
 
+import { Global } from "@/global"
+import { Provider } from "../provider/provider"
+import { Config } from "../config/config"
 import { $ } from "bun"
 import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
@@ -154,12 +157,53 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
+      const env = { ...process.env }
+      try {
+        const statePath = `${Global.Path.state}/model.json`
+        let recent: { providerID: string; modelID: string } | undefined
+        if (await Filesystem.exists(statePath)) {
+          const content = await Bun.file(statePath).text()
+          const json = JSON.parse(content)
+          if (json.recent && Array.isArray(json.recent) && json.recent.length > 0 && json.recent[0].providerID) {
+            recent = json.recent[0]
+          }
+        }
+
+        const config = await Config.get()
+        const configModel = config.model
+
+        let providerID: string
+        let modelID: string
+
+        if (recent) {
+          providerID = recent.providerID
+          modelID = recent.modelID
+        } else if (configModel) {
+          const parsed = Provider.parseModel(configModel)
+          providerID = parsed.providerID
+          modelID = parsed.modelID
+        } else {
+          const defaultModel = await Provider.defaultModel()
+          providerID = defaultModel.providerID
+          modelID = defaultModel.modelID
+        }
+
+        const model = await Provider.getModel(providerID, modelID)
+
+        const canonicalModelID = model.id.split("/").pop() || model.id
+        env["OPENCODE_MODEL_ID"] = model.id
+        env["OPENCODE_CANONICAL_MODEL_ID"] = canonicalModelID
+        env["OPENCODE_PROVIDER_ID"] = model.providerID
+        env["OPENCODE_MODEL_FULL_ID"] = `${model.providerID}/${model.id}`
+        env["OPENCODE_MODEL_NAME"] = model.name
+      } catch (error) {
+        // ignore
+      }
+
       const proc = spawn(params.command, {
         shell,
         cwd,
-        env: {
-          ...process.env,
-        },
+        env,
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
       })

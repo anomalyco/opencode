@@ -8,6 +8,10 @@ import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
+import { Global } from "@/global"
+import { Provider } from "../provider/provider"
+import { Config } from "../config/config"
+import { Filesystem } from "@/util/filesystem"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -103,10 +107,61 @@ export namespace Pty {
 
     const cwd = input.cwd || Instance.directory
     const env = { ...process.env, ...input.env, TERM: "xterm-256color" } as Record<string, string>
+
+    let envExports = ""
+    try {
+      const statePath = `${Global.Path.state}/model.json`
+      let recent: { providerID: string; modelID: string } | undefined
+      if (await Filesystem.exists(statePath)) {
+        const content = await Bun.file(statePath).text()
+        const json = JSON.parse(content)
+        if (json.recent && Array.isArray(json.recent) && json.recent.length > 0 && json.recent[0].providerID) {
+          recent = json.recent[0]
+        }
+      }
+
+      const config = await Config.get()
+      const configModel = config.model
+
+      let providerID: string
+      let modelID: string
+
+      if (recent) {
+        providerID = recent.providerID
+        modelID = recent.modelID
+      } else if (configModel) {
+        const parsed = Provider.parseModel(configModel)
+        providerID = parsed.providerID
+        modelID = parsed.modelID
+      } else {
+        const defaultModel = await Provider.defaultModel()
+        providerID = defaultModel.providerID
+        modelID = defaultModel.modelID
+      }
+
+      const model = await Provider.getModel(providerID, modelID)
+
+      const canonicalModelID = model.id.split("/").pop() || model.id
+      const escapedName = model.name.replace(/'/g, "'\\''")
+      env["OPENCODE_MODEL_ID"] = model.id
+      env["OPENCODE_CANONICAL_MODEL_ID"] = canonicalModelID
+      env["OPENCODE_PROVIDER_ID"] = model.providerID
+      env["OPENCODE_MODEL_FULL_ID"] = `${model.providerID}/${model.id}`
+      env["OPENCODE_MODEL_NAME"] = model.name
+      envExports = `export OPENCODE_MODEL_ID='${model.id}' OPENCODE_CANONICAL_MODEL_ID='${canonicalModelID}' OPENCODE_PROVIDER_ID='${model.providerID}' OPENCODE_MODEL_FULL_ID='${model.providerID}/${model.id}' OPENCODE_MODEL_NAME='${escapedName}'; `
+    } catch (error) {}
+
     log.info("creating session", { id, cmd: command, args, cwd })
 
     const spawn = await pty()
-    const ptyProcess = spawn(command, args, {
+    const spawnArgs = [...args]
+
+    if (command.endsWith("sh") && spawnArgs.length > 0) {
+      const cmdStr = spawnArgs[spawnArgs.length - 1]
+      spawnArgs[spawnArgs.length - 1] = envExports + cmdStr
+    }
+
+    const ptyProcess = spawn(command, spawnArgs, {
       name: "xterm-256color",
       cwd,
       env,

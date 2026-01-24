@@ -44,6 +44,9 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { Global } from "@/global"
+import { Filesystem } from "@/util/filesystem"
+import { Config } from "../config/config"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1424,6 +1427,47 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
     ).toLowerCase()
 
+    const statePath = `${Global.Path.state}/model.json`
+    let envPrefix = ""
+    let modelInfo: { providerID: string; modelID: string; canonicalModelID: string; id: string; name: string } | null =
+      null
+    try {
+      let recent: { providerID: string; modelID: string } | undefined
+      if (await Filesystem.exists(statePath)) {
+        const content = await Bun.file(statePath).text()
+        const json = JSON.parse(content)
+        if (json.recent && Array.isArray(json.recent) && json.recent.length > 0 && json.recent[0].providerID) {
+          recent = json.recent[0]
+        }
+      }
+
+      const config = await Config.get()
+      const configModel = config.model
+
+      let providerID: string
+      let modelID: string
+
+      if (recent) {
+        providerID = recent.providerID
+        modelID = recent.modelID
+      } else if (configModel) {
+        const parsed = Provider.parseModel(configModel)
+        providerID = parsed.providerID
+        modelID = parsed.modelID
+      } else {
+        const defaultModel = await Provider.defaultModel()
+        providerID = defaultModel.providerID
+        modelID = defaultModel.modelID
+      }
+
+      const model = await Provider.getModel(providerID, modelID)
+
+      const canonicalModelID = model.id.split("/").pop() || model.id
+      const escapedName = model.name.replace(/'/g, "'\\''")
+      modelInfo = { providerID: model.providerID, modelID: model.id, canonicalModelID, id: model.id, name: model.name }
+      envPrefix = `export OPENCODE_MODEL_ID='${model.id}' OPENCODE_CANONICAL_MODEL_ID='${canonicalModelID}' OPENCODE_PROVIDER_ID='${model.providerID}' OPENCODE_MODEL_FULL_ID='${model.providerID}/${model.id}' OPENCODE_MODEL_NAME='${escapedName}'; `
+    } catch (error) {}
+
     const invocations: Record<string, { args: string[] }> = {
       nu: {
         args: ["-c", input.command],
@@ -1436,6 +1480,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           "-c",
           "-l",
           `
+            ${envPrefix}
             [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
             [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
             eval ${JSON.stringify(input.command)}
@@ -1447,39 +1492,44 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           "-c",
           "-l",
           `
+            ${envPrefix}
             shopt -s expand_aliases
             [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
             eval ${JSON.stringify(input.command)}
           `,
         ],
       },
-      // Windows cmd
       cmd: {
         args: ["/c", input.command],
       },
-      // Windows PowerShell
       powershell: {
         args: ["-NoProfile", "-Command", input.command],
       },
       pwsh: {
         args: ["-NoProfile", "-Command", input.command],
       },
-      // Fallback: any shell that doesn't match those above
-      //  - No -l, for max compatibility
       "": {
-        args: ["-c", `${input.command}`],
+        args: ["-c", `${envPrefix}${input.command}`],
       },
     }
 
     const matchingInvocation = invocations[shellName] ?? invocations[""]
-    const args = matchingInvocation?.args
+    const env = { ...process.env }
 
-    const proc = spawn(shell, args, {
+    if (modelInfo) {
+      env["OPENCODE_MODEL_ID"] = modelInfo.id
+      env["OPENCODE_CANONICAL_MODEL_ID"] = modelInfo.canonicalModelID
+      env["OPENCODE_PROVIDER_ID"] = modelInfo.providerID
+      env["OPENCODE_MODEL_FULL_ID"] = `${modelInfo.providerID}/${modelInfo.id}`
+      env["OPENCODE_MODEL_NAME"] = modelInfo.name
+    }
+
+    const proc = spawn(shell, matchingInvocation.args, {
       cwd: Instance.directory,
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
       env: {
-        ...process.env,
+        ...env,
         TERM: "dumb",
       },
     })
