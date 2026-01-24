@@ -7,6 +7,7 @@ import { AssistantMessage } from "@opencode-ai/sdk/v2/client"
 
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
+import { useLanguage } from "@/context/language"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
@@ -16,22 +17,25 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const sync = useSync()
   const params = useParams()
   const layout = useLayout()
+  const language = useLanguage()
 
   const variant = createMemo(() => props.variant ?? "button")
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey()))
-  const view = createMemo(() => layout.view(sessionKey()))
+  const tabs = createMemo(() => layout.tabs(sessionKey))
+  const view = createMemo(() => layout.view(sessionKey))
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
 
   const cost = createMemo(() => {
+    const locale = language.locale()
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat(locale, {
       style: "currency",
       currency: "USD",
     }).format(total)
   })
 
   const context = createMemo(() => {
+    const locale = language.locale()
     const last = messages().findLast((x) => {
       if (x.role !== "assistant") return false
       const total = x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
@@ -42,7 +46,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     const model = sync.data.provider.all.find((x) => x.id === last.providerID)?.models[last.modelID]
     return {
-      tokens: total.toLocaleString(),
+      tokens: total.toLocaleString(locale),
       percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
     }
   })
@@ -67,21 +71,21 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
           <>
             <div class="flex items-center gap-2">
               <span class="text-text-invert-strong">{ctx().tokens}</span>
-              <span class="text-text-invert-base">Tokens</span>
+              <span class="text-text-invert-base">{language.t("context.usage.tokens")}</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="text-text-invert-strong">{ctx().percentage ?? 0}%</span>
-              <span class="text-text-invert-base">Usage</span>
+              <span class="text-text-invert-base">{language.t("context.usage.usage")}</span>
             </div>
           </>
         )}
       </Show>
       <div class="flex items-center gap-2">
         <span class="text-text-invert-strong">{cost()}</span>
-        <span class="text-text-invert-base">Cost</span>
+        <span class="text-text-invert-base">{language.t("context.usage.cost")}</span>
       </div>
       <Show when={variant() === "button"}>
-        <div class="text-11-regular text-text-invert-base mt-1">Click to view context</div>
+        <div class="text-11-regular text-text-invert-base mt-1">{language.t("context.usage.clickToView")}</div>
       </Show>
     </div>
   )
@@ -92,7 +96,13 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         <Switch>
           <Match when={variant() === "indicator"}>{circle()}</Match>
           <Match when={true}>
-            <Button type="button" variant="ghost" class="size-6" onClick={openContext}>
+            <Button
+              type="button"
+              variant="ghost"
+              class="size-6"
+              onClick={openContext}
+              aria-label={language.t("context.usage.view")}
+            >
               {circle()}
             </Button>
           </Match>

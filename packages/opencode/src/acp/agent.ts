@@ -5,13 +5,21 @@ import {
   type AuthenticateRequest,
   type AuthMethod,
   type CancelNotification,
+  type ForkSessionRequest,
+  type ForkSessionResponse,
   type InitializeRequest,
   type InitializeResponse,
+  type ListSessionsRequest,
+  type ListSessionsResponse,
   type LoadSessionRequest,
   type NewSessionRequest,
   type PermissionOption,
   type PlanEntry,
   type PromptRequest,
+  type ResumeSessionRequest,
+  type ResumeSessionResponse,
+  type Role,
+  type SessionInfo,
   type SetSessionModelRequest,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
@@ -354,7 +362,7 @@ export namespace ACP {
 
           if (part.type === "text") {
             const delta = props.delta
-            if (delta && part.synthetic !== true) {
+            if (delta && part.ignored !== true) {
               await this.connection
                 .sessionUpdate({
                   sessionId,
@@ -428,6 +436,11 @@ export namespace ACP {
           promptCapabilities: {
             embeddedContext: true,
             image: true,
+          },
+          sessionCapabilities: {
+            fork: {},
+            list: {},
+            resume: {},
           },
         },
         authMethods: [authMethod],
@@ -512,8 +525,13 @@ export namespace ACP {
         const lastUser = messages?.findLast((m) => m.info.role === "user")?.info
         if (lastUser?.role === "user") {
           result.models.currentModelId = `${lastUser.model.providerID}/${lastUser.model.modelID}`
+          this.sessionManager.setModel(sessionId, {
+            providerID: lastUser.model.providerID,
+            modelID: lastUser.model.modelID,
+          })
           if (result.modes.availableModes.some((m) => m.id === lastUser.agent)) {
             result.modes.currentModeId = lastUser.agent
+            this.sessionManager.setMode(sessionId, lastUser.agent)
           }
         }
 
@@ -523,6 +541,141 @@ export namespace ACP {
         }
 
         return result
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+      try {
+        const cursor = params.cursor ? Number(params.cursor) : undefined
+        const limit = 100
+
+        const sessions = await this.sdk.session
+          .list(
+            {
+              directory: params.cwd ?? undefined,
+              roots: true,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data ?? [])
+
+        const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
+        const filtered = cursor ? sorted.filter((s) => s.time.updated < cursor) : sorted
+        const page = filtered.slice(0, limit)
+
+        const entries: SessionInfo[] = page.map((session) => ({
+          sessionId: session.id,
+          cwd: session.directory,
+          title: session.title,
+          updatedAt: new Date(session.time.updated).toISOString(),
+        }))
+
+        const last = page[page.length - 1]
+        const next = filtered.length > limit && last ? String(last.time.updated) : undefined
+
+        const response: ListSessionsResponse = {
+          sessions: entries,
+        }
+        if (next) response.nextCursor = next
+        return response
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
+      const directory = params.cwd
+      const mcpServers = params.mcpServers ?? []
+
+      try {
+        const model = await defaultModel(this.config, directory)
+
+        const forked = await this.sdk.session
+          .fork(
+            {
+              sessionID: params.sessionId,
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data)
+
+        if (!forked) {
+          throw new Error("Fork session returned no data")
+        }
+
+        const sessionId = forked.id
+        await this.sessionManager.load(sessionId, directory, mcpServers, model)
+
+        log.info("fork_session", { sessionId, mcpServers: mcpServers.length })
+
+        const mode = await this.loadSessionMode({
+          cwd: directory,
+          mcpServers,
+          sessionId,
+        })
+
+        const messages = await this.sdk.session
+          .messages(
+            {
+              sessionID: sessionId,
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data)
+          .catch((err) => {
+            log.error("unexpected error when fetching message", { error: err })
+            return undefined
+          })
+
+        for (const msg of messages ?? []) {
+          log.debug("replay message", msg)
+          await this.processMessage(msg)
+        }
+
+        return mode
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    async unstable_resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+      const directory = params.cwd
+      const sessionId = params.sessionId
+      const mcpServers = params.mcpServers ?? []
+
+      try {
+        const model = await defaultModel(this.config, directory)
+        await this.sessionManager.load(sessionId, directory, mcpServers, model)
+
+        log.info("resume_session", { sessionId, mcpServers: mcpServers.length })
+
+        return this.loadSessionMode({
+          cwd: directory,
+          mcpServers,
+          sessionId,
+        })
       } catch (e) {
         const error = MessageV2.fromError(e, {
           providerID: this.config.defaultModel?.providerID ?? "unknown",
@@ -688,6 +841,7 @@ export namespace ACP {
           }
         } else if (part.type === "text") {
           if (part.text) {
+            const audience: Role[] | undefined = part.synthetic ? ["assistant"] : part.ignored ? ["user"] : undefined
             await this.connection
               .sessionUpdate({
                 sessionId,
@@ -696,6 +850,7 @@ export namespace ACP {
                   content: {
                     type: "text",
                     text: part.text,
+                    ...(audience && { annotations: { audience } }),
                   },
                 },
               })
@@ -703,6 +858,83 @@ export namespace ACP {
                 log.error("failed to send text to ACP", { error: err })
               })
           }
+        } else if (part.type === "file") {
+          // Replay file attachments as appropriate ACP content blocks.
+          // OpenCode stores files internally as { type: "file", url, filename, mime }.
+          // We convert these back to ACP blocks based on the URL scheme and MIME type:
+          // - file:// URLs → resource_link
+          // - data: URLs with image/* → image block
+          // - data: URLs with text/* or application/json → resource with text
+          // - data: URLs with other types → resource with blob
+          const url = part.url
+          const filename = part.filename ?? "file"
+          const mime = part.mime || "application/octet-stream"
+          const messageChunk = message.info.role === "user" ? "user_message_chunk" : "agent_message_chunk"
+
+          if (url.startsWith("file://")) {
+            // Local file reference - send as resource_link
+            await this.connection
+              .sessionUpdate({
+                sessionId,
+                update: {
+                  sessionUpdate: messageChunk,
+                  content: { type: "resource_link", uri: url, name: filename, mimeType: mime },
+                },
+              })
+              .catch((err) => {
+                log.error("failed to send resource_link to ACP", { error: err })
+              })
+          } else if (url.startsWith("data:")) {
+            // Embedded content - parse data URL and send as appropriate block type
+            const base64Match = url.match(/^data:([^;]+);base64,(.*)$/)
+            const dataMime = base64Match?.[1]
+            const base64Data = base64Match?.[2] ?? ""
+
+            const effectiveMime = dataMime || mime
+
+            if (effectiveMime.startsWith("image/")) {
+              // Image - send as image block
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: messageChunk,
+                    content: {
+                      type: "image",
+                      mimeType: effectiveMime,
+                      data: base64Data,
+                      uri: `file://${filename}`,
+                    },
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send image to ACP", { error: err })
+                })
+            } else {
+              // Non-image: text types get decoded, binary types stay as blob
+              const isText = effectiveMime.startsWith("text/") || effectiveMime === "application/json"
+              const resource = isText
+                ? {
+                    uri: `file://${filename}`,
+                    mimeType: effectiveMime,
+                    text: Buffer.from(base64Data, "base64").toString("utf-8"),
+                  }
+                : { uri: `file://${filename}`, mimeType: effectiveMime, blob: base64Data }
+
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: messageChunk,
+                    content: { type: "resource", resource },
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send resource to ACP", { error: err })
+                })
+            }
+          }
+          // URLs that don't match file:// or data: are skipped (unsupported)
         } else if (part.type === "reasoning") {
           if (part.text) {
             await this.connection
@@ -852,7 +1084,7 @@ export namespace ACP {
       }
     }
 
-    async setSessionModel(params: SetSessionModelRequest) {
+    async unstable_setSessionModel(params: SetSessionModelRequest) {
       const session = this.sessionManager.get(params.sessionId)
 
       const model = Provider.parseModel(params.modelId)
@@ -891,49 +1123,73 @@ export namespace ACP {
       const agent = session.modeId ?? (await AgentModule.defaultAgent())
 
       const parts: Array<
-        { type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }
+        | { type: "text"; text: string; synthetic?: boolean; ignored?: boolean }
+        | { type: "file"; url: string; filename: string; mime: string }
       > = []
       for (const part of params.prompt) {
         switch (part.type) {
           case "text":
+            const audience = part.annotations?.audience
+            const forAssistant = audience?.length === 1 && audience[0] === "assistant"
+            const forUser = audience?.length === 1 && audience[0] === "user"
             parts.push({
               type: "text" as const,
               text: part.text,
+              ...(forAssistant && { synthetic: true }),
+              ...(forUser && { ignored: true }),
             })
             break
-          case "image":
+          case "image": {
+            const parsed = parseUri(part.uri ?? "")
+            const filename = parsed.type === "file" ? parsed.filename : "image"
             if (part.data) {
               parts.push({
                 type: "file",
                 url: `data:${part.mimeType};base64,${part.data}`,
-                filename: "image",
+                filename,
                 mime: part.mimeType,
               })
             } else if (part.uri && part.uri.startsWith("http:")) {
               parts.push({
                 type: "file",
                 url: part.uri,
-                filename: "image",
+                filename,
                 mime: part.mimeType,
               })
             }
             break
+          }
 
           case "resource_link":
             const parsed = parseUri(part.uri)
+            // Use the name from resource_link if available
+            if (part.name && parsed.type === "file") {
+              parsed.filename = part.name
+            }
             parts.push(parsed)
 
             break
 
-          case "resource":
+          case "resource": {
             const resource = part.resource
-            if ("text" in resource) {
+            if ("text" in resource && resource.text) {
               parts.push({
                 type: "text",
                 text: resource.text,
               })
+            } else if ("blob" in resource && resource.blob && resource.mimeType) {
+              // Binary resource (PDFs, etc.): store as file part with data URL
+              const parsed = parseUri(resource.uri ?? "")
+              const filename = parsed.type === "file" ? parsed.filename : "file"
+              parts.push({
+                type: "file",
+                url: `data:${resource.mimeType};base64,${resource.blob}`,
+                filename,
+                mime: resource.mimeType,
+              })
             }
             break
+          }
 
           default:
             break
