@@ -234,6 +234,33 @@ export class BrokerClient {
   }
 
   /**
+   * Check if user has 2FA configured.
+   *
+   * @param username - Username to check
+   * @param home - User's home directory (for .google_authenticator check)
+   * @returns true if user has 2FA configured, false otherwise
+   */
+  async check2fa(username: string, home: string): Promise<boolean> {
+    const id = crypto.randomUUID()
+
+    const request: BrokerRequest = {
+      id,
+      version: 1,
+      method: "check2fa",
+      username,
+      home,
+    }
+
+    try {
+      const response = await this.sendRequest(request)
+      return response.id === id && response.success
+    } catch {
+      // On error, assume no 2FA (fail open for detection)
+      return false
+    }
+  }
+
+  /**
    * Register a session with user info after successful authentication.
    *
    * Must be called before spawning PTY sessions for this user.
