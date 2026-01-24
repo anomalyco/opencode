@@ -1,6 +1,6 @@
 import { Dialog } from "@kobalte/core/dialog"
 import { useSession } from "@/context/session"
-import { useNavigate } from "@solidjs/router"
+import { useServer } from "@/context/server"
 
 /**
  * Modal overlay shown when user's session has expired.
@@ -9,7 +9,7 @@ import { useNavigate } from "@solidjs/router"
  */
 export function SessionExpiredOverlay() {
   const session = useSession()
-  const navigate = useNavigate()
+  const server = useServer()
 
   return (
     <Dialog open={session.isExpired()}>
@@ -64,7 +64,9 @@ export function SessionExpiredOverlay() {
               Your session has expired. Please log in again to continue.
             </Dialog.Description>
             <button
-              onClick={() => navigate("/auth/login")}
+              onClick={() => {
+                window.location.href = `${server.url}/auth/login`
+              }}
               style={{
                 background: "#3b82f6",
                 color: "white",
