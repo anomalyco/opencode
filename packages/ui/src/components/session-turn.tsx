@@ -156,12 +156,12 @@ export function SessionTurn(
   const allMessages = createMemo(() => data.store.message[props.sessionID] ?? emptyMessages)
 
   const messageIndex = createMemo(() => {
-    const messages = allMessages()
+    const messages = allMessages() ?? emptyMessages
     const result = Binary.search(messages, props.messageID, (m) => m.id)
     if (!result.found) return -1
 
     const msg = messages[result.index]
-    if (msg.role !== "user") return -1
+    if (!msg || msg.role !== "user") return -1
 
     return result.index
   })
@@ -170,7 +170,8 @@ export function SessionTurn(
     const index = messageIndex()
     if (index < 0) return undefined
 
-    const msg = allMessages()[index]
+    const messages = allMessages() ?? emptyMessages
+    const msg = messages[index]
     if (!msg || msg.role !== "user") return undefined
 
     return msg
@@ -179,7 +180,7 @@ export function SessionTurn(
   const lastUserMessageID = createMemo(() => {
     if (props.lastUserMessageID) return props.lastUserMessageID
 
-    const messages = allMessages()
+    const messages = allMessages() ?? emptyMessages
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i]
       if (msg?.role === "user") return msg.id
@@ -213,7 +214,7 @@ export function SessionTurn(
       const msg = message()
       if (!msg) return emptyAssistant
 
-      const messages = allMessages()
+      const messages = allMessages() ?? emptyMessages
       const index = messageIndex()
       if (index < 0) return emptyAssistant
 
