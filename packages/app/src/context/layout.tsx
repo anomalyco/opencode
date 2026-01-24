@@ -209,6 +209,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     })
 
     const [colors, setColors] = createStore<Record<string, AvatarColorKey>>({})
+    const colorRequested = new Map<string, AvatarColorKey>()
 
     function pickAvailableColor(used: Set<string>): AvatarColorKey {
       const available = AVATAR_COLOR_KEYS.filter((c) => !used.has(c))
@@ -324,13 +325,21 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     createEffect(() => {
       const projects = enriched()
       if (projects.length === 0) return
+      if (!globalSync.ready) return
 
-      if (globalSync.ready) {
-        for (const project of projects) {
-          if (!project.id) continue
-          if (project.id === "global") continue
-          globalSync.project.icon(project.worktree, project.icon?.override)
-        }
+      for (const project of projects) {
+        if (!project.id) continue
+        if (project.id === "global") continue
+        globalSync.project.icon(project.worktree, project.icon?.override)
+      }
+    })
+
+    createEffect(() => {
+      const projects = enriched()
+      if (projects.length === 0) return
+
+      for (const project of projects) {
+        if (project.icon?.color) colorRequested.delete(project.worktree)
       }
 
       const used = new Set<string>()
@@ -341,18 +350,29 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
       for (const project of projects) {
         if (project.icon?.color) continue
-        const existing = colors[project.worktree]
+        const worktree = project.worktree
+        const existing = colors[worktree]
         const color = existing ?? pickAvailableColor(used)
         if (!existing) {
           used.add(color)
-          setColors(project.worktree, color)
+          setColors(worktree, color)
         }
         if (!project.id) continue
+
+        const requested = colorRequested.get(worktree)
+        if (requested === color) continue
+        colorRequested.set(worktree, color)
+
         if (project.id === "global") {
-          globalSync.project.meta(project.worktree, { icon: { color } })
+          globalSync.project.meta(worktree, { icon: { color } })
           continue
         }
-        void globalSdk.client.project.update({ projectID: project.id, directory: project.worktree, icon: { color } })
+
+        void globalSdk.client.project
+          .update({ projectID: project.id, directory: worktree, icon: { color } })
+          .catch(() => {
+            if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
+          })
       }
     })
 
