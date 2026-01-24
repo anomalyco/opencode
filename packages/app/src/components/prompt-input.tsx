@@ -1679,52 +1679,70 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <For each={prompt.context.items()}>
               {(item) => {
                 return (
-                  <div
-                    classList={{
-                      "group shrink-0 flex flex-col rounded-[6px] bg-background-stronger pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all shadow-xs-border hover:shadow-xs-border-hover": true,
-                      "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID,
-                    }}
-                    onClick={() => {
-                      if (!item.commentID) return
-                      comments.setFocus({ file: item.path, id: item.commentID })
-                      view().reviewPanel.open()
-                      tabs().open("review")
-                    }}
+                  <Tooltip
+                    value={
+                      <span class="flex max-w-[300px]">
+                        <span
+                          class="text-text-invert-base truncate min-w-0"
+                          style={{ direction: "rtl", "text-align": "left" }}
+                        >
+                          <bdi>{getDirectory(item.path)}</bdi>
+                        </span>
+                        <span class="shrink-0">{getFilename(item.path)}</span>
+                      </span>
+                    }
+                    placement="top"
+                    openDelay={2000}
                   >
-                    <div class="flex items-center gap-1.5">
-                      <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
-                      <div
-                        class="flex-1 flex items-center text-11-regular min-w-0"
-                        style={{ "font-weight": "var(--font-weight-medium)" }}
-                      >
-                        <span class="text-text-strong whitespace-nowrap">{getFilenameTruncated(item.path, 18)}</span>
-                        <Show when={item.selection}>
-                          {(sel) => (
-                            <span class="text-text-weak whitespace-nowrap shrink-0">
-                              {sel().startLine === sel().endLine
-                                ? `:${sel().startLine}`
-                                : `:${sel().startLine}-${sel().endLine}`}
-                            </span>
-                          )}
-                        </Show>
+                    <div
+                      classList={{
+                        "group shrink-0 flex flex-col rounded-[6px] bg-background-stronger pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all shadow-xs-border hover:shadow-xs-border-hover": true,
+                        "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID,
+                      }}
+                      onClick={() => {
+                        if (!item.commentID) return
+                        comments.setFocus({ file: item.path, id: item.commentID })
+                        view().reviewPanel.open()
+                        tabs().open("review")
+                      }}
+                    >
+                      <div class="flex items-center gap-1.5">
+                        <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
+                        <div
+                          class="flex items-center text-11-regular min-w-0"
+                          style={{ "font-weight": "var(--font-weight-medium)" }}
+                        >
+                          <span class="text-text-strong whitespace-nowrap">{getFilenameTruncated(item.path, 14)}</span>
+                          <Show when={item.selection}>
+                            {(sel) => (
+                              <span class="text-text-weak whitespace-nowrap shrink-0">
+                                {sel().startLine === sel().endLine
+                                  ? `:${sel().startLine}`
+                                  : `:${sel().startLine}-${sel().endLine}`}
+                              </span>
+                            )}
+                          </Show>
+                        </div>
+                        <IconButton
+                          type="button"
+                          icon="close-small"
+                          variant="ghost"
+                          class="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100 transition-all"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (item.commentID) comments.remove(item.path, item.commentID)
+                            prompt.context.remove(item.key)
+                          }}
+                          aria-label={language.t("prompt.context.removeFile")}
+                        />
                       </div>
-                      <IconButton
-                        type="button"
-                        icon="close-small"
-                        variant="ghost"
-                        class="h-5 w-5 opacity-0 group-hover:opacity-100 transition-all"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (item.commentID) comments.remove(item.path, item.commentID)
-                          prompt.context.remove(item.key)
-                        }}
-                        aria-label={language.t("prompt.context.removeFile")}
-                      />
+                      <Show when={item.comment}>
+                        {(comment) => (
+                          <div class="text-12-regular text-text-strong ml-5 pr-1 truncate">{comment()}</div>
+                        )}
+                      </Show>
                     </div>
-                    <Show when={item.comment}>
-                      {(comment) => <div class="text-12-regular text-text-strong ml-5 pr-1 truncate">{comment()}</div>}
-                    </Show>
-                  </div>
+                  </Tooltip>
                 )
               }}
             </For>
