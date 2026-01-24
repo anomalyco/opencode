@@ -79,6 +79,8 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         // Don't mark as expired on network error - could be temporary
       } finally {
         setReady(true)
+        // Check for expiration warning after each fetch
+        checkExpirationWarning()
       }
     }
 
@@ -147,7 +149,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         if (document.hidden) return
 
         void fetchSession()
-        checkExpirationWarning()
+        // checkExpirationWarning() is called in fetchSession's finally block
       }, POLL_INTERVAL_MS)
     }
 
