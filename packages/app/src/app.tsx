@@ -95,10 +95,12 @@ function AuthGate(props: ParentProps) {
 
 /**
  * Component that redirects to the login page.
+ * Passes current URL as returnUrl so user is redirected back after login.
  */
 function AuthRedirect(props: { url: string | undefined }) {
   if (props.url) {
-    window.location.href = `${props.url}/auth/login`
+    const returnUrl = encodeURIComponent(window.location.href)
+    window.location.href = `${props.url}/auth/login?returnUrl=${returnUrl}`
   }
   return <Loading />
 }

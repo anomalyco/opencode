@@ -80,16 +80,31 @@ const loginRateLimiter = lazy(() => {
 })
 
 /**
- * Validate that a return URL is safe (same-origin only).
+ * Validate that a return URL is safe.
+ * Allows:
+ * - Relative paths starting with /
+ * - Localhost URLs (for development with separate frontend server)
  */
 function isValidReturnUrl(url: string): boolean {
-  // Must start with / (relative path)
-  if (!url.startsWith("/")) return false
-  // Must not have protocol or double slashes (prevent //evil.com)
-  if (url.startsWith("//")) return false
   // Must not contain newlines (header injection)
   if (url.includes("\n") || url.includes("\r")) return false
-  return true
+
+  // Allow relative paths starting with /
+  if (url.startsWith("/") && !url.startsWith("//")) {
+    return true
+  }
+
+  // Allow localhost URLs (for development)
+  try {
+    const parsed = new URL(url)
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+      return true
+    }
+  } catch {
+    // Invalid URL
+  }
+
+  return false
 }
 
 /**
