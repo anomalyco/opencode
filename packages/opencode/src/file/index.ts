@@ -146,19 +146,32 @@ export namespace File {
           .readdir(Instance.directory, { withFileTypes: true })
           .catch(() => [] as fs.Dirent[])
 
-        for (const entry of top) {
-          if (!entry.isDirectory()) continue
-          if (shouldIgnore(entry.name)) continue
-          dirs.add(entry.name + "/")
+        // Process top-level entries in parallel, checking symlinks
+        const topDirs = await Promise.all(
+          top.map(async (entry) => {
+            if (shouldIgnore(entry.name)) return null
+            const full = path.join(Instance.directory, entry.name)
+            const dir = entry.isDirectory() || (entry.isSymbolicLink() && (await Filesystem.isDir(full)))
+            return dir ? { name: entry.name, path: full } : null
+          }),
+        ).then((results) => results.filter((x): x is NonNullable<typeof x> => x !== null))
 
-          const base = path.join(Instance.directory, entry.name)
-          const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
-          for (const child of children) {
-            if (!child.isDirectory()) continue
-            if (shouldIgnoreNested(child.name)) continue
-            dirs.add(entry.name + "/" + child.name + "/")
-          }
-        }
+        // Scan subdirectories in parallel
+        await Promise.all(
+          topDirs.map(async ({ name, path: base }) => {
+            dirs.add(name + "/")
+            const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
+
+            await Promise.all(
+              children.map(async (child) => {
+                if (shouldIgnoreNested(child.name)) return
+                const nested = path.join(base, child.name)
+                const dir = child.isDirectory() || (child.isSymbolicLink() && (await Filesystem.isDir(nested)))
+                if (dir) dirs.add(name + "/" + child.name + "/")
+              }),
+            )
+          }),
+        )
 
         result.dirs = Array.from(dirs).toSorted()
         cache = result
@@ -343,24 +356,24 @@ export namespace File {
       throw new Error(`Access denied: path escapes project directory`)
     }
 
-    const nodes: Node[] = []
-    for (const entry of await fs.promises
-      .readdir(resolved, {
-        withFileTypes: true,
-      })
-      .catch(() => [])) {
-      if (exclude.includes(entry.name)) continue
-      const fullPath = path.join(resolved, entry.name)
-      const relativePath = path.relative(Instance.directory, fullPath)
-      const type = entry.isDirectory() ? "directory" : "file"
-      nodes.push({
-        name: entry.name,
-        path: relativePath,
-        absolute: fullPath,
-        type,
-        ignored: ignored(type === "directory" ? relativePath + "/" : relativePath),
-      })
-    }
+    const entries = await fs.promises.readdir(resolved, { withFileTypes: true }).catch(() => [])
+    const nodes = await Promise.all(
+      entries
+        .filter((entry) => !exclude.includes(entry.name))
+        .map(async (entry) => {
+          const fullPath = path.join(resolved, entry.name)
+          const relativePath = path.relative(Instance.directory, fullPath)
+          const dir = entry.isDirectory() || (entry.isSymbolicLink() && (await Filesystem.isDir(fullPath)))
+          const type = dir ? "directory" : "file"
+          return {
+            name: entry.name,
+            path: relativePath,
+            absolute: fullPath,
+            type,
+            ignored: ignored(type === "directory" ? relativePath + "/" : relativePath),
+          } as Node
+        }),
+    )
     return nodes.sort((a, b) => {
       if (a.type !== b.type) {
         return a.type === "directory" ? -1 : 1
