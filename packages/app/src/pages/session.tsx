@@ -1537,9 +1537,9 @@ export default function Page() {
                         }}
                         onClick={autoScroll.handleInteraction}
                         class="relative min-w-0 w-full h-full overflow-y-auto session-scroller"
-                        style={{ "--session-title-height": info()?.title ? "40px" : "0px" }}
+                        style={{ "--session-title-height": (info()?.title || info()?.parentID) ? "40px" : "0px" }}
                       >
-                        <Show when={info()?.title}>
+                        <Show when={info()?.title || info()?.parentID}>
                           <div
                             classList={{
                               "sticky top-0 z-30 bg-background-stronger": true,
@@ -1548,8 +1548,21 @@ export default function Page() {
                               "md:max-w-200 md:mx-auto": !showTabs(),
                             }}
                           >
-                            <div class="h-10 flex items-center">
-                              <h1 class="text-16-medium text-text-strong truncate">{info()?.title}</h1>
+                            <div class="h-10 flex items-center gap-1">
+                              <Show when={info()?.parentID}>
+                                <IconButton
+                                  tabIndex={-1}
+                                  icon="arrow-left"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    navigate(`/${params.dir}/session/${info()?.parentID}`)
+                                  }}
+                                  aria-label={language.t("common.goBack")}
+                                />
+                              </Show>
+                              <Show when={info()?.title}>
+                                <h1 class="text-16-medium text-text-strong truncate">{info()?.title}</h1>
+                              </Show>
                             </div>
                           </div>
                         </Show>
