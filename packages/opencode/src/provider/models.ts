@@ -88,6 +88,7 @@ export namespace ModelsDev {
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
     if (result) return result
+    // @ts-ignore
     const snapshot = await import("./models-snapshot")
       .then((m) => m.snapshot as Record<string, unknown>)
       .catch(() => undefined)
