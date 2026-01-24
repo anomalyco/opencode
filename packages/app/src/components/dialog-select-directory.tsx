@@ -98,16 +98,16 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     const existing = cache.get(key)
     if (existing) return existing
 
-    const request = sdk.client.file
-      .list({ directory: key, path: "" })
+    const request = sdk.client.global
+      .browse({ path: key })
       .then((x) => x.data ?? [])
-      .catch(() => [])
+      .catch(() => [] as Array<{ name: string; path: string; type: string }>)
       .then((nodes) =>
         nodes
           .filter((n) => n.type === "directory")
           .map((n) => ({
             name: n.name,
-            absolute: trimTrailing(normalizeDriveRoot(n.absolute)),
+            absolute: trimTrailing(normalizeDriveRoot(n.path)),
           })),
       )
 
@@ -131,12 +131,10 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     const query = normalizeDriveRoot(input.path)
 
     if (!isPath) {
-      const results = await sdk.client.find
-        .files({ directory: input.directory, query, type: "directory", limit: 50 })
-        .then((x) => x.data ?? [])
-        .catch(() => [])
-
-      return results.map((rel) => join(input.directory, rel)).slice(0, 50)
+      // No path specified, show directories in the base directory with fuzzy filtering
+      const items = await dirs(input.directory)
+      if (!query) return items.slice(0, 50).map((x) => x.absolute)
+      return fuzzysort.go(query, items, { key: "name", limit: 50 }).map((x) => x.obj.absolute)
     }
 
     const segments = query.replace(/^\/+/, "").split("/")

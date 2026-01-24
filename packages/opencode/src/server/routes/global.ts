@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { describeRoute, resolver } from "hono-openapi"
+import { describeRoute, resolver, validator } from "hono-openapi"
 import { streamSSE } from "hono/streaming"
 import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
@@ -8,8 +8,17 @@ import { Instance } from "../../project/instance"
 import { Installation } from "@/installation"
 import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
+import { Global } from "@/global"
 
 const log = Log.create({ service: "server" })
+
+const BrowseNode = z
+  .object({
+    name: z.string(),
+    path: z.string(),
+    type: z.enum(["file", "directory"]),
+  })
+  .meta({ ref: "BrowseNode" })
 
 export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({}))
 
@@ -130,6 +139,56 @@ export const GlobalRoutes = lazy(() =>
           },
         })
         return c.json(true)
+      },
+    )
+    .get(
+      "/browse",
+      describeRoute({
+        summary: "Browse directory",
+        description:
+          "Browse any directory on the filesystem. Returns files and directories sorted with directories first.",
+        operationId: "global.browse",
+        responses: {
+          200: {
+            description: "Directory contents",
+            content: {
+              "application/json": {
+                schema: resolver(BrowseNode.array()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          path: z.string().optional(),
+        }),
+      ),
+      async (c) => {
+        const path = c.req.valid("query").path || Global.Path.home
+        try {
+          const entries = await Array.fromAsync(new Bun.Glob("*").scan({ cwd: path, onlyFiles: false }))
+          const items = await Promise.all(
+            entries.map(async (name) => {
+              const fullPath = path === "/" ? "/" + name : path + "/" + name
+              const file = Bun.file(fullPath)
+              const stat = await file.stat().catch(() => null)
+              const isDir = stat ? stat.isDirectory() : false
+              return { name, path: fullPath, type: isDir ? "directory" : "file" } as const
+            }),
+          )
+          const sorted = items
+            .filter((i) => !i.name.startsWith("."))
+            .sort((a, b) => {
+              if (a.type === "directory" && b.type !== "directory") return -1
+              if (a.type !== "directory" && b.type === "directory") return 1
+              return a.name.localeCompare(b.name)
+            })
+          return c.json(sorted)
+        } catch {
+          return c.json([], 200)
+        }
       },
     ),
 )

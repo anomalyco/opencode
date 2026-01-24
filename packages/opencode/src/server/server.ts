@@ -118,11 +118,16 @@ export namespace Server {
                 return input
               }
 
-              // Allow requests from the same origin on common dev ports (Vite dev server)
+              // Allow requests from any origin on common dev ports (Vite dev server)
               // This enables the launcher workflow where the app runs on :3000 and API on :5050
-              const url = new URL(input)
-              if (url.port === "3000" || url.port === "5173") {
-                return input
+              // Also allows access from Tailscale/LAN IPs
+              try {
+                const url = new URL(input)
+                if (url.port === "3000" || url.port === "5173") {
+                  return input
+                }
+              } catch {
+                // Invalid URL, fall through
               }
 
               return

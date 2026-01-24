@@ -930,6 +930,12 @@ export type GlobalEvent = {
   payload: Event
 }
 
+export type BrowseNode = {
+  name: string
+  path: string
+  type: "file" | "directory"
+}
+
 export type BadRequestError = {
   data: unknown
   errors: Array<{
@@ -2214,6 +2220,24 @@ export type GlobalDisposeResponses = {
 }
 
 export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
+
+export type GlobalBrowseData = {
+  body?: never
+  path?: never
+  query?: {
+    path?: string
+  }
+  url: "/global/browse"
+}
+
+export type GlobalBrowseResponses = {
+  /**
+   * Directory contents
+   */
+  200: Array<BrowseNode>
+}
+
+export type GlobalBrowseResponse = GlobalBrowseResponses[keyof GlobalBrowseResponses]
 
 export type ProjectListData = {
   body?: never
