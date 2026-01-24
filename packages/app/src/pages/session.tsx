@@ -1900,6 +1900,7 @@ export default function Page() {
                     const [openedComment, setOpenedComment] = createSignal<string | null>(null)
                     const [commenting, setCommenting] = createSignal<SelectedLineRange | null>(null)
                     const [draft, setDraft] = createSignal("")
+                    const [draftError, setDraftError] = createSignal(false)
                     const [positions, setPositions] = createSignal<Record<string, number>>({})
                     const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
 
@@ -2086,19 +2087,30 @@ export default function Page() {
                                 onClick={() => textarea?.focus()}
                                 onPopoverFocusOut={(e) => {
                                   const target = e.relatedTarget as Node | null
-                                  if (!target || !e.currentTarget.contains(target)) {
-                                    setCommenting(null)
-                                  }
+                                  if (target && e.currentTarget.contains(target)) return
+                                  // Delay to allow click handlers to fire first
+                                  setTimeout(() => {
+                                    if (!document.activeElement || !e.currentTarget.contains(document.activeElement)) {
+                                      setCommenting(null)
+                                    }
+                                  }, 0)
                                 }}
                               >
                                 <div class="flex flex-col gap-2">
                                   <textarea
                                     ref={textarea}
-                                    class="w-full resize-vertical p-2 rounded-[6px] bg-surface-base border border-border-base text-text-strong text-12-regular leading-5 focus:outline-none focus:shadow-xs-border-select"
+                                    classList={{
+                                      "w-full resize-vertical p-2 rounded-[6px] bg-surface-base border text-text-strong text-12-regular leading-5 focus:outline-none focus:shadow-xs-border-select": true,
+                                      "border-transparent": !draftError(),
+                                      "border-border-critical-base": draftError(),
+                                    }}
                                     rows={3}
                                     placeholder="Add comment"
                                     value={draft()}
-                                    onInput={(e) => setDraft(e.currentTarget.value)}
+                                    onInput={(e) => {
+                                      setDraft(e.currentTarget.value)
+                                      setDraftError(false)
+                                    }}
                                     onKeyDown={(e) => {
                                       if (e.key === "Escape") {
                                         setCommenting(null)
@@ -2108,7 +2120,10 @@ export default function Page() {
                                       if (e.shiftKey) return
                                       e.preventDefault()
                                       const value = draft().trim()
-                                      if (!value) return
+                                      if (!value) {
+                                        setDraftError(true)
+                                        return
+                                      }
                                       const p = path()
                                       if (!p) return
                                       addCommentToContext({
@@ -2131,10 +2146,12 @@ export default function Page() {
                                     <Button
                                       size="small"
                                       variant="primary"
-                                      disabled={draft().trim().length === 0}
                                       onClick={() => {
                                         const value = draft().trim()
-                                        if (!value) return
+                                        if (!value) {
+                                          setDraftError(true)
+                                          return
+                                        }
                                         const p = path()
                                         if (!p) return
                                         addCommentToContext({
