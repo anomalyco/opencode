@@ -2474,7 +2474,15 @@ export default function Page() {
                           display: terminal.active() === pty.id ? "block" : "none",
                         }}
                       >
-                        <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
+                        <Show when={pty.id} keyed>
+                          {() => (
+                            <Terminal
+                              pty={pty}
+                              onCleanup={terminal.update}
+                              onConnectError={() => terminal.clone(pty.id)}
+                            />
+                          )}
+                        </Show>
                       </div>
                     )}
                   </For>

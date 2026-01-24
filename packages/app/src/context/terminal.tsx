@@ -150,13 +150,18 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
           return undefined
         })
       if (!clone?.data) return
-      setStore("all", index, {
-        ...pty,
-        ...clone.data,
+
+      const active = store.active === pty.id
+
+      batch(() => {
+        setStore("all", index, {
+          ...pty,
+          ...clone.data,
+        })
+        if (active) {
+          setStore("active", clone.data.id)
+        }
       })
-      if (store.active === pty.id) {
-        setStore("active", clone.data.id)
-      }
     },
     open(id: string) {
       setStore("active", id)
