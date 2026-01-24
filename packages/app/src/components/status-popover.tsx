@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useNavigate } from "@solidjs/router"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -7,6 +7,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { Button } from "@opencode-ai/ui/button"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, serverDisplayName, useServer } from "@/context/server"
@@ -210,44 +211,78 @@ export function StatusPopover() {
                     const isDefault = () => url === defaultServerUrl()
                     const status = () => store.status[url]
                     const isBlocked = () => status()?.healthy === false
+                    const [truncated, setTruncated] = createSignal(false)
+                    let nameRef: HTMLSpanElement | undefined
+                    let versionRef: HTMLSpanElement | undefined
+
+                    onMount(() => {
+                      const check = () => {
+                        const nameTruncated = nameRef ? nameRef.scrollWidth > nameRef.clientWidth : false
+                        const versionTruncated = versionRef ? versionRef.scrollWidth > versionRef.clientWidth : false
+                        setTruncated(nameTruncated || versionTruncated)
+                      }
+                      check()
+                      window.addEventListener("resize", check)
+                      onCleanup(() => window.removeEventListener("resize", check))
+                    })
+
+                    const tooltipValue = () => {
+                      const name = serverDisplayName(url)
+                      const version = status()?.version
+                      return (
+                        <span class="flex items-center gap-2">
+                          <span>{name}</span>
+                          <Show when={version}>
+                            <span class="text-text-invert-base">{version}</span>
+                          </Show>
+                        </span>
+                      )
+                    }
+
                     return (
-                      <button
-                        type="button"
-                        class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
-                        classList={{
-                          "opacity-50": isBlocked(),
-                          "hover:bg-surface-raised-base-hover": !isBlocked(),
-                          "cursor-not-allowed": isBlocked(),
-                        }}
-                        aria-disabled={isBlocked()}
-                        onClick={() => {
-                          if (isBlocked()) return
-                          server.setActive(url)
-                          navigate("/")
-                        }}
-                      >
-                        <div
+                      <Tooltip value={tooltipValue()} placement="top" inactive={!truncated()}>
+                        <button
+                          type="button"
+                          class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
                           classList={{
-                            "size-1.5 rounded-full shrink-0": true,
-                            "bg-icon-success-base": status()?.healthy === true,
-                            "bg-icon-critical-base": status()?.healthy === false,
-                            "bg-border-weak-base": status() === undefined,
+                            "opacity-50": isBlocked(),
+                            "hover:bg-surface-raised-base-hover": !isBlocked(),
+                            "cursor-not-allowed": isBlocked(),
                           }}
-                        />
-                        <span class="text-14-regular text-text-base truncate">{serverDisplayName(url)}</span>
-                        <Show when={status()?.version}>
-                          <span class="text-12-regular text-text-weak truncate">{status()?.version}</span>
-                        </Show>
-                        <Show when={isDefault()}>
-                          <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
-                            Default
+                          aria-disabled={isBlocked()}
+                          onClick={() => {
+                            if (isBlocked()) return
+                            server.setActive(url)
+                            navigate("/")
+                          }}
+                        >
+                          <div
+                            classList={{
+                              "size-1.5 rounded-full shrink-0": true,
+                              "bg-icon-success-base": status()?.healthy === true,
+                              "bg-icon-critical-base": status()?.healthy === false,
+                              "bg-border-weak-base": status() === undefined,
+                            }}
+                          />
+                          <span ref={nameRef} class="text-14-regular text-text-base truncate">
+                            {serverDisplayName(url)}
                           </span>
-                        </Show>
-                        <div class="flex-1" />
-                        <Show when={isActive()}>
-                          <Icon name="check" size="small" class="text-icon-weak shrink-0" />
-                        </Show>
-                      </button>
+                          <Show when={status()?.version}>
+                            <span ref={versionRef} class="text-12-regular text-text-weak truncate">
+                              {status()?.version}
+                            </span>
+                          </Show>
+                          <Show when={isDefault()}>
+                            <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
+                              Default
+                            </span>
+                          </Show>
+                          <div class="flex-1" />
+                          <Show when={isActive()}>
+                            <Icon name="check" size="small" class="text-icon-weak shrink-0" />
+                          </Show>
+                        </button>
+                      </Tooltip>
                     )
                   }}
                 </For>
@@ -276,7 +311,7 @@ export function StatusPopover() {
                       return (
                         <button
                           type="button"
-                          class="flex items-center gap-2 w-full h-8 px-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
+                          class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
                           onClick={() => toggleMcp(item.name)}
                           disabled={loading() === item.name}
                         >
