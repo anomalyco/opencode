@@ -7,6 +7,62 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     port: 3000,
+    // Proxy API requests to backend server for development
+    // This avoids CORS and cookie issues with cross-origin requests
+    proxy: {
+      "/auth": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+      "/global": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+      "/project": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+      "/session": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+      "/provider": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+      "/path": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+      "/config": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+      "/pty": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+      "/event": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+      "/permission": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+      "/question": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+      "/mcp": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+      "/file": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     target: "esnext",
