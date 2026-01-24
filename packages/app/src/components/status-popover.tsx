@@ -303,7 +303,9 @@ export function StatusPopover() {
               <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <Show
                   when={mcpItems().length > 0}
-                  fallback={<div class="text-14-regular text-text-weak text-center">No MCP servers configured</div>}
+                  fallback={
+                    <div class="text-14-regular text-text-base text-center my-auto">No MCP servers configured</div>
+                  }
                 >
                   <For each={mcpItems()}>
                     {(item) => {
@@ -348,7 +350,9 @@ export function StatusPopover() {
                 <Show
                   when={lspItems().length > 0}
                   fallback={
-                    <div class="text-14-regular text-text-weak text-center">LSPs auto-detected from file types</div>
+                    <div class="text-14-regular text-text-base text-center my-auto">
+                      LSPs auto-detected from file types
+                    </div>
                   }
                 >
                   <For each={lspItems()}>
@@ -376,9 +380,9 @@ export function StatusPopover() {
                 <Show
                   when={plugins().length > 0}
                   fallback={
-                    <div class="text-14-regular text-text-weak text-center">
+                    <div class="text-14-regular text-text-base text-center my-auto">
                       Plugins configured in{" "}
-                      <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm">opencode.json</code>
+                      <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm text-text-base">opencode.json</code>
                     </div>
                   }
                 >
