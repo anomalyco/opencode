@@ -485,7 +485,11 @@ export function DialogSelectServer() {
                           <IconButton
                             icon="dot-grid"
                             variant="ghost"
-                            class="bg-transparent transition-opacity shrink-0 hover:scale-110 size-8"
+                            class="shrink-0 size-8 hover:bg-surface-base-hover"
+                            classList={{
+                              "bg-transparent": !popoverOpen(),
+                              "bg-surface-base-active": popoverOpen(),
+                            }}
                             onPointerDown={(event: PointerEvent) => event.stopPropagation()}
                           />
                         }
