@@ -138,7 +138,8 @@ export function StatusPopover() {
       triggerAs={Button}
       triggerProps={{
         variant: "ghost",
-        class: "rounded-sm w-[75px] h-[24px] py-1.5 pr-3 pl-2 gap-2 border-none shadow-none",
+        class:
+          "rounded-sm w-[75px] h-[24px] py-1.5 pr-3 pl-2 gap-2 border-none shadow-none data-[expanded]:bg-surface-raised-base-active",
         style: { scale: 1 },
       }}
       trigger={
@@ -154,8 +155,10 @@ export function StatusPopover() {
           <span class="text-12-regular text-text-strong">Status</span>
         </div>
       }
-      class="[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] mx-5 bg-transparent border-0 shadow-none rounded-xl"
-      gutter={12}
+      class="[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
+      gutter={6}
+      placement="bottom-end"
+      shift={-136}
     >
       <div
         class="flex items-center gap-1 w-[360px] rounded-xl"
@@ -200,7 +203,7 @@ export function StatusPopover() {
 
           <Tabs.Content value="servers">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base rounded-sm min-h-14">
+              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <For each={sortedServers()}>
                   {(url) => {
                     const isActive = () => url === server.url
@@ -210,7 +213,7 @@ export function StatusPopover() {
                     return (
                       <button
                         type="button"
-                        class="flex items-center gap-2 w-full px-2 py-1 rounded-md transition-colors text-left"
+                        class="flex items-center gap-2 w-full p-1.5 rounded-md transition-colors text-left"
                         classList={{
                           "opacity-50": isBlocked(),
                           "hover:bg-surface-raised-base-hover": !isBlocked(),
@@ -251,7 +254,7 @@ export function StatusPopover() {
 
                 <Button
                   variant="secondary"
-                  class="mt-2 self-start"
+                  class="mt-3 self-start h-8 px-3 py-1.5"
                   onClick={() => dialog.show(() => <DialogSelectServer />)}
                 >
                   Manage servers
@@ -262,12 +265,10 @@ export function StatusPopover() {
 
           <Tabs.Content value="mcp">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base rounded-sm min-h-14">
+              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <Show
                   when={mcpItems().length > 0}
-                  fallback={
-                    <div class="text-14-regular text-text-weak text-center py-4">No MCP servers configured</div>
-                  }
+                  fallback={<div class="text-14-regular text-text-weak text-center">No MCP servers configured</div>}
                 >
                   <For each={mcpItems()}>
                     {(item) => {
@@ -308,13 +309,11 @@ export function StatusPopover() {
 
           <Tabs.Content value="lsp">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base rounded-sm min-h-14">
+              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <Show
                   when={lspItems().length > 0}
                   fallback={
-                    <div class="text-14-regular text-text-weak text-center py-4">
-                      LSPs auto-detected from file types
-                    </div>
+                    <div class="text-14-regular text-text-weak text-center">LSPs auto-detected from file types</div>
                   }
                 >
                   <For each={lspItems()}>
@@ -338,11 +337,11 @@ export function StatusPopover() {
 
           <Tabs.Content value="plugins">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base rounded-sm min-h-14">
+              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <Show
                   when={plugins().length > 0}
                   fallback={
-                    <div class="text-14-regular text-text-weak text-center py-4">
+                    <div class="text-14-regular text-text-weak text-center">
                       Plugins configured in{" "}
                       <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm">opencode.json</code>
                     </div>

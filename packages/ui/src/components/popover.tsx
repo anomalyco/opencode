@@ -13,6 +13,7 @@ export interface PopoverProps<T extends ValidComponent = "div">
   description?: JSXElement
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
+  style?: ComponentProps<"div">["style"]
   portal?: boolean
 }
 
