@@ -2030,7 +2030,7 @@ export default function Page() {
                                 <Icon name="comment" size="small" style={{ color: "var(--white)" }} />
                               </button>
                               <Show when={openedComment() === comment.id}>
-                                <div class="absolute top-0 right-[calc(100%+12px)] z-40 min-w-[200px] max-w-[320px] rounded-[14px] bg-surface-raised-stronger-non-alpha border border-border-base p-3">
+                                <div class="absolute top-[calc(100%+4px)] right-[-8px] z-40 min-w-[200px] max-w-[320px] rounded-[14px] bg-surface-raised-stronger-non-alpha border border-border-base p-3">
                                   <div class="flex flex-col gap-1.5">
                                     <div class="text-14-regular text-text-strong whitespace-pre-wrap">
                                       {comment.comment}

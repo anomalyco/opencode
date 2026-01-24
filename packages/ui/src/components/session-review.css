@@ -77,8 +77,8 @@
 
   [data-slot="session-review-comment-popover-content"] {
     position: absolute;
-    top: 0;
-    right: calc(100% + 12px);
+    top: calc(100% + 4px);
+    right: -8px;
     z-index: 6;
     min-width: 200px;
     max-width: min(320px, calc(100vw - 48px));
