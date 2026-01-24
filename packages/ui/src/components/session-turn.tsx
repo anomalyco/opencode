@@ -457,9 +457,16 @@ export function SessionTurn(
   })
 
   createEffect(() => {
-    const timer = setInterval(() => {
+    const update = () => {
       setStore("duration", duration())
-    }, 1000)
+    }
+
+    update()
+
+    // Only keep ticking while the active (in-progress) turn is running.
+    if (!working()) return
+
+    const timer = setInterval(update, 1000)
     onCleanup(() => clearInterval(timer))
   })
 
@@ -493,6 +500,11 @@ export function SessionTurn(
         statusTimeout = undefined
       }, 2500 - timeSinceLastChange) as unknown as number
     }
+  })
+
+  onCleanup(() => {
+    if (!statusTimeout) return
+    clearTimeout(statusTimeout)
   })
 
   return (
