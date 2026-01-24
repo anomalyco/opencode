@@ -22,7 +22,12 @@ process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
 process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
 process.env["XDG_STATE_HOME"] = path.join(dir, "state")
 
-// Write the cache version file to prevent global/index.ts from clearing the cache
+// Import Global to trigger module initialization (creates data/cache/config directories)
+// This must happen AFTER XDG env vars are set so paths resolve correctly
+await import("../src/global")
+
+// Pre-fetch models.json so tests don't need the macro fallback
+// Also write the cache version file to prevent global/index.ts from clearing the cache
 const cacheDir = path.join(dir, "cache", "opencode")
 await fs.mkdir(cacheDir, { recursive: true })
 await fs.writeFile(path.join(cacheDir, "version"), "14")
