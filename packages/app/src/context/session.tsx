@@ -39,6 +39,8 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
     const server = useServer()
     const [sessionInfo, setSessionInfo] = createSignal<SessionInfo | undefined>(undefined)
     const [isExpired, setIsExpired] = createSignal(false)
+    const [ready, setReady] = createSignal(false)
+    const [authRequired, setAuthRequired] = createSignal(false)
     let intervalId: number | undefined
     let warningShown = false
     let warningToastId: number | undefined
@@ -58,6 +60,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         if (res.status === 401) {
           // Not authenticated or session expired
           setSessionInfo(undefined)
+          setAuthRequired(true) // Auth is enabled but user isn't authenticated
           setIsExpired(sessionInfo() !== undefined) // Only mark expired if we had a session
           return
         }
@@ -65,6 +68,7 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         if (res.ok) {
           const data = await res.json()
           setSessionInfo(data)
+          setAuthRequired(false)
           setIsExpired(false)
         } else {
           // Other error - treat as not authenticated
@@ -73,6 +77,8 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       } catch (err) {
         console.warn("Session fetch failed:", err)
         // Don't mark as expired on network error - could be temporary
+      } finally {
+        setReady(true)
       }
     }
 
@@ -190,6 +196,8 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
       sessionInfo,
       remainingMs,
       isExpired,
+      ready,
+      authRequired,
     }
   },
 })

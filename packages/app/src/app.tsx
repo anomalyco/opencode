@@ -14,7 +14,7 @@ import { PermissionProvider } from "@/context/permission"
 import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { ServerProvider, useServer } from "@/context/server"
-import { SessionProvider } from "@/context/session"
+import { SessionProvider, useSession } from "@/context/session"
 import { SessionExpiredOverlay } from "@/components/session-expired-overlay"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptProvider } from "@/context/prompt"
@@ -67,6 +67,42 @@ function ServerKey(props: ParentProps) {
   )
 }
 
+/**
+ * Auth gate that waits for session check and redirects to login if needed.
+ */
+function AuthGate(props: ParentProps) {
+  const session = useSession()
+  const server = useServer()
+
+  // Wait for initial session check
+  // If auth is required but not authenticated, redirect to login
+  return (
+    <Show
+      when={session.ready()}
+      fallback={<Loading />}
+    >
+      <Show
+        when={!session.authRequired()}
+        fallback={
+          <AuthRedirect url={server.url} />
+        }
+      >
+        {props.children}
+      </Show>
+    </Show>
+  )
+}
+
+/**
+ * Component that redirects to the login page.
+ */
+function AuthRedirect(props: { url: string | undefined }) {
+  if (props.url) {
+    window.location.href = `${props.url}/auth/login`
+  }
+  return <Loading />
+}
+
 export function AppInterface(props: { defaultUrl?: string }) {
   const defaultServerUrl = () => {
     if (props.defaultUrl) return props.defaultUrl
@@ -82,8 +118,9 @@ export function AppInterface(props: { defaultUrl?: string }) {
       <ServerKey>
         <SessionProvider>
           <SessionExpiredOverlay />
-          <GlobalSDKProvider>
-            <GlobalSyncProvider>
+          <AuthGate>
+            <GlobalSDKProvider>
+              <GlobalSyncProvider>
               <Router
                 root={(props) => (
                   <PermissionProvider>
@@ -123,8 +160,9 @@ export function AppInterface(props: { defaultUrl?: string }) {
                 />
               </Route>
             </Router>
-          </GlobalSyncProvider>
-        </GlobalSDKProvider>
+              </GlobalSyncProvider>
+            </GlobalSDKProvider>
+          </AuthGate>
         </SessionProvider>
       </ServerKey>
     </ServerProvider>
