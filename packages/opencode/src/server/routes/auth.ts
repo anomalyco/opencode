@@ -16,6 +16,7 @@ import { getConnectionSecurityInfo, shouldBlockInsecureLogin } from "../security
 import { create2FAToken, verify2FAToken, type TwoFactorUserInfo } from "../../auth/two-factor-token"
 import { verifyDeviceTrustToken, createDeviceTrustToken, createDeviceFingerprint } from "../../auth/device-trust"
 import { getTokenSecret } from "../security/token-secret"
+import { generateTotpSetup, getGoogleAuthenticatorSetupCommand } from "../../auth/totp-setup"
 
 const log = Log.create({ service: "auth-routes" })
 
@@ -810,6 +811,283 @@ function escapeHtml(str: string): string {
 }
 
 /**
+ * Generate 2FA setup wizard page HTML.
+ */
+function generate2FASetupPageHtml(params: {
+  username: string
+  secret: string
+  qrCodeSvg: string
+  setupCommand: string
+  alreadyConfigured: boolean
+}): string {
+  const { username, secret, qrCodeSvg, setupCommand, alreadyConfigured } = params
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Set Up Two-Factor Authentication - opencode</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0a0a0a;
+      color: #e5e5e5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .card {
+      width: 100%;
+      max-width: 480px;
+      padding: 2rem;
+      background: #141414;
+      border: 1px solid #262626;
+      border-radius: 12px;
+    }
+    h1 {
+      font-size: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      color: #737373;
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+    }
+    .warning {
+      background: rgba(234, 179, 8, 0.15);
+      border: 1px solid rgba(234, 179, 8, 0.4);
+      border-radius: 8px;
+      padding: 0.75rem;
+      margin-bottom: 1.5rem;
+      color: #fbbf24;
+      font-size: 0.875rem;
+    }
+    .step {
+      margin-bottom: 1.5rem;
+    }
+    .step-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: #a3a3a3;
+    }
+    .qr-container {
+      display: flex;
+      justify-content: center;
+      padding: 1rem;
+      background: #fff;
+      border-radius: 8px;
+      margin-bottom: 0.75rem;
+    }
+    .qr-container svg {
+      width: 200px;
+      height: 200px;
+    }
+    .secret-display {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.875rem;
+      background: #1a1a1a;
+      padding: 0.75rem;
+      border-radius: 6px;
+      word-break: break-all;
+      text-align: center;
+      color: #0ea5e9;
+    }
+    .command-display {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.75rem;
+      background: #1a1a1a;
+      padding: 0.75rem;
+      border-radius: 6px;
+      word-break: break-all;
+      color: #a3a3a3;
+      margin-top: 0.5rem;
+    }
+    .verify-form {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #a3a3a3;
+    }
+    input[type="text"] {
+      width: 100%;
+      height: 40px;
+      padding: 0 12px;
+      border: 1px solid #333;
+      border-radius: 8px;
+      background: #1a1a1a;
+      color: #e5e5e5;
+      font-size: 16px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.2em;
+      text-align: center;
+    }
+    input:focus {
+      outline: none;
+      border-color: #525252;
+    }
+    .error {
+      color: #fca5a5;
+      font-size: 0.75rem;
+      padding: 0.5rem;
+      background: rgba(239,68,68,0.15);
+      border-radius: 6px;
+      display: none;
+    }
+    .error.visible { display: block; }
+    .success {
+      color: #4ade80;
+      font-size: 0.875rem;
+      padding: 0.75rem;
+      background: rgba(74, 222, 128, 0.15);
+      border-radius: 8px;
+      text-align: center;
+      display: none;
+    }
+    .success.visible { display: block; }
+    button {
+      height: 40px;
+      border: none;
+      border-radius: 8px;
+      background: #e5e5e5;
+      color: #0a0a0a;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #d4d4d4; }
+    button:disabled { background: #404040; color: #737373; cursor: not-allowed; }
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 1rem;
+      color: #737373;
+      font-size: 0.75rem;
+      text-decoration: none;
+    }
+    .back-link:hover { color: #a3a3a3; text-decoration: underline; }
+    .note {
+      font-size: 0.75rem;
+      color: #737373;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Set Up Two-Factor Authentication</h1>
+    <p class="subtitle">for ${escapeHtml(username)}</p>
+
+    ${alreadyConfigured ? `
+    <div class="warning">
+      You already have 2FA configured. Setting up again will replace your existing configuration.
+    </div>
+    ` : ""}
+
+    <div class="step">
+      <div class="step-title">Step 1: Scan QR Code</div>
+      <p class="note">Scan this code with your authenticator app (Apple Passwords, Google Authenticator, Authy, 1Password, etc.)</p>
+      <div class="qr-container">
+        ${qrCodeSvg}
+      </div>
+      <p class="note">Or enter this secret manually:</p>
+      <div class="secret-display">${secret}</div>
+    </div>
+
+    <div class="step">
+      <div class="step-title">Step 2: Run Setup Command</div>
+      <p class="note">Run this command on the server to enable 2FA for your account:</p>
+      <div class="command-display">${escapeHtml(setupCommand)}</div>
+      <p class="note">This creates ~/.google_authenticator with your secret.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-title">Step 3: Verify Setup</div>
+      <p class="note">Enter a code from your authenticator app to verify it's working:</p>
+      <form id="verifyForm" class="verify-form">
+        <div id="error" class="error"></div>
+        <div id="success" class="success">2FA is now enabled! You'll be prompted for a code on future logins.</div>
+        <div class="field">
+          <input type="text" id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000">
+        </div>
+        <button type="submit" id="verifyBtn">Verify & Enable 2FA</button>
+      </form>
+    </div>
+
+    <a href="/" class="back-link">Back to opencode</a>
+  </div>
+
+  <script>
+    const form = document.getElementById('verifyForm');
+    const codeInput = document.getElementById('code');
+    const errorDiv = document.getElementById('error');
+    const successDiv = document.getElementById('success');
+    const verifyBtn = document.getElementById('verifyBtn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorDiv.classList.remove('visible');
+
+      const code = codeInput.value.trim();
+      if (!code || code.length !== 6) {
+        errorDiv.textContent = 'Please enter a 6-digit code';
+        errorDiv.classList.add('visible');
+        return;
+      }
+
+      verifyBtn.disabled = true;
+      verifyBtn.textContent = 'Verifying...';
+
+      try {
+        const res = await fetch('/auth/2fa/verify', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: JSON.stringify({ code }),
+        });
+
+        if (res.ok) {
+          successDiv.classList.add('visible');
+          verifyBtn.textContent = 'Verified!';
+          codeInput.disabled = true;
+        } else {
+          const data = await res.json();
+          errorDiv.textContent = data.message || 'Invalid code - make sure you ran the setup command first';
+          errorDiv.classList.add('visible');
+          verifyBtn.disabled = false;
+          verifyBtn.textContent = 'Verify & Enable 2FA';
+          codeInput.value = '';
+          codeInput.focus();
+        }
+      } catch (err) {
+        errorDiv.textContent = 'Connection error';
+        errorDiv.classList.add('visible');
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = 'Verify & Enable 2FA';
+      }
+    });
+  </script>
+</body>
+</html>`
+}
+
+/**
  * Auth routes for session management.
  *
  * - GET /login - Login page (HTML)
@@ -1394,6 +1672,66 @@ export const AuthRoutes = lazy(() =>
         return c.json({ success: true as const })
       },
     )
+    .get("/2fa/setup", async (c) => {
+      // Require authenticated session
+      const sessionId = getCookie(c, "opencode_session")
+      if (!sessionId) {
+        return c.redirect("/auth/login")
+      }
+      const session = UserSession.get(sessionId)
+      if (!session) {
+        return c.redirect("/auth/login")
+      }
+
+      // Check if 2FA is already configured
+      const broker = new BrokerClient()
+      const has2fa = await broker.check2fa(session.username, session.home ?? "")
+
+      // Generate setup data
+      const setupData = await generateTotpSetup(session.username)
+
+      return c.html(generate2FASetupPageHtml({
+        username: session.username,
+        secret: setupData.secret,
+        qrCodeSvg: setupData.qrCodeSvg,
+        setupCommand: getGoogleAuthenticatorSetupCommand(setupData.secret),
+        alreadyConfigured: has2fa,
+      }))
+    })
+    .post("/2fa/verify", async (c) => {
+      // Require authenticated session
+      const sessionId = getCookie(c, "opencode_session")
+      if (!sessionId) {
+        return c.json({ error: "not_authenticated" }, 401)
+      }
+      const session = UserSession.get(sessionId)
+      if (!session) {
+        return c.json({ error: "not_authenticated" }, 401)
+      }
+
+      // Check CSRF
+      const xrw = c.req.header("X-Requested-With")
+      if (!xrw) {
+        return c.json({ error: "csrf_missing" }, 400)
+      }
+
+      const body = await c.req.json()
+      const { code } = body as { code?: string }
+
+      if (!code || code.length < 6) {
+        return c.json({ error: "invalid_code", message: "Code is required" }, 400)
+      }
+
+      // Validate OTP via broker
+      const broker = new BrokerClient()
+      const result = await broker.authenticateOtp(session.username, code)
+
+      if (!result.success) {
+        return c.json({ error: "invalid_code", message: "Invalid code - make sure you ran the setup command" }, 401)
+      }
+
+      return c.json({ success: true })
+    })
     .post(
       "/logout",
       describeRoute({
