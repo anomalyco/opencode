@@ -86,8 +86,6 @@ jobs:
         working-directory: packages/opencode
         run: bun dev -- --print-logs --log-level WARN serve --port 4096 --hostname 127.0.0.1 &
         env:
-          MODELS_DEV_API_JSON: ${{ env.MODELS_DEV_API_JSON }}
-          OPENCODE_DISABLE_MODELS_FETCH: "true"
           OPENCODE_DISABLE_SHARE: "true"
           OPENCODE_DISABLE_LSP_DOWNLOAD: "true"
           OPENCODE_DISABLE_DEFAULT_PLUGINS: "true"
@@ -113,8 +111,6 @@ jobs:
         run: ${{ matrix.settings.command }}
         env:
           CI: true
-          MODELS_DEV_API_JSON: ${{ env.MODELS_DEV_API_JSON }}
-          OPENCODE_DISABLE_MODELS_FETCH: "true"
           OPENCODE_DISABLE_SHARE: "true"
           OPENCODE_DISABLE_LSP_DOWNLOAD: "true"
           OPENCODE_DISABLE_DEFAULT_PLUGINS: "true"
