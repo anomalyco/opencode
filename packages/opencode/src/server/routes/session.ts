@@ -58,7 +58,7 @@ export const SessionRoutes = lazy(() =>
         const sessions: Session.Info[] = []
         const config = await Config.get()
         for await (const session of Session.list()) {
-          if (!config.showAllSessions && query.directory !== undefined && session.directory !== query.directory) continue
+          if (!config.crossPlatformSessions && query.directory !== undefined && session.directory !== query.directory) continue
           if (query.roots && session.parentID) continue
           if (query.start !== undefined && session.time.updated < query.start) continue
           if (term !== undefined && !session.title.toLowerCase().includes(term)) continue

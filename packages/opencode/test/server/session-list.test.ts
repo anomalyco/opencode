@@ -38,7 +38,7 @@ describe("session.list", () => {
     })
   })
 
-  test("showAllSessions bypasses directory filter", async () => {
+  test("crossPlatformSessions bypasses directory filter", async () => {
     // Store original config getter
     const originalGet = Config.get
 
@@ -55,8 +55,8 @@ describe("session.list", () => {
           fn: async () => Session.create({}),
         })
 
-        // Mock Config.get to return showAllSessions: true
-        Config.get = async () => ({ showAllSessions: true }) as any
+        // Mock Config.get to return crossPlatformSessions: true
+        Config.get = async () => ({ crossPlatformSessions: true }) as any
 
         const response = await app.request(`/session?directory=${encodeURIComponent(projectRoot)}`)
         expect(response.status).toBe(200)
