@@ -46,6 +46,7 @@ import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/pa
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
+import { Dialog } from "./dialog"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
@@ -1349,6 +1350,7 @@ ToolRegistry.register({
 function QuestionPrompt(props: { request: QuestionRequest }) {
   const data = useData()
   const i18n = useI18n()
+  const dialog = useDialog()
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
 
@@ -1420,6 +1422,25 @@ function QuestionPrompt(props: { request: QuestionRequest }) {
     setStore("editing", false)
   }
 
+  async function openReviewDialog(path: string) {
+    if (!data.readFile) {
+      console.warn("readFile not available")
+      return
+    }
+    const content = await data.readFile(path)
+    if (!content) {
+      console.warn("Could not read file:", path)
+      return
+    }
+    dialog.show(() => (
+      <Dialog title="Review Plan" size="x-large">
+        <div data-slot="review-dialog-content">
+          <Markdown text={content} />
+        </div>
+      </Dialog>
+    ))
+  }
+
   function selectOption(optIndex: number) {
     if (optIndex === options().length) {
       setStore("editing", true)
@@ -1427,6 +1448,12 @@ function QuestionPrompt(props: { request: QuestionRequest }) {
     }
     const opt = options()[optIndex]
     if (!opt) return
+    if (opt.action?.type === "review") {
+      if (opt.action.path) {
+        openReviewDialog(opt.action.path)
+      }
+      return
+    }
     if (multi()) {
       toggle(opt.label)
       return

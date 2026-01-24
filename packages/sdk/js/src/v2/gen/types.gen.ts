@@ -558,6 +558,19 @@ export type QuestionOption = {
    * Explanation of choice
    */
   description: string
+  /**
+   * Optional action metadata for UI handling
+   */
+  action?: {
+    /**
+     * Action type
+     */
+    type: "review"
+    /**
+     * File path for review action
+     */
+    path?: string
+  }
 }
 
 export type QuestionInfo = {

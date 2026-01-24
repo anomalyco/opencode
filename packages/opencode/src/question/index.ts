@@ -12,6 +12,13 @@ export namespace Question {
     .object({
       label: z.string().max(30).describe("Display text (1-5 words, concise)"),
       description: z.string().describe("Explanation of choice"),
+      action: z
+        .object({
+          type: z.enum(["review"]).describe("Action type"),
+          path: z.string().optional().describe("File path for review action"),
+        })
+        .optional()
+        .describe("Optional action metadata for UI handling"),
     })
     .meta({
       ref: "QuestionOption",

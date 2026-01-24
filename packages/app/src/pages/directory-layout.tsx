@@ -33,6 +33,12 @@ export default function Layout(props: ParentProps) {
 
             const rejectQuestion = (input: { requestID: string }) => sdk.client.question.reject(input)
 
+            const readFile = (path: string) =>
+              sdk.client.file
+                .read({ path })
+                .then((x) => x.data?.content)
+                .catch(() => undefined)
+
             const navigateToSession = (sessionID: string) => {
               navigate(`/${params.dir}/session/${sessionID}`)
             }
@@ -45,6 +51,7 @@ export default function Layout(props: ParentProps) {
                 onQuestionReply={replyToQuestion}
                 onQuestionReject={rejectQuestion}
                 onNavigateToSession={navigateToSession}
+                readFile={readFile}
               >
                 <LocalProvider>{props.children}</LocalProvider>
               </DataProvider>

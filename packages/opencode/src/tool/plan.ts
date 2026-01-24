@@ -33,6 +33,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
           options: [
             { label: "Yes", description: "Switch to build agent and start implementing the plan" },
             { label: "No", description: "Stay with plan agent to continue refining the plan" },
+            { label: "Review", description: "Review the plan file", action: { type: "review", path: plan } },
           ],
         },
       ],

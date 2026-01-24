@@ -588,6 +588,8 @@
       font-size: 14px;
       color: var(--text-base);
       line-height: 1.5;
+      -webkit-user-select: text;
+      user-select: text;
     }
   }
 
@@ -727,6 +729,17 @@
     [data-slot="answer-text"] {
       color: var(--text-strong);
     }
+  }
+}
+
+[data-slot="review-dialog-content"] {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 24px 24px;
+
+  [data-component="markdown"] {
+    font-size: 14px;
+    line-height: 1.6;
   }
 }
 

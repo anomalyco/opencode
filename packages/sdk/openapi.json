@@ -7325,6 +7325,22 @@
           "description": {
             "description": "Explanation of choice",
             "type": "string"
+          },
+          "action": {
+            "description": "Optional action metadata for UI handling",
+            "type": "object",
+            "properties": {
+              "type": {
+                "description": "Action type",
+                "type": "string",
+                "enum": ["review"]
+              },
+              "path": {
+                "description": "File path for review action",
+                "type": "string"
+              }
+            },
+            "required": ["type"]
           }
         },
         "required": ["label", "description"]
