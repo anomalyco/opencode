@@ -186,12 +186,18 @@ export namespace ProviderTransform {
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
         if (lastContent && typeof lastContent === "object") {
-          lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
+          lastContent.providerOptions = mergeDeep(
+            lastContent.providerOptions ?? {},
+            providerOptions[providerID as keyof typeof providerOptions] ?? providerOptions.anthropic
+          )
           continue
         }
       }
 
-      msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerOptions)
+      msg.providerOptions = mergeDeep(
+        msg.providerOptions ?? {},
+        providerOptions[providerID as keyof typeof providerOptions] ?? providerOptions.anthropic
+      )
     }
 
     return msgs
