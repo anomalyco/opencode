@@ -212,6 +212,48 @@ export class BrokerClient {
   }
 
   /**
+   * Validate OTP code for user.
+   *
+   * @param username - Username to validate OTP for
+   * @param code - The TOTP code entered by user
+   * @returns Authentication result with success status and optional error
+   *
+   * Note: Code is sent to the broker but never logged or stored client-side.
+   */
+  async authenticateOtp(username: string, code: string): Promise<AuthResult> {
+    const id = crypto.randomUUID()
+
+    const request: BrokerRequest = {
+      id,
+      version: 1,
+      method: "authenticateotp",
+      username,
+      code,
+    }
+
+    try {
+      const response = await this.sendRequest(request)
+
+      if (response.id !== id) {
+        return {
+          success: false,
+          error: "authentication service unavailable",
+        }
+      }
+
+      return {
+        success: response.success,
+        error: response.error,
+      }
+    } catch {
+      return {
+        success: false,
+        error: "authentication service unavailable",
+      }
+    }
+  }
+
+  /**
    * Ping the auth broker to check if it's running.
    *
    * @returns true if broker responds, false otherwise
