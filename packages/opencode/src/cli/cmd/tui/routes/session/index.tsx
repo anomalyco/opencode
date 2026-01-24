@@ -80,6 +80,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { DialogSessionTree } from "./dialog-session-tree"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1007,6 +1008,15 @@ export function Session() {
       onSelect: (dialog) => {
         moveToRoot()
         dialog.clear()
+      },
+    },
+    {
+      title: "Session tree",
+      value: "session.tree",
+      keybind: "session_child_list",
+      category: "Session",
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogSessionTree />)
       },
     },
   ])
