@@ -581,7 +581,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 openComment(comment)
                               }}
                             >
-                              <Icon name="speech-bubble" size="small" />
+                              <Icon name="comment" size="small" />
                             </button>
                             <Show when={isCommentOpen(comment)}>
                               <div data-slot="session-review-comment-popover-content">
@@ -606,7 +606,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 data-slot="session-review-comment-button"
                                 onClick={() => textarea?.focus()}
                               >
-                                <Icon name="speech-bubble" size="small" />
+                                <Icon name="comment" size="small" />
                               </button>
                               <div data-slot="session-review-comment-popover-content">
                                 <div data-slot="session-review-comment-popover">

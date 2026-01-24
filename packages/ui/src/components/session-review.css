@@ -232,15 +232,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--surface-warning-base);
-    border: 1px solid var(--border-warning-base);
-    color: var(--icon-warning-active);
+    background: var(--icon-interactive-base);
     box-shadow: var(--shadow-xs);
     cursor: pointer;
 
-    &:hover {
-      background: var(--surface-warning-weak);
-      border-color: var(--border-warning-hover);
+    [data-slot="icon-svg"] {
+      color: var(--white);
     }
 
     &:focus {
