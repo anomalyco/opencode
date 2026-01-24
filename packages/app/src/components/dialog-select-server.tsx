@@ -147,7 +147,14 @@ export function DialogSelectServer() {
       status: undefined as boolean | undefined,
     },
   })
-  const [defaultUrl, defaultUrlActions] = createResource(() => platform.getDefaultServerUrl?.())
+  const [defaultUrl, defaultUrlActions] = createResource(
+    async () => {
+      const url = await platform.getDefaultServerUrl?.()
+      if (!url) return null
+      return normalizeServerUrl(url) ?? null
+    },
+    { initialValue: null },
+  )
   const isDesktop = platform.platform === "desktop"
 
   const looksComplete = (value: string) => {
@@ -502,7 +509,7 @@ export function DialogSelectServer() {
                             <DropdownMenu.Item
                               onSelect={async () => {
                                 await platform.setDefaultServerUrl?.(i)
-                                defaultUrlActions.refetch(i)
+                                defaultUrlActions.mutate(i)
                               }}
                             >
                               <DropdownMenu.ItemLabel>
@@ -514,7 +521,7 @@ export function DialogSelectServer() {
                             <DropdownMenu.Item
                               onSelect={async () => {
                                 await platform.setDefaultServerUrl?.(null)
-                                defaultUrlActions.refetch(null)
+                                defaultUrlActions.mutate(null)
                               }}
                             >
                               <DropdownMenu.ItemLabel>
