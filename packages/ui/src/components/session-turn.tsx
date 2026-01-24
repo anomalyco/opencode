@@ -536,12 +536,19 @@ export function SessionTurn(
                             data-slot="session-turn-collapsible-trigger-content"
                             variant="ghost"
                             size="small"
-                            onClick={props.onStepsExpandedToggle ?? (() => {})}
+                            onClick={props.onStepsExpandedToggle ?? (() => { })}
                             aria-expanded={props.stepsExpanded}
                           >
-                            <Show when={working()}>
-                              <Spinner />
-                            </Show>
+                            <Switch>
+                              <Match when={working()}>
+                                <Spinner />
+                              </Match>
+                              <Match when={true}>
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-icon-base">
+                                  <path d="M8.125 1.875H1.875L5 8.125L8.125 1.875Z" fill="currentColor" stroke="currentColor" stroke-linejoin="round" />
+                                </svg>
+                              </Match>
+                            </Switch>
                             <Switch>
                               <Match when={retry()}>
                                 <span data-slot="session-turn-retry-message">
@@ -567,9 +574,6 @@ export function SessionTurn(
                             </Switch>
                             <span aria-hidden="true">·</span>
                             <span aria-live="off">{store.duration}</span>
-                            <Show when={assistantMessages().length > 0}>
-                              <Icon name="chevron-grabber-vertical" size="small" />
-                            </Show>
                           </Button>
                         </div>
                       </Show>

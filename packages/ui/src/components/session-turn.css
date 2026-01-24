@@ -28,7 +28,7 @@
     align-items: flex-start;
     align-self: stretch;
     min-width: 0;
-    gap: 28px;
+    gap: 18px;
     overflow-anchor: none;
 
     [data-slot="session-turn-badge"] {
@@ -60,7 +60,7 @@
     background-color: var(--background-stronger);
     margin-left: -9px;
     padding-left: 9px;
-    padding-bottom: 12px;
+    /* padding-bottom: 12px; */
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -479,9 +479,8 @@
     width: fit-content;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     color: var(--text-weak);
-    margin-left: -9px;
 
     [data-component="spinner"] {
       width: 12px;
@@ -527,6 +526,10 @@
     flex-direction: column;
     align-self: stretch;
     gap: 12px;
+    margin-left: 12px;
+    padding-left: 12px;
+    padding-right: 12px;
+    border-left: 1px solid var(--border-base);
 
     > :first-child>[data-component="markdown"]:first-child {
       margin-top: 0;
