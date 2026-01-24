@@ -127,6 +127,44 @@ test("handles environment variable substitution", async () => {
   }
 })
 
+test("preserves env variables when adding $schema to config", async () => {
+  const originalEnv = process.env["PRESERVE_VAR"]
+  process.env["PRESERVE_VAR"] = "secret_value"
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // Config without $schema - should trigger auto-add
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            theme: "{env:PRESERVE_VAR}",
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.theme).toBe("secret_value")
+
+        // Read the file to verify the env variable was preserved
+        const content = await Bun.file(path.join(tmp.path, "opencode.json")).text()
+        expect(content).toContain("{env:PRESERVE_VAR}")
+        expect(content).not.toContain("secret_value")
+        expect(content).toContain("$schema")
+      },
+    })
+  } finally {
+    if (originalEnv !== undefined) {
+      process.env["PRESERVE_VAR"] = originalEnv
+    } else {
+      delete process.env["PRESERVE_VAR"]
+    }
+  }
+})
+
 test("handles file inclusion substitution", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -1372,5 +1410,204 @@ describe("deduplicatePlugins", () => {
         expect(myPlugins[0].startsWith("file://")).toBe(true)
       },
     })
+  })
+})
+
+describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
+  test("skips project config files when flag is set", async () => {
+    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          // Create a project config that would normally be loaded
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "project/model",
+              username: "project-user",
+            }),
+          )
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          // Project config should NOT be loaded - model should be default, not "project/model"
+          expect(config.model).not.toBe("project/model")
+          expect(config.username).not.toBe("project-user")
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalEnv
+      }
+    }
+  })
+
+  test("skips project .opencode/ directories when flag is set", async () => {
+    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          // Create a .opencode directory with a command
+          const opencodeDir = path.join(dir, ".opencode", "command")
+          await fs.mkdir(opencodeDir, { recursive: true })
+          await Bun.write(path.join(opencodeDir, "test-cmd.md"), "# Test Command\nThis is a test command.")
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const directories = await Config.directories()
+          // Project .opencode should NOT be in directories list
+          const hasProjectOpencode = directories.some((d) => d.startsWith(tmp.path))
+          expect(hasProjectOpencode).toBe(false)
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalEnv
+      }
+    }
+  })
+
+  test("still loads global config when flag is set", async () => {
+    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+
+    try {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          // Should still get default config (from global or defaults)
+          const config = await Config.get()
+          expect(config).toBeDefined()
+          expect(config.username).toBeDefined()
+        },
+      })
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalEnv
+      }
+    }
+  })
+
+  test("skips relative instructions with warning when flag is set but no config dir", async () => {
+    const originalDisable = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
+
+    try {
+      // Ensure no config dir is set
+      delete process.env["OPENCODE_CONFIG_DIR"]
+      process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          // Create a config with relative instruction path
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              instructions: ["./CUSTOM.md"],
+            }),
+          )
+          // Create the instruction file (should be skipped)
+          await Bun.write(path.join(dir, "CUSTOM.md"), "# Custom Instructions")
+        },
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          // The relative instruction should be skipped without error
+          // We're mainly verifying this doesn't throw and the config loads
+          const config = await Config.get()
+          expect(config).toBeDefined()
+          // The instruction should have been skipped (warning logged)
+          // We can't easily test the warning was logged, but we verify
+          // the relative path didn't cause an error
+        },
+      })
+    } finally {
+      if (originalDisable === undefined) {
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalDisable
+      }
+      if (originalConfigDir === undefined) {
+        delete process.env["OPENCODE_CONFIG_DIR"]
+      } else {
+        process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+      }
+    }
+  })
+
+  test("OPENCODE_CONFIG_DIR still works when flag is set", async () => {
+    const originalDisable = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
+
+    try {
+      await using configDirTmp = await tmpdir({
+        init: async (dir) => {
+          // Create config in the custom config dir
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "configdir/model",
+            }),
+          )
+        },
+      })
+
+      await using projectTmp = await tmpdir({
+        init: async (dir) => {
+          // Create config in project (should be ignored)
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              model: "project/model",
+            }),
+          )
+        },
+      })
+
+      process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+      process.env["OPENCODE_CONFIG_DIR"] = configDirTmp.path
+
+      await Instance.provide({
+        directory: projectTmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          // Should load from OPENCODE_CONFIG_DIR, not project
+          expect(config.model).toBe("configdir/model")
+        },
+      })
+    } finally {
+      if (originalDisable === undefined) {
+        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+      } else {
+        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalDisable
+      }
+      if (originalConfigDir === undefined) {
+        delete process.env["OPENCODE_CONFIG_DIR"]
+      } else {
+        process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+      }
+    }
   })
 })

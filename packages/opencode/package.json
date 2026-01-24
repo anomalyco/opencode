@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.1.25",
+  "version": "1.1.34",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -49,7 +49,7 @@
   "dependencies": {
     "@actions/core": "1.11.1",
     "@actions/github": "6.0.1",
-    "@agentclientprotocol/sdk": "0.5.1",
+    "@agentclientprotocol/sdk": "0.12.0",
     "@ai-sdk/amazon-bedrock": "3.0.73",
     "@ai-sdk/anthropic": "2.0.57",
     "@ai-sdk/azure": "2.0.91",
@@ -70,7 +70,7 @@
     "@ai-sdk/vercel": "1.0.31",
     "@ai-sdk/xai": "2.0.51",
     "@clack/prompts": "1.0.0-alpha.1",
-    "@gitlab/gitlab-ai-provider": "3.1.1",
+    "@gitlab/gitlab-ai-provider": "3.3.1",
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
     "@modelcontextprotocol/sdk": "1.25.2",

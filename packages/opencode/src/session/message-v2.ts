@@ -11,6 +11,7 @@ import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
 import { type SystemError } from "bun"
+import type { Provider } from "@/provider/provider"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -432,8 +433,42 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function toModelMessage(input: WithParts[]): ModelMessage[] {
+  export function toModelMessages(input: WithParts[], model: Provider.Model): ModelMessage[] {
     const result: UIMessage[] = []
+    const toolNames = new Set<string>()
+
+    const toModelOutput = (output: unknown) => {
+      if (typeof output === "string") {
+        return { type: "text", value: output }
+      }
+
+      if (typeof output === "object") {
+        const outputObject = output as {
+          text: string
+          attachments?: Array<{ mime: string; url: string }>
+        }
+        const attachments = (outputObject.attachments ?? []).filter((attachment) => {
+          return attachment.url.startsWith("data:") && attachment.url.includes(",")
+        })
+
+        return {
+          type: "content",
+          value: [
+            { type: "text", text: outputObject.text },
+            ...attachments.map((attachment) => ({
+              type: "media",
+              mediaType: attachment.mime,
+              data: iife(() => {
+                const commaIndex = attachment.url.indexOf(",")
+                return commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
+              }),
+            })),
+          ],
+        }
+      }
+
+      return { type: "json", value: output as never }
+    }
 
     for (const msg of input) {
       if (msg.parts.length === 0) continue
@@ -476,6 +511,8 @@ export namespace MessageV2 {
       }
 
       if (msg.info.role === "assistant") {
+        const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
+
         if (
           msg.info.error &&
           !(
@@ -495,39 +532,32 @@ export namespace MessageV2 {
             assistantMessage.parts.push({
               type: "text",
               text: part.text,
-              providerMetadata: part.metadata,
+              ...(differentModel ? {} : { providerMetadata: part.metadata }),
             })
           if (part.type === "step-start")
             assistantMessage.parts.push({
               type: "step-start",
             })
           if (part.type === "tool") {
+            toolNames.add(part.tool)
             if (part.state.status === "completed") {
-              if (part.state.attachments?.length) {
-                result.push({
-                  id: Identifier.ascending("message"),
-                  role: "user",
-                  parts: [
-                    {
-                      type: "text",
-                      text: `The tool ${part.tool} returned the following attachments:`,
-                    },
-                    ...part.state.attachments.map((attachment) => ({
-                      type: "file" as const,
-                      url: attachment.url,
-                      mediaType: attachment.mime,
-                      filename: attachment.filename,
-                    })),
-                  ],
-                })
-              }
+              const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
+              const attachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
+              const output =
+                attachments.length > 0
+                  ? {
+                      text: outputText,
+                      attachments,
+                    }
+                  : outputText
+
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-available",
                 toolCallId: part.callID,
                 input: part.state.input,
-                output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
-                callProviderMetadata: part.metadata,
+                output,
+                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
             }
             if (part.state.status === "error")
@@ -537,7 +567,7 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: part.state.error,
-                callProviderMetadata: part.metadata,
+                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
             // Handle pending/running tool calls to prevent dangling tool_use blocks
             // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
@@ -548,14 +578,14 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: "[Tool execution was interrupted]",
-                callProviderMetadata: part.metadata,
+                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
           }
           if (part.type === "reasoning") {
             assistantMessage.parts.push({
               type: "reasoning",
               text: part.text,
-              providerMetadata: part.metadata,
+              ...(differentModel ? {} : { providerMetadata: part.metadata }),
             })
           }
         }
@@ -565,7 +595,15 @@ export namespace MessageV2 {
       }
     }
 
-    return convertToModelMessages(result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")))
+    const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
+
+    return convertToModelMessages(
+      result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
+      {
+        //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
+        tools,
+      },
+    )
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
