@@ -131,16 +131,21 @@ function findSide(element: HTMLElement): "additions" | "deletions" {
 }
 
 function findMarker(root: ShadowRoot, range: SelectedLineRange) {
-  const line = Math.max(range.start, range.end)
-  const side = range.endSide ?? range.side
-  const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"], [data-alt-line="${line}"]`)).filter(
-    (node): node is HTMLElement => node instanceof HTMLElement,
-  )
-  if (nodes.length === 0) return
-  if (!side) return nodes[0]
+  const marker = (line: number, side?: "additions" | "deletions") => {
+    const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"], [data-alt-line="${line}"]`)).filter(
+      (node): node is HTMLElement => node instanceof HTMLElement,
+    )
+    if (nodes.length === 0) return
+    if (!side) return nodes[0]
+    const match = nodes.find((node) => findSide(node) === side)
+    return match ?? nodes[0]
+  }
 
-  const match = nodes.find((node) => findSide(node) === side)
-  return match ?? nodes[0]
+  const a = marker(range.start, range.side)
+  const b = marker(range.end, range.endSide ?? range.side)
+  if (!a) return b
+  if (!b) return a
+  return a.getBoundingClientRect().top > b.getBoundingClientRect().top ? a : b
 }
 
 function markerTop(wrapper: HTMLElement, marker: HTMLElement) {
@@ -602,6 +607,12 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   value={draft()}
                                   onInput={(e) => setDraft(e.currentTarget.value)}
                                   onKeyDown={(e) => {
+                                    if (e.key === "Escape") {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      setCommenting(null)
+                                      return
+                                    }
                                     if (e.key !== "Enter") return
                                     if (e.shiftKey) return
                                     e.preventDefault()
