@@ -57,6 +57,9 @@ import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { playSound, soundSrc } from "@/utils/sound"
 import { Worktree as WorktreeState } from "@/utils/worktree"
+import { ExplorerPanel } from "@/components/explorer-panel"
+import { EditorPanel } from "@/components/editor-panel"
+import { useEditor } from "@/context/editor"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
@@ -112,6 +115,8 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
+  const editorCtx = useEditor()
+  const [editorPanelWidth, setEditorPanelWidth] = createSignal(Math.floor(window.innerWidth * 0.4)) // pixels
   const initialDir = params.dir
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
@@ -2251,6 +2256,8 @@ export default function Layout(props: ParentProps) {
     const expanded = () => sidebarProps.mobile || layout.sidebar.opened()
 
     const sync = useGlobalSync()
+    const editor = useEditor()
+    const [explorerHeight, setExplorerHeight] = createSignal(400)
     const project = createMemo(() => currentProject())
     const projectName = createMemo(() => {
       const current = project()
@@ -2457,6 +2464,23 @@ export default function Layout(props: ParentProps) {
                     when={layout.sidebar.workspaces(p.worktree)()}
                     fallback={
                       <>
+                        <Show when={platform.readDirectory}>
+                          <div class="relative flex flex-col" style={{ height: `${explorerHeight()}px` }}>
+                            <ExplorerPanel
+                              projectDir={p.worktree}
+                              onFileOpen={(path) => editorCtx.openFile(path)}
+                              class="flex-1 min-h-0 overflow-y-auto px-3"
+                            />
+                            <ResizeHandle
+                              direction="vertical"
+                              edge="end"
+                              size={explorerHeight()}
+                              min={100}
+                              max={400}
+                              onResize={setExplorerHeight}
+                            />
+                          </div>
+                        </Show>
                         <div class="py-4 px-3">
                           <TooltipKeybind
                             title={language.t("command.session.new")}
@@ -2483,6 +2507,24 @@ export default function Layout(props: ParentProps) {
                     }
                   >
                     <>
+                      <Show when={platform.readDirectory}>
+                        <div class="relative flex flex-col" style={{ height: `${explorerHeight()}px` }}>
+                          <div class="px-3 py-2 text-13-semibold text-text-strong shrink-0">Explorer</div>
+                          <ExplorerPanel
+                            projectDir={p.worktree}
+                            onFileOpen={(path) => editorCtx.openFile(path)}
+                            class="flex-1 min-h-0 overflow-y-auto px-3"
+                          />
+                          <ResizeHandle
+                            direction="vertical"
+                            edge="end"
+                            size={explorerHeight()}
+                            min={100}
+                            max={400}
+                            onResize={setExplorerHeight}
+                          />
+                        </div>
+                      </Show>
                       <div class="py-4 px-3">
                         <TooltipKeybind
                           title={language.t("workspace.new")}
@@ -2606,12 +2648,28 @@ export default function Layout(props: ParentProps) {
 
         <main
           classList={{
-            "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base": true,
+            "size-full overflow-x-hidden flex items-start contain-strict border-t border-border-weak-base": true,
             "xl:border-l xl:rounded-tl-sm": !layout.sidebar.opened(),
           }}
         >
           <Show when={!autoselecting()} fallback={<div class="size-full" />}>
-            {props.children}
+            <Show when={platform.readFile && editorCtx.panelVisible()}>
+              <div
+                id="editor-panel"
+                class="relative h-full flex-shrink-0 border-r border-border-weak-base"
+                style={{ width: `${editorPanelWidth()}px` }}
+              >
+                <EditorPanel />
+                <ResizeHandle
+                  direction="horizontal"
+                  size={editorPanelWidth()}
+                  min={300}
+                  max={Math.floor(window.innerWidth * 0.7)}
+                  onResize={setEditorPanelWidth}
+                />
+              </div>
+            </Show>
+            <div class="h-full flex-1 min-w-0">{props.children}</div>
           </Show>
         </main>
       </div>

@@ -68,6 +68,7 @@ import {
   NewSessionView,
 } from "@/components/session"
 import { usePlatform } from "@/context/platform"
+import { useEditor } from "@/context/editor"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
 
@@ -193,6 +194,7 @@ export default function Page() {
   const command = useCommand()
   const language = useLanguage()
   const platform = usePlatform()
+  const editorCtx = useEditor()
   const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
@@ -200,9 +202,10 @@ export default function Page() {
   const comments = useComments()
   const permission = usePermission()
   const [pendingMessage, setPendingMessage] = createSignal<string | undefined>(undefined)
+  const [inlineReviewHeight, setInlineReviewHeight] = createSignal(250)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
+  const tabs = createMemo(() => layout.tabs(sessionKey()))
+  const view = createMemo(() => layout.view(sessionKey()))
 
   if (import.meta.env.DEV) {
     createEffect(
@@ -614,6 +617,14 @@ export default function Page() {
       keybind: "ctrl+`",
       slash: "terminal",
       onSelect: () => view().terminal.toggle(),
+    },
+    {
+      id: "editor.toggle",
+      title: language.t("command.editor.toggle"),
+      description: "",
+      category: "View",
+      keybind: "mod+shift+e",
+      onSelect: () => editorCtx.toggle(),
     },
     {
       id: "review.toggle",
@@ -1444,13 +1455,65 @@ export default function Page() {
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
-            "flex-1 md:flex-none py-6 md:py-3": true,
+            "flex-1 md:flex-none py-6 md:py-3": !editorCtx.panelVisible() || !platform.readFile,
+            "flex-1 py-3": editorCtx.panelVisible() && !!platform.readFile,
           }}
           style={{
-            width: isDesktop() && showTabs() ? `${layout.session.width()}px` : "100%",
+            width: isDesktop() && showTabs() && (!editorCtx.panelVisible() || !platform.readFile) ? `${layout.session.width()}px` : "100%",
             "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
           }}
         >
+          {/* Inline review panel - shown when editor panel is visible (desktop only, with file system support) */}
+          <Show when={editorCtx.panelVisible() && platform.readFile && showTabs() && isDesktop()}>
+            <div 
+              class="relative shrink-0 border-b border-border-base"
+              style={{ height: `${inlineReviewHeight()}px` }}
+            >
+              <div class="h-full overflow-auto">
+                <Switch>
+                  <Match when={hasReview()}>
+                    <Show
+                      when={diffsReady()}
+                      fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
+                    >
+                      <SessionReviewTab
+                        diffs={diffs}
+                        view={view}
+                        diffStyle="unified"
+                        onLineComment={addCommentToContext}
+                        comments={comments.all()}
+                        focusedComment={comments.focus()}
+                        onFocusedCommentChange={comments.setFocus}
+                        onViewFile={(path) => {
+                          const value = file.tab(path)
+                          tabs().open(value)
+                          file.load(path)
+                        }}
+                        classes={{
+                          header: "px-4",
+                          container: "px-4",
+                        }}
+                      />
+                    </Show>
+                  </Match>
+                  <Match when={true}>
+                    <div class="h-full px-4 flex flex-col items-center justify-center text-center gap-4">
+                      <Mark class="w-10 opacity-10" />
+                      <div class="text-13-regular text-text-weak">No changes yet</div>
+                    </div>
+                  </Match>
+                </Switch>
+              </div>
+              <ResizeHandle
+                direction="vertical"
+                edge="end"
+                size={inlineReviewHeight()}
+                min={100}
+                max={500}
+                onResize={setInlineReviewHeight}
+              />
+            </div>
+          </Show>
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
@@ -1691,7 +1754,7 @@ export default function Page() {
             </div>
           </div>
 
-          <Show when={isDesktop() && showTabs()}>
+          <Show when={isDesktop() && showTabs() && (!editorCtx.panelVisible() || !platform.readFile)}>
             <ResizeHandle
               direction="horizontal"
               size={layout.session.width()}
@@ -1702,8 +1765,8 @@ export default function Page() {
           </Show>
         </div>
 
-        {/* Desktop tabs panel (Review + Context + Files) - hidden on mobile */}
-        <Show when={isDesktop() && showTabs()}>
+        {/* Desktop tabs panel (Review + Context + Files) - hidden on mobile and when editor panel is visible (with file system support) */}
+        <Show when={isDesktop() && showTabs() && (!editorCtx.panelVisible() || !platform.readFile)}>
           <aside
             id="review-panel"
             aria-label={language.t("session.panel.reviewAndFiles")}

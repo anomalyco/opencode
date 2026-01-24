@@ -57,6 +57,7 @@
     "ghostty-web": "0.3.0",
     "luxon": "catalog:",
     "marked": "catalog:",
+    "monaco-editor": "^0.52.0",
     "marked-shiki": "catalog:",
     "remeda": "catalog:",
     "shiki": "catalog:",

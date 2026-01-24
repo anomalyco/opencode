@@ -45,6 +45,7 @@ export const dict = {
   "command.file.open": "파일 열기",
   "command.file.open.description": "파일 및 명령어 검색",
   "command.terminal.toggle": "터미널 토글",
+  "command.editor.toggle": "편집기 토글",
   "command.review.toggle": "검토 토글",
   "command.terminal.new": "새 터미널",
   "command.terminal.new.description": "새 터미널 탭 생성",

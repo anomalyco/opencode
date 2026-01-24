@@ -12,6 +12,7 @@ import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notif
 import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
+import { watch, type WatchEvent } from "@tauri-apps/plugin-fs"
 import { Store } from "@tauri-apps/plugin-store"
 import { Splash } from "@opencode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
@@ -319,6 +320,57 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
   parseMarkdown: async (markdown: string) => {
     return invoke<string>("parse_markdown_command", { markdown })
+  },
+
+  getProjectRoot: async () => {
+    return invoke<string>("get_project_root")
+  },
+
+  readDirectory: async (path: string) => {
+    return invoke("read_directory", { path })
+  },
+
+  readFile: async (path: string) => {
+    return invoke<string>("read_file", { path })
+  },
+
+  writeFile: async (path: string, contents: string) => {
+    return invoke("write_file", { path, contents })
+  },
+
+  renamePath: async (oldPath: string, newPath: string) => {
+    return invoke("rename_path", { oldPath, newPath })
+  },
+
+  deletePath: async (path: string) => {
+    return invoke("delete_path", { path })
+  },
+
+  copyPath: async (source: string, destination: string) => {
+    return invoke("copy_path", { source, destination })
+  },
+
+  createFile: async (path: string) => {
+    return invoke("create_file", { path })
+  },
+
+  createDirectory: async (path: string) => {
+    return invoke("create_directory", { path })
+  },
+
+  watchFile: async (path: string, callback: (event: { type: "create" | "modify" | "remove" | "rename" | "any"; paths: string[] }) => void) => {
+    const unwatch = await watch(path, (event: WatchEvent) => {
+      // Map Tauri's event type to our simplified type
+      let type: "create" | "modify" | "remove" | "rename" | "any" = "any"
+      if (typeof event.type === "object") {
+        if ("create" in event.type) type = "create"
+        else if ("modify" in event.type) type = "modify"
+        else if ("remove" in event.type) type = "remove"
+        else if ("rename" in event.type) type = "rename"
+      }
+      callback({ type, paths: event.paths })
+    }, { delayMs: 500 })
+    return unwatch
   },
 })
 

@@ -5,8 +5,7 @@ import { useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
-// import { useServer } from "@/context/server"
-// import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useEditor } from "@/context/editor"
 import { usePlatform } from "@/context/platform"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -46,10 +45,15 @@ export function SessionHeader() {
 
   const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
+  // FORK: Editor context for file explorer/editor panel
+  const editorCtx = useEditor()
+  // Editor is only effectively visible when file system is supported
+  const editorEffectivelyVisible = createMemo(() => editorCtx.panelVisible() && !!platform.readFile)
+  // END FORK
   const showShare = createMemo(() => shareEnabled() && !!currentSession())
   const showReview = createMemo(() => !!currentSession())
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const view = createMemo(() => layout.view(sessionKey))
+  const view = createMemo(() => layout.view(sessionKey()))
 
   const [state, setState] = createStore({
     share: false,
@@ -131,21 +135,74 @@ export function SessionHeader() {
       <Show when={centerMount()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <button
-              type="button"
-              class="hidden md:flex w-[320px] p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
-              onClick={() => command.trigger("file.open")}
-              aria-label={language.t("session.header.searchFiles")}
-            >
-              <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
-                <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
-                <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate h-4.5 flex items-center">
-                  {language.t("session.header.search.placeholder", { project: name() })}
-                </span>
-              </div>
+            {/* FORK: Added editor toggle next to search for center positioning */}
+            <div class="hidden md:flex items-center gap-2">
+              <button
+                type="button"
+                class="flex w-[320px] p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
+                onClick={() => command.trigger("file.open")}
+                aria-label={language.t("session.header.searchFiles")}
+              >
+                <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
+                  <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
+                  <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate h-4.5 flex items-center">
+                    {language.t("session.header.search.placeholder", { project: name() })}
+                  </span>
+                </div>
 
-              <Show when={hotkey()}>{(keybind) => <Keybind class="shrink-0">{keybind()}</Keybind>}</Show>
-            </button>
+                <Show when={hotkey()}>{(keybind) => <Keybind class="shrink-0">{keybind()}</Keybind>}</Show>
+              </button>
+              <Show when={platform.readFile}>
+                <TooltipKeybind
+                  title={language.t("command.editor.toggle")}
+                  keybind={command.keybind("editor.toggle")}
+                >
+                  <Button
+                    variant="ghost"
+                    class="group/editor-toggle size-6 p-0"
+                    onClick={() => editorCtx.toggle()}
+                    aria-label={language.t("command.editor.toggle")}
+                    aria-expanded={editorCtx.panelVisible()}
+                    aria-controls="editor-panel"
+                  >
+                    <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                      <Icon
+                        size="small"
+                        name={
+                          editorEffectivelyVisible()
+                            ? layout.sidebar.opened()
+                              ? "layout-center-full"
+                              : "layout-center-left-full"
+                            : layout.sidebar.opened()
+                              ? "layout-center"
+                              : "layout-center-left"
+                        }
+                        class="group-hover/editor-toggle:hidden"
+                      />
+                      <Icon
+                        size="small"
+                        name={layout.sidebar.opened() ? "layout-center-partial" : "layout-center-left-partial"}
+                        class="hidden group-hover/editor-toggle:inline-block"
+                      />
+                      <Icon
+                        size="small"
+                        name={
+                          editorEffectivelyVisible()
+                            ? layout.sidebar.opened()
+                              ? "layout-center"
+                              : "layout-center-left"
+                            : layout.sidebar.opened()
+                              ? "layout-center-full"
+                              : "layout-center-left-full"
+                        }
+                        class="hidden group-active/editor-toggle:inline-block"
+                      />
+                    </div>
+                  </Button>
+                </TooltipKeybind>
+              </Show>
+            </div>
+            {/* END FORK */}
           </Portal>
         )}
       </Show>
@@ -279,6 +336,7 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
               </div>
+              {/* FORK: Review toggle with editor-aware icons (top-right quarter when editor visible) */}
               <div class="hidden md:block shrink-0">
                 <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button
@@ -293,23 +351,40 @@ export function SessionHeader() {
                     <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                       <Icon
                         size="small"
-                        name={view().reviewPanel.opened() ? "layout-right-full" : "layout-right"}
+                        name={
+                          view().reviewPanel.opened()
+                            ? editorEffectivelyVisible()
+                              ? "layout-top-right-full"
+                              : "layout-right-full"
+                            : editorEffectivelyVisible()
+                              ? "layout-top-right"
+                              : "layout-right"
+                        }
                         class="group-hover/review-toggle:hidden"
                       />
                       <Icon
                         size="small"
-                        name="layout-right-partial"
+                        name={editorEffectivelyVisible() ? "layout-top-right-partial" : "layout-right-partial"}
                         class="hidden group-hover/review-toggle:inline-block"
                       />
                       <Icon
                         size="small"
-                        name={view().reviewPanel.opened() ? "layout-right" : "layout-right-full"}
+                        name={
+                          view().reviewPanel.opened()
+                            ? editorEffectivelyVisible()
+                              ? "layout-top-right"
+                              : "layout-right"
+                            : editorEffectivelyVisible()
+                              ? "layout-top-right-full"
+                              : "layout-right-full"
+                        }
                         class="hidden group-active/review-toggle:inline-block"
                       />
                     </div>
                   </Button>
                 </TooltipKeybind>
               </div>
+              {/* END FORK */}
             </div>
           </Portal>
         )}

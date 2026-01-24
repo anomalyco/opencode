@@ -41,6 +41,7 @@ export const dict = {
   "command.file.open": "Ouvrir un fichier",
   "command.file.open.description": "Rechercher des fichiers et des commandes",
   "command.terminal.toggle": "Basculer le terminal",
+  "command.editor.toggle": "Basculer l'éditeur",
   "command.review.toggle": "Basculer la revue",
   "command.terminal.new": "Nouveau terminal",
   "command.terminal.new.description": "Créer un nouvel onglet de terminal",

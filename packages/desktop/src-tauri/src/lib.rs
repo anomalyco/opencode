@@ -27,11 +27,31 @@ use crate::window_customizer::PinchZoomDisablePlugin;
 
 const SETTINGS_STORE: &str = "opencode.settings.dat";
 const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
+const MAX_FILE_SIZE: usize = 10 * 1024 * 1024;
 
 #[derive(Clone, serde::Serialize)]
 struct ServerReadyData {
     url: String,
     password: Option<String>,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileSystemEntry {
+    name: String,
+    path: String,
+    is_directory: bool,
+}
+
+fn is_text_file(path: &std::path::Path) -> bool {
+    let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let text_extensions = [
+        "txt", "md", "js", "ts", "jsx", "tsx", "json", "html", "css", "scss", "py", "rs", "go", "java",
+        "c", "cpp", "h", "hpp", "cs", "php", "rb", "swift", "kt", "scala", "sh", "bash", "zsh",
+        "fish", "yaml", "yml", "toml", "ini", "cfg", "conf", "xml", "sql", "graphql", "gql",
+        "vue", "svelte", "astro", "liquid", "mustache", "hbs", "handlebars", "twig", "erb",
+    ];
+    text_extensions.contains(&extension) || extension.is_empty()
 }
 
 #[derive(Clone)]
@@ -136,6 +156,209 @@ async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Result<(
         .map_err(|e| format!("Failed to save settings: {}", e))?;
 
     Ok(())
+}
+
+#[tauri::command]
+fn get_project_root(app: AppHandle) -> Result<String, String> {
+    app.path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?
+        .to_str()
+        .ok_or_else(|| "Invalid path".to_string())
+        .map(|s| s.to_string())
+}
+
+#[tauri::command]
+fn read_directory(path: String) -> Result<Vec<FileSystemEntry>, String> {
+    let path_obj = std::path::Path::new(&path);
+    if !path_obj.exists() || !path_obj.is_dir() {
+        return Err(format!("Directory does not exist: {}", path));
+    }
+
+    let mut entries = Vec::new();
+    let entries_iter = std::fs::read_dir(&path)
+        .map_err(|e| format!("Failed to read directory: {}", e))?;
+
+    for entry in entries_iter {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let entry_path = entry.path();
+        let name = entry.file_name()
+            .to_str()
+            .ok_or_else(|| "Invalid file name".to_string())?
+            .to_string();
+        let is_directory = entry_path.is_dir();
+
+        entries.push(FileSystemEntry {
+            name,
+            path: entry_path.to_string_lossy().to_string(),
+            is_directory,
+        });
+    }
+
+    entries.sort_by(|a, b| {
+        match (a.is_directory, b.is_directory) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.name.cmp(&b.name),
+        }
+    });
+
+    Ok(entries)
+}
+
+#[tauri::command]
+fn read_file(path: String) -> Result<String, String> {
+    let path_obj = std::path::Path::new(&path);
+    if !path_obj.exists() {
+        return Err(format!("File does not exist: {}", path));
+    }
+
+    if !path_obj.is_file() {
+        return Err(format!("Not a file: {}", path));
+    }
+
+    if !is_text_file(path_obj) {
+        return Err("Binary files are not supported".to_string());
+    }
+
+    let metadata = std::fs::metadata(&path)
+        .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+
+    if metadata.len() > MAX_FILE_SIZE as u64 {
+        return Err("File is too large".to_string());
+    }
+
+    std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read file: {}", e))
+}
+
+#[tauri::command]
+fn write_file(path: String, contents: String) -> Result<(), String> {
+    let path_obj = std::path::Path::new(&path);
+
+    if !path_obj.exists() {
+        return Err(format!("File does not exist: {}", path));
+    }
+
+    if !path_obj.is_file() {
+        return Err(format!("Not a file: {}", path));
+    }
+
+    if !is_text_file(path_obj) {
+        return Err("Binary files are not supported".to_string());
+    }
+
+    std::fs::write(&path, contents)
+        .map_err(|e| format!("Failed to write file: {}", e))
+}
+
+#[tauri::command]
+fn rename_path(old_path: String, new_path: String) -> Result<(), String> {
+    let old = std::path::Path::new(&old_path);
+    let new = std::path::Path::new(&new_path);
+
+    if !old.exists() {
+        return Err(format!("Path does not exist: {}", old_path));
+    }
+
+    if new.exists() {
+        return Err(format!("Destination already exists: {}", new_path));
+    }
+
+    std::fs::rename(&old_path, &new_path)
+        .map_err(|e| format!("Failed to rename: {}", e))
+}
+
+#[tauri::command]
+fn delete_path(path: String) -> Result<(), String> {
+    let path_obj = std::path::Path::new(&path);
+
+    if !path_obj.exists() {
+        return Err(format!("Path does not exist: {}", path));
+    }
+
+    if path_obj.is_dir() {
+        std::fs::remove_dir_all(&path)
+            .map_err(|e| format!("Failed to delete directory: {}", e))
+    } else {
+        std::fs::remove_file(&path)
+            .map_err(|e| format!("Failed to delete file: {}", e))
+    }
+}
+
+#[tauri::command]
+fn copy_path(source: String, destination: String) -> Result<(), String> {
+    let src = std::path::Path::new(&source);
+    let dest = std::path::Path::new(&destination);
+
+    if !src.exists() {
+        return Err(format!("Source does not exist: {}", source));
+    }
+
+    if dest.exists() {
+        return Err(format!("Destination already exists: {}", destination));
+    }
+
+    if src.is_dir() {
+        copy_dir_recursive(src, dest)
+    } else {
+        std::fs::copy(&source, &destination)
+            .map(|_| ())
+            .map_err(|e| format!("Failed to copy file: {}", e))
+    }
+}
+
+fn copy_dir_recursive(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir_all(dest)
+        .map_err(|e| format!("Failed to create directory: {}", e))?;
+
+    for entry in std::fs::read_dir(src)
+        .map_err(|e| format!("Failed to read directory: {}", e))? 
+    {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let entry_path = entry.path();
+        let dest_path = dest.join(entry.file_name());
+
+        if entry_path.is_dir() {
+            copy_dir_recursive(&entry_path, &dest_path)?;
+        } else {
+            std::fs::copy(&entry_path, &dest_path)
+                .map_err(|e| format!("Failed to copy file: {}", e))?;
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn create_file(path: String) -> Result<(), String> {
+    let path_obj = std::path::Path::new(&path);
+
+    if path_obj.exists() {
+        return Err(format!("File already exists: {}", path));
+    }
+
+    // Create parent directories if they don't exist
+    if let Some(parent) = path_obj.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create parent directories: {}", e))?;
+    }
+
+    std::fs::File::create(&path)
+        .map(|_| ())
+        .map_err(|e| format!("Failed to create file: {}", e))
+}
+
+#[tauri::command]
+fn create_directory(path: String) -> Result<(), String> {
+    let path_obj = std::path::Path::new(&path);
+
+    if path_obj.exists() {
+        return Err(format!("Directory already exists: {}", path));
+    }
+
+    std::fs::create_dir_all(&path)
+        .map_err(|e| format!("Failed to create directory: {}", e))
 }
 
 fn get_sidecar_port() -> u32 {
@@ -280,6 +503,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(PinchZoomDisablePlugin)
         .plugin(tauri_plugin_decorum::init())
         .invoke_handler(tauri::generate_handler![
@@ -288,7 +512,16 @@ pub fn run() {
             ensure_server_ready,
             get_default_server_url,
             set_default_server_url,
-            markdown::parse_markdown_command
+            markdown::parse_markdown_command,
+            get_project_root,
+            read_directory,
+            read_file,
+            write_file,
+            rename_path,
+            delete_path,
+            copy_path,
+            create_file,
+            create_directory
         ])
         .setup(move |app| {
             let app = app.handle().clone();

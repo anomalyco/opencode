@@ -46,6 +46,7 @@ export const dict = {
   "command.file.open": "Åpne fil",
   "command.file.open.description": "Søk i filer og kommandoer",
   "command.terminal.toggle": "Veksle terminal",
+  "command.editor.toggle": "Veksle redigering",
   "command.review.toggle": "Veksle gjennomgang",
   "command.terminal.new": "Ny terminal",
   "command.terminal.new.description": "Opprett en ny terminalfane",

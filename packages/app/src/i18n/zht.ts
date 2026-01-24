@@ -45,6 +45,7 @@ export const dict = {
   "command.file.open": "開啟檔案",
   "command.file.open.description": "搜尋檔案和命令",
   "command.terminal.toggle": "切換終端機",
+  "command.editor.toggle": "切換編輯器",
   "command.review.toggle": "切換審查",
   "command.terminal.new": "新增終端機",
   "command.terminal.new.description": "建立新的終端機標籤頁",

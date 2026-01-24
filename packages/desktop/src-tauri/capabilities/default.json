@@ -32,6 +32,13 @@
     {
       "identifier": "http:default",
       "allow": [{ "url": "http://*" }, { "url": "https://*" }, { "url": "http://*:*/*" }]
+    },
+    "fs:default",
+    "fs:allow-watch",
+    "fs:allow-unwatch",
+    {
+      "identifier": "fs:scope",
+      "allow": [{ "path": "**" }]
     }
   ]
 }

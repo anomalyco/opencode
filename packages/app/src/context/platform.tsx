@@ -1,6 +1,12 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 
+export type FileSystemEntry = {
+  name: string
+  path: string
+  isDirectory: boolean
+}
+
 export type Platform = {
   /** Platform discriminator */
   platform: "web" | "desktop"
@@ -49,6 +55,41 @@ export type Platform = {
 
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>
+
+  /** Get project root directory (desktop only) */
+  getProjectRoot?(): Promise<string>
+
+  /** Read directory contents (desktop only) */
+  readDirectory?(path: string): Promise<FileSystemEntry[]>
+
+  /** Read file contents (desktop only) */
+  readFile?(path: string): Promise<string>
+
+  /** Write file contents (desktop only) */
+  writeFile?(path: string, contents: string): Promise<void>
+
+  /** Rename/move a file or directory (desktop only) */
+  renamePath?(oldPath: string, newPath: string): Promise<void>
+
+  /** Delete a file or directory (desktop only) */
+  deletePath?(path: string): Promise<void>
+
+  /** Copy a file or directory (desktop only) */
+  copyPath?(source: string, destination: string): Promise<void>
+
+  /** Create a new file (desktop only) */
+  createFile?(path: string): Promise<void>
+
+  /** Create a new directory (desktop only) */
+  createDirectory?(path: string): Promise<void>
+
+  /** Watch a file for changes (desktop only) - returns an unwatch function */
+  watchFile?(path: string, callback: (event: FileWatchEvent) => void): Promise<() => void>
+}
+
+export type FileWatchEvent = {
+  type: "create" | "modify" | "remove" | "rename" | "any"
+  paths: string[]
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({

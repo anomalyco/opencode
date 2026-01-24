@@ -43,6 +43,7 @@ export const dict = {
   "command.file.open": "فتح ملف",
   "command.file.open.description": "البحث في الملفات والأوامر",
   "command.terminal.toggle": "تبديل المحطة الطرفية",
+  "command.editor.toggle": "تبديل المحرر",
   "command.review.toggle": "تبديل المراجعة",
   "command.terminal.new": "محطة طرفية جديدة",
   "command.terminal.new.description": "إنشاء علامة تبويب جديدة للمحطة الطرفية",

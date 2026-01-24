@@ -1,9 +1,10 @@
-import { Component, createMemo, type JSX } from "solid-js"
+import { Component, createMemo, Show, type JSX } from "solid-js"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { useLanguage } from "@/context/language"
 import { useSettings, monoFontFamily } from "@/context/settings"
+import { usePlatform } from "@/context/platform"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 
@@ -30,6 +31,7 @@ export const SettingsGeneral: Component = () => {
   const theme = useTheme()
   const language = useLanguage()
   const settings = useSettings()
+  const platform = usePlatform()
 
   const themeOptions = createMemo(() =>
     Object.entries(theme.themes()).map(([id, def]) => ({ id, name: def.name ?? id })),
@@ -292,6 +294,26 @@ export const SettingsGeneral: Component = () => {
             </SettingsRow>
           </div>
         </div>
+
+        {/* File Editor Section - only show on desktop */}
+        <Show when={platform.readFile}>
+          <div class="flex flex-col gap-1">
+            <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.editor")}</h3>
+
+            <div class="bg-surface-raised-base px-4 rounded-lg">
+              <SettingsRow
+                title={language.t("settings.general.editor.autoReloadBackgroundFiles.title")}
+                description={language.t("settings.general.editor.autoReloadBackgroundFiles.description")}
+              >
+                <Switch
+                  checked={settings.editor.autoReloadBackgroundFiles()}
+                  onChange={(checked) => settings.editor.setAutoReloadBackgroundFiles(checked)}
+                />
+              </SettingsRow>
+            </div>
+          </div>
+        </Show>
+
       </div>
     </div>
   )

@@ -43,6 +43,7 @@ export const dict = {
   "command.file.open": "Open file",
   "command.file.open.description": "Search files and commands",
   "command.terminal.toggle": "Toggle terminal",
+  "command.editor.toggle": "Toggle editor",
   "command.review.toggle": "Toggle review",
   "command.terminal.new": "New terminal",
   "command.terminal.new.description": "Create a new terminal tab",
@@ -489,6 +490,10 @@ export const dict = {
   "settings.general.section.appearance": "Appearance",
   "settings.general.section.notifications": "System notifications",
   "settings.general.section.sounds": "Sound effects",
+  "settings.general.section.editor": "File Editor",
+
+  "settings.general.editor.autoReloadBackgroundFiles.title": "Auto-reload background files",
+  "settings.general.editor.autoReloadBackgroundFiles.description": "Automatically reload inactive tabs when files change on disk (e.g., edited by AI). When off, you'll be prompted to reload or keep your version.",
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",

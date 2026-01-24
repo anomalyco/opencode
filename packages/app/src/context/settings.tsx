@@ -15,6 +15,11 @@ export interface SoundSettings {
   errors: string
 }
 
+export interface EditorSettings {
+  pollInterval: number
+  autoReloadBackgroundFiles: boolean
+}
+
 export interface Settings {
   general: {
     autoSave: boolean
@@ -29,6 +34,7 @@ export interface Settings {
   }
   notifications: NotificationSettings
   sounds: SoundSettings
+  editor: EditorSettings
 }
 
 const defaultSettings: Settings = {
@@ -52,6 +58,10 @@ const defaultSettings: Settings = {
     agent: "staplebops-01",
     permissions: "staplebops-02",
     errors: "nope-03",
+  },
+  editor: {
+    pollInterval: 1000,
+    autoReloadBackgroundFiles: true,
   },
 }
 
@@ -152,6 +162,16 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         errors: createMemo(() => store.sounds?.errors ?? defaultSettings.sounds.errors),
         setErrors(value: string) {
           setStore("sounds", "errors", value)
+        },
+      },
+      editor: {
+        pollInterval: createMemo(() => store.editor?.pollInterval ?? defaultSettings.editor.pollInterval),
+        setPollInterval(value: number) {
+          setStore("editor", "pollInterval", value)
+        },
+        autoReloadBackgroundFiles: createMemo(() => store.editor?.autoReloadBackgroundFiles ?? defaultSettings.editor.autoReloadBackgroundFiles),
+        setAutoReloadBackgroundFiles(value: boolean) {
+          setStore("editor", "autoReloadBackgroundFiles", value)
         },
       },
     }
