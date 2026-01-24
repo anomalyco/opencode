@@ -272,7 +272,15 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                     backgroundColor={isActive() ? theme.accent : theme.backgroundElement}
                     onMouseUp={() => selectTab(index())}
                   >
-                    <text fg={isActive() ? selectedForeground(theme, theme.accent) : isAnswered() ? theme.text : theme.textMuted}>
+                    <text
+                      fg={
+                        isActive()
+                          ? selectedForeground(theme, theme.accent)
+                          : isAnswered()
+                            ? theme.text
+                            : theme.textMuted
+                      }
+                    >
                       {q.header}
                     </text>
                   </box>
