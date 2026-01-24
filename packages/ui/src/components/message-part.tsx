@@ -47,6 +47,7 @@ import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { Dialog } from "./dialog"
+import { showToast } from "./toast"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
@@ -1424,12 +1425,12 @@ function QuestionPrompt(props: { request: QuestionRequest }) {
 
   async function openReviewDialog(path: string) {
     if (!data.readFile) {
-      console.warn("readFile not available")
+      showToast({ title: "Unable to review file", description: "File reading not available", variant: "error" })
       return
     }
     const content = await data.readFile(path)
     if (!content) {
-      console.warn("Could not read file:", path)
+      showToast({ title: "Unable to review file", description: `Could not read: ${path}`, variant: "error" })
       return
     }
     dialog.show(() => (
