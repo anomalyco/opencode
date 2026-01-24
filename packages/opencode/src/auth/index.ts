@@ -15,6 +15,9 @@ export * from "./device-trust.js"
 // Re-export 2FA token utilities
 export * from "./two-factor-token.js"
 
+// Re-export TOTP setup utilities
+export * from "./totp-setup.js"
+
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
 export namespace Auth {
