@@ -1954,7 +1954,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Match>
             </Switch>
           </div>
-          <div class="flex items-center gap-3 absolute right-2 bottom-2">
+          <div class="flex items-center gap-3 absolute right-3 bottom-3">
             <input
               ref={fileInputRef}
               type="file"
