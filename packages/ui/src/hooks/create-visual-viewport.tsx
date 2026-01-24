@@ -35,7 +35,10 @@ export function createVisualViewport() {
       // This represents the space taken by the virtual keyboard
       const layoutHeight = window.innerHeight
       const visualHeight = viewport.height
-      const keyboardOffset = layoutHeight - visualHeight - viewport.offsetTop
+      // Don't subtract viewport.offsetTop - that represents scroll position within
+      // the visual viewport, but we need the full keyboard height to properly
+      // offset fixed elements at the bottom of the screen
+      const keyboardOffset = layoutHeight - visualHeight
 
       // Only set offset if keyboard is likely open (more than 100px difference)
       // to avoid small fluctuations from address bar hiding/showing
