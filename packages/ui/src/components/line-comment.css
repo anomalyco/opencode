@@ -13,7 +13,7 @@
   justify-content: center;
   background: var(--icon-interactive-base);
   box-shadow: var(--shadow-xs);
-  cursor: pointer;
+  cursor: default;
   border: none;
 }
 
@@ -36,7 +36,7 @@
   z-index: var(--line-comment-popover-z, 40);
   min-width: 200px;
   max-width: min(320px, calc(100vw - 48px));
-  border-radius: 14px;
+  border-radius: 8px;
   background: var(--surface-raised-stronger-non-alpha);
   box-shadow: var(--shadow-lg-border-base);
   padding: 12px;
@@ -46,4 +46,5 @@
   width: 380px;
   max-width: min(380px, calc(100vw - 48px));
   padding: 8px;
+  border-radius: 14px;
 }

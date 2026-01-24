@@ -35,6 +35,13 @@ function findSide(node: Node | null): SelectionSide | undefined {
   const element = findElement(node)
   if (!element) return
 
+  const line = element.closest("[data-line], [data-alt-line]")
+  if (line instanceof HTMLElement) {
+    const type = line.dataset.lineType
+    if (type === "change-deletion") return "deletions"
+    if (type === "change-addition" || type === "change-additions") return "additions"
+  }
+
   const code = element.closest("[data-code]")
   if (!(code instanceof HTMLElement)) return
 
@@ -303,6 +310,12 @@ export function Diff<T>(props: DiffProps<T>) {
 
       numberColumn = numberColumn || item.dataset.columnNumber != null
 
+      if (side === undefined) {
+        const type = item.dataset.lineType
+        if (type === "change-deletion") side = "deletions"
+        if (type === "change-addition" || type === "change-additions") side = "additions"
+      }
+
       if (side === undefined && item.dataset.code != null) {
         side = item.hasAttribute("data-deletions") ? "deletions" : "additions"
       }
@@ -364,11 +377,27 @@ export function Diff<T>(props: DiffProps<T>) {
     if (props.enableLineSelection !== true) return
     if (dragStart === undefined) return
 
-    if (dragMoved) {
-      pendingSelectionEnd = true
-      scheduleDragUpdate()
-      scheduleSelectionUpdate()
+    if (!dragMoved) {
+      pendingSelectionEnd = false
+      const line = dragStart
+      const selected: SelectedLineRange = {
+        start: line,
+        end: line,
+      }
+      if (dragSide) selected.side = dragSide
+      setSelectedLines(selected)
+      props.onLineSelectionEnd?.(lastSelection)
+      dragStart = undefined
+      dragEnd = undefined
+      dragSide = undefined
+      dragEndSide = undefined
+      dragMoved = false
+      return
     }
+
+    pendingSelectionEnd = true
+    scheduleDragUpdate()
+    scheduleSelectionUpdate()
 
     dragStart = undefined
     dragEnd = undefined

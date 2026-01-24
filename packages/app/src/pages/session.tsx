@@ -40,6 +40,7 @@ import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
 import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
+import { findLast } from "@opencode-ai/util/array"
 import { getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
@@ -767,7 +768,7 @@ export default function Page() {
         }
         const revert = info()?.revert?.messageID
         // Find the last user message that's not already reverted
-        const message = userMessages().findLast((x) => !revert || x.id < revert)
+        const message = findLast(userMessages(), (x) => !revert || x.id < revert)
         if (!message) return
         await sdk.client.session.revert({ sessionID, messageID: message.id })
         // Restore the prompt from the reverted message
@@ -777,7 +778,7 @@ export default function Page() {
           prompt.set(restored)
         }
         // Navigate to the message before the reverted one (which will be the new last visible message)
-        const priorMessage = userMessages().findLast((x) => x.id < message.id)
+        const priorMessage = findLast(userMessages(), (x) => x.id < message.id)
         setActiveMessage(priorMessage)
       },
     },
@@ -799,14 +800,14 @@ export default function Page() {
           await sdk.client.session.unrevert({ sessionID })
           prompt.reset()
           // Navigate to the last message (the one that was at the revert point)
-          const lastMsg = userMessages().findLast((x) => x.id >= revertMessageID)
+          const lastMsg = findLast(userMessages(), (x) => x.id >= revertMessageID)
           setActiveMessage(lastMsg)
           return
         }
         // Partial redo - move forward to next message
         await sdk.client.session.revert({ sessionID, messageID: nextMessage.id })
         // Navigate to the message before the new revert point
-        const priorMsg = userMessages().findLast((x) => x.id < nextMessage.id)
+        const priorMsg = findLast(userMessages(), (x) => x.id < nextMessage.id)
         setActiveMessage(priorMsg)
       },
     },
@@ -1462,7 +1463,7 @@ export default function Page() {
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
-            "flex-1 md:flex-none py-6 md:py-3": true,
+            "flex-1 md:flex-none pt-6 md:pt-3": true,
           }}
           style={{
             width: isDesktop() && showTabs() ? `${layout.session.width()}px` : "100%",
@@ -1681,11 +1682,11 @@ export default function Page() {
           {/* Prompt input */}
           <div
             ref={(el) => (promptDock = el)}
-            class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-6 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+            class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
           >
             <div
               classList={{
-                "w-full md:px-6 pointer-events-auto": true,
+                "w-full px-4 pointer-events-auto": true,
                 "md:max-w-200": !showTabs(),
               }}
             >
@@ -1918,6 +1919,7 @@ export default function Page() {
                     const [openedComment, setOpenedComment] = createSignal<string | null>(null)
                     const [commenting, setCommenting] = createSignal<SelectedLineRange | null>(null)
                     const [draft, setDraft] = createSignal("")
+                    const [draftError, setDraftError] = createSignal(false)
                     const [positions, setPositions] = createSignal<Record<string, number>>({})
                     const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
 
@@ -2104,19 +2106,30 @@ export default function Page() {
                                 onClick={() => textarea?.focus()}
                                 onPopoverFocusOut={(e) => {
                                   const target = e.relatedTarget as Node | null
-                                  if (!target || !e.currentTarget.contains(target)) {
-                                    setCommenting(null)
-                                  }
+                                  if (target && e.currentTarget.contains(target)) return
+                                  // Delay to allow click handlers to fire first
+                                  setTimeout(() => {
+                                    if (!document.activeElement || !e.currentTarget.contains(document.activeElement)) {
+                                      setCommenting(null)
+                                    }
+                                  }, 0)
                                 }}
                               >
                                 <div class="flex flex-col gap-2">
                                   <textarea
                                     ref={textarea}
-                                    class="w-full resize-vertical p-2 rounded-[6px] bg-surface-base border border-border-base text-text-strong text-12-regular leading-5 focus:outline-none focus:shadow-xs-border-select"
+                                    classList={{
+                                      "w-full resize-vertical p-2 rounded-[6px] bg-surface-base text-text-strong text-12-regular leading-5 focus:outline-none": true,
+                                      "focus:shadow-xs-border-select": !draftError(),
+                                      "shadow-xs-border-critical-base": draftError(),
+                                    }}
                                     rows={3}
                                     placeholder="Add comment"
                                     value={draft()}
-                                    onInput={(e) => setDraft(e.currentTarget.value)}
+                                    onInput={(e) => {
+                                      setDraft(e.currentTarget.value)
+                                      setDraftError(false)
+                                    }}
                                     onKeyDown={(e) => {
                                       if (e.key === "Escape") {
                                         setCommenting(null)
@@ -2126,7 +2139,10 @@ export default function Page() {
                                       if (e.shiftKey) return
                                       e.preventDefault()
                                       const value = draft().trim()
-                                      if (!value) return
+                                      if (!value) {
+                                        setDraftError(true)
+                                        return
+                                      }
                                       const p = path()
                                       if (!p) return
                                       addCommentToContext({
@@ -2149,10 +2165,12 @@ export default function Page() {
                                     <Button
                                       size="small"
                                       variant="primary"
-                                      disabled={draft().trim().length === 0}
                                       onClick={() => {
                                         const value = draft().trim()
-                                        if (!value) return
+                                        if (!value) {
+                                          setDraftError(true)
+                                          return
+                                        }
                                         const p = path()
                                         if (!p) return
                                         addCommentToContext({
