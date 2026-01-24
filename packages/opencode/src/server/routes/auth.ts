@@ -1313,6 +1313,39 @@ export const AuthRoutes = lazy(() =>
       },
     )
     .post(
+      "/device-trust/revoke",
+      describeRoute({
+        summary: "Revoke device trust",
+        description: "Clear the device trust cookie to require 2FA on next login.",
+        operationId: "auth.deviceTrustRevoke",
+        responses: {
+          200: {
+            description: "Device trust revoked",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    success: z.literal(true),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        // Clear device trust cookie by setting maxAge to 0
+        setCookie(c, "opencode_device_trust", "", {
+          path: "/",
+          httpOnly: true,
+          secure: c.req.url.startsWith("https"),
+          sameSite: "Strict",
+          maxAge: 0,
+        })
+        return c.json({ success: true as const })
+      },
+    )
+    .post(
       "/logout",
       describeRoute({
         summary: "Logout current session",
@@ -1340,6 +1373,14 @@ export const AuthRoutes = lazy(() =>
         }
         clearSessionCookie(c)
         clearCSRFCookie(c)
+        // Also clear device trust cookie on logout
+        setCookie(c, "opencode_device_trust", "", {
+          path: "/",
+          httpOnly: true,
+          secure: c.req.url.startsWith("https"),
+          sameSite: "Strict",
+          maxAge: 0,
+        })
         return c.redirect("/auth/login")
       },
     )
@@ -1373,6 +1414,14 @@ export const AuthRoutes = lazy(() =>
         }
         clearSessionCookie(c)
         clearCSRFCookie(c)
+        // Also clear device trust cookie on logout all
+        setCookie(c, "opencode_device_trust", "", {
+          path: "/",
+          httpOnly: true,
+          secure: c.req.url.startsWith("https"),
+          sameSite: "Strict",
+          maxAge: 0,
+        })
         return c.redirect("/auth/login")
       },
     )
