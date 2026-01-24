@@ -53,7 +53,6 @@ jobs:
             printf '%s\n' "XDG_CACHE_HOME=${{ runner.temp }}\\opencode-e2e\\cache" >> "$GITHUB_ENV"
             printf '%s\n' "XDG_CONFIG_HOME=${{ runner.temp }}\\opencode-e2e\\config" >> "$GITHUB_ENV"
             printf '%s\n' "XDG_STATE_HOME=${{ runner.temp }}\\opencode-e2e\\state" >> "$GITHUB_ENV"
-            printf '%s\n' "MODELS_DEV_API_JSON=${{ github.workspace }}\\packages\\opencode\\test\\tool\\fixtures\\models-api.json" >> "$GITHUB_ENV"
           else
             printf '%s\n' "OPENCODE_E2E_ROOT=${{ runner.temp }}/opencode-e2e" >> "$GITHUB_ENV"
             printf '%s\n' "OPENCODE_TEST_HOME=${{ runner.temp }}/opencode-e2e/home" >> "$GITHUB_ENV"
@@ -61,7 +60,6 @@ jobs:
             printf '%s\n' "XDG_CACHE_HOME=${{ runner.temp }}/opencode-e2e/cache" >> "$GITHUB_ENV"
             printf '%s\n' "XDG_CONFIG_HOME=${{ runner.temp }}/opencode-e2e/config" >> "$GITHUB_ENV"
             printf '%s\n' "XDG_STATE_HOME=${{ runner.temp }}/opencode-e2e/state" >> "$GITHUB_ENV"
-            printf '%s\n' "MODELS_DEV_API_JSON=${{ github.workspace }}/packages/opencode/test/tool/fixtures/models-api.json" >> "$GITHUB_ENV"
           fi
 
       - name: Seed opencode data
@@ -69,8 +67,6 @@ jobs:
         working-directory: packages/opencode
         run: bun script/seed-e2e.ts
         env:
-          MODELS_DEV_API_JSON: ${{ env.MODELS_DEV_API_JSON }}
-          OPENCODE_DISABLE_MODELS_FETCH: "true"
           OPENCODE_DISABLE_SHARE: "true"
           OPENCODE_DISABLE_LSP_DOWNLOAD: "true"
           OPENCODE_DISABLE_DEFAULT_PLUGINS: "true"
