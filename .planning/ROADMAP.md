@@ -169,10 +169,11 @@ Plans:
   1. Lock icon displayed for HTTPS connections
   2. Warning indicator displayed for HTTP connections
   3. Security badge visible without user action
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 09-01: TBD
+- [ ] 09-01-PLAN.md — SecurityBadge component with icons, detection, tooltip, and popover details
+- [ ] 09-02-PLAN.md — HTTP warning banner and layout integration
 
 ### Phase 10: Two-Factor Authentication
 **Goal**: Users can optionally enable TOTP-based 2FA for login
@@ -217,6 +218,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 6. Login UI | 1/1 | Complete | 2026-01-22 |
 | 7. Security Hardening | 3/3 | Complete | 2026-01-22 |
 | 8. Session Enhancements | 4/4 | Complete | 2026-01-23 |
-| 9. Connection Security UI | 0/TBD | Not started | - |
+| 9. Connection Security UI | 0/2 | Not started | - |
 | 10. Two-Factor Authentication | 0/TBD | Not started | - |
 | 11. Documentation | 0/TBD | Not started | - |
