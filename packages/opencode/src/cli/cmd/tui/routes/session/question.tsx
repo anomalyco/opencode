@@ -3,7 +3,7 @@ import { createMemo, For, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
-import { tint, useTheme } from "../../context/theme"
+import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
@@ -272,7 +272,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                     backgroundColor={isActive() ? theme.accent : theme.backgroundElement}
                     onMouseUp={() => selectTab(index())}
                   >
-                    <text fg={isActive() ? theme.selectedListItemText : isAnswered() ? theme.text : theme.textMuted}>
+                    <text fg={isActive() ? selectedForeground(theme, theme.accent) : isAnswered() ? theme.text : theme.textMuted}>
                       {q.header}
                     </text>
                   </box>
@@ -285,7 +285,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               backgroundColor={confirm() ? theme.accent : theme.backgroundElement}
               onMouseUp={() => selectTab(questions().length)}
             >
-              <text fg={confirm() ? theme.selectedListItemText : theme.textMuted}>Confirm</text>
+              <text fg={confirm() ? selectedForeground(theme, theme.accent) : theme.textMuted}>Confirm</text>
             </box>
           </box>
         </Show>
