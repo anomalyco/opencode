@@ -9,6 +9,12 @@ export { BrokerClient, type AuthResult } from "./broker-client.js"
 // Re-export user info lookup for UNIX user identity
 export { getUserInfo, type UnixUserInfo } from "./user-info.js"
 
+// Re-export device trust token utilities
+export * from "./device-trust.js"
+
+// Re-export 2FA token utilities
+export * from "./two-factor-token.js"
+
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
 export namespace Auth {
