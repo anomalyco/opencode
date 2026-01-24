@@ -155,9 +155,12 @@ export function StatusPopover() {
         </div>
       }
       class="[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] mx-5 bg-transparent border-0 shadow-none rounded-xl"
-      gutter={8}
+      gutter={12}
     >
-      <div class="flex items-center gap-1 w-[360px] border border-border-weak-base rounded-xl">
+      <div
+        class="flex items-center gap-1 w-[360px] rounded-xl"
+        style={{ "box-shadow": "var(--shadow-lg-border-base)" }}
+      >
         <Tabs
           aria-label="Server Configurations"
           class="tabs"
@@ -197,7 +200,7 @@ export function StatusPopover() {
 
           <Tabs.Content value="servers">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base">
+              <div class="flex flex-col p-2 bg-background-base rounded min-h-14">
                 <For each={sortedServers()}>
                   {(url) => {
                     const isActive = () => url === server.url
@@ -259,7 +262,7 @@ export function StatusPopover() {
 
           <Tabs.Content value="mcp">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base">
+              <div class="flex flex-col p-2 bg-background-base rounded min-h-14">
                 <Show
                   when={mcpItems().length > 0}
                   fallback={
@@ -305,7 +308,7 @@ export function StatusPopover() {
 
           <Tabs.Content value="lsp">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base">
+              <div class="flex flex-col p-2 bg-background-base rounded min-h-14">
                 <Show
                   when={lspItems().length > 0}
                   fallback={
@@ -335,7 +338,7 @@ export function StatusPopover() {
 
           <Tabs.Content value="plugins">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base">
+              <div class="flex flex-col p-2 bg-background-base rounded min-h-14">
                 <Show
                   when={plugins().length > 0}
                   fallback={
