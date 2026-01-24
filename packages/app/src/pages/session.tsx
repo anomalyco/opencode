@@ -1049,6 +1049,15 @@ export default function Page() {
               data-e2e="nav-buttons"
               class="fixed md:absolute right-4 md:right-6 bottom-32 md:bottom-36 z-50 flex flex-col gap-1 pointer-events-auto"
             >
+              <Tooltip value="Open sidebar" placement="left">
+                <IconButton
+                  data-e2e="nav-sidebar"
+                  icon="menu"
+                  variant="ghost"
+                  class="xl:hidden"
+                  onClick={() => layout.mobileSidebar.toggle()}
+                />
+              </Tooltip>
               <Tooltip value="Go to top" placement="left">
                 <IconButton
                   data-e2e="nav-top"
