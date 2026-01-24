@@ -51,7 +51,7 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
     }
 
     const handler = (data: Buffer) => {
-      const str = data.toString()
+      const str = data.toString("utf8")
       const match = str.match(/\x1b]11;([^\x07\x1b]+)/)
       if (match) {
         cleanup()

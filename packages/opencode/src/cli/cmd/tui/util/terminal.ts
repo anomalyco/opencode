@@ -52,7 +52,7 @@ export namespace Terminal {
       }
 
       const handler = (data: Buffer) => {
-        const str = data.toString()
+        const str = data.toString("utf8")
 
         // Match OSC 11 (background color)
         const bgMatch = str.match(/\x1b]11;([^\x07\x1b]+)/)
