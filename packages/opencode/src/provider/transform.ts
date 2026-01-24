@@ -369,6 +369,8 @@ export namespace ProviderTransform {
       case "@ai-sdk/deepinfra":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/deepinfra
       case "@ai-sdk/openai-compatible":
+        // https://v5.ai-sdk.dev/providers/community-providers/friendliai
+        // However, v5 support has been discontinued and only v6 is supported, so use @ai-sdk/openai-compatible
         if (model.providerID === "friendli" || model.api.url?.includes("friendli")) {
           // Friendli uses chat_template_kwargs instead of reasoningEffort; variants must be defined explicitly in config
           return {}
