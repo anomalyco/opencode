@@ -46,4 +46,5 @@
   width: 380px;
   max-width: min(380px, calc(100vw - 48px));
   padding: 8px;
+  border-radius: 14px;
 }

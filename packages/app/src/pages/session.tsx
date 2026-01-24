@@ -2100,9 +2100,9 @@ export default function Page() {
                                   <textarea
                                     ref={textarea}
                                     classList={{
-                                      "w-full resize-vertical p-2 rounded-[6px] bg-surface-base border text-text-strong text-12-regular leading-5 focus:outline-none focus:shadow-xs-border-select": true,
-                                      "border-transparent": !draftError(),
-                                      "border-border-critical-base": draftError(),
+                                      "w-full resize-vertical p-2 rounded-[6px] bg-surface-base text-text-strong text-12-regular leading-5 focus:outline-none": true,
+                                      "focus:shadow-xs-border-select": !draftError(),
+                                      "shadow-xs-border-critical-base": draftError(),
                                     }}
                                     rows={3}
                                     placeholder="Add comment"
