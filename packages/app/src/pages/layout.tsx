@@ -1760,7 +1760,15 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const titlebarRightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
+  const [titlebarRightMount, setTitlebarRightMount] = createSignal<HTMLElement | null>(null)
+
+  // Find the titlebar mount point after Titlebar renders
+  onMount(() => {
+    // Use queueMicrotask to ensure DOM is fully rendered
+    queueMicrotask(() => {
+      setTitlebarRightMount(document.getElementById("opencode-titlebar-right"))
+    })
+  })
 
   return (
     <div class="relative bg-background-base flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
