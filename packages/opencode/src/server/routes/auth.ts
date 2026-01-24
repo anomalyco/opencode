@@ -1108,6 +1108,22 @@ function generate2FASetupPageHtml(params: {
       return '';
     }
 
+    // Auto-submit when 6 digits entered or pasted
+    codeInput.addEventListener('input', () => {
+      // Strip non-digits and trim
+      const cleaned = codeInput.value.replace(/\\D/g, '').trim();
+      if (cleaned !== codeInput.value) {
+        codeInput.value = cleaned;
+      }
+
+      // Auto-submit when exactly 6 digits
+      if (cleaned.length === 6) {
+        verifyBtn.disabled = true;
+        verifyBtn.textContent = 'Verifying...';
+        form.requestSubmit();
+      }
+    });
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorDiv.classList.remove('visible');
@@ -1116,9 +1132,12 @@ function generate2FASetupPageHtml(params: {
       if (!code || code.length !== 6) {
         errorDiv.textContent = 'Please enter a 6-digit code';
         errorDiv.classList.add('visible');
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = 'Verify & Enable 2FA';
         return;
       }
 
+      // Disable button (may already be disabled from auto-submit)
       verifyBtn.disabled = true;
       verifyBtn.textContent = 'Verifying...';
 
