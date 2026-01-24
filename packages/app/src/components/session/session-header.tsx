@@ -164,6 +164,8 @@ export function SessionHeader() {
                         : language.t("session.share.popover.description.unshared")
                     }
                     gutter={6}
+                    placement="bottom-end"
+                    shift={-64}
                     class="rounded-xl"
                     triggerAs={Button}
                     triggerProps={{
