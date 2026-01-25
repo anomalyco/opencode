@@ -1,4 +1,5 @@
-import { Show, type JSX } from "solid-js"
+import { onMount, Show, splitProps, type JSX } from "solid-js"
+import { Button } from "./button"
 import { Icon } from "./icon"
 
 export type LineCommentVariant = "default" | "editor"
@@ -50,5 +51,107 @@ export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
         </div>
       </Show>
     </div>
+  )
+}
+
+export type LineCommentProps = Omit<LineCommentAnchorProps, "children" | "variant"> & {
+  comment: JSX.Element
+  selection: JSX.Element
+}
+
+export const LineComment = (props: LineCommentProps) => {
+  const [split, rest] = splitProps(props, ["comment", "selection"])
+
+  return (
+    <LineCommentAnchor {...rest} variant="default">
+      <div data-slot="line-comment-content">
+        <div data-slot="line-comment-text">{split.comment}</div>
+        <div data-slot="line-comment-label">Comment on {split.selection}</div>
+      </div>
+    </LineCommentAnchor>
+  )
+}
+
+export type LineCommentEditorProps = Omit<LineCommentAnchorProps, "children" | "open" | "variant" | "onClick"> & {
+  value: string
+  selection: JSX.Element
+  onInput: (value: string) => void
+  onCancel: VoidFunction
+  onSubmit: (value: string) => void
+  placeholder?: string
+  rows?: number
+  autofocus?: boolean
+  cancelLabel?: string
+  submitLabel?: string
+}
+
+export const LineCommentEditor = (props: LineCommentEditorProps) => {
+  const [split, rest] = splitProps(props, [
+    "value",
+    "selection",
+    "onInput",
+    "onCancel",
+    "onSubmit",
+    "placeholder",
+    "rows",
+    "autofocus",
+    "cancelLabel",
+    "submitLabel",
+  ])
+
+  const refs = {
+    textarea: undefined as HTMLTextAreaElement | undefined,
+  }
+
+  const focus = () => refs.textarea?.focus()
+
+  const submit = () => {
+    const value = split.value.trim()
+    if (!value) return
+    split.onSubmit(value)
+  }
+
+  onMount(() => {
+    if (split.autofocus === false) return
+    requestAnimationFrame(focus)
+  })
+
+  return (
+    <LineCommentAnchor {...rest} open={true} variant="editor" onClick={() => focus()}>
+      <div data-slot="line-comment-editor">
+        <textarea
+          ref={(el) => {
+            refs.textarea = el
+          }}
+          data-slot="line-comment-textarea"
+          rows={split.rows ?? 3}
+          placeholder={split.placeholder ?? "Add comment"}
+          value={split.value}
+          onInput={(e) => split.onInput(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault()
+              e.stopPropagation()
+              split.onCancel()
+              return
+            }
+            if (e.key !== "Enter") return
+            if (e.shiftKey) return
+            e.preventDefault()
+            e.stopPropagation()
+            submit()
+          }}
+        />
+        <div data-slot="line-comment-actions">
+          <div data-slot="line-comment-editor-label">Commenting on {split.selection}</div>
+          <Button size="small" variant="ghost" onClick={split.onCancel}>
+            {split.cancelLabel ?? "Cancel"}
+          </Button>
+          <Button size="small" variant="primary" disabled={split.value.trim().length === 0} onClick={submit}>
+            {split.submitLabel ?? "Comment"}
+          </Button>
+        </div>
+      </div>
+    </LineCommentAnchor>
   )
 }
