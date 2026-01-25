@@ -1,6 +1,32 @@
 {
   "$schema": "https://opencode.ai/theme.json",
   "defs": {
+    "latteRosewater": "#dc8a78",
+    "latteFlamingo": "#dd7878",
+    "lattePink": "#ea76cb",
+    "latteMauve": "#8839ef",
+    "latteRed": "#d20f39",
+    "latteMaroon": "#e64553",
+    "lattePeach": "#fe640b",
+    "latteYellow": "#df8e1d",
+    "latteGreen": "#40a02b",
+    "latteTeal": "#179299",
+    "latteSky": "#04a5e5",
+    "latteSapphire": "#209fb5",
+    "latteBlue": "#1e66f5",
+    "latteLavender": "#7287fd",
+    "latteText": "#4c4f69",
+    "latteSubtext1": "#5c5f77",
+    "latteSubtext0": "#6c6f85",
+    "latteOverlay2": "#7c7f93",
+    "latteOverlay1": "#8c8fa1",
+    "latteOverlay0": "#9ca0b0",
+    "latteSurface2": "#acb0be",
+    "latteSurface1": "#bcc0cc",
+    "latteSurface0": "#ccd0da",
+    "latteBase": "#eff1f5",
+    "latteMantle": "#e6e9ef",
+    "latteCrust": "#dce0e8",
     "frappeRosewater": "#f2d5cf",
     "frappeFlamingo": "#eebebe",
     "frappePink": "#f4b8e4",
@@ -31,203 +57,203 @@
   "theme": {
     "primary": {
       "dark": "frappeBlue",
-      "light": "frappeBlue"
+      "light": "latteBlue"
     },
     "secondary": {
       "dark": "frappeMauve",
-      "light": "frappeMauve"
+      "light": "latteMauve"
     },
     "accent": {
       "dark": "frappePink",
-      "light": "frappePink"
+      "light": "lattePink"
     },
     "error": {
       "dark": "frappeRed",
-      "light": "frappeRed"
+      "light": "latteRed"
     },
     "warning": {
       "dark": "frappeYellow",
-      "light": "frappeYellow"
+      "light": "latteYellow"
     },
     "success": {
       "dark": "frappeGreen",
-      "light": "frappeGreen"
+      "light": "latteGreen"
     },
     "info": {
       "dark": "frappeTeal",
-      "light": "frappeTeal"
+      "light": "latteTeal"
     },
     "text": {
       "dark": "frappeText",
-      "light": "frappeText"
+      "light": "latteText"
     },
     "textMuted": {
       "dark": "frappeSubtext1",
-      "light": "frappeSubtext1"
+      "light": "latteSubtext1"
     },
     "background": {
       "dark": "frappeBase",
-      "light": "frappeBase"
+      "light": "latteBase"
     },
     "backgroundPanel": {
       "dark": "frappeMantle",
-      "light": "frappeMantle"
+      "light": "latteMantle"
     },
     "backgroundElement": {
       "dark": "frappeCrust",
-      "light": "frappeCrust"
+      "light": "latteCrust"
     },
     "border": {
       "dark": "frappeSurface0",
-      "light": "frappeSurface0"
+      "light": "latteSurface0"
     },
     "borderActive": {
       "dark": "frappeSurface1",
-      "light": "frappeSurface1"
+      "light": "latteSurface1"
     },
     "borderSubtle": {
       "dark": "frappeSurface2",
-      "light": "frappeSurface2"
+      "light": "latteSurface2"
     },
     "diffAdded": {
       "dark": "frappeGreen",
-      "light": "frappeGreen"
+      "light": "latteGreen"
     },
     "diffRemoved": {
       "dark": "frappeRed",
-      "light": "frappeRed"
+      "light": "latteRed"
     },
     "diffContext": {
       "dark": "frappeOverlay2",
-      "light": "frappeOverlay2"
+      "light": "latteOverlay2"
     },
     "diffHunkHeader": {
       "dark": "frappePeach",
-      "light": "frappePeach"
+      "light": "lattePeach"
     },
     "diffHighlightAdded": {
       "dark": "frappeGreen",
-      "light": "frappeGreen"
+      "light": "latteGreen"
     },
     "diffHighlightRemoved": {
       "dark": "frappeRed",
-      "light": "frappeRed"
+      "light": "latteRed"
     },
     "diffAddedBg": {
       "dark": "#29342b",
-      "light": "#29342b"
+      "light": "#d6f0d9"
     },
     "diffRemovedBg": {
       "dark": "#3a2a31",
-      "light": "#3a2a31"
+      "light": "#f6dfe2"
     },
     "diffContextBg": {
       "dark": "frappeMantle",
-      "light": "frappeMantle"
+      "light": "latteMantle"
     },
     "diffLineNumber": {
       "dark": "frappeSurface1",
-      "light": "frappeSurface1"
+      "light": "latteSurface1"
     },
     "diffAddedLineNumberBg": {
       "dark": "#223025",
-      "light": "#223025"
+      "light": "#c9e3cb"
     },
     "diffRemovedLineNumberBg": {
       "dark": "#2f242b",
-      "light": "#2f242b"
+      "light": "#e9d3d6"
     },
     "markdownText": {
       "dark": "frappeText",
-      "light": "frappeText"
+      "light": "latteText"
     },
     "markdownHeading": {
       "dark": "frappeMauve",
-      "light": "frappeMauve"
+      "light": "latteMauve"
     },
     "markdownLink": {
       "dark": "frappeBlue",
-      "light": "frappeBlue"
+      "light": "latteBlue"
     },
     "markdownLinkText": {
       "dark": "frappeSky",
-      "light": "frappeSky"
+      "light": "latteSky"
     },
     "markdownCode": {
       "dark": "frappeGreen",
-      "light": "frappeGreen"
+      "light": "latteGreen"
     },
     "markdownBlockQuote": {
       "dark": "frappeYellow",
-      "light": "frappeYellow"
+      "light": "latteYellow"
     },
     "markdownEmph": {
       "dark": "frappeYellow",
-      "light": "frappeYellow"
+      "light": "latteYellow"
     },
     "markdownStrong": {
       "dark": "frappePeach",
-      "light": "frappePeach"
+      "light": "lattePeach"
     },
     "markdownHorizontalRule": {
       "dark": "frappeSubtext0",
-      "light": "frappeSubtext0"
+      "light": "latteSubtext0"
     },
     "markdownListItem": {
       "dark": "frappeBlue",
-      "light": "frappeBlue"
+      "light": "latteBlue"
     },
     "markdownListEnumeration": {
       "dark": "frappeSky",
-      "light": "frappeSky"
+      "light": "latteSky"
     },
     "markdownImage": {
       "dark": "frappeBlue",
-      "light": "frappeBlue"
+      "light": "latteBlue"
     },
     "markdownImageText": {
       "dark": "frappeSky",
-      "light": "frappeSky"
+      "light": "latteSky"
     },
     "markdownCodeBlock": {
       "dark": "frappeText",
-      "light": "frappeText"
+      "light": "latteText"
     },
     "syntaxComment": {
       "dark": "frappeOverlay2",
-      "light": "frappeOverlay2"
+      "light": "latteOverlay2"
     },
     "syntaxKeyword": {
       "dark": "frappeMauve",
-      "light": "frappeMauve"
+      "light": "latteMauve"
     },
     "syntaxFunction": {
       "dark": "frappeBlue",
-      "light": "frappeBlue"
+      "light": "latteBlue"
     },
     "syntaxVariable": {
       "dark": "frappeRed",
-      "light": "frappeRed"
+      "light": "latteRed"
     },
     "syntaxString": {
       "dark": "frappeGreen",
-      "light": "frappeGreen"
+      "light": "latteGreen"
     },
     "syntaxNumber": {
       "dark": "frappePeach",
-      "light": "frappePeach"
+      "light": "lattePeach"
     },
     "syntaxType": {
       "dark": "frappeYellow",
-      "light": "frappeYellow"
+      "light": "latteYellow"
     },
     "syntaxOperator": {
       "dark": "frappeSky",
-      "light": "frappeSky"
+      "light": "latteSky"
     },
     "syntaxPunctuation": {
       "dark": "frappeText",
-      "light": "frappeText"
+      "light": "latteText"
     }
   }
 }
