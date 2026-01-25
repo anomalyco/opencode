@@ -238,7 +238,7 @@ export const SessionReview = (props: SessionReviewProps) => {
 
       const target = ready ? anchor : anchors.get(focus.file)
       if (!target) {
-        if (attempt >= 24) return
+        if (attempt >= 120) return
         requestAnimationFrame(() => scrollTo(attempt + 1))
         return
       }
@@ -250,7 +250,7 @@ export const SessionReview = (props: SessionReviewProps) => {
       root.scrollTop = Math.max(0, next)
 
       if (ready) return
-      if (attempt >= 24) return
+      if (attempt >= 120) return
       requestAnimationFrame(() => scrollTo(attempt + 1))
     }
 

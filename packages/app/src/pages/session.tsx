@@ -1860,6 +1860,7 @@ export default function Page() {
                     let scrollFrame: number | undefined
                     let pending: { x: number; y: number } | undefined
                     let codeScroll: HTMLElement[] = []
+                    let focusToken = 0
 
                     const path = createMemo(() => file.pathFromTab(tab))
                     const state = createMemo(() => {
@@ -2036,9 +2037,50 @@ export default function Page() {
                       const target = fileComments().find((comment) => comment.id === focus.id)
                       if (!target) return
 
+                      focusToken++
+                      const token = focusToken
+
                       setOpenedComment(target.id)
                       setCommenting(null)
                       file.setSelectedLines(p, target.selection)
+
+                      const scrollTo = (attempt: number) => {
+                        if (token !== focusToken) return
+
+                        const root = scroll
+                        if (!root) {
+                          if (attempt >= 120) return
+                          requestAnimationFrame(() => scrollTo(attempt + 1))
+                          return
+                        }
+
+                        const anchor = root.querySelector(`[data-comment-id="${target.id}"]`)
+                        const ready =
+                          anchor instanceof HTMLElement &&
+                          anchor.style.pointerEvents !== "none" &&
+                          anchor.style.opacity !== "0"
+
+                        const shadow = getRoot()
+                        const marker = shadow ? findMarker(shadow, target.selection) : undefined
+                        const node = (ready ? anchor : (marker ?? wrap)) as HTMLElement | undefined
+                        if (!node) {
+                          if (attempt >= 120) return
+                          requestAnimationFrame(() => scrollTo(attempt + 1))
+                          return
+                        }
+
+                        const rootRect = root.getBoundingClientRect()
+                        const targetRect = node.getBoundingClientRect()
+                        const offset = targetRect.top - rootRect.top
+                        const next = root.scrollTop + offset - rootRect.height / 2 + targetRect.height / 2
+                        root.scrollTop = Math.max(0, next)
+
+                        if (ready || marker) return
+                        if (attempt >= 120) return
+                        requestAnimationFrame(() => scrollTo(attempt + 1))
+                      }
+
+                      requestAnimationFrame(() => scrollTo(0))
                       requestAnimationFrame(() => comments.clearFocus())
                     })
 
