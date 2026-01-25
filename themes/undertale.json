@@ -1,0 +1,232 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "black": "#000000",
+    "white": "#FFFFFF",
+    "soulRed": "#FF0000",
+    "soulOrange": "#FF6600",
+    "soulYellow": "#FFFF00",
+    "soulGreen": "#00FF00",
+    "soulAqua": "#00FFFF",
+    "soulBlue": "#0000FF",
+    "soulPurple": "#FF00FF",
+    "ruinsPurple": "#A349A4",
+    "ruinsDark": "#380A43",
+    "snowdinBlue": "#6BA3E5",
+    "hotlandOrange": "#FF7F27",
+    "coreGray": "#3A3949",
+    "battleBg": "#0D0D1A",
+    "battlePanel": "#1A1A2E",
+    "uiYellow": "#FFC90E",
+    "textGray": "#909090",
+    "damageRed": "#FF3333",
+    "healGreen": "#00FF00",
+    "saveYellow": "#FFFF00",
+    "determinationRed": "#FF0000",
+    "mttPink": "#FF6EB4",
+    "waterfall": "#283197",
+    "waterfallGlow": "#00BFFF"
+  },
+  "theme": {
+    "primary": {
+      "dark": "soulRed",
+      "light": "determinationRed"
+    },
+    "secondary": {
+      "dark": "uiYellow",
+      "light": "uiYellow"
+    },
+    "accent": {
+      "dark": "soulAqua",
+      "light": "soulBlue"
+    },
+    "error": {
+      "dark": "damageRed",
+      "light": "soulRed"
+    },
+    "warning": {
+      "dark": "uiYellow",
+      "light": "hotlandOrange"
+    },
+    "success": {
+      "dark": "healGreen",
+      "light": "soulGreen"
+    },
+    "info": {
+      "dark": "soulAqua",
+      "light": "waterfallGlow"
+    },
+    "text": {
+      "dark": "white",
+      "light": "black"
+    },
+    "textMuted": {
+      "dark": "textGray",
+      "light": "coreGray"
+    },
+    "background": {
+      "dark": "black",
+      "light": "white"
+    },
+    "backgroundPanel": {
+      "dark": "battleBg",
+      "light": "#F0F0F0"
+    },
+    "backgroundElement": {
+      "dark": "battlePanel",
+      "light": "#E5E5E5"
+    },
+    "border": {
+      "dark": "white",
+      "light": "black"
+    },
+    "borderActive": {
+      "dark": "soulRed",
+      "light": "determinationRed"
+    },
+    "borderSubtle": {
+      "dark": "#555555",
+      "light": "#AAAAAA"
+    },
+    "diffAdded": {
+      "dark": "healGreen",
+      "light": "soulGreen"
+    },
+    "diffRemoved": {
+      "dark": "damageRed",
+      "light": "soulRed"
+    },
+    "diffContext": {
+      "dark": "textGray",
+      "light": "coreGray"
+    },
+    "diffHunkHeader": {
+      "dark": "soulAqua",
+      "light": "soulBlue"
+    },
+    "diffHighlightAdded": {
+      "dark": "soulGreen",
+      "light": "healGreen"
+    },
+    "diffHighlightRemoved": {
+      "dark": "soulRed",
+      "light": "determinationRed"
+    },
+    "diffAddedBg": {
+      "dark": "#002200",
+      "light": "#CCFFCC"
+    },
+    "diffRemovedBg": {
+      "dark": "#220000",
+      "light": "#FFCCCC"
+    },
+    "diffContextBg": {
+      "dark": "battleBg",
+      "light": "#F5F5F5"
+    },
+    "diffLineNumber": {
+      "dark": "textGray",
+      "light": "coreGray"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#001A00",
+      "light": "#E0FFE0"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#1A0000",
+      "light": "#FFE0E0"
+    },
+    "markdownText": {
+      "dark": "white",
+      "light": "black"
+    },
+    "markdownHeading": {
+      "dark": "uiYellow",
+      "light": "hotlandOrange"
+    },
+    "markdownLink": {
+      "dark": "soulAqua",
+      "light": "soulBlue"
+    },
+    "markdownLinkText": {
+      "dark": "waterfallGlow",
+      "light": "waterfall"
+    },
+    "markdownCode": {
+      "dark": "healGreen",
+      "light": "soulGreen"
+    },
+    "markdownBlockQuote": {
+      "dark": "textGray",
+      "light": "coreGray"
+    },
+    "markdownEmph": {
+      "dark": "mttPink",
+      "light": "soulPurple"
+    },
+    "markdownStrong": {
+      "dark": "soulRed",
+      "light": "determinationRed"
+    },
+    "markdownHorizontalRule": {
+      "dark": "white",
+      "light": "black"
+    },
+    "markdownListItem": {
+      "dark": "uiYellow",
+      "light": "uiYellow"
+    },
+    "markdownListEnumeration": {
+      "dark": "uiYellow",
+      "light": "uiYellow"
+    },
+    "markdownImage": {
+      "dark": "ruinsPurple",
+      "light": "soulPurple"
+    },
+    "markdownImageText": {
+      "dark": "mttPink",
+      "light": "ruinsPurple"
+    },
+    "markdownCodeBlock": {
+      "dark": "white",
+      "light": "black"
+    },
+    "syntaxComment": {
+      "dark": "textGray",
+      "light": "coreGray"
+    },
+    "syntaxKeyword": {
+      "dark": "soulRed",
+      "light": "determinationRed"
+    },
+    "syntaxFunction": {
+      "dark": "soulAqua",
+      "light": "soulBlue"
+    },
+    "syntaxVariable": {
+      "dark": "uiYellow",
+      "light": "hotlandOrange"
+    },
+    "syntaxString": {
+      "dark": "healGreen",
+      "light": "soulGreen"
+    },
+    "syntaxNumber": {
+      "dark": "mttPink",
+      "light": "soulPurple"
+    },
+    "syntaxType": {
+      "dark": "waterfallGlow",
+      "light": "waterfall"
+    },
+    "syntaxOperator": {
+      "dark": "white",
+      "light": "black"
+    },
+    "syntaxPunctuation": {
+      "dark": "textGray",
+      "light": "coreGray"
+    }
+  }
+}

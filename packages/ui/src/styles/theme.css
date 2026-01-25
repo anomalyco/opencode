@@ -58,6 +58,7 @@
     0 16px 48px -6px light-dark(hsl(0 0% 0% / 0.05), hsl(0 0% 0% / 0.15)),
     0 6px 12px -2px light-dark(hsl(0 0% 0% / 0.025), hsl(0 0% 0% / 0.1)),
     0 1px 2.5px light-dark(hsl(0 0% 0% / 0.025), hsl(0 0% 0% / 0.1));
+  --shadow-xxs-border: 0 0 0 0.5px var(--border-weak-base, rgba(0, 0, 0, 0.07));
   --shadow-xs-border:
     0 0 0 1px var(--border-base, rgba(11, 6, 0, 0.2)), 0 1px 2px -1px rgba(19, 16, 16, 0.04),
     0 1px 2px 0 rgba(19, 16, 16, 0.06), 0 1px 3px 0 rgba(19, 16, 16, 0.08);
@@ -72,6 +73,17 @@
     0 0 0 1px var(--border-base, rgba(11, 6, 0, 0.2)), 0 1px 2px -1px rgba(19, 16, 16, 0.25),
     0 1px 2px 0 rgba(19, 16, 16, 0.08), 0 1px 3px 0 rgba(19, 16, 16, 0.12), 0 0 0 2px var(--background-weak, #f1f0f0),
     0 0 0 3px var(--border-selected, rgba(0, 74, 255, 0.99));
+  --shadow-xs-border-hover:
+    0 0 0 1px var(--border-weak-selected, rgba(0, 112, 255, 0.22)), 0 1px 2px -1px rgba(19, 16, 16, 0.04),
+    0 1px 2px 0 rgba(19, 16, 16, 0.06), 0 1px 3px 0 rgba(19, 16, 16, 0.08);
+  --shadow-xs-border-critical-base: 0 0 0 1px var(--border-critical-selected, #fc543a);
+  --shadow-xs-border-critical-focus:
+    0 0 0 3px var(--border-critical-weak, rgba(251, 34, 0, 0.18)), 0 0 0 1px var(--border-critical-selected, #fc543a),
+    0 1px 2px -1px rgba(19, 16, 16, 0.25), 0 1px 2px 0 rgba(19, 16, 16, 0.08), 0 1px 3px 0 rgba(19, 16, 16, 0.12);
+  --shadow-lg-border-base:
+    0 0 0 1px var(--border-weak-base, rgba(0, 0, 0, 0.07)), 0 36px 80px 0 rgba(0, 0, 0, 0.03),
+    0 13.141px 29.201px 0 rgba(0, 0, 0, 0.04), 0 6.38px 14.177px 0 rgba(0, 0, 0, 0.05),
+    0 3.127px 6.95px 0 rgba(0, 0, 0, 0.06), 0 1.237px 2.748px 0 rgba(0, 0, 0, 0.09);
 
   color-scheme: light;
   --text-mix-blend-mode: multiply;
@@ -108,7 +120,7 @@
   --surface-brand-base: var(--yuzu-light-9);
   --surface-brand-hover: var(--yuzu-light-10);
   --surface-interactive-base: var(--cobalt-light-3);
-  --surface-interactive-hover: var(--cobalt-light-4);
+  --surface-interactive-hover: #e5f0ff;
   --surface-interactive-weak: var(--cobalt-light-2);
   --surface-interactive-weak-hover: var(--cobalt-light-3);
   --surface-success-base: var(--apple-light-3);
@@ -177,6 +189,7 @@
   --text-on-brand-weak: var(--smoke-light-alpha-9);
   --text-on-brand-weaker: var(--smoke-light-alpha-8);
   --text-on-brand-strong: var(--smoke-light-alpha-12);
+  --button-primary-base: var(--smoke-light-12);
   --button-secondary-base: #fdfcfc;
   --button-secondary-hover: #faf9f9;
   --border-base: var(--smoke-light-alpha-7);
@@ -363,9 +376,9 @@
     --surface-raised-stronger-non-alpha: var(--smoke-dark-3);
     --surface-brand-base: var(--yuzu-light-9);
     --surface-brand-hover: var(--yuzu-light-10);
-    --surface-interactive-base: var(--cobalt-light-3);
-    --surface-interactive-hover: var(--cobalt-light-4);
-    --surface-interactive-weak: var(--cobalt-light-2);
+    --surface-interactive-base: var(--cobalt-dark-3);
+    --surface-interactive-hover: #0a1d4d;
+    --surface-interactive-weak: var(--cobalt-dark-2);
     --surface-interactive-weak-hover: var(--cobalt-light-3);
     --surface-success-base: var(--apple-light-3);
     --surface-success-weak: var(--apple-light-2);
@@ -433,6 +446,7 @@
     --text-on-brand-weak: var(--smoke-dark-alpha-9);
     --text-on-brand-weaker: var(--smoke-dark-alpha-8);
     --text-on-brand-strong: var(--smoke-dark-alpha-12);
+    --button-primary-base: var(--smoke-dark-12);
     --button-secondary-base: #231f1f;
     --button-secondary-hover: #2a2727;
     --border-base: var(--smoke-dark-alpha-7);
