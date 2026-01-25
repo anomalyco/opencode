@@ -70,6 +70,14 @@ const unsafeCSS = `
   color: var(--diffs-selection-number-fg);
 }
 
+/* The deletion word-diff emphasis is stronger than additions; soften it while selected so the selection highlight reads consistently. */
+[data-diffs] [data-line-type='change-deletion'][data-selected-line] {
+  --diffs-bg-deletion-emphasis: light-dark(
+    rgb(from var(--diffs-deletion-base) r g b / 0.15),
+    rgb(from var(--diffs-deletion-base) r g b / 0.1)
+  );
+}
+
 :host-context([data-color-scheme='dark']) [data-diffs] {
   --diffs-selection-number-fg: #fdfbfb;
   --diffs-bg-selection: var(--diffs-bg-selection-override, color-mix(in oklch, var(--solaris-dark-6) 65%, transparent));
