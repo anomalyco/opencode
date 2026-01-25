@@ -3,12 +3,9 @@ name: Duplicate Issue Detection
 on:
   issues:
     types: [opened]
-  schedule:
-    - cron: "0 * * * *"
 
 jobs:
   check-duplicates:
-    if: github.event_name == 'issues'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -27,14 +24,6 @@ jobs:
       - name: Install opencode
         run: curl -fsSL https://opencode.ai/install | bash
 
-      - name: Ensure labels exist
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh label create "potential-duplicate" --repo ${{ github.repository }} --color "FEF2C0" --description "Potentially a duplicate issue - pending confirmation" 2>/dev/null || true
-          gh label create "duplicate" --repo ${{ github.repository }} --color "cfd3d7" --description "This issue is a duplicate" 2>/dev/null || true
-          gh label create "spam" --repo ${{ github.repository }} --color "B60205" --description "Spam or low-quality issue" 2>/dev/null || true
-
       - name: Build prompt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -51,158 +40,33 @@ jobs:
             gh issue view "$ISSUE_NUMBER" --json body --jq .body
           } > issue_info.txt
 
-      - name: Analyze issue
-        id: analyze
+      - name: Check for duplicate issues
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          RESULT=$(bun script/duplicate-issue.ts -f issue_info.txt "Check the attached file for issue details and analyze for spam/duplicates")
-          echo "$RESULT" > analysis.json
-          cat analysis.json
-
-      - name: Process results
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          set -euo pipefail
+          RESULT=$(bun script/duplicate-issue.ts -f issue_info.txt "Check the attached file for issue details and search for duplicates")
 
-          # Validate JSON structure
-          if ! jq -e 'type=="object" and (.spam|type=="object") and (.duplicates|type=="array")' analysis.json > /dev/null 2>&1; then
-            echo "Invalid or unexpected JSON structure, skipping"
-            cat analysis.json
-            exit 0
-          fi
+          # Sanitize output: escape @ mentions, truncate to 4KB
+          RESULT=$(printf '%s' "$RESULT" | sed 's/@/@ /g' | head -c 4096)
 
-          IS_SPAM=$(jq -r '.spam.is_spam // false' analysis.json)
-          SPAM_REASON=$(jq -r '.spam.reason // ""' analysis.json)
-          DUPLICATES=$(jq -r '.duplicates // []' analysis.json)
-          QUICK_ANSWER=$(jq -r '.quick_answer // ""' analysis.json)
-          KEYBINDS=$(jq -r '.keybinds_related // false' analysis.json)
-
-          # Handle spam
-          if [ "$IS_SPAM" = "true" ]; then
-            echo "Issue detected as spam: $SPAM_REASON"
-            gh issue close "$ISSUE_NUMBER" --repo ${{ github.repository }} --comment "This issue has been automatically closed as spam or low-quality.
-
-          **Reason:** $SPAM_REASON
+          # Handle spam - use fixed message instead of agent output
+          if printf '%s' "$RESULT" | grep -q "^SPAM:"; then
+            gh issue close "$ISSUE_NUMBER" --comment "This issue has been automatically closed as spam or low-quality content.
 
           If this was closed in error, please reopen with a detailed description of your issue."
-            gh issue edit "$ISSUE_NUMBER" --repo ${{ github.repository }} --add-label "spam"
+            gh issue edit "$ISSUE_NUMBER" --add-label "spam" 2>/dev/null || true
             exit 0
           fi
 
-          # Check for duplicates
-          DUP_COUNT=$(echo "$DUPLICATES" | jq 'length')
-          HAS_DUPLICATES=false
-
-          if [ "$DUP_COUNT" -gt 0 ]; then
-            # Check if any have >= 50% confidence
-            HIGH_CONF=$(echo "$DUPLICATES" | jq '[.[] | select(.confidence >= 50)] | length')
-            if [ "$HIGH_CONF" -gt 0 ]; then
-              HAS_DUPLICATES=true
-            fi
+          # Skip if no duplicates found
+          if printf '%s' "$RESULT" | grep -q "No duplicate issues found"; then
+            echo "No duplicates found, not commenting"
+            exit 0
           fi
 
-          # Build comment if we have something to say
-          if [ "$HAS_DUPLICATES" = "true" ] || [ -n "$QUICK_ANSWER" ] && [ "$QUICK_ANSWER" != "null" ]; then
-            {
-              echo "## Agent Review"
-              echo ""
-              echo "### Duplicate Analysis"
-              
-              if [ "$HAS_DUPLICATES" = "true" ]; then
-                echo "This issue appears to overlap with existing issues:"
-                echo "$DUPLICATES" | jq -r '.[] | select(.confidence >= 50) | "- #\(.issue_number) (\(.confidence)%): \(.explanation)"'
-              else
-                echo "No clear duplicates found."
-              fi
-              
-              if [ -n "$QUICK_ANSWER" ] && [ "$QUICK_ANSWER" != "null" ]; then
-                echo ""
-                echo "### Quick Answer"
-                echo "$QUICK_ANSWER"
-              fi
-              
-              if [ "$KEYBINDS" = "true" ]; then
-                echo ""
-                echo "### Related"
-                echo "For keybind-related issues, please also check the pinned keybinds documentation: #4997"
-              fi
-              
-              if [ "$HAS_DUPLICATES" = "true" ]; then
-                echo ""
-                echo "---"
-                echo "👎 **React with thumbs-down if this does not address your issue.**"
-                echo "If no reaction is received within 6 hours, this issue will be automatically closed."
-                echo ""
-                echo "_Feel free to reopen if your issue persists._"
-              fi
-            } > comment.txt
+          # Post comment for potential duplicates
+          gh issue comment "$ISSUE_NUMBER" --body "_The following comment was made by an LLM, it may be inaccurate:_
 
-            gh issue comment "$ISSUE_NUMBER" --repo ${{ github.repository }} --body "$(cat comment.txt)"
-            
-            if [ "$HAS_DUPLICATES" = "true" ]; then
-              gh issue edit "$ISSUE_NUMBER" --repo ${{ github.repository }} --add-label "potential-duplicate"
-            fi
-          else
-            echo "No duplicates found and no quick answer to provide, not commenting"
-          fi
-
-  close-stale-duplicates:
-    if: github.event_name == 'schedule'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - name: Ensure labels exist
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh label create "potential-duplicate" --repo ${{ github.repository }} --color "FEF2C0" --description "Potentially a duplicate issue - pending confirmation" 2>/dev/null || true
-          gh label create "duplicate" --repo ${{ github.repository }} --color "cfd3d7" --description "This issue is a duplicate" 2>/dev/null || true
-          gh label create "spam" --repo ${{ github.repository }} --color "B60205" --description "Spam or low-quality issue" 2>/dev/null || true
-
-      - name: Close stale potential duplicates
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Get issues with potential-duplicate label that are still open
-          gh issue list --repo ${{ github.repository }} --label "potential-duplicate" --state open --json number --jq '.[].number' | while read -r issue_number; do
-            [ -z "$issue_number" ] && continue
-
-            echo "Checking issue #${issue_number}..."
-
-            # Get comments containing the duplicate marker
-            comment_data=$(gh api "repos/${{ github.repository }}/issues/${issue_number}/comments" --jq '.[] | select(.body | contains("React with thumbs-down")) | {id: .id, created_at: .created_at}' | head -1)
-
-            if [ -n "$comment_data" ]; then
-              comment_id=$(echo "$comment_data" | jq -r '.id')
-              comment_created=$(echo "$comment_data" | jq -r '.created_at')
-
-              # Check if comment is older than 6 hours (21600 seconds)
-              comment_epoch=$(date -d "$comment_created" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$comment_created" +%s)
-              current_epoch=$(date +%s)
-              age=$((current_epoch - comment_epoch))
-
-              if [ "$age" -gt 21600 ]; then
-                # Check for thumbs-down reactions
-                thumbs_down=$(gh api "repos/${{ github.repository }}/issues/comments/${comment_id}/reactions" --jq '[.[] | select(.content == "-1")] | length')
-
-                if [ "$thumbs_down" = "0" ] || [ -z "$thumbs_down" ]; then
-                  echo "Closing issue #${issue_number} - no thumbs-down reaction after 6 hours"
-                  gh issue close "$issue_number" --repo ${{ github.repository }} --comment "This issue has been automatically closed as a potential duplicate. No objection was received within 6 hours. If this was closed in error, please reopen the issue and provide additional context about why it differs from the linked issues."
-                  gh issue edit "$issue_number" --repo ${{ github.repository }} --remove-label "potential-duplicate" --add-label "duplicate"
-                else
-                  echo "Issue #${issue_number} has thumbs-down reactions, removing potential-duplicate label"
-                  gh issue edit "$issue_number" --repo ${{ github.repository }} --remove-label "potential-duplicate"
-                fi
-              else
-                echo "Issue #${issue_number} comment is less than 6 hours old (${age}s), skipping"
-              fi
-            else
-              echo "Issue #${issue_number} has no duplicate comment, skipping"
-            fi
-          done
+          $RESULT"
