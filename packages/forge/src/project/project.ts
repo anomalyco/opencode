@@ -2,6 +2,7 @@ import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
 import { $ } from "bun"
+import { Git } from "../git"
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
@@ -47,19 +48,7 @@ export namespace Project {
       .then((x) => x.trim())
       .catch(() => {})
     if (!id) {
-      const roots = await $`git rev-list --max-parents=0 --all`
-        .quiet()
-        .nothrow()
-        .cwd(worktree)
-        .text()
-        .then((x) =>
-          x
-            .split("\n")
-            .filter(Boolean)
-            .map((x) => x.trim())
-            .toSorted(),
-        )
-      id = roots[0]
+      id = (await Git.getRepoID(worktree)) ?? undefined
       if (id) Bun.file(path.join(git, "opencode")).write(id)
     }
     timer.stop()
@@ -74,12 +63,7 @@ export namespace Project {
       await Storage.write<Info>(["project", "global"], project)
       return project
     }
-    worktree = await $`git rev-parse --path-format=absolute --show-toplevel`
-      .quiet()
-      .nothrow()
-      .cwd(worktree)
-      .text()
-      .then((x) => x.trim())
+    worktree = (await Git.getRepoRoot(worktree)) ?? worktree
     const project: Info = {
       id,
       worktree,

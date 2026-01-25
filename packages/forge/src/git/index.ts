@@ -2,7 +2,7 @@ import { $ } from "bun"
 import { Log } from "../util/log"
 
 export namespace Git {
-  const log = Log.create({ service: "workspace-git" })
+  const log = Log.create({ service: "git" })
 
   export interface WorktreeInfo {
     path: string
@@ -11,10 +11,10 @@ export namespace Git {
   }
 
   /**
-   * Get the root path of the git repository
+   * Get the root path of the git repository (absolute path)
    */
   export async function getRepoRoot(cwd: string): Promise<string | null> {
-    const result = await $`git rev-parse --show-toplevel`.cwd(cwd).quiet().nothrow()
+    const result = await $`git rev-parse --path-format=absolute --show-toplevel`.cwd(cwd).quiet().nothrow()
     if (result.exitCode !== 0) {
       return null
     }

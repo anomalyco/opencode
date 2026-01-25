@@ -1,12 +1,13 @@
 import z from "zod"
 import path from "path"
 import { Global } from "../global"
+import { Git } from "../git"
 import { Identifier } from "../id/id"
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
 import { fn } from "../util/fn"
-import { Git } from "./git"
 import { Names } from "./names"
+import { Session } from "../session"
 
 export namespace Workspace {
   const log = Log.create({ service: "workspace" })
@@ -138,7 +139,8 @@ export namespace Workspace {
   }
 
   /**
-   * Remove a workspace and its associated worktree
+   * Remove a workspace and its associated worktree.
+   * Also removes all sessions associated with this workspace (if Instance context is available).
    */
   export const remove = fn(Identifier.schema("workspace"), async (id) => {
     const workspace = await getByID(id)
@@ -148,6 +150,20 @@ export namespace Workspace {
     }
 
     log.info("removing workspace", { workspace })
+
+    // Remove all sessions associated with this workspace
+    // This requires Instance context to look up sessions by project
+    try {
+      const sessions = await Session.listByWorkspace(id)
+      for (const session of sessions) {
+        log.info("removing session associated with workspace", { sessionID: session.id, workspaceID: id })
+        await Session.remove(session.id)
+      }
+    } catch (e) {
+      // If no Instance context available, we can't look up sessions
+      // This is expected when called outside of a project context
+      log.info("skipping session cascade delete - no Instance context", { workspaceID: id })
+    }
 
     // Remove the git worktree
     await Git.removeWorktree(workspace.repoRoot, workspace.worktreePath)

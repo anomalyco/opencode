@@ -8,7 +8,7 @@ Log.init({ print: false })
 
 describe("Workspace", () => {
   describe("Git operations", async () => {
-    const { Git } = await import("../../src/workspace/git")
+    const { Git } = await import("../../src/git")
 
     test("getRepoRoot returns the git repository root", async () => {
       await using tmp = await tmpdir({ git: true })
@@ -162,7 +162,7 @@ branch refs/heads/main`
 
   describe("Workspace CRUD", async () => {
     const { Workspace } = await import("../../src/workspace")
-    const { Git } = await import("../../src/workspace/git")
+    const { Git } = await import("../../src/git")
 
     test("create creates a new workspace with provided name", async () => {
       await using tmp = await tmpdir({ git: true })

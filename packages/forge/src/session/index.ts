@@ -40,6 +40,7 @@ export namespace Session {
       projectID: z.string(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
+      workspaceID: Identifier.schema("workspace").optional(),
       summary: z
         .object({
           additions: z.number(),
@@ -172,13 +173,20 @@ export namespace Session {
     })
   })
 
-  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
+  export async function createNext(input: {
+    id?: string
+    title?: string
+    parentID?: string
+    workspaceID?: string
+    directory: string
+  }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory: input.directory,
       parentID: input.parentID,
+      workspaceID: input.workspaceID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       time: {
         created: Date.now(),
@@ -306,6 +314,19 @@ export namespace Session {
       yield Storage.read<Info>(item)
     }
   }
+
+  /**
+   * List all sessions associated with a specific workspace
+   */
+  export const listByWorkspace = fn(Identifier.schema("workspace"), async (workspaceID) => {
+    const result: Info[] = []
+    for await (const session of list()) {
+      if (session.workspaceID === workspaceID) {
+        result.push(session)
+      }
+    }
+    return result
+  })
 
   export const children = fn(Identifier.schema("session"), async (parentID) => {
     const project = Instance.project
