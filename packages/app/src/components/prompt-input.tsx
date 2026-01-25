@@ -123,6 +123,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const local = useLocal()
   const files = useFile()
   const prompt = usePrompt()
+  const commentCount = createMemo(() => prompt.context.items().filter((item) => !!item.comment?.trim()).length)
   const layout = useLayout()
   const comments = useComments()
   const params = useParams()
@@ -183,6 +184,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!item.commentID) return
 
     comments.setFocus({ file: item.path, id: item.commentID })
+    comments.setActive({ file: item.path, id: item.commentID })
     view().reviewPanel.open()
 
     if (item.commentOrigin === "review") {
@@ -1710,15 +1712,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <div class="flex flex-nowrap items-start gap-2 p-2 overflow-x-auto no-scrollbar">
             <For each={prompt.context.items()}>
               {(item) => {
+                const active = () => {
+                  const a = comments.active()
+                  return !!item.commentID && item.commentID === a?.id && item.path === a?.file
+                }
                 return (
                   <Tooltip
                     value={
                       <span class="flex max-w-[300px]">
                         <span
                           class="text-text-invert-base truncate min-w-0"
-                          style={{ direction: "rtl", "text-align": "left" }}
+                          style={{ direction: "rtl", "text-align": "left", "unicode-bidi": "plaintext" }}
                         >
-                          <bdi>{getDirectory(item.path)}</bdi>
+                          {getDirectory(item.path)}
                         </span>
                         <span class="shrink-0">{getFilename(item.path)}</span>
                       </span>
@@ -1728,8 +1734,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <div
                       classList={{
-                        "group shrink-0 flex flex-col rounded-[6px] bg-background-stronger pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all shadow-xs-border hover:shadow-xs-border-hover": true,
-                        "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID,
+                        "group shrink-0 flex flex-col rounded-[6px] pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all transition-transform shadow-xs-border hover:shadow-xs-border-hover": true,
+                        "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID && !active(),
+                        "cursor-pointer bg-surface-interactive-hover hover:bg-surface-interactive-hover shadow-xs-border-hover":
+                          active(),
+                        "bg-background-stronger": !active(),
                       }}
                       onClick={() => {
                         openComment(item)
@@ -1827,7 +1836,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             aria-label={
               store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
-                : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })
+                : commentCount() > 1
+                  ? "Summarize comments…"
+                  : commentCount() === 1
+                    ? "Summarize comment…"
+                    : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })
             }
             contenteditable="true"
             onInput={handleInput}
@@ -1847,7 +1860,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <div class="absolute top-0 inset-x-0 p-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
-                : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })}
+                : commentCount() > 1
+                  ? "Summarize comments…"
+                  : commentCount() === 1
+                    ? "Summarize comment…"
+                    : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })}
             </div>
           </Show>
         </div>
@@ -1954,7 +1971,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Match>
             </Switch>
           </div>
-          <div class="flex items-center gap-3 absolute right-2 bottom-2">
+          <div class="flex items-center gap-3 absolute right-3 bottom-3">
             <input
               ref={fileInputRef}
               type="file"

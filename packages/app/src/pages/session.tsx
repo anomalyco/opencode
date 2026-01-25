@@ -1,16 +1,4 @@
-import {
-  For,
-  Index,
-  onCleanup,
-  onMount,
-  Show,
-  Match,
-  Switch,
-  createMemo,
-  createEffect,
-  on,
-  createSignal,
-} from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on, createSignal } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -40,7 +28,7 @@ import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
 import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
-import { getFilename } from "@opencode-ai/util/path"
+import { findLast } from "@opencode-ai/util/array"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
@@ -66,7 +54,6 @@ import {
   SortableTerminalTab,
   NewSessionView,
 } from "@/components/session"
-import { usePlatform } from "@/context/platform"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
 
@@ -102,7 +89,7 @@ function SessionReviewTab(props: SessionReviewTabProps) {
 
   const sdk = useSDK()
 
-  const readFile = (path: string) => {
+  const readFile = async (path: string) => {
     return sdk.client.file
       .read({ path })
       .then((x) => x.data)
@@ -191,7 +178,6 @@ export default function Page() {
   const codeComponent = useCodeComponent()
   const command = useCommand()
   const language = useLanguage()
-  const platform = usePlatform()
   const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
@@ -748,7 +734,7 @@ export default function Page() {
         }
         const revert = info()?.revert?.messageID
         // Find the last user message that's not already reverted
-        const message = userMessages().findLast((x) => !revert || x.id < revert)
+        const message = findLast(userMessages(), (x) => !revert || x.id < revert)
         if (!message) return
         await sdk.client.session.revert({ sessionID, messageID: message.id })
         // Restore the prompt from the reverted message
@@ -758,7 +744,7 @@ export default function Page() {
           prompt.set(restored)
         }
         // Navigate to the message before the reverted one (which will be the new last visible message)
-        const priorMessage = userMessages().findLast((x) => x.id < message.id)
+        const priorMessage = findLast(userMessages(), (x) => x.id < message.id)
         setActiveMessage(priorMessage)
       },
     },
@@ -780,14 +766,14 @@ export default function Page() {
           await sdk.client.session.unrevert({ sessionID })
           prompt.reset()
           // Navigate to the last message (the one that was at the revert point)
-          const lastMsg = userMessages().findLast((x) => x.id >= revertMessageID)
+          const lastMsg = findLast(userMessages(), (x) => x.id >= revertMessageID)
           setActiveMessage(lastMsg)
           return
         }
         // Partial redo - move forward to next message
         await sdk.client.session.revert({ sessionID, messageID: nextMessage.id })
         // Navigate to the message before the new revert point
-        const priorMsg = userMessages().findLast((x) => x.id < nextMessage.id)
+        const priorMsg = findLast(userMessages(), (x) => x.id < nextMessage.id)
         setActiveMessage(priorMsg)
       },
     },
@@ -1443,7 +1429,7 @@ export default function Page() {
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
-            "flex-1 md:flex-none py-6 md:py-3": true,
+            "flex-1 md:flex-none pt-6 md:pt-3": true,
           }}
           style={{
             width: isDesktop() && showTabs() ? `${layout.session.width()}px` : "100%",
@@ -1536,9 +1522,9 @@ export default function Page() {
                         }}
                         onClick={autoScroll.handleInteraction}
                         class="relative min-w-0 w-full h-full overflow-y-auto session-scroller"
-                        style={{ "--session-title-height": info()?.title ? "40px" : "0px" }}
+                        style={{ "--session-title-height": info()?.title || info()?.parentID ? "40px" : "0px" }}
                       >
-                        <Show when={info()?.title}>
+                        <Show when={info()?.title || info()?.parentID}>
                           <div
                             classList={{
                               "sticky top-0 z-30 bg-background-stronger": true,
@@ -1547,8 +1533,21 @@ export default function Page() {
                               "md:max-w-200 md:mx-auto": !showTabs(),
                             }}
                           >
-                            <div class="h-10 flex items-center">
-                              <h1 class="text-16-medium text-text-strong truncate">{info()?.title}</h1>
+                            <div class="h-10 flex items-center gap-1">
+                              <Show when={info()?.parentID}>
+                                <IconButton
+                                  tabIndex={-1}
+                                  icon="arrow-left"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    navigate(`/${params.dir}/session/${info()?.parentID}`)
+                                  }}
+                                  aria-label={language.t("common.goBack")}
+                                />
+                              </Show>
+                              <Show when={info()?.title}>
+                                <h1 class="text-16-medium text-text-strong truncate">{info()?.title}</h1>
+                              </Show>
                             </div>
                           </div>
                         </Show>
@@ -1662,11 +1661,11 @@ export default function Page() {
           {/* Prompt input */}
           <div
             ref={(el) => (promptDock = el)}
-            class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-6 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+            class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
           >
             <div
               classList={{
-                "w-full md:px-6 pointer-events-auto": true,
+                "w-full px-4 pointer-events-auto": true,
                 "md:max-w-200": !showTabs(),
               }}
             >
@@ -1899,6 +1898,7 @@ export default function Page() {
                     const [openedComment, setOpenedComment] = createSignal<string | null>(null)
                     const [commenting, setCommenting] = createSignal<SelectedLineRange | null>(null)
                     const [draft, setDraft] = createSignal("")
+                    const [draftError, setDraftError] = createSignal(false)
                     const [positions, setPositions] = createSignal<Record<string, number>>({})
                     const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
 
@@ -2085,19 +2085,30 @@ export default function Page() {
                                 onClick={() => textarea?.focus()}
                                 onPopoverFocusOut={(e) => {
                                   const target = e.relatedTarget as Node | null
-                                  if (!target || !e.currentTarget.contains(target)) {
-                                    setCommenting(null)
-                                  }
+                                  if (target && e.currentTarget.contains(target)) return
+                                  // Delay to allow click handlers to fire first
+                                  setTimeout(() => {
+                                    if (!document.activeElement || !e.currentTarget.contains(document.activeElement)) {
+                                      setCommenting(null)
+                                    }
+                                  }, 0)
                                 }}
                               >
                                 <div class="flex flex-col gap-2">
                                   <textarea
                                     ref={textarea}
-                                    class="w-full resize-vertical p-2 rounded-[6px] bg-surface-base border border-border-base text-text-strong text-12-regular leading-5 focus:outline-none focus:shadow-xs-border-select"
+                                    classList={{
+                                      "w-full resize-vertical p-2 rounded-[6px] bg-surface-base text-text-strong text-12-regular leading-5 focus:outline-none": true,
+                                      "focus:shadow-xs-border-select": !draftError(),
+                                      "shadow-xs-border-critical-base": draftError(),
+                                    }}
                                     rows={3}
                                     placeholder="Add comment"
                                     value={draft()}
-                                    onInput={(e) => setDraft(e.currentTarget.value)}
+                                    onInput={(e) => {
+                                      setDraft(e.currentTarget.value)
+                                      setDraftError(false)
+                                    }}
                                     onKeyDown={(e) => {
                                       if (e.key === "Escape") {
                                         setCommenting(null)
@@ -2107,7 +2118,10 @@ export default function Page() {
                                       if (e.shiftKey) return
                                       e.preventDefault()
                                       const value = draft().trim()
-                                      if (!value) return
+                                      if (!value) {
+                                        setDraftError(true)
+                                        return
+                                      }
                                       const p = path()
                                       if (!p) return
                                       addCommentToContext({
@@ -2130,10 +2144,12 @@ export default function Page() {
                                     <Button
                                       size="small"
                                       variant="primary"
-                                      disabled={draft().trim().length === 0}
                                       onClick={() => {
                                         const value = draft().trim()
-                                        if (!value) return
+                                        if (!value) {
+                                          setDraftError(true)
+                                          return
+                                        }
                                         const p = path()
                                         if (!p) return
                                         addCommentToContext({
@@ -2435,66 +2451,23 @@ export default function Page() {
                 </Tabs>
                 <div class="flex-1 min-h-0 relative">
                   <For each={terminal.all()}>
-                    {(pty) => {
-                      const [dismissed, setDismissed] = createSignal(false)
-                      return (
-                        <div
-                          id={`terminal-wrapper-${pty.id}`}
-                          class="absolute inset-0"
-                          style={{
-                            display: terminal.active() === pty.id ? "block" : "none",
-                          }}
-                        >
+                    {(pty) => (
+                      <div
+                        id={`terminal-wrapper-${pty.id}`}
+                        class="absolute inset-0"
+                        style={{
+                          display: terminal.active() === pty.id ? "block" : "none",
+                        }}
+                      >
+                        <Show when={pty.id} keyed>
                           <Terminal
                             pty={pty}
-                            onCleanup={(data) => terminal.update({ ...data, id: pty.id })}
-                            onConnect={() => {
-                              terminal.update({ id: pty.id, error: false })
-                              setDismissed(false)
-                            }}
-                            onConnectError={() => {
-                              setDismissed(false)
-                              terminal.update({ id: pty.id, error: true })
-                            }}
+                            onCleanup={terminal.update}
+                            onConnectError={() => terminal.clone(pty.id)}
                           />
-                          <Show when={pty.error && !dismissed()}>
-                            <div
-                              class="absolute inset-0 flex flex-col items-center justify-center gap-3"
-                              style={{ "background-color": "rgba(0, 0, 0, 0.6)" }}
-                            >
-                              <Icon
-                                name="circle-ban-sign"
-                                class="w-8 h-8"
-                                style={{ color: "rgba(239, 68, 68, 0.8)" }}
-                              />
-                              <div class="text-center" style={{ color: "rgba(255, 255, 255, 0.7)" }}>
-                                <div class="text-14-semibold mb-1">{language.t("terminal.connectionLost.title")}</div>
-                                <div class="text-12-regular" style={{ color: "rgba(255, 255, 255, 0.5)" }}>
-                                  {language.t("terminal.connectionLost.description")}
-                                </div>
-                              </div>
-                              <button
-                                class="mt-2 px-3 py-1.5 text-12-medium rounded-lg transition-colors"
-                                style={{
-                                  "background-color": "rgba(255, 255, 255, 0.1)",
-                                  color: "rgba(255, 255, 255, 0.7)",
-                                  border: "1px solid rgba(255, 255, 255, 0.2)",
-                                }}
-                                onMouseEnter={(e) =>
-                                  (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)")
-                                }
-                                onMouseLeave={(e) =>
-                                  (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.1)")
-                                }
-                                onClick={() => setDismissed(true)}
-                              >
-                                {language.t("common.dismiss")}
-                              </button>
-                            </div>
-                          </Show>
-                        </div>
-                      )
-                    }}
+                        </Show>
+                      </div>
+                    )}
                   </For>
                 </div>
               </div>

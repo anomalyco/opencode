@@ -30,6 +30,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
     return el.scrollHeight - el.clientHeight - el.scrollTop
   }
 
+  const canScroll = (el: HTMLElement) => {
+    return el.scrollHeight - el.clientHeight > 1
+  }
+
   // Browsers can dispatch scroll events asynchronously. If new content arrives
   // between us calling `scrollTo()` and the subsequent `scroll` event firing,
   // the handler can see a non-zero `distanceFromBottom` and incorrectly assume
@@ -89,6 +93,12 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const stop = () => {
+    const el = scroll
+    if (!el) return
+    if (!canScroll(el)) {
+      if (store.userScrolled) setStore("userScrolled", false)
+      return
+    }
     if (store.userScrolled) return
 
     setStore("userScrolled", true)
@@ -110,6 +120,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
   const handleScroll = () => {
     const el = scroll
     if (!el) return
+
+    if (!canScroll(el)) {
+      if (store.userScrolled) setStore("userScrolled", false)
+      return
+    }
 
     if (distanceFromBottom(el) < threshold()) {
       if (store.userScrolled) setStore("userScrolled", false)
@@ -149,6 +164,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
   createResizeObserver(
     () => store.contentRef,
     () => {
+      const el = scroll
+      if (el && !canScroll(el)) {
+        if (store.userScrolled) setStore("userScrolled", false)
+        return
+      }
       if (!active()) return
       if (store.userScrolled) return
       // ResizeObserver fires after layout, before paint.
@@ -159,7 +179,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   )
 
   createEffect(
-    on(options.working, (working) => {
+    on(options.working, (working: boolean) => {
       settling = false
       if (settleTimer) clearTimeout(settleTimer)
       settleTimer = undefined

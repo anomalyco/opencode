@@ -312,7 +312,11 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                   const active = () => i() === store.selected
                   const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
                   return (
-                    <box onMouseOver={() => moveTo(i())} onMouseUp={() => selectOption()}>
+                    <box
+                      onMouseOver={() => moveTo(i())}
+                      onMouseDown={() => moveTo(i())}
+                      onMouseUp={() => selectOption()}
+                    >
                       <box flexDirection="row">
                         <box backgroundColor={active() ? theme.backgroundElement : undefined} paddingRight={1}>
                           <text fg={active() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
@@ -337,7 +341,11 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                 }}
               </For>
               <Show when={custom()}>
-                <box onMouseOver={() => moveTo(options().length)} onMouseUp={() => selectOption()}>
+                <box
+                  onMouseOver={() => moveTo(options().length)}
+                  onMouseDown={() => moveTo(options().length)}
+                  onMouseUp={() => selectOption()}
+                >
                   <box flexDirection="row">
                     <box backgroundColor={other() ? theme.backgroundElement : undefined} paddingRight={1}>
                       <text fg={other() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
