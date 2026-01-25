@@ -7,6 +7,7 @@ import { useParams } from "@solidjs/router"
 import { getFilename } from "@opencode-ai/util/path"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
+import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 
 export type FileSelection = {
@@ -186,6 +187,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const sdk = useSDK()
     const sync = useSync()
     const params = useParams()
+    const language = useLanguage()
+
+    const scope = createMemo(() => sdk.directory)
 
     const directory = createMemo(() => sync.data.path.directory)
 
@@ -230,6 +234,12 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       file: Record<string, FileState>
     }>({
       file: {},
+    })
+
+    createEffect(() => {
+      scope()
+      inflight.clear()
+      setStore("file", {})
     })
 
     const viewCache = new Map<string, ViewCacheEntry>()
@@ -282,12 +292,16 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const path = normalize(input)
       if (!path) return Promise.resolve()
 
+      const directory = scope()
+      const key = `${directory}\n${path}`
+      const client = sdk.client
+
       ensure(path)
 
       const current = store.file[path]
       if (!options?.force && current?.loaded) return Promise.resolve()
 
-      const pending = inflight.get(path)
+      const pending = inflight.get(key)
       if (pending) return pending
 
       setStore(
@@ -299,9 +313,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         }),
       )
 
-      const promise = sdk.client.file
+      const promise = client.file
         .read({ path })
         .then((x) => {
+          if (scope() !== directory) return
           setStore(
             "file",
             path,
@@ -313,6 +328,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           )
         })
         .catch((e) => {
+          if (scope() !== directory) return
           setStore(
             "file",
             path,
@@ -323,15 +339,15 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           )
           showToast({
             variant: "error",
-            title: "Failed to load file",
+            title: language.t("toast.file.loadFailed.title"),
             description: e.message,
           })
         })
         .finally(() => {
-          inflight.delete(path)
+          inflight.delete(key)
         })
 
-      inflight.set(path, promise)
+      inflight.set(key, promise)
       return promise
     }
 
