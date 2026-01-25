@@ -88,9 +88,6 @@
     }
   }
 
-  [data-slot="session-turn-response-trigger"] {
-    width: fit-content;
-  }
 
   [data-slot="session-turn-message-header"] {
     display: flex;
@@ -483,7 +480,7 @@
   }
 
   [data-slot="session-turn-collapsible-trigger-content"] {
-    width: fit-content;
+    max-width: 100%;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -512,6 +509,11 @@
 
   [data-slot="session-turn-retry-attempt"] {
     color: var(--text-weak);
+  }
+
+  [data-slot="session-turn-status-text"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   [data-slot="session-turn-details-text"] {
