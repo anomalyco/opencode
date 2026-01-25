@@ -10,7 +10,7 @@ import { BrokerClient, type UserInfo } from "../../auth/broker-client"
 import { getUserInfo } from "../../auth/user-info"
 import { ServerAuth } from "../../config/server-auth"
 import { Log } from "../../util/log"
-import { createLoginRateLimiter, createOtpRateLimiter, getClientIP } from "../security/rate-limit"
+import { createManualRateLimiter, getClientIP, type ManualRateLimiter } from "../security/rate-limit"
 import { parseDuration } from "../../util/duration"
 import { getConnectionSecurityInfo, shouldBlockInsecureLogin } from "../security/https-detection"
 import { create2FAToken, verify2FAToken, type TwoFactorUserInfo } from "../../auth/two-factor-token"
@@ -68,32 +68,32 @@ const loginRequestSchema = z.object({
 })
 
 /**
- * Lazy-initialized rate limiter for login endpoint.
- * Only created when auth is enabled and rate limiting is not disabled.
+ * Lazy-initialized manual rate limiter for login endpoint.
+ * Only counts failed attempts - successful logins don't increment counter.
  */
-const loginRateLimiter = lazy(() => {
+const loginRateLimiter = lazy((): ManualRateLimiter | undefined => {
   const authConfig = ServerAuth.get()
   if (!authConfig.enabled || authConfig.rateLimiting === false) {
     return undefined
   }
   const windowMs = parseDuration(authConfig.rateLimitWindow ?? "15m") ?? 15 * 60 * 1000
-  return createLoginRateLimiter({
+  return createManualRateLimiter({
     windowMs,
     limit: authConfig.rateLimitMax ?? 5,
   })
 })
 
 /**
- * Lazy-initialized rate limiter for OTP validation.
- * Only counts failed attempts (successful OTP validations don't count against limit).
+ * Lazy-initialized manual rate limiter for OTP validation.
+ * Only counts failed attempts - successful OTP validations don't increment counter.
  */
-const otpRateLimiter = lazy(() => {
+const otpRateLimiter = lazy((): ManualRateLimiter | undefined => {
   const authConfig = ServerAuth.get()
   if (!authConfig.enabled || authConfig.rateLimiting === false) {
     return undefined
   }
   const windowMs = parseDuration(authConfig.otpRateLimitWindow ?? "15m") ?? 15 * 60 * 1000
-  return createOtpRateLimiter({
+  return createManualRateLimiter({
     windowMs,
     limit: authConfig.otpRateLimitMax ?? 5,
   })
@@ -1515,11 +1515,10 @@ export const AuthRoutes = lazy(() =>
           return c.json({ error: "https_required", message: "HTTPS is required for login" }, 403)
         }
 
-        // 2. Apply rate limiting if enabled
-        const rateLimiter = loginRateLimiter()
-        if (rateLimiter) {
-          // Cast context - rate limiter only uses request headers, not env bindings
-          const rateLimitResult = await rateLimiter(c as Parameters<typeof rateLimiter>[0], async () => {})
+        // 2. Check rate limiting if enabled
+        const limiter = loginRateLimiter()
+        if (limiter) {
+          const rateLimitResult = limiter.checkRateLimit(c)
           if (rateLimitResult) {
             return rateLimitResult
           }
@@ -1589,6 +1588,8 @@ export const AuthRoutes = lazy(() =>
             timestamp,
             userAgent,
           })
+          // Record failure for rate limiting
+          limiter?.recordFailure(c)
           // Generic error message - no user enumeration
           return c.json({ error: "auth_failed", message: "Authentication failed" }, 401)
         }
@@ -1605,6 +1606,8 @@ export const AuthRoutes = lazy(() =>
             timestamp,
             userAgent,
           })
+          // Record failure for rate limiting
+          limiter?.recordFailure(c)
           return c.json({ error: "auth_failed", message: "Authentication failed" }, 401)
         }
 
@@ -1814,10 +1817,10 @@ export const AuthRoutes = lazy(() =>
           return c.json({ error: "token_expired", message: "2FA session expired, please login again" }, 401)
         }
 
-        // Rate limit OTP attempts (only counts failed attempts)
-        const limiter = otpRateLimiter()
-        if (limiter) {
-          const rateLimitResult = await limiter(c as Parameters<typeof limiter>[0], async () => {})
+        // Check rate limiting for OTP attempts
+        const otpLimiter = otpRateLimiter()
+        if (otpLimiter) {
+          const rateLimitResult = otpLimiter.checkRateLimit(c)
           if (rateLimitResult) return rateLimitResult
         }
 
@@ -1869,6 +1872,8 @@ export const AuthRoutes = lazy(() =>
             timestamp,
             userAgent,
           })
+          // Record failure for rate limiting
+          otpLimiter?.recordFailure(c)
           return c.json({ error: "invalid_code", message: "Invalid verification code" }, 401)
         }
 

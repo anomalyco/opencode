@@ -13,6 +13,123 @@ export interface RateLimitConfig {
 }
 
 /**
+ * Simple in-memory rate limit store.
+ * Tracks failed attempts per key with automatic cleanup of expired entries.
+ */
+interface RateLimitEntry {
+  count: number
+  resetAt: number
+}
+
+const failureStore = new Map<string, RateLimitEntry>()
+
+/**
+ * Clean up expired entries from the store.
+ */
+function cleanupExpiredEntries(): void {
+  const now = Date.now()
+  for (const [key, entry] of failureStore) {
+    if (now >= entry.resetAt) {
+      failureStore.delete(key)
+    }
+  }
+}
+
+// Cleanup every 5 minutes
+setInterval(cleanupExpiredEntries, 5 * 60 * 1000)
+
+/**
+ * Manual rate limiter for tracking failed attempts only.
+ *
+ * Usage:
+ * 1. Call `checkRateLimit()` before processing - returns error response if limited
+ * 2. Call `recordFailure()` after a failed attempt to increment counter
+ * 3. Successful attempts don't need any action (counter not incremented)
+ */
+export interface ManualRateLimiter {
+  /**
+   * Check if the key is rate limited.
+   * @returns Error response if rate limited, undefined if allowed
+   */
+  checkRateLimit: (c: Context) => Response | undefined
+
+  /**
+   * Record a failed attempt for the key.
+   */
+  recordFailure: (c: Context) => void
+}
+
+/**
+ * Create a manual rate limiter that only counts failures.
+ *
+ * @param config - Rate limit configuration
+ * @returns Manual rate limiter with check and record functions
+ */
+export function createManualRateLimiter(config?: RateLimitConfig): ManualRateLimiter {
+  const windowMs = config?.windowMs ?? 15 * 60 * 1000 // 15 minutes
+  const limit = config?.limit ?? 5
+
+  return {
+    checkRateLimit: (c: Context): Response | undefined => {
+      const key = getClientIP(c)
+      const now = Date.now()
+      const entry = failureStore.get(key)
+
+      // No entry or expired - allowed
+      if (!entry || now >= entry.resetAt) {
+        return undefined
+      }
+
+      // Under limit - allowed
+      if (entry.count < limit) {
+        return undefined
+      }
+
+      // Rate limited
+      const ip = getClientIP(c)
+      const timestamp = new Date().toISOString()
+
+      log.warn("[SECURITY] Rate limit exceeded", {
+        ip,
+        timestamp,
+        user_agent: c.req.header("User-Agent"),
+        failures: entry.count,
+      })
+
+      const retryAfterSeconds = Math.ceil((entry.resetAt - now) / 1000)
+
+      return c.json(
+        {
+          error: "rate_limit_exceeded",
+          message: "Too many failed attempts. Please try again later.",
+        },
+        429,
+        {
+          "Retry-After": retryAfterSeconds.toString(),
+        },
+      ) as unknown as Response
+    },
+
+    recordFailure: (c: Context): void => {
+      const key = getClientIP(c)
+      const now = Date.now()
+      const entry = failureStore.get(key)
+
+      if (!entry || now >= entry.resetAt) {
+        // Start new window
+        failureStore.set(key, {
+          count: 1,
+          resetAt: now + windowMs,
+        })
+      } else {
+        // Increment existing
+        entry.count++
+      }
+    },
+  }
+}
+
+/**
  * Extract client IP address from request headers.
  *
  * Checks X-Forwarded-For (takes first IP), falls back to X-Real-IP,
