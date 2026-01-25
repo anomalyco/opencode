@@ -190,14 +190,14 @@ Plans:
 **Plans**: 8 plans
 
 Plans:
-- [ ] 10-01-PLAN.md — 2FA config and broker OTP module (config schema, has_2fa_configured, validate_otp)
-- [ ] 10-02-PLAN.md — Broker protocol extension (Check2fa, AuthenticateOtp methods)
-- [ ] 10-03-PLAN.md — Token utilities (device trust JWT, 2FA token JWT)
-- [ ] 10-04-PLAN.md — BrokerClient 2FA methods (check2fa, authenticateOtp)
-- [ ] 10-05-PLAN.md — Auth routes 2FA flow (2fa_required response, /login/2fa endpoint)
-- [ ] 10-06-PLAN.md — 2FA verification page (countdown timer, auto-submit, remember device)
-- [ ] 10-07-PLAN.md — Setup wizard (QR code generation, verification)
-- [ ] 10-08-PLAN.md — Device trust UI (revoke device, setup link in dropdown)
+- [x] 10-01-PLAN.md — 2FA config and broker OTP module (config schema, has_2fa_configured, validate_otp)
+- [x] 10-02-PLAN.md — Broker protocol extension (Check2fa, AuthenticateOtp methods)
+- [x] 10-03-PLAN.md — Token utilities (device trust JWT, 2FA token JWT)
+- [x] 10-04-PLAN.md — BrokerClient 2FA methods (check2fa, authenticateOtp)
+- [x] 10-05-PLAN.md — Auth routes 2FA flow (2fa_required response, /login/2fa endpoint)
+- [x] 10-06-PLAN.md — 2FA verification page (countdown timer, auto-submit, remember device)
+- [x] 10-07-PLAN.md — Setup wizard (QR code generation, verification)
+- [x] 10-08-PLAN.md — Device trust UI (revoke device, setup link in dropdown)
 
 ### Phase 11: Documentation
 **Goal**: Users have clear guides for deployment with auth enabled
@@ -208,10 +208,13 @@ Plans:
   2. PAM service file documentation explains configuration
   3. Troubleshooting section covers common PAM issues
   4. Documentation is accessible from project README or docs site
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 11-01: TBD
+- [ ] 11-01-PLAN.md — Docs structure and reverse proxy guide (nginx, Caddy, TLS, WebSocket)
+- [ ] 11-02-PLAN.md — PAM configuration guide (setup, LDAP, 2FA, broker)
+- [ ] 11-03-PLAN.md — Troubleshooting guide (flowcharts, debugging, common errors)
+- [ ] 11-04-PLAN.md — Index finalization and README integration
 
 ### Phase 12: Server-Side TOTP Registration
 **Goal**: Simplify TOTP setup by having the server create ~/.google_authenticator instead of requiring users to run shell commands
@@ -281,7 +284,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 8. Session Enhancements | 4/4 | Complete | 2026-01-23 |
 | 9. Connection Security UI | 2/2 | Complete | 2026-01-24 |
 | 10. Two-Factor Authentication | 8/8 | Complete | 2026-01-24 |
-| 11. Documentation | 0/TBD | Not started | - |
+| 11. Documentation | 0/4 | Not started | - |
 | 12. Server-Side TOTP Registration | 0/TBD | Not started | - |
 | 13. Passkeys Investigation | 0/TBD | Not started | - |
 | 14. Persistent Session Storage | 0/TBD | Not started | - |
