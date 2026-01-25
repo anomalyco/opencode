@@ -170,7 +170,12 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
       if (result.ok) {
         await refetch()
         await loadBrowserSessions()
+      } else {
+        const error = await result.json().catch(() => ({ message: "Unknown error" }))
+        alert(`Refresh failed: ${error.message || "Unknown error"}`)
       }
+    } catch (e) {
+      alert(`Refresh error: ${e}`)
     } finally {
       setRefreshingBrowser(null)
     }
@@ -185,7 +190,12 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
       if (result.ok) {
         await refetch()
         await loadBrowserSessions()
+      } else {
+        const error = await result.json().catch(() => ({ message: "Unknown error" }))
+        alert(`Rebind failed: ${error.message || "Unknown error"}`)
       }
+    } catch (e) {
+      alert(`Rebind error: ${e}`)
     } finally {
       setRebindingBrowser(null)
     }

@@ -608,33 +608,87 @@ export namespace AuthBrowser {
             if (code) break
           }
 
-          // Try to click "Authorize" button if we're on consent screen
+          // Try to dismiss cookie banner first, then click "Authorize" button (language-agnostic)
           if (!clickedAuthorize && currentUrl.includes("claude.ai")) {
             try {
-              // Try multiple selectors for the authorize button
+              // Try to dismiss cookie banner if present
+              const dismissedCookie = await page.evaluate(() => {
+                // Look for cookie-related containers
+                const cookieSelectors = [
+                  '[data-testid*="cookie"]',
+                  '[class*="cookie"]',
+                  '[id*="cookie"]',
+                  '[class*="consent"]',
+                  '[id*="consent"]',
+                ]
+
+                for (const selector of cookieSelectors) {
+                  const container = document.querySelector(selector)
+                  if (container) {
+                    const buttons = Array.from(container.querySelectorAll("button"))
+                    if (buttons.length > 0) {
+                      // Click the last button (usually "Accept All")
+                      buttons[buttons.length - 1].click()
+                      return true
+                    }
+                  }
+                }
+                return false
+              })
+              if (dismissedCookie) {
+                log.info("dismissed cookie banner")
+                await new Promise((resolve) => setTimeout(resolve, 1000))
+              }
+
+              // Try to find and click the authorize button (language-agnostic)
+              // Strategy: Find the primary button (with solid background) that's not a deny button
               const clicked = await page.evaluate(() => {
-                // Find button with text "Authorize"
-                const buttons = Array.from(document.querySelectorAll("button"))
-                for (const btn of buttons) {
-                  if (btn.textContent?.trim() === "Authorize" || btn.textContent?.includes("Authorize")) {
+                const mainContent = document.querySelector("main") || document.body
+                const buttons = Array.from(mainContent.querySelectorAll("button"))
+
+                // Filter visible, enabled buttons
+                const visibleButtons = buttons.filter((btn) => {
+                  const style = getComputedStyle(btn)
+                  return (
+                    style.display !== "none" &&
+                    style.visibility !== "hidden" &&
+                    !btn.disabled &&
+                    btn.offsetParent !== null
+                  )
+                })
+
+                // Deny patterns to skip (common words across languages)
+                const denyPatterns = ["deny", "cancel", "reject", "decline", "no", "nein", "non", "nie"]
+
+                // Find primary button (with background color = filled/primary style)
+                for (const btn of visibleButtons) {
+                  const bg = getComputedStyle(btn).backgroundColor
+                  const text = btn.textContent?.toLowerCase() || ""
+
+                  if (denyPatterns.some((p) => text.includes(p))) continue
+
+                  const hasBackground = bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent"
+                  if (hasBackground) {
                     btn.click()
                     return true
                   }
                 }
-                // Also try input submit buttons
-                const inputs = Array.from(document.querySelectorAll('input[type="submit"]'))
-                for (const input of inputs) {
-                  if ((input as HTMLInputElement).value?.includes("Authorize")) {
-                    ;(input as HTMLInputElement).click()
+
+                // Fallback: first non-deny button
+                for (const btn of visibleButtons) {
+                  const text = btn.textContent?.toLowerCase() || ""
+                  if (!denyPatterns.some((p) => text.includes(p))) {
+                    btn.click()
                     return true
                   }
                 }
+
                 return false
               })
               if (clicked) {
                 log.info("clicked authorize button")
                 clickedAuthorize = true
-                await new Promise((resolve) => setTimeout(resolve, 2000)) // Wait for redirect
+                await new Promise((resolve) => setTimeout(resolve, 2000))
               }
             } catch {
               // Button not found or click failed, continue polling
@@ -646,6 +700,15 @@ export namespace AuthBrowser {
       }
 
       if (!code) {
+        // Save debug screenshot for troubleshooting
+        try {
+          const screenshotPath = path.join(profilePath, "debug-screenshot.png")
+          await page.screenshot({ path: screenshotPath, fullPage: true })
+          log.info("saved debug screenshot", { screenshotPath })
+        } catch {
+          // Screenshot failed
+        }
+
         throw new Error("Session expired or refresh timed out. Please run setup again.")
       }
 
