@@ -106,10 +106,13 @@
           [data-slot="cta-button"] {
             background: var(--color-background-strong);
             color: var(--color-text-inverted);
-            padding: 8px 16px;
+            padding: 8px 16px 8px 10px;
             border-radius: 4px;
             font-weight: 500;
             text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
 
             @media (max-width: 55rem) {
               display: none;

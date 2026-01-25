@@ -5,8 +5,6 @@ import { useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
-// import { useServer } from "@/context/server"
-// import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { usePlatform } from "@/context/platform"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -256,7 +254,7 @@ export function SessionHeader() {
                 >
                   <Button
                     variant="ghost"
-                    class="group/terminal-toggle size-5 p-0"
+                    class="group/terminal-toggle size-6 p-0"
                     onClick={() => view().terminal.toggle()}
                     aria-label={language.t("command.terminal.toggle")}
                     aria-expanded={view().terminal.opened()}
@@ -286,7 +284,7 @@ export function SessionHeader() {
                 <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button
                     variant="ghost"
-                    class="group/review-toggle size-5 p-0"
+                    class="group/review-toggle size-6 p-0"
                     onClick={() => view().reviewPanel.toggle()}
                     aria-label={language.t("command.review.toggle")}
                     aria-expanded={view().reviewPanel.opened()}
