@@ -10,7 +10,7 @@ import { BrokerClient, type UserInfo } from "../../auth/broker-client"
 import { getUserInfo } from "../../auth/user-info"
 import { ServerAuth } from "../../config/server-auth"
 import { Log } from "../../util/log"
-import { createLoginRateLimiter, getClientIP } from "../security/rate-limit"
+import { createLoginRateLimiter, createOtpRateLimiter, getClientIP } from "../security/rate-limit"
 import { parseDuration } from "../../util/duration"
 import { getConnectionSecurityInfo, shouldBlockInsecureLogin } from "../security/https-detection"
 import { create2FAToken, verify2FAToken, type TwoFactorUserInfo } from "../../auth/two-factor-token"
@@ -80,6 +80,22 @@ const loginRateLimiter = lazy(() => {
   return createLoginRateLimiter({
     windowMs,
     limit: authConfig.rateLimitMax ?? 5,
+  })
+})
+
+/**
+ * Lazy-initialized rate limiter for OTP validation.
+ * Only counts failed attempts (successful OTP validations don't count against limit).
+ */
+const otpRateLimiter = lazy(() => {
+  const authConfig = ServerAuth.get()
+  if (!authConfig.enabled || authConfig.rateLimiting === false) {
+    return undefined
+  }
+  const windowMs = parseDuration(authConfig.otpRateLimitWindow ?? "15m") ?? 15 * 60 * 1000
+  return createOtpRateLimiter({
+    windowMs,
+    limit: authConfig.otpRateLimitMax ?? 5,
   })
 })
 
@@ -1798,10 +1814,10 @@ export const AuthRoutes = lazy(() =>
           return c.json({ error: "token_expired", message: "2FA session expired, please login again" }, 401)
         }
 
-        // Rate limit OTP attempts
-        const rateLimiter = loginRateLimiter()
-        if (rateLimiter) {
-          const rateLimitResult = await rateLimiter(c as Parameters<typeof rateLimiter>[0], async () => {})
+        // Rate limit OTP attempts (only counts failed attempts)
+        const limiter = otpRateLimiter()
+        if (limiter) {
+          const rateLimitResult = await limiter(c as Parameters<typeof limiter>[0], async () => {})
           if (rateLimitResult) return rateLimitResult
         }
 

@@ -80,3 +80,49 @@ export function createLoginRateLimiter(config?: RateLimitConfig) {
     },
   })
 }
+
+/**
+ * Create a rate limiter for OTP validation that only counts failed attempts.
+ *
+ * Unlike the login rate limiter, this only increments the counter when
+ * the request fails (status >= 400). Successful OTP validations don't
+ * count against the limit.
+ *
+ * @param config - Rate limit configuration
+ * @returns Rate limiter middleware
+ */
+export function createOtpRateLimiter(config?: RateLimitConfig) {
+  const windowMs = config?.windowMs ?? 15 * 60 * 1000 // 15 minutes
+  const limit = config?.limit ?? 5
+
+  return rateLimiter({
+    windowMs,
+    limit,
+    standardHeaders: "draft-7",
+    keyGenerator: (c) => getClientIP(c),
+    skipSuccessfulRequests: true, // Only count failed attempts (status >= 400)
+    handler: (c) => {
+      const ip = getClientIP(c)
+      const timestamp = new Date().toISOString()
+
+      log.warn("[SECURITY] OTP rate limit exceeded", {
+        ip,
+        timestamp,
+        user_agent: c.req.header("User-Agent"),
+      })
+
+      const retryAfterSeconds = Math.ceil(windowMs / 1000)
+
+      return c.json(
+        {
+          error: "rate_limit_exceeded",
+          message: "Too many verification attempts. Please try again later.",
+        },
+        429,
+        {
+          "Retry-After": retryAfterSeconds.toString(),
+        },
+      )
+    },
+  })
+}
