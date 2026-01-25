@@ -20,6 +20,16 @@ interface ProviderUsage {
   percentage: number
 }
 
+interface ModelUsage {
+  model: string
+  provider: string
+  input: number
+  output: number
+  cost: number
+  requests: number
+  total: number
+}
+
 function getProviderEmoji(provider: string): string {
   const p = provider.toLowerCase()
   if (p.includes("anthropic")) return "🟣"
@@ -27,7 +37,31 @@ function getProviderEmoji(provider: string): string {
   if (p.includes("openai")) return "🟢"
   if (p.includes("antigravity")) return "🌌"
   if (p.includes("xai") || p.includes("grok")) return "⚡"
+  if (p.includes("groq")) return "🟠"
+  if (p.includes("mistral")) return "🔶"
+  if (p.includes("deepseek")) return "🐋"
   return "⚪"
+}
+
+function shortenModelName(model: string): string {
+  return model
+    .replace("claude-", "")
+    .replace("gpt-", "")
+    .replace("gemini-", "")
+    .replace("-latest", "")
+    .replace("-20250514", "")
+    .replace("-20250219", "")
+    .replace("-20241022", "")
+    .replace("-20240620", "")
+}
+
+function formatCost(n: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  }).format(n)
 }
 
 function getProviderLabel(provider: string): string {
@@ -101,6 +135,42 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     return result.sort((a, b) => b.tokens - a.tokens)
   })
 
+  // Per-model usage breakdown
+  const modelUsage = createMemo((): ModelUsage[] => {
+    const byModel = new Map<string, { provider: string; input: number; output: number; cost: number; requests: number }>()
+
+    for (const msg of messages()) {
+      if (msg.role !== "assistant") continue
+      const assistant = msg as AssistantMessage
+      const providerId = assistant.providerID || "unknown"
+      const modelId = assistant.modelID || "unknown"
+      const key = `${providerId}:${modelId}`
+
+      const existing = byModel.get(key) || { provider: providerId, input: 0, output: 0, cost: 0, requests: 0 }
+      existing.input += assistant.tokens.input + assistant.tokens.cache.read
+      existing.output += assistant.tokens.output + assistant.tokens.reasoning
+      existing.cost += assistant.cost || 0
+      existing.requests += 1
+      byModel.set(key, existing)
+    }
+
+    const result: ModelUsage[] = []
+    for (const [key, usage] of byModel) {
+      const modelId = key.split(":").slice(1).join(":")
+      result.push({
+        model: modelId,
+        provider: usage.provider,
+        input: usage.input,
+        output: usage.output,
+        cost: usage.cost,
+        requests: usage.requests,
+        total: usage.input + usage.output,
+      })
+    }
+
+    return result.sort((a, b) => b.total - a.total)
+  })
+
   const totalTokens = createMemo(() => {
     return providerUsage().reduce((sum, x) => sum + x.tokens, 0)
   })
@@ -160,7 +230,31 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
           </div>
         </div>
       </Show>
-      
+
+      {/* Model Usage Breakdown */}
+      <Show when={modelUsage().length > 0}>
+        <div class="mb-2 pb-2 border-b border-border-base/30">
+          <div class="text-11-medium text-text-invert-base mb-1.5">Model Usage</div>
+          <For each={modelUsage()}>
+            {(usage) => (
+              <div class="py-0.5">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-1.5">
+                    <span>{getProviderEmoji(usage.provider)}</span>
+                    <span class="text-text-invert-base text-11-regular truncate max-w-32">{shortenModelName(usage.model)}</span>
+                  </div>
+                  <span class="text-text-invert-weak text-10-regular">{usage.requests}x</span>
+                </div>
+                <div class="flex items-center justify-between gap-3 pl-5">
+                  <span class="text-text-invert-weak text-10-regular">↑{formatTokens(usage.input)} ↓{formatTokens(usage.output)}</span>
+                  <span class="text-text-invert-strong text-10-medium">{formatCost(usage.cost)}</span>
+                </div>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+
       {/* Context Window Usage */}
       <Show when={context()}>
         {(ctx) => (

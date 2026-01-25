@@ -25,6 +25,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     diff: true,
     todo: true,
     lsp: true,
+    models: true,
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -51,37 +52,90 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   // Provider usage statistics (including Antigravity)
   const providerUsage = createMemo(() => {
     const usage: Record<string, { input: number; output: number; cost: number; requests: number }> = {}
-    
+
     for (const msg of messages()) {
       if (msg.role !== "assistant") continue
       const assistant = msg as AssistantMessage
-      
+
       // Determine provider name
       let providerName = assistant.providerID || "unknown"
       const modelID = assistant.modelID || ""
-      
+
       // Check if it's an Antigravity model
       if (modelID.includes("antigravity") || providerName.includes("antigravity")) {
         providerName = "antigravity"
       } else if (providerName === "google" && modelID.includes("antigravity")) {
         providerName = "antigravity"
       }
-      
+
       if (!usage[providerName]) {
         usage[providerName] = { input: 0, output: 0, cost: 0, requests: 0 }
       }
-      
+
       usage[providerName].input += assistant.tokens.input + assistant.tokens.cache.read
       usage[providerName].output += assistant.tokens.output + assistant.tokens.reasoning
       usage[providerName].cost += assistant.cost
       usage[providerName].requests += 1
     }
-    
+
     // Sort by total tokens descending
     return Object.entries(usage)
       .map(([provider, stats]) => ({ provider, ...stats, total: stats.input + stats.output }))
       .sort((a, b) => b.total - a.total)
   })
+
+  // Model usage statistics (per-model breakdown)
+  const modelUsage = createMemo(() => {
+    const usage: Record<string, { provider: string; input: number; output: number; cost: number; requests: number }> = {}
+
+    for (const msg of messages()) {
+      if (msg.role !== "assistant") continue
+      const assistant = msg as AssistantMessage
+
+      const providerName = assistant.providerID || "unknown"
+      const modelID = assistant.modelID || "unknown"
+      const key = `${providerName}:${modelID}`
+
+      if (!usage[key]) {
+        usage[key] = { provider: providerName, input: 0, output: 0, cost: 0, requests: 0 }
+      }
+
+      usage[key].input += assistant.tokens.input + assistant.tokens.cache.read
+      usage[key].output += assistant.tokens.output + assistant.tokens.reasoning
+      usage[key].cost += assistant.cost
+      usage[key].requests += 1
+    }
+
+    // Sort by total tokens descending
+    return Object.entries(usage)
+      .map(([key, stats]) => {
+        const modelID = key.split(":").slice(1).join(":")
+        return { model: modelID, ...stats, total: stats.input + stats.output }
+      })
+      .sort((a, b) => b.total - a.total)
+  })
+
+  const formatCost = (n: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 4,
+      maximumFractionDigits: 4,
+    }).format(n)
+  }
+
+  const shortenModelName = (model: string) => {
+    // Shorten common model names for display
+    return model
+      .replace("claude-", "")
+      .replace("gpt-", "")
+      .replace("gemini-", "")
+      .replace("-latest", "")
+      .replace("-20250514", "")
+      .replace("-20250219", "")
+      .replace("-20241022", "")
+      .replace("-20240620", "")
+  }
 
   const formatTokens = (n: number) => {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -170,6 +224,64 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     )
                   }}
                 </For>
+              </box>
+            </Show>
+            <Show when={modelUsage().length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => modelUsage().length > 3 && setExpanded("models", !expanded.models)}
+                >
+                  <Show when={modelUsage().length > 3}>
+                    <text fg={theme.text}>{expanded.models ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Model Usage</b>
+                    <Show when={!expanded.models}>
+                      <span style={{ fg: theme.textMuted }}> ({modelUsage().length} models)</span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={modelUsage().length <= 3 || expanded.models}>
+                  <For each={modelUsage()}>
+                    {(item) => {
+                      const providerIcon = () => {
+                        switch (item.provider.toLowerCase()) {
+                          case "antigravity": return "🌌"
+                          case "anthropic": return "🟣"
+                          case "google": return "🔵"
+                          case "openai": return "🟢"
+                          case "xai": return "⚡"
+                          case "groq": return "🟠"
+                          case "mistral": return "🔶"
+                          case "deepseek": return "🐋"
+                          default: return "⚪"
+                        }
+                      }
+                      return (
+                        <box>
+                          <box flexDirection="row" gap={1} justifyContent="space-between">
+                            <text fg={theme.text} wrapMode="char">
+                              {providerIcon()} {shortenModelName(item.model)}
+                            </text>
+                            <text fg={theme.textMuted} flexShrink={0}>
+                              {item.requests}x
+                            </text>
+                          </box>
+                          <box flexDirection="row" gap={1} justifyContent="space-between" paddingLeft={2}>
+                            <text fg={theme.textMuted}>
+                              ↑{formatTokens(item.input)} ↓{formatTokens(item.output)}
+                            </text>
+                            <text fg={theme.textMuted} flexShrink={0}>
+                              {formatCost(item.cost)}
+                            </text>
+                          </box>
+                        </box>
+                      )
+                    }}
+                  </For>
+                </Show>
               </box>
             </Show>
             <Show when={mcpEntries().length > 0}>
