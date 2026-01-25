@@ -900,7 +900,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .abort({
         sessionID,
       })
-      .catch(() => {})
+      .catch(() => { })
   }
 
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
@@ -1324,18 +1324,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const contextParts: Array<
       | {
-          id: string
-          type: "text"
-          text: string
-          synthetic?: boolean
-        }
+        id: string
+        type: "text"
+        text: string
+        synthetic?: boolean
+      }
       | {
-          id: string
-          type: "file"
-          mime: string
-          url: string
-          filename?: string
-        }
+        id: string
+        type: "file"
+        mime: string
+        url: string
+        filename?: string
+      }
     > = []
 
     const commentNote = (path: string, selection: FileSelection | undefined, comment: string) => {
@@ -2021,7 +2021,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             >
               <IconButton
                 type="submit"
-                disabled={!prompt.dirty() && !working() && commentCount() === 0}
+                disabled={!prompt.dirty() && !working()}
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
                 class="h-6 w-4.5"
