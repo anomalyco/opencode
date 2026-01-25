@@ -1089,6 +1089,10 @@ export namespace Config {
           realtime: z
             .object({
               enabled: z.boolean().optional().describe("Enable realtime voice mode"),
+              model: z
+                .string()
+                .optional()
+                .describe("OpenAI realtime model (default: gpt-4o-realtime-preview)"),
               voice: z
                 .enum(["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"])
                 .optional()
