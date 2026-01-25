@@ -34,6 +34,7 @@ import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
+import { DialogShowAccounts } from "@/components/dialog-show-accounts"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useNavigate, useParams } from "@solidjs/router"
@@ -668,6 +669,14 @@ export default function Page() {
       keybind: "mod+;",
       slash: "mcp",
       onSelect: () => dialog.show(() => <DialogSelectMcp />),
+    },
+    {
+      id: "accounts.show",
+      title: "Show accounts",
+      description: "View configured authentication accounts",
+      category: "Account",
+      slash: "accounts",
+      onSelect: () => dialog.show(() => <DialogShowAccounts />),
     },
     {
       id: "agent.cycle",

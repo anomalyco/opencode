@@ -1,13 +1,14 @@
 import { createResource, createMemo, createSignal, For, Show } from "solid-js"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
+import { useDialog } from "@tui/ui/dialog"
 import { useTheme } from "../context/theme"
 import { Account } from "@/account"
 import { TextAttributes } from "@opentui/core"
-import { useDialog } from "@tui/ui/dialog"
+import { useKeyboard } from "@opentui/solid"
 
 export function DialogAccounts() {
-  const { theme } = useTheme()
   const dialog = useDialog()
+  const { theme } = useTheme()
 
   const [accounts, { refetch }] = createResource(() => Account.list())
   const [actionMessage, setActionMessage] = createSignal<string | null>(null)
@@ -61,6 +62,17 @@ export function DialogAccounts() {
     }
   }
 
+  const openDetail = (account: Account.Entry) => {
+    dialog.replace(() => (
+      <AccountDetailView 
+        account={account} 
+        onBack={() => dialog.replace(() => <DialogAccounts />)}
+        onRefetch={refetch}
+        showMessage={showMessage}
+      />
+    ))
+  }
+
   const options = createMemo((): DialogSelectOption<Account.Entry>[] => {
     const list = accounts() ?? []
     return list.map((account) => ({
@@ -68,9 +80,7 @@ export function DialogAccounts() {
       title: account.email || account.accountId || `Account #${(account.index ?? 0) + 1}`,
       category: account.provider,
       footer: getStatusText(account.status, account.isActive),
-      onSelect: () => {
-        dialog.replace(() => <DialogAccountDetail account={account} onBack={() => dialog.replace(() => <DialogAccounts />)} onRefetch={refetch} />)
-      },
+      onSelect: () => openDetail(account),
     }))
   })
 
@@ -88,17 +98,17 @@ export function DialogAccounts() {
         skipFilter={false}
         keybind={[
           {
-            keybind: { key: "s" },
+            keybind: { name: "s", ctrl: true, meta: false, shift: false, leader: false },
             title: "switch",
             onTrigger: (opt) => handleSwitch(opt.value),
           },
           {
-            keybind: { key: "r" },
+            keybind: { name: "r", ctrl: true, meta: false, shift: false, leader: false },
             title: "refresh",
             onTrigger: (opt) => handleRefresh(opt.value),
           },
           {
-            keybind: { key: "d" },
+            keybind: { name: "d", ctrl: true, meta: false, shift: false, leader: false },
             title: "delete",
             onTrigger: (opt) => handleDelete(opt.value),
           },
@@ -108,22 +118,20 @@ export function DialogAccounts() {
   )
 }
 
-function DialogAccountDetail(props: { account: Account.Entry; onBack: () => void; onRefetch: () => void }) {
+function AccountDetailView(props: { 
+  account: Account.Entry
+  onBack: () => void
+  onRefetch: () => void
+  showMessage: (msg: string) => void
+}) {
   const { theme } = useTheme()
-  const dialog = useDialog()
   const account = props.account
-
-  const quotaColor = (pct: number) => {
-    const color = Account.getQuotaColor(pct)
-    if (color === "success") return theme.success
-    if (color === "warning") return theme.warning
-    return theme.error
-  }
 
   const handleSwitch = async () => {
     if (account.isActive) return
     const success = await Account.setActive(account.id)
     if (success) {
+      props.showMessage("Switched")
       props.onRefetch()
       props.onBack()
     }
@@ -131,6 +139,7 @@ function DialogAccountDetail(props: { account: Account.Entry; onBack: () => void
 
   const handleRefresh = async () => {
     await Account.clearRateLimits(account.id)
+    props.showMessage("Cleared limits")
     props.onRefetch()
     props.onBack()
   }
@@ -138,10 +147,30 @@ function DialogAccountDetail(props: { account: Account.Entry; onBack: () => void
   const handleDelete = async () => {
     const success = await Account.remove(account.id)
     if (success) {
+      props.showMessage("Removed")
       props.onRefetch()
       props.onBack()
     }
   }
+
+  useKeyboard((evt) => {
+    if (evt.name === "b" || evt.name === "q") {
+      evt.preventDefault()
+      props.onBack()
+    }
+    if (evt.name === "s" && !account.isActive) {
+      evt.preventDefault()
+      handleSwitch()
+    }
+    if (evt.name === "r") {
+      evt.preventDefault()
+      handleRefresh()
+    }
+    if (evt.name === "d") {
+      evt.preventDefault()
+      handleDelete()
+    }
+  })
 
   return (
     <box flexDirection="column" gap={1} paddingLeft={4} paddingRight={4} paddingBottom={1}>
@@ -149,7 +178,7 @@ function DialogAccountDetail(props: { account: Account.Entry; onBack: () => void
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           {account.email || "Account Details"}
         </text>
-        <text fg={theme.textMuted}>esc</text>
+        <text fg={theme.textMuted}>[b/q] back</text>
       </box>
 
       <box flexDirection="column" gap={0} paddingTop={1}>
@@ -169,18 +198,30 @@ function DialogAccountDetail(props: { account: Account.Entry; onBack: () => void
         <box flexDirection="column" gap={0} paddingTop={1}>
           <text fg={theme.textMuted}>Quotas</text>
           <For each={account.quotas}>
-            {(quota) => (
-              <text>
-                <span style={{ fg: theme.text }}>{quota.displayName.padEnd(14)}</span>
-                <span style={{ fg: quotaColor(quota.percentage) }}>{Account.createProgressBar(quota.percentage, 10)} {quota.percentage.toString().padStart(3)}%</span>
-                <span style={{ fg: theme.textMuted }}> {quota.resetTime ? Account.formatTimeRemaining(quota.resetTime) : ""}</span>
-              </text>
-            )}
+            {(quota) => {
+              const bar = Account.createProgressBar(quota.percentage, 10)
+              const colorType = Account.getQuotaColor(quota.percentage)
+              const color = colorType === "success" ? theme.success : colorType === "warning" ? theme.warning : theme.error
+              const timeStr = quota.percentage >= 100 ? "Ready" : Account.formatTimeRemaining(quota.resetTime)
+              return (
+                <text>
+                  <span style={{ fg: theme.text }}>{quota.displayName.padEnd(14)}</span>
+                  <span style={{ fg: color }}>{bar}</span>
+                  <span style={{ fg: theme.textMuted }}> {String(quota.percentage).padStart(3)}%  </span>
+                  <span style={{ fg: color }}>{timeStr}</span>
+                </text>
+              )
+            }}
           </For>
         </box>
       </Show>
 
       <box flexDirection="row" gap={2} paddingTop={1}>
+        <text>
+          <span style={{ fg: theme.textMuted }}>[</span>
+          <span style={{ fg: theme.primary }}>b</span>
+          <span style={{ fg: theme.textMuted }}>] back</span>
+        </text>
         <Show when={!account.isActive}>
           <text>
             <span style={{ fg: theme.textMuted }}>[</span>

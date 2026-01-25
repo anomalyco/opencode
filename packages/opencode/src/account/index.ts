@@ -32,26 +32,21 @@ export namespace Account {
     .meta({ ref: "AccountEntry" })
   export type Entry = z.infer<typeof Entry>
 
-  // Model name mapping for display
   const MODEL_DISPLAY_NAMES: Record<string, string> = {
-    // Antigravity/Google models
     "claude": "Claude 4.5",
     "gemini-antigravity:antigravity-gemini-3-pro": "G3 Pro",
     "gemini-antigravity:antigravity-gemini-3-pro-image": "G3 Image",
     "gemini-cli:gemini-3-flash-preview": "G3 Flash",
     "gemini-cli:gemini-3-pro-preview": "G3 Pro",
-    // OpenAI/Codex models
     "codex": "Codex",
     "codex-primary": "Primary (5H)",
     "codex-secondary": "Secondary (W)",
   }
 
   function getDisplayName(modelKey: string): string {
-    // Check exact match first
     if (MODEL_DISPLAY_NAMES[modelKey]) {
       return MODEL_DISPLAY_NAMES[modelKey]
     }
-    // Check partial matches
     const lowerKey = modelKey.toLowerCase()
     if (lowerKey.includes("claude")) return "Claude 4.5"
     if (lowerKey.includes("gemini-3-pro") && lowerKey.includes("image")) return "G3 Image"
@@ -59,7 +54,6 @@ export namespace Account {
     if (lowerKey.includes("gemini-3-flash") || lowerKey.includes("flash")) return "G3 Flash"
     if (lowerKey.includes("codex-primary") || lowerKey === "primary") return "Primary (5H)"
     if (lowerKey.includes("codex-secondary") || lowerKey === "secondary") return "Secondary (W)"
-    // Fallback: prettify the key
     return modelKey.split(":").pop()?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || modelKey
   }
 
@@ -76,6 +70,8 @@ export namespace Account {
     return path.join(xdgConfig, "opencode", "antigravity-accounts.json")
   }
 
+  const QUOTA_WINDOW_MS = 5 * 60 * 60 * 1000
+
   function parseQuotas(rateLimitResetTimes: Record<string, unknown> | undefined, now: number): ModelQuota[] {
     if (!rateLimitResetTimes || typeof rateLimitResetTimes !== "object") return []
     
@@ -83,18 +79,15 @@ export namespace Account {
     for (const [key, resetTime] of Object.entries(rateLimitResetTimes)) {
       if (typeof resetTime !== "number") continue
       
-      // Calculate percentage based on time remaining
-      // Assume 5-hour window for most quotas
-      const QUOTA_WINDOW_MS = 5 * 60 * 60 * 1000 // 5 hours
-      const timeRemaining = Math.max(0, resetTime - now)
-      const timeElapsed = QUOTA_WINDOW_MS - timeRemaining
-      const percentage = Math.max(0, Math.min(100, Math.round((timeRemaining / QUOTA_WINDOW_MS) * 100)))
+      const isRecovered = resetTime <= now
+      const timeRemaining = isRecovered ? 0 : resetTime - now
+      const percentage = isRecovered ? 100 : Math.max(0, 100 - Math.round((timeRemaining / QUOTA_WINDOW_MS) * 100))
       
       quotas.push({
         name: key,
         displayName: getDisplayName(key),
-        percentage: resetTime > now ? percentage : 100, // If reset time passed, quota is full
-        resetTime: resetTime > now ? resetTime : undefined,
+        percentage,
+        resetTime: isRecovered ? undefined : resetTime,
       })
     }
     return quotas
@@ -193,10 +186,6 @@ export namespace Account {
     return [...openai, ...antigravity]
   }
 
-  // ============================================================================
-  // Account Actions
-  // ============================================================================
-
   export async function setActive(accountId: string): Promise<boolean> {
     const [providerType, indexStr] = accountId.split("-").slice(0, 2)
     
@@ -266,7 +255,6 @@ export namespace Account {
     if (!Array.isArray(data.accounts) || index < 0 || index >= data.accounts.length) return false
     
     data.accounts.splice(index, 1)
-    // Adjust activeIndex if needed
     if (data.activeIndex >= data.accounts.length) {
       data.activeIndex = Math.max(0, data.accounts.length - 1)
     } else if (data.activeIndex > index) {
@@ -288,7 +276,6 @@ export namespace Account {
     if (!Array.isArray(data.accounts) || index < 0 || index >= data.accounts.length) return false
     
     data.accounts.splice(index, 1)
-    // Adjust activeIndex if needed
     if (data.activeIndex >= data.accounts.length) {
       data.activeIndex = Math.max(0, data.accounts.length - 1)
     } else if (data.activeIndex > index) {
@@ -346,10 +333,6 @@ export namespace Account {
     return true
   }
 
-  // ============================================================================
-  // Utility Functions
-  // ============================================================================
-
   export function formatTimeRemaining(resetTime: number | undefined): string {
     if (!resetTime) return "Ready"
     const diffMs = resetTime - Date.now()
@@ -367,15 +350,17 @@ export namespace Account {
     return `${hours}h ${mins}m`
   }
 
-  export function getQuotaColor(percentage: number): "success" | "warning" | "error" {
-    if (percentage >= 50) return "success"
-    if (percentage >= 20) return "warning"
-    return "error"
-  }
-
   export function createProgressBar(percentage: number, width: number = 10): string {
     const filled = Math.round((percentage / 100) * width)
     const empty = width - filled
     return "█".repeat(filled) + "░".repeat(empty)
+  }
+
+  export type QuotaColorType = "success" | "warning" | "error"
+
+  export function getQuotaColor(percentage: number): QuotaColorType {
+    if (percentage >= 80) return "success"
+    if (percentage >= 40) return "warning"
+    return "error"
   }
 }
