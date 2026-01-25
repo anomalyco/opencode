@@ -132,6 +132,8 @@ function AutoMethod(props: AutoMethodProps) {
 
   useKeyboard((evt) => {
     if (evt.name === "c" && !evt.ctrl && !evt.meta) {
+      evt.preventDefault()
+      evt.stopPropagation()
       const value = copyValue(props.authorization)
       Clipboard.copy(value)
         .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
@@ -189,6 +191,8 @@ function CodeMethod(props: CodeMethodProps) {
 
   useKeyboard((evt) => {
     if (evt.name === "c" && !evt.ctrl && !evt.meta) {
+      evt.preventDefault()
+      evt.stopPropagation()
       const value = copyValue(props.authorization)
       Clipboard.copy(value)
         .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
