@@ -36,6 +36,7 @@ let mockAuthConfig: AuthConfig = {
   deviceTrustDuration: "30d",
   otpRateLimitMax: 5,
   otpRateLimitWindow: "15m",
+  twoFactorRequired: false,
 }
 
 // Mock for registerSession (fire-and-forget, just needs to not throw)
@@ -77,6 +78,7 @@ mock.module("../../../src/config/server-auth", () => ({
         deviceTrustDuration: "30d",
         otpRateLimitMax: 5,
         otpRateLimitWindow: "15m",
+        twoFactorRequired: false,
       }
     },
   },
@@ -105,6 +107,7 @@ function setMockAuthConfig(config: Partial<AuthConfig>) {
     deviceTrustDuration: "30d",
     otpRateLimitMax: 5,
     otpRateLimitWindow: "15m",
+    twoFactorRequired: false,
     ...config,
   }
 }

@@ -80,6 +80,7 @@ describe("PTY auth enforcement logic", () => {
         deviceTrustDuration: "30d",
         otpRateLimitMax: 5,
         otpRateLimitWindow: "15m",
+        twoFactorRequired: false,
       })
 
       const app = new Hono<AuthEnv>()
@@ -205,6 +206,7 @@ describe("PTY auth enforcement logic", () => {
           deviceTrustDuration: "30d",
           otpRateLimitMax: 5,
           otpRateLimitWindow: "15m",
+        twoFactorRequired: false,
         })
       })
 
@@ -268,6 +270,7 @@ describe("PTY auth enforcement logic", () => {
           deviceTrustDuration: "30d",
           otpRateLimitMax: 5,
           otpRateLimitWindow: "15m",
+        twoFactorRequired: false,
         })
       })
 
@@ -330,6 +333,7 @@ describe("PTY auth enforcement logic", () => {
           deviceTrustDuration: "30d",
           otpRateLimitMax: 5,
           otpRateLimitWindow: "15m",
+        twoFactorRequired: false,
         })
 
         const { app, mockCreate } = createPtyRouteSimulator()
@@ -378,6 +382,7 @@ describe("PTY auth enforcement logic", () => {
           deviceTrustDuration: "30d",
           otpRateLimitMax: 5,
           otpRateLimitWindow: "15m",
+        twoFactorRequired: false,
         })
 
         const { app, mockCreate } = createPtyRouteSimulator()

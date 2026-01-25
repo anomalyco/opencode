@@ -63,8 +63,10 @@
   "devDependencies": {
     "@actions/artifact": "5.0.1",
     "@tsconfig/bun": "catalog:",
+    "@types/qrcode": "1.5.6",
     "husky": "9.1.7",
     "prettier": "3.6.2",
+    "qrcode": "1.5.4",
     "sst": "3.17.23",
     "turbo": "2.5.6"
   },

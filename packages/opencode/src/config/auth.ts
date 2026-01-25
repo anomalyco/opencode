@@ -49,6 +49,11 @@ export const AuthConfig = z
       .default([])
       .describe("Additional routes to exclude from CSRF validation"),
     twoFactorEnabled: z.boolean().optional().default(false).describe("Enable two-factor authentication support"),
+    twoFactorRequired: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Require users to set up 2FA before accessing the app (implies twoFactorEnabled)"),
     twoFactorTokenTimeout: Duration.optional()
       .default("5m")
       .describe("How long the 2FA token is valid after password success"),

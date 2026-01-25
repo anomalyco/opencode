@@ -39,6 +39,7 @@ describe("CSRF middleware", () => {
       deviceTrustDuration: "30d",
       otpRateLimitMax: 5,
       otpRateLimitWindow: "15m",
+      twoFactorRequired: false,
     }
 
     // Mock ServerAuth.get

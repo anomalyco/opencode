@@ -446,6 +446,13 @@ function generateLoginPageHtml(securityContext: {
           return;
         }
 
+        // Check for 2FA setup required
+        if (data.error === '2fa_setup_required') {
+          submitBtn.textContent = 'Redirecting to 2FA setup...';
+          window.location.href = '/auth/2fa/setup?required=1';
+          return;
+        }
+
         if (res.ok && data.success) {
           // Keep button disabled during redirect
           submitBtn.textContent = 'Redirecting...';
@@ -819,8 +826,9 @@ function generate2FASetupPageHtml(params: {
   qrCodeSvg: string
   setupCommand: string
   alreadyConfigured: boolean
+  required?: boolean
 }): string {
-  const { username, secret, qrCodeSvg, setupCommand, alreadyConfigured } = params
+  const { username, secret, qrCodeSvg, setupCommand, alreadyConfigured, required } = params
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -866,6 +874,16 @@ function generate2FASetupPageHtml(params: {
       margin-bottom: 1.5rem;
       color: #fbbf24;
       font-size: 0.875rem;
+    }
+    .required-banner {
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      border-radius: 8px;
+      padding: 0.75rem;
+      margin-bottom: 1.5rem;
+      color: #60a5fa;
+      font-size: 0.875rem;
+      text-align: center;
     }
     .step {
       margin-bottom: 1.5rem;
@@ -1056,6 +1074,12 @@ function generate2FASetupPageHtml(params: {
     <h1>Set Up Two-Factor Authentication</h1>
     <p class="subtitle">for ${escapeHtml(username)}</p>
 
+    ${required ? `
+    <div class="required-banner">
+      Two-factor authentication is required. Please complete setup to continue.
+    </div>
+    ` : ""}
+
     ${alreadyConfigured ? `
     <div class="warning">
       You already have 2FA configured. Setting up again will replace your existing configuration.
@@ -1187,6 +1211,12 @@ function generate2FASetupPageHtml(params: {
           successDiv.classList.add('visible');
           verifyBtn.textContent = 'Verified!';
           codeInput.disabled = true;
+          // Redirect to app if setup was required
+          const urlParams = new URLSearchParams(window.location.search);
+          if (urlParams.get('required') === '1') {
+            successDiv.textContent = '2FA enabled! Redirecting...';
+            setTimeout(() => { window.location.href = '/'; }, 1500);
+          }
         } else {
           const data = await res.json();
           errorDiv.textContent = data.message || 'Invalid code - make sure you ran the setup command first';
@@ -1454,6 +1484,28 @@ export const AuthRoutes = lazy(() =>
                 timeoutSeconds: timeoutSec,
               }, 200) // 200 because password was valid, just need 2FA
             }
+          } else if (authConfig.twoFactorRequired) {
+            // User doesn't have 2FA configured but it's required
+            // Create a temporary session so they can access the setup page
+            const tempSession = UserSession.create(
+              username,
+              c.req.header("User-Agent"),
+              {
+                uid: userInfo.uid,
+                gid: userInfo.gid,
+                home: userInfo.home,
+                shell: userInfo.shell,
+              },
+              false, // Don't use rememberMe for setup session
+            )
+            setSessionCookie(c, tempSession.id, false)
+            setCSRFCookie(c, tempSession.id)
+
+            return c.json({
+              success: false as const,
+              error: "2fa_setup_required" as const,
+              message: "Two-factor authentication setup is required",
+            }, 200)
           }
         }
 
@@ -1808,6 +1860,9 @@ export const AuthRoutes = lazy(() =>
       const broker = new BrokerClient()
       const has2fa = await broker.check2fa(session.username, session.home ?? "")
 
+      // Check if setup is required (from login redirect)
+      const required = c.req.query("required") === "1"
+
       // Generate setup data
       const setupData = await generateTotpSetup(session.username)
 
@@ -1817,6 +1872,7 @@ export const AuthRoutes = lazy(() =>
         qrCodeSvg: setupData.qrCodeSvg,
         setupCommand: getGoogleAuthenticatorSetupCommand(setupData.secret),
         alreadyConfigured: has2fa,
+        required,
       }))
     })
     .post("/2fa/verify", async (c) => {
