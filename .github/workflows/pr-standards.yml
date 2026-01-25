@@ -22,7 +22,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Check PR standards
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const pr = context.payload.pull_request;
