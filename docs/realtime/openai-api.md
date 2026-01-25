@@ -12,6 +12,8 @@ Authorization: Bearer <API_KEY>
 OpenAI-Beta: realtime=v1
 ```
 
+**Note**: The GA (General Availability) interface requires specifying `session.type` as `"realtime"` for speech-to-speech sessions.
+
 ## Audio Format
 
 | Direction | Format | Sample Rate | Channels | Encoding |
@@ -66,14 +68,24 @@ Sent via `session.update` after connection:
 
 ### Turn Detection
 
-**Server VAD** (recommended):
+**Server VAD** (recommended, default):
 ```json
 {
   "type": "server_vad",
   "threshold": 0.5,           // Speech detection sensitivity (0.0-1.0)
   "prefix_padding_ms": 300,   // Audio to include before speech start
   "silence_duration_ms": 500, // Silence duration to end turn
-  "create_response": true     // Auto-trigger response on turn end
+  "create_response": true,    // Auto-trigger response on turn end
+  "interrupt_response": true, // Allow user to interrupt model
+  "idle_timeout_ms": 15000    // Timeout when no speech detected
+}
+```
+
+**Semantic VAD** (new, uses classifier to detect end of utterance):
+```json
+{
+  "type": "semantic_vad",
+  "eagerness": "medium"       // "low", "medium", "high" - how quickly to respond
 }
 ```
 
@@ -83,6 +95,31 @@ Sent via `session.update` after connection:
   "type": "none"
 }
 ```
+
+---
+
+## WebSocket Audio Workflow
+
+Per [Handling Audio with WebSockets](https://platform.openai.com/docs/guides/realtime-conversations#handling-audio-with-websockets):
+
+### Sending Audio (Input)
+1. Capture microphone audio as Int16Array at 24kHz mono
+2. Base64-encode each frame
+3. Send via `input_audio_buffer.append` events (max 15MB per chunk)
+4. In manual mode, call `input_audio_buffer.commit` when done
+5. In server VAD mode, the server auto-commits on silence detection
+
+### Receiving Audio (Output)
+1. Listen for `response.audio.delta` events
+2. Decode base64 to PCM16 bytes: `Buffer.from(delta, 'base64')`
+3. Append to audio decoder/MediaSource for playback
+4. `response.audio.done` signals end of audio for this response item
+
+### Interruption Flow
+1. User starts speaking → server sends `input_audio_buffer.speech_started`
+2. If model is outputting audio, it's automatically interrupted
+3. Server sends `response.cancelled` for the interrupted response
+4. Server processes user's new input
 
 ---
 
@@ -396,5 +433,9 @@ Common errors:
 ## References
 
 - [OpenAI Realtime API Guide](https://platform.openai.com/docs/guides/realtime)
+- [Realtime Conversations - Handling Audio with WebSockets](https://platform.openai.com/docs/guides/realtime-conversations#handling-audio-with-websockets)
+- [Voice Activity Detection (VAD)](https://platform.openai.com/docs/guides/realtime-vad)
+- [Client Events Reference](https://platform.openai.com/docs/api-reference/realtime-client-events)
+- [Server Events Reference](https://platform.openai.com/docs/api-reference/realtime-server-events)
 - [OpenAI Realtime API Reference](https://platform.openai.com/docs/api-reference/realtime)
 - [Realtime Console Demo](https://github.com/openai/openai-realtime-console)
