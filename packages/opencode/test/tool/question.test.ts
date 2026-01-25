@@ -53,7 +53,7 @@ describe("tool.question", () => {
     const questions = [
       {
         question: "What is your favorite animal?",
-        header: "This Header is Over 12",
+        header: "This Header is Definitely More Than Thirty Characters",
         options: [{ label: "Dog", description: "Man's best friend" }],
       },
     ]
@@ -64,7 +64,28 @@ describe("tool.question", () => {
     expect(result.output).toContain(`"What is your favorite animal?"="Dog"`)
   })
 
-  // intentionally removed the zod validation due to tool call errors, hoping prompting is gonna be good enough
+  test("should allow option labels longer than 30 characters", async () => {
+    const tool = await QuestionTool.init()
+    const questions = [
+      {
+        question: "A question with a very long label",
+        header: "Long label",
+        options: [
+          {
+            label: "This is a very, very, very long label that will exceed the old limit",
+            description: "A description",
+          },
+        ],
+      },
+    ]
+
+    askSpy.mockResolvedValueOnce([["ok"]])
+
+    const result = await tool.execute({ questions }, ctx)
+    expect(result.title).toBe("Asked 1 question")
+  })
+
+  // intentionally removed the strict zod validation due to tool call errors, hoping prompting is gonna be good enough
   //   test("should throw an Error for header exceeding 30 characters", async () => {
   //     const tool = await QuestionTool.init()
   //     const questions = [
