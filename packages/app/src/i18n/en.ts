@@ -223,6 +223,9 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} of {{total}} enabled",
   "dialog.mcp.empty": "No MCPs configured",
 
+  "dialog.lsp.empty": "LSPs auto-detected from file types",
+  "dialog.plugins.empty": "Plugins configured in opencode.json",
+
   "mcp.status.connected": "connected",
   "mcp.status.failed": "failed",
   "mcp.status.needs_auth": "needs auth",
@@ -242,7 +245,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "Could not connect to server",
   "dialog.server.add.checking": "Checking...",
-  "dialog.server.add.button": "Add",
+  "dialog.server.add.button": "Add server",
   "dialog.server.default.title": "Default server",
   "dialog.server.default.description":
     "Connect to this server on app launch instead of starting a local server. Requires restart.",
@@ -250,6 +253,13 @@ export const dict = {
   "dialog.server.default.set": "Set current server as default",
   "dialog.server.default.clear": "Clear",
   "dialog.server.action.remove": "Remove server",
+
+  "dialog.server.menu.edit": "Edit",
+  "dialog.server.menu.default": "Set as default",
+  "dialog.server.menu.defaultRemove": "Remove default",
+  "dialog.server.menu.delete": "Delete",
+  "dialog.server.current": "Current Server",
+  "dialog.server.status.default": "Default",
 
   "dialog.project.edit.title": "Edit project",
   "dialog.project.edit.name": "Name",
@@ -494,6 +504,7 @@ export const dict = {
   "font.option.hack": "Hack",
   "font.option.inconsolata": "Inconsolata",
   "font.option.intelOneMono": "Intel One Mono",
+  "font.option.iosevka": "Iosevka",
   "font.option.jetbrainsMono": "JetBrains Mono",
   "font.option.mesloLgs": "Meslo LGS",
   "font.option.robotoMono": "Roboto Mono",

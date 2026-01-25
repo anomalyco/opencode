@@ -40,6 +40,7 @@ export const dict = {
   "ui.messageNav.newMessage": "Новое сообщение",
 
   "ui.textField.copyToClipboard": "Копировать в буфер обмена",
+  "ui.textField.copyLink": "Копировать ссылку",
   "ui.textField.copied": "Скопировано",
 
   "ui.imagePreview.alt": "Предпросмотр изображения",

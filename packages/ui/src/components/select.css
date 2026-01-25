@@ -36,7 +36,7 @@
         background-color: var(--button-secondary-base);
       }
       &[data-variant="ghost"] {
-        background-color: transparent;
+        background-color: var(--surface-raised-base-hover);
       }
       &[data-variant="primary"] {
         background-color: var(--icon-strong-base);

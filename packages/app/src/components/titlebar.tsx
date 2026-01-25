@@ -19,9 +19,6 @@ export function Titlebar() {
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
-  const reserve = createMemo(
-    () => platform.platform === "desktop" && (platform.os === "windows" || platform.os === "linux"),
-  )
   const web = createMemo(() => platform.platform === "web")
 
   const getWin = () => {
@@ -81,7 +78,7 @@ export function Titlebar() {
         classList={{
           "flex items-center w-full min-w-0": true,
           "pl-2": !mac(),
-          "pr-2": !windows(),
+          "pr-6": !windows(),
         }}
         onMouseDown={drag}
         data-tauri-drag-region
@@ -145,6 +142,7 @@ export function Titlebar() {
           data-tauri-drag-region
         />
         <Show when={windows()}>
+          <div class="w-6 shrink-0" />
           <div data-tauri-decorum-tb class="flex flex-row" />
         </Show>
       </div>

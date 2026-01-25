@@ -226,6 +226,9 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} av {{total}} aktivert",
   "dialog.mcp.empty": "Ingen MCP-er konfigurert",
 
+  "dialog.lsp.empty": "LSP-er automatisk oppdaget fra filtyper",
+  "dialog.plugins.empty": "Plugins konfigurert i opencode.json",
+
   "mcp.status.connected": "tilkoblet",
   "mcp.status.failed": "mislyktes",
   "mcp.status.needs_auth": "trenger autentisering",
@@ -245,7 +248,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "Kunne ikke koble til server",
   "dialog.server.add.checking": "Sjekker...",
-  "dialog.server.add.button": "Legg til",
+  "dialog.server.add.button": "Legg til server",
   "dialog.server.default.title": "Standardserver",
   "dialog.server.default.description":
     "Koble til denne serveren ved oppstart i stedet for å starte en lokal server. Krever omstart.",
@@ -253,6 +256,13 @@ export const dict = {
   "dialog.server.default.set": "Sett gjeldende server som standard",
   "dialog.server.default.clear": "Tøm",
   "dialog.server.action.remove": "Fjern server",
+
+  "dialog.server.menu.edit": "Rediger",
+  "dialog.server.menu.default": "Sett som standard",
+  "dialog.server.menu.defaultRemove": "Fjern standard",
+  "dialog.server.menu.delete": "Slett",
+  "dialog.server.current": "Gjeldende server",
+  "dialog.server.status.default": "Standard",
 
   "dialog.project.edit.title": "Rediger prosjekt",
   "dialog.project.edit.name": "Navn",

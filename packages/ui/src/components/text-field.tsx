@@ -93,17 +93,20 @@ export function TextField(props: TextFieldProps) {
         </Show>
         <Show when={local.copyable}>
           <Tooltip
-            value={copied() ? i18n.t("ui.textField.copied") : i18n.t("ui.textField.copyToClipboard")}
+            value={copied() ? i18n.t("ui.textField.copied") : i18n.t("ui.textField.copyLink")}
             placement="top"
-            gutter={8}
+            gutter={4}
+            forceOpen={copied()}
+            skipDelayDuration={0}
           >
             <IconButton
               type="button"
-              icon={copied() ? "check" : "copy"}
+              icon={copied() ? "check" : "link"}
               variant="ghost"
               onClick={handleCopy}
+              tabIndex={-1}
               data-slot="input-copy-button"
-              aria-label={copied() ? i18n.t("ui.textField.copied") : i18n.t("ui.textField.copyToClipboard")}
+              aria-label={copied() ? i18n.t("ui.textField.copied") : i18n.t("ui.textField.copyLink")}
             />
           </Tooltip>
         </Show>

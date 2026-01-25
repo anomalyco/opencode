@@ -89,11 +89,6 @@ export default function Layout(props: ParentProps) {
   const pageReady = createMemo(() => ready())
 
   let scrollContainerRef: HTMLDivElement | undefined
-  const xlQuery = window.matchMedia("(min-width: 1280px)")
-  const [isLargeViewport, setIsLargeViewport] = createSignal(xlQuery.matches)
-  const handleViewportChange = (e: MediaQueryListEvent) => setIsLargeViewport(e.matches)
-  xlQuery.addEventListener("change", handleViewportChange)
-  onCleanup(() => xlQuery.removeEventListener("change", handleViewportChange))
 
   const params = useParams()
   const [autoselect, setAutoselect] = createSignal(!params.dir)
@@ -550,11 +545,10 @@ export default function Layout(props: ParentProps) {
   const workspaceLabel = (directory: string, branch?: string, projectId?: string) =>
     workspaceName(directory, projectId, branch) ?? branch ?? getFilename(directory)
 
-  const isWorkspaceEditing = () => editor.active.startsWith("workspace:")
-
   const workspaceSetting = createMemo(() => {
     const project = currentProject()
     if (!project) return false
+    if (project.vcs !== "git") return false
     return layout.sidebar.workspaces(project.worktree)()
   })
 
@@ -594,7 +588,7 @@ export default function Layout(props: ParentProps) {
       if (!expanded) continue
       const project = projects.find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
       if (!project) continue
-      if (layout.sidebar.workspaces(project.worktree)()) continue
+      if (project.vcs === "git" && layout.sidebar.workspaces(project.worktree)()) continue
       setStore("workspaceExpanded", directory, false)
     }
   })
@@ -724,7 +718,8 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
 
     const [store] = globalSync.child(directory)
-    if (store.message[session.id] !== undefined) return
+    const cached = untrack(() => store.message[session.id] !== undefined)
+    if (cached) return
 
     const q = queueFor(directory)
     if (q.inflight.has(session.id)) return
@@ -855,14 +850,34 @@ export default function Layout(props: ParentProps) {
     setStore(
       produce((draft) => {
         const removed = new Set<string>([session.id])
-        const collect = (parentID: string) => {
-          for (const item of draft.session) {
-            if (item.parentID !== parentID) continue
-            removed.add(item.id)
-            collect(item.id)
+
+        const byParent = new Map<string, string[]>()
+        for (const item of draft.session) {
+          const parentID = item.parentID
+          if (!parentID) continue
+          const existing = byParent.get(parentID)
+          if (existing) {
+            existing.push(item.id)
+            continue
+          }
+          byParent.set(parentID, [item.id])
+        }
+
+        const stack = [session.id]
+        while (stack.length) {
+          const parentID = stack.pop()
+          if (!parentID) continue
+
+          const children = byParent.get(parentID)
+          if (!children) continue
+
+          for (const child of children) {
+            if (removed.has(child)) continue
+            removed.add(child)
+            stack.push(child)
           }
         }
-        collect(session.id)
+
         draft.session = draft.session.filter((s) => !removed.has(s.id))
       }),
     )
@@ -2027,7 +2042,9 @@ export default function Layout(props: ParentProps) {
     })
 
     const workspaces = createMemo(() => workspaceIds(props.project).slice(0, 2))
-    const workspaceEnabled = createMemo(() => layout.sidebar.workspaces(props.project.worktree)())
+    const workspaceEnabled = createMemo(
+      () => props.project.vcs === "git" && layout.sidebar.workspaces(props.project.worktree)(),
+    )
     const [open, setOpen] = createSignal(false)
 
     const label = (directory: string) => {
@@ -2156,8 +2173,8 @@ export default function Layout(props: ParentProps) {
                 class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
                 onClick={() => {
                   layout.sidebar.open()
+                  setOpen(false)
                   if (selected()) {
-                    setOpen(false)
                     return
                   }
                   navigateToProject(props.project.worktree)
@@ -2256,13 +2273,23 @@ export default function Layout(props: ParentProps) {
 
       if (!created?.directory) return
 
+      const local = current.worktree
+      const key = workspaceKey(created.directory)
+      const root = workspaceKey(local)
+
       setBusy(created.directory, true)
       WorktreeState.pending(created.directory)
-      setStore("workspaceExpanded", created.directory, true)
+      setStore("workspaceExpanded", key, true)
+      if (key !== created.directory) {
+        setStore("workspaceExpanded", created.directory, true)
+      }
       setStore("workspaceOrder", current.worktree, (prev) => {
         const existing = prev ?? []
-        const local = current.worktree
-        const next = existing.filter((d) => d !== local && d !== created.directory)
+        const next = existing.filter((item) => {
+          const id = workspaceKey(item)
+          if (id === root) return false
+          return id !== key
+        })
         return [local, created.directory, ...next]
       })
 
@@ -2277,7 +2304,7 @@ export default function Layout(props: ParentProps) {
         title: language.t("workspace.new"),
         category: language.t("command.category.workspace"),
         keybind: "mod+shift+w",
-        disabled: !layout.sidebar.workspaces(project()?.worktree ?? "")(),
+        disabled: !workspaceSetting(),
         onSelect: createWorkspace,
       },
     ])
@@ -2405,7 +2432,18 @@ export default function Layout(props: ParentProps) {
                             <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
                               <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces(p.worktree)}>
+                            <DropdownMenu.Item
+                              disabled={p.vcs !== "git" && !layout.sidebar.workspaces(p.worktree)()}
+                              onSelect={() => {
+                                const enabled = layout.sidebar.workspaces(p.worktree)()
+                                if (enabled) {
+                                  layout.sidebar.toggleWorkspaces(p.worktree)
+                                  return
+                                }
+                                if (p.vcs !== "git") return
+                                layout.sidebar.toggleWorkspaces(p.worktree)
+                              }}
+                            >
                               <DropdownMenu.ItemLabel>
                                 {layout.sidebar.workspaces(p.worktree)()
                                   ? language.t("sidebar.workspaces.disable")
@@ -2423,7 +2461,7 @@ export default function Layout(props: ParentProps) {
                   </div>
 
                   <Show
-                    when={layout.sidebar.workspaces(p.worktree)()}
+                    when={workspaceSetting()}
                     fallback={
                       <>
                         <div class="py-4 px-3">

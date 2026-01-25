@@ -63,6 +63,12 @@
       align-items: center;
       justify-content: center;
       padding: 14px 24px;
+      outline: none;
+
+      &:focus-visible {
+        outline: none;
+        box-shadow: none;
+      }
     }
 
     [data-slot="tabs-trigger-close-button"] {
@@ -81,7 +87,7 @@
     }
     &:focus-visible {
       outline: none;
-      box-shadow: 0 0 0 2px var(--border-focus);
+      box-shadow: none;
     }
     &:has([data-hidden]) {
       [data-slot="tabs-trigger-close-button"] {
