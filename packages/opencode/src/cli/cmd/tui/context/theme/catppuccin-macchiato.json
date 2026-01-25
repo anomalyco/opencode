@@ -1,6 +1,32 @@
 {
   "$schema": "https://opencode.ai/theme.json",
   "defs": {
+    "latteRosewater": "#dc8a78",
+    "latteFlamingo": "#dd7878",
+    "lattePink": "#ea76cb",
+    "latteMauve": "#8839ef",
+    "latteRed": "#d20f39",
+    "latteMaroon": "#e64553",
+    "lattePeach": "#fe640b",
+    "latteYellow": "#df8e1d",
+    "latteGreen": "#40a02b",
+    "latteTeal": "#179299",
+    "latteSky": "#04a5e5",
+    "latteSapphire": "#209fb5",
+    "latteBlue": "#1e66f5",
+    "latteLavender": "#7287fd",
+    "latteText": "#4c4f69",
+    "latteSubtext1": "#5c5f77",
+    "latteSubtext0": "#6c6f85",
+    "latteOverlay2": "#7c7f93",
+    "latteOverlay1": "#8c8fa1",
+    "latteOverlay0": "#9ca0b0",
+    "latteSurface2": "#acb0be",
+    "latteSurface1": "#bcc0cc",
+    "latteSurface0": "#ccd0da",
+    "latteBase": "#eff1f5",
+    "latteMantle": "#e6e9ef",
+    "latteCrust": "#dce0e8",
     "macRosewater": "#f4dbd6",
     "macFlamingo": "#f0c6c6",
     "macPink": "#f5bde6",
@@ -31,203 +57,203 @@
   "theme": {
     "primary": {
       "dark": "macBlue",
-      "light": "macBlue"
+      "light": "latteBlue"
     },
     "secondary": {
       "dark": "macMauve",
-      "light": "macMauve"
+      "light": "latteMauve"
     },
     "accent": {
       "dark": "macPink",
-      "light": "macPink"
+      "light": "lattePink"
     },
     "error": {
       "dark": "macRed",
-      "light": "macRed"
+      "light": "latteRed"
     },
     "warning": {
       "dark": "macYellow",
-      "light": "macYellow"
+      "light": "latteYellow"
     },
     "success": {
       "dark": "macGreen",
-      "light": "macGreen"
+      "light": "latteGreen"
     },
     "info": {
       "dark": "macTeal",
-      "light": "macTeal"
+      "light": "latteTeal"
     },
     "text": {
       "dark": "macText",
-      "light": "macText"
+      "light": "latteText"
     },
     "textMuted": {
       "dark": "macSubtext1",
-      "light": "macSubtext1"
+      "light": "latteSubtext1"
     },
     "background": {
       "dark": "macBase",
-      "light": "macBase"
+      "light": "latteBase"
     },
     "backgroundPanel": {
       "dark": "macMantle",
-      "light": "macMantle"
+      "light": "latteMantle"
     },
     "backgroundElement": {
       "dark": "macCrust",
-      "light": "macCrust"
+      "light": "latteCrust"
     },
     "border": {
       "dark": "macSurface0",
-      "light": "macSurface0"
+      "light": "latteSurface0"
     },
     "borderActive": {
       "dark": "macSurface1",
-      "light": "macSurface1"
+      "light": "latteSurface1"
     },
     "borderSubtle": {
       "dark": "macSurface2",
-      "light": "macSurface2"
+      "light": "latteSurface2"
     },
     "diffAdded": {
       "dark": "macGreen",
-      "light": "macGreen"
+      "light": "latteGreen"
     },
     "diffRemoved": {
       "dark": "macRed",
-      "light": "macRed"
+      "light": "latteRed"
     },
     "diffContext": {
       "dark": "macOverlay2",
-      "light": "macOverlay2"
+      "light": "latteOverlay2"
     },
     "diffHunkHeader": {
       "dark": "macPeach",
-      "light": "macPeach"
+      "light": "lattePeach"
     },
     "diffHighlightAdded": {
       "dark": "macGreen",
-      "light": "macGreen"
+      "light": "latteGreen"
     },
     "diffHighlightRemoved": {
       "dark": "macRed",
-      "light": "macRed"
+      "light": "latteRed"
     },
     "diffAddedBg": {
       "dark": "#29342b",
-      "light": "#29342b"
+      "light": "#d6f0d9"
     },
     "diffRemovedBg": {
       "dark": "#3a2a31",
-      "light": "#3a2a31"
+      "light": "#f6dfe2"
     },
     "diffContextBg": {
       "dark": "macMantle",
-      "light": "macMantle"
+      "light": "latteMantle"
     },
     "diffLineNumber": {
       "dark": "macSurface1",
-      "light": "macSurface1"
+      "light": "latteSurface1"
     },
     "diffAddedLineNumberBg": {
       "dark": "#223025",
-      "light": "#223025"
+      "light": "#c9e3cb"
     },
     "diffRemovedLineNumberBg": {
       "dark": "#2f242b",
-      "light": "#2f242b"
+      "light": "#e9d3d6"
     },
     "markdownText": {
       "dark": "macText",
-      "light": "macText"
+      "light": "latteText"
     },
     "markdownHeading": {
       "dark": "macMauve",
-      "light": "macMauve"
+      "light": "latteMauve"
     },
     "markdownLink": {
       "dark": "macBlue",
-      "light": "macBlue"
+      "light": "latteBlue"
     },
     "markdownLinkText": {
       "dark": "macSky",
-      "light": "macSky"
+      "light": "latteSky"
     },
     "markdownCode": {
       "dark": "macGreen",
-      "light": "macGreen"
+      "light": "latteGreen"
     },
     "markdownBlockQuote": {
       "dark": "macYellow",
-      "light": "macYellow"
+      "light": "latteYellow"
     },
     "markdownEmph": {
       "dark": "macYellow",
-      "light": "macYellow"
+      "light": "latteYellow"
     },
     "markdownStrong": {
       "dark": "macPeach",
-      "light": "macPeach"
+      "light": "lattePeach"
     },
     "markdownHorizontalRule": {
       "dark": "macSubtext0",
-      "light": "macSubtext0"
+      "light": "latteSubtext0"
     },
     "markdownListItem": {
       "dark": "macBlue",
-      "light": "macBlue"
+      "light": "latteBlue"
     },
     "markdownListEnumeration": {
       "dark": "macSky",
-      "light": "macSky"
+      "light": "latteSky"
     },
     "markdownImage": {
       "dark": "macBlue",
-      "light": "macBlue"
+      "light": "latteBlue"
     },
     "markdownImageText": {
       "dark": "macSky",
-      "light": "macSky"
+      "light": "latteSky"
     },
     "markdownCodeBlock": {
       "dark": "macText",
-      "light": "macText"
+      "light": "latteText"
     },
     "syntaxComment": {
       "dark": "macOverlay2",
-      "light": "macOverlay2"
+      "light": "latteOverlay2"
     },
     "syntaxKeyword": {
       "dark": "macMauve",
-      "light": "macMauve"
+      "light": "latteMauve"
     },
     "syntaxFunction": {
       "dark": "macBlue",
-      "light": "macBlue"
+      "light": "latteBlue"
     },
     "syntaxVariable": {
       "dark": "macRed",
-      "light": "macRed"
+      "light": "latteRed"
     },
     "syntaxString": {
       "dark": "macGreen",
-      "light": "macGreen"
+      "light": "latteGreen"
     },
     "syntaxNumber": {
       "dark": "macPeach",
-      "light": "macPeach"
+      "light": "lattePeach"
     },
     "syntaxType": {
       "dark": "macYellow",
-      "light": "macYellow"
+      "light": "latteYellow"
     },
     "syntaxOperator": {
       "dark": "macSky",
-      "light": "macSky"
+      "light": "latteSky"
     },
     "syntaxPunctuation": {
       "dark": "macText",
-      "light": "macText"
+      "light": "latteText"
     }
   }
 }
