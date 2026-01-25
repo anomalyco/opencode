@@ -225,22 +225,110 @@ Voice Agent: "I see we have 3 payment providers configured.
 
 ## Phase 6: Future Explorations
 
-### 6a: Multi-Modal Input
+### 6a: Continuous Bidirectional Agent (Non-Turn-Based)
+
+**The Problem with Turn-Based:**
+Current LLM interactions are fundamentally turn-based - even "streaming" only streams the output. The agent waits for complete input before processing.
+
+**Vision: Truly Continuous Interaction**
+```
+User input stream: |████████████████████████████→ (still typing/speaking)
+                        ↓         ↓         ↓
+Agent state:           |▒▒▒|    |▒▒▒|    |▒▒▒|  (updating)
+Preemptive tools:           |read file|   |analyze|
+Thinking (visible):              |reasoning tokens streaming|
+Draft response:                        |████| (refining)
+```
+
+**Key Behaviors:**
+| Aspect | Turn-Based | Continuous |
+|--------|------------|------------|
+| Input processing | Wait for complete | Incremental understanding |
+| Tool calls | After turn | Speculative/preemptive |
+| Thinking | Hidden or post-input | Visible, ongoing |
+| Response latency | Input + think + generate | Near-instant (pre-computed) |
+| Interruption | Discard state | Update existing state |
+
+**Example:**
+```
+User typing: "Can you look at the auth module and..."
+                    ↓
+Agent (in parallel):
+  - Detects "auth module" → preemptively reads auth/*.ts
+  - Builds context, prepares for likely continuations
+  - Drafts responses for "fix bug", "explain", "refactor"
+                    ↓
+User finishes: "...fix the login timeout"
+                    ↓
+Agent: Already has files, matches pattern, responds in <100ms
+```
+
+**Technical Approaches:**
+
+1. **Speculative Tool Execution**
+   - Predict likely tool calls from partial input
+   - Execute low-cost tools speculatively (file reads)
+   - Cache results, discard if prediction wrong
+   - Trade compute cost for latency
+
+2. **Incremental Context Building**
+   - Process input tokens as they arrive
+   - Update internal "understanding state" continuously
+   - Use sliding window or chunked attention
+   - Maintain draft response that refines over time
+
+3. **Parallel Processing Pipeline**
+   ```
+   Input Stream → Parser → Intent Detector → Tool Predictor
+                               ↓                  ↓
+                     Context Builder      Speculative Executor
+                               ↓                  ↓
+                          Response Generator ←────┘
+   ```
+
+4. **Visible Thinking Stream**
+   - Stream thinking tokens as they're generated
+   - Allow user to see reasoning in real-time
+   - User can interrupt/redirect thinking
+   - More collaborative, less "oracle"
+
+**Implementation Considerations:**
+
+| Challenge | Potential Solution |
+|-----------|-------------------|
+| Transformer needs full input | Chunked processing with KV cache updates |
+| Wasted speculative compute | Cheap models for prediction, expensive for execution |
+| Race conditions | Transactional tool execution, rollback on mispredict |
+| User experience | Clear indication of "draft" vs "final" state |
+
+**Why This Matters:**
+- **Latency**: Pre-computation can reduce perceived latency to near-zero
+- **Natural interaction**: More like human conversation (we think while listening)
+- **Efficiency**: Start work before user finishes explaining
+- **Transparency**: Visible thinking builds trust, allows course correction
+
+**Research Required:**
+- How to handle mispredictions gracefully
+- Cost/benefit of speculative execution
+- UX for showing "agent is thinking about X" during input
+- Architecture for incremental understanding
+
+### 6b: Multi-Modal Input
 - Screen sharing / screenshot analysis
 - "Look at this error" with visual context
 - Diagram understanding
 
-### 6b: Proactive Agent
+### 6c: Proactive Agent
 - Agent notices issues and speaks up
 - "I noticed a potential bug in the file you just saved"
 - Requires always-on listening (privacy considerations)
 
-### 6c: Team/Multi-User
+### 6d: Team/Multi-User
 - Multiple developers in voice session
 - Speaker identification
 - Shared context
 
-### 6d: Local/Offline Voice
+### 6e: Local/Offline Voice
 - Local Whisper for STT
 - Local TTS (Piper, Coqui)
 - Fallback when OpenAI unavailable
