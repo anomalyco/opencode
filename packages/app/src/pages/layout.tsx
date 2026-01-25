@@ -56,6 +56,7 @@ import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { playSound, soundSrc } from "@/utils/sound"
+import { Worktree as WorktreeState } from "@/utils/worktree"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
@@ -332,6 +333,18 @@ export default function Layout(props: ParentProps) {
     const cooldownMs = 5000
 
     const unsub = globalSDK.event.listen((e) => {
+      if (e.details?.type === "worktree.ready") {
+        setBusy(e.name, false)
+        WorktreeState.ready(e.name)
+        return
+      }
+
+      if (e.details?.type === "worktree.failed") {
+        setBusy(e.name, false)
+        WorktreeState.failed(e.name, e.details.properties?.message ?? language.t("common.requestFailed"))
+        return
+      }
+
       if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked") return
       const title =
         e.details.type === "permission.asked"
@@ -551,6 +564,7 @@ export default function Layout(props: ParentProps) {
     const project = currentProject()
     if (!project) return
 
+    const local = project.worktree
     const dirs = [project.worktree, ...(project.sandboxes ?? [])]
     const existing = store.workspaceOrder[project.worktree]
     if (!existing) {
@@ -558,9 +572,9 @@ export default function Layout(props: ParentProps) {
       return
     }
 
-    const keep = existing.filter((d) => dirs.includes(d))
-    const missing = dirs.filter((d) => !existing.includes(d))
-    const merged = [...keep, ...missing]
+    const keep = existing.filter((d) => d !== local && dirs.includes(d))
+    const missing = dirs.filter((d) => d !== local && !existing.includes(d))
+    const merged = [local, ...missing, ...keep]
 
     if (merged.length !== existing.length) {
       setStore("workspaceOrder", project.worktree, merged)
@@ -710,7 +724,8 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
 
     const [store] = globalSync.child(directory)
-    if (store.message[session.id] !== undefined) return
+    const cached = untrack(() => store.message[session.id] !== undefined)
+    if (cached) return
 
     const q = queueFor(directory)
     if (q.inflight.has(session.id)) return
@@ -841,14 +856,34 @@ export default function Layout(props: ParentProps) {
     setStore(
       produce((draft) => {
         const removed = new Set<string>([session.id])
-        const collect = (parentID: string) => {
-          for (const item of draft.session) {
-            if (item.parentID !== parentID) continue
-            removed.add(item.id)
-            collect(item.id)
+
+        const byParent = new Map<string, string[]>()
+        for (const item of draft.session) {
+          const parentID = item.parentID
+          if (!parentID) continue
+          const existing = byParent.get(parentID)
+          if (existing) {
+            existing.push(item.id)
+            continue
+          }
+          byParent.set(parentID, [item.id])
+        }
+
+        const stack = [session.id]
+        while (stack.length) {
+          const parentID = stack.pop()
+          if (!parentID) continue
+
+          const children = byParent.get(parentID)
+          if (!children) continue
+
+          for (const child of children) {
+            if (removed.has(child)) continue
+            removed.add(child)
+            stack.push(child)
           }
         }
-        collect(session.id)
+
         draft.session = draft.session.filter((s) => !removed.has(s.id))
       }),
     )
@@ -1246,9 +1281,9 @@ export default function Layout(props: ParentProps) {
         })
     })
 
-    const handleDelete = async () => {
-      await deleteWorkspace(props.directory)
+    const handleDelete = () => {
       dialog.close()
+      void deleteWorkspace(props.directory)
     }
 
     const description = () => {
@@ -1434,17 +1469,22 @@ export default function Layout(props: ParentProps) {
 
   function workspaceIds(project: LocalProject | undefined) {
     if (!project) return []
-    const dirs = [project.worktree, ...(project.sandboxes ?? [])]
+    const local = project.worktree
+    const dirs = [local, ...(project.sandboxes ?? [])]
     const active = currentProject()
     const directory = active?.worktree === project.worktree && params.dir ? base64Decode(params.dir) : undefined
-    const next = directory && directory !== project.worktree && !dirs.includes(directory) ? [...dirs, directory] : dirs
+    const extra = directory && directory !== local && !dirs.includes(directory) ? directory : undefined
+    const pending = extra ? WorktreeState.get(extra)?.status === "pending" : false
 
     const existing = store.workspaceOrder[project.worktree]
-    if (!existing) return next
+    if (!existing) return extra ? [...dirs, extra] : dirs
 
-    const keep = existing.filter((d) => next.includes(d))
-    const missing = next.filter((d) => !existing.includes(d))
-    return [...keep, ...missing]
+    const keep = existing.filter((d) => d !== local && dirs.includes(d))
+    const missing = dirs.filter((d) => d !== local && !existing.includes(d))
+    const merged = [local, ...(pending && extra ? [extra] : []), ...missing, ...keep]
+    if (!extra) return merged
+    if (pending) return merged
+    return [...merged, extra]
   }
 
   function handleWorkspaceDragStart(event: unknown) {
@@ -2137,8 +2177,8 @@ export default function Layout(props: ParentProps) {
                 class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
                 onClick={() => {
                   layout.sidebar.open()
+                  setOpen(false)
                   if (selected()) {
-                    setOpen(false)
                     return
                   }
                   navigateToProject(props.project.worktree)
@@ -2237,8 +2277,29 @@ export default function Layout(props: ParentProps) {
 
       if (!created?.directory) return
 
+      const local = current.worktree
+      const key = workspaceKey(created.directory)
+      const root = workspaceKey(local)
+
+      setBusy(created.directory, true)
+      WorktreeState.pending(created.directory)
+      setStore("workspaceExpanded", key, true)
+      if (key !== created.directory) {
+        setStore("workspaceExpanded", created.directory, true)
+      }
+      setStore("workspaceOrder", current.worktree, (prev) => {
+        const existing = prev ?? []
+        const next = existing.filter((item) => {
+          const id = workspaceKey(item)
+          if (id === root) return false
+          return id !== key
+        })
+        return [local, created.directory, ...next]
+      })
+
       globalSync.child(created.directory)
       navigate(`/${base64Encode(created.directory)}/session`)
+      layout.mobileSidebar.hide()
     }
 
     command.register(() => [

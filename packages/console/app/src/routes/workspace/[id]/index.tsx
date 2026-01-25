@@ -43,8 +43,9 @@ export default function () {
           </span>
           <Show when={userInfo()?.isAdmin}>
             <span data-slot="billing-info">
-              <Switch>
-                <Match when={!billingInfo()?.customerID}>
+              <Show
+                when={billingInfo()?.customerID}
+                fallback={
                   <button
                     data-color="primary"
                     data-size="sm"
@@ -53,13 +54,12 @@ export default function () {
                   >
                     {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Enable billing"}
                   </button>
-                </Match>
-                <Match when={!billingInfo()?.subscriptionID}>
-                  <span data-slot="balance">
-                    Current balance <b>${balance()}</b>
-                  </span>
-                </Match>
-              </Switch>
+                }
+              >
+                <span data-slot="balance">
+                  Current balance <b>${balance()}</b>
+                </span>
+              </Show>
             </span>
           </Show>
         </p>
