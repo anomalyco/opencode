@@ -1123,8 +1123,8 @@ function generate2FASetupPageHtml(params: {
     </div>
 
     <div class="step">
-      <div class="step-title">Step 2: Install google-authenticator (if needed)</div>
-      <p class="note">The <code>google-authenticator</code> command is part of <strong>libpam-google-authenticator</strong>, an open source PAM module.</p>
+      <div class="step-title">Step 2: Install google-authenticator on the server (if needed)</div>
+      <p class="note">Install <code>google-authenticator</code> on the same machine where opencode is running. This is part of <strong>libpam-google-authenticator</strong>, an open source PAM module.</p>
       <details class="install-details">
         <summary>Installation instructions</summary>
         <div class="install-commands">
@@ -1138,8 +1138,8 @@ function generate2FASetupPageHtml(params: {
     </div>
 
     <div class="step">
-      <div class="step-title">Step 3: Run Setup Command</div>
-      <p class="note">Run this command on the server to enable 2FA for your account:</p>
+      <div class="step-title">Step 3: Run Setup Command on the Server</div>
+      <p class="note">Run this command on the opencode server to enable 2FA for your account:</p>
       <div class="command-display">${escapeHtml(setupCommand)}</div>
       <p class="note">This creates ~/.google_authenticator with your secret.</p>
       <details class="install-details">
