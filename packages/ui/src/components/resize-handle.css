@@ -19,7 +19,7 @@
     inset-inline-end: 0;
     width: 8px;
     transform: translateX(50%);
-    cursor: ew-resize;
+    cursor: col-resize;
 
     &::after {
       width: 3px;
@@ -34,7 +34,7 @@
     inset-block-start: 0;
     height: 8px;
     transform: translateY(-50%);
-    cursor: ns-resize;
+    cursor: row-resize;
 
     &::after {
       height: 3px;
