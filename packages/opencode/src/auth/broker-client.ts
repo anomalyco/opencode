@@ -22,6 +22,7 @@ interface BrokerRequest {
     | "ptyread"
     | "check2fa"
     | "authenticateotp"
+    | "checkotpconfig"
   /** Username for authenticate method */
   username?: string
   /** Password for authenticate method */
@@ -72,6 +73,14 @@ interface BrokerResponse {
     data?: string
     /** Whether more data is available (ptyRead) */
     more?: boolean
+    /** OTP config check fields */
+    configured?: boolean
+    pam_module_installed?: boolean
+    pam_module_path?: string
+    pam_service_exists?: boolean
+    pam_service_path?: string
+    service_auto_created?: boolean
+    error_code?: string
   }
 }
 
@@ -138,6 +147,33 @@ export interface AuthResult {
   success: boolean
   /** Error message if failed (generic, no internal details) */
   error?: string
+}
+
+/**
+ * Result of OTP server configuration check.
+ *
+ * Provides detailed information about why 2FA might not be working,
+ * allowing administrators to diagnose and fix server misconfigurations.
+ */
+export interface OtpConfigResult {
+  /** Whether all configuration is valid and ready for OTP validation */
+  configured: boolean
+  /** Whether pam_google_authenticator.so module is installed */
+  pamModuleInstalled: boolean
+  /** Path where PAM module was found (or expected path if not found) */
+  pamModulePath: string
+  /** Whether /etc/pam.d/opencode-otp service file exists */
+  pamServiceExists: boolean
+  /** Path to PAM service file */
+  pamServicePath: string
+  /** If the service file was auto-created by the broker */
+  serviceAutoCreated: boolean
+  /**
+   * Specific error code if not configured:
+   * - "pam_module_not_installed": google-authenticator PAM module not found
+   * - "pam_service_not_configured": /etc/pam.d/opencode-otp missing and couldn't be created
+   */
+  errorCode?: string
 }
 
 /**
@@ -299,6 +335,76 @@ export class BrokerClient {
     } catch {
       // On error, assume no 2FA (fail open for detection)
       return false
+    }
+  }
+
+  /**
+   * Check OTP server configuration.
+   *
+   * Verifies that the server is properly configured for 2FA/OTP validation:
+   * 1. PAM google_authenticator module is installed
+   * 2. PAM service file exists at /etc/pam.d/opencode-otp
+   *
+   * If the service file is missing and the broker has permissions,
+   * it will attempt to auto-create it.
+   *
+   * Use this to provide helpful error messages when OTP validation fails
+   * due to server misconfiguration rather than invalid codes.
+   *
+   * @returns OtpConfigResult with detailed configuration status
+   *
+   * @example
+   * ```typescript
+   * const config = await client.checkOtpConfig()
+   * if (!config.configured) {
+   *   if (config.errorCode === "pam_module_not_installed") {
+   *     console.error("Install google-authenticator: sudo apt install libpam-google-authenticator")
+   *   } else if (config.errorCode === "pam_service_not_configured") {
+   *     console.error(`Create PAM service file: ${config.pamServicePath}`)
+   *   }
+   * }
+   * ```
+   */
+  async checkOtpConfig(): Promise<OtpConfigResult> {
+    const id = crypto.randomUUID()
+
+    const request: BrokerRequest = {
+      id,
+      version: 1,
+      method: "checkotpconfig",
+    }
+
+    // Default result when broker is unavailable
+    const unavailableResult: OtpConfigResult = {
+      configured: false,
+      pamModuleInstalled: false,
+      pamModulePath: "",
+      pamServiceExists: false,
+      pamServicePath: "/etc/pam.d/opencode-otp",
+      serviceAutoCreated: false,
+      errorCode: "broker_unavailable",
+    }
+
+    try {
+      const response = await this.sendRequest(request)
+
+      if (response.id !== id) {
+        return unavailableResult
+      }
+
+      // Map snake_case response to camelCase
+      const data = response.data
+      return {
+        configured: data?.configured ?? false,
+        pamModuleInstalled: data?.pam_module_installed ?? false,
+        pamModulePath: data?.pam_module_path ?? "",
+        pamServiceExists: data?.pam_service_exists ?? false,
+        pamServicePath: data?.pam_service_path ?? "/etc/pam.d/opencode-otp",
+        serviceAutoCreated: data?.service_auto_created ?? false,
+        errorCode: data?.error_code ?? response.error,
+      }
+    } catch {
+      return unavailableResult
     }
   }
 

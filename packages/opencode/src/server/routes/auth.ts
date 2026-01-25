@@ -1805,8 +1805,40 @@ export const AuthRoutes = lazy(() =>
           if (rateLimitResult) return rateLimitResult
         }
 
-        // Validate OTP via broker
+        // Check OTP configuration first
         const broker = new BrokerClient()
+        const otpConfig = await broker.checkOtpConfig()
+        if (!otpConfig.configured) {
+          // Return specific error based on what's misconfigured
+          if (otpConfig.errorCode === "pam_module_not_installed") {
+            return c.json({
+              error: "server_misconfigured",
+              message: "Server configuration error: libpam-google-authenticator is not installed.",
+            }, 500)
+          } else if (otpConfig.errorCode === "pam_service_not_configured") {
+            return c.json({
+              error: "server_misconfigured",
+              message: `Server configuration error: PAM service file missing at ${otpConfig.pamServicePath}`,
+            }, 500)
+          } else if (otpConfig.errorCode === "broker_unavailable") {
+            return c.json({
+              error: "server_error",
+              message: "Authentication service unavailable. Please try again later.",
+            }, 503)
+          } else {
+            return c.json({
+              error: "server_misconfigured",
+              message: "Server configuration error: OTP validation is not properly configured.",
+            }, 500)
+          }
+        }
+
+        // Log if service file was auto-created
+        if (otpConfig.serviceAutoCreated) {
+          log.info("PAM service file auto-created", { path: otpConfig.pamServicePath })
+        }
+
+        // Validate OTP via broker
         const otpResult = await broker.authenticateOtp(userInfo.username, code)
 
         const timestamp = new Date().toISOString()
@@ -2052,7 +2084,7 @@ export const AuthRoutes = lazy(() =>
       // Check CSRF
       const xrw = c.req.header("X-Requested-With")
       if (!xrw) {
-        return c.json({ error: "csrf_missing" }, 400)
+        return c.json({ error: "csrf_missing", message: "CSRF token required" }, 400)
       }
 
       const body = await c.req.json()
@@ -2062,14 +2094,54 @@ export const AuthRoutes = lazy(() =>
         return c.json({ error: "invalid_code", message: "Code is required" }, 400)
       }
 
-      // Validate OTP via broker
       const broker = new BrokerClient()
+
+      // Check OTP server configuration first
+      const otpConfig = await broker.checkOtpConfig()
+      if (!otpConfig.configured) {
+        // Return specific error based on what's misconfigured
+        if (otpConfig.errorCode === "pam_module_not_installed") {
+          return c.json({
+            error: "server_misconfigured",
+            message: "Server configuration error: libpam-google-authenticator is not installed. " +
+              "Install it with: Ubuntu/Debian: sudo apt install libpam-google-authenticator, " +
+              "macOS: brew install google-authenticator-libpam",
+            details: otpConfig,
+          }, 500)
+        } else if (otpConfig.errorCode === "pam_service_not_configured") {
+          return c.json({
+            error: "server_misconfigured",
+            message: `Server configuration error: PAM service file missing at ${otpConfig.pamServicePath}. ` +
+              "Create it with: echo \"auth required pam_google_authenticator.so nullok\" | sudo tee " +
+              otpConfig.pamServicePath,
+            details: otpConfig,
+          }, 500)
+        } else if (otpConfig.errorCode === "broker_unavailable") {
+          return c.json({
+            error: "server_error",
+            message: "Authentication service unavailable. Please try again later.",
+          }, 503)
+        } else {
+          return c.json({
+            error: "server_misconfigured",
+            message: "Server configuration error: OTP validation is not properly configured.",
+            details: otpConfig,
+          }, 500)
+        }
+      }
+
+      // Log if service file was auto-created
+      if (otpConfig.serviceAutoCreated) {
+        log.info("PAM service file auto-created", { path: otpConfig.pamServicePath })
+      }
+
+      // Validate OTP via broker
       const result = await broker.authenticateOtp(session.username, code)
 
       if (!result.success) {
         return c.json({
           error: "invalid_code",
-          message: "Verification failed. Check that: 1) You ran the setup command on the server, 2) The PAM service file exists (/etc/pam.d/opencode-otp), 3) The code from your authenticator matches the QR code you scanned"
+          message: "Invalid verification code. Make sure: 1) You ran the setup command on the server to create ~/.google_authenticator, 2) The code from your authenticator matches the QR code you scanned"
         }, 401)
       }
 

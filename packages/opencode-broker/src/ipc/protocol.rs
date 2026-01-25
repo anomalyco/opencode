@@ -29,6 +29,7 @@ impl fmt::Debug for Request {
             RequestParams::Authenticate(params) => s.field("params", params),
             RequestParams::AuthenticateOtp(params) => s.field("params", params),
             RequestParams::Check2fa(params) => s.field("params", params),
+            RequestParams::CheckOtpConfig(params) => s.field("params", params),
             RequestParams::Ping(params) => s.field("params", params),
             RequestParams::SpawnPty(params) => s.field("params", params),
             RequestParams::KillPty(params) => s.field("params", params),
@@ -52,6 +53,8 @@ pub enum Method {
     AuthenticateOtp,
     /// Check if user has 2FA configured.
     Check2fa,
+    /// Check OTP/2FA server configuration (PAM module, service file).
+    CheckOtpConfig,
     Ping,
     /// Spawn a new PTY session for a user.
     SpawnPty,
@@ -77,6 +80,7 @@ pub enum Method {
 /// - `RegisterSession` (6 required) before `SpawnPty` (1 required + defaults)
 /// - `UnregisterSession` (1 required + deny_unknown_fields) before `SpawnPty`
 /// - `Check2fa` (2 required) before `Ping`
+/// - `CheckOtpConfig` uses deny_unknown_fields - must come before Ping
 /// - `Ping` must be LAST because `PingParams` is empty and matches any JSON
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -100,6 +104,8 @@ pub enum RequestParams {
     PtyRead(PtyReadParams),
     /// Check2fa has 2 required fields - must come before Ping.
     Check2fa(Check2faParams),
+    /// CheckOtpConfig uses deny_unknown_fields - must come before Ping.
+    CheckOtpConfig(CheckOtpConfigParams),
     /// Ping must be last - empty params match any JSON with untagged serde.
     Ping(PingParams),
 }
@@ -152,6 +158,37 @@ impl fmt::Debug for AuthenticateOtpParams {
             .field("code", &"[REDACTED]")
             .finish()
     }
+}
+
+/// Parameters for checking OTP/2FA server configuration.
+///
+/// Uses `deny_unknown_fields` to prevent matching with untagged serde
+/// since it has no required fields.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CheckOtpConfigParams {}
+
+/// Result of OTP configuration check.
+///
+/// Contains detailed information about the server's 2FA/OTP configuration status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtpConfigResult {
+    /// Whether all configuration is valid.
+    pub configured: bool,
+    /// Whether the PAM module is installed.
+    pub pam_module_installed: bool,
+    /// Path where PAM module was found (or expected path if not found).
+    pub pam_module_path: String,
+    /// Whether the PAM service file exists.
+    pub pam_service_exists: bool,
+    /// Path to PAM service file.
+    pub pam_service_path: String,
+    /// If service was auto-created.
+    pub service_auto_created: bool,
+    /// Specific error code if not configured.
+    /// Possible values: "pam_module_not_installed", "pam_service_not_configured", null
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
 }
 
 /// Parameters for ping/health check requests.

@@ -11,10 +11,11 @@ use base64::Engine;
 
 use crate::auth::rate_limit::RateLimiter;
 use crate::auth::validation;
-use crate::auth::{has_2fa_configured, pam, validate_otp};
+use crate::auth::{check_otp_config, has_2fa_configured, pam, validate_otp};
 use crate::config::BrokerConfig;
 use crate::ipc::protocol::{
-    Method, PROTOCOL_VERSION, PtyReadResult, Request, RequestParams, Response, SpawnPtyResult,
+    Method, OtpConfigResult, PROTOCOL_VERSION, PtyReadResult, Request, RequestParams, Response,
+    SpawnPtyResult,
 };
 use crate::process::environment::LoginEnvironment;
 use crate::process::spawn::{self, SpawnConfig};
@@ -75,6 +76,8 @@ pub async fn handle_request(
         Method::AuthenticateOtp => handle_authenticate_otp(request, config, rate_limiter).await,
 
         Method::Check2fa => handle_check_2fa(request).await,
+
+        Method::CheckOtpConfig => handle_check_otp_config(request, config).await,
 
         Method::SpawnPty => handle_spawn_pty(request, user_sessions, pty_sessions).await,
 
@@ -266,6 +269,74 @@ async fn handle_check_2fa(request: Request) -> Response {
         );
         // Use failure to indicate no 2FA - client checks success field
         Response::failure(&request.id, "2FA not configured")
+    }
+}
+
+/// Handle an OTP configuration check request.
+///
+/// Verifies the server's OTP/2FA configuration:
+/// - PAM google_authenticator module is installed
+/// - PAM service file exists (will attempt to auto-create if missing)
+///
+/// This is used to provide specific error messages when 2FA validation fails
+/// due to server misconfiguration rather than invalid codes.
+async fn handle_check_otp_config(request: Request, config: &BrokerConfig) -> Response {
+    // Verify params (though CheckOtpConfigParams is empty)
+    if !matches!(&request.params, RequestParams::CheckOtpConfig(_)) {
+        return Response::failure(&request.id, "invalid params for check_otp_config");
+    }
+
+    debug!(
+        id = %request.id,
+        "checking OTP server configuration"
+    );
+
+    let status = check_otp_config(&config.pam_service);
+
+    let result = OtpConfigResult {
+        configured: status.configured,
+        pam_module_installed: status.pam_module_installed,
+        pam_module_path: status.pam_module_path,
+        pam_service_exists: status.pam_service_exists,
+        pam_service_path: status.pam_service_path,
+        service_auto_created: status.service_auto_created,
+        error_code: status.error_code.clone(),
+    };
+
+    if status.configured {
+        if status.service_auto_created {
+            info!(
+                id = %request.id,
+                pam_service_path = %result.pam_service_path,
+                "OTP configuration valid (service file auto-created)"
+            );
+        } else {
+            info!(
+                id = %request.id,
+                "OTP server configuration valid"
+            );
+        }
+        Response::success_with_data(
+            &request.id,
+            serde_json::to_value(result).expect("OtpConfigResult serialization cannot fail"),
+        )
+    } else {
+        warn!(
+            id = %request.id,
+            error_code = ?status.error_code,
+            pam_module_installed = status.pam_module_installed,
+            pam_service_exists = status.pam_service_exists,
+            "OTP server configuration incomplete"
+        );
+        // Return failure with the detailed result in data
+        let mut response = Response::failure(
+            &request.id,
+            status.error_code.unwrap_or_else(|| "configuration_error".to_string()),
+        );
+        response.data = Some(
+            serde_json::to_value(result).expect("OtpConfigResult serialization cannot fail"),
+        );
+        response
     }
 }
 
