@@ -137,6 +137,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
 
+  const mirror = { input: false }
+
   const scrollCursorIntoView = () => {
     const container = scrollRef
     const selection = window.getSelection()
@@ -183,23 +185,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {
     if (!item.commentID) return
 
-    comments.setFocus({ file: item.path, id: item.commentID })
-    comments.setActive({ file: item.path, id: item.commentID })
+    const focus = { file: item.path, id: item.commentID }
+    comments.setActive(focus)
     view().reviewPanel.open()
 
     if (item.commentOrigin === "review") {
       tabs().open("review")
+      requestAnimationFrame(() => comments.setFocus(focus))
       return
     }
 
     if (item.commentOrigin !== "file" && commentInReview(item.path)) {
       tabs().open("review")
+      requestAnimationFrame(() => comments.setFocus(focus))
       return
     }
 
     const tab = files.tab(item.path)
     tabs().open(tab)
     files.load(item.path)
+    requestAnimationFrame(() => comments.setFocus(focus))
   }
 
   const recent = createMemo(() => {
@@ -651,6 +656,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       () => prompt.current(),
       (currentParts) => {
         const inputParts = currentParts.filter((part) => part.type !== "image") as Prompt
+
+        if (mirror.input) {
+          mirror.input = false
+          if (isNormalizedEditor()) return
+
+          const selection = window.getSelection()
+          let cursorPosition: number | null = null
+          if (selection && selection.rangeCount > 0 && editorRef.contains(selection.anchorNode)) {
+            cursorPosition = getCursorPosition(editorRef)
+          }
+
+          renderEditor(inputParts)
+
+          if (cursorPosition !== null) {
+            setCursorPosition(editorRef, cursorPosition)
+          }
+          return
+        }
+
         const domParts = parseFromDOM()
         if (isNormalizedEditor() && isPromptEqual(inputParts, domParts)) return
 
@@ -765,6 +789,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         setStore("savedPrompt", null)
       }
       if (prompt.dirty()) {
+        mirror.input = true
         prompt.set(DEFAULT_PROMPT, 0)
       }
       queueScroll()
@@ -795,6 +820,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("savedPrompt", null)
     }
 
+    mirror.input = true
     prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
   }
