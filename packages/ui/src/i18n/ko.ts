@@ -40,6 +40,7 @@ export const dict = {
   "ui.messageNav.newMessage": "새 메시지",
 
   "ui.textField.copyToClipboard": "클립보드에 복사",
+  "ui.textField.copyLink": "링크 복사",
   "ui.textField.copied": "복사됨",
 
   "ui.imagePreview.alt": "이미지 미리보기",
