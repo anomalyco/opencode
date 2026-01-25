@@ -14,6 +14,23 @@
   <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="README.zh.md">Chinese (Simplified)</a> |
+  <a href="README.zht.md">Chinese (Traditional)</a> |
+  <a href="README.ko.md">Korean</a> |
+  <a href="README.de.md">German</a> |
+  <a href="README.es.md">Spanish</a> |
+  <a href="README.fr.md">French</a> |
+  <a href="README.da.md">Danish</a> |
+  <a href="README.ja.md">Japanese</a> |
+  <a href="README.pl.md">Polish</a> |
+  <a href="README.ru.md">Russian</a> |
+  <a href="README.ar.md">Arabic</a> |
+  <a href="README.no.md">Norwegian</a> |
+  <a href="README.br.md">Portuguese (Brazil)</a>
+</p>
+
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---
@@ -31,7 +48,7 @@ choco install opencode             # Windows
 brew install anomalyco/tap/opencode # macOS 與 Linux（推薦，始終保持最新）
 brew install opencode              # macOS 與 Linux（官方 brew formula，更新頻率較低）
 paru -S opencode-bin               # Arch Linux
-mise use -g github:anomalyco/opencode    # 任何作業系統
+mise use -g opencode               # 任何作業系統
 nix run nixpkgs#opencode           # 或使用 github:anomalyco/opencode 以取得最新開發分支
 ```
 
@@ -108,10 +125,6 @@ OpenCode 內建了兩種 Agent，您可以使用 `Tab` 鍵快速切換。
 - 內建 LSP (語言伺服器協定) 支援。
 - 專注於終端機介面 (TUI)。OpenCode 由 Neovim 愛好者與 [terminal.shop](https://terminal.shop) 的創作者打造；我們將不斷挑戰終端機介面的極限。
 - 客戶端/伺服器架構 (Client/Server Architecture)。這讓 OpenCode 能夠在您的電腦上運行的同時，由行動裝置進行遠端操控。這意味著 TUI 前端只是眾多可能的客戶端之一。
-
-#### 另一個同名的 Repo 是什麼？
-
-另一個名稱相近的儲存庫與本專案無關。您可以點此[閱讀背後的故事](https://x.com/thdxr/status/1933561254481666466)。
 
 ---
 

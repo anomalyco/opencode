@@ -14,6 +14,23 @@
   <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="README.zh.md">Chinese (Simplified)</a> |
+  <a href="README.zht.md">Chinese (Traditional)</a> |
+  <a href="README.ko.md">Korean</a> |
+  <a href="README.de.md">German</a> |
+  <a href="README.es.md">Spanish</a> |
+  <a href="README.fr.md">French</a> |
+  <a href="README.da.md">Danish</a> |
+  <a href="README.ja.md">Japanese</a> |
+  <a href="README.pl.md">Polish</a> |
+  <a href="README.ru.md">Russian</a> |
+  <a href="README.ar.md">Arabic</a> |
+  <a href="README.no.md">Norwegian</a> |
+  <a href="README.br.md">Portuguese (Brazil)</a>
+</p>
+
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---
@@ -108,10 +125,6 @@ OpenCode 内置两种 Agent，可用 `Tab` 键快速切换：
 - 内置 LSP 支持。
 - 聚焦终端界面 (TUI)。OpenCode 由 Neovim 爱好者和 [terminal.shop](https://terminal.shop) 的创建者打造，会持续探索终端的极限。
 - 客户端/服务器架构。可在本机运行，同时用移动设备远程驱动。TUI 只是众多潜在客户端之一。
-
-#### 另一个同名的仓库是什么？
-
-另一个名字相近的仓库与本项目无关。[点击这里了解背后故事](https://x.com/thdxr/status/1933561254481666466)。
 
 ---
 
