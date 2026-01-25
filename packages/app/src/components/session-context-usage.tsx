@@ -4,6 +4,7 @@ import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Button } from "@opencode-ai/ui/button"
 import { useParams } from "@solidjs/router"
 import { AssistantMessage } from "@opencode-ai/sdk/v2/client"
+import { findLast } from "@opencode-ai/util/array"
 
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
@@ -25,18 +26,22 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const view = createMemo(() => layout.view(sessionKey))
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
 
+  const usd = createMemo(
+    () =>
+      new Intl.NumberFormat(language.locale(), {
+        style: "currency",
+        currency: "USD",
+      }),
+  )
+
   const cost = createMemo(() => {
-    const locale = language.locale()
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency: "USD",
-    }).format(total)
+    return usd().format(total)
   })
 
   const context = createMemo(() => {
     const locale = language.locale()
-    const last = messages().findLast((x) => {
+    const last = findLast(messages(), (x) => {
       if (x.role !== "assistant") return false
       const total = x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
       return total > 0
@@ -84,9 +89,6 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         <span class="text-text-invert-strong">{cost()}</span>
         <span class="text-text-invert-base">{language.t("context.usage.cost")}</span>
       </div>
-      <Show when={variant() === "button"}>
-        <div class="text-11-regular text-text-invert-base mt-1">{language.t("context.usage.clickToView")}</div>
-      </Show>
     </div>
   )
 

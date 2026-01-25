@@ -2277,13 +2277,23 @@ export default function Layout(props: ParentProps) {
 
       if (!created?.directory) return
 
+      const local = current.worktree
+      const key = workspaceKey(created.directory)
+      const root = workspaceKey(local)
+
       setBusy(created.directory, true)
       WorktreeState.pending(created.directory)
-      setStore("workspaceExpanded", created.directory, true)
+      setStore("workspaceExpanded", key, true)
+      if (key !== created.directory) {
+        setStore("workspaceExpanded", created.directory, true)
+      }
       setStore("workspaceOrder", current.worktree, (prev) => {
         const existing = prev ?? []
-        const local = current.worktree
-        const next = existing.filter((d) => d !== local && d !== created.directory)
+        const next = existing.filter((item) => {
+          const id = workspaceKey(item)
+          if (id === root) return false
+          return id !== key
+        })
         return [local, created.directory, ...next]
       })
 

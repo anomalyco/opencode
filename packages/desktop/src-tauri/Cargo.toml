@@ -43,7 +43,6 @@ uuid = { version = "1.19.0", features = ["v4"] }
 tauri-plugin-decorum = "1.1.1"
 comrak = { version = "0.50", default-features = false }
 
-
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"
 webkit2gtk = "=2.0.1"

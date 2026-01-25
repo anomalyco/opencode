@@ -223,6 +223,9 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} из {{total}} включено",
   "dialog.mcp.empty": "MCP не настроены",
 
+  "dialog.lsp.empty": "LSP автоматически обнаружены по типам файлов",
+  "dialog.plugins.empty": "Плагины настроены в opencode.json",
+
   "mcp.status.connected": "подключено",
   "mcp.status.failed": "ошибка",
   "mcp.status.needs_auth": "требуется авторизация",
@@ -242,7 +245,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "Не удалось подключиться к серверу",
   "dialog.server.add.checking": "Проверка...",
-  "dialog.server.add.button": "Добавить",
+  "dialog.server.add.button": "Добавить сервер",
   "dialog.server.default.title": "Сервер по умолчанию",
   "dialog.server.default.description":
     "Подключаться к этому серверу при запуске приложения вместо запуска локального сервера. Требуется перезапуск.",
@@ -250,6 +253,13 @@ export const dict = {
   "dialog.server.default.set": "Установить текущий сервер по умолчанию",
   "dialog.server.default.clear": "Очистить",
   "dialog.server.action.remove": "Удалить сервер",
+
+  "dialog.server.menu.edit": "Редактировать",
+  "dialog.server.menu.default": "Сделать по умолчанию",
+  "dialog.server.menu.defaultRemove": "Удалить по умолчанию",
+  "dialog.server.menu.delete": "Удалить",
+  "dialog.server.current": "Текущий сервер",
+  "dialog.server.status.default": "По умолч.",
 
   "dialog.project.edit.title": "Редактировать проект",
   "dialog.project.edit.name": "Название",

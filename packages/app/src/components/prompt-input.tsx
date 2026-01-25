@@ -123,6 +123,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const local = useLocal()
   const files = useFile()
   const prompt = usePrompt()
+  const commentCount = createMemo(() => prompt.context.items().filter((item) => !!item.comment?.trim()).length)
   const layout = useLayout()
   const comments = useComments()
   const params = useParams()
@@ -135,6 +136,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let fileInputRef!: HTMLInputElement
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
+
+  const mirror = { input: false }
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -169,6 +172,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
   const view = createMemo(() => layout.view(sessionKey))
+
+  const commentInReview = (path: string) => {
+    const sessionID = params.id
+    if (!sessionID) return false
+
+    const diffs = sync.data.session_diff[sessionID]
+    if (!diffs) return false
+    return diffs.some((diff) => diff.file === path)
+  }
+
+  const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {
+    if (!item.commentID) return
+
+    comments.setFocus({ file: item.path, id: item.commentID })
+    comments.setActive({ file: item.path, id: item.commentID })
+    view().reviewPanel.open()
+
+    if (item.commentOrigin === "review") {
+      tabs().open("review")
+      return
+    }
+
+    if (item.commentOrigin !== "file" && commentInReview(item.path)) {
+      tabs().open("review")
+      return
+    }
+
+    const tab = files.tab(item.path)
+    tabs().open(tab)
+    files.load(item.path)
+  }
 
   const recent = createMemo(() => {
     const all = tabs().all()
@@ -619,6 +653,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       () => prompt.current(),
       (currentParts) => {
         const inputParts = currentParts.filter((part) => part.type !== "image") as Prompt
+
+        if (mirror.input) {
+          mirror.input = false
+          if (isNormalizedEditor()) return
+
+          const selection = window.getSelection()
+          let cursorPosition: number | null = null
+          if (selection && selection.rangeCount > 0 && editorRef.contains(selection.anchorNode)) {
+            cursorPosition = getCursorPosition(editorRef)
+          }
+
+          renderEditor(inputParts)
+
+          if (cursorPosition !== null) {
+            setCursorPosition(editorRef, cursorPosition)
+          }
+          return
+        }
+
         const domParts = parseFromDOM()
         if (isNormalizedEditor() && isPromptEqual(inputParts, domParts)) return
 
@@ -733,6 +786,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         setStore("savedPrompt", null)
       }
       if (prompt.dirty()) {
+        mirror.input = true
         prompt.set(DEFAULT_PROMPT, 0)
       }
       queueScroll()
@@ -763,6 +817,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("savedPrompt", null)
     }
 
+    mirror.input = true
     prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
   }
@@ -1481,6 +1536,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             selection: item.selection,
             comment: item.comment,
             commentID: item.commentID,
+            commentOrigin: item.commentOrigin,
             preview: item.preview,
           })
         }
@@ -1547,6 +1603,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           selection: item.selection,
           comment: item.comment,
           commentID: item.commentID,
+          commentOrigin: item.commentOrigin,
           preview: item.preview,
         })
       }
@@ -1678,15 +1735,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <div class="flex flex-nowrap items-start gap-2 p-2 overflow-x-auto no-scrollbar">
             <For each={prompt.context.items()}>
               {(item) => {
+                const active = () => {
+                  const a = comments.active()
+                  return !!item.commentID && item.commentID === a?.id && item.path === a?.file
+                }
                 return (
                   <Tooltip
                     value={
                       <span class="flex max-w-[300px]">
                         <span
                           class="text-text-invert-base truncate min-w-0"
-                          style={{ direction: "rtl", "text-align": "left" }}
+                          style={{ direction: "rtl", "text-align": "left", "unicode-bidi": "plaintext" }}
                         >
-                          <bdi>{getDirectory(item.path)}</bdi>
+                          {getDirectory(item.path)}
                         </span>
                         <span class="shrink-0">{getFilename(item.path)}</span>
                       </span>
@@ -1696,14 +1757,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <div
                       classList={{
-                        "group shrink-0 flex flex-col rounded-[6px] bg-background-stronger pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all shadow-xs-border hover:shadow-xs-border-hover": true,
-                        "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID,
+                        "group shrink-0 flex flex-col rounded-[6px] pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all transition-transform shadow-xs-border hover:shadow-xs-border-hover": true,
+                        "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID && !active(),
+                        "cursor-pointer bg-surface-interactive-hover hover:bg-surface-interactive-hover shadow-xs-border-hover":
+                          active(),
+                        "bg-background-stronger": !active(),
                       }}
                       onClick={() => {
-                        if (!item.commentID) return
-                        comments.setFocus({ file: item.path, id: item.commentID })
-                        view().reviewPanel.open()
-                        tabs().open("review")
+                        openComment(item)
                       }}
                     >
                       <div class="flex items-center gap-1.5">
@@ -1798,7 +1859,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             aria-label={
               store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
-                : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })
+                : commentCount() > 1
+                  ? "Summarize comments…"
+                  : commentCount() === 1
+                    ? "Summarize comment…"
+                    : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })
             }
             contenteditable="true"
             onInput={handleInput}
@@ -1818,7 +1883,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <div class="absolute top-0 inset-x-0 p-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
-                : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })}
+                : commentCount() > 1
+                  ? "Summarize comments…"
+                  : commentCount() === 1
+                    ? "Summarize comment…"
+                    : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })}
             </div>
           </Show>
         </div>
@@ -1925,7 +1994,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Match>
             </Switch>
           </div>
-          <div class="flex items-center gap-3 absolute right-2 bottom-2">
+          <div class="flex items-center gap-3 absolute right-3 bottom-3">
             <input
               ref={fileInputRef}
               type="file"
