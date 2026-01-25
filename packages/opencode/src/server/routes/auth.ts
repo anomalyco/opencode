@@ -942,18 +942,50 @@ function generate2FASetupPageHtml(params: {
       text-align: center;
       color: #0ea5e9;
     }
+    .command-container {
+      position: relative;
+      margin-top: 0.5rem;
+    }
     .command-display {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 0.7rem;
       background: #1a1a1a;
       padding: 0.75rem;
+      padding-right: 3rem;
       border-radius: 6px;
       white-space: pre-wrap;
       word-break: break-all;
       color: #a3a3a3;
-      margin-top: 0.5rem;
       max-height: 150px;
       overflow-y: auto;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      background: #333;
+      border: none;
+      border-radius: 4px;
+      padding: 0.35rem 0.5rem;
+      cursor: pointer;
+      color: #a3a3a3;
+      font-size: 0.7rem;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover {
+      background: #444;
+      color: #e5e5e5;
+    }
+    .copy-btn.copied {
+      background: #166534;
+      color: #4ade80;
+    }
+    .copy-btn svg {
+      width: 14px;
+      height: 14px;
     }
     .install-details {
       margin-top: 0.75rem;
@@ -1143,7 +1175,16 @@ function generate2FASetupPageHtml(params: {
     <div class="step">
       <div class="step-title">Step 3: Run Setup Command on the Server</div>
       <p class="note">Run this command on the opencode server to create your 2FA configuration file:</p>
-      <div class="command-display">${escapeHtml(setupCommand)}</div>
+      <div class="command-container">
+        <div class="command-display" id="setupCommand">${escapeHtml(setupCommand)}</div>
+        <button type="button" class="copy-btn" id="copyBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span>Copy</span>
+        </button>
+      </div>
       <p class="note">This creates ~/.google_authenticator with the secret from Step 1.</p>
       <details class="install-details">
         <summary>Is this safe? Will it affect my system login?</summary>
@@ -1271,6 +1312,38 @@ function generate2FASetupPageHtml(params: {
         verifyBtn.textContent = 'Verify & Enable 2FA';
       }
     });
+
+    // Copy button handler
+    const copyBtn = document.getElementById('copyBtn');
+    const setupCommandEl = document.getElementById('setupCommand');
+    if (copyBtn && setupCommandEl) {
+      copyBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(setupCommandEl.textContent || '');
+          copyBtn.classList.add('copied');
+          copyBtn.querySelector('span').textContent = 'Copied!';
+          setTimeout(() => {
+            copyBtn.classList.remove('copied');
+            copyBtn.querySelector('span').textContent = 'Copy';
+          }, 2000);
+        } catch (err) {
+          // Fallback for older browsers
+          const range = document.createRange();
+          range.selectNodeContents(setupCommandEl);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          document.execCommand('copy');
+          selection.removeAllRanges();
+          copyBtn.classList.add('copied');
+          copyBtn.querySelector('span').textContent = 'Copied!';
+          setTimeout(() => {
+            copyBtn.classList.remove('copied');
+            copyBtn.querySelector('span').textContent = 'Copy';
+          }, 2000);
+        }
+      });
+    }
 
     // Skip button handler
     const skipBtn = document.getElementById('skipBtn');
