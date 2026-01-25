@@ -145,9 +145,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           available(),
           filter((x) => Math.abs(DateTime.fromISO(x.release_date).diffNow().as("months")) < 6),
           groupBy((x) => x.provider.id),
-          mapValues((models) =>
-            pipe(
-              models,
+          mapValues((models) => {
+            const isCodex = (model: { family?: string; id: string }) => model.family?.includes("codex") || model.id.includes("codex")
+            const codex = models.filter((model) => isCodex(model))
+            const nonCodex = models.filter((model) => !isCodex(model))
+            const deduped = pipe(
+              nonCodex,
               groupBy((x) => x.family),
               values(),
               (groups) =>
@@ -155,8 +158,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
                   const first = firstBy(g, [(x) => x.release_date, "desc"])
                   return first ? [{ modelID: first.id, providerID: first.provider.id }] : []
                 }),
-            ),
-          ),
+            )
+            return [
+              ...deduped,
+              ...codex.map((model) => ({
+                modelID: model.id,
+                providerID: model.provider.id,
+              })),
+            ]
+          }),
           values(),
           flat(),
         ),
