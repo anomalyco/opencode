@@ -114,7 +114,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.publish.outputs.tag }}
 
-      - uses: apple-actions/import-codesign-certs@v2
+      - uses: apple-actions/import-codesign-certs@v6
         if: ${{ runner.os == 'macOS' }}
         with:
           keychain: build
