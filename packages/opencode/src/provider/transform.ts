@@ -1,5 +1,5 @@
 import type { APICallError, ModelMessage } from "ai"
-import { unique } from "remeda"
+import { mergeDeep, unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
@@ -26,6 +26,7 @@ export namespace ProviderTransform {
       case "@ai-sdk/amazon-bedrock":
         return "bedrock"
       case "@ai-sdk/anthropic":
+      case "@ai-sdk/google-vertex/anthropic":
         return "anthropic"
       case "@ai-sdk/google-vertex":
       case "@ai-sdk/google":
@@ -186,18 +187,12 @@ export namespace ProviderTransform {
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
         if (lastContent && typeof lastContent === "object") {
-          lastContent.providerOptions = {
-            ...lastContent.providerOptions,
-            ...providerOptions,
-          }
+          lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
           continue
         }
       }
 
-      msg.providerOptions = {
-        ...msg.providerOptions,
-        ...providerOptions,
-      }
+      msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerOptions)
     }
 
     return msgs
@@ -349,8 +344,12 @@ export namespace ProviderTransform {
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
       case "@ai-sdk/github-copilot":
+        const copilotEfforts = iife(() => {
+          if (id.includes("5.1-codex-max") || id.includes("5.2")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+          return WIDELY_SUPPORTED_EFFORTS
+        })
         return Object.fromEntries(
-          WIDELY_SUPPORTED_EFFORTS.map((effort) => [
+          copilotEfforts.map((effort) => [
             effort,
             {
               reasoningEffort: effort,
