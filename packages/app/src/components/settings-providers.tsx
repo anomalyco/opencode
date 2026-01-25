@@ -22,12 +22,27 @@ export const SettingsProviders: Component = () => {
 
   const connected = createMemo(() => providers.connected())
   const popular = createMemo(() => {
-    const items = providers.popular().slice()
+    const connectedIDs = new Set(connected().map((p) => p.id))
+    const items = providers
+      .popular()
+      .filter((p) => !connectedIDs.has(p.id))
+      .slice()
     items.sort((a, b) => popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id))
     return items
   })
 
   const source = (item: unknown) => (item as ProviderMeta).source
+
+  const type = (item: unknown) => {
+    const current = source(item)
+    if (current === "env") return language.t("settings.providers.tag.environment")
+    if (current === "api") return language.t("provider.connect.method.apiKey")
+    if (current === "config") return language.t("settings.providers.tag.config")
+    if (current === "custom") return language.t("settings.providers.tag.custom")
+    return language.t("settings.providers.tag.other")
+  }
+
+  const canDisconnect = (item: unknown) => source(item) !== "env"
 
   const disconnect = async (providerID: string, name: string) => {
     await globalSDK.client.auth
@@ -48,14 +63,8 @@ export const SettingsProviders: Component = () => {
   }
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar" style={{ padding: "0 40px 40px 40px" }}>
-      <div
-        class="sticky top-0 z-10"
-        style={{
-          background:
-            "linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha) calc(100% - 24px), transparent)",
-        }}
-      >
+    <div class="flex flex-col h-full overflow-y-auto px-10 pb-10 no-scrollbar">
+      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
           <div class="flex items-center justify-between gap-4">
             <h2 class="text-16-medium text-text-strong">{language.t("settings.providers.title")}</h2>
@@ -81,14 +90,9 @@ export const SettingsProviders: Component = () => {
                     <div class="flex items-center gap-3 min-w-0">
                       <ProviderIcon id={item.id as IconName} class="size-5 shrink-0 icon-strong-base" />
                       <span class="text-14-regular text-text-strong truncate">{item.name}</span>
-                      <Show when={source(item) === "env"}>
-                        <Tag>{language.t("settings.providers.tag.environment")}</Tag>
-                      </Show>
-                      <Show when={source(item) === "api"}>
-                        <Tag>{language.t("provider.connect.method.apiKey")}</Tag>
-                      </Show>
+                      <Tag>{type(item)}</Tag>
                     </div>
-                    <Show when={source(item) === "api"}>
+                    <Show when={canDisconnect(item)}>
                       <Button size="small" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
                         {language.t("common.disconnect")}
                       </Button>
