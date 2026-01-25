@@ -80,24 +80,25 @@ Each task follows Test-Driven Development: write the test first, then implement.
 
 ---
 
-## Phase 4: Tool Integration ⏳
+## Phase 4: Tool Integration ✅
 
 **Goal**: Enable existing tools to work in realtime conversations.
 
-### 4.1 Tool Schema Conversion
+### 4.1 Tool Schema Conversion ✅
 
 | # | Status | Task | File | Description |
 |---|--------|------|------|-------------|
-| 4.1.1 | ⏳ | Tool.Info → OpenAI format | `src/realtime/tools.ts` | Convert Zod schemas to OpenAI function format |
-| 4.1.2 | ⏳ | Tests | `test/realtime/tools.test.ts` | Conversion tests with existing tools |
+| 4.1.1 | ✅ | Zod v4 → OpenAI format | `src/realtime/tools.ts` | Custom converter for Zod v4 schemas |
+| 4.1.2 | ✅ | Tests | `test/realtime/tools.test.ts` | 6 conversion tests (simple, optional, enum, nested, arrays) |
 
-### 4.2 Tool Execution
+### 4.2 Tool Execution ✅
 
 | # | Status | Task | File | Description |
 |---|--------|------|------|-------------|
-| 4.2.1 | ⏳ | Realtime tool executor | `src/realtime/tools.ts` | Execute tools, handle results |
-| 4.2.2 | ⏳ | Interruption handling | `src/realtime/tools.ts` | Cancel on VAD, update to interrupted state |
-| 4.2.3 | ⏳ | Tests | `test/realtime/tools.test.ts` | Execution and interruption tests |
+| 4.2.1 | ✅ | Tool executor | `src/realtime/tools.ts` | Execute tools with validation and error handling |
+| 4.2.2 | ✅ | Auto-execution in session | `src/realtime/session.ts` | Automatic tool execution on function calls |
+| 4.2.3 | ✅ | Interruption handling | `src/realtime/session.ts` | Cancel on VAD speech_started, abort signal support |
+| 4.2.4 | ✅ | Tests | `test/realtime/tools.test.ts` | 15 tests for execution and interruption
 
 ---
 
@@ -132,10 +133,10 @@ Each task follows Test-Driven Development: write the test first, then implement.
 | Phase 1: Types | 27 | ✅ |
 | Phase 2: Protocol & Transport | 47 | ✅ |
 | Phase 3: Server | 15 | ✅ |
-| Phase 4: Tools | 0 | ⏳ |
+| Phase 4: Tools | 15 | ✅ |
 | Phase 5: Persistence | 0 | ⏳ |
 | Phase 6: Client | 0 | ⏳ |
-| **Total** | **89** | - |
+| **Total** | **104** | - |
 
 ---
 
@@ -146,7 +147,8 @@ src/realtime/
 ├── index.ts           ✅ Re-exports
 ├── protocol.ts        ✅ All Zod schemas for WebSocket events
 ├── transport.ts       ✅ Transport interface + OpenAI + Mock
-└── session.ts         ✅ RealtimeSession class (client WS ↔ OpenAI bridge)
+├── session.ts         ✅ RealtimeSession class (client WS ↔ OpenAI bridge)
+└── tools.ts           ✅ Zod→JSON Schema converter + tool executor
 
 src/server/routes/
 └── realtime.ts        ✅ WebSocket and REST endpoints
@@ -156,7 +158,8 @@ test/realtime/
 ├── config.test.ts     ✅ RealtimeConfig schema
 ├── protocol.test.ts   ✅ All event types
 ├── transport.test.ts  ✅ Transport interface and flows
-└── session.test.ts    ✅ Session lifecycle and message routing
+├── session.test.ts    ✅ Session lifecycle and message routing
+└── tools.test.ts      ✅ Schema conversion and tool execution
 ```
 
 ## Files Modified
