@@ -11,6 +11,110 @@ This document outlines the plan for adding OpenAI Realtime API support to openco
 3. **Full Compatibility**: Integrate seamlessly with existing opencode architecture
 4. **Extensibility**: Design for future realtime providers (e.g., Gemini Live)
 
+## SDK Choice: Raw WebSocket over OpenAI Realtime API
+
+### Options Considered
+
+| Option | Description | Verdict |
+|--------|-------------|---------|
+| **OpenAI Agents SDK** | High-level agent framework | ❌ Poor fit - different tool format, conflicts with opencode's session system |
+| **@openai/realtime-api-beta** | Typed WebSocket wrapper | ⚠️ Viable - adds dependency, tool format differs |
+| **Raw WebSocket + Thin Wrapper** | Direct Realtime API | ✅ Best fit - full control, reuses existing tools |
+
+### Decision: Raw WebSocket with Custom Transport
+
+**Rationale:**
+1. **Reuse existing tool system**: OpenCode's `Tool.Info` with Zod schemas works unchanged
+2. **Control over audio**: Fine-grained buffering, interruption handling
+3. **Consistent architecture**: Follows opencode's pattern of owning the abstraction layer
+4. **No external dependencies**: Reduces version conflicts and breaking changes
+5. **Future extensibility**: Same transport interface for Gemini Live, etc.
+
+### Tool Integration Strategy
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     OpenCode Tool System                         │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │ Tool.Info { id, init() → { description, parameters, execute } │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                              │                                   │
+│              ┌───────────────┴───────────────┐                  │
+│              ▼                               ▼                  │
+│  ┌─────────────────────┐        ┌─────────────────────────────┐ │
+│  │ Text Mode           │        │ Realtime Mode               │ │
+│  │ (Vercel AI SDK)     │        │ (OpenAI Realtime WebSocket) │ │
+│  │                     │        │                             │ │
+│  │ streamText({        │        │ RealtimeTransport {         │ │
+│  │   tools: convert(   │        │   tools: convert(           │ │
+│  │     Tool.Info →     │        │     Tool.Info →             │ │
+│  │     AI SDK format   │        │     OpenAI function format  │ │
+│  │   )                 │        │   )                         │ │
+│  │ })                  │        │ }                           │ │
+│  └─────────────────────┘        └─────────────────────────────┘ │
+│                              │                                   │
+│                              ▼                                   │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │              Shared: Tool.execute(args, context)            │ │
+│  │              Shared: ToolPart state machine                 │ │
+│  │              Shared: Permission system                      │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Realtime Tool Call Flow
+
+```
+1. User speaks → OpenAI Realtime detects intent to use tool
+2. OpenAI sends: response.function_call_arguments.done
+   { call_id: "call_123", name: "read_file", arguments: '{"path":"/foo"}' }
+
+3. Server:
+   a. Creates ToolPart(pending) → emits Bus event
+   b. Transitions to ToolPart(running)
+   c. Calls existing Tool.execute() with Tool.Context
+   d. Respects permissions (ctx.ask())
+   e. Transitions to ToolPart(completed|error|interrupted)
+
+4. Server sends: conversation.item.create
+   { type: "function_call_output", call_id: "call_123", output: "..." }
+
+5. Server sends: response.create
+   (Triggers OpenAI to continue with tool result)
+
+6. OpenAI responds with audio incorporating tool result
+```
+
+### New ToolPart State: `interrupted`
+
+For realtime, tools can be interrupted mid-execution by user speech:
+
+```typescript
+export const ToolStateInterrupted = z.object({
+  status: z.literal("interrupted"),
+  input: z.record(z.string(), z.any()),
+  reason: z.enum(["user_speech", "response_cancel", "connection_lost"]),
+  partialOutput: z.string().optional(),
+  time: z.object({
+    start: z.number(),
+    end: z.number(),
+  }),
+})
+```
+
+### Key Differences from Text Mode
+
+| Aspect | Text Mode | Realtime Mode |
+|--------|-----------|---------------|
+| Transport | HTTP streaming (Vercel AI SDK) | WebSocket (raw) |
+| Tool invocation | Callback in `streamText()` | Explicit event handling |
+| Result delivery | Return from `execute()` | WebSocket message |
+| Concurrent tools | Sequential | Can be parallel |
+| Interruption | AbortSignal only | VAD + response.cancel |
+| Feedback | Text response | Voice confirms execution |
+
+---
+
 ## Current Architecture Analysis
 
 ### What Already Exists
@@ -1576,6 +1680,347 @@ describe("RealtimeEvent", () => {
 
 ---
 
+### Phase 4B: Tool Integration for Realtime
+
+**Goal**: Enable existing opencode tools to work in realtime voice conversations.
+
+#### 4B.1 Tool Schema Conversion
+
+| # | Task | File | Description |
+|---|------|------|-------------|
+| 4B.1.1 | **TEST**: Convert Tool.Info to OpenAI format | `test/realtime/tools-convert.test.ts` | Test Zod → OpenAI function schema |
+| 4B.1.2 | **IMPL**: Tool conversion | `src/realtime/tools.ts` | Convert opencode tools to realtime format |
+
+```typescript
+// test/realtime/tools-convert.test.ts
+import { describe, expect, test } from "bun:test"
+import { convertToolsForRealtime } from "../../src/realtime/tools"
+import { z } from "zod"
+
+describe("convertToolsForRealtime", () => {
+  test("converts Zod schema to OpenAI function format", async () => {
+    const mockTool = {
+      id: "read_file",
+      description: "Read a file from disk",
+      parameters: z.object({
+        path: z.string().describe("File path to read"),
+        encoding: z.enum(["utf8", "binary"]).optional()
+      })
+    }
+
+    const converted = await convertToolsForRealtime([mockTool])
+
+    expect(converted[0]).toEqual({
+      type: "function",
+      name: "read_file",
+      description: "Read a file from disk",
+      parameters: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "File path to read" },
+          encoding: { type: "string", enum: ["utf8", "binary"] }
+        },
+        required: ["path"]
+      }
+    })
+  })
+
+  test("handles nested object schemas", async () => {
+    const mockTool = {
+      id: "edit_file",
+      description: "Edit a file",
+      parameters: z.object({
+        file: z.string(),
+        changes: z.array(z.object({
+          line: z.number(),
+          content: z.string()
+        }))
+      })
+    }
+
+    const converted = await convertToolsForRealtime([mockTool])
+    expect(converted[0].parameters.properties.changes.type).toBe("array")
+  })
+})
+```
+
+---
+
+#### 4B.2 ToolStateInterrupted
+
+| # | Task | File | Description |
+|---|------|------|-------------|
+| 4B.2.1 | **TEST**: Interrupted state schema | `test/session/tool-interrupted.test.ts` | Test new ToolState variant |
+| 4B.2.2 | **IMPL**: Add interrupted state | `src/session/message-v2.ts` | Extend ToolState union |
+
+```typescript
+// test/session/tool-interrupted.test.ts
+import { describe, expect, test } from "bun:test"
+import { MessageV2 } from "../../src/session/message-v2"
+
+describe("ToolStateInterrupted", () => {
+  test("validates interrupted state", () => {
+    const state = {
+      status: "interrupted",
+      input: { path: "/foo" },
+      reason: "user_speech",
+      time: { start: 1000, end: 2000 }
+    }
+    expect(MessageV2.ToolState.safeParse(state).success).toBe(true)
+  })
+
+  test("validates with partial output", () => {
+    const state = {
+      status: "interrupted",
+      input: { query: "test" },
+      reason: "response_cancel",
+      partialOutput: "Partial results...",
+      time: { start: 1000, end: 1500 }
+    }
+    expect(MessageV2.ToolState.safeParse(state).success).toBe(true)
+  })
+
+  test("validates all interrupt reasons", () => {
+    const reasons = ["user_speech", "response_cancel", "connection_lost"]
+    for (const reason of reasons) {
+      const state = {
+        status: "interrupted",
+        input: {},
+        reason,
+        time: { start: 0, end: 0 }
+      }
+      expect(MessageV2.ToolState.safeParse(state).success).toBe(true)
+    }
+  })
+})
+```
+
+---
+
+#### 4B.3 Realtime Tool Executor
+
+| # | Task | File | Description |
+|---|------|------|-------------|
+| 4B.3.1 | **TEST**: Execute tool in realtime context | `test/realtime/tools-execute.test.ts` | Test tool execution with realtime context |
+| 4B.3.2 | **IMPL**: Realtime executor | `src/realtime/tools.ts` | Execute tools, handle interruption |
+
+```typescript
+// test/realtime/tools-execute.test.ts
+import { describe, expect, test, mock } from "bun:test"
+import { tmpdir } from "../fixture/fixture"
+import { Instance } from "../../src/project/instance"
+import { executeRealtimeTool } from "../../src/realtime/tools"
+
+describe("executeRealtimeTool", () => {
+  test("executes tool and returns JSON result", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // Write test file
+        await Bun.write(`${tmp.path}/test.txt`, "hello world")
+
+        const result = await executeRealtimeTool(
+          "read",
+          { file_path: `${tmp.path}/test.txt` },
+          { sessionID: "s1", messageID: "m1", agent: "coder", abort: new AbortController().signal }
+        )
+
+        const parsed = JSON.parse(result)
+        expect(parsed.output).toContain("hello world")
+      }
+    })
+  })
+
+  test("handles abort signal for interruption", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const controller = new AbortController()
+
+        // Start long-running tool
+        const promise = executeRealtimeTool(
+          "bash",
+          { command: "sleep 10", description: "Sleep" },
+          { sessionID: "s1", messageID: "m1", agent: "coder", abort: controller.signal }
+        )
+
+        // Interrupt immediately
+        controller.abort()
+
+        await expect(promise).rejects.toThrow()
+      }
+    })
+  })
+
+  test("respects permission system", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const askMock = mock(() => Promise.reject(new Error("Permission denied")))
+
+        await expect(
+          executeRealtimeTool(
+            "bash",
+            { command: "rm -rf /", description: "Delete" },
+            {
+              sessionID: "s1",
+              messageID: "m1",
+              agent: "coder",
+              abort: new AbortController().signal,
+              ask: askMock
+            }
+          )
+        ).rejects.toThrow("Permission denied")
+      }
+    })
+  })
+})
+```
+
+---
+
+#### 4B.4 Tool Call Event Handler
+
+| # | Task | File | Description |
+|---|------|------|-------------|
+| 4B.4.1 | **TEST**: Handle function_call events | `test/realtime/tools-handler.test.ts` | Test event → execution → response flow |
+| 4B.4.2 | **IMPL**: Event handler | `src/realtime/openai-transport.ts` | Handle tool calls in transport |
+
+```typescript
+// test/realtime/tools-handler.test.ts
+import { describe, expect, test, mock } from "bun:test"
+
+describe("OpenAIRealtimeTransport tool handling", () => {
+  test("emits tool call on function_call_arguments.done", async () => {
+    const transport = new OpenAIRealtimeTransport({ apiKey: "test" })
+    const handler = mock(() => {})
+    transport.onToolCall(handler)
+
+    await transport.connect({ model: "test", voice: "alloy", instructions: "" })
+
+    mockWs.onmessage?.({
+      data: JSON.stringify({
+        type: "response.function_call_arguments.done",
+        call_id: "call_abc",
+        name: "read_file",
+        arguments: '{"path": "/test.txt"}'
+      })
+    })
+
+    expect(handler).toHaveBeenCalledWith({
+      callId: "call_abc",
+      name: "read_file",
+      args: { path: "/test.txt" }
+    })
+  })
+
+  test("respondToTool sends correct messages", async () => {
+    const transport = new OpenAIRealtimeTransport({ apiKey: "test" })
+    await transport.connect({ model: "test", voice: "alloy", instructions: "" })
+
+    transport.respondToTool("call_abc", { content: "File contents here" })
+
+    // Should send conversation.item.create
+    const createCall = mockWs.send.mock.calls.find(c => {
+      const msg = JSON.parse(c[0])
+      return msg.type === "conversation.item.create"
+    })
+    expect(createCall).toBeDefined()
+    expect(JSON.parse(createCall[0])).toMatchObject({
+      type: "conversation.item.create",
+      item: {
+        type: "function_call_output",
+        call_id: "call_abc"
+      }
+    })
+
+    // Should send response.create to continue
+    const responseCall = mockWs.send.mock.calls.find(c => {
+      const msg = JSON.parse(c[0])
+      return msg.type === "response.create"
+    })
+    expect(responseCall).toBeDefined()
+  })
+
+  test("handles tool error gracefully", async () => {
+    const transport = new OpenAIRealtimeTransport({ apiKey: "test" })
+    await transport.connect({ model: "test", voice: "alloy", instructions: "" })
+
+    transport.respondToToolError("call_abc", "File not found")
+
+    const createCall = mockWs.send.mock.calls.find(c => {
+      const msg = JSON.parse(c[0])
+      return msg.type === "conversation.item.create" &&
+             msg.item.output?.includes("error")
+    })
+    expect(createCall).toBeDefined()
+  })
+})
+```
+
+---
+
+#### 4B.5 Tool Interruption Handling
+
+| # | Task | File | Description |
+|---|------|------|-------------|
+| 4B.5.1 | **TEST**: Interrupt running tool | `test/realtime/tools-interrupt.test.ts` | Test VAD interruption during tool |
+| 4B.5.2 | **IMPL**: Interruption logic | `src/realtime/tools.ts` | Handle abort, update ToolPart state |
+
+```typescript
+// test/realtime/tools-interrupt.test.ts
+import { describe, expect, test, mock } from "bun:test"
+import { tmpdir } from "../fixture/fixture"
+import { Instance } from "../../src/project/instance"
+import { RealtimeToolExecutor } from "../../src/realtime/tools"
+import { MessageV2 } from "../../src/session/message-v2"
+
+describe("Tool interruption", () => {
+  test("transitions to interrupted state on user speech", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const executor = new RealtimeToolExecutor("session-1")
+        const partUpdates: MessageV2.ToolPart[] = []
+
+        // Track part updates
+        Bus.subscribe(MessageV2.Event.PartUpdated, (e) => {
+          if (e.properties.part.type === "tool") {
+            partUpdates.push(e.properties.part)
+          }
+        })
+
+        // Start long-running tool
+        const promise = executor.execute("bash", {
+          command: "sleep 5",
+          description: "Sleep"
+        })
+
+        // Wait for running state
+        await new Promise(r => setTimeout(r, 50))
+        expect(partUpdates.some(p => p.state.status === "running")).toBe(true)
+
+        // Simulate user speech interruption
+        executor.interrupt("user_speech")
+
+        await promise.catch(() => {})
+
+        // Should have interrupted state
+        const lastPart = partUpdates[partUpdates.length - 1]
+        expect(lastPart.state.status).toBe("interrupted")
+        expect(lastPart.state.reason).toBe("user_speech")
+      }
+    })
+  })
+})
+```
+
+---
+
 ### Phase 5: Model Configuration
 
 **Goal**: Add realtime models to provider system.
@@ -1836,6 +2281,14 @@ Phase 4: Session Integration
   3.x Routes ──────────┼──> 4.1 Transcript Persistence
   1.3 AudioPart ───────┘    4.2 Bus Events
 
+Phase 4B: Tool Integration (Critical Path)
+  Existing Tool.Info ──┐
+  2.7 Tool Calls ──────┼──> 4B.1 Schema Conversion
+  MessageV2.ToolState ─┘    4B.2 Interrupted State
+                            4B.3 Realtime Executor
+                            4B.4 Event Handler
+                            4B.5 Interruption Handling
+
 Phase 5: Model Config
   (independent) ───────────> 5.1-5.2 Model Metadata
 
@@ -1874,6 +2327,13 @@ bun test test/realtime/state.test.ts
 # Phase 4: Session
 bun test test/session/realtime-persist.test.ts
 bun test test/realtime/events.test.ts
+
+# Phase 4B: Tool Integration
+bun test test/realtime/tools-convert.test.ts
+bun test test/session/tool-interrupted.test.ts
+bun test test/realtime/tools-execute.test.ts
+bun test test/realtime/tools-handler.test.ts
+bun test test/realtime/tools-interrupt.test.ts
 
 # Phase 5-6: Config & Errors
 bun test test/provider/realtime-model.test.ts
