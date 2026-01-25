@@ -106,7 +106,12 @@ export namespace Pty {
     }
 
     const cwd = input.cwd || Instance.directory
-    const env = { ...process.env, ...input.env, TERM: "xterm-256color" } as Record<string, string>
+    const env = {
+      ...process.env,
+      ...input.env,
+      TERM: "xterm-256color",
+      OPENCODE_TERMINAL: "1",
+    } as Record<string, string>
 
     let envExports = ""
     try {
