@@ -800,17 +800,10 @@ export namespace SessionPrompt {
           }
         }
 
-        const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
-        const metadata = {
-          ...(result.metadata ?? {}),
-          truncated: truncated.truncated,
-          ...(truncated.truncated && { outputPath: truncated.outputPath }),
-        }
-
         return {
           title: "",
-          metadata,
-          output: truncated.content,
+          metadata: result.metadata ?? {},
+          output: textParts.join("\n\n"),
           attachments,
           content: result.content, // directly return content to preserve ordering when outputting to model
         }

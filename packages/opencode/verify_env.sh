@@ -1,0 +1,10 @@
+#!/bin/bash
+echo "----------------------------------------"
+echo "Opencode Environment Variables Verification"
+echo "----------------------------------------"
+echo "OPENCODE_MODEL_NAME:         '${OPENCODE_MODEL_NAME}'"
+echo "OPENCODE_MODEL_ID:           '${OPENCODE_MODEL_ID}'"
+echo "OPENCODE_CANONICAL_MODEL_ID: '${OPENCODE_CANONICAL_MODEL_ID}'"
+echo "OPENCODE_PROVIDER_ID:        '${OPENCODE_PROVIDER_ID}'"
+echo "OPENCODE_MODEL_FULL_ID:      '${OPENCODE_MODEL_FULL_ID}'"
+echo "----------------------------------------"
