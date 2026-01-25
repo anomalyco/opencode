@@ -45,8 +45,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Documentation
 
-- [ ] **DOC-01**: Reverse proxy setup guide (nginx, Caddy) with TLS configuration examples
-- [ ] **DOC-02**: PAM service file configuration and troubleshooting documentation
+- [x] **DOC-01**: Reverse proxy setup guide (nginx, Caddy) with TLS configuration examples
+- [x] **DOC-02**: PAM service file configuration and troubleshooting documentation
 
 ## v2 Requirements
 
@@ -103,8 +103,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-02 | Phase 6 | Complete |
 | UI-03 | Phase 8 | Complete |
 | UI-04 | Phase 9 | Complete |
-| DOC-01 | Phase 11 | Pending |
-| DOC-02 | Phase 11 | Pending |
+| DOC-01 | Phase 11 | Complete |
+| DOC-02 | Phase 11 | Complete |
 
 **Coverage:**
 - v1 requirements: 23 total
@@ -113,4 +113,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-19*
-*Last updated: 2026-01-24 after Phase 10 completion*
+*Last updated: 2026-01-25 after Phase 11 completion*

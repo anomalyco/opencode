@@ -211,10 +211,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 11-01-PLAN.md — Docs structure and reverse proxy guide (nginx, Caddy, TLS, WebSocket)
-- [ ] 11-02-PLAN.md — PAM configuration guide (setup, LDAP, 2FA, broker)
-- [ ] 11-03-PLAN.md — Troubleshooting guide (flowcharts, debugging, common errors)
-- [ ] 11-04-PLAN.md — Index finalization and README integration
+- [x] 11-01-PLAN.md — Docs structure and reverse proxy guide (nginx, Caddy, TLS, WebSocket)
+- [x] 11-02-PLAN.md — PAM configuration guide (setup, LDAP, 2FA, broker)
+- [x] 11-03-PLAN.md — Troubleshooting guide (flowcharts, debugging, common errors)
+- [x] 11-04-PLAN.md — Index finalization and README integration
 
 ### Phase 12: Server-Side TOTP Registration
 **Goal**: Simplify TOTP setup by having the server create ~/.google_authenticator instead of requiring users to run shell commands
@@ -284,7 +284,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 8. Session Enhancements | 4/4 | Complete | 2026-01-23 |
 | 9. Connection Security UI | 2/2 | Complete | 2026-01-24 |
 | 10. Two-Factor Authentication | 8/8 | Complete | 2026-01-24 |
-| 11. Documentation | 0/4 | Not started | - |
+| 11. Documentation | 4/4 | Complete | 2026-01-25 |
 | 12. Server-Side TOTP Registration | 0/TBD | Not started | - |
 | 13. Passkeys Investigation | 0/TBD | Not started | - |
 | 14. Persistent Session Storage | 0/TBD | Not started | - |
