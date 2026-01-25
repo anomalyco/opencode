@@ -392,6 +392,7 @@ function createGlobalSync() {
         project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
         provider: () =>
           sdk.provider.list().then((x) => {
+            console.log("provider", x)
             setStore("provider", normalizeProviderList(x.data!))
           }),
         agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
