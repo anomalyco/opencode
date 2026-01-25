@@ -944,13 +944,16 @@ function generate2FASetupPageHtml(params: {
     }
     .command-display {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       background: #1a1a1a;
       padding: 0.75rem;
       border-radius: 6px;
+      white-space: pre-wrap;
       word-break: break-all;
       color: #a3a3a3;
       margin-top: 0.5rem;
+      max-height: 150px;
+      overflow-y: auto;
     }
     .install-details {
       margin-top: 0.75rem;
@@ -1146,9 +1149,11 @@ function generate2FASetupPageHtml(params: {
         <summary>Is this safe? Will it affect my system login?</summary>
         <div class="safety-info">
           <p><strong>No, this will not affect your system login.</strong></p>
-          <p>The command only creates a file at <code>~/.google_authenticator</code> containing your TOTP secret. This file is completely inert by itself.</p>
+          <p>The command creates a file at <code>~/.google_authenticator</code> containing your TOTP secret. This file is completely inert by itself.</p>
           <p>It only affects authentication when a PAM service explicitly loads it. Your system's login, sudo, and SSH use their own PAM configs which remain untouched. Opencode uses a separate PAM service file (<code>opencode-otp</code>) that only opencode reads.</p>
-          <p><strong>Reversibility:</strong> Simply run <code>rm ~/.google_authenticator</code> to undo.</p>
+          <p><strong>Multi-user:</strong> Each user has their own <code>~/.google_authenticator</code> in their home directory. Multiple users can independently configure 2FA.</p>
+          <p><strong>Existing file:</strong> The command will prompt before overwriting an existing configuration.</p>
+          <p><strong>Reversibility:</strong> Run <code>rm ~/.google_authenticator</code> to remove 2FA.</p>
         </div>
       </details>
     </div>

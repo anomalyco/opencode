@@ -84,22 +84,72 @@ export async function generateTotpSetup(
 /**
  * Generate the command to set up ~/.google_authenticator on the server.
  *
- * The google-authenticator CLI doesn't accept a pre-generated secret,
- * so we write the file directly in the format it expects.
+ * ## Why we write the file directly
  *
- * File format:
- * - Line 1: Base32 secret
- * - Subsequent lines: Options prefixed with " (space + quote)
+ * The google-authenticator CLI always generates its own secret and doesn't
+ * accept a pre-generated one. To provide a better UX (showing QR code in
+ * web UI), we write the file directly in the format the PAM module expects.
  *
- * @param secret - The base32 secret to use
+ * ## File format reference
+ *
+ * The ~/.google_authenticator file format is defined by google-authenticator-libpam:
+ * https://github.com/google/google-authenticator-libpam
+ *
+ * Format:
+ * - Line 1: Base32-encoded shared secret (RFC 4648, no padding)
+ * - Subsequent lines: Configuration options, each prefixed with `" ` (quote + space)
+ * - Optional: 8-digit scratch/backup codes, one per line
+ *
+ * Valid configuration options (from pam_google_authenticator.c):
+ * - `" TOTP_AUTH` - Enable time-based one-time passwords (vs HOTP counter-based)
+ * - `" HOTP_COUNTER N` - Counter value for HMAC-based codes (mutually exclusive with TOTP)
+ * - `" STEP_SIZE N` - Time step in seconds, default 30, valid 1-60
+ * - `" WINDOW_SIZE N` - Codes accepted before/after current time, default 3, valid 1-100
+ * - `" DISALLOW_REUSE` - Prevent reuse of same code within time window
+ * - `" RATE_LIMIT N M` - Allow N attempts per M seconds (N: 1-100, M: 1-3600)
+ * - `" TIME_SKEW N` - Clock offset adjustment in time steps
+ *
+ * ## Multi-user support
+ *
+ * Each Unix user has their own ~/.google_authenticator file in their home
+ * directory. The PAM module reads from the authenticating user's home,
+ * so multiple users can each have independent 2FA configurations.
+ *
+ * ## Security considerations
+ *
+ * - File permissions set to 400 (owner read-only) to protect the secret
+ * - The command checks for existing file and prompts before overwriting
+ * - Secret is passed via heredoc to avoid shell history exposure
+ *
+ * @param secret - The base32-encoded secret (must match QR code shown to user)
+ * @returns Shell command that safely creates the authenticator file
  */
 export function getGoogleAuthenticatorSetupCommand(secret: string): string {
-  // Write the ~/.google_authenticator file directly
-  // Options: TOTP mode, rate limit 3 per 30s, window size 3, disallow reuse
-  return `echo '${secret}
+  // Build the file content following the google-authenticator-libpam format
+  // Reference: https://github.com/google/google-authenticator-libpam/blob/master/src/pam_google_authenticator.c
+  //
+  // Options used:
+  // - TOTP_AUTH: Time-based OTP (standard 30-second window)
+  // - RATE_LIMIT 3 30: Max 3 attempts per 30 seconds (brute-force protection)
+  // - WINDOW_SIZE 3: Accept codes from 1 step before to 1 step after current time
+  //                  (compensates for clock skew up to ~30 seconds)
+  // - DISALLOW_REUSE: Each code can only be used once (replay protection)
+  //
+  // Note: We don't include scratch/backup codes - users can add them manually
+  // by appending 8-digit numbers to the file if desired.
+
+  const fileContent = `${secret}
+" TOTP_AUTH
 " RATE_LIMIT 3 30
 " WINDOW_SIZE 3
-" DISALLOW_REUSE
-" TOTP_AUTH
-' > ~/.google_authenticator && chmod 400 ~/.google_authenticator`
+" DISALLOW_REUSE`
+
+  // Command explanation:
+  // 1. Check if file exists and warn user (but allow override)
+  // 2. Use heredoc to avoid secret appearing in shell history via echo
+  // 3. Set restrictive permissions (400 = owner read-only)
+  return `[ -f ~/.google_authenticator ] && echo "Warning: ~/.google_authenticator exists and will be replaced" && read -p "Continue? [y/N] " confirm && [ "$confirm" != "y" ] && exit 1; cat > ~/.google_authenticator << 'EOF'
+${fileContent}
+EOF
+chmod 400 ~/.google_authenticator && echo "2FA configured successfully"`
 }
