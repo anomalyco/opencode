@@ -235,6 +235,30 @@ describe("session.getUsage", () => {
     expect(result.tokens.cache.read).toBe(200)
   })
 
+  test("reads anthropic usage from metadata", () => {
+    const model = createModel({ context: 100_000, output: 32_000 })
+    const result = Session.getUsage({
+      model,
+      usage: {
+        inputTokens: 0,
+        outputTokens: 500,
+        totalTokens: 500,
+        cachedInputTokens: 0,
+      },
+      metadata: {
+        anthropic: {
+          usage: {
+            input_tokens: 700,
+            cache_read_input_tokens: 50,
+          },
+        },
+      },
+    })
+
+    expect(result.tokens.input).toBe(700)
+    expect(result.tokens.cache.read).toBe(50)
+  })
+
   test("handles reasoning tokens", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
     const result = Session.getUsage({

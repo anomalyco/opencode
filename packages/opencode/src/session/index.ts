@@ -426,11 +426,22 @@ export namespace Session {
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
-      const cachedInputTokens = input.usage.cachedInputTokens ?? 0
+      const baseInputTokens = input.usage.inputTokens ?? 0
+      const baseCachedTokens = input.usage.cachedInputTokens ?? 0
+
+      // The ai-sdk anthropic only read input_tokens and cache_read_input_tokens from message_start block
+      // But a lot of compatible providers only return real tokens in message_delta block
+      // Try to read from the metadata anthropic usage.
+      const anthUsageMeta = input.metadata?.["anthropic"]?.["usage"]
+      const anthUsage = anthUsageMeta && typeof anthUsageMeta === "object" ? (anthUsageMeta as Record<string, unknown>) : undefined
+      const pick = (value: unknown, fallback: number) =>
+        typeof value === "number" && Number.isFinite(value) ? value : fallback
+      const inputTokens = anthUsage ? pick(anthUsage["input_tokens"], baseInputTokens) : baseInputTokens
+      const cachedInputTokens = anthUsage ? pick(anthUsage["cache_read_input_tokens"], baseCachedTokens) : baseCachedTokens
+
       const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
-      const adjustedInputTokens = excludesCachedTokens
-        ? (input.usage.inputTokens ?? 0)
-        : (input.usage.inputTokens ?? 0) - cachedInputTokens
+      const adjustedInputTokens = excludesCachedTokens ? inputTokens : inputTokens - cachedInputTokens
+
       const safe = (value: number) => {
         if (!Number.isFinite(value)) return 0
         return value
