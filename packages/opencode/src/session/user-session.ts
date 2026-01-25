@@ -21,6 +21,7 @@ export namespace UserSession {
       lastAccessTime: z.number(),
       userAgent: z.string().optional(),
       rememberMe: z.boolean().optional(), // Extended session persistence
+      twoFactorPending: z.boolean().optional(), // User needs to set up 2FA
     })
     .meta({ ref: "UserSessionInfo" })
 
@@ -86,6 +87,18 @@ export namespace UserSession {
     if (!session) return false
 
     session.lastAccessTime = Date.now()
+    return true
+  }
+
+  /**
+   * Clear the twoFactorPending flag for a session.
+   * Called after user completes 2FA setup.
+   */
+  export function clearTwoFactorPending(id: string): boolean {
+    const session = sessions.get(id)
+    if (!session) return false
+
+    session.twoFactorPending = false
     return true
   }
 

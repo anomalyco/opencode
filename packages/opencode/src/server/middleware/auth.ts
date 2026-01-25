@@ -163,6 +163,19 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
   // Update lastAccessTime (sliding expiration)
   UserSession.touch(sessionId)
 
+  // Check if user needs to complete 2FA setup
+  if (session.twoFactorPending && authConfig.twoFactorRequired) {
+    // User must complete 2FA setup before accessing other pages
+    const isApiCall = () => {
+      const accept = c.req.header("Accept") ?? ""
+      return !accept.includes("text/html")
+    }
+    if (isApiCall()) {
+      return c.json({ error: "2fa_setup_required", message: "Two-factor authentication setup is required" }, 403)
+    }
+    return c.redirect("/auth/2fa/setup?required=1")
+  }
+
   // Set context variables for downstream handlers
   c.set("session", session)
   c.set("username", session.username)

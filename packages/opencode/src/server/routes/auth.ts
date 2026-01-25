@@ -449,7 +449,8 @@ function generateLoginPageHtml(securityContext: {
         // Check for 2FA setup required
         if (data.error === '2fa_setup_required') {
           submitBtn.textContent = 'Redirecting to 2FA setup...';
-          window.location.href = '/auth/2fa/setup?required=1';
+          const setupUrl = data.canSkip ? '/auth/2fa/setup' : '/auth/2fa/setup?required=1';
+          window.location.href = setupUrl;
           return;
         }
 
@@ -885,6 +886,31 @@ function generate2FASetupPageHtml(params: {
       font-size: 0.875rem;
       text-align: center;
     }
+    .skip-section {
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #333;
+      text-align: center;
+    }
+    .skip-note {
+      font-size: 0.75rem;
+      color: #737373;
+      margin-bottom: 0.75rem;
+    }
+    .skip-btn {
+      background: transparent;
+      border: 1px solid #525252;
+      color: #a3a3a3;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .skip-btn:hover {
+      border-color: #737373;
+      color: #e5e5e5;
+    }
     .step {
       margin-bottom: 1.5rem;
     }
@@ -1140,7 +1166,14 @@ function generate2FASetupPageHtml(params: {
       </form>
     </div>
 
-    <a href="/" class="back-link">Back to opencode</a>
+    ${required ? '' : `
+    <div class="skip-section">
+      <p class="skip-note">You can set up 2FA later from your session menu.</p>
+      <button type="button" id="skipBtn" class="skip-btn">Skip for now</button>
+    </div>
+    `}
+
+    <a href="/" class="back-link">${required ? 'Back to login' : 'Back to opencode'}</a>
   </div>
 
   <script>
@@ -1233,6 +1266,41 @@ function generate2FASetupPageHtml(params: {
         verifyBtn.textContent = 'Verify & Enable 2FA';
       }
     });
+
+    // Skip button handler
+    const skipBtn = document.getElementById('skipBtn');
+    if (skipBtn) {
+      skipBtn.addEventListener('click', async () => {
+        skipBtn.disabled = true;
+        skipBtn.textContent = 'Skipping...';
+
+        try {
+          const res = await fetch('/auth/2fa/skip', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest',
+              'X-CSRF-Token': getCSRFToken(),
+            },
+          });
+
+          if (res.ok) {
+            window.location.href = '/';
+          } else {
+            const data = await res.json();
+            errorDiv.textContent = data.message || 'Failed to skip setup';
+            errorDiv.classList.add('visible');
+            skipBtn.disabled = false;
+            skipBtn.textContent = 'Skip for now';
+          }
+        } catch (err) {
+          errorDiv.textContent = 'Connection error';
+          errorDiv.classList.add('visible');
+          skipBtn.disabled = false;
+          skipBtn.textContent = 'Skip for now';
+        }
+      });
+    }
   </script>
 </body>
 </html>`
@@ -1484,9 +1552,9 @@ export const AuthRoutes = lazy(() =>
                 timeoutSeconds: timeoutSec,
               }, 200) // 200 because password was valid, just need 2FA
             }
-          } else if (authConfig.twoFactorRequired) {
-            // User doesn't have 2FA configured but it's required
-            // Create a temporary session so they can access the setup page
+          } else {
+            // User doesn't have 2FA configured - redirect to setup
+            // Create session with twoFactorPending flag
             const tempSession = UserSession.create(
               username,
               c.req.header("User-Agent"),
@@ -1498,13 +1566,18 @@ export const AuthRoutes = lazy(() =>
               },
               false, // Don't use rememberMe for setup session
             )
+            // Mark session as pending 2FA setup
+            tempSession.twoFactorPending = true
             setSessionCookie(c, tempSession.id, false)
             setCSRFCookie(c, tempSession.id)
 
             return c.json({
               success: false as const,
               error: "2fa_setup_required" as const,
-              message: "Two-factor authentication setup is required",
+              message: authConfig.twoFactorRequired
+                ? "Two-factor authentication setup is required"
+                : "Two-factor authentication is recommended",
+              canSkip: !authConfig.twoFactorRequired,
             }, 200)
           }
         }
@@ -1906,6 +1979,37 @@ export const AuthRoutes = lazy(() =>
       if (!result.success) {
         return c.json({ error: "invalid_code", message: "Invalid code - make sure you ran the setup command" }, 401)
       }
+
+      // Clear twoFactorPending flag now that 2FA is configured
+      UserSession.clearTwoFactorPending(sessionId)
+
+      return c.json({ success: true })
+    })
+    .post("/2fa/skip", async (c) => {
+      // Require authenticated session
+      const sessionId = getCookie(c, "opencode_session")
+      if (!sessionId) {
+        return c.json({ error: "not_authenticated" }, 401)
+      }
+      const session = UserSession.get(sessionId)
+      if (!session) {
+        return c.json({ error: "not_authenticated" }, 401)
+      }
+
+      // Check CSRF
+      const xrw = c.req.header("X-Requested-With")
+      if (!xrw) {
+        return c.json({ error: "csrf_missing" }, 400)
+      }
+
+      // Check if 2FA is required - if so, cannot skip
+      const authConfig = ServerAuth.get()
+      if (authConfig.twoFactorRequired) {
+        return c.json({ error: "2fa_required", message: "Two-factor authentication is required and cannot be skipped" }, 403)
+      }
+
+      // Clear twoFactorPending flag so user can access the app
+      UserSession.clearTwoFactorPending(sessionId)
 
       return c.json({ success: true })
     })
