@@ -158,6 +158,19 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       }
     }
 
+    // Build per-file metadata for UI rendering (used for both permission and result)
+    const files = fileChanges.map((change) => ({
+      filePath: change.filePath,
+      relativePath: path.relative(Instance.worktree, change.movePath ?? change.filePath),
+      type: change.type,
+      diff: change.diff,
+      before: change.oldContent,
+      after: change.newContent,
+      additions: change.additions,
+      deletions: change.deletions,
+      movePath: change.movePath,
+    }))
+
     // Check permissions if needed
     const relativePaths = fileChanges.map((c) => path.relative(Instance.worktree, c.filePath))
     await ctx.ask({
@@ -167,6 +180,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       metadata: {
         filepath: relativePaths.join(", "),
         diff: totalDiff,
+        files,
       },
     })
 
@@ -252,19 +266,6 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         output += `\n\nLSP errors detected in ${path.relative(Instance.worktree, target)}, please fix:\n<diagnostics file="${target}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
       }
     }
-
-    // Build per-file metadata for UI rendering
-    const files = fileChanges.map((change) => ({
-      filePath: change.filePath,
-      relativePath: path.relative(Instance.worktree, change.movePath ?? change.filePath),
-      type: change.type,
-      diff: change.diff,
-      before: change.oldContent,
-      after: change.newContent,
-      additions: change.additions,
-      deletions: change.deletions,
-      movePath: change.movePath,
-    }))
 
     return {
       title: output,
