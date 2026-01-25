@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Secure remote access to your opencode instance from anywhere — authenticate once with your system credentials, work on your projects from any device.
-**Current focus:** Phase 11 (Documentation) - Not started
+**Current focus:** Phase 11 (Documentation) - In progress
 
 ## Current Position
 
-Phase: 10 of 11 (Two-Factor Authentication) - Complete
-Plan: 8/8 - All plans complete
-Status: Phase complete, verified
-Last activity: 2026-01-24 - Completed Phase 10 (Two-Factor Authentication)
+Phase: 11 of 11 (Documentation)
+Plan: 1 of 4 - In progress
+Status: In progress
+Last activity: 2026-01-25 - Completed 11-01-PLAN.md
 
-Progress: [██████████] ~91%
+Progress: [███████████] ~93%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 40
-- Average duration: 5.4 min
-- Total execution time: 214.6 min
+- Total plans completed: 41
+- Average duration: 5.3 min
+- Total execution time: 217.5 min
 
 **By Phase:**
 
@@ -37,9 +37,10 @@ Progress: [██████████] ~91%
 | 8. Session Enhancements | 4 | 11.5 min | 2.9 min |
 | 9. Connection Security UI | 2 | 4.6 min | 2.3 min |
 | 10. Two-Factor Authentication | 8 | 19.6 min | 2.5 min |
+| 11. Documentation | 1 | 2.9 min | 2.9 min |
 
 **Recent Trend:**
-- Last 5 plans: 10-04 (2 min), 10-05 (3 min), 10-06 (2.4 min), 10-07 (3.3 min), 10-08 (2.5 min)
+- Last 5 plans: 10-05 (3 min), 10-06 (2.4 min), 10-07 (3.3 min), 10-08 (2.5 min), 11-01 (2.9 min)
 - Trend: Consistently fast execution
 
 *Updated after each plan completion*
@@ -153,6 +154,9 @@ Recent decisions affecting current work:
 | 10-08 | Device trust cookie cleared on all logout paths | Consistency - both /logout and /logout/all clear trust |
 | 10-08 | Status endpoint verifies cookie validity | Prevents false positives for device trust status |
 | 10-08 | 2FA setup opens in new tab | Placeholder URL for future setup page |
+| 11-01 | Document both nginx and Caddy as primary reverse proxy options | nginx is widely used and enterprise-proven, Caddy has automatic HTTPS |
+| 11-01 | 24-hour WebSocket timeout for proxy configurations | Prevents long-running terminal sessions from being disconnected |
+| 11-01 | Placeholder pattern for user-supplied values | Clear indication of values users must replace, prevents copy-paste errors |
 
 ### Roadmap Evolution
 
@@ -177,10 +181,10 @@ From research summary (Phase 2, 3 flags):
 
 ## Session Continuity
 
-Last session: 2026-01-24
-Stopped at: Completed Phase 10 (Two-Factor Authentication)
+Last session: 2026-01-25
+Stopped at: Completed 11-01-PLAN.md
 Resume file: None
-Next: Phase 11 (Documentation)
+Next: Continue Phase 11 (Plans 11-02 through 11-04)
 
 ## Phase 6 Progress
 
@@ -221,3 +225,11 @@ Next: Phase 11 (Documentation)
 - [x] Plan 08: Device Trust Management (2.5 min)
 
 Verification: Passed (4/4 must-haves verified)
+
+## Phase 11 Progress
+
+**Documentation - In Progress:**
+- [x] Plan 01: Reverse proxy documentation (nginx, Caddy, TLS, security headers) (2.9 min)
+- [ ] Plan 02: systemd service management documentation
+- [ ] Plan 03: Docker deployment documentation
+- [ ] Plan 04: Main README and installation guide
