@@ -83,6 +83,35 @@ export function SessionIndicator() {
   }
 
   /**
+   * Handle logout all sessions by POSTing to /auth/logout/all endpoint.
+   * This also clears device trust as a security measure.
+   */
+  async function handleLogoutAll(): Promise<void> {
+    try {
+      const url = server.url
+      if (!url) return
+
+      const csrfToken = getCsrfToken()
+      const headers: Record<string, string> = {}
+      if (csrfToken) {
+        headers["X-CSRF-Token"] = csrfToken
+      }
+
+      const res = await fetch(`${url}/auth/logout/all`, {
+        method: "POST",
+        credentials: "include",
+        headers,
+      })
+
+      if (res.status === 302 || res.ok) {
+        window.location.href = `${url}/auth/login`
+      }
+    } catch (err) {
+      console.error("Logout all failed:", err)
+    }
+  }
+
+  /**
    * Revoke device trust, requiring 2FA on next login.
    */
   async function handleForgetDevice(): Promise<void> {
@@ -164,6 +193,9 @@ export function SessionIndicator() {
             <DropdownMenu.Separator />
             <DropdownMenu.Item onSelect={handleLogout}>
               <DropdownMenu.ItemLabel>Log out</DropdownMenu.ItemLabel>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={handleLogoutAll}>
+              <DropdownMenu.ItemLabel>Log out all sessions</DropdownMenu.ItemLabel>
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
