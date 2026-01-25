@@ -82,13 +82,24 @@ export async function generateTotpSetup(
 }
 
 /**
- * Generate the google-authenticator command to run on the server.
- * This sets up the user's ~/.google_authenticator file.
+ * Generate the command to set up ~/.google_authenticator on the server.
+ *
+ * The google-authenticator CLI doesn't accept a pre-generated secret,
+ * so we write the file directly in the format it expects.
+ *
+ * File format:
+ * - Line 1: Base32 secret
+ * - Subsequent lines: Options prefixed with " (space + quote)
  *
  * @param secret - The base32 secret to use
  */
 export function getGoogleAuthenticatorSetupCommand(secret: string): string {
-  // The google-authenticator CLI can accept a secret via --secret flag
-  // This generates the ~/.google_authenticator file
-  return `google-authenticator -t -d -f -r 3 -R 30 -w 3 -s ~/.google_authenticator --secret=${secret}`
+  // Write the ~/.google_authenticator file directly
+  // Options: TOTP mode, rate limit 3 per 30s, window size 3, disallow reuse
+  return `echo '${secret}
+" RATE_LIMIT 3 30
+" WINDOW_SIZE 3
+" DISALLOW_REUSE
+" TOTP_AUTH
+' > ~/.google_authenticator && chmod 400 ~/.google_authenticator`
 }
