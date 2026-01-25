@@ -1,6 +1,7 @@
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createSignal, createEffect, on } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useSync } from "@tui/context/sync"
+import { useKV } from "@tui/context/kv"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
@@ -20,8 +21,10 @@ export function DialogModel(props: { providerID?: string }) {
   const sync = useSync()
   const dialog = useDialog()
   const keybind = useKeybind()
+  const kv = useKV()
   const [ref, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [query, setQuery] = createSignal("")
+  const [showRecent, setShowRecent] = kv.signal("model_list_recents_visibility", true)
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
@@ -39,11 +42,12 @@ export function DialogModel(props: { providerID?: string }) {
     const favorites = connected() ? local.model.favorite() : []
     const recents = local.model.recent()
 
-    const recentList = showSections
-      ? recents.filter(
-          (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
-        )
-      : []
+    const recentList =
+      showSections && showRecent()
+        ? recents.filter(
+            (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
+          )
+        : []
 
     const favoriteOptions = showSections
       ? favorites.flatMap((item) => {
@@ -204,6 +208,12 @@ export function DialogModel(props: { providerID?: string }) {
     return "Select model"
   })
 
+  createEffect(
+    on(showRecent, () => {
+      ref()?.scrollToCurrent()
+    }),
+  )
+
   return (
     <DialogSelect
       keybind={[
@@ -220,6 +230,14 @@ export function DialogModel(props: { providerID?: string }) {
           disabled: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
+          },
+        },
+        {
+          keybind: keybind.all.model_list_recent_toggle?.[0],
+          title: "Toggle recent",
+          disabled: !connected(),
+          onTrigger: () => {
+            setShowRecent((prev) => !prev)
           },
         },
       ]}
