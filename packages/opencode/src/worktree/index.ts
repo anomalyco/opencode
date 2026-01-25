@@ -5,12 +5,33 @@ import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
+import { InstanceBootstrap } from "../project/bootstrap"
 import { Project } from "../project/project"
 import { Storage } from "../storage/storage"
 import { fn } from "../util/fn"
-import { Config } from "@/config/config"
+import { Log } from "../util/log"
+import { BusEvent } from "@/bus/bus-event"
+import { GlobalBus } from "@/bus/global"
 
 export namespace Worktree {
+  const log = Log.create({ service: "worktree" })
+
+  export const Event = {
+    Ready: BusEvent.define(
+      "worktree.ready",
+      z.object({
+        name: z.string(),
+        branch: z.string(),
+      }),
+    ),
+    Failed: BusEvent.define(
+      "worktree.failed",
+      z.object({
+        message: z.string(),
+      }),
+    ),
+  }
+
   export const Info = z
     .object({
       name: z.string(),
@@ -234,7 +255,7 @@ export namespace Worktree {
     const base = input?.name ? slug(input.name) : ""
     const info = await candidate(root, base || undefined)
 
-    const created = await $`git worktree add -b ${info.branch} ${info.directory}`
+    const created = await $`git worktree add --no-checkout -b ${info.branch} ${info.directory}`
       .quiet()
       .nothrow()
       .cwd(Instance.worktree)
@@ -242,24 +263,88 @@ export namespace Worktree {
       throw new CreateFailedError({ message: errorText(created) || "Failed to create git worktree" })
     }
 
-    const project = await Storage.read<Project.Info>(["project", Instance.project.id]).catch(() => Instance.project)
-    const startup = project.commands?.start?.trim()
-    if (startup) {
-      const ran = await runStartCommand(info.directory, startup)
-      if (ran.exitCode !== 0) {
-        throw new StartCommandFailedError({
-          message: errorText(ran) || "Project start command failed",
-        })
-      }
-    }
+    await Project.addSandbox(Instance.project.id, info.directory).catch(() => undefined)
 
+    const projectID = Instance.project.id
     const extra = input?.startCommand?.trim()
-    if (extra) {
-      const ran = await runStartCommand(info.directory, extra)
-      if (ran.exitCode !== 0) {
-        throw new StartCommandFailedError({ message: errorText(ran) || "Worktree start command failed" })
+    setTimeout(() => {
+      const start = async () => {
+        const populated = await $`git reset --hard`.quiet().nothrow().cwd(info.directory)
+        if (populated.exitCode !== 0) {
+          const message = errorText(populated) || "Failed to populate worktree"
+          log.error("worktree checkout failed", { directory: info.directory, message })
+          GlobalBus.emit("event", {
+            directory: info.directory,
+            payload: {
+              type: Event.Failed.type,
+              properties: {
+                message,
+              },
+            },
+          })
+          return
+        }
+
+        const booted = await Instance.provide({
+          directory: info.directory,
+          init: InstanceBootstrap,
+          fn: () => undefined,
+        })
+          .then(() => true)
+          .catch((error) => {
+            const message = error instanceof Error ? error.message : String(error)
+            log.error("worktree bootstrap failed", { directory: info.directory, message })
+            GlobalBus.emit("event", {
+              directory: info.directory,
+              payload: {
+                type: Event.Failed.type,
+                properties: {
+                  message,
+                },
+              },
+            })
+            return false
+          })
+        if (!booted) return
+
+        GlobalBus.emit("event", {
+          directory: info.directory,
+          payload: {
+            type: Event.Ready.type,
+            properties: {
+              name: info.name,
+              branch: info.branch,
+            },
+          },
+        })
+
+        const project = await Storage.read<Project.Info>(["project", projectID]).catch(() => undefined)
+        const startup = project?.commands?.start?.trim() ?? ""
+
+        const run = async (cmd: string, kind: "project" | "worktree") => {
+          const ran = await runStartCommand(info.directory, cmd)
+          if (ran.exitCode === 0) return true
+          log.error("worktree start command failed", {
+            kind,
+            directory: info.directory,
+            message: errorText(ran),
+          })
+          return false
+        }
+
+        if (startup) {
+          const ok = await run(startup, "project")
+          if (!ok) return
+        }
+        if (extra) {
+          await run(extra, "worktree")
+        }
       }
-    }
+
+      void start().catch((error) => {
+        log.error("worktree start task failed", { directory: info.directory, error })
+      })
+    }, 0)
 
     return info
   })

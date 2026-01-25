@@ -4,7 +4,6 @@ import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { Select } from "@opencode-ai/ui/select"
 
 const MAIN_WORKTREE = "main"
 const CREATE_WORKTREE = "create"
@@ -60,18 +59,7 @@ export function NewSessionView(props: NewSessionViewProps) {
       </div>
       <div class="flex justify-center items-center gap-1">
         <Icon name="branch" size="small" />
-        <Select
-          options={options()}
-          current={current()}
-          value={(x) => x}
-          label={label}
-          onSelect={(value) => {
-            props.onWorktreeChange(value ?? MAIN_WORKTREE)
-          }}
-          size="normal"
-          variant="ghost"
-          class="text-12-medium"
-        />
+        <div class="text-12-medium text-text-weak select-text ml-2">{label(current())}</div>
       </div>
       <Show when={sync.project}>
         {(project) => (
