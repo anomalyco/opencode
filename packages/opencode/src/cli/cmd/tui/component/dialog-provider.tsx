@@ -112,6 +112,11 @@ export function DialogProvider() {
   return <DialogSelect title="Connect a provider" options={options()} />
 }
 
+function copyValue(authorization: ProviderAuthAuthorization) {
+  const match = authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4}/)?.[0]
+  return match ?? authorization.url
+}
+
 interface AutoMethodProps {
   index: number
   providerID: string
@@ -127,8 +132,8 @@ function AutoMethod(props: AutoMethodProps) {
 
   useKeyboard((evt) => {
     if (evt.name === "c" && !evt.ctrl && !evt.meta) {
-      const code = props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4}/)?.[0] ?? props.authorization.url
-      Clipboard.copy(code)
+      const value = copyValue(props.authorization)
+      Clipboard.copy(value)
         .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
         .catch(toast.error)
     }
@@ -180,6 +185,16 @@ function CodeMethod(props: CodeMethodProps) {
   const sync = useSync()
   const dialog = useDialog()
   const [error, setError] = createSignal(false)
+  const toast = useToast()
+
+  useKeyboard((evt) => {
+    if (evt.name === "c" && !evt.ctrl && !evt.meta) {
+      const value = copyValue(props.authorization)
+      Clipboard.copy(value)
+        .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+        .catch(toast.error)
+    }
+  })
 
   return (
     <DialogPrompt
@@ -203,6 +218,9 @@ function CodeMethod(props: CodeMethodProps) {
         <box gap={1}>
           <text fg={theme.textMuted}>{props.authorization.instructions}</text>
           <Link href={props.authorization.url} fg={theme.primary} />
+          <text fg={theme.text}>
+            c <span style={{ fg: theme.textMuted }}>copy</span>
+          </text>
           <Show when={error()}>
             <text fg={theme.error}>Invalid code</text>
           </Show>
