@@ -40,6 +40,7 @@ export const dict = {
   "ui.messageNav.newMessage": "新しいメッセージ",
 
   "ui.textField.copyToClipboard": "クリップボードにコピー",
+  "ui.textField.copyLink": "リンクをコピー",
   "ui.textField.copied": "コピーしました",
 
   "ui.imagePreview.alt": "画像プレビュー",

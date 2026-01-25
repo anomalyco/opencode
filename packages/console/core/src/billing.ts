@@ -78,8 +78,6 @@ export namespace Billing {
     const customerID = billing.customerID
     const paymentMethodID = billing.paymentMethodID
     const amountInCents = (billing.reloadAmount ?? Billing.RELOAD_AMOUNT) * 100
-    const paymentID = Identifier.create("payment")
-    let invoice
     try {
       const draft = await Billing.stripe().invoices.create({
         customer: customerID!,
@@ -87,6 +85,10 @@ export namespace Billing {
         default_payment_method: paymentMethodID!,
         collection_method: "charge_automatically",
         currency: "usd",
+        metadata: {
+          workspaceID: Actor.workspace(),
+          amount: amountInCents.toString(),
+        },
       })
       await Billing.stripe().invoiceItems.create({
         amount: amountInCents,
@@ -103,19 +105,17 @@ export namespace Billing {
         description: ITEM_FEE_NAME,
       })
       await Billing.stripe().invoices.finalizeInvoice(draft.id!)
-      invoice = await Billing.stripe().invoices.pay(draft.id!, {
+      await Billing.stripe().invoices.pay(draft.id!, {
         off_session: true,
         payment_method: paymentMethodID!,
-        expand: ["payments"],
       })
-      if (invoice.status !== "paid" || invoice.payments?.data.length !== 1)
-        throw new Error(invoice.last_finalization_error?.message)
     } catch (e: any) {
       console.error(e)
       await Database.use((tx) =>
         tx
           .update(BillingTable)
           .set({
+            reload: false,
             reloadError: e.message ?? "Payment failed.",
             timeReloadError: sql`now()`,
           })
@@ -123,25 +123,6 @@ export namespace Billing {
       )
       return
     }
-
-    await Database.transaction(async (tx) => {
-      await tx
-        .update(BillingTable)
-        .set({
-          balance: sql`${BillingTable.balance} + ${centsToMicroCents(amountInCents)}`,
-          reloadError: null,
-          timeReloadError: null,
-        })
-        .where(eq(BillingTable.workspaceID, Actor.workspace()))
-      await tx.insert(PaymentTable).values({
-        workspaceID: Actor.workspace(),
-        id: paymentID,
-        amount: centsToMicroCents(amountInCents),
-        invoiceID: invoice.id!,
-        paymentID: invoice.payments?.data[0].payment.payment_intent as string,
-        customerID,
-      })
-    })
   }
 
   export const grantCredit = async (workspaceID: string, dollarAmount: number) => {
