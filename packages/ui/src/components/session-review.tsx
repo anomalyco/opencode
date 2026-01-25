@@ -123,11 +123,17 @@ type SessionReviewSelection = {
   range: SelectedLineRange
 }
 
-function findSide(element: HTMLElement): "additions" | "deletions" {
+function findSide(element: HTMLElement): "additions" | "deletions" | undefined {
+  const typed = element.closest("[data-line-type]")
+  if (typed instanceof HTMLElement) {
+    const type = typed.dataset.lineType
+    if (type === "change-deletion") return "deletions"
+    if (type === "change-addition" || type === "change-additions") return "additions"
+  }
+
   const code = element.closest("[data-code]")
-  if (!(code instanceof HTMLElement)) return "additions"
-  if (code.hasAttribute("data-deletions")) return "deletions"
-  return "additions"
+  if (!(code instanceof HTMLElement)) return
+  return code.hasAttribute("data-deletions") ? "deletions" : "additions"
 }
 
 function findMarker(root: ShadowRoot, range: SelectedLineRange) {
