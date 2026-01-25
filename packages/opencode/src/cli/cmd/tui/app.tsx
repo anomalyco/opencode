@@ -570,6 +570,15 @@ function App() {
         dialog.clear()
       },
     },
+    {
+      title: kv.get("animations_enabled", true) ? "Disable animations" : "Enable animations",
+      value: "app.toggle.animations",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("animations_enabled", !kv.get("animations_enabled", true))
+        dialog.clear()
+      },
+    },
   ])
 
   createEffect(() => {

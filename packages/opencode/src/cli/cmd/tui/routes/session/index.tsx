@@ -571,15 +571,6 @@ export function Session() {
       },
     },
     {
-      title: animationsEnabled() ? "Disable animations" : "Enable animations",
-      value: "session.toggle.animations",
-      category: "Session",
-      onSelect: (dialog) => {
-        setAnimationsEnabled((prev) => !prev)
-        dialog.clear()
-      },
-    },
-    {
       title: "Page up",
       value: "session.page.up",
       keybind: "messages_page_up",
