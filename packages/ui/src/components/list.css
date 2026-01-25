@@ -30,7 +30,6 @@
     gap: 8px;
     align-self: stretch;
     margin-bottom: 4px;
-    padding-right: 4px;
 
     > [data-component="icon-button"] {
       width: 24px;

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useNavigate } from "@solidjs/router"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -7,6 +7,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { Button } from "@opencode-ai/ui/button"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, serverDisplayName, useServer } from "@/context/server"
@@ -138,7 +139,8 @@ export function StatusPopover() {
       triggerAs={Button}
       triggerProps={{
         variant: "ghost",
-        class: "rounded-sm w-[75px] h-[24px] py-1.5 pr-3 pl-2 gap-2 border-none shadow-none",
+        class:
+          "rounded-sm w-[75px] h-[24px] py-1.5 pr-3 pl-2 gap-2 border-none shadow-none data-[expanded]:bg-surface-raised-base-active",
         style: { scale: 1 },
       }}
       trigger={
@@ -154,10 +156,15 @@ export function StatusPopover() {
           <span class="text-12-regular text-text-strong">Status</span>
         </div>
       }
-      class="[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] mx-5 bg-transparent border-0 shadow-none rounded-xl"
-      gutter={8}
+      class="[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
+      gutter={6}
+      placement="bottom-end"
+      shift={-136}
     >
-      <div class="flex items-center gap-1 w-[360px] border border-border-weak-base rounded-xl">
+      <div
+        class="flex items-center gap-1 w-[360px] rounded-xl"
+        style={{ "box-shadow": "var(--shadow-lg-border-base)" }}
+      >
         <Tabs
           aria-label="Server Configurations"
           class="tabs"
@@ -197,58 +204,92 @@ export function StatusPopover() {
 
           <Tabs.Content value="servers">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base">
+              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <For each={sortedServers()}>
                   {(url) => {
                     const isActive = () => url === server.url
                     const isDefault = () => url === defaultServerUrl()
                     const status = () => store.status[url]
                     const isBlocked = () => status()?.healthy === false
+                    const [truncated, setTruncated] = createSignal(false)
+                    let nameRef: HTMLSpanElement | undefined
+                    let versionRef: HTMLSpanElement | undefined
+
+                    onMount(() => {
+                      const check = () => {
+                        const nameTruncated = nameRef ? nameRef.scrollWidth > nameRef.clientWidth : false
+                        const versionTruncated = versionRef ? versionRef.scrollWidth > versionRef.clientWidth : false
+                        setTruncated(nameTruncated || versionTruncated)
+                      }
+                      check()
+                      window.addEventListener("resize", check)
+                      onCleanup(() => window.removeEventListener("resize", check))
+                    })
+
+                    const tooltipValue = () => {
+                      const name = serverDisplayName(url)
+                      const version = status()?.version
+                      return (
+                        <span class="flex items-center gap-2">
+                          <span>{name}</span>
+                          <Show when={version}>
+                            <span class="text-text-invert-base">{version}</span>
+                          </Show>
+                        </span>
+                      )
+                    }
+
                     return (
-                      <button
-                        type="button"
-                        class="flex items-center gap-2 w-full px-2 py-1 rounded-md transition-colors text-left"
-                        classList={{
-                          "opacity-50": isBlocked(),
-                          "hover:bg-surface-raised-base-hover": !isBlocked(),
-                          "cursor-not-allowed": isBlocked(),
-                        }}
-                        aria-disabled={isBlocked()}
-                        onClick={() => {
-                          if (isBlocked()) return
-                          server.setActive(url)
-                          navigate("/")
-                        }}
-                      >
-                        <div
+                      <Tooltip value={tooltipValue()} placement="top" inactive={!truncated()}>
+                        <button
+                          type="button"
+                          class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
                           classList={{
-                            "size-1.5 rounded-full shrink-0": true,
-                            "bg-icon-success-base": status()?.healthy === true,
-                            "bg-icon-critical-base": status()?.healthy === false,
-                            "bg-border-weak-base": status() === undefined,
+                            "opacity-50": isBlocked(),
+                            "hover:bg-surface-raised-base-hover": !isBlocked(),
+                            "cursor-not-allowed": isBlocked(),
                           }}
-                        />
-                        <span class="text-14-regular text-text-base truncate">{serverDisplayName(url)}</span>
-                        <Show when={status()?.version}>
-                          <span class="text-12-regular text-text-weak">{status()?.version}</span>
-                        </Show>
-                        <Show when={isDefault()}>
-                          <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
-                            Default
+                          aria-disabled={isBlocked()}
+                          onClick={() => {
+                            if (isBlocked()) return
+                            server.setActive(url)
+                            navigate("/")
+                          }}
+                        >
+                          <div
+                            classList={{
+                              "size-1.5 rounded-full shrink-0": true,
+                              "bg-icon-success-base": status()?.healthy === true,
+                              "bg-icon-critical-base": status()?.healthy === false,
+                              "bg-border-weak-base": status() === undefined,
+                            }}
+                          />
+                          <span ref={nameRef} class="text-14-regular text-text-base truncate">
+                            {serverDisplayName(url)}
                           </span>
-                        </Show>
-                        <div class="flex-1" />
-                        <Show when={isActive()}>
-                          <Icon name="check" size="small" class="text-icon-weak shrink-0" />
-                        </Show>
-                      </button>
+                          <Show when={status()?.version}>
+                            <span ref={versionRef} class="text-12-regular text-text-weak truncate">
+                              {status()?.version}
+                            </span>
+                          </Show>
+                          <Show when={isDefault()}>
+                            <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
+                              Default
+                            </span>
+                          </Show>
+                          <div class="flex-1" />
+                          <Show when={isActive()}>
+                            <Icon name="check" size="small" class="text-icon-weak shrink-0" />
+                          </Show>
+                        </button>
+                      </Tooltip>
                     )
                   }}
                 </For>
 
                 <Button
                   variant="secondary"
-                  class="mt-2 self-start"
+                  class="mt-3 self-start h-8 px-3 py-1.5"
                   onClick={() => dialog.show(() => <DialogSelectServer />)}
                 >
                   Manage servers
@@ -259,11 +300,11 @@ export function StatusPopover() {
 
           <Tabs.Content value="mcp">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base">
+              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <Show
                   when={mcpItems().length > 0}
                   fallback={
-                    <div class="text-14-regular text-text-weak text-center py-4">No MCP servers configured</div>
+                    <div class="text-14-regular text-text-base text-center my-auto">No MCP servers configured</div>
                   }
                 >
                   <For each={mcpItems()}>
@@ -272,7 +313,7 @@ export function StatusPopover() {
                       return (
                         <button
                           type="button"
-                          class="flex items-center gap-2 w-full px-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
+                          class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
                           onClick={() => toggleMcp(item.name)}
                           disabled={loading() === item.name}
                         >
@@ -305,11 +346,11 @@ export function StatusPopover() {
 
           <Tabs.Content value="lsp">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base">
+              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <Show
                   when={lspItems().length > 0}
                   fallback={
-                    <div class="text-14-regular text-text-weak text-center py-4">
+                    <div class="text-14-regular text-text-base text-center my-auto">
                       LSPs auto-detected from file types
                     </div>
                   }
@@ -335,13 +376,13 @@ export function StatusPopover() {
 
           <Tabs.Content value="plugins">
             <div class="flex flex-col px-2 pb-2">
-              <div class="flex flex-col p-2 bg-background-base">
+              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <Show
                   when={plugins().length > 0}
                   fallback={
-                    <div class="text-14-regular text-text-weak text-center py-4">
+                    <div class="text-14-regular text-text-base text-center my-auto">
                       Plugins configured in{" "}
-                      <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm">opencode.json</code>
+                      <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm text-text-base">opencode.json</code>
                     </div>
                   }
                 >
