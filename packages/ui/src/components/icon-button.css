@@ -24,7 +24,8 @@
     }
 
     &:hover:not(:disabled) {
-      background-color: var(--icon-strong-hover);
+      /* Align hover color with primary button hover to keep consistency */
+      background-color: color-mix(in oklab, var(--button-primary-base) 75%, black 25%);
     }
     &:focus:not(:disabled) {
       background-color: var(--icon-strong-focus);

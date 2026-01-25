@@ -167,12 +167,18 @@ export function SessionHeader() {
                     triggerAs={Button}
                     triggerProps={{
                       variant: "secondary",
-                      class: "rounded-sm w-[60px] h-[24px]",
+                      class: "rounded-sm w-[60px] h-[24px] hover:bg-surface-raised-base-hover",
                       classList: { "rounded-r-none": shareUrl() !== undefined },
                       style: { scale: 1 },
                     }}
                     trigger={language.t("session.share.action.share")}
                   >
+                    <input
+                      type="text"
+                      autofocus
+                      style="position:absolute; left:-10000px; width:1px; height:1px; opacity:0;"
+                      aria-hidden="true"
+                    />
                     <div class="flex flex-col gap-2">
                       <Show
                         when={shareUrl()}

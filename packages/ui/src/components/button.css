@@ -20,8 +20,11 @@
       color: var(--icon-invert-base);
     }
 
+    /* Clear, darker hover fill for primary button */
     &:hover:not(:disabled) {
-      background-color: var(--icon-strong-hover);
+      /* Subtler darken on hover to avoid overly dark button */
+      background-color: color-mix(in oklab, var(--button-primary-base) 75%, black 25%);
+      transition: background-color 100ms ease;
     }
     &:focus:not(:disabled) {
       background-color: var(--icon-strong-focus);
