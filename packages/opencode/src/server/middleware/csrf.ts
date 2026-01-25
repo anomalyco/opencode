@@ -76,8 +76,8 @@ export const csrfMiddleware = createMiddleware(async (c, next) => {
 
   const path = c.req.path
 
-  // Default allowlist: login sets cookie, status is read-only
-  const defaultAllowlist = ["/auth/login", "/auth/status"]
+  // Default allowlist: login sets cookie, status is read-only, login/2fa is mid-login flow
+  const defaultAllowlist = ["/auth/login", "/auth/login/2fa", "/auth/status"]
   const customAllowlist = authConfig.csrfAllowlist ?? []
   const allowlist = [...defaultAllowlist, ...customAllowlist]
 
