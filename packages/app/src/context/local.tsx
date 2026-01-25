@@ -1,5 +1,5 @@
 import { createStore, produce, reconcile } from "solid-js/store"
-import { batch, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -338,6 +338,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         node: {}, //  Object.fromEntries(sync.data.node.map((x) => [x.path, x])),
       })
 
+      const scope = createMemo(() => sdk.directory)
+      createEffect(() => {
+        scope()
+        setStore("node", {})
+      })
+
       // const changeset = createMemo(() => new Set(sync.data.changes.map((f) => f.path)))
       // const changes = createMemo(() => Array.from(changeset()).sort((a, b) => a.localeCompare(b)))
 
@@ -394,10 +400,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const relative = (path: string) => path.replace(sync.data.path.directory + "/", "")
 
       const load = async (path: string) => {
+        const directory = scope()
+        const client = sdk.client
         const relativePath = relative(path)
-        await sdk.client.file
+        await client.file
           .read({ path: relativePath })
           .then((x) => {
+            if (scope() !== directory) return
             if (!store.node[relativePath]) return
             setStore(
               "node",
@@ -409,6 +418,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             )
           })
           .catch((e) => {
+            if (scope() !== directory) return
             showToast({
               variant: "error",
               title: language.t("toast.file.loadFailed.title"),
@@ -453,9 +463,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
 
       const list = async (path: string) => {
-        return sdk.client.file
+        const directory = scope()
+        const client = sdk.client
+        return client.file
           .list({ path: path + "/" })
           .then((x) => {
+            if (scope() !== directory) return
             setStore(
               "node",
               produce((draft) => {
