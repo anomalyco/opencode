@@ -371,9 +371,7 @@ export function DialogConnectProvider(props: { provider: string }) {
                             />
                           </TooltipKeybind>
                           <div class="text-14-regular text-text-base">
-                            <Link href={store.authorization!.url}>
-                              {language.t("provider.connect.oauth.url.open")}
-                            </Link>
+                            <Link href={store.authorization!.url}>{language.t("provider.connect.oauth.url.open")}</Link>
                           </div>
                         </div>
                         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
@@ -400,8 +398,15 @@ export function DialogConnectProvider(props: { provider: string }) {
                   {iife(() => {
                     const code = createMemo(() => {
                       const instructions = store.authorization?.instructions
-                      if (instructions?.includes(":")) {
-                        return instructions?.split(":")[1]?.trim()
+                      if (!instructions?.includes(":")) return
+                      return instructions?.split(":")[1]?.trim()
+                    })
+                    const note = createMemo(() => {
+                      const instructions = store.authorization?.instructions
+                      if (!instructions || instructions.includes(":")) {
+                        return language.t("provider.connect.oauth.auto.visit.description", {
+                          provider: provider().name,
+                        })
                       }
                       return instructions
                     })
@@ -430,9 +435,7 @@ export function DialogConnectProvider(props: { provider: string }) {
 
                     return (
                       <div class="flex flex-col gap-6">
-                        <div class="text-14-regular text-text-base">
-                          {language.t("provider.connect.oauth.auto.visit.description", { provider: provider().name })}
-                        </div>
+                        <div class="text-14-regular text-text-base">{note()}</div>
                         <div class="flex flex-col gap-2">
                           <TooltipKeybind
                             title={language.t("provider.connect.oauth.url.copy")}
@@ -449,18 +452,18 @@ export function DialogConnectProvider(props: { provider: string }) {
                             />
                           </TooltipKeybind>
                           <div class="text-14-regular text-text-base">
-                            <Link href={store.authorization!.url}>
-                              {language.t("provider.connect.oauth.url.open")}
-                            </Link>
+                            <Link href={store.authorization!.url}>{language.t("provider.connect.oauth.url.open")}</Link>
                           </div>
                         </div>
-                        <TextField
-                          label={language.t("provider.connect.oauth.auto.confirmationCode")}
-                          class="font-mono"
-                          value={code()}
-                          readOnly
-                          copyable
-                        />
+                        {code() && (
+                          <TextField
+                            label={language.t("provider.connect.oauth.auto.confirmationCode")}
+                            class="font-mono"
+                            value={code()}
+                            readOnly
+                            copyable
+                          />
+                        )}
                         <div class="text-14-regular text-text-base flex items-center gap-4">
                           <Spinner />
                           <span>{language.t("provider.connect.status.waiting")}</span>
