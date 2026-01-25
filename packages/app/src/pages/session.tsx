@@ -15,7 +15,7 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
-import { LineCommentAnchor } from "@opencode-ai/ui/line-comment"
+import { LineComment as LineCommentView, LineCommentEditor } from "@opencode-ai/ui/line-comment"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
@@ -1885,7 +1885,6 @@ export default function Page() {
                     })
 
                     let wrap: HTMLDivElement | undefined
-                    let textarea: HTMLTextAreaElement | undefined
 
                     const fileComments = createMemo(() => {
                       const p = path()
@@ -1898,7 +1897,6 @@ export default function Page() {
                     const [openedComment, setOpenedComment] = createSignal<string | null>(null)
                     const [commenting, setCommenting] = createSignal<SelectedLineRange | null>(null)
                     const [draft, setDraft] = createSignal("")
-                    const [draftError, setDraftError] = createSignal(false)
                     const [positions, setPositions] = createSignal<Record<string, number>>({})
                     const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
 
@@ -1986,7 +1984,6 @@ export default function Page() {
                       const range = commenting()
                       if (!range) return
                       setDraft("")
-                      requestAnimationFrame(() => textarea?.focus())
                     })
 
                     createEffect(() => {
@@ -2047,7 +2044,7 @@ export default function Page() {
                         />
                         <For each={fileComments()}>
                           {(comment) => (
-                            <LineCommentAnchor
+                            <LineCommentView
                               id={comment.id}
                               top={positions()[comment.id]}
                               open={openedComment() === comment.id}
@@ -2063,26 +2060,31 @@ export default function Page() {
                                 setOpenedComment((current) => (current === comment.id ? null : comment.id))
                                 file.setSelectedLines(p, comment.selection)
                               }}
-                            >
-                              <div class="flex flex-col gap-1.5">
-                                <div class="text-14-regular text-text-strong whitespace-pre-wrap">
-                                  {comment.comment}
-                                </div>
-                                <div class="text-12-medium text-text-weak whitespace-nowrap">
-                                  Comment on {commentLabel(comment.selection)}
-                                </div>
-                              </div>
-                            </LineCommentAnchor>
+                              comment={comment.comment}
+                              selection={commentLabel(comment.selection)}
+                            />
                           )}
                         </For>
                         <Show when={commenting()}>
                           {(range) => (
                             <Show when={draftTop() !== undefined}>
-                              <LineCommentAnchor
+                              <LineCommentEditor
                                 top={draftTop()}
-                                open={true}
-                                variant="editor"
-                                onClick={() => textarea?.focus()}
+                                value={draft()}
+                                selection={commentLabel(range())}
+                                onInput={setDraft}
+                                onCancel={() => setCommenting(null)}
+                                onSubmit={(comment) => {
+                                  const p = path()
+                                  if (!p) return
+                                  addCommentToContext({
+                                    file: p,
+                                    selection: range(),
+                                    comment,
+                                    origin: "file",
+                                  })
+                                  setCommenting(null)
+                                }}
                                 onPopoverFocusOut={(e) => {
                                   const target = e.relatedTarget as Node | null
                                   if (target && e.currentTarget.contains(target)) return
@@ -2093,79 +2095,7 @@ export default function Page() {
                                     }
                                   }, 0)
                                 }}
-                              >
-                                <div class="flex flex-col gap-2">
-                                  <textarea
-                                    ref={textarea}
-                                    classList={{
-                                      "w-full resize-vertical p-2 rounded-[6px] bg-surface-base text-text-strong text-12-regular leading-5 focus:outline-none": true,
-                                      "focus:shadow-xs-border-select": !draftError(),
-                                      "shadow-xs-border-critical-base": draftError(),
-                                    }}
-                                    rows={3}
-                                    placeholder="Add comment"
-                                    value={draft()}
-                                    onInput={(e) => {
-                                      setDraft(e.currentTarget.value)
-                                      setDraftError(false)
-                                    }}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Escape") {
-                                        setCommenting(null)
-                                        return
-                                      }
-                                      if (e.key !== "Enter") return
-                                      if (e.shiftKey) return
-                                      e.preventDefault()
-                                      const value = draft().trim()
-                                      if (!value) {
-                                        setDraftError(true)
-                                        return
-                                      }
-                                      const p = path()
-                                      if (!p) return
-                                      addCommentToContext({
-                                        file: p,
-                                        selection: range(),
-                                        comment: value,
-                                        origin: "file",
-                                      })
-                                      setCommenting(null)
-                                    }}
-                                  />
-                                  <div class="flex items-center gap-2">
-                                    <div class="text-12-medium text-text-weak ml-1">
-                                      Commenting on {commentLabel(range())}
-                                    </div>
-                                    <div class="flex-1" />
-                                    <Button size="small" variant="ghost" onClick={() => setCommenting(null)}>
-                                      Cancel
-                                    </Button>
-                                    <Button
-                                      size="small"
-                                      variant="primary"
-                                      onClick={() => {
-                                        const value = draft().trim()
-                                        if (!value) {
-                                          setDraftError(true)
-                                          return
-                                        }
-                                        const p = path()
-                                        if (!p) return
-                                        addCommentToContext({
-                                          file: p,
-                                          selection: range(),
-                                          comment: value,
-                                          origin: "file",
-                                        })
-                                        setCommenting(null)
-                                      }}
-                                    >
-                                      Comment
-                                    </Button>
-                                  </div>
-                                </div>
-                              </LineCommentAnchor>
+                              />
                             </Show>
                           )}
                         </Show>
