@@ -1158,7 +1158,7 @@ function generate2FASetupPageHtml(params: {
     </div>
 
     <div class="step">
-      <div class="step-title">Step 2: Install PAM module on the server (if needed)</div>
+      <div class="step-title">Step 2: Install and configure PAM module on the server (if needed)</div>
       <p class="note">Install <strong>libpam-google-authenticator</strong> on the same machine where opencode is running. This PAM module validates TOTP codes.</p>
       <details class="install-details">
         <summary>Installation instructions</summary>
@@ -1169,6 +1169,18 @@ function generate2FASetupPageHtml(params: {
           <div class="install-row"><span class="os">macOS:</span><code>brew install google-authenticator-libpam</code></div>
         </div>
         <p class="note" style="margin-top: 0.75rem;">This is free, open source software: <a href="https://github.com/google/google-authenticator-libpam" target="_blank" rel="noopener">github.com/google/google-authenticator-libpam</a></p>
+      </details>
+      <details class="install-details">
+        <summary>PAM service file setup (required)</summary>
+        <div class="safety-info">
+          <p>Create the PAM service file at <code>/etc/pam.d/opencode-otp</code>:</p>
+          <p><strong>Linux:</strong></p>
+          <p><code>echo "auth required pam_google_authenticator.so nullok" | sudo tee /etc/pam.d/opencode-otp</code></p>
+          <p><strong>macOS (Apple Silicon):</strong></p>
+          <p><code>echo "auth required /opt/homebrew/lib/security/pam_google_authenticator.so nullok" | sudo tee /etc/pam.d/opencode-otp</code></p>
+          <p><strong>macOS (Intel):</strong></p>
+          <p><code>echo "auth required /usr/local/lib/security/pam_google_authenticator.so nullok" | sudo tee /etc/pam.d/opencode-otp</code></p>
+        </div>
       </details>
     </div>
 
@@ -2055,7 +2067,10 @@ export const AuthRoutes = lazy(() =>
       const result = await broker.authenticateOtp(session.username, code)
 
       if (!result.success) {
-        return c.json({ error: "invalid_code", message: "Invalid code - make sure you ran the setup command" }, 401)
+        return c.json({
+          error: "invalid_code",
+          message: "Verification failed. Check that: 1) You ran the setup command on the server, 2) The PAM service file exists (/etc/pam.d/opencode-otp), 3) The code from your authenticator matches the QR code you scanned"
+        }, 401)
       }
 
       // Clear twoFactorPending flag now that 2FA is configured
