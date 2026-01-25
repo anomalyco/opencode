@@ -25,6 +25,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 11: Documentation** - Reverse proxy and PAM configuration guides
 - [ ] **Phase 12: Server-Side TOTP Registration** - Offload .google_authenticator file generation to server
 - [ ] **Phase 13: Passkeys Investigation** - Investigate adding passkeys and passkey management to opencode auth
+- [ ] **Phase 14: Persistent Session Storage** - Add persistent session storage for multi-instance deployments
 
 ## Phase Details
 
@@ -246,10 +247,27 @@ Plans:
 **Details:**
 [To be added during planning]
 
+### Phase 14: Persistent Session Storage
+**Goal**: Enable session persistence across server restarts and multi-instance deployments
+**Depends on**: Phase 2
+**Requirements**: None (infrastructure improvement)
+**Success Criteria** (what must be TRUE):
+  1. Sessions survive server restarts
+  2. Multiple server instances share session state
+  3. Session storage backend is configurable (file, Redis, database)
+  4. Existing in-memory mode remains available for single-instance deployments
+**Plans**: 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 14 to break down)
+
+**Details:**
+[To be added during planning]
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13 -> 14
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -266,3 +284,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 11. Documentation | 0/TBD | Not started | - |
 | 12. Server-Side TOTP Registration | 0/TBD | Not started | - |
 | 13. Passkeys Investigation | 0/TBD | Not started | - |
+| 14. Persistent Session Storage | 0/TBD | Not started | - |
