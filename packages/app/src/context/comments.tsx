@@ -38,6 +38,7 @@ function createCommentSession(dir: string, id: string | undefined) {
   )
 
   const [focus, setFocus] = createSignal<CommentFocus | null>(null)
+  const [active, setActive] = createSignal<CommentFocus | null>(null)
 
   const list = (file: string) => store.comments[file] ?? []
 
@@ -76,6 +77,9 @@ function createCommentSession(dir: string, id: string | undefined) {
     focus: createMemo(() => focus()),
     setFocus,
     clearFocus: () => setFocus(null),
+    active: createMemo(() => active()),
+    setActive,
+    clearActive: () => setActive(null),
   }
 }
 
@@ -135,6 +139,9 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
       focus: () => session().focus(),
       setFocus: (focus: CommentFocus | null) => session().setFocus(focus),
       clearFocus: () => session().clearFocus(),
+      active: () => session().active(),
+      setActive: (active: CommentFocus | null) => session().setActive(active),
+      clearActive: () => session().clearActive(),
     }
   },
 })

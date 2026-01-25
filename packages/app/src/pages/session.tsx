@@ -1,16 +1,4 @@
-import {
-  For,
-  Index,
-  onCleanup,
-  onMount,
-  Show,
-  Match,
-  Switch,
-  createMemo,
-  createEffect,
-  on,
-  createSignal,
-} from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on, createSignal } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -27,7 +15,7 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
-import { LineCommentAnchor } from "@opencode-ai/ui/line-comment"
+import { LineComment as LineCommentView, LineCommentEditor } from "@opencode-ai/ui/line-comment"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
@@ -41,7 +29,6 @@ import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
 import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
 import { findLast } from "@opencode-ai/util/array"
-import { getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
@@ -67,7 +54,6 @@ import {
   SortableTerminalTab,
   NewSessionView,
 } from "@/components/session"
-import { usePlatform } from "@/context/platform"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
 
@@ -103,7 +89,7 @@ function SessionReviewTab(props: SessionReviewTabProps) {
 
   const sdk = useSDK()
 
-  const readFile = (path: string) => {
+  const readFile = async (path: string) => {
     return sdk.client.file
       .read({ path })
       .then((x) => x.data)
@@ -192,7 +178,6 @@ export default function Page() {
   const codeComponent = useCodeComponent()
   const command = useCommand()
   const language = useLanguage()
-  const platform = usePlatform()
   const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
@@ -1266,19 +1251,40 @@ export default function Page() {
     autoScroll.forceScrollToBottom()
   }
 
+  const closestMessage = (node: Element | null): HTMLElement | null => {
+    if (!node) return null
+    const match = node.closest?.("[data-message-id]") as HTMLElement | null
+    if (match) return match
+    const root = node.getRootNode?.()
+    if (root instanceof ShadowRoot) return closestMessage(root.host)
+    return null
+  }
+
   const getActiveMessageId = (container: HTMLDivElement) => {
+    const rect = container.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+
+    const x = Math.min(window.innerWidth - 1, Math.max(0, rect.left + rect.width / 2))
+    const y = Math.min(window.innerHeight - 1, Math.max(0, rect.top + 100))
+
+    const hit = document.elementFromPoint(x, y)
+    const host = closestMessage(hit)
+    const id = host?.dataset.messageId
+    if (id) return id
+
+    // Fallback: DOM query (handles edge hit-testing cases)
     const cutoff = container.scrollTop + 100
     const nodes = container.querySelectorAll<HTMLElement>("[data-message-id]")
-    let id: string | undefined
+    let last: string | undefined
 
     for (const node of nodes) {
       const next = node.dataset.messageId
       if (!next) continue
       if (node.offsetTop > cutoff) break
-      id = next
+      last = next
     }
 
-    return id
+    return last
   }
 
   const scheduleScrollSpy = (container: HTMLDivElement) => {
@@ -1900,7 +1906,6 @@ export default function Page() {
                     })
 
                     let wrap: HTMLDivElement | undefined
-                    let textarea: HTMLTextAreaElement | undefined
 
                     const fileComments = createMemo(() => {
                       const p = path()
@@ -1913,9 +1918,10 @@ export default function Page() {
                     const [openedComment, setOpenedComment] = createSignal<string | null>(null)
                     const [commenting, setCommenting] = createSignal<SelectedLineRange | null>(null)
                     const [draft, setDraft] = createSignal("")
-                    const [draftError, setDraftError] = createSignal(false)
                     const [positions, setPositions] = createSignal<Record<string, number>>({})
                     const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
+
+                    const empty = {} as Record<string, number>
 
                     const commentLabel = (range: SelectedLineRange) => {
                       const start = Math.min(range.start, range.end)
@@ -1950,12 +1956,22 @@ export default function Page() {
                       return rect.top - wrapperRect.top + Math.max(0, (rect.height - 20) / 2)
                     }
 
+                    const equal = (a: Record<string, number>, b: Record<string, number>) => {
+                      const aKeys = Object.keys(a)
+                      const bKeys = Object.keys(b)
+                      if (aKeys.length !== bKeys.length) return false
+                      for (const key of aKeys) {
+                        if (a[key] !== b[key]) return false
+                      }
+                      return true
+                    }
+
                     const updateComments = () => {
                       const el = wrap
                       const root = getRoot()
                       if (!el || !root) {
-                        setPositions({})
-                        setDraftTop(undefined)
+                        setPositions((prev) => (Object.keys(prev).length === 0 ? prev : empty))
+                        setDraftTop((prev) => (prev === undefined ? prev : undefined))
                         return
                       }
 
@@ -1966,7 +1982,7 @@ export default function Page() {
                         next[comment.id] = markerTop(el, marker)
                       }
 
-                      setPositions(next)
+                      setPositions((prev) => (equal(prev, next) ? prev : next))
 
                       const range = commenting()
                       if (!range) {
@@ -1980,11 +1996,18 @@ export default function Page() {
                         return
                       }
 
-                      setDraftTop(markerTop(el, marker))
+                      const nextTop = markerTop(el, marker)
+                      setDraftTop((prev) => (prev === nextTop ? prev : nextTop))
                     }
 
+                    let commentFrame: number | undefined
+
                     const scheduleComments = () => {
-                      requestAnimationFrame(updateComments)
+                      if (commentFrame !== undefined) return
+                      commentFrame = requestAnimationFrame(() => {
+                        commentFrame = undefined
+                        updateComments()
+                      })
                     }
 
                     createEffect(() => {
@@ -2001,7 +2024,6 @@ export default function Page() {
                       const range = commenting()
                       if (!range) return
                       setDraft("")
-                      requestAnimationFrame(() => textarea?.focus())
                     })
 
                     createEffect(() => {
@@ -2062,7 +2084,7 @@ export default function Page() {
                         />
                         <For each={fileComments()}>
                           {(comment) => (
-                            <LineCommentAnchor
+                            <LineCommentView
                               id={comment.id}
                               top={positions()[comment.id]}
                               open={openedComment() === comment.id}
@@ -2078,26 +2100,31 @@ export default function Page() {
                                 setOpenedComment((current) => (current === comment.id ? null : comment.id))
                                 file.setSelectedLines(p, comment.selection)
                               }}
-                            >
-                              <div class="flex flex-col gap-1.5">
-                                <div class="text-14-regular text-text-strong whitespace-pre-wrap">
-                                  {comment.comment}
-                                </div>
-                                <div class="text-12-medium text-text-weak whitespace-nowrap">
-                                  Comment on {commentLabel(comment.selection)}
-                                </div>
-                              </div>
-                            </LineCommentAnchor>
+                              comment={comment.comment}
+                              selection={commentLabel(comment.selection)}
+                            />
                           )}
                         </For>
                         <Show when={commenting()}>
                           {(range) => (
                             <Show when={draftTop() !== undefined}>
-                              <LineCommentAnchor
+                              <LineCommentEditor
                                 top={draftTop()}
-                                open={true}
-                                variant="editor"
-                                onClick={() => textarea?.focus()}
+                                value={draft()}
+                                selection={commentLabel(range())}
+                                onInput={setDraft}
+                                onCancel={() => setCommenting(null)}
+                                onSubmit={(comment) => {
+                                  const p = path()
+                                  if (!p) return
+                                  addCommentToContext({
+                                    file: p,
+                                    selection: range(),
+                                    comment,
+                                    origin: "file",
+                                  })
+                                  setCommenting(null)
+                                }}
                                 onPopoverFocusOut={(e) => {
                                   const target = e.relatedTarget as Node | null
                                   if (target && e.currentTarget.contains(target)) return
@@ -2108,79 +2135,7 @@ export default function Page() {
                                     }
                                   }, 0)
                                 }}
-                              >
-                                <div class="flex flex-col gap-2">
-                                  <textarea
-                                    ref={textarea}
-                                    classList={{
-                                      "w-full resize-vertical p-2 rounded-[6px] bg-surface-base text-text-strong text-12-regular leading-5 focus:outline-none": true,
-                                      "focus:shadow-xs-border-select": !draftError(),
-                                      "shadow-xs-border-critical-base": draftError(),
-                                    }}
-                                    rows={3}
-                                    placeholder="Add comment"
-                                    value={draft()}
-                                    onInput={(e) => {
-                                      setDraft(e.currentTarget.value)
-                                      setDraftError(false)
-                                    }}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Escape") {
-                                        setCommenting(null)
-                                        return
-                                      }
-                                      if (e.key !== "Enter") return
-                                      if (e.shiftKey) return
-                                      e.preventDefault()
-                                      const value = draft().trim()
-                                      if (!value) {
-                                        setDraftError(true)
-                                        return
-                                      }
-                                      const p = path()
-                                      if (!p) return
-                                      addCommentToContext({
-                                        file: p,
-                                        selection: range(),
-                                        comment: value,
-                                        origin: "file",
-                                      })
-                                      setCommenting(null)
-                                    }}
-                                  />
-                                  <div class="flex items-center gap-2">
-                                    <div class="text-12-medium text-text-weak ml-1">
-                                      Commenting on {commentLabel(range())}
-                                    </div>
-                                    <div class="flex-1" />
-                                    <Button size="small" variant="ghost" onClick={() => setCommenting(null)}>
-                                      Cancel
-                                    </Button>
-                                    <Button
-                                      size="small"
-                                      variant="primary"
-                                      onClick={() => {
-                                        const value = draft().trim()
-                                        if (!value) {
-                                          setDraftError(true)
-                                          return
-                                        }
-                                        const p = path()
-                                        if (!p) return
-                                        addCommentToContext({
-                                          file: p,
-                                          selection: range(),
-                                          comment: value,
-                                          origin: "file",
-                                        })
-                                        setCommenting(null)
-                                      }}
-                                    >
-                                      Comment
-                                    </Button>
-                                  </div>
-                                </div>
-                              </LineCommentAnchor>
+                              />
                             </Show>
                           )}
                         </Show>
@@ -2310,6 +2265,7 @@ export default function Page() {
                     )
 
                     onCleanup(() => {
+                      if (commentFrame !== undefined) cancelAnimationFrame(commentFrame)
                       for (const item of codeScroll) {
                         item.removeEventListener("scroll", handleCodeScroll)
                       }
@@ -2466,66 +2422,23 @@ export default function Page() {
                 </Tabs>
                 <div class="flex-1 min-h-0 relative">
                   <For each={terminal.all()}>
-                    {(pty) => {
-                      const [dismissed, setDismissed] = createSignal(false)
-                      return (
-                        <div
-                          id={`terminal-wrapper-${pty.id}`}
-                          class="absolute inset-0"
-                          style={{
-                            display: terminal.active() === pty.id ? "block" : "none",
-                          }}
-                        >
+                    {(pty) => (
+                      <div
+                        id={`terminal-wrapper-${pty.id}`}
+                        class="absolute inset-0"
+                        style={{
+                          display: terminal.active() === pty.id ? "block" : "none",
+                        }}
+                      >
+                        <Show when={pty.id} keyed>
                           <Terminal
                             pty={pty}
-                            onCleanup={(data) => terminal.update({ ...data, id: pty.id })}
-                            onConnect={() => {
-                              terminal.update({ id: pty.id, error: false })
-                              setDismissed(false)
-                            }}
-                            onConnectError={() => {
-                              setDismissed(false)
-                              terminal.update({ id: pty.id, error: true })
-                            }}
+                            onCleanup={terminal.update}
+                            onConnectError={() => terminal.clone(pty.id)}
                           />
-                          <Show when={pty.error && !dismissed()}>
-                            <div
-                              class="absolute inset-0 flex flex-col items-center justify-center gap-3"
-                              style={{ "background-color": "rgba(0, 0, 0, 0.6)" }}
-                            >
-                              <Icon
-                                name="circle-ban-sign"
-                                class="w-8 h-8"
-                                style={{ color: "rgba(239, 68, 68, 0.8)" }}
-                              />
-                              <div class="text-center" style={{ color: "rgba(255, 255, 255, 0.7)" }}>
-                                <div class="text-14-semibold mb-1">{language.t("terminal.connectionLost.title")}</div>
-                                <div class="text-12-regular" style={{ color: "rgba(255, 255, 255, 0.5)" }}>
-                                  {language.t("terminal.connectionLost.description")}
-                                </div>
-                              </div>
-                              <button
-                                class="mt-2 px-3 py-1.5 text-12-medium rounded-lg transition-colors"
-                                style={{
-                                  "background-color": "rgba(255, 255, 255, 0.1)",
-                                  color: "rgba(255, 255, 255, 0.7)",
-                                  border: "1px solid rgba(255, 255, 255, 0.2)",
-                                }}
-                                onMouseEnter={(e) =>
-                                  (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)")
-                                }
-                                onMouseLeave={(e) =>
-                                  (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.1)")
-                                }
-                                onClick={() => setDismissed(true)}
-                              >
-                                {language.t("common.dismiss")}
-                              </button>
-                            </div>
-                          </Show>
-                        </div>
-                      )
-                    }}
+                        </Show>
+                      </div>
+                    )}
                   </For>
                 </div>
               </div>

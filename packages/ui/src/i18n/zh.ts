@@ -44,6 +44,7 @@ export const dict = {
   "ui.messageNav.newMessage": "新消息",
 
   "ui.textField.copyToClipboard": "复制到剪贴板",
+  "ui.textField.copyLink": "复制链接",
   "ui.textField.copied": "已复制",
 
   "ui.imagePreview.alt": "图片预览",

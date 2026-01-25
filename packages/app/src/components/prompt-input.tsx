@@ -137,6 +137,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
 
+  const mirror = { input: false }
+
   const scrollCursorIntoView = () => {
     const container = scrollRef
     const selection = window.getSelection()
@@ -184,6 +186,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!item.commentID) return
 
     comments.setFocus({ file: item.path, id: item.commentID })
+    comments.setActive({ file: item.path, id: item.commentID })
     view().reviewPanel.open()
 
     if (item.commentOrigin === "review") {
@@ -650,6 +653,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       () => prompt.current(),
       (currentParts) => {
         const inputParts = currentParts.filter((part) => part.type !== "image") as Prompt
+
+        if (mirror.input) {
+          mirror.input = false
+          if (isNormalizedEditor()) return
+
+          const selection = window.getSelection()
+          let cursorPosition: number | null = null
+          if (selection && selection.rangeCount > 0 && editorRef.contains(selection.anchorNode)) {
+            cursorPosition = getCursorPosition(editorRef)
+          }
+
+          renderEditor(inputParts)
+
+          if (cursorPosition !== null) {
+            setCursorPosition(editorRef, cursorPosition)
+          }
+          return
+        }
+
         const domParts = parseFromDOM()
         if (isNormalizedEditor() && isPromptEqual(inputParts, domParts)) return
 
@@ -764,6 +786,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         setStore("savedPrompt", null)
       }
       if (prompt.dirty()) {
+        mirror.input = true
         prompt.set(DEFAULT_PROMPT, 0)
       }
       queueScroll()
@@ -794,6 +817,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("savedPrompt", null)
     }
 
+    mirror.input = true
     prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
   }
@@ -1711,15 +1735,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           <div class="flex flex-nowrap items-start gap-2 p-2 overflow-x-auto no-scrollbar">
             <For each={prompt.context.items()}>
               {(item) => {
+                const active = () => {
+                  const a = comments.active()
+                  return !!item.commentID && item.commentID === a?.id && item.path === a?.file
+                }
                 return (
                   <Tooltip
                     value={
                       <span class="flex max-w-[300px]">
                         <span
                           class="text-text-invert-base truncate min-w-0"
-                          style={{ direction: "rtl", "text-align": "left" }}
+                          style={{ direction: "rtl", "text-align": "left", "unicode-bidi": "plaintext" }}
                         >
-                          <bdi>{getDirectory(item.path)}</bdi>
+                          {getDirectory(item.path)}
                         </span>
                         <span class="shrink-0">{getFilename(item.path)}</span>
                       </span>
@@ -1729,8 +1757,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <div
                       classList={{
-                        "group shrink-0 flex flex-col rounded-[6px] bg-background-stronger pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all shadow-xs-border hover:shadow-xs-border-hover": true,
-                        "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID,
+                        "group shrink-0 flex flex-col rounded-[6px] pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all transition-transform shadow-xs-border hover:shadow-xs-border-hover": true,
+                        "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID && !active(),
+                        "cursor-pointer bg-surface-interactive-hover hover:bg-surface-interactive-hover shadow-xs-border-hover":
+                          active(),
+                        "bg-background-stronger": !active(),
                       }}
                       onClick={() => {
                         openComment(item)
@@ -2013,7 +2044,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             >
               <IconButton
                 type="submit"
-                disabled={!prompt.dirty() && !working() && commentCount() === 0}
+                disabled={!prompt.dirty() && !working()}
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
                 class="h-6 w-4.5"
