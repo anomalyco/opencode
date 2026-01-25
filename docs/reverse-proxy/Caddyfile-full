@@ -1,0 +1,111 @@
+# Production Caddy Configuration for opencode
+#
+# Features:
+# - Automatic HTTPS with Let's Encrypt
+# - Automatic HTTP to HTTPS redirect
+# - WebSocket support (built-in)
+# - Security headers (OWASP recommendations)
+# - Certificate auto-renewal
+#
+# Installation:
+# 1. Replace <YOUR_DOMAIN> with your domain (e.g., opencode.example.com)
+# 2. Replace <OPENCODE_PORT> with your opencode port (default: 3000)
+# 3. Save to /etc/caddy/Caddyfile (or any path)
+# 4. Test: caddy validate --config Caddyfile
+# 5. Run: caddy run --config Caddyfile
+#    Or with systemd: sudo systemctl reload caddy
+# 6. Configure opencode with trustProxy: true
+#
+# Caddy automatically:
+# - Obtains TLS certificate from Let's Encrypt
+# - Redirects HTTP (port 80) to HTTPS (port 443)
+# - Renews certificates before expiration
+# - Handles WebSocket upgrade
+
+<YOUR_DOMAIN> {
+    # Reverse proxy to opencode server
+    reverse_proxy localhost:<OPENCODE_PORT> {
+        # WebSocket Support
+        # Caddy automatically detects Upgrade headers and switches to WebSocket mode
+        # No explicit configuration needed (unlike nginx)
+
+        # Health Check (optional)
+        # Uncomment to enable periodic health checks
+        # health_uri /
+        # health_interval 30s
+        # health_timeout 5s
+
+        # Load Balancing (if running multiple opencode instances)
+        # Uncomment and add more upstreams for load balancing
+        # lb_policy round_robin
+        # to localhost:3001
+        # to localhost:3002
+
+        # Timeouts
+        # WebSocket connections have no read timeout by default (suitable for long sessions)
+        # Uncomment to set custom timeouts if needed
+        # transport http {
+        #     read_timeout 24h
+        #     write_timeout 24h
+        # }
+    }
+
+    # Security Headers (OWASP Recommendations)
+    # https://owasp.org/www-project-secure-headers/
+    header {
+        # HSTS: Force HTTPS for 1 year including subdomains
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+        # Prevent MIME-sniffing attacks
+        X-Content-Type-Options "nosniff"
+
+        # Prevent clickjacking (allow only same-origin frames)
+        X-Frame-Options "SAMEORIGIN"
+
+        # Control referrer information leakage
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # Enable XSS filter in legacy browsers
+        X-XSS-Protection "1; mode=block"
+
+        # Content Security Policy (optional, customize as needed)
+        # Uncomment and adjust for your security requirements
+        # Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';"
+
+        # Remove Server header (hides Caddy version)
+        -Server
+    }
+
+    # Logging
+    # Customize log format and output path
+    log {
+        output file /var/log/caddy/opencode-access.log
+        format json
+    }
+
+    # Optional: Enable compression
+    encode gzip zstd
+
+    # Optional: Rate Limiting (requires caddy-rate-limit plugin)
+    # Uncomment if you have the plugin installed
+    # rate_limit {
+    #     zone opencode {
+    #         key {remote_host}
+    #         events 100
+    #         window 1m
+    #     }
+    # }
+}
+
+# Advanced: Custom Certificate (instead of Let's Encrypt)
+# Uncomment and customize if you want to use your own certificate
+# <YOUR_DOMAIN> {
+#     tls /path/to/cert.pem /path/to/key.pem
+#     reverse_proxy localhost:<OPENCODE_PORT>
+# }
+
+# Advanced: HTTP-only mode (local development/testing)
+# Uncomment to disable automatic HTTPS
+# http://<YOUR_DOMAIN> {
+#     reverse_proxy localhost:<OPENCODE_PORT>
+# }
