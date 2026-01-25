@@ -28,6 +28,195 @@ import { Auth } from "@/auth"
 export namespace LLM {
   const log = Log.create({ service: "llm" })
 
+  /**
+   * Common tool name aliases that local models (especially via Ollama) might use.
+   * Maps various naming conventions to the canonical OpenCode tool names.
+   */
+  const TOOL_ALIASES: Record<string, string> = {
+    // read tool aliases
+    readfile: "read",
+    read_file: "read",
+    file_read: "read",
+    getfile: "read",
+    get_file: "read",
+    openfile: "read",
+    open_file: "read",
+    viewfile: "read",
+    view_file: "read",
+    catfile: "read",
+    cat_file: "read",
+    cat: "read",
+
+    // write tool aliases
+    writefile: "write",
+    write_file: "write",
+    file_write: "write",
+    createfile: "write",
+    create_file: "write",
+    savefile: "write",
+    save_file: "write",
+
+    // edit tool aliases
+    editfile: "edit",
+    edit_file: "edit",
+    file_edit: "edit",
+    modifyfile: "edit",
+    modify_file: "edit",
+    updatefile: "edit",
+    update_file: "edit",
+    patchfile: "edit",
+    patch_file: "edit",
+    patch: "edit",
+
+    // bash/shell tool aliases
+    shell: "bash",
+    terminal: "bash",
+    command: "bash",
+    run: "bash",
+    execute: "bash",
+    exec: "bash",
+    runcommand: "bash",
+    run_command: "bash",
+    shellcommand: "bash",
+    shell_command: "bash",
+    runshell: "bash",
+    run_shell: "bash",
+
+    // list/ls tool aliases
+    ls: "glob",
+    list: "glob",
+    listdir: "glob",
+    list_dir: "glob",
+    listdirectory: "glob",
+    list_directory: "glob",
+    dir: "glob",
+    directory: "glob",
+    listfiles: "glob",
+    list_files: "glob",
+    find: "glob",
+    findfiles: "glob",
+    find_files: "glob",
+
+    // grep/search tool aliases
+    search: "grep",
+    searchcode: "grep",
+    search_code: "grep",
+    searchfiles: "grep",
+    search_files: "grep",
+    findtext: "grep",
+    find_text: "grep",
+    searchtext: "grep",
+    search_text: "grep",
+    ripgrep: "grep",
+    rg: "grep",
+
+    // webfetch aliases
+    fetch: "webfetch",
+    geturl: "webfetch",
+    get_url: "webfetch",
+    getwebpage: "webfetch",
+    get_webpage: "webfetch",
+    fetchurl: "webfetch",
+    fetch_url: "webfetch",
+    http: "webfetch",
+    httpget: "webfetch",
+    http_get: "webfetch",
+    curl: "webfetch",
+
+    // websearch aliases
+    web_search: "websearch",
+    searchweb: "websearch",
+    search_web: "websearch",
+    googlesearch: "websearch",
+    google_search: "websearch",
+    internetsearch: "websearch",
+    internet_search: "websearch",
+
+    // todo aliases
+    todo: "todowrite",
+    todo_write: "todowrite",
+    addtodo: "todowrite",
+    add_todo: "todowrite",
+    createtodo: "todowrite",
+    create_todo: "todowrite",
+    todo_read: "todoread",
+    gettodo: "todoread",
+    get_todo: "todoread",
+    listtodo: "todoread",
+    list_todo: "todoread",
+
+    // task/agent aliases
+    agent: "task",
+    subagent: "task",
+    sub_agent: "task",
+    delegate: "task",
+    spawn: "task",
+    createtask: "task",
+    create_task: "task",
+
+    // codesearch aliases
+    code_search: "codesearch",
+    semanticsearch: "codesearch",
+    semantic_search: "codesearch",
+
+    // skill aliases
+    useskill: "skill",
+    use_skill: "skill",
+    runSkill: "skill",
+    run_skill: "skill",
+  }
+
+  /**
+   * Attempts to repair a tool name that the model called incorrectly.
+   * Handles case sensitivity, common aliases, and fuzzy matching.
+   */
+  function repairToolName(toolName: string, availableTools: string[]): string | undefined {
+    // 1. Exact match (already correct)
+    if (availableTools.includes(toolName)) {
+      return toolName
+    }
+
+    // 2. Case-insensitive match
+    const lower = toolName.toLowerCase()
+    const caseMatch = availableTools.find((t) => t.toLowerCase() === lower)
+    if (caseMatch) {
+      return caseMatch
+    }
+
+    // 3. Check aliases (case-insensitive)
+    const aliasLower = lower.replace(/[^a-z0-9]/g, "") // normalize: remove non-alphanumeric
+    const aliasMatch = TOOL_ALIASES[aliasLower] || TOOL_ALIASES[lower]
+    if (aliasMatch && availableTools.includes(aliasMatch)) {
+      return aliasMatch
+    }
+
+    // 4. Try removing common prefixes/suffixes that models add
+    const stripped = lower
+      .replace(/^(repo_browser\.|file_system\.|fs\.|tool\.|tools\.)/, "") // remove common prefixes
+      .replace(/_tool$/, "") // remove _tool suffix
+    const strippedMatch = availableTools.find((t) => t.toLowerCase() === stripped)
+    if (strippedMatch) {
+      return strippedMatch
+    }
+
+    // 5. Check if stripped version is in aliases
+    const strippedAliasMatch = TOOL_ALIASES[stripped]
+    if (strippedAliasMatch && availableTools.includes(strippedAliasMatch)) {
+      return strippedAliasMatch
+    }
+
+    // 6. Fuzzy match: find tool that starts with or contains the name
+    const fuzzyMatch = availableTools.find(
+      (t) => t.toLowerCase().startsWith(stripped) || stripped.startsWith(t.toLowerCase()),
+    )
+    if (fuzzyMatch) {
+      return fuzzyMatch
+    }
+
+    // No match found
+    return undefined
+  }
+
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
   export type StreamInput = {
@@ -184,15 +373,15 @@ export namespace LLM {
         })
       },
       async experimental_repairToolCall(failed) {
-        const lower = failed.toolCall.toolName.toLowerCase()
-        if (lower !== failed.toolCall.toolName && tools[lower]) {
+        const repaired = repairToolName(failed.toolCall.toolName, Object.keys(tools))
+        if (repaired && repaired !== failed.toolCall.toolName) {
           l.info("repairing tool call", {
             tool: failed.toolCall.toolName,
-            repaired: lower,
+            repaired,
           })
           return {
             ...failed.toolCall,
-            toolName: lower,
+            toolName: repaired,
           }
         }
         return {
