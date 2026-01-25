@@ -118,14 +118,32 @@ export function Session() {
       .filter((x) => x.parentID === parentID || x.id === parentID)
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
+
+  // Recursively collect all descendant session IDs
+  const descendants = createMemo(() => {
+    const collect = (id: string, visited: Set<string>): string[] => {
+      if (visited.has(id)) return []
+      visited.add(id)
+
+      const directChildren = sync.data.session.filter((x) => x.parentID === id).map((x) => x.id)
+
+      return [id, ...directChildren.flatMap((childID) => collect(childID, visited))]
+    }
+
+    const root = session()?.parentID ?? session()?.id
+    return root ? collect(root, new Set()) : []
+  })
+
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+    return descendants().flatMap((x) => sync.data.permission[x] ?? [])
   })
+
   const questions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
+    return descendants().flatMap((x) => sync.data.question[x] ?? [])
   })
 
   const pending = createMemo(() => {
