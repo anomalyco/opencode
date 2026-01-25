@@ -107,14 +107,15 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
         .then((pty) => {
           const id = pty.data?.id
           if (!id) return
-          setStore("all", [
-            ...store.all,
-            {
-              id,
-              title: pty.data?.title ?? "Terminal",
-              titleNumber: nextNumber,
-            },
-          ])
+          const newTerminal = {
+            id,
+            title: pty.data?.title ?? "Terminal",
+            titleNumber: nextNumber,
+          }
+          setStore("all", (all) => {
+            const newAll = [...all, newTerminal]
+            return newAll
+          })
           setStore("active", id)
         })
         .catch((e) => {
@@ -122,7 +123,10 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
         })
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
-      setStore("all", (x) => x.map((x) => (x.id === pty.id ? { ...x, ...pty } : x)))
+      const index = store.all.findIndex((x) => x.id === pty.id)
+      if (index !== -1) {
+        setStore("all", index, (existing) => ({ ...existing, ...pty }))
+      }
       sdk.client.pty
         .update({
           ptyID: pty.id,
@@ -146,29 +150,45 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
           return undefined
         })
       if (!clone?.data) return
-      setStore("all", index, {
-        ...pty,
-        ...clone.data,
+
+      const active = store.active === pty.id
+
+      batch(() => {
+        setStore("all", index, {
+          ...pty,
+          ...clone.data,
+        })
+        if (active) {
+          setStore("active", clone.data.id)
+        }
       })
-      if (store.active === pty.id) {
-        setStore("active", clone.data.id)
-      }
     },
     open(id: string) {
       setStore("active", id)
     },
+    next() {
+      const index = store.all.findIndex((x) => x.id === store.active)
+      if (index === -1) return
+      const nextIndex = (index + 1) % store.all.length
+      setStore("active", store.all[nextIndex]?.id)
+    },
+    previous() {
+      const index = store.all.findIndex((x) => x.id === store.active)
+      if (index === -1) return
+      const prevIndex = index === 0 ? store.all.length - 1 : index - 1
+      setStore("active", store.all[prevIndex]?.id)
+    },
     async close(id: string) {
       batch(() => {
-        setStore(
-          "all",
-          store.all.filter((x) => x.id !== id),
-        )
+        const filtered = store.all.filter((x) => x.id !== id)
         if (store.active === id) {
           const index = store.all.findIndex((f) => f.id === id)
-          const previous = store.all[Math.max(0, index - 1)]
-          setStore("active", previous?.id)
+          const next = index > 0 ? index - 1 : 0
+          setStore("active", filtered[next]?.id)
         }
+        setStore("all", filtered)
       })
+
       await sdk.client.pty.remove({ ptyID: id }).catch((e) => {
         console.error("Failed to close terminal", e)
       })
@@ -244,6 +264,8 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       open: (id: string) => workspace().open(id),
       close: (id: string) => workspace().close(id),
       move: (id: string, to: number) => workspace().move(id, to),
+      next: () => workspace().next(),
+      previous: () => workspace().previous(),
     }
   },
 })

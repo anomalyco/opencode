@@ -28,6 +28,12 @@ export type Project = {
     override?: string
     color?: string
   }
+  commands?: {
+    /**
+     * Startup script to run when creating a new workspace (worktree)
+     */
+    start?: string
+  }
   time: {
     created: number
     updated: number
@@ -860,6 +866,21 @@ export type EventPtyDeleted = {
   }
 }
 
+export type EventWorktreeReady = {
+  type: "worktree.ready"
+  properties: {
+    name: string
+    branch: string
+  }
+}
+
+export type EventWorktreeFailed = {
+  type: "worktree.failed"
+  properties: {
+    message: string
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -901,6 +922,8 @@ export type Event =
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
+  | EventWorktreeReady
+  | EventWorktreeFailed
 
 export type GlobalEvent = {
   directory: string
@@ -1906,6 +1929,9 @@ export type Worktree = {
 
 export type WorktreeCreateInput = {
   name?: string
+  /**
+   * Additional startup script to run after the project's start command
+   */
   startCommand?: string
 }
 
@@ -2232,6 +2258,12 @@ export type ProjectUpdateData = {
       url?: string
       override?: string
       color?: string
+    }
+    commands?: {
+      /**
+       * Startup script to run when creating a new workspace (worktree)
+       */
+      start?: string
     }
   }
   path: {

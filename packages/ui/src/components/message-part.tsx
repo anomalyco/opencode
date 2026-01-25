@@ -42,6 +42,7 @@ import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
+import { findLast } from "@opencode-ai/util/array"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
@@ -425,10 +426,12 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               <IconButton
                 icon={copied() ? "check" : "copy"}
                 variant="secondary"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={(event) => {
                   event.stopPropagation()
                   handleCopy()
                 }}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
               />
             </Tooltip>
           </div>
@@ -603,7 +606,12 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 
   const input = () => part.state?.input ?? emptyInput
   // @ts-expect-error
-  const metadata = () => part.state?.metadata ?? emptyMetadata
+  const partMetadata = () => part.state?.metadata ?? emptyMetadata
+  const metadata = () => {
+    const perm = permission()
+    if (perm?.metadata) return { ...perm.metadata, ...partMetadata() }
+    return partMetadata()
+  }
 
   const render = ToolRegistry.render(part.tool) ?? GenericTool
 
@@ -672,14 +680,41 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 
 PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
+  const i18n = useI18n()
   const part = props.part as TextPart
   const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
   const throttledText = createThrottledValue(displayText)
+  const [copied, setCopied] = createSignal(false)
+
+  const handleCopy = async () => {
+    const content = displayText()
+    if (!content) return
+    await navigator.clipboard.writeText(content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
     <Show when={throttledText()}>
       <div data-component="text-part">
-        <Markdown text={throttledText()} cacheKey={part.id} />
+        <div data-slot="text-part-body">
+          <Markdown text={throttledText()} cacheKey={part.id} />
+          <div data-slot="text-part-copy-wrapper">
+            <Tooltip
+              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              placement="top"
+              gutter={8}
+            >
+              <IconButton
+                icon={copied() ? "check" : "copy"}
+                variant="secondary"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleCopy}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              />
+            </Tooltip>
+          </div>
+        </div>
       </div>
     </Show>
   )
@@ -857,7 +892,7 @@ ToolRegistry.register({
       if (!sessionId) return undefined
       // Find the tool part that matches the permission's callID
       const messages = data.store.message[sessionId] ?? []
-      const message = messages.findLast((m) => m.id === perm.tool!.messageID)
+      const message = findLast(messages, (m) => m.id === perm.tool!.messageID)
       if (!message) return undefined
       const parts = data.store.part[message.id] ?? []
       for (const part of parts) {
@@ -1025,7 +1060,8 @@ ToolRegistry.register({
           <div data-component="edit-trigger">
             <div data-slot="message-part-title-area">
               <div data-slot="message-part-title">
-                {i18n.t("ui.messagePart.title.edit")} {filename()}
+                <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.edit")}</span>
+                <span data-slot="message-part-title-filename">{filename()}</span>
               </div>
               <Show when={props.input.filePath?.includes("/")}>
                 <div data-slot="message-part-path">
@@ -1077,7 +1113,8 @@ ToolRegistry.register({
           <div data-component="write-trigger">
             <div data-slot="message-part-title-area">
               <div data-slot="message-part-title">
-                {i18n.t("ui.messagePart.title.write")} {filename()}
+                <span data-slot="message-part-title-text">{i18n.t("ui.messagePart.title.write")}</span>
+                <span data-slot="message-part-title-filename">{filename()}</span>
               </div>
               <Show when={props.input.filePath?.includes("/")}>
                 <div data-slot="message-part-path">

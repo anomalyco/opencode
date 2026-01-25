@@ -17,6 +17,7 @@ export const dict = {
   "command.category.mcp": "MCP",
   "command.category.agent": "智能体",
   "command.category.permissions": "权限",
+  "command.category.workspace": "工作区",
 
   "theme.scheme.system": "系统",
   "theme.scheme.light": "浅色",
@@ -89,6 +90,8 @@ export const dict = {
   "dialog.provider.group.other": "其他",
   "dialog.provider.tag.recommended": "推荐",
   "dialog.provider.anthropic.note": "使用 Claude Pro/Max 或 API 密钥连接",
+  "dialog.provider.openai.note": "使用 ChatGPT Pro/Plus 或 API 密钥连接",
+  "dialog.provider.copilot.note": "使用 Copilot 或 API 密钥连接",
 
   "dialog.model.select.title": "选择模型",
   "dialog.model.search.placeholder": "搜索模型",
@@ -135,6 +138,7 @@ export const dict = {
   "model.tag.latest": "最新",
 
   "common.search.placeholder": "搜索",
+  "common.goBack": "返回",
   "common.loading": "加载中",
   "common.cancel": "取消",
   "common.submit": "提交",
@@ -180,7 +184,10 @@ export const dict = {
   "prompt.slash.badge.custom": "自定义",
   "prompt.context.active": "当前",
   "prompt.context.includeActiveFile": "包含当前文件",
+  "prompt.context.removeActiveFile": "从上下文移除活动文件",
+  "prompt.context.removeFile": "从上下文移除文件",
   "prompt.action.attachFile": "附加文件",
+  "prompt.attachment.remove": "移除附件",
   "prompt.action.send": "发送",
   "prompt.action.stop": "停止",
 
@@ -197,6 +204,9 @@ export const dict = {
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "已启用 {{enabled}} / {{total}}",
   "dialog.mcp.empty": "未配置 MCPs",
+
+  "dialog.lsp.empty": "已从文件类型自动检测到 LSPs",
+  "dialog.plugins.empty": "在 opencode.json 中配置的插件",
 
   "mcp.status.connected": "已连接",
   "mcp.status.failed": "失败",
@@ -217,12 +227,20 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "无法连接到服务器",
   "dialog.server.add.checking": "检查中...",
-  "dialog.server.add.button": "添加",
+  "dialog.server.add.button": "添加服务器",
   "dialog.server.default.title": "默认服务器",
   "dialog.server.default.description": "应用启动时连接此服务器，而不是启动本地服务器。需要重启。",
   "dialog.server.default.none": "未选择服务器",
   "dialog.server.default.set": "将当前服务器设为默认",
   "dialog.server.default.clear": "清除",
+  "dialog.server.action.remove": "移除服务器",
+
+  "dialog.server.menu.edit": "编辑",
+  "dialog.server.menu.default": "设为默认",
+  "dialog.server.menu.defaultRemove": "取消默认",
+  "dialog.server.menu.delete": "删除",
+  "dialog.server.current": "当前服务器",
+  "dialog.server.status.default": "默认",
 
   "dialog.project.edit.title": "编辑项目",
   "dialog.project.edit.name": "名称",
@@ -231,6 +249,7 @@ export const dict = {
   "dialog.project.edit.icon.hint": "点击或拖拽图片",
   "dialog.project.edit.icon.recommended": "建议：128x128px",
   "dialog.project.edit.color": "颜色",
+  "dialog.project.edit.color.select": "选择{{color}}颜色",
 
   "context.breakdown.title": "上下文拆分",
   "context.breakdown.note": "输入 token 的大致拆分。“其他”包含工具定义和开销。",
@@ -264,9 +283,22 @@ export const dict = {
   "context.usage.usage": "使用率",
   "context.usage.cost": "成本",
   "context.usage.clickToView": "点击查看上下文",
+  "context.usage.view": "查看上下文用量",
 
   "language.en": "英语",
-  "language.zh": "中文",
+  "language.zh": "简体中文",
+  "language.zht": "繁体中文",
+  "language.ko": "韩语",
+  "language.de": "德语",
+  "language.es": "西班牙语",
+  "language.fr": "法语",
+  "language.ja": "日语",
+  "language.da": "丹麦语",
+  "language.ru": "俄语",
+  "language.pl": "波兰语",
+  "language.ar": "阿拉伯语",
+  "language.no": "挪威语",
+  "language.br": "葡萄牙语（巴西）",
 
   "toast.language.title": "语言",
   "toast.language.description": "已切换到{{language}}",
@@ -354,6 +386,7 @@ export const dict = {
   "session.tab.session": "会话",
   "session.tab.review": "审查",
   "session.tab.context": "上下文",
+  "session.panel.reviewAndFiles": "审查和文件",
   "session.review.filesChanged": "{{count}} 个文件变更",
   "session.review.loadingChanges": "正在加载更改...",
   "session.review.empty": "此会话暂无更改",
@@ -370,6 +403,7 @@ export const dict = {
   "session.new.lastModified": "最后修改",
 
   "session.header.search.placeholder": "搜索 {{project}}",
+  "session.header.searchFiles": "搜索文件",
 
   "session.share.popover.title": "发布到网页",
   "session.share.popover.description.shared": "此会话已在网页上公开。任何拥有链接的人都可以访问。",
@@ -390,6 +424,7 @@ export const dict = {
   "terminal.loading": "正在加载终端...",
   "terminal.title": "终端",
   "terminal.title.numbered": "终端 {{number}}",
+  "terminal.close": "关闭终端",
 
   "common.closeTab": "关闭标签页",
   "common.dismiss": "忽略",
@@ -398,11 +433,13 @@ export const dict = {
   "common.learnMore": "了解更多",
   "common.rename": "重命名",
   "common.reset": "重置",
+  "common.archive": "归档",
   "common.delete": "删除",
   "common.close": "关闭",
   "common.edit": "编辑",
   "common.loadMore": "加载更多",
 
+  "sidebar.nav.projectsAndSessions": "项目和会话",
   "sidebar.settings": "设置",
   "sidebar.help": "帮助",
   "sidebar.workspaces.enable": "启用工作区",
@@ -452,6 +489,8 @@ export const dict = {
   "settings.shortcuts.conflict.description": "{{keybind}} 已分配给 {{titles}}。",
   "settings.shortcuts.unassigned": "未设置",
   "settings.shortcuts.pressKeys": "按下按键",
+  "settings.shortcuts.search.placeholder": "搜索快捷键",
+  "settings.shortcuts.search.empty": "未找到快捷键",
 
   "settings.shortcuts.group.general": "通用",
   "settings.shortcuts.group.session": "会话",
@@ -512,6 +551,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "访问项目目录之外的文件",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
   "settings.permissions.tool.doom_loop.description": "检测具有相同输入的重复工具调用",
+
+  "session.delete.failed.title": "删除会话失败",
+  "session.delete.title": "删除会话",
+  "session.delete.confirm": '删除会话 "{{name}}"?',
+  "session.delete.button": "删除会话",
 
   "workspace.new": "新建工作区",
   "workspace.type.local": "本地",

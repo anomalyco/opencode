@@ -72,15 +72,23 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   let input: InputRenderable
 
   const filtered = createMemo(() => {
-    if (props.skipFilter) {
-      return props.options.filter((x) => x.disabled !== true)
-    }
+    if (props.skipFilter) return props.options.filter((x) => x.disabled !== true)
     const needle = store.filter.toLowerCase()
-    const result = pipe(
+    const options = pipe(
       props.options,
       filter((x) => x.disabled !== true),
-      (x) => (!needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj)),
     )
+    if (!needle) return options
+
+    // prioritize title matches (weight: 2) over category matches (weight: 1).
+    // users typically search by the item name, and not its category.
+    const result = fuzzysort
+      .go(needle, options, {
+        keys: ["title", "category"],
+        scoreFn: (r) => r[0].score * 2 + r[1].score,
+      })
+      .map((x) => x.obj)
+
     return result
   })
 
@@ -136,7 +144,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     let next = store.selected + direction
     if (next < 0) next = flat().length - 1
     if (next >= flat().length) next = 0
-    moveTo(next)
+    moveTo(next, true)
   }
 
   function moveTo(next: number, center = false) {
