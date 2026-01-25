@@ -159,6 +159,36 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
   return false
 }
 
+/**
+ * Collect and merge auth methods from all plugins that register for the same provider.
+ * This allows external plugins to add auth methods alongside internal plugins.
+ * The first matching plugin's loader is used (internal plugins take precedence).
+ */
+async function getMergedPluginAuth(provider: string): Promise<{ auth: PluginAuth } | null> {
+  const allPlugins = await Plugin.list()
+  const matchingPlugins = allPlugins.filter((x) => x.auth?.provider === provider)
+
+  if (matchingPlugins.length === 0) {
+    return null
+  }
+
+  // Merge methods from all matching plugins
+  const mergedMethods = matchingPlugins.flatMap((p) => p.auth?.methods ?? [])
+
+  // Use the first plugin's auth config as the base (internal plugins load first)
+  const primaryPlugin = matchingPlugins[0]
+  if (!primaryPlugin.auth) {
+    return null
+  }
+
+  return {
+    auth: {
+      ...primaryPlugin.auth,
+      methods: mergedMethods,
+    },
+  }
+}
+
 export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
@@ -307,9 +337,9 @@ export const AuthLoginCommand = cmd({
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-        const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-        if (plugin && plugin.auth) {
-          const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
+        const mergedPlugin = await getMergedPluginAuth(provider)
+        if (mergedPlugin) {
+          const handled = await handlePluginAuth(mergedPlugin, provider)
           if (handled) return
         }
 
@@ -322,10 +352,9 @@ export const AuthLoginCommand = cmd({
           provider = provider.replace(/^@ai-sdk\//, "")
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-          // Check if a plugin provides auth for this custom provider
-          const customPlugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-          if (customPlugin && customPlugin.auth) {
-            const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
+          const customMergedPlugin = await getMergedPluginAuth(provider)
+          if (customMergedPlugin) {
+            const handled = await handlePluginAuth(customMergedPlugin, provider)
             if (handled) return
           }
 
