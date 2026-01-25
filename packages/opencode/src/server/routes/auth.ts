@@ -2222,14 +2222,9 @@ export const AuthRoutes = lazy(() =>
         }
         clearSessionCookie(c)
         clearCSRFCookie(c)
-        // Also clear device trust cookie on logout
-        setCookie(c, "opencode_device_trust", "", {
-          path: "/",
-          httpOnly: true,
-          secure: c.req.url.startsWith("https"),
-          sameSite: "Strict",
-          maxAge: 0,
-        })
+        // Note: Device trust cookie is NOT cleared on regular logout
+        // This allows "Remember this device" to persist across sessions
+        // Use "Forget this device" or "Logout all" to clear device trust
         return c.redirect("/auth/login")
       },
     )
