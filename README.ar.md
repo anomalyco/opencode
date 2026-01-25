@@ -15,20 +15,20 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">Chinese (Simplified)</a> |
-  <a href="README.zht.md">Chinese (Traditional)</a> |
-  <a href="README.ko.md">Korean</a> |
-  <a href="README.de.md">German</a> |
-  <a href="README.es.md">Spanish</a> |
-  <a href="README.fr.md">French</a> |
-  <a href="README.da.md">Danish</a> |
-  <a href="README.ja.md">Japanese</a> |
-  <a href="README.pl.md">Polish</a> |
-  <a href="README.ru.md">Russian</a> |
-  <a href="README.ar.md">Arabic</a> |
-  <a href="README.no.md">Norwegian</a> |
-  <a href="README.br.md">Portuguese (Brazil)</a>
+  <a href="README.md">الإنجليزية</a> |
+  <a href="README.zh.md">الصينية (المبسطة)</a> |
+  <a href="README.zht.md">الصينية (التقليدية)</a> |
+  <a href="README.ko.md">الكورية</a> |
+  <a href="README.de.md">الألمانية</a> |
+  <a href="README.es.md">الإسبانية</a> |
+  <a href="README.fr.md">الفرنسية</a> |
+  <a href="README.da.md">الدنماركية</a> |
+  <a href="README.ja.md">اليابانية</a> |
+  <a href="README.pl.md">البولندية</a> |
+  <a href="README.ru.md">الروسية</a> |
+  <a href="README.ar.md">العربية</a> |
+  <a href="README.no.md">النرويجية</a> |
+  <a href="README.br.md">البرتغالية (البرازيل)</a>
 </p>
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
