@@ -76,7 +76,7 @@ export function Titlebar() {
   }
 
   return (
-    <header class="h-10 shrink-0 bg-background-base flex items-center relative" data-tauri-drag-region>
+    <header class="h-10 shrink-0 bg-background-base flex items-center relative">
       <div
         classList={{
           "flex items-center w-full min-w-0": true,
@@ -84,7 +84,6 @@ export function Titlebar() {
           "pr-6": !windows(),
         }}
         onMouseDown={drag}
-        data-tauri-drag-region
       >
         <Show when={mac()}>
           <div class="w-[72px] h-full shrink-0" data-tauri-drag-region />
@@ -137,12 +136,11 @@ export function Titlebar() {
             </div>
           </Button>
         </TooltipKeybind>
-        <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" data-tauri-drag-region />
+        <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
         <div class="flex-1 h-full" data-tauri-drag-region />
         <div
           id="opencode-titlebar-right"
           class="flex items-center gap-3 shrink-0 flex-1 justify-end"
-          data-tauri-drag-region
         />
         <Show when={windows()}>
           <div class="w-6 shrink-0" />

@@ -1,5 +1,6 @@
 [data-component="tooltip-trigger"] {
   display: flex;
+  cursor: pointer;
 }
 
 [data-slot="tooltip-keybind"] {

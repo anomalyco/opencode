@@ -128,7 +128,7 @@
     padding: 2px 8px;
     gap: 12px;
     border-radius: 4px;
-    cursor: default;
+    cursor: pointer;
 
     /* text-12-medium */
     font-family: var(--font-family-sans);

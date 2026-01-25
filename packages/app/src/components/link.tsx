@@ -10,7 +10,7 @@ export function Link(props: LinkProps) {
   const [local, rest] = splitProps(props, ["href", "children"])
 
   return (
-    <button class="text-text-strong underline" onClick={() => platform.openLink(local.href)} {...rest}>
+    <button class="text-text-strong underline cursor-pointer" onClick={() => platform.openLink(local.href)} {...rest}>
       {local.children}
     </button>
   )

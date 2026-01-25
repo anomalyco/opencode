@@ -400,7 +400,7 @@ export const SettingsKeybinds: Component = () => {
                         <button
                           type="button"
                           classList={{
-                            "h-8 px-3 rounded-md text-12-regular": true,
+                            "h-8 px-3 rounded-md text-12-regular cursor-pointer": true,
                             "bg-surface-base text-text-subtle hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active":
                               active() !== id,
                             "border border-border-weak-base bg-surface-inset-base text-text-weak": active() === id,

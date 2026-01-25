@@ -219,6 +219,7 @@
           align-items: center;
           color: var(--text-strong);
           scroll-margin-top: 28px;
+          cursor: pointer;
 
           /* text-14-medium */
           font-family: var(--font-family-sans);

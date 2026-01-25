@@ -1,5 +1,6 @@
 [data-slot="popover-trigger"] {
   display: inline-flex;
+  cursor: pointer;
 }
 
 [data-component="popover-content"] {

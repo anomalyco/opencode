@@ -6,6 +6,7 @@
   /* resize: both; */
   aspect-ratio: 1/1;
   color: var(--icon-base);
+  cursor: inherit;
 
   &[data-size="small"] {
     width: 16px;
@@ -30,5 +31,16 @@
   [data-slot="icon-svg"] {
     width: 100%;
     height: auto;
+    cursor: pointer;
+  }
+
+  svg {
+    cursor: inherit;
+    pointer-events: auto;
+  }
+
+  svg,
+  svg * {
+    cursor: inherit;
   }
 }

@@ -37,7 +37,7 @@
     gap: 8px;
     padding: 4px 8px;
     border-radius: var(--radius-sm);
-    cursor: default;
+    cursor: pointer;
     user-select: none;
     outline: none;
 
