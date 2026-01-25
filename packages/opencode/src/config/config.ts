@@ -1086,6 +1086,46 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          realtime: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable realtime voice mode"),
+              voice: z
+                .enum(["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"])
+                .optional()
+                .describe("Voice to use for audio output"),
+              turn_detection: z
+                .enum(["server_vad", "none"])
+                .optional()
+                .describe("Turn detection mode: server_vad for automatic, none for push-to-talk"),
+              input_audio_format: z
+                .enum(["pcm16", "g711_ulaw", "g711_alaw"])
+                .optional()
+                .describe("Format of input audio"),
+              output_audio_format: z
+                .enum(["pcm16", "g711_ulaw", "g711_alaw"])
+                .optional()
+                .describe("Format of output audio"),
+              vad: z
+                .object({
+                  threshold: z.number().min(0).max(1).optional().describe("VAD activation threshold (0.0-1.0)"),
+                  prefix_padding_ms: z
+                    .number()
+                    .int()
+                    .positive()
+                    .optional()
+                    .describe("Milliseconds of audio to include before speech starts"),
+                  silence_duration_ms: z
+                    .number()
+                    .int()
+                    .positive()
+                    .optional()
+                    .describe("Milliseconds of silence before speech is considered ended"),
+                })
+                .optional()
+                .describe("Voice Activity Detection settings"),
+            })
+            .optional()
+            .describe("Realtime voice mode configuration"),
         })
         .optional(),
     })

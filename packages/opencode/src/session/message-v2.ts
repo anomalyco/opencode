@@ -141,6 +141,27 @@ export namespace MessageV2 {
   })
   export type FilePart = z.infer<typeof FilePart>
 
+  export const AudioPart = PartBase.extend({
+    type: z.literal("audio"),
+    transcript: z.string().optional(),
+    duration: z.number().optional(),
+    url: z.string().optional(),
+    encoding: z.enum(["pcm16", "mp3", "opus"]).optional(),
+  }).meta({
+    ref: "AudioPart",
+  })
+  export type AudioPart = z.infer<typeof AudioPart>
+
+  export const RealtimeEventPart = PartBase.extend({
+    type: z.literal("realtime_event"),
+    event: z.enum(["speech_started", "speech_stopped", "connected", "disconnected"]),
+    time: z.number(),
+    metadata: z.record(z.string(), z.any()).optional(),
+  }).meta({
+    ref: "RealtimeEventPart",
+  })
+  export type RealtimeEventPart = z.infer<typeof RealtimeEventPart>
+
   export const AgentPart = PartBase.extend({
     type: z.literal("agent"),
     name: z.string(),
@@ -280,8 +301,31 @@ export namespace MessageV2 {
     })
   export type ToolStateError = z.infer<typeof ToolStateError>
 
+  export const ToolStateInterrupted = z
+    .object({
+      status: z.literal("interrupted"),
+      input: z.record(z.string(), z.any()),
+      reason: z.string().optional(),
+      partialOutput: z.string().optional(),
+      metadata: z.record(z.string(), z.any()).optional(),
+      time: z.object({
+        start: z.number(),
+        end: z.number(),
+      }),
+    })
+    .meta({
+      ref: "ToolStateInterrupted",
+    })
+  export type ToolStateInterrupted = z.infer<typeof ToolStateInterrupted>
+
   export const ToolState = z
-    .discriminatedUnion("status", [ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError])
+    .discriminatedUnion("status", [
+      ToolStatePending,
+      ToolStateRunning,
+      ToolStateCompleted,
+      ToolStateError,
+      ToolStateInterrupted,
+    ])
     .meta({
       ref: "ToolState",
     })
@@ -333,6 +377,8 @@ export namespace MessageV2 {
       SubtaskPart,
       ReasoningPart,
       FilePart,
+      AudioPart,
+      RealtimeEventPart,
       ToolPart,
       StepStartPart,
       StepFinishPart,
@@ -569,9 +615,9 @@ export namespace MessageV2 {
                 errorText: part.state.error,
                 ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
-            // Handle pending/running tool calls to prevent dangling tool_use blocks
+            // Handle pending/running/interrupted tool calls to prevent dangling tool_use blocks
             // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
-            if (part.state.status === "pending" || part.state.status === "running")
+            if (part.state.status === "pending" || part.state.status === "running" || part.state.status === "interrupted")
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-error",
