@@ -97,7 +97,7 @@ export default function Changelog() {
       <Meta name="description" content="OpenCode release notes and changelog" />
 
       <div data-component="container">
-        <Header hideGetStarted />
+        <Header />
 
         <div data-component="content">
           <section data-component="changelog-hero">

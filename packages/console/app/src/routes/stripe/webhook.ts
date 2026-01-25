@@ -87,7 +87,6 @@ export async function POST(input: APIEvent) {
               ...(customer?.customerID
                 ? {}
                 : {
-                    reload: true,
                     reloadError: null,
                     timeReloadError: null,
                   }),
@@ -141,8 +140,6 @@ export async function POST(input: APIEvent) {
         if (!couponID) throw new Error("Coupon not found for promotion code")
         return couponID
       })()
-
-      // get user
 
       await Actor.provide("system", { workspaceID }, async () => {
         // look up current billing
@@ -217,141 +214,71 @@ export async function POST(input: APIEvent) {
       })
     }
     if (body.type === "customer.subscription.created") {
-      const data = {
-        id: "evt_1Smq802SrMQ2Fneksse5FMNV",
-        object: "event",
-        api_version: "2025-07-30.basil",
-        created: 1767766916,
-        data: {
-          object: {
-            id: "sub_1Smq7x2SrMQ2Fnek8F1yf3ZD",
-            object: "subscription",
-            application: null,
-            application_fee_percent: null,
-            automatic_tax: {
-              disabled_reason: null,
-              enabled: false,
-              liability: null,
-            },
-            billing_cycle_anchor: 1770445200,
-            billing_cycle_anchor_config: null,
-            billing_mode: {
-              flexible: {
-                proration_discounts: "included",
-              },
-              type: "flexible",
-              updated_at: 1770445200,
-            },
+      /*
+{
+  id: "evt_1Smq802SrMQ2Fneksse5FMNV",
+  object: "event",
+  api_version: "2025-07-30.basil",
+  created: 1767766916,
+  data: {
+    object: {
+      id: "sub_1Smq7x2SrMQ2Fnek8F1yf3ZD",
+      object: "subscription",
+      application: null,
+      application_fee_percent: null,
+      automatic_tax: {
+        disabled_reason: null,
+        enabled: false,
+        liability: null,
+      },
+      billing_cycle_anchor: 1770445200,
+      billing_cycle_anchor_config: null,
+      billing_mode: {
+        flexible: {
+          proration_discounts: "included",
+        },
+        type: "flexible",
+        updated_at: 1770445200,
+      },
+      billing_thresholds: null,
+      cancel_at: null,
+      cancel_at_period_end: false,
+      canceled_at: null,
+      cancellation_details: {
+        comment: null,
+        feedback: null,
+        reason: null,
+      },
+      collection_method: "charge_automatically",
+      created: 1770445200,
+      currency: "usd",
+      customer: "cus_TkKmZZvysJ2wej",
+      customer_account: null,
+      days_until_due: null,
+      default_payment_method: null,
+      default_source: "card_1Smq7u2SrMQ2FneknjyOa7sq",
+      default_tax_rates: [],
+      description: null,
+      discounts: [],
+      ended_at: null,
+      invoice_settings: {
+        account_tax_ids: null,
+        issuer: {
+          type: "self",
+        },
+      },
+      items: {
+        object: "list",
+        data: [
+          {
+            id: "si_TkKnBKXFX76t0O",
+            object: "subscription_item",
             billing_thresholds: null,
-            cancel_at: null,
-            cancel_at_period_end: false,
-            canceled_at: null,
-            cancellation_details: {
-              comment: null,
-              feedback: null,
-              reason: null,
-            },
-            collection_method: "charge_automatically",
             created: 1770445200,
-            currency: "usd",
-            customer: "cus_TkKmZZvysJ2wej",
-            customer_account: null,
-            days_until_due: null,
-            default_payment_method: null,
-            default_source: "card_1Smq7u2SrMQ2FneknjyOa7sq",
-            default_tax_rates: [],
-            description: null,
+            current_period_end: 1772864400,
+            current_period_start: 1770445200,
             discounts: [],
-            ended_at: null,
-            invoice_settings: {
-              account_tax_ids: null,
-              issuer: {
-                type: "self",
-              },
-            },
-            items: {
-              object: "list",
-              data: [
-                {
-                  id: "si_TkKnBKXFX76t0O",
-                  object: "subscription_item",
-                  billing_thresholds: null,
-                  created: 1770445200,
-                  current_period_end: 1772864400,
-                  current_period_start: 1770445200,
-                  discounts: [],
-                  metadata: {},
-                  plan: {
-                    id: "price_1SmfFG2SrMQ2FnekJuzwHMea",
-                    object: "plan",
-                    active: true,
-                    amount: 20000,
-                    amount_decimal: "20000",
-                    billing_scheme: "per_unit",
-                    created: 1767725082,
-                    currency: "usd",
-                    interval: "month",
-                    interval_count: 1,
-                    livemode: false,
-                    metadata: {},
-                    meter: null,
-                    nickname: null,
-                    product: "prod_Tk9LjWT1n0DgYm",
-                    tiers_mode: null,
-                    transform_usage: null,
-                    trial_period_days: null,
-                    usage_type: "licensed",
-                  },
-                  price: {
-                    id: "price_1SmfFG2SrMQ2FnekJuzwHMea",
-                    object: "price",
-                    active: true,
-                    billing_scheme: "per_unit",
-                    created: 1767725082,
-                    currency: "usd",
-                    custom_unit_amount: null,
-                    livemode: false,
-                    lookup_key: null,
-                    metadata: {},
-                    nickname: null,
-                    product: "prod_Tk9LjWT1n0DgYm",
-                    recurring: {
-                      interval: "month",
-                      interval_count: 1,
-                      meter: null,
-                      trial_period_days: null,
-                      usage_type: "licensed",
-                    },
-                    tax_behavior: "unspecified",
-                    tiers_mode: null,
-                    transform_quantity: null,
-                    type: "recurring",
-                    unit_amount: 20000,
-                    unit_amount_decimal: "20000",
-                  },
-                  quantity: 1,
-                  subscription: "sub_1Smq7x2SrMQ2Fnek8F1yf3ZD",
-                  tax_rates: [],
-                },
-              ],
-              has_more: false,
-              total_count: 1,
-              url: "/v1/subscription_items?subscription=sub_1Smq7x2SrMQ2Fnek8F1yf3ZD",
-            },
-            latest_invoice: "in_1Smq7x2SrMQ2FnekSJesfPwE",
-            livemode: false,
             metadata: {},
-            next_pending_invoice_item_invoice: null,
-            on_behalf_of: null,
-            pause_collection: null,
-            payment_settings: {
-              payment_method_options: null,
-              payment_method_types: null,
-              save_default_payment_method: "off",
-            },
-            pending_invoice_item_interval: null,
-            pending_setup_intent: null,
-            pending_update: null,
             plan: {
               id: "price_1SmfFG2SrMQ2FnekJuzwHMea",
               object: "plan",
@@ -373,29 +300,101 @@ export async function POST(input: APIEvent) {
               trial_period_days: null,
               usage_type: "licensed",
             },
-            quantity: 1,
-            schedule: null,
-            start_date: 1770445200,
-            status: "active",
-            test_clock: "clock_1Smq6n2SrMQ2FnekQw4yt2PZ",
-            transfer_data: null,
-            trial_end: null,
-            trial_settings: {
-              end_behavior: {
-                missing_payment_method: "create_invoice",
+            price: {
+              id: "price_1SmfFG2SrMQ2FnekJuzwHMea",
+              object: "price",
+              active: true,
+              billing_scheme: "per_unit",
+              created: 1767725082,
+              currency: "usd",
+              custom_unit_amount: null,
+              livemode: false,
+              lookup_key: null,
+              metadata: {},
+              nickname: null,
+              product: "prod_Tk9LjWT1n0DgYm",
+              recurring: {
+                interval: "month",
+                interval_count: 1,
+                meter: null,
+                trial_period_days: null,
+                usage_type: "licensed",
               },
+              tax_behavior: "unspecified",
+              tiers_mode: null,
+              transform_quantity: null,
+              type: "recurring",
+              unit_amount: 20000,
+              unit_amount_decimal: "20000",
             },
-            trial_start: null,
+            quantity: 1,
+            subscription: "sub_1Smq7x2SrMQ2Fnek8F1yf3ZD",
+            tax_rates: [],
           },
-        },
+        ],
+        has_more: false,
+        total_count: 1,
+        url: "/v1/subscription_items?subscription=sub_1Smq7x2SrMQ2Fnek8F1yf3ZD",
+      },
+      latest_invoice: "in_1Smq7x2SrMQ2FnekSJesfPwE",
+      livemode: false,
+      metadata: {},
+      next_pending_invoice_item_invoice: null,
+      on_behalf_of: null,
+      pause_collection: null,
+      payment_settings: {
+        payment_method_options: null,
+        payment_method_types: null,
+        save_default_payment_method: "off",
+      },
+      pending_invoice_item_interval: null,
+      pending_setup_intent: null,
+      pending_update: null,
+      plan: {
+        id: "price_1SmfFG2SrMQ2FnekJuzwHMea",
+        object: "plan",
+        active: true,
+        amount: 20000,
+        amount_decimal: "20000",
+        billing_scheme: "per_unit",
+        created: 1767725082,
+        currency: "usd",
+        interval: "month",
+        interval_count: 1,
         livemode: false,
-        pending_webhooks: 0,
-        request: {
-          id: "req_6YO9stvB155WJD",
-          idempotency_key: "581ba059-6f86-49b2-9c49-0d8450255322",
+        metadata: {},
+        meter: null,
+        nickname: null,
+        product: "prod_Tk9LjWT1n0DgYm",
+        tiers_mode: null,
+        transform_usage: null,
+        trial_period_days: null,
+        usage_type: "licensed",
+      },
+      quantity: 1,
+      schedule: null,
+      start_date: 1770445200,
+      status: "active",
+      test_clock: "clock_1Smq6n2SrMQ2FnekQw4yt2PZ",
+      transfer_data: null,
+      trial_end: null,
+      trial_settings: {
+        end_behavior: {
+          missing_payment_method: "create_invoice",
         },
-        type: "customer.subscription.created",
-      }
+      },
+      trial_start: null,
+    },
+  },
+  livemode: false,
+  pending_webhooks: 0,
+  request: {
+    id: "req_6YO9stvB155WJD",
+    idempotency_key: "581ba059-6f86-49b2-9c49-0d8450255322",
+  },
+  type: "customer.subscription.created",
+}
+  */
     }
     if (body.type === "customer.subscription.deleted") {
       const subscriptionID = body.data.object.id
@@ -420,7 +419,10 @@ export async function POST(input: APIEvent) {
       })
     }
     if (body.type === "invoice.payment_succeeded") {
-      if (body.data.object.billing_reason === "subscription_cycle") {
+      if (
+        body.data.object.billing_reason === "subscription_create" ||
+        body.data.object.billing_reason === "subscription_cycle"
+      ) {
         const invoiceID = body.data.object.id as string
         const amountInCents = body.data.object.amount_paid
         const customerID = body.data.object.customer as string
@@ -472,6 +474,70 @@ export async function POST(input: APIEvent) {
             },
           }),
         )
+      } else if (body.data.object.billing_reason === "manual") {
+        const workspaceID = body.data.object.metadata?.workspaceID
+        const amountInCents = body.data.object.metadata?.amount && parseInt(body.data.object.metadata?.amount)
+        const invoiceID = body.data.object.id as string
+        const customerID = body.data.object.customer as string
+
+        if (!workspaceID) throw new Error("Workspace ID not found")
+        if (!customerID) throw new Error("Customer ID not found")
+        if (!amountInCents) throw new Error("Amount not found")
+        if (!invoiceID) throw new Error("Invoice ID not found")
+
+        await Actor.provide("system", { workspaceID }, async () => {
+          // get payment id from invoice
+          const invoice = await Billing.stripe().invoices.retrieve(invoiceID, {
+            expand: ["payments"],
+          })
+          await Database.transaction(async (tx) => {
+            await tx
+              .update(BillingTable)
+              .set({
+                balance: sql`${BillingTable.balance} + ${centsToMicroCents(amountInCents)}`,
+                reloadError: null,
+                timeReloadError: null,
+              })
+              .where(eq(BillingTable.workspaceID, Actor.workspace()))
+            await tx.insert(PaymentTable).values({
+              workspaceID: Actor.workspace(),
+              id: Identifier.create("payment"),
+              amount: centsToMicroCents(amountInCents),
+              invoiceID,
+              paymentID: invoice.payments?.data[0].payment.payment_intent as string,
+              customerID,
+            })
+          })
+        })
+      }
+    }
+    if (body.type === "invoice.payment_failed" || body.type === "invoice.payment_action_required") {
+      if (body.data.object.billing_reason === "manual") {
+        const workspaceID = body.data.object.metadata?.workspaceID
+        const invoiceID = body.data.object.id
+
+        if (!workspaceID) throw new Error("Workspace ID not found")
+        if (!invoiceID) throw new Error("Invoice ID not found")
+
+        const paymentIntent = await Billing.stripe().paymentIntents.retrieve(invoiceID)
+        console.log(JSON.stringify(paymentIntent))
+        const errorMessage =
+          typeof paymentIntent === "object" && paymentIntent !== null
+            ? paymentIntent.last_payment_error?.message
+            : undefined
+
+        await Actor.provide("system", { workspaceID }, async () => {
+          await Database.use((tx) =>
+            tx
+              .update(BillingTable)
+              .set({
+                reload: false,
+                reloadError: errorMessage ?? "Payment failed.",
+                timeReloadError: sql`now()`,
+              })
+              .where(eq(BillingTable.workspaceID, Actor.workspace())),
+          )
+        })
       }
     }
     if (body.type === "charge.refunded") {

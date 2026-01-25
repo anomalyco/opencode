@@ -39,7 +39,7 @@ import { TodoWriteTool } from "@/tool/todo"
 import type { GrepTool } from "@/tool/grep"
 import type { ListTool } from "@/tool/ls"
 import type { EditTool } from "@/tool/edit"
-import type { PatchTool } from "@/tool/patch"
+import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
@@ -1445,8 +1445,8 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "task"}>
           <Task {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "patch"}>
-          <Patch {...toolprops} />
+        <Match when={props.part.tool === "apply_patch"}>
+          <ApplyPatch {...toolprops} />
         </Match>
         <Match when={props.part.tool === "todowrite"}>
           <TodoWrite {...toolprops} />
@@ -1895,20 +1895,74 @@ function Edit(props: ToolProps<typeof EditTool>) {
   )
 }
 
-function Patch(props: ToolProps<typeof PatchTool>) {
-  const { theme } = useTheme()
+function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
+  const ctx = use()
+  const { theme, syntax } = useTheme()
+
+  const files = createMemo(() => props.metadata.files ?? [])
+
+  const view = createMemo(() => {
+    const diffStyle = ctx.sync.data.config.tui?.diff_style
+    if (diffStyle === "stacked") return "unified"
+    return ctx.width > 120 ? "split" : "unified"
+  })
+
+  function Diff(p: { diff: string; filePath: string }) {
+    return (
+      <box paddingLeft={1}>
+        <diff
+          diff={p.diff}
+          view={view()}
+          filetype={filetype(p.filePath)}
+          syntaxStyle={syntax()}
+          showLineNumbers={true}
+          width="100%"
+          wrapMode={ctx.diffWrapMode()}
+          fg={theme.text}
+          addedBg={theme.diffAddedBg}
+          removedBg={theme.diffRemovedBg}
+          contextBg={theme.diffContextBg}
+          addedSignColor={theme.diffHighlightAdded}
+          removedSignColor={theme.diffHighlightRemoved}
+          lineNumberFg={theme.diffLineNumber}
+          lineNumberBg={theme.diffContextBg}
+          addedLineNumberBg={theme.diffAddedLineNumberBg}
+          removedLineNumberBg={theme.diffRemovedLineNumberBg}
+        />
+      </box>
+    )
+  }
+
+  function title(file: { type: string; relativePath: string; filePath: string; deletions: number }) {
+    if (file.type === "delete") return "# Deleted " + file.relativePath
+    if (file.type === "add") return "# Created " + file.relativePath
+    if (file.type === "move") return "# Moved " + normalizePath(file.filePath) + " → " + file.relativePath
+    return "← Patched " + file.relativePath
+  }
+
   return (
     <Switch>
-      <Match when={props.output !== undefined}>
-        <BlockTool title="# Patch" part={props.part}>
-          <box>
-            <text fg={theme.text}>{props.output?.trim()}</text>
-          </box>
-        </BlockTool>
+      <Match when={files().length > 0}>
+        <For each={files()}>
+          {(file) => (
+            <BlockTool title={title(file)} part={props.part}>
+              <Show
+                when={file.type !== "delete"}
+                fallback={
+                  <text fg={theme.diffRemoved}>
+                    -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
+                  </text>
+                }
+              >
+                <Diff diff={file.diff} filePath={file.filePath} />
+              </Show>
+            </BlockTool>
+          )}
+        </For>
       </Match>
       <Match when={true}>
-        <InlineTool icon="%" pending="Preparing patch..." complete={false} part={props.part}>
-          Patch
+        <InlineTool icon="%" pending="Preparing apply_patch..." complete={false} part={props.part}>
+          apply_patch
         </InlineTool>
       </Match>
     </Switch>

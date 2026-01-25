@@ -2,4 +2,4 @@ research
 dist
 gen
 app.log
-verify_env.sh
+src/provider/models-snapshot.ts
