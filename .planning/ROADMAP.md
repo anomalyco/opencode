@@ -23,6 +23,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 9: Connection Security UI** - HTTPS/HTTP security badge in UI
 - [x] **Phase 10: Two-Factor Authentication** - TOTP support via PAM integration
 - [ ] **Phase 11: Documentation** - Reverse proxy and PAM configuration guides
+- [ ] **Phase 12: Server-Side TOTP Registration** - Offload .google_authenticator file generation to server
+- [ ] **Phase 13: Passkeys Investigation** - Investigate adding passkeys and passkey management to opencode auth
 
 ## Phase Details
 
@@ -210,10 +212,44 @@ Plans:
 Plans:
 - [ ] 11-01: TBD
 
+### Phase 12: Server-Side TOTP Registration
+**Goal**: Simplify TOTP setup by having the server create ~/.google_authenticator instead of requiring users to run shell commands
+**Depends on**: Phase 10
+**Requirements**: None (UX improvement)
+**Success Criteria** (what must be TRUE):
+  1. Server generates and writes ~/.google_authenticator file for the authenticated user
+  2. User only needs to scan QR code and verify - no shell command required
+  3. Auth broker handles file creation with correct ownership (user's UID/GID)
+  4. Existing manual setup path remains available as fallback
+**Plans**: 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 12 to break down)
+
+**Details:**
+[To be added during planning]
+
+### Phase 13: Passkeys Investigation
+**Goal**: Investigate adding passkeys and passkey management to opencode auth
+**Depends on**: Phase 10
+**Requirements**: None (investigation/research)
+**Success Criteria** (what must be TRUE):
+  1. Research complete on WebAuthn/passkey integration with PAM-based auth
+  2. Architecture decision documented for passkey storage and management
+  3. Feasibility assessment for browser-side and server-side requirements
+  4. Clear recommendation on implementation approach
+**Plans**: 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 13 to break down)
+
+**Details:**
+[To be added during planning]
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -228,3 +264,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 9. Connection Security UI | 2/2 | Complete | 2026-01-24 |
 | 10. Two-Factor Authentication | 8/8 | Complete | 2026-01-24 |
 | 11. Documentation | 0/TBD | Not started | - |
+| 12. Server-Side TOTP Registration | 0/TBD | Not started | - |
+| 13. Passkeys Investigation | 0/TBD | Not started | - |

@@ -154,6 +154,11 @@ Recent decisions affecting current work:
 | 10-08 | Status endpoint verifies cookie validity | Prevents false positives for device trust status |
 | 10-08 | 2FA setup opens in new tab | Placeholder URL for future setup page |
 
+### Roadmap Evolution
+
+- Phase 12 added: Server-Side TOTP Registration - offload .google_authenticator file generation to server
+- Phase 13 added: Passkeys Investigation - investigate adding passkeys and passkey management to opencode auth
+
 ### Pending Todos
 
 None yet.
