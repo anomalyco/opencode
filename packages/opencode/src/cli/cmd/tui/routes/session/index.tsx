@@ -147,6 +147,7 @@ export function Session() {
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
+  const [busyIndicatorStyle, setBusyIndicatorStyle] = kv.signal<"dynamic" | "static">("busy_indicator_style", "dynamic")
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -576,6 +577,15 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         setAnimationsEnabled((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: busyIndicatorStyle() === "dynamic" ? "Use static busy indicator" : "Use dynamic busy indicator",
+      value: "session.toggle.busy_style",
+      category: "Session",
+      onSelect: (dialog) => {
+        setBusyIndicatorStyle((prev) => (prev === "dynamic" ? "static" : "dynamic"))
         dialog.clear()
       },
     },

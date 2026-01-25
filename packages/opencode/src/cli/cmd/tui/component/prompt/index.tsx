@@ -1001,7 +1001,12 @@ export function Prompt(props: PromptProps) {
               <box flexShrink={0} flexDirection="row" gap={1}>
                 <box marginLeft={1}>
                   <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
-                    <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                    <Show
+                      when={kv.get("busy_indicator_style", "dynamic") === "static"}
+                      fallback={<spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />}
+                    >
+                      <text fg={theme.info}>[currently busy]</text>
+                    </Show>
                   </Show>
                 </box>
                 <box flexDirection="row" gap={1} flexShrink={0}>
