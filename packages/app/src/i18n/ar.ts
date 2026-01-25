@@ -223,6 +223,9 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} من {{total}} مفعل",
   "dialog.mcp.empty": "لم يتم تكوين MCPs",
 
+  "dialog.lsp.empty": "تم الكشف تلقائيًا عن LSPs من أنواع الملفات",
+  "dialog.plugins.empty": "الإضافات المكونة في opencode.json",
+
   "mcp.status.connected": "متصل",
   "mcp.status.failed": "فشل",
   "mcp.status.needs_auth": "يحتاج إلى مصادقة",
@@ -242,7 +245,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "تعذر الاتصال بالخادم",
   "dialog.server.add.checking": "جارٍ التحقق...",
-  "dialog.server.add.button": "إضافة",
+  "dialog.server.add.button": "إضافة خادم",
   "dialog.server.default.title": "الخادم الافتراضي",
   "dialog.server.default.description":
     "الاتصال بهذا الخادم عند بدء تشغيل التطبيق بدلاً من بدء خادم محلي. يتطلب إعادة التشغيل.",
@@ -250,6 +253,13 @@ export const dict = {
   "dialog.server.default.set": "تعيين الخادم الحالي كافتراضي",
   "dialog.server.default.clear": "مسح",
   "dialog.server.action.remove": "إزالة الخادم",
+
+  "dialog.server.menu.edit": "تعديل",
+  "dialog.server.menu.default": "تعيين كافتراضي",
+  "dialog.server.menu.defaultRemove": "إزالة الافتراضي",
+  "dialog.server.menu.delete": "حذف",
+  "dialog.server.current": "الخادم الحالي",
+  "dialog.server.status.default": "افتراضي",
 
   "dialog.project.edit.title": "تحرير المشروع",
   "dialog.project.edit.name": "الاسم",
