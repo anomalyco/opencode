@@ -117,15 +117,45 @@ Each task follows Test-Driven Development: write the test first, then implement.
 
 ---
 
-## Phase 6: Client Audio ⏳
+## Phase 6a: Web Client ⏳
 
-**Goal**: Audio capture and playback for web/desktop clients.
+**Goal**: Voice integration for web app using Web Audio API (no dependencies).
 
 | # | Status | Task | File | Description |
 |---|--------|------|------|-------------|
-| 6.1 | ⏳ | AudioWorklet processor | `packages/app/` | PCM16 capture from microphone |
-| 6.2 | ⏳ | Audio playback queue | `packages/app/` | Buffered playback of response audio |
-| 6.3 | ⏳ | SDK RealtimeClient | `packages/sdk/` | WebSocket client for realtime |
+| 6a.1 | ⏳ | RealtimeClient | `packages/app/src/realtime/client.ts` | WebSocket client to server `/realtime` endpoint |
+| 6a.2 | ⏳ | AudioCapture | `packages/app/src/realtime/audio-capture.ts` | AudioWorklet for PCM16 mic capture at 24kHz |
+| 6a.3 | ⏳ | AudioPlayback | `packages/app/src/realtime/audio-playback.ts` | AudioContext queue for response audio |
+| 6a.4 | ⏳ | useRealtime hook | `packages/app/src/realtime/use-realtime.ts` | Solid.js hook for components |
+| 6a.5 | ⏳ | VoiceButton component | `packages/app/src/components/voice-button.tsx` | UI toggle for voice mode |
+| 6a.6 | ⏳ | Integration | `packages/app/src/components/prompt-input.tsx` | Wire voice into prompt input |
+
+**Key details:**
+- Web Audio API: `getUserMedia()` → `AudioWorkletNode` → PCM16 chunks
+- Format: PCM16 signed 16-bit little-endian at 24kHz (OpenAI native)
+- No resampling if browser supports 24kHz, otherwise downsample from 48kHz
+- Playback: Decode base64 → `AudioBuffer` → `AudioBufferSourceNode`
+
+---
+
+## Phase 6b: CLI/TUI Client ⏳
+
+**Goal**: Voice integration for terminal TUI using `@mastra/node-audio`.
+
+| # | Status | Task | File | Description |
+|---|--------|------|------|-------------|
+| 6b.1 | ⏳ | Add dependency | `package.json` | Add `@mastra/node-audio` |
+| 6b.2 | ⏳ | AudioCapture | `src/realtime/audio-node.ts` | `getMicrophoneStream()` wrapper |
+| 6b.3 | ⏳ | AudioPlayback | `src/realtime/audio-node.ts` | `playAudio()` stream wrapper |
+| 6b.4 | ⏳ | VoiceMode component | `src/cli/cmd/tui/component/voice-mode.tsx` | TUI voice UI |
+| 6b.5 | ⏳ | Keybind | `src/cli/cmd/tui/context/keybind.ts` | Hotkey to toggle voice (e.g., `Ctrl+V`) |
+| 6b.6 | ⏳ | Integration | `src/cli/cmd/tui/routes/session.tsx` | Wire into session view |
+
+**Key details:**
+- `@mastra/node-audio` requires ffmpeg installed
+- `getMicrophoneStream()` returns readable stream
+- Convert stream to PCM16 base64 chunks
+- `playAudio()` accepts readable stream for playback
 
 ---
 
@@ -138,7 +168,8 @@ Each task follows Test-Driven Development: write the test first, then implement.
 | Phase 3: Server | 15 | ✅ |
 | Phase 4: Tools | 15 | ✅ |
 | Phase 5: Persistence | 14 | ✅ |
-| Phase 6: Client | 0 | ⏳ |
+| Phase 6a: Web Client | 0 | ⏳ |
+| Phase 6b: CLI/TUI Client | 0 | ⏳ |
 | **Total** | **118** | - |
 
 ---
