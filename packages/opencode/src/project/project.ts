@@ -54,125 +54,167 @@ export namespace Project {
     log.info("fromDirectory", { directory })
 
     const { id, sandbox, worktree, vcs } = await iife(async () => {
-      const matches = Filesystem.up({ targets: [".git"], start: directory })
-      const git = await matches.next().then((x) => x.value)
-      await matches.return()
-      if (git) {
-        let sandbox = path.dirname(git)
+      const gitBinary = Bun.which("git")
 
-        const gitBinary = Bun.which("git")
+      const findDotGit = async () => {
+        const matches = Filesystem.up({ targets: [".git"], start: directory })
+        const dotGit = await matches.next().then((x) => x.value)
+        await matches.return()
+        return dotGit
+      }
 
-        // cached id calculation
-        let id = await Bun.file(path.join(git, "opencode"))
+      // read cached id
+      const readId = async (commonDir: string) =>
+        Bun.file(path.join(commonDir, "opencode"))
           .text()
           .then((x) => x.trim())
           .catch(() => undefined)
 
-        if (!gitBinary) {
+      const writeId = async (commonDir: string, id: string) =>
+        Bun.file(path.join(commonDir, "opencode"))
+          .write(id)
+          .catch(() => undefined)
+
+      // generate id from root commit
+      const generateId = async (cwd: string) => {
+        const roots = await $`git rev-list --max-parents=0 --all`
+          .quiet()
+          .nothrow()
+          .cwd(cwd)
+          .text()
+          .then((x) =>
+            x
+              .split("\n")
+              .filter(Boolean)
+              .map((x) => x.trim())
+              .toSorted(),
+          )
+          .catch(() => undefined)
+        return roots?.[0]
+      }
+
+      const globalFallback = (vcs?: "git") => ({
+        id: "global",
+        sandbox: "/",
+        worktree: "/",
+        vcs: vcs ?? Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+      })
+
+      // No git binary - fallback to .git directory search
+      if (!gitBinary) {
+        const dotGit = await findDotGit()
+        if (dotGit) {
+          const sandbox = path.dirname(dotGit)
+          const id = await readId(dotGit)
           return {
             id: id ?? "global",
-            worktree: sandbox,
             sandbox: sandbox,
+            worktree: sandbox,
             vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
           }
         }
+        return globalFallback()
+      }
 
-        // generate id from root commit
-        if (!id) {
-          const roots = await $`git rev-list --max-parents=0 --all`
+      const insideGitWorktree = await $`git rev-parse --is-inside-work-tree`
+        .quiet()
+        .nothrow()
+        .cwd(directory)
+        .text()
+        .then((x) => x.trim() === "true")
+        .catch(() => false)
+
+      // Inside a git worktree (normal repo or worktree from repo / bare-repo)
+      if (insideGitWorktree) {
+        const sandbox = await iife(async () => {
+          const top = await $`git rev-parse --show-toplevel`
             .quiet()
             .nothrow()
-            .cwd(sandbox)
+            .cwd(directory)
             .text()
-            .then((x) =>
-              x
-                .split("\n")
-                .filter(Boolean)
-                .map((x) => x.trim())
-                .toSorted(),
-            )
+            .then((x) => x.trim())
             .catch(() => undefined)
+          if (top) return top
 
-          if (!roots) {
-            return {
-              id: "global",
-              worktree: sandbox,
-              sandbox: sandbox,
-              vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
-            }
-          }
+          const dotGit = await findDotGit()
+          if (!dotGit) return undefined
+          return path.dirname(dotGit)
+        })
+        if (!sandbox) return globalFallback()
 
-          id = roots[0]
-          if (id) {
-            void Bun.file(path.join(git, "opencode"))
-              .write(id)
-              .catch(() => undefined)
-          }
-        }
-
-        if (!id) {
-          return {
-            id: "global",
-            worktree: sandbox,
-            sandbox: sandbox,
-            vcs: "git",
-          }
-        }
-
-        const top = await $`git rev-parse --show-toplevel`
+        // Get the common git directory (for storing opencode id file)
+        // - normal repo: returns .git directory
+        // - linked worktree: returns the main repo's .git or bare repo path
+        const commonDir = await $`git rev-parse --git-common-dir`
           .quiet()
           .nothrow()
           .cwd(sandbox)
           .text()
           .then((x) => path.resolve(sandbox, x.trim()))
           .catch(() => undefined)
+        if (!commonDir) return globalFallback()
 
-        if (!top) {
-          return {
-            id,
-            sandbox,
-            worktree: sandbox,
-            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
-          }
+        let id = await readId(commonDir)
+        if (!id) {
+          id = await generateId(sandbox)
+          if (id) await writeId(commonDir, id)
         }
 
-        sandbox = top
-
-        const worktree = await $`git rev-parse --git-common-dir`
+        // For normal repos: commonDir is .git, worktree is sandbox (parent of .git)
+        // For linked worktrees: commonDir is main repo's .git or bare repo path
+        // Use commonDir's parent as worktree for normal repos, or commonDir itself for bare repos
+        const bare = await $`git rev-parse --is-bare-repository`
           .quiet()
           .nothrow()
-          .cwd(sandbox)
+          .cwd(commonDir)
           .text()
-          .then((x) => {
-            const dirname = path.dirname(x.trim())
-            if (dirname === ".") return sandbox
-            return dirname
-          })
-          .catch(() => undefined)
+          .then((x) => x.trim() === "true")
+          .catch(() => false)
 
-        if (!worktree) {
-          return {
-            id,
-            sandbox,
-            worktree: sandbox,
-            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
-          }
-        }
+        const worktree = bare ? commonDir : path.dirname(commonDir)
 
         return {
-          id,
-          sandbox,
-          worktree,
+          id: id ?? "global",
+          sandbox: sandbox,
+          worktree: worktree,
           vcs: "git",
         }
       }
 
-      return {
-        id: "global",
-        worktree: "/",
-        sandbox: "/",
-        vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+      // Inside a bare repo
+      const insideGitBareRepo = await $`git rev-parse --is-bare-repository`
+        .quiet()
+        .nothrow()
+        .cwd(directory)
+        .text()
+        .then((x) => x.trim() === "true")
+        .catch(() => false)
+
+      if (insideGitBareRepo) {
+        const commonDir = await $`git rev-parse --git-common-dir`
+          .quiet()
+          .nothrow()
+          .cwd(directory)
+          .text()
+          .then((x) => path.resolve(directory, x.trim()))
+          .catch(() => undefined)
+        if (!commonDir) return globalFallback()
+
+        let id = await readId(commonDir)
+        if (!id) {
+          id = await generateId(commonDir)
+          if (id) await writeId(commonDir, id)
+        }
+
+        return {
+          id: id ?? "global",
+          sandbox: commonDir,
+          worktree: commonDir,
+          vcs: "git",
+        }
       }
+
+      return globalFallback()
     })
 
     let existing = await Storage.read<Info>(["project", id]).catch(() => undefined)
