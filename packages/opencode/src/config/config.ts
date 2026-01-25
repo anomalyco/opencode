@@ -1164,6 +1164,15 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          level_limit: z
+            .number()
+            .int()
+            .nonnegative()
+            .optional()
+            .describe(
+              "Maximum depth for subagent session trees. Prevents infinite delegation loops. " +
+              "Default: 5. Set to 0 to disable (not recommended)."
+            ),
         })
         .optional(),
     })

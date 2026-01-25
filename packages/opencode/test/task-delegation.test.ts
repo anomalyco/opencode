@@ -190,3 +190,55 @@ describe("backwards compatibility", () => {
     })
   })
 })
+
+describe("level_limit configuration", () => {
+  test("level_limit is preserved from config", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        experimental: {
+          level_limit: 8,
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.experimental?.level_limit).toBe(8)
+      },
+    })
+  })
+
+  test("level_limit defaults to undefined when not set (implementation defaults to 5)", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {},
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.experimental?.level_limit).toBeUndefined()
+      },
+    })
+  })
+
+  test("level_limit of 0 is preserved (disabled)", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        experimental: {
+          level_limit: 0,
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.experimental?.level_limit).toBe(0)
+      },
+    })
+  })
+})

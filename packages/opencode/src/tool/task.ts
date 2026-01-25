@@ -29,6 +29,23 @@ function incrementCallCount(sessionID: string): number {
   return newCount
 }
 
+/**
+ * Calculate session depth by walking up the parentID chain.
+ * Root session = depth 0, first child = depth 1, etc.
+ */
+async function getSessionDepth(sessionID: string): Promise<number> {
+  let depth = 0
+  let currentID: string | undefined = sessionID
+  while (currentID) {
+    const session: Awaited<ReturnType<typeof Session.get>> | undefined = 
+      await Session.get(currentID).catch(() => undefined)
+    if (!session?.parentID) break
+    currentID = session.parentID
+    depth++
+  }
+  return depth
+}
+
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
@@ -123,6 +140,18 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             `Task budget exhausted (${currentCount}/${callerTaskBudget} calls). ` +
             `Return control to caller to continue.`,
           )
+        }
+
+        // Check 3: Level limit not exceeded
+        const levelLimit = config.experimental?.level_limit ?? 5  // Default: 5
+        if (levelLimit > 0) {
+          const currentDepth = await getSessionDepth(ctx.sessionID)
+          if (currentDepth >= levelLimit) {
+            throw new Error(
+              `Level limit reached (depth ${currentDepth}/${levelLimit}). ` +
+              `Cannot create deeper subagent sessions. Return control to caller.`
+            )
+          }
         }
 
         // Increment count after passing all checks (including ownership above)
