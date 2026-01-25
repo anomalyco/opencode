@@ -21,6 +21,7 @@ Unlike traditional TTS/STT workflows, the Realtime API provides:
 
 | Document | Description |
 |----------|-------------|
+| [Why Realtime vs STT+TTS](./why-realtime-vs-stt-tts.md) | Explains why we chose Realtime API over traditional pipeline |
 | [Roadmap](./roadmap.md) | High-level phases from MVP to dual-agent architecture |
 | [Architecture](./architecture.md) | System design, message flow, WebSocket transport |
 | [SDK Choice](./sdk-choice.md) | Research on SDK options and decision rationale |
