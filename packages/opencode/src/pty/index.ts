@@ -8,6 +8,7 @@ import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
+import path from "path"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -96,9 +97,22 @@ export namespace Pty {
   export async function create(input: CreateInput) {
     const id = Identifier.create("pty", false)
     const command = input.command || Shell.preferred()
-    const args = input.args || []
+    let args = input.args || []
     if (command.endsWith("sh")) {
       args.push("-l")
+    }
+    if (process.platform === "win32" && args.length === 0) {
+      const base = path.win32.basename(command).toLowerCase()
+      if (base === "cmd.exe" || base === "cmd") {
+        args = ["/k", "chcp 65001>nul"]
+      } else if (base === "powershell.exe" || base === "pwsh.exe") {
+        args = [
+          "-NoLogo",
+          "-NoExit",
+          "-Command",
+          "[Console]::OutputEncoding=[Text.UTF8Encoding]::UTF8; [Console]::InputEncoding=[Text.UTF8Encoding]::UTF8",
+        ]
+      }
     }
 
     const cwd = input.cwd || Instance.directory
@@ -108,6 +122,12 @@ export namespace Pty {
       TERM: "xterm-256color",
       OPENCODE_TERMINAL: "1",
     } as Record<string, string>
+    if (process.platform === "win32") {
+      env.LANG = env.LANG || "en_US.UTF-8"
+      env.LC_ALL = env.LC_ALL || "en_US.UTF-8"
+      env.PYTHONUTF8 = env.PYTHONUTF8 || "1"
+      env.PYTHONIOENCODING = env.PYTHONIOENCODING || "utf-8"
+    }
     log.info("creating session", { id, cmd: command, args, cwd })
 
     const spawn = await pty()
