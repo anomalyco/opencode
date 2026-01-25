@@ -60,8 +60,8 @@
   ol {
     margin-top: 0.5rem;
     margin-bottom: 1rem;
-    padding-left: 0;
-    list-style-position: inside;
+    padding-left: 1.5rem;
+    list-style-position: outside;
   }
 
   ul {
@@ -74,6 +74,16 @@
 
   li {
     margin-bottom: 0.5rem;
+  }
+
+  li > p:first-child {
+    display: inline;
+    margin: 0;
+  }
+
+  li > p + p {
+    display: block;
+    margin-top: 0.5rem;
   }
 
   li::marker {

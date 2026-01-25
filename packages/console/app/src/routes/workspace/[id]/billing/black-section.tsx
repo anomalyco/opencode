@@ -2,7 +2,7 @@ import { action, useParams, useAction, useSubmission, json, query, createAsync }
 import { createStore } from "solid-js/store"
 import { Show } from "solid-js"
 import { Billing } from "@opencode-ai/console-core/billing.js"
-import { Database, eq, and, isNull } from "@opencode-ai/console-core/drizzle/index.js"
+import { Database, eq, and, isNull, sql } from "@opencode-ai/console-core/drizzle/index.js"
 import { BillingTable, SubscriptionTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { Black } from "@opencode-ai/console-core/black.js"
@@ -32,6 +32,7 @@ const querySubscription = query(async (workspaceID: string) => {
 
     return {
       plan: row.subscription.plan,
+      useBalance: row.subscription.useBalance ?? false,
       rollingUsage: Black.analyzeRollingUsage({
         plan: row.subscription.plan,
         usage: row.rollingUsage ?? 0,
@@ -107,6 +108,30 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
   )
 }, "sessionUrl")
 
+const setUseBalance = action(async (form: FormData) => {
+  "use server"
+  const workspaceID = form.get("workspaceID")?.toString()
+  if (!workspaceID) return { error: "Workspace ID is required" }
+  const useBalance = form.get("useBalance")?.toString() === "true"
+
+  return json(
+    await withActor(async () => {
+      await Database.use((tx) =>
+        tx
+          .update(BillingTable)
+          .set({
+            subscription: useBalance
+              ? sql`JSON_SET(subscription, '$.useBalance', true)`
+              : sql`JSON_REMOVE(subscription, '$.useBalance')`,
+          })
+          .where(eq(BillingTable.workspaceID, workspaceID)),
+      )
+      return { error: undefined }
+    }, workspaceID).catch((e) => ({ error: e.message as string })),
+    { revalidate: [queryBillingInfo.key, querySubscription.key] },
+  )
+}, "setUseBalance")
+
 export function BlackSection() {
   const params = useParams()
   const billing = createAsync(() => queryBillingInfo(params.id!))
@@ -117,6 +142,7 @@ export function BlackSection() {
   const cancelSubmission = useSubmission(cancelWaitlist)
   const enrollAction = useAction(enroll)
   const enrollSubmission = useSubmission(enroll)
+  const useBalanceSubmission = useSubmission(setUseBalance)
   const [store, setStore] = createStore({
     sessionRedirecting: false,
     cancelled: false,
@@ -185,6 +211,20 @@ export function BlackSection() {
                 <span data-slot="reset-time">Resets in {formatResetTime(sub().weeklyUsage.resetInSec)}</span>
               </div>
             </div>
+            <form action={setUseBalance} method="post" data-slot="setting-row">
+              <p>Use your available balance after reaching the usage limits</p>
+              <input type="hidden" name="workspaceID" value={params.id} />
+              <input type="hidden" name="useBalance" value={sub().useBalance ? "false" : "true"} />
+              <label data-slot="toggle-label">
+                <input
+                  type="checkbox"
+                  checked={sub().useBalance}
+                  disabled={useBalanceSubmission.pending}
+                  onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                />
+                <span></span>
+              </label>
+            </form>
           </section>
         )}
       </Show>
