@@ -89,11 +89,6 @@ export default function Layout(props: ParentProps) {
   const pageReady = createMemo(() => ready())
 
   let scrollContainerRef: HTMLDivElement | undefined
-  const xlQuery = window.matchMedia("(min-width: 1280px)")
-  const [isLargeViewport, setIsLargeViewport] = createSignal(xlQuery.matches)
-  const handleViewportChange = (e: MediaQueryListEvent) => setIsLargeViewport(e.matches)
-  xlQuery.addEventListener("change", handleViewportChange)
-  onCleanup(() => xlQuery.removeEventListener("change", handleViewportChange))
 
   const params = useParams()
   const [autoselect, setAutoselect] = createSignal(!params.dir)
@@ -550,11 +545,10 @@ export default function Layout(props: ParentProps) {
   const workspaceLabel = (directory: string, branch?: string, projectId?: string) =>
     workspaceName(directory, projectId, branch) ?? branch ?? getFilename(directory)
 
-  const isWorkspaceEditing = () => editor.active.startsWith("workspace:")
-
   const workspaceSetting = createMemo(() => {
     const project = currentProject()
     if (!project) return false
+    if (project.vcs !== "git") return false
     return layout.sidebar.workspaces(project.worktree)()
   })
 
@@ -594,7 +588,7 @@ export default function Layout(props: ParentProps) {
       if (!expanded) continue
       const project = projects.find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
       if (!project) continue
-      if (layout.sidebar.workspaces(project.worktree)()) continue
+      if (project.vcs === "git" && layout.sidebar.workspaces(project.worktree)()) continue
       setStore("workspaceExpanded", directory, false)
     }
   })
@@ -2048,7 +2042,9 @@ export default function Layout(props: ParentProps) {
     })
 
     const workspaces = createMemo(() => workspaceIds(props.project).slice(0, 2))
-    const workspaceEnabled = createMemo(() => layout.sidebar.workspaces(props.project.worktree)())
+    const workspaceEnabled = createMemo(
+      () => props.project.vcs === "git" && layout.sidebar.workspaces(props.project.worktree)(),
+    )
     const [open, setOpen] = createSignal(false)
 
     const label = (directory: string) => {
@@ -2308,7 +2304,7 @@ export default function Layout(props: ParentProps) {
         title: language.t("workspace.new"),
         category: language.t("command.category.workspace"),
         keybind: "mod+shift+w",
-        disabled: !layout.sidebar.workspaces(project()?.worktree ?? "")(),
+        disabled: !workspaceSetting(),
         onSelect: createWorkspace,
       },
     ])
@@ -2436,7 +2432,18 @@ export default function Layout(props: ParentProps) {
                             <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
                               <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces(p.worktree)}>
+                            <DropdownMenu.Item
+                              disabled={p.vcs !== "git" && !layout.sidebar.workspaces(p.worktree)()}
+                              onSelect={() => {
+                                const enabled = layout.sidebar.workspaces(p.worktree)()
+                                if (enabled) {
+                                  layout.sidebar.toggleWorkspaces(p.worktree)
+                                  return
+                                }
+                                if (p.vcs !== "git") return
+                                layout.sidebar.toggleWorkspaces(p.worktree)
+                              }}
+                            >
                               <DropdownMenu.ItemLabel>
                                 {layout.sidebar.workspaces(p.worktree)()
                                   ? language.t("sidebar.workspaces.disable")
@@ -2454,7 +2461,7 @@ export default function Layout(props: ParentProps) {
                   </div>
 
                   <Show
-                    when={layout.sidebar.workspaces(p.worktree)()}
+                    when={workspaceSetting()}
                     fallback={
                       <>
                         <div class="py-4 px-3">
