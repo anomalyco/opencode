@@ -159,6 +159,15 @@ export function DialogContext(props: { sessionID: string }) {
       >
         {(u) => {
           const value = u()
+          if (value.limit <= 0) {
+            return (
+              <box paddingTop={1}>
+                <text fg={theme.theme.textMuted}>
+                  Model limits unavailable for {value.providerID}/{value.modelID}.
+                </text>
+              </box>
+            )
+          }
           return (
             <box gap={1} paddingTop={1}>
               <text fg={theme.theme.text}>
