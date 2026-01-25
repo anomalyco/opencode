@@ -781,6 +781,10 @@ export function Prompt(props: PromptProps) {
                 setStore("prompt", "input", value)
                 autocomplete.onInput(value)
                 syncExtmarksWithPromptParts()
+                // Force layout update and render to keep cursor visible when typing
+                // beyond the visible area (matches pattern in onPaste handler)
+                input.getLayoutNode().markDirty()
+                renderer.requestRender()
               }}
               keyBindings={textareaKeybindings()}
               onKeyDown={async (e) => {
