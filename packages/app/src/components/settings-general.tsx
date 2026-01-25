@@ -1,15 +1,19 @@
-import { Component, createMemo, type JSX } from "solid-js"
+import { Component, createMemo, Show, type JSX } from "solid-js"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
+import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { useSettings, monoFontFamily } from "@/context/settings"
-import { playSound, SOUND_OPTIONS } from "@/utils/sound"
+import { playSound, SOUND_OPTIONS, isCustomSound, soundSrc, getSoundLabel } from "@/utils/sound"
 import { Link } from "./link"
 
 export const SettingsGeneral: Component = () => {
   const theme = useTheme()
   const language = useLanguage()
+  const platform = usePlatform()
   const settings = useSettings()
 
   const themeOptions = createMemo(() =>

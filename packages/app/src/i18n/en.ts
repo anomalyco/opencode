@@ -552,11 +552,14 @@ export const dict = {
   "settings.general.notifications.errors.description": "Show system notification when an error occurs",
 
   "settings.general.sounds.agent.title": "Agent",
-  "settings.general.sounds.agent.description": "Play sound when the agent is complete or needs attention",
+  "settings.general.sounds.agent.description": "Play sound when agent is complete or needs attention",
   "settings.general.sounds.permissions.title": "Permissions",
   "settings.general.sounds.permissions.description": "Play sound when a permission is required",
   "settings.general.sounds.errors.title": "Errors",
   "settings.general.sounds.errors.description": "Play sound when an error occurs",
+  "settings.general.sounds.custom.error.invalid": "Please select a valid audio file",
+  "settings.general.sounds.custom.error.tooLarge": "File is larger than 5MB",
+  "settings.general.sounds.custom.error.tooLargeConfirm": "This file is larger than 5MB. Continue?",
 
   "settings.shortcuts.title": "Keyboard shortcuts",
   "settings.shortcuts.reset.button": "Reset to defaults",

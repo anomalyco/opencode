@@ -2,6 +2,7 @@ mod cli;
 #[cfg(windows)]
 mod job_object;
 mod markdown;
+mod sounds;
 mod window_customizer;
 
 use cli::{install_cli, sync_cli};
@@ -288,7 +289,11 @@ pub fn run() {
             ensure_server_ready,
             get_default_server_url,
             set_default_server_url,
-            markdown::parse_markdown_command
+            markdown::parse_markdown_command,
+            sounds::copy_sound_file,
+            sounds::cleanup_old_sounds,
+            sounds::sound_file_exists,
+            sounds::get_file_size,
         ])
         .setup(move |app| {
             let app = app.handle().clone();

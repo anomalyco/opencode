@@ -97,8 +97,26 @@ export type SoundID = SoundOption["id"]
 
 const soundById = Object.fromEntries(SOUND_OPTIONS.map((s) => [s.id, s.src])) as Record<SoundID, string>
 
+export function isCustomSound(id: string | undefined): boolean {
+  return id?.startsWith("custom:") ?? false
+}
+
+export function getSoundLabel(id: string): string {
+  if (isCustomSound(id)) {
+    return id.slice("custom:".length)
+  }
+  const option = SOUND_OPTIONS.find((s) => s.id === id)
+  return option?.label ?? id
+}
+
 export function soundSrc(id: string | undefined) {
   if (!id) return
+  
+  if (isCustomSound(id)) {
+    const filename = id.slice("custom:".length)
+    return `sounds/${filename}`
+  }
+  
   if (!(id in soundById)) return
   return soundById[id as SoundID]
 }
