@@ -105,7 +105,7 @@ export namespace ModelsDev {
 
   export async function refresh() {
     const file = Bun.file(filepath)
-    log.info("refreshing", {
+    log.debug("refreshing", {
       file,
     })
     const result = await fetch(`${url()}/api.json`, {
