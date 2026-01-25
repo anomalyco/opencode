@@ -52,6 +52,7 @@ import type {
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
+  McpStderrResponses,
   Part as Part2,
   PartDeleteErrors,
   PartDeleteResponses,
@@ -2421,6 +2422,36 @@ export class Mcp extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Get MCP stderr
+   *
+   * Get recent stderr output from an MCP server (last 50 lines)
+   */
+  public stderr<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<McpStderrResponses, unknown, ThrowOnError>({
+      url: "/mcp/{name}/stderr",
+      ...options,
+      ...params,
     })
   }
 

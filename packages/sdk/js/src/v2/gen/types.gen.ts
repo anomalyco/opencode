@@ -4339,6 +4339,26 @@ export type McpAuthAuthenticateResponses = {
 
 export type McpAuthAuthenticateResponse = McpAuthAuthenticateResponses[keyof McpAuthAuthenticateResponses]
 
+export type McpStderrData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/{name}/stderr"
+}
+
+export type McpStderrResponses = {
+  /**
+   * MCP stderr output
+   */
+  200: Array<string>
+}
+
+export type McpStderrResponse = McpStderrResponses[keyof McpStderrResponses]
+
 export type McpConnectData = {
   body?: never
   path: {

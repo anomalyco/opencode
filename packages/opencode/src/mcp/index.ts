@@ -27,6 +27,30 @@ import open from "open"
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
   const DEFAULT_TIMEOUT = 30_000
+  const STDERR_MAX_LINES = 50
+
+  const stderrBuffers = new Map<string, string[]>()
+
+  function appendStderr(name: string, data: string) {
+    let buffer = stderrBuffers.get(name)
+    if (!buffer) {
+      buffer = []
+      stderrBuffers.set(name, buffer)
+    }
+    const lines = data.split("\n").filter((line) => line.length > 0)
+    buffer.push(...lines)
+    if (buffer.length > STDERR_MAX_LINES) {
+      buffer.splice(0, buffer.length - STDERR_MAX_LINES)
+    }
+  }
+
+  function clearStderr(name: string) {
+    stderrBuffers.delete(name)
+  }
+
+  export function getStderr(name: string): string[] {
+    return stderrBuffers.get(name) ?? []
+  }
 
   export const Resource = z
     .object({
@@ -420,7 +444,9 @@ export namespace MCP {
         },
       })
       transport.stderr?.on("data", (chunk: Buffer) => {
-        log.info(`mcp stderr: ${chunk.toString()}`, { key })
+        const text = chunk.toString()
+        log.info(`mcp stderr: ${text}`, { key })
+        appendStderr(key, text)
       })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
@@ -435,6 +461,7 @@ export namespace MCP {
         status = {
           status: "connected",
         }
+        clearStderr(key)
       } catch (error) {
         log.error("local mcp startup failed", {
           key,

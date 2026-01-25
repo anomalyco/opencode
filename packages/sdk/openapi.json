@@ -4590,6 +4590,51 @@
         ]
       }
     },
+    "/mcp/{name}/stderr": {
+      "get": {
+        "operationId": "mcp.stderr",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get MCP stderr",
+        "description": "Get recent stderr output from an MCP server (last 50 lines)",
+        "responses": {
+          "200": {
+            "description": "MCP stderr output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.mcp.stderr({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/mcp/{name}/connect": {
       "post": {
         "operationId": "mcp.connect",

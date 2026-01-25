@@ -176,6 +176,29 @@ export const McpRoutes = lazy(() =>
         return c.json({ success: true as const })
       },
     )
+    .get(
+      "/:name/stderr",
+      describeRoute({
+        summary: "Get MCP stderr",
+        description: "Get recent stderr output from an MCP server (last 50 lines)",
+        operationId: "mcp.stderr",
+        responses: {
+          200: {
+            description: "MCP stderr output",
+            content: {
+              "application/json": {
+                schema: resolver(z.array(z.string())),
+              },
+            },
+          },
+        },
+      }),
+      validator("param", z.object({ name: z.string() })),
+      async (c) => {
+        const { name } = c.req.valid("param")
+        return c.json(MCP.getStderr(name))
+      },
+    )
     .post(
       "/:name/connect",
       describeRoute({
