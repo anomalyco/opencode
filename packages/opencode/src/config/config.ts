@@ -806,6 +806,7 @@ export namespace Config {
       })
       .optional()
       .describe("Scroll acceleration settings"),
+    auto_scroll: z.boolean().optional().describe("Automatically scroll to bottom when new messages arrive"),
     diff_style: z
       .enum(["auto", "stacked"])
       .optional()
