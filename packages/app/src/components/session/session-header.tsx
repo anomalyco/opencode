@@ -19,6 +19,7 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { SessionLspIndicator } from "@/components/session-lsp-indicator"
 import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
+import { SessionContextUsage } from "@/components/session-context-usage"
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { same } from "@/utils/same"
 
@@ -161,6 +162,7 @@ export function SessionHeader() {
               <Icon name="server" size="small" class="text-icon-weak" />
               <span class="text-12-regular text-text-weak truncate max-w-[200px]">{server.name}</span>
             </Button>
+            <SessionContextUsage />
             <SessionLspIndicator />
             <SessionMcpIndicator />
           </div>

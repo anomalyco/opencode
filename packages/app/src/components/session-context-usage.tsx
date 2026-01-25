@@ -1,4 +1,4 @@
-import { Match, Show, Switch, createMemo } from "solid-js"
+import { For, Match, Show, Switch, createMemo } from "solid-js"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Button } from "@opencode-ai/ui/button"
@@ -10,6 +10,40 @@ import { useSync } from "@/context/sync"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
+}
+
+interface ProviderUsage {
+  provider: string
+  tokens: number
+  cost: number
+  requests: number
+  percentage: number
+}
+
+function getProviderEmoji(provider: string): string {
+  const p = provider.toLowerCase()
+  if (p.includes("anthropic")) return "🟣"
+  if (p.includes("google")) return "🔵"
+  if (p.includes("openai")) return "🟢"
+  if (p.includes("antigravity")) return "🌌"
+  if (p.includes("xai") || p.includes("grok")) return "⚡"
+  return "⚪"
+}
+
+function getProviderLabel(provider: string): string {
+  const p = provider.toLowerCase()
+  if (p.includes("anthropic")) return "Anthropic"
+  if (p.includes("google")) return "Google"
+  if (p.includes("openai")) return "OpenAI"
+  if (p.includes("antigravity")) return "Antigravity"
+  if (p.includes("xai") || p.includes("grok")) return "xAI"
+  return provider
+}
+
+function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`
+  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`
+  return tokens.toString()
 }
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
@@ -28,6 +62,47 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       style: "currency",
       currency: "USD",
     }).format(total)
+  })
+
+  // Per-provider usage breakdown
+  const providerUsage = createMemo((): ProviderUsage[] => {
+    const byProvider = new Map<string, { tokens: number; cost: number; requests: number }>()
+    
+    for (const msg of messages()) {
+      if (msg.role !== "assistant") continue
+      const assistant = msg as AssistantMessage
+      const providerId = assistant.providerID
+      if (!providerId) continue
+      
+      const tokens = assistant.tokens.input + assistant.tokens.output + 
+                     assistant.tokens.reasoning + assistant.tokens.cache.read + 
+                     assistant.tokens.cache.write
+      
+      const existing = byProvider.get(providerId) || { tokens: 0, cost: 0, requests: 0 }
+      existing.tokens += tokens
+      existing.cost += assistant.cost || 0
+      existing.requests += 1
+      byProvider.set(providerId, existing)
+    }
+    
+    const totalTokens = Array.from(byProvider.values()).reduce((sum, x) => sum + x.tokens, 0)
+    
+    const result: ProviderUsage[] = []
+    for (const [provider, usage] of byProvider) {
+      result.push({
+        provider,
+        tokens: usage.tokens,
+        cost: usage.cost,
+        requests: usage.requests,
+        percentage: totalTokens > 0 ? (usage.tokens / totalTokens) * 100 : 0,
+      })
+    }
+    
+    return result.sort((a, b) => b.tokens - a.tokens)
+  })
+
+  const totalTokens = createMemo(() => {
+    return providerUsage().reduce((sum, x) => sum + x.tokens, 0)
   })
 
   const context = createMemo(() => {
@@ -60,27 +135,56 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   )
 
   const tooltipValue = () => (
-    <div>
+    <div class="min-w-48">
+      {/* Provider Usage Breakdown */}
+      <Show when={providerUsage().length > 0}>
+        <div class="mb-2 pb-2 border-b border-border-base/30">
+          <div class="text-11-medium text-text-invert-base mb-1.5">Provider Usage</div>
+          <For each={providerUsage()}>
+            {(usage) => (
+              <div class="flex items-center justify-between gap-3 py-0.5">
+                <div class="flex items-center gap-1.5">
+                  <span>{getProviderEmoji(usage.provider)}</span>
+                  <span class="text-text-invert-base text-11-regular">{getProviderLabel(usage.provider)}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-text-invert-strong text-11-medium">{formatTokens(usage.tokens)}</span>
+                  <span class="text-text-invert-weak text-10-regular w-8 text-right">{Math.round(usage.percentage)}%</span>
+                </div>
+              </div>
+            )}
+          </For>
+          <div class="flex items-center justify-between gap-3 pt-1 mt-1 border-t border-border-base/20">
+            <span class="text-text-invert-base text-11-medium">Total</span>
+            <span class="text-text-invert-strong text-11-medium">{formatTokens(totalTokens())}</span>
+          </div>
+        </div>
+      </Show>
+      
+      {/* Context Window Usage */}
       <Show when={context()}>
         {(ctx) => (
-          <>
+          <div class="mb-1">
             <div class="flex items-center gap-2">
               <span class="text-text-invert-strong">{ctx().tokens}</span>
-              <span class="text-text-invert-base">Tokens</span>
+              <span class="text-text-invert-base">Context Tokens</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="text-text-invert-strong">{ctx().percentage ?? 0}%</span>
-              <span class="text-text-invert-base">Usage</span>
+              <span class="text-text-invert-base">Window Usage</span>
             </div>
-          </>
+          </div>
         )}
       </Show>
+      
+      {/* Cost */}
       <div class="flex items-center gap-2">
         <span class="text-text-invert-strong">{cost()}</span>
-        <span class="text-text-invert-base">Cost</span>
+        <span class="text-text-invert-base">Total Cost</span>
       </div>
+      
       <Show when={variant() === "button"}>
-        <div class="text-11-regular text-text-invert-base mt-1">Click to view context</div>
+        <div class="text-11-regular text-text-invert-base mt-2 pt-1 border-t border-border-base/20">Click to view context</div>
       </Show>
     </div>
   )
