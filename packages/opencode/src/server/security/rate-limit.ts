@@ -37,7 +37,8 @@ export function getClientIP(c: Context): string {
 /**
  * Create a rate limiter for the login endpoint.
  *
- * Limits login attempts per IP address to prevent brute force attacks.
+ * Limits failed login attempts per IP address to prevent brute force attacks.
+ * Only counts failed attempts (status >= 400) - successful logins don't count.
  * Returns 429 with Retry-After header when limit is exceeded.
  *
  * @param config - Rate limit configuration
@@ -52,12 +53,13 @@ export function createLoginRateLimiter(config?: RateLimitConfig) {
     limit,
     standardHeaders: "draft-7", // Return rate limit info in headers
     keyGenerator: (c) => getClientIP(c),
+    skipSuccessfulRequests: true, // Only count failed attempts (status >= 400)
     handler: (c) => {
       const ip = getClientIP(c)
       const timestamp = new Date().toISOString()
 
       // Log security event
-      log.warn("[SECURITY] Rate limit exceeded", {
+      log.warn("[SECURITY] Login rate limit exceeded", {
         ip,
         timestamp,
         user_agent: c.req.header("User-Agent"),
