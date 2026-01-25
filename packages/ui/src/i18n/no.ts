@@ -43,6 +43,7 @@ export const dict: Record<Keys, string> = {
   "ui.messageNav.newMessage": "Ny melding",
 
   "ui.textField.copyToClipboard": "Kopier til utklippstavlen",
+  "ui.textField.copyLink": "Kopier lenke",
   "ui.textField.copied": "Kopiert",
 
   "ui.imagePreview.alt": "Bildeforhåndsvisning",
