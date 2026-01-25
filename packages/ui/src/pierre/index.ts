@@ -70,12 +70,10 @@ const unsafeCSS = `
   color: var(--diffs-selection-number-fg);
 }
 
-@media (prefers-color-scheme: dark) {
-  [data-diffs] {
-    --diffs-selection-number-fg: #fdfbfb;
-    --diffs-bg-selection: var(--diffs-bg-selection-override, color-mix(in oklch, var(--solaris-dark-6) 65%, transparent));
-    --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, color-mix(in oklch, var(--solaris-dark-6) 85%, transparent));
-  }
+:host-context([data-color-scheme='dark']) [data-diffs] {
+  --diffs-selection-number-fg: #fdfbfb;
+  --diffs-bg-selection: var(--diffs-bg-selection-override, color-mix(in oklch, var(--solaris-dark-6) 65%, transparent));
+  --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, color-mix(in oklch, var(--solaris-dark-6) 85%, transparent));
 }
 
 [data-diffs-header],
