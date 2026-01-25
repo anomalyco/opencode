@@ -141,7 +141,7 @@ const getAgentByCommand = (command: string) => agents.find((agent) => agent.comm
                         id="install-run-command"
                         class="command-text text-xs font-mono text-zinc-500 select-all break-words min-w-0 flex-1"
                       >
-                        curl -fsSL https://<span class="text-zinc-300">forgeagents.dev/install</span> | sh
+                        npm i -g @forge-agents/forge
                         <!-- && forge <span
                           id="agent-name-mobile"
                           class="text-zinc-300">claude</span
@@ -319,7 +319,7 @@ const getAgentByCommand = (command: string) => agents.find((agent) => agent.comm
                       id="install-run-command-desktop"
                       class="command-text text-xs font-mono text-zinc-500 select-all break-words min-w-0 flex-1"
                     >
-                      curl -fsSL https://<span class="text-zinc-300">forgeagents.dev/install</span> | sh
+                      npm i -g @forge-agents/forge
                       <!-- && forge <span
                         id="agent-name-desktop"
                         class="text-zinc-300">claude</span
