@@ -183,7 +183,7 @@
           }
         ],
         "summary": "Update project",
-        "description": "Update project properties such as name, icon and color.",
+        "description": "Update project properties such as name, icon, and commands.",
         "responses": {
           "200": {
             "description": "Updated project information",
@@ -231,7 +231,19 @@
                       "url": {
                         "type": "string"
                       },
+                      "override": {
+                        "type": "string"
+                      },
                       "color": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "commands": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "description": "Startup script to run when creating a new workspace (worktree)",
                         "type": "string"
                       }
                     }
@@ -847,7 +859,7 @@
           }
         ],
         "summary": "Create worktree",
-        "description": "Create a new git worktree for the current project.",
+        "description": "Create a new git worktree for the current project and run any configured startup scripts.",
         "responses": {
           "200": {
             "description": "Worktree created",
@@ -918,6 +930,110 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.worktree.list({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "worktree.remove",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Remove worktree",
+        "description": "Remove a git worktree and delete its branch.",
+        "responses": {
+          "200": {
+            "description": "Worktree removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorktreeRemoveInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.worktree.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experimental/worktree/reset": {
+      "post": {
+        "operationId": "worktree.reset",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Reset worktree",
+        "description": "Reset a worktree branch to the primary default branch.",
+        "responses": {
+          "200": {
+            "description": "Worktree reset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorktreeResetInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.worktree.reset({\n  ...\n})"
           }
         ]
       }
@@ -5692,7 +5808,19 @@
               "url": {
                 "type": "string"
               },
+              "override": {
+                "type": "string"
+              },
               "color": {
+                "type": "string"
+              }
+            }
+          },
+          "commands": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "description": "Startup script to run when creating a new workspace (worktree)",
                 "type": "string"
               }
             }
@@ -5749,6 +5877,34 @@
               }
             },
             "required": ["directory"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.server.connected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "server.connected"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.global.disposed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "global.disposed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
           }
         },
         "required": ["type", "properties"]
@@ -7163,7 +7319,8 @@
         "properties": {
           "label": {
             "description": "Display text (1-5 words, concise)",
-            "type": "string"
+            "type": "string",
+            "maxLength": 30
           },
           "description": {
             "description": "Explanation of choice",
@@ -7180,9 +7337,9 @@
             "type": "string"
           },
           "header": {
-            "description": "Very short label (max 12 chars)",
+            "description": "Very short label (max 30 chars)",
             "type": "string",
-            "maxLength": 12
+            "maxLength": 30
           },
           "options": {
             "description": "Available choices",
@@ -7370,6 +7527,41 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.file.watcher.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "file.watcher.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "event": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "add"
+                  },
+                  {
+                    "type": "string",
+                    "const": "change"
+                  },
+                  {
+                    "type": "string",
+                    "const": "unlink"
+                  }
+                ]
+              }
+            },
+            "required": ["file", "event"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.tui.prompt.append": {
         "type": "object",
         "properties": {
@@ -7411,6 +7603,8 @@
                       "session.compact",
                       "session.page.up",
                       "session.page.down",
+                      "session.line.up",
+                      "session.line.down",
                       "session.half.page.up",
                       "session.half.page.down",
                       "session.first",
@@ -7796,41 +7990,6 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.file.watcher.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "file.watcher.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string"
-              },
-              "event": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "const": "add"
-                  },
-                  {
-                    "type": "string",
-                    "const": "change"
-                  },
-                  {
-                    "type": "string",
-                    "const": "unlink"
-                  }
-                ]
-              }
-            },
-            "required": ["file", "event"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "Event.vcs.branch.updated": {
         "type": "object",
         "properties": {
@@ -7962,30 +8121,43 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.global.disposed": {
+      "Event.worktree.ready": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "global.disposed"
+            "const": "worktree.ready"
           },
           "properties": {
             "type": "object",
-            "properties": {}
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "branch"]
           }
         },
         "required": ["type", "properties"]
       },
-      "Event.server.connected": {
+      "Event.worktree.failed": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "server.connected"
+            "const": "worktree.failed"
           },
           "properties": {
             "type": "object",
-            "properties": {}
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"]
           }
         },
         "required": ["type", "properties"]
@@ -8003,6 +8175,12 @@
           },
           {
             "$ref": "#/components/schemas/Event.server.instance.disposed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.server.connected"
+          },
+          {
+            "$ref": "#/components/schemas/Event.global.disposed"
           },
           {
             "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
@@ -8053,6 +8231,9 @@
             "$ref": "#/components/schemas/Event.todo.updated"
           },
           {
+            "$ref": "#/components/schemas/Event.file.watcher.updated"
+          },
+          {
             "$ref": "#/components/schemas/Event.tui.prompt.append"
           },
           {
@@ -8089,9 +8270,6 @@
             "$ref": "#/components/schemas/Event.session.error"
           },
           {
-            "$ref": "#/components/schemas/Event.file.watcher.updated"
-          },
-          {
             "$ref": "#/components/schemas/Event.vcs.branch.updated"
           },
           {
@@ -8107,10 +8285,10 @@
             "$ref": "#/components/schemas/Event.pty.deleted"
           },
           {
-            "$ref": "#/components/schemas/Event.global.disposed"
+            "$ref": "#/components/schemas/Event.worktree.ready"
           },
           {
-            "$ref": "#/components/schemas/Event.server.connected"
+            "$ref": "#/components/schemas/Event.worktree.failed"
           }
         ]
       },
@@ -8282,12 +8460,22 @@
           },
           "messages_page_up": {
             "description": "Scroll messages up by one page",
-            "default": "pageup",
+            "default": "pageup,ctrl+alt+b",
             "type": "string"
           },
           "messages_page_down": {
             "description": "Scroll messages down by one page",
-            "default": "pagedown",
+            "default": "pagedown,ctrl+alt+f",
+            "type": "string"
+          },
+          "messages_line_up": {
+            "description": "Scroll messages up by one line",
+            "default": "ctrl+alt+y",
+            "type": "string"
+          },
+          "messages_line_down": {
+            "description": "Scroll messages down by one line",
+            "default": "ctrl+alt+e",
             "type": "string"
           },
           "messages_half_page_up": {
@@ -9971,9 +10159,28 @@
             "type": "string"
           },
           "startCommand": {
+            "description": "Additional startup script to run after the project's start command",
             "type": "string"
           }
         }
+      },
+      "WorktreeRemoveInput": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          }
+        },
+        "required": ["directory"]
+      },
+      "WorktreeResetInput": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          }
+        },
+        "required": ["directory"]
       },
       "McpResource": {
         "type": "object",
