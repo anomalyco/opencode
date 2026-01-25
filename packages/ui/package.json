@@ -32,6 +32,7 @@
     "@types/bun": "catalog:",
     "@types/katex": "0.16.7",
     "@types/luxon": "catalog:",
+    "@types/morphdom": "2.4.2",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
