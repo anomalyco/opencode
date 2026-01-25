@@ -111,6 +111,8 @@ export const Terminal = (props: TerminalProps) => {
     const mod = await import("ghostty-web")
     ghostty = await mod.Ghostty.load()
 
+    const once = { value: false }
+
     const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
     if (window.__OPENCODE__?.serverPassword) {
       url.username = "opencode"
@@ -258,6 +260,8 @@ export const Terminal = (props: TerminalProps) => {
     })
     socket.addEventListener("error", (error) => {
       if (disposed) return
+      if (once.value) return
+      once.value = true
       console.error("WebSocket error:", error)
       local.onConnectError?.(error)
     })
@@ -266,6 +270,8 @@ export const Terminal = (props: TerminalProps) => {
       // Normal closure (code 1000) means PTY process exited - server event handles cleanup
       // For other codes (network issues, server restart), trigger error handler
       if (event.code !== 1000) {
+        if (once.value) return
+        once.value = true
         local.onConnectError?.(new Error(`WebSocket closed abnormally: ${event.code}`))
       }
     })

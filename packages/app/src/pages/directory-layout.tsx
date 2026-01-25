@@ -16,7 +16,7 @@ export default function Layout(props: ParentProps) {
     return base64Decode(params.dir!)
   })
   return (
-    <Show when={params.dir} keyed>
+    <Show when={params.dir}>
       <SDKProvider directory={directory()}>
         <SyncProvider>
           {iife(() => {
