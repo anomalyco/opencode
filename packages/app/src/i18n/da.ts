@@ -86,6 +86,8 @@ export const dict = {
   "dialog.provider.group.other": "Andre",
   "dialog.provider.tag.recommended": "Anbefalet",
   "dialog.provider.anthropic.note": "Forbind med Claude Pro/Max eller API-nøgle",
+  "dialog.provider.openai.note": "Forbind med ChatGPT Pro/Plus eller API-nøgle",
+  "dialog.provider.copilot.note": "Forbind med Copilot eller API-nøgle",
 
   "dialog.model.select.title": "Vælg model",
   "dialog.model.search.placeholder": "Søg modeller",
@@ -203,6 +205,9 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} af {{total}} aktiveret",
   "dialog.mcp.empty": "Ingen MCP'er konfigureret",
 
+  "dialog.lsp.empty": "LSP'er registreret automatisk fra filtyper",
+  "dialog.plugins.empty": "Plugins konfigureret i opencode.json",
+
   "mcp.status.connected": "forbundet",
   "mcp.status.failed": "mislykkedes",
   "mcp.status.needs_auth": "kræver godkendelse",
@@ -222,7 +227,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "Kunne ikke forbinde til server",
   "dialog.server.add.checking": "Tjekker...",
-  "dialog.server.add.button": "Tilføj",
+  "dialog.server.add.button": "Tilføj server",
   "dialog.server.default.title": "Standardserver",
   "dialog.server.default.description":
     "Forbind til denne server ved start af app i stedet for at starte en lokal server. Kræver genstart.",
@@ -230,6 +235,13 @@ export const dict = {
   "dialog.server.default.set": "Sæt nuværende server som standard",
   "dialog.server.default.clear": "Ryd",
   "dialog.server.action.remove": "Fjern server",
+
+  "dialog.server.menu.edit": "Rediger",
+  "dialog.server.menu.default": "Sæt som standard",
+  "dialog.server.menu.defaultRemove": "Fjern som standard",
+  "dialog.server.menu.delete": "Slet",
+  "dialog.server.current": "Nuværende server",
+  "dialog.server.status.default": "Standard",
 
   "dialog.project.edit.title": "Rediger projekt",
   "dialog.project.edit.name": "Navn",
