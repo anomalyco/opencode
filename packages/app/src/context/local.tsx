@@ -126,7 +126,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       )
 
       const [ephemeral, setEphemeral] = createStore<{
-        model: Record<string, ModelKey>
+        model: Record<string, ModelKey | undefined>
       }>({
         model: {},
       })
@@ -182,7 +182,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const find = (key: ModelKey) => list().find((m) => m.id === key?.modelID && m.provider.id === key.providerID)
 
-      const fallbackModel = createMemo(() => {
+      const fallbackModel = createMemo<ModelKey | undefined>(() => {
         if (sync.data.config.model) {
           const [providerID, modelID] = sync.data.config.model.split("/")
           if (isModelValid({ providerID, modelID })) {
@@ -199,16 +199,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
+        const defaults = providers.default()
         for (const p of providers.connected()) {
-          if (p.id in providers.default()) {
-            return {
-              providerID: p.id,
-              modelID: providers.default()[p.id],
-            }
+          const configured = defaults[p.id]
+          if (configured) {
+            const key = { providerID: p.id, modelID: configured }
+            if (isModelValid(key)) return key
           }
+
+          const first = Object.values(p.models)[0]
+          if (!first) continue
+          const key = { providerID: p.id, modelID: first.id }
+          if (isModelValid(key)) return key
         }
 
-        throw new Error("No default model found")
+        return undefined
       })
 
       const current = createMemo(() => {
@@ -266,7 +271,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         set(model: ModelKey | undefined, options?: { recent?: boolean }) {
           batch(() => {
             const currentAgent = agent.current()
-            if (currentAgent) setEphemeral("model", currentAgent.name, model ?? fallbackModel())
+            const next = model ?? fallbackModel()
+            if (currentAgent) setEphemeral("model", currentAgent.name, next)
             if (model) updateVisibility(model, "show")
             if (options?.recent && model) {
               const uniq = uniqueBy([model, ...store.recent], (x) => x.providerID + x.modelID)

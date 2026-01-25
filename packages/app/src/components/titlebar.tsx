@@ -19,9 +19,6 @@ export function Titlebar() {
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
-  const reserve = createMemo(
-    () => platform.platform === "desktop" && (platform.os === "windows" || platform.os === "linux"),
-  )
   const web = createMemo(() => platform.platform === "web")
 
   const getWin = () => {
