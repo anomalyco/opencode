@@ -11,7 +11,7 @@
   &[data-variant="primary"] {
     background-color: var(--icon-strong-base);
 
-    [data-slot="icon"] {
+    [data-slot="icon-svg"] {
       /* color: var(--icon-weak-base); */
       color: var(--icon-invert-base);
 
@@ -35,7 +35,7 @@
     &:disabled {
       background-color: var(--icon-strong-disabled);
 
-      [data-slot="icon"] {
+      [data-slot="icon-svg"] {
         color: var(--icon-invert-base);
       }
     }
@@ -64,8 +64,14 @@
       background-color: var(--button-secondary-base);
     }
 
-    [data-slot="icon"] {
+    [data-slot="icon-svg"] {
       color: var(--icon-strong-base);
+    }
+
+    &:disabled {
+      background-color: var(--icon-strong-disabled);
+      color: var(--icon-invert-base);
+      cursor: not-allowed;
     }
   }
 
@@ -73,14 +79,14 @@
     background-color: transparent;
     /* color: var(--icon-base); */
 
-    [data-slot="icon"] {
+    [data-slot="icon-svg"] {
       color: var(--icon-base);
     }
 
     &:hover:not(:disabled) {
       background-color: var(--surface-raised-base-hover);
 
-      /* [data-slot="icon"] { */
+      /* [data-slot="icon-svg"] { */
       /*   color: var(--icon-hover); */
       /* } */
     }
@@ -89,15 +95,19 @@
     }
     &:active:not(:disabled) {
       background-color: var(--surface-raised-base-active);
-      /* [data-slot="icon"] { */
+      /* [data-slot="icon-svg"] { */
       /*   color: var(--icon-active); */
       /* } */
     }
     &:selected:not(:disabled) {
       background-color: var(--surface-raised-base-active);
-      /* [data-slot="icon"] { */
+      /* [data-slot="icon-svg"] { */
       /*   color: var(--icon-selected); */
       /* } */
+    }
+    &:disabled {
+      color: var(--icon-invert-base);
+      cursor: not-allowed;
     }
   }
 
@@ -115,11 +125,6 @@
     /* padding: 0 8px 0 6px; */
     gap: 8px;
 
-    [data-slot="icon"] {
-      height: 16px;
-      width: 16px;
-    }
-
     /* text-12-medium */
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
@@ -127,12 +132,6 @@
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large); /* 166.667% */
     letter-spacing: var(--letter-spacing-normal);
-  }
-
-  &:disabled {
-    background-color: var(--icon-strong-disabled);
-    color: var(--icon-invert-base);
-    cursor: not-allowed;
   }
 
   &:focus {

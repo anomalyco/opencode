@@ -2,10 +2,11 @@ import { Log } from "../util/log"
 import path from "path"
 import fs from "fs/promises"
 import { Global } from "../global"
+import { Filesystem } from "../util/filesystem"
 import { lazy } from "../util/lazy"
 import { Lock } from "../util/lock"
 import { $ } from "bun"
-import { NamedError } from "@/util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 
 export namespace Storage {
@@ -23,7 +24,7 @@ export namespace Storage {
   const MIGRATIONS: Migration[] = [
     async (dir) => {
       const project = path.resolve(dir, "../project")
-      if (!fs.exists(project)) return
+      if (!(await Filesystem.isDir(project))) return
       for await (const projectDir of new Bun.Glob("*").scan({
         cwd: project,
         onlyFiles: false,
@@ -43,7 +44,7 @@ export namespace Storage {
             if (worktree) break
           }
           if (!worktree) continue
-          if (!(await fs.exists(worktree))) continue
+          if (!(await Filesystem.isDir(worktree))) continue
           const [id] = await $`git rev-list --max-parents=0 --all`
             .quiet()
             .nothrow()

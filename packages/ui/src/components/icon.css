@@ -17,12 +17,17 @@
     height: 20px;
   }
 
+  &[data-size="medium"] {
+    width: 24px;
+    height: 24px;
+  }
+
   &[data-size="large"] {
     width: 24px;
     height: 24px;
   }
 
-  [data-slot="svg"] {
+  [data-slot="icon-svg"] {
     width: 100%;
     height: auto;
   }

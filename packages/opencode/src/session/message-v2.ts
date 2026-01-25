@@ -1,13 +1,17 @@
+import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
-import { Bus } from "../bus"
-import { NamedError } from "../util/error"
-import { Message } from "./message"
+import { NamedError } from "@opencode-ai/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
 import { Storage } from "@/storage/storage"
+import { ProviderTransform } from "@/provider/transform"
+import { STATUS_CODES } from "http"
+import { iife } from "@/util/iife"
+import { type SystemError } from "bun"
+import type { Provider } from "@/provider/provider"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -27,6 +31,7 @@ export namespace MessageV2 {
       isRetryable: z.boolean(),
       responseHeaders: z.record(z.string(), z.string()).optional(),
       responseBody: z.string().optional(),
+      metadata: z.record(z.string(), z.string()).optional(),
     }),
   )
   export type APIError = z.infer<typeof APIError.Schema>
@@ -58,6 +63,7 @@ export namespace MessageV2 {
     type: z.literal("text"),
     text: z.string(),
     synthetic: z.boolean().optional(),
+    ignored: z.boolean().optional(),
     time: z
       .object({
         start: z.number(),
@@ -112,7 +118,15 @@ export namespace MessageV2 {
     ref: "SymbolSource",
   })
 
-  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource]).meta({
+  export const ResourceSource = FilePartSourceBase.extend({
+    type: z.literal("resource"),
+    clientName: z.string(),
+    uri: z.string(),
+  }).meta({
+    ref: "ResourceSource",
+  })
+
+  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource, ResourceSource]).meta({
     ref: "FilePartSource",
   })
 
@@ -144,6 +158,7 @@ export namespace MessageV2 {
 
   export const CompactionPart = PartBase.extend({
     type: z.literal("compaction"),
+    auto: z.boolean(),
   }).meta({
     ref: "CompactionPart",
   })
@@ -154,6 +169,13 @@ export namespace MessageV2 {
     prompt: z.string(),
     description: z.string(),
     agent: z.string(),
+    model: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+      })
+      .optional(),
+    command: z.string().optional(),
   })
   export type SubtaskPart = z.infer<typeof SubtaskPart>
 
@@ -299,6 +321,7 @@ export namespace MessageV2 {
     }),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
+    variant: z.string().optional(),
   }).meta({
     ref: "UserMessage",
   })
@@ -342,7 +365,11 @@ export namespace MessageV2 {
     parentID: z.string(),
     modelID: z.string(),
     providerID: z.string(),
+    /**
+     * @deprecated
+     */
     mode: z.string(),
+    agent: z.string(),
     path: z.object({
       cwd: z.string(),
       root: z.string(),
@@ -370,27 +397,27 @@ export namespace MessageV2 {
   export type Info = z.infer<typeof Info>
 
   export const Event = {
-    Updated: Bus.event(
+    Updated: BusEvent.define(
       "message.updated",
       z.object({
         info: Info,
       }),
     ),
-    Removed: Bus.event(
+    Removed: BusEvent.define(
       "message.removed",
       z.object({
         sessionID: z.string(),
         messageID: z.string(),
       }),
     ),
-    PartUpdated: Bus.event(
+    PartUpdated: BusEvent.define(
       "message.part.updated",
       z.object({
         part: Part,
         delta: z.string().optional(),
       }),
     ),
-    PartRemoved: Bus.event(
+    PartRemoved: BusEvent.define(
       "message.part.removed",
       z.object({
         sessionID: z.string(),
@@ -406,154 +433,42 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function fromV1(v1: Message.Info) {
-    if (v1.role === "assistant") {
-      const info: Assistant = {
-        id: v1.id,
-        parentID: "",
-        sessionID: v1.metadata.sessionID,
-        role: "assistant",
-        time: {
-          created: v1.metadata.time.created,
-          completed: v1.metadata.time.completed,
-        },
-        cost: v1.metadata.assistant!.cost,
-        path: v1.metadata.assistant!.path,
-        summary: v1.metadata.assistant!.summary,
-        tokens: v1.metadata.assistant!.tokens,
-        modelID: v1.metadata.assistant!.modelID,
-        providerID: v1.metadata.assistant!.providerID,
-        mode: "build",
-        error: v1.metadata.error,
-      }
-      const parts = v1.parts.flatMap((part): Part[] => {
-        const base = {
-          id: Identifier.ascending("part"),
-          messageID: v1.id,
-          sessionID: v1.metadata.sessionID,
-        }
-        if (part.type === "text") {
-          return [
-            {
-              ...base,
-              type: "text",
-              text: part.text,
-            },
-          ]
-        }
-        if (part.type === "step-start") {
-          return [
-            {
-              ...base,
-              type: "step-start",
-            },
-          ]
-        }
-        if (part.type === "tool-invocation") {
-          return [
-            {
-              ...base,
-              type: "tool",
-              callID: part.toolInvocation.toolCallId,
-              tool: part.toolInvocation.toolName,
-              state: (() => {
-                if (part.toolInvocation.state === "partial-call") {
-                  return {
-                    status: "pending",
-                    input: {},
-                    raw: "",
-                  }
-                }
-
-                const { title, time, ...metadata } = v1.metadata.tool[part.toolInvocation.toolCallId] ?? {}
-                if (part.toolInvocation.state === "call") {
-                  return {
-                    status: "running",
-                    input: part.toolInvocation.args,
-                    time: {
-                      start: time?.start,
-                    },
-                  }
-                }
-
-                if (part.toolInvocation.state === "result") {
-                  return {
-                    status: "completed",
-                    input: part.toolInvocation.args,
-                    output: part.toolInvocation.result,
-                    title,
-                    time,
-                    metadata,
-                  }
-                }
-                throw new Error("unknown tool invocation state")
-              })(),
-            },
-          ]
-        }
-        return []
-      })
-      return {
-        info,
-        parts,
-      }
-    }
-
-    if (v1.role === "user") {
-      const info: User = {
-        id: v1.id,
-        sessionID: v1.metadata.sessionID,
-        role: "user",
-        time: {
-          created: v1.metadata.time.created,
-        },
-        agent: "build",
-        model: {
-          providerID: "opencode",
-          modelID: "opencode",
-        },
-      }
-      const parts = v1.parts.flatMap((part): Part[] => {
-        const base = {
-          id: Identifier.ascending("part"),
-          messageID: v1.id,
-          sessionID: v1.metadata.sessionID,
-        }
-        if (part.type === "text") {
-          return [
-            {
-              ...base,
-              type: "text",
-              text: part.text,
-            },
-          ]
-        }
-        if (part.type === "file") {
-          return [
-            {
-              ...base,
-              type: "file",
-              mime: part.mediaType,
-              filename: part.filename,
-              url: part.url,
-            },
-          ]
-        }
-        return []
-      })
-      return { info, parts }
-    }
-
-    throw new Error("unknown message type")
-  }
-
-  export function toModelMessage(
-    input: {
-      info: Info
-      parts: Part[]
-    }[],
-  ): ModelMessage[] {
+  export function toModelMessages(input: WithParts[], model: Provider.Model): ModelMessage[] {
     const result: UIMessage[] = []
+    const toolNames = new Set<string>()
+
+    const toModelOutput = (output: unknown) => {
+      if (typeof output === "string") {
+        return { type: "text", value: output }
+      }
+
+      if (typeof output === "object") {
+        const outputObject = output as {
+          text: string
+          attachments?: Array<{ mime: string; url: string }>
+        }
+        const attachments = (outputObject.attachments ?? []).filter((attachment) => {
+          return attachment.url.startsWith("data:") && attachment.url.includes(",")
+        })
+
+        return {
+          type: "content",
+          value: [
+            { type: "text", text: outputObject.text },
+            ...attachments.map((attachment) => ({
+              type: "media",
+              mediaType: attachment.mime,
+              data: iife(() => {
+                const commaIndex = attachment.url.indexOf(",")
+                return commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
+              }),
+            })),
+          ],
+        }
+      }
+
+      return { type: "json", value: output as never }
+    }
 
     for (const msg of input) {
       if (msg.parts.length === 0) continue
@@ -566,7 +481,7 @@ export namespace MessageV2 {
         }
         result.push(userMessage)
         for (const part of msg.parts) {
-          if (part.type === "text")
+          if (part.type === "text" && !part.ignored)
             userMessage.parts.push({
               type: "text",
               text: part.text,
@@ -596,50 +511,53 @@ export namespace MessageV2 {
       }
 
       if (msg.info.role === "assistant") {
+        const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
+
+        if (
+          msg.info.error &&
+          !(
+            MessageV2.AbortedError.isInstance(msg.info.error) &&
+            msg.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+          )
+        ) {
+          continue
+        }
         const assistantMessage: UIMessage = {
           id: msg.info.id,
           role: "assistant",
           parts: [],
         }
-        result.push(assistantMessage)
         for (const part of msg.parts) {
           if (part.type === "text")
             assistantMessage.parts.push({
               type: "text",
               text: part.text,
-              providerMetadata: part.metadata,
+              ...(differentModel ? {} : { providerMetadata: part.metadata }),
             })
           if (part.type === "step-start")
             assistantMessage.parts.push({
               type: "step-start",
             })
           if (part.type === "tool") {
+            toolNames.add(part.tool)
             if (part.state.status === "completed") {
-              if (part.state.attachments?.length) {
-                result.push({
-                  id: Identifier.ascending("message"),
-                  role: "user",
-                  parts: [
-                    {
-                      type: "text",
-                      text: `Tool ${part.tool} returned an attachment:`,
-                    },
-                    ...part.state.attachments.map((attachment) => ({
-                      type: "file" as const,
-                      url: attachment.url,
-                      mediaType: attachment.mime,
-                      filename: attachment.filename,
-                    })),
-                  ],
-                })
-              }
+              const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
+              const attachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
+              const output =
+                attachments.length > 0
+                  ? {
+                      text: outputText,
+                      attachments,
+                    }
+                  : outputText
+
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-available",
                 toolCallId: part.callID,
                 input: part.state.input,
-                output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
-                callProviderMetadata: part.metadata,
+                output,
+                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
             }
             if (part.state.status === "error")
@@ -649,21 +567,43 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: part.state.error,
-                callProviderMetadata: part.metadata,
+                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
+              })
+            // Handle pending/running tool calls to prevent dangling tool_use blocks
+            // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
+            if (part.state.status === "pending" || part.state.status === "running")
+              assistantMessage.parts.push({
+                type: ("tool-" + part.tool) as `tool-${string}`,
+                state: "output-error",
+                toolCallId: part.callID,
+                input: part.state.input,
+                errorText: "[Tool execution was interrupted]",
+                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
           }
           if (part.type === "reasoning") {
             assistantMessage.parts.push({
               type: "reasoning",
               text: part.text,
-              providerMetadata: part.metadata,
+              ...(differentModel ? {} : { providerMetadata: part.metadata }),
             })
           }
+        }
+        if (assistantMessage.parts.length > 0) {
+          result.push(assistantMessage)
         }
       }
     }
 
-    return convertToModelMessages(result)
+    const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
+
+    return convertToModelMessages(
+      result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
+      {
+        //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
+        tools,
+      },
+    )
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
@@ -735,14 +675,59 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
-      case APICallError.isInstance(e):
+      case (e as SystemError)?.code === "ECONNRESET":
         return new MessageV2.APIError(
           {
-            message: e.message,
+            message: "Connection reset by server",
+            isRetryable: true,
+            metadata: {
+              code: (e as SystemError).code ?? "",
+              syscall: (e as SystemError).syscall ?? "",
+              message: (e as SystemError).message ?? "",
+            },
+          },
+          { cause: e },
+        ).toObject()
+      case APICallError.isInstance(e):
+        const message = iife(() => {
+          let msg = e.message
+          if (msg === "") {
+            if (e.responseBody) return e.responseBody
+            if (e.statusCode) {
+              const err = STATUS_CODES[e.statusCode]
+              if (err) return err
+            }
+            return "Unknown error"
+          }
+          const transformed = ProviderTransform.error(ctx.providerID, e)
+          if (transformed !== msg) {
+            return transformed
+          }
+          if (!e.responseBody || (e.statusCode && msg !== STATUS_CODES[e.statusCode])) {
+            return msg
+          }
+
+          try {
+            const body = JSON.parse(e.responseBody)
+            // try to extract common error message fields
+            const errMsg = body.message || body.error || body.error?.message
+            if (errMsg && typeof errMsg === "string") {
+              return `${msg}: ${errMsg}`
+            }
+          } catch {}
+
+          return `${msg}: ${e.responseBody}`
+        }).trim()
+
+        const metadata = e.url ? { url: e.url } : undefined
+        return new MessageV2.APIError(
+          {
+            message,
             statusCode: e.statusCode,
             isRetryable: e.isRetryable,
             responseHeaders: e.responseHeaders,
             responseBody: e.responseBody,
+            metadata,
           },
           { cause: e },
         ).toObject()

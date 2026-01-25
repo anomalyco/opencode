@@ -1,18 +1,9 @@
-import {
-  TextAttributes,
-  BoxRenderable,
-  TextareaRenderable,
-  MouseEvent,
-  PasteEvent,
-  t,
-  dim,
-  fg,
-  type KeyBinding,
-} from "@opentui/core"
-import { createEffect, createMemo, Match, Switch, type JSX, onMount, batch } from "solid-js"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
+import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
+import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
-import { SplitBorder } from "@tui/component/border"
+import { EmptyBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
@@ -20,18 +11,30 @@ import { Identifier } from "@/id/id"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
+import { usePromptStash } from "./stash"
+import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
 import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
-import type { FilePart } from "@opencode-ai/sdk"
+import type { FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
+import { Locale } from "@/util/locale"
+import { formatDuration } from "@/util/format"
+import { createColors, createFrames } from "../../ui/spinner.ts"
+import { useDialog } from "@tui/ui/dialog"
+import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
+import { DialogAlert } from "../../ui/dialog-alert"
+import { useToast } from "../../ui/toast"
+import { useKV } from "../../context/kv"
+import { useTextareaKeybindings } from "../textarea-keybindings"
 
 export type PromptProps = {
   sessionID?: string
+  visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
   ref?: (ref: PromptRef) => void
@@ -41,11 +44,15 @@ export type PromptProps = {
 
 export type PromptRef = {
   focused: boolean
+  current: PromptInfo
   set(prompt: PromptInfo): void
   reset(): void
   blur(): void
   focus(): void
+  submit(): void
 }
+
+const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -57,49 +64,176 @@ export function Prompt(props: PromptProps) {
   const sdk = useSDK()
   const route = useRoute()
   const sync = useSync()
-  const status = createMemo(() => (props.sessionID ? sync.session.status(props.sessionID) : "idle"))
+  const dialog = useDialog()
+  const toast = useToast()
+  const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
+  const stash = usePromptStash()
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
+  const kv = useKV()
 
-  const textareaKeybindings = createMemo(() => {
-    const newlineBindings = keybind.all.input_newline || []
-    const submitBindings = keybind.all.input_submit || []
+  function promptModelWarning() {
+    toast.show({
+      variant: "warning",
+      message: "Connect a provider to send prompts",
+      duration: 3000,
+    })
+    if (sync.data.provider.length === 0) {
+      dialog.replace(() => <DialogProviderConnect />)
+    }
+  }
 
-    return [
-      { name: "return", action: "submit" },
-      { name: "return", meta: true, action: "newline" },
-      ...newlineBindings.map((binding) => ({
-        name: binding.name,
-        ctrl: binding.ctrl || undefined,
-        meta: binding.meta || undefined,
-        shift: binding.shift || undefined,
-        action: "newline" as const,
-      })),
-      ...submitBindings.map((binding) => ({
-        name: binding.name,
-        ctrl: binding.ctrl || undefined,
-        meta: binding.meta || undefined,
-        shift: binding.shift || undefined,
-        action: "submit" as const,
-      })),
-    ] satisfies KeyBinding[]
-  })
+  const textareaKeybindings = useTextareaKeybindings()
 
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
-  let promptPartTypeId: number
+  let promptPartTypeId = 0
+
+  sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
+    input.insertText(evt.properties.text)
+    setTimeout(() => {
+      input.getLayoutNode().markDirty()
+      input.gotoBufferEnd()
+      renderer.requestRender()
+    }, 0)
+  })
+
+  createEffect(() => {
+    if (props.disabled) input.cursorColor = theme.backgroundElement
+    if (!props.disabled) input.cursorColor = theme.text
+  })
+
+  const lastUserMessage = createMemo(() => {
+    if (!props.sessionID) return undefined
+    const messages = sync.data.message[props.sessionID]
+    if (!messages) return undefined
+    return messages.findLast((m) => m.role === "user")
+  })
+
+  const [store, setStore] = createStore<{
+    prompt: PromptInfo
+    mode: "normal" | "shell"
+    extmarkToPartIndex: Map<number, number>
+    interrupt: number
+    placeholder: number
+  }>({
+    placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
+    prompt: {
+      input: "",
+      parts: [],
+    },
+    mode: "normal",
+    extmarkToPartIndex: new Map(),
+    interrupt: 0,
+  })
+
+  // Initialize agent/model/variant from last user message when session changes
+  let syncedSessionID: string | undefined
+  createEffect(() => {
+    const sessionID = props.sessionID
+    const msg = lastUserMessage()
+
+    if (sessionID !== syncedSessionID) {
+      if (!sessionID || !msg) return
+
+      syncedSessionID = sessionID
+
+      // Only set agent if it's a primary agent (not a subagent)
+      const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
+      if (msg.agent && isPrimaryAgent) {
+        local.agent.set(msg.agent)
+        if (msg.model) local.model.set(msg.model)
+        if (msg.variant) local.model.variant.set(msg.variant)
+      }
+    }
+  })
 
   command.register(() => {
     return [
+      {
+        title: "Clear prompt",
+        value: "prompt.clear",
+        category: "Prompt",
+        hidden: true,
+        onSelect: (dialog) => {
+          input.extmarks.clear()
+          input.clear()
+          dialog.clear()
+        },
+      },
+      {
+        title: "Submit prompt",
+        value: "prompt.submit",
+        keybind: "input_submit",
+        category: "Prompt",
+        hidden: true,
+        onSelect: (dialog) => {
+          if (!input.focused) return
+          submit()
+          dialog.clear()
+        },
+      },
+      {
+        title: "Paste",
+        value: "prompt.paste",
+        keybind: "input_paste",
+        category: "Prompt",
+        hidden: true,
+        onSelect: async () => {
+          const content = await Clipboard.read()
+          if (content?.mime.startsWith("image/")) {
+            await pasteImage({
+              filename: "clipboard",
+              mime: content.mime,
+              content: content.data,
+            })
+          }
+        },
+      },
+      {
+        title: "Interrupt session",
+        value: "session.interrupt",
+        keybind: "session_interrupt",
+        category: "Session",
+        hidden: true,
+        enabled: status().type !== "idle",
+        onSelect: (dialog) => {
+          if (autocomplete.visible) return
+          if (!input.focused) return
+          // TODO: this should be its own command
+          if (store.mode === "shell") {
+            setStore("mode", "normal")
+            return
+          }
+          if (!props.sessionID) return
+
+          setStore("interrupt", store.interrupt + 1)
+
+          setTimeout(() => {
+            setStore("interrupt", 0)
+          }, 5000)
+
+          if (store.interrupt >= 2) {
+            sdk.client.session.abort({
+              sessionID: props.sessionID,
+            })
+            setStore("interrupt", 0)
+          }
+          dialog.clear()
+        },
+      },
       {
         title: "Open editor",
         category: "Session",
         keybind: "editor_open",
         value: "prompt.editor",
-        onSelect: async (dialog, trigger) => {
+        slash: {
+          name: "editor",
+        },
+        onSelect: async (dialog) => {
           dialog.clear()
 
           // replace summarized text parts with the actual text
@@ -112,11 +246,11 @@ export function Prompt(props: PromptProps) {
 
           const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
 
-          const value = trigger === "prompt" ? "" : text
+          const value = text
           const content = await Editor.open({ value, renderer })
           if (!content) return
 
-          input.setText(content, { history: false })
+          input.setText(content)
 
           // Update positions for nonTextParts based on their location in new content
           // Filter out parts whose virtual text was deleted
@@ -178,107 +312,45 @@ export function Prompt(props: PromptProps) {
           input.cursorOffset = Bun.stringWidth(content)
         },
       },
-      {
-        title: "Clear prompt",
-        value: "prompt.clear",
-        category: "Prompt",
-        disabled: true,
-        onSelect: (dialog) => {
-          input.extmarks.clear()
-          input.clear()
-          dialog.clear()
-        },
-      },
-      {
-        title: "Submit prompt",
-        value: "prompt.submit",
-        disabled: true,
-        keybind: "input_submit",
-        category: "Prompt",
-        onSelect: (dialog) => {
-          if (!input.focused) return
-          submit()
-          dialog.clear()
-        },
-      },
-      {
-        title: "Paste",
-        value: "prompt.paste",
-        disabled: true,
-        keybind: "input_paste",
-        category: "Prompt",
-        onSelect: async () => {
-          const content = await Clipboard.read()
-          if (content?.mime.startsWith("image/")) {
-            await pasteImage({
-              filename: "clipboard",
-              mime: content.mime,
-              content: content.data,
-            })
-          }
-        },
-      },
-      {
-        title: "Interrupt session",
-        value: "session.interrupt",
-        keybind: "session_interrupt",
-        disabled: status() !== "working",
-        category: "Session",
-        onSelect: (dialog) => {
-          if (!props.sessionID) return
-          if (autocomplete.visible) return
-          if (!input.focused) return
-
-          setStore("interrupt", store.interrupt + 1)
-
-          setTimeout(() => {
-            setStore("interrupt", 0)
-          }, 5000)
-
-          if (store.interrupt >= 2) {
-            sdk.client.session.abort({
-              path: {
-                id: props.sessionID,
-              },
-            })
-            setStore("interrupt", 0)
-          }
-          dialog.clear()
-        },
-      },
     ]
   })
 
-  sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
-    input.insertText(evt.properties.text)
-  })
-
-  createEffect(() => {
-    if (props.disabled) input.cursorColor = theme.backgroundElement
-    if (!props.disabled) input.cursorColor = theme.primary
-  })
-
-  const [store, setStore] = createStore<{
-    prompt: PromptInfo
-    mode: "normal" | "shell"
-    extmarkToPartIndex: Map<number, number>
-    interrupt: number
-  }>({
-    prompt: {
-      input: "",
-      parts: [],
+  const ref: PromptRef = {
+    get focused() {
+      return input.focused
     },
-    mode: "normal",
-    extmarkToPartIndex: new Map(),
-    interrupt: 0,
-  })
+    get current() {
+      return store.prompt
+    },
+    focus() {
+      input.focus()
+    },
+    blur() {
+      input.blur()
+    },
+    set(prompt) {
+      input.setText(prompt.input)
+      setStore("prompt", prompt)
+      restoreExtmarksFromParts(prompt.parts)
+      input.gotoBufferEnd()
+    },
+    reset() {
+      input.clear()
+      input.extmarks.clear()
+      setStore("prompt", {
+        input: "",
+        parts: [],
+      })
+      setStore("extmarkToPartIndex", new Map())
+    },
+    submit() {
+      submit()
+    },
+  }
 
   createEffect(() => {
-    input.focus()
-  })
-
-  onMount(() => {
-    promptPartTypeId = input.extmarks.registerType("prompt-part")
+    if (props.visible !== false) input?.focus()
+    if (props.visible === false) input?.blur()
   })
 
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
@@ -359,37 +431,75 @@ export function Prompt(props: PromptProps) {
     )
   }
 
-  props.ref?.({
-    get focused() {
-      return input.focused
+  command.register(() => [
+    {
+      title: "Stash prompt",
+      value: "prompt.stash",
+      category: "Prompt",
+      enabled: !!store.prompt.input,
+      onSelect: (dialog) => {
+        if (!store.prompt.input) return
+        stash.push({
+          input: store.prompt.input,
+          parts: store.prompt.parts,
+        })
+        input.extmarks.clear()
+        input.clear()
+        setStore("prompt", { input: "", parts: [] })
+        setStore("extmarkToPartIndex", new Map())
+        dialog.clear()
+      },
     },
-    focus() {
-      input.focus()
+    {
+      title: "Stash pop",
+      value: "prompt.stash.pop",
+      category: "Prompt",
+      enabled: stash.list().length > 0,
+      onSelect: (dialog) => {
+        const entry = stash.pop()
+        if (entry) {
+          input.setText(entry.input)
+          setStore("prompt", { input: entry.input, parts: entry.parts })
+          restoreExtmarksFromParts(entry.parts)
+          input.gotoBufferEnd()
+        }
+        dialog.clear()
+      },
     },
-    blur() {
-      input.blur()
+    {
+      title: "Stash list",
+      value: "prompt.stash.list",
+      category: "Prompt",
+      enabled: stash.list().length > 0,
+      onSelect: (dialog) => {
+        dialog.replace(() => (
+          <DialogStash
+            onSelect={(entry) => {
+              input.setText(entry.input)
+              setStore("prompt", { input: entry.input, parts: entry.parts })
+              restoreExtmarksFromParts(entry.parts)
+              input.gotoBufferEnd()
+            }}
+          />
+        ))
+      },
     },
-    set(prompt) {
-      input.setText(prompt.input, { history: false })
-      setStore("prompt", prompt)
-      restoreExtmarksFromParts(prompt.parts)
-      input.gotoBufferEnd()
-    },
-    reset() {
-      input.clear()
-      input.extmarks.clear()
-      setStore("prompt", {
-        input: "",
-        parts: [],
-      })
-      setStore("extmarkToPartIndex", new Map())
-    },
-  })
+  ])
 
   async function submit() {
     if (props.disabled) return
-    if (autocomplete.visible) return
+    if (autocomplete?.visible) return
     if (!store.prompt.input) return
+    const trimmed = store.prompt.input.trim()
+    if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
+      exit()
+      return
+    }
+    const selectedModel = local.model.current()
+    if (!selectedModel) {
+      promptModelWarning()
+      return
+    }
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
@@ -418,48 +528,60 @@ export function Prompt(props: PromptProps) {
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
 
+    // Capture mode before it gets reset
+    const currentMode = store.mode
+    const variant = local.model.variant.current()
+
     if (store.mode === "shell") {
       sdk.client.session.shell({
-        path: {
-          id: sessionID,
+        sessionID,
+        agent: local.agent.current().name,
+        model: {
+          providerID: selectedModel.providerID,
+          modelID: selectedModel.modelID,
         },
-        body: {
-          agent: local.agent.current().name,
-          command: inputText,
-        },
+        command: inputText,
       })
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
-        const command = inputText.split(" ")[0].slice(1)
-        console.log(command)
+        const firstLine = inputText.split("\n")[0]
+        const command = firstLine.split(" ")[0].slice(1)
         return sync.data.command.some((x) => x.name === command)
       })
     ) {
-      let [command, ...args] = inputText.split(" ")
+      // Parse command from first line, preserve multi-line content in arguments
+      const firstLineEnd = inputText.indexOf("\n")
+      const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
+      const [command, ...firstLineArgs] = firstLine.split(" ")
+      const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
+      const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
+
       sdk.client.session.command({
-        path: {
-          id: sessionID,
-        },
-        body: {
-          command: command.slice(1),
-          arguments: args.join(" "),
-          agent: local.agent.current().name,
-          model: `${local.model.current().providerID}/${local.model.current().modelID}`,
-          messageID,
-        },
+        sessionID,
+        command: command.slice(1),
+        arguments: args,
+        agent: local.agent.current().name,
+        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+        messageID,
+        variant,
+        parts: nonTextParts
+          .filter((x) => x.type === "file")
+          .map((x) => ({
+            id: Identifier.ascending("part"),
+            ...x,
+          })),
       })
     } else {
-      sdk.client.session.prompt({
-        path: {
-          id: sessionID,
-        },
-        body: {
-          ...local.model.current(),
+      sdk.client.session
+        .prompt({
+          sessionID,
+          ...selectedModel,
           messageID,
           agent: local.agent.current().name,
-          model: local.model.current(),
+          model: selectedModel,
+          variant,
           parts: [
             {
               id: Identifier.ascending("part"),
@@ -471,10 +593,13 @@ export function Prompt(props: PromptProps) {
               ...x,
             })),
           ],
-        },
-      })
+        })
+        .catch(() => {})
     }
-    history.append(store.prompt)
+    history.append({
+      ...store.prompt,
+      mode: currentMode,
+    })
     input.extmarks.clear()
     setStore("prompt", {
       input: "",
@@ -494,6 +619,40 @@ export function Prompt(props: PromptProps) {
     input.clear()
   }
   const exit = useExit()
+
+  function pasteText(text: string, virtualText: string) {
+    const currentOffset = input.visualCursor.offset
+    const extmarkStart = currentOffset
+    const extmarkEnd = extmarkStart + virtualText.length
+
+    input.insertText(virtualText + " ")
+
+    const extmarkId = input.extmarks.create({
+      start: extmarkStart,
+      end: extmarkEnd,
+      virtual: true,
+      styleId: pasteStyleId,
+      typeId: promptPartTypeId,
+    })
+
+    setStore(
+      produce((draft) => {
+        const partIndex = draft.prompt.parts.length
+        draft.prompt.parts.push({
+          type: "text" as const,
+          text,
+          source: {
+            text: {
+              start: extmarkStart,
+              end: extmarkEnd,
+              value: virtualText,
+            },
+          },
+        })
+        draft.extmarkToPartIndex.set(extmarkId, partIndex)
+      }),
+    )
+  }
 
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
@@ -538,6 +697,39 @@ export function Prompt(props: PromptProps) {
     return
   }
 
+  const highlight = createMemo(() => {
+    if (keybind.leader) return theme.border
+    if (store.mode === "shell") return theme.primary
+    return local.agent.color(local.agent.current().name)
+  })
+
+  const showVariant = createMemo(() => {
+    const variants = local.model.variant.list()
+    if (variants.length === 0) return false
+    const current = local.model.variant.current()
+    return !!current
+  })
+
+  const spinnerDef = createMemo(() => {
+    const color = local.agent.color(local.agent.current().name)
+    return {
+      frames: createFrames({
+        color,
+        style: "blocks",
+        inactiveFactor: 0.6,
+        // enableFading: false,
+        minAlpha: 0.3,
+      }),
+      color: createColors({
+        color,
+        style: "blocks",
+        inactiveFactor: 0.6,
+        // enableFading: false,
+        minAlpha: 0.3,
+      }),
+    }
+  })
+
   return (
     <>
       <Autocomplete
@@ -560,27 +752,28 @@ export function Prompt(props: PromptProps) {
         agentStyleId={agentStyleId}
         promptPartTypeId={() => promptPartTypeId}
       />
-      <box ref={(r) => (anchor = r)}>
+      <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
         <box
-          flexDirection="row"
-          {...SplitBorder}
-          borderColor={keybind.leader ? theme.accent : store.mode === "shell" ? theme.secondary : theme.border}
-          justifyContent="space-evenly"
+          border={["left"]}
+          borderColor={highlight()}
+          customBorderChars={{
+            ...EmptyBorder,
+            vertical: "┃",
+            bottomLeft: "╹",
+          }}
         >
-          <box backgroundColor={theme.backgroundElement} width={3} height="100%" alignItems="center" paddingTop={1}>
-            <text attributes={TextAttributes.BOLD} fg={theme.primary}>
-              {store.mode === "normal" ? ">" : "!"}
-            </text>
-          </box>
-          <box paddingTop={1} paddingBottom={1} backgroundColor={theme.backgroundElement} flexGrow={1}>
+          <box
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            flexShrink={0}
+            backgroundColor={theme.backgroundElement}
+            flexGrow={1}
+          >
             <textarea
-              placeholder={
-                props.showPlaceholder
-                  ? t`${dim(fg(theme.primary)("  → up/down"))} ${dim(fg("#64748b")("history"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_newline")))} ${dim(fg("#64748b")("newline"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_submit")))} ${dim(fg("#64748b")("submit"))}`
-                  : undefined
-              }
-              textColor={theme.text}
-              focusedTextColor={theme.text}
+              placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
+              textColor={keybind.leader ? theme.textMuted : theme.text}
+              focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
               minHeight={1}
               maxHeight={6}
               onContentChange={() => {
@@ -595,6 +788,23 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
+                // Handle clipboard paste (Ctrl+V) - check for images first on Windows
+                // This is needed because Windows terminal doesn't properly send image data
+                // through bracketed paste, so we need to intercept the keypress and
+                // directly read from clipboard before the terminal handles it
+                if (keybind.match("input_paste", e)) {
+                  const content = await Clipboard.read()
+                  if (content?.mime.startsWith("image/")) {
+                    e.preventDefault()
+                    await pasteImage({
+                      filename: "clipboard",
+                      mime: content.mime,
+                      content: content.data,
+                    })
+                    return
+                  }
+                  // If no image, let the default paste behavior continue
+                }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()
                   input.extmarks.clear()
@@ -605,20 +815,13 @@ export function Prompt(props: PromptProps) {
                   setStore("extmarkToPartIndex", new Map())
                   return
                 }
-                if (keybind.match("input_forward_delete", e) && store.prompt.input !== "") {
-                  const cursorOffset = input.cursorOffset
-                  if (cursorOffset < input.plainText.length) {
-                    const text = input.plainText
-                    const newText = text.slice(0, cursorOffset) + text.slice(cursorOffset + 1)
-                    input.setText(newText)
-                    input.cursorOffset = cursorOffset
-                  }
-                  e.preventDefault()
-                  return
-                }
                 if (keybind.match("app_exit", e)) {
-                  await exit()
-                  return
+                  if (store.prompt.input === "") {
+                    await exit()
+                    // Don't preventDefault - let textarea potentially handle the event
+                    e.preventDefault()
+                    return
+                  }
                 }
                 if (e.name === "!" && input.visualCursor.offset === 0) {
                   setStore("mode", "shell")
@@ -642,8 +845,9 @@ export function Prompt(props: PromptProps) {
                     const item = history.move(direction, input.plainText)
 
                     if (item) {
-                      input.setText(item.input, { history: false })
+                      input.setText(item.input)
                       setStore("prompt", item)
+                      setStore("mode", item.mode ?? "normal")
                       restoreExtmarksFromParts(item.parts)
                       e.preventDefault()
                       if (direction === -1) input.cursorOffset = 0
@@ -677,25 +881,36 @@ export function Prompt(props: PromptProps) {
                 // trim ' from the beginning and end of the pasted content. just
                 // ' and nothing else
                 const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
-                console.log(pastedContent, filepath)
-                try {
-                  const file = Bun.file(filepath)
-                  if (file.type.startsWith("image/")) {
-                    event.preventDefault()
-                    const content = await file
-                      .arrayBuffer()
-                      .then((buffer) => Buffer.from(buffer).toString("base64"))
-                      .catch(console.error)
-                    if (content) {
-                      await pasteImage({
-                        filename: file.name,
-                        mime: file.type,
-                        content,
-                      })
-                      return
+                const isUrl = /^(https?):\/\//.test(filepath)
+                if (!isUrl) {
+                  try {
+                    const file = Bun.file(filepath)
+                    // Handle SVG as raw text content, not as base64 image
+                    if (file.type === "image/svg+xml") {
+                      event.preventDefault()
+                      const content = await file.text().catch(() => {})
+                      if (content) {
+                        pasteText(content, `[SVG: ${file.name ?? "image"}]`)
+                        return
+                      }
                     }
-                  }
-                } catch {}
+                    if (file.type.startsWith("image/")) {
+                      event.preventDefault()
+                      const content = await file
+                        .arrayBuffer()
+                        .then((buffer) => Buffer.from(buffer).toString("base64"))
+                        .catch(() => {})
+                      if (content) {
+                        await pasteImage({
+                          filename: file.name,
+                          mime: file.type,
+                          content,
+                        })
+                        return
+                      }
+                    }
+                  } catch {}
+                }
 
                 const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
                 if (
@@ -703,79 +918,183 @@ export function Prompt(props: PromptProps) {
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
                   event.preventDefault()
-                  const currentOffset = input.visualCursor.offset
-                  const virtualText = `[Pasted ~${lineCount} lines]`
-                  const textToInsert = virtualText + " "
-                  const extmarkStart = currentOffset
-                  const extmarkEnd = extmarkStart + virtualText.length
-
-                  input.insertText(textToInsert)
-
-                  const extmarkId = input.extmarks.create({
-                    start: extmarkStart,
-                    end: extmarkEnd,
-                    virtual: true,
-                    styleId: pasteStyleId,
-                    typeId: promptPartTypeId,
-                  })
-
-                  const part = {
-                    type: "text" as const,
-                    text: pastedContent,
-                    source: {
-                      text: {
-                        start: extmarkStart,
-                        end: extmarkEnd,
-                        value: virtualText,
-                      },
-                    },
-                  }
-
-                  setStore(
-                    produce((draft) => {
-                      const partIndex = draft.prompt.parts.length
-                      draft.prompt.parts.push(part)
-                      draft.extmarkToPartIndex.set(extmarkId, partIndex)
-                    }),
-                  )
+                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                   return
                 }
+
+                // Force layout update and render for the pasted content
+                setTimeout(() => {
+                  input.getLayoutNode().markDirty()
+                  renderer.requestRender()
+                }, 0)
               }}
-              ref={(r: TextareaRenderable) => (input = r)}
+              ref={(r: TextareaRenderable) => {
+                input = r
+                if (promptPartTypeId === 0) {
+                  promptPartTypeId = input.extmarks.registerType("prompt-part")
+                }
+                props.ref?.(ref)
+                setTimeout(() => {
+                  input.cursorColor = theme.text
+                }, 0)
+              }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={theme.primary}
+              cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
+            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+              <text fg={highlight()}>
+                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+              </text>
+              <Show when={store.mode === "normal"}>
+                <box flexDirection="row" gap={1}>
+                  <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
+                    {local.model.parsed().model}
+                  </text>
+                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                  <Show when={showVariant()}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text>
+                      <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                    </text>
+                  </Show>
+                </box>
+              </Show>
+            </box>
           </box>
-          <box backgroundColor={theme.backgroundElement} width={1} justifyContent="center" alignItems="center"></box>
+        </box>
+        <box
+          height={1}
+          border={["left"]}
+          borderColor={highlight()}
+          customBorderChars={{
+            ...EmptyBorder,
+            vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
+          }}
+        >
+          <box
+            height={1}
+            border={["bottom"]}
+            borderColor={theme.backgroundElement}
+            customBorderChars={
+              theme.backgroundElement.a !== 0
+                ? {
+                    ...EmptyBorder,
+                    horizontal: "▀",
+                  }
+                : {
+                    ...EmptyBorder,
+                    horizontal: " ",
+                  }
+            }
+          />
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <text flexShrink={0} wrapMode="none" fg={theme.text}>
-            <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
-            <span style={{ bold: true }}>{local.model.parsed().model}</span>
-          </text>
-          <Switch>
-            <Match when={status() === "compacting"}>
-              <text fg={theme.textMuted}>compacting...</text>
-            </Match>
-            <Match when={status() === "working"}>
-              <box flexDirection="row" gap={1}>
-                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                  esc{" "}
-                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                  </span>
-                </text>
+          <Show when={status().type !== "idle"} fallback={<text />}>
+            <box
+              flexDirection="row"
+              gap={1}
+              flexGrow={1}
+              justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
+            >
+              <box flexShrink={0} flexDirection="row" gap={1}>
+                <box marginLeft={1}>
+                  <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+                    <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                  </Show>
+                </box>
+                <box flexDirection="row" gap={1} flexShrink={0}>
+                  {(() => {
+                    const retry = createMemo(() => {
+                      const s = status()
+                      if (s.type !== "retry") return
+                      return s
+                    })
+                    const message = createMemo(() => {
+                      const r = retry()
+                      if (!r) return
+                      if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
+                        return "gemini is way too hot right now"
+                      if (r.message.length > 80) return r.message.slice(0, 80) + "..."
+                      return r.message
+                    })
+                    const isTruncated = createMemo(() => {
+                      const r = retry()
+                      if (!r) return false
+                      return r.message.length > 120
+                    })
+                    const [seconds, setSeconds] = createSignal(0)
+                    onMount(() => {
+                      const timer = setInterval(() => {
+                        const next = retry()?.next
+                        if (next) setSeconds(Math.round((next - Date.now()) / 1000))
+                      }, 1000)
+
+                      onCleanup(() => {
+                        clearInterval(timer)
+                      })
+                    })
+                    const handleMessageClick = () => {
+                      const r = retry()
+                      if (!r) return
+                      if (isTruncated()) {
+                        DialogAlert.show(dialog, "Retry Error", r.message)
+                      }
+                    }
+
+                    const retryText = () => {
+                      const r = retry()
+                      if (!r) return ""
+                      const baseMessage = message()
+                      const truncatedHint = isTruncated() ? " (click to expand)" : ""
+                      const duration = formatDuration(seconds())
+                      const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
+                      return baseMessage + truncatedHint + retryInfo
+                    }
+
+                    return (
+                      <Show when={retry()}>
+                        <box onMouseUp={handleMessageClick}>
+                          <text fg={theme.error}>{retryText()}</text>
+                        </box>
+                      </Show>
+                    )
+                  })()}
+                </box>
               </box>
-            </Match>
-            <Match when={props.hint}>{props.hint!}</Match>
-            <Match when={true}>
-              <text fg={theme.text}>
-                {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+              <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                esc{" "}
+                <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                  {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                </span>
               </text>
-            </Match>
-          </Switch>
+            </box>
+          </Show>
+          <Show when={status().type !== "retry"}>
+            <box gap={2} flexDirection="row">
+              <Switch>
+                <Match when={store.mode === "normal"}>
+                  <Show when={local.model.variant.list().length > 0}>
+                    <text fg={theme.text}>
+                      {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
+                    </text>
+                  </Show>
+                  <text fg={theme.text}>
+                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
+                  </text>
+                  <text fg={theme.text}>
+                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                  </text>
+                </Match>
+                <Match when={store.mode === "shell"}>
+                  <text fg={theme.text}>
+                    esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                  </text>
+                </Match>
+              </Switch>
+            </box>
+          </Show>
         </box>
       </box>
     </>

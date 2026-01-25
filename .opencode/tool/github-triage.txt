@@ -1,0 +1,88 @@
+Use this tool to assign and/or label a Github issue.
+
+You can assign the following users:
+- thdxr
+- adamdotdevin
+- fwang
+- jayair
+- kommander
+- rekram1-node
+
+
+You can use the following labels:
+- nix
+- opentui
+- perf
+- web
+- zen
+- docs
+
+Always try to assign an issue, if in doubt, assign rekram1-node to it.
+
+## Breakdown of responsibilities:
+
+### thdxr
+
+Dax is responsible for managing core parts of the application, for large feature requests, api changes, or things that require significant changes to the codebase assign him.
+
+This relates to OpenCode server primarily but has overlap with just about anything
+
+### adamdotdevin
+
+Adam is responsible for managing the Desktop/Web app. If there is an issue relating to the desktop app or `opencode web` command. Assign him.
+
+
+### fwang
+
+Frank is responsible for managing Zen, if you see complaints about OpenCode Zen, maybe it's the dashboard, the model quality, billing issues, etc. Assign him to the issue.
+
+### jayair
+
+Jay is responsible for documentation. If there is an issue relating to documentation assign him.
+
+### kommander
+
+Sebastian is responsible for managing an OpenTUI (a library for building terminal user interfaces). OpenCode's TUI is built with OpenTUI. If there are issues about:
+- random characters on screen
+- keybinds not working on different terminals
+- general terminal stuff
+Then assign the issue to Him.
+
+### rekram1-node
+
+ALL BUGS SHOULD BE assigned to rekram1-node unless they have the `opentui` label.
+
+Assign Aiden to an issue as a catch all, if you can't assign anyone else. Most of the time this will be bugs/polish things.
+If no one else makes sense to assign, assign rekram1-node to it.
+
+Always assign to aiden if the issue mentions "acp", "zed", or model performance issues
+
+## Breakdown of Labels:
+
+### nix
+
+Any issue that mentions nix, or nixos should have a nix label
+
+### opentui
+
+Anything relating to the TUI itself should have an opentui label
+
+### perf
+
+Anything related to slow performance, high ram, high cpu usage, or any other performance related issue should have a perf label
+
+### desktop
+
+Anything related to `opencode web` command or the desktop app should have a desktop label. Never add this label for anything terminal/tui related
+
+### zen
+
+Anything related to OpenCode Zen, billing, or model quality from Zen should have a zen label
+
+### docs
+
+Anything related to the documentation should have a docs label
+
+### windows
+
+Use for any issue that involves the windows OS

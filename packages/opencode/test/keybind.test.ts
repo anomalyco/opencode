@@ -68,6 +68,31 @@ describe("Keybind.toString", () => {
     const info: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: true, name: "" }
     expect(Keybind.toString(info)).toBe("<leader>")
   })
+
+  test("should convert super modifier to string", () => {
+    const info: Keybind.Info = { ctrl: false, meta: false, shift: false, super: true, leader: false, name: "z" }
+    expect(Keybind.toString(info)).toBe("super+z")
+  })
+
+  test("should convert super+shift modifier to string", () => {
+    const info: Keybind.Info = { ctrl: false, meta: false, shift: true, super: true, leader: false, name: "z" }
+    expect(Keybind.toString(info)).toBe("super+shift+z")
+  })
+
+  test("should handle super with ctrl modifier", () => {
+    const info: Keybind.Info = { ctrl: true, meta: false, shift: false, super: true, leader: false, name: "a" }
+    expect(Keybind.toString(info)).toBe("ctrl+super+a")
+  })
+
+  test("should handle super with all modifiers", () => {
+    const info: Keybind.Info = { ctrl: true, meta: true, shift: true, super: true, leader: false, name: "x" }
+    expect(Keybind.toString(info)).toBe("ctrl+alt+super+shift+x")
+  })
+
+  test("should handle undefined super field (omitted)", () => {
+    const info: Keybind.Info = { ctrl: true, meta: false, shift: false, leader: false, name: "c" }
+    expect(Keybind.toString(info)).toBe("ctrl+c")
+  })
 })
 
 describe("Keybind.match", () => {
@@ -117,6 +142,36 @@ describe("Keybind.match", () => {
     const a: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: false, name: "a" }
     const b: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: false, name: "a" }
     expect(Keybind.match(a, b)).toBe(true)
+  })
+
+  test("should match super modifier keybinds", () => {
+    const a: Keybind.Info = { ctrl: false, meta: false, shift: false, super: true, leader: false, name: "z" }
+    const b: Keybind.Info = { ctrl: false, meta: false, shift: false, super: true, leader: false, name: "z" }
+    expect(Keybind.match(a, b)).toBe(true)
+  })
+
+  test("should not match super vs non-super", () => {
+    const a: Keybind.Info = { ctrl: false, meta: false, shift: false, super: true, leader: false, name: "z" }
+    const b: Keybind.Info = { ctrl: false, meta: false, shift: false, super: false, leader: false, name: "z" }
+    expect(Keybind.match(a, b)).toBe(false)
+  })
+
+  test("should match undefined super with false super", () => {
+    const a: Keybind.Info = { ctrl: true, meta: false, shift: false, leader: false, name: "c" }
+    const b: Keybind.Info = { ctrl: true, meta: false, shift: false, super: false, leader: false, name: "c" }
+    expect(Keybind.match(a, b)).toBe(true)
+  })
+
+  test("should match super+shift combination", () => {
+    const a: Keybind.Info = { ctrl: false, meta: false, shift: true, super: true, leader: false, name: "z" }
+    const b: Keybind.Info = { ctrl: false, meta: false, shift: true, super: true, leader: false, name: "z" }
+    expect(Keybind.match(a, b)).toBe(true)
+  })
+
+  test("should not match when only super differs", () => {
+    const a: Keybind.Info = { ctrl: true, meta: true, shift: true, super: true, leader: false, name: "a" }
+    const b: Keybind.Info = { ctrl: true, meta: true, shift: true, super: false, leader: false, name: "a" }
+    expect(Keybind.match(a, b)).toBe(false)
   })
 })
 
@@ -311,6 +366,55 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: false,
         name: "x",
+      },
+    ])
+  })
+
+  test("should parse super modifier", () => {
+    const result = Keybind.parse("super+z")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        super: true,
+        leader: false,
+        name: "z",
+      },
+    ])
+  })
+
+  test("should parse super with shift modifier", () => {
+    const result = Keybind.parse("super+shift+z")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: false,
+        shift: true,
+        super: true,
+        leader: false,
+        name: "z",
+      },
+    ])
+  })
+
+  test("should parse multiple keybinds with super", () => {
+    const result = Keybind.parse("ctrl+-,super+z")
+    expect(result).toEqual([
+      {
+        ctrl: true,
+        meta: false,
+        shift: false,
+        leader: false,
+        name: "-",
+      },
+      {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        super: true,
+        leader: false,
+        name: "z",
       },
     ])
   })

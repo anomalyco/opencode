@@ -8,6 +8,7 @@ import styles from "./provider-section.module.css"
 const PROVIDERS = [
   { name: "OpenAI", key: "openai", prefix: "sk-" },
   { name: "Anthropic", key: "anthropic", prefix: "sk-ant-" },
+  { name: "Google Gemini", key: "google", prefix: "AI" },
 ] as const
 
 type Provider = (typeof PROVIDERS)[number]

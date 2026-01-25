@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OpenCode",
+  "identifier": "ai.opencode.desktop",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "title": "OpenCode",
+        "url": "/",
+        "decorations": true,
+        "dragDropEnabled": false,
+        "zoomHotkeysEnabled": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 12.0, "y": 18.0 }
+      }
+    ],
+    "withGlobalTauri": true,
+    "security": {
+      "csp": null
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/prod/32x32.png",
+      "icons/prod/128x128.png",
+      "icons/prod/128x128@2x.png",
+      "icons/prod/icon.icns",
+      "icons/prod/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/prod/icon.ico"
+      }
+    },
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/share/metainfo/ai.opencode.opencode.metainfo.xml": "release/appstream.metainfo.xml"
+        }
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYwMDM5Nzg5OUMzOUExMDQKUldRRW9UbWNpWmNEOENYT01CV0lhOXR1UFhpaXJsK1Z3aU9lZnNtNzE0TDROWVMwVW9XQnFOelkK",
+      "endpoints": ["https://github.com/anomalyco/opencode/releases/latest/download/latest.json"]
+    }
+  }
+}

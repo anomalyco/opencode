@@ -1,91 +1,64 @@
-import {
-  Dialog as Kobalte,
-  DialogRootProps,
-  DialogTitleProps,
-  DialogCloseButtonProps,
-  DialogDescriptionProps,
-} from "@kobalte/core/dialog"
-import { ComponentProps, type JSX, onCleanup, Show, splitProps } from "solid-js"
+import { Dialog as Kobalte } from "@kobalte/core/dialog"
+import { ComponentProps, JSXElement, Match, ParentProps, Show, Switch } from "solid-js"
+import { useI18n } from "../context/i18n"
 import { IconButton } from "./icon-button"
 
-export interface DialogProps extends DialogRootProps {
-  trigger?: JSX.Element
+export interface DialogProps extends ParentProps {
+  title?: JSXElement
+  description?: JSXElement
+  action?: JSXElement
+  size?: "normal" | "large" | "x-large"
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
+  fit?: boolean
 }
 
-export function DialogRoot(props: DialogProps) {
-  let trigger!: HTMLElement
-  const [local, others] = splitProps(props, ["trigger", "class", "classList", "children"])
-
-  const resetTabIndex = () => {
-    trigger.tabIndex = 0
-  }
-
-  const handleTriggerFocus = (e: FocusEvent & { currentTarget: HTMLElement | null }) => {
-    const firstChild = e.currentTarget?.firstElementChild as HTMLElement
-    if (!firstChild) return
-
-    firstChild.focus()
-    trigger.tabIndex = -1
-
-    firstChild.addEventListener("focusout", resetTabIndex)
-    onCleanup(() => {
-      firstChild.removeEventListener("focusout", resetTabIndex)
-    })
-  }
-
+export function Dialog(props: DialogProps) {
+  const i18n = useI18n()
   return (
-    <Kobalte {...others}>
-      <Show when={props.trigger}>
-        <Kobalte.Trigger ref={trigger} data-component="dialog-trigger" onFocusIn={handleTriggerFocus}>
-          {props.trigger}
-        </Kobalte.Trigger>
-      </Show>
-      <Kobalte.Portal>
-        <Kobalte.Overlay data-component="dialog-overlay" />
-        <div data-component="dialog">
-          <div data-slot="container">
-            <Kobalte.Content
-              data-slot="content"
-              classList={{
-                ...(local.classList ?? {}),
-                [local.class ?? ""]: !!local.class,
-              }}
-            >
-              {local.children}
-            </Kobalte.Content>
-          </div>
-        </div>
-      </Kobalte.Portal>
-    </Kobalte>
+    <div data-component="dialog" data-fit={props.fit ? true : undefined} data-size={props.size || "normal"}>
+      <div data-slot="dialog-container">
+        <Kobalte.Content
+          data-slot="dialog-content"
+          data-no-header={!props.title && !props.action ? "" : undefined}
+          classList={{
+            ...(props.classList ?? {}),
+            [props.class ?? ""]: !!props.class,
+          }}
+          onOpenAutoFocus={(e) => {
+            const target = e.currentTarget as HTMLElement | null
+            const autofocusEl = target?.querySelector("[autofocus]") as HTMLElement | null
+            if (autofocusEl) {
+              e.preventDefault()
+              autofocusEl.focus()
+            }
+          }}
+        >
+          <Show when={props.title || props.action}>
+            <div data-slot="dialog-header">
+              <Show when={props.title}>
+                <Kobalte.Title data-slot="dialog-title">{props.title}</Kobalte.Title>
+              </Show>
+              <Switch>
+                <Match when={props.action}>{props.action}</Match>
+                <Match when={true}>
+                  <Kobalte.CloseButton
+                    data-slot="dialog-close-button"
+                    as={IconButton}
+                    icon="close"
+                    variant="ghost"
+                    aria-label={i18n.t("ui.common.close")}
+                  />
+                </Match>
+              </Switch>
+            </div>
+          </Show>
+          <Show when={props.description}>
+            <Kobalte.Description data-slot="dialog-description">{props.description}</Kobalte.Description>
+          </Show>
+          <div data-slot="dialog-body">{props.children}</div>
+        </Kobalte.Content>
+      </div>
+    </div>
   )
 }
-
-function DialogHeader(props: ComponentProps<"div">) {
-  return <div data-slot="header" {...props} />
-}
-
-function DialogBody(props: ComponentProps<"div">) {
-  return <div data-slot="body" {...props} />
-}
-
-function DialogTitle(props: DialogTitleProps & ComponentProps<"h2">) {
-  return <Kobalte.Title data-slot="title" {...props} />
-}
-
-function DialogDescription(props: DialogDescriptionProps & ComponentProps<"p">) {
-  return <Kobalte.Description data-slot="description" {...props} />
-}
-
-function DialogCloseButton(props: DialogCloseButtonProps & ComponentProps<"button">) {
-  return <Kobalte.CloseButton data-slot="close-button" as={IconButton} icon="close" {...props} />
-}
-
-export const Dialog = Object.assign(DialogRoot, {
-  Header: DialogHeader,
-  Title: DialogTitle,
-  Description: DialogDescription,
-  CloseButton: DialogCloseButton,
-  Body: DialogBody,
-})

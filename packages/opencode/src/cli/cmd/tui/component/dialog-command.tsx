@@ -1,5 +1,5 @@
 import { useDialog } from "@tui/ui/dialog"
-import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
+import { DialogSelect, type DialogSelectOption, type DialogSelectRef } from "@tui/ui/dialog-select"
 import {
   createContext,
   createMemo,
@@ -11,13 +11,22 @@ import {
 } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import { useKeybind } from "@tui/context/keybind"
-import type { KeybindsConfig } from "@opencode-ai/sdk"
+import type { KeybindsConfig } from "@opencode-ai/sdk/v2"
 
 type Context = ReturnType<typeof init>
 const ctx = createContext<Context>()
 
-export type CommandOption = DialogSelectOption & {
+export type Slash = {
+  name: string
+  aliases?: string[]
+}
+
+export type CommandOption = DialogSelectOption<string> & {
   keybind?: keyof KeybindsConfig
+  suggested?: boolean
+  slash?: Slash
+  hidden?: boolean
+  enabled?: boolean
 }
 
 function init() {
@@ -25,14 +34,35 @@ function init() {
   const [suspendCount, setSuspendCount] = createSignal(0)
   const dialog = useDialog()
   const keybind = useKeybind()
-  const options = createMemo(() => {
-    return registrations().flatMap((x) => x())
+
+  const entries = createMemo(() => {
+    const all = registrations().flatMap((x) => x())
+    return all.map((x) => ({
+      ...x,
+      footer: x.keybind ? keybind.print(x.keybind) : undefined,
+    }))
   })
+
+  const isEnabled = (option: CommandOption) => option.enabled !== false
+  const isVisible = (option: CommandOption) => isEnabled(option) && !option.hidden
+
+  const visibleOptions = createMemo(() => entries().filter((option) => isVisible(option)))
+  const suggestedOptions = createMemo(() =>
+    visibleOptions()
+      .filter((option) => option.suggested)
+      .map((option) => ({
+        ...option,
+        value: `suggested:${option.value}`,
+        category: "Suggested",
+      })),
+  )
   const suspended = () => suspendCount() > 0
 
   useKeyboard((evt) => {
     if (suspended()) return
-    for (const option of options()) {
+    if (dialog.stack.length > 0) return
+    for (const option of entries()) {
+      if (!isEnabled(option)) continue
       if (option.keybind && keybind.match(option.keybind, evt)) {
         evt.preventDefault()
         option.onSelect?.(dialog)
@@ -42,20 +72,33 @@ function init() {
   })
 
   const result = {
-    trigger(name: string, source?: "prompt") {
-      for (const option of options()) {
+    trigger(name: string) {
+      for (const option of entries()) {
         if (option.value === name) {
-          option.onSelect?.(dialog, source)
+          if (!isEnabled(option)) return
+          option.onSelect?.(dialog)
           return
         }
       }
+    },
+    slashes() {
+      return visibleOptions().flatMap((option) => {
+        const slash = option.slash
+        if (!slash) return []
+        return {
+          display: "/" + slash.name,
+          description: option.description ?? option.title,
+          aliases: slash.aliases?.map((alias) => "/" + alias),
+          onSelect: () => result.trigger(option.value),
+        }
+      })
     },
     keybinds(enabled: boolean) {
       setSuspendCount((count) => count + (enabled ? -1 : 1))
     },
     suspended,
     show() {
-      dialog.replace(() => <DialogCommand options={options()} />)
+      dialog.replace(() => <DialogCommand options={visibleOptions()} suggestedOptions={suggestedOptions()} />)
     },
     register(cb: () => CommandOption[]) {
       const results = createMemo(cb)
@@ -63,9 +106,6 @@ function init() {
       onCleanup(() => {
         setRegistrations((arr) => arr.filter((x) => x !== results))
       })
-    },
-    get options() {
-      return options()
     },
   }
   return result
@@ -90,7 +130,7 @@ export function CommandProvider(props: ParentProps) {
     if (evt.defaultPrevented) return
     if (keybind.match("command_list", evt)) {
       evt.preventDefault()
-      dialog.replace(() => <DialogCommand options={value.options} />)
+      value.show()
       return
     }
   })
@@ -98,15 +138,11 @@ export function CommandProvider(props: ParentProps) {
   return <ctx.Provider value={value}>{props.children}</ctx.Provider>
 }
 
-function DialogCommand(props: { options: CommandOption[] }) {
-  const keybind = useKeybind()
-  return (
-    <DialogSelect
-      title="Commands"
-      options={props.options.map((x) => ({
-        ...x,
-        footer: x.keybind ? keybind.print(x.keybind) : undefined,
-      }))}
-    />
-  )
+function DialogCommand(props: { options: CommandOption[]; suggestedOptions: CommandOption[] }) {
+  let ref: DialogSelectRef<string>
+  const list = () => {
+    if (ref?.filter) return props.options
+    return [...props.suggestedOptions, ...props.options]
+  }
+  return <DialogSelect ref={(r) => (ref = r)} title="Commands" options={list()} />
 }

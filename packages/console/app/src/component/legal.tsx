@@ -9,6 +9,12 @@ export function Legal() {
       <span>
         <A href="/brand">Brand</A>
       </span>
+      <span>
+        <A href="/legal/privacy-policy">Privacy</A>
+      </span>
+      <span>
+        <A href="/legal/terms-of-service">Terms</A>
+      </span>
     </div>
   )
 }

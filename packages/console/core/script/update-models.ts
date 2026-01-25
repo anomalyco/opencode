@@ -7,23 +7,24 @@ import { ZenData } from "../src/model"
 
 const root = path.resolve(process.cwd(), "..", "..", "..")
 const models = await $`bun sst secret list`.cwd(root).text()
+const PARTS = 8
 
 // read the line starting with "ZEN_MODELS"
-const oldValue1 = models
-  .split("\n")
-  .find((line) => line.startsWith("ZEN_MODELS1"))
-  ?.split("=")[1]
-const oldValue2 = models
-  .split("\n")
-  .find((line) => line.startsWith("ZEN_MODELS2"))
-  ?.split("=")[1]
-if (!oldValue1) throw new Error("ZEN_MODELS1 not found")
-if (!oldValue2) throw new Error("ZEN_MODELS2 not found")
+const lines = models.split("\n")
+const oldValues = Array.from({ length: PARTS }, (_, i) => {
+  const value = lines
+    .find((line) => line.startsWith(`ZEN_MODELS${i + 1}`))
+    ?.split("=")
+    .slice(1)
+    .join("=")
+  if (!value) throw new Error(`ZEN_MODELS${i + 1} not found`)
+  return value
+})
 
 // store the prettified json to a temp file
 const filename = `models-${Date.now()}.json`
 const tempFile = Bun.file(path.join(os.tmpdir(), filename))
-await tempFile.write(JSON.stringify(JSON.parse(oldValue1 + oldValue2), null, 2))
+await tempFile.write(JSON.stringify(JSON.parse(oldValues.join("")), null, 2))
 console.log("tempFile", tempFile.name)
 
 // open temp file in vim and read the file on close
@@ -32,6 +33,11 @@ const newValue = JSON.stringify(JSON.parse(await tempFile.text()))
 ZenData.validate(JSON.parse(newValue))
 
 // update the secret
-const mid = Math.floor(newValue.length / 2)
-await $`bun sst secret set ZEN_MODELS1 ${newValue.slice(0, mid)}`
-await $`bun sst secret set ZEN_MODELS2 ${newValue.slice(mid)}`
+const chunk = Math.ceil(newValue.length / PARTS)
+const newValues = Array.from({ length: PARTS }, (_, i) =>
+  newValue.slice(chunk * i, i === PARTS - 1 ? undefined : chunk * (i + 1)),
+)
+
+for (let i = 0; i < PARTS; i++) {
+  await $`bun sst secret set ZEN_MODELS${i + 1} -- ${newValues[i]}`
+}

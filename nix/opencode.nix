@@ -1,108 +1,96 @@
-{ lib, stdenv, stdenvNoCC, bun, fzf, ripgrep, makeBinaryWrapper }:
-args:
-let
-  scripts = args.scripts;
-  mkModules =
-    attrs:
-    args.mkNodeModules (
-      attrs
-      // {
-        canonicalizeScript = scripts + "/canonicalize-node-modules.ts";
-        normalizeBinsScript = scripts + "/normalize-bun-binaries.ts";
-      }
-    );
-in
+{
+  lib,
+  stdenvNoCC,
+  callPackage,
+  bun,
+  sysctl,
+  makeBinaryWrapper,
+  models-dev,
+  ripgrep,
+  installShellFiles,
+  versionCheckHook,
+  writableTmpDirAsHomeHook,
+  node_modules ? callPackage ./node-modules.nix { },
+}:
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "opencode";
-  version = args.version;
-
-  src = args.src;
-
-  node_modules = mkModules {
-    version = finalAttrs.version;
-    src = finalAttrs.src;
-  };
+  inherit (node_modules) version src;
+  inherit node_modules;
 
   nativeBuildInputs = [
     bun
+    installShellFiles
     makeBinaryWrapper
+    models-dev
+    writableTmpDirAsHomeHook
   ];
 
   configurePhase = ''
     runHook preConfigure
+
     cp -R ${finalAttrs.node_modules}/. .
+
     runHook postConfigure
   '';
 
-  env.MODELS_DEV_API_JSON = args.modelsDev;
-  env.OPENCODE_VERSION = args.version;
-  env.OPENCODE_CHANNEL = "stable";
+  env.MODELS_DEV_API_JSON = "${models-dev}/dist/_api.json";
+  env.OPENCODE_VERSION = finalAttrs.version;
+  env.OPENCODE_CHANNEL = "local";
 
   buildPhase = ''
     runHook preBuild
 
-    cp ${scripts + "/bun-build.ts"} bun-build.ts
-
-    substituteInPlace bun-build.ts \
-      --replace '@VERSION@' "${finalAttrs.version}"
-
-    export BUN_COMPILE_TARGET=${args.target}
-    bun --bun bun-build.ts
+    cd ./packages/opencode
+    bun --bun ./script/build.ts --single --skip-install
+    bun --bun ./script/schema.ts schema.json
 
     runHook postBuild
   '';
 
-  dontStrip = true;
-
   installPhase = ''
     runHook preInstall
 
-    cd packages/opencode
-    if [ ! -f opencode ]; then
-      echo "ERROR: opencode binary not found in $(pwd)"
-      ls -la
-      exit 1
-    fi
-    if [ ! -f opencode-worker.js ]; then
-      echo "ERROR: opencode worker bundle not found in $(pwd)"
-      ls -la
-      exit 1
-    fi
+    install -Dm755 dist/opencode-*/bin/opencode $out/bin/opencode
+    install -Dm644 schema.json $out/share/opencode/schema.json
 
-    install -Dm755 opencode $out/bin/opencode
-    install -Dm644 opencode-worker.js $out/bin/opencode-worker.js
-    if [ -f opencode-assets.manifest ]; then
-      while IFS= read -r asset; do
-        [ -z "$asset" ] && continue
-        if [ ! -f "$asset" ]; then
-          echo "ERROR: referenced asset \"$asset\" missing"
-          exit 1
-        fi
-        install -Dm644 "$asset" "$out/bin/$(basename "$asset")"
-      done < opencode-assets.manifest
-    fi
+    wrapProgram $out/bin/opencode \
+      --prefix PATH : ${
+        lib.makeBinPath (
+          [
+            ripgrep
+          ]
+          # bun runs sysctl to detect if dunning on rosetta2
+          ++ lib.optional stdenvNoCC.hostPlatform.isDarwin sysctl
+        )
+      }
+
     runHook postInstall
   '';
 
-  postFixup = ''
-    wrapProgram "$out/bin/opencode" --prefix PATH : ${lib.makeBinPath [ fzf ripgrep ]}
+  postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
+    # trick yargs into also generating zsh completions
+    installShellCompletion --cmd opencode \
+      --bash <($out/bin/opencode completion) \
+      --zsh <(SHELL=/bin/zsh $out/bin/opencode completion)
   '';
 
+  nativeInstallCheckInputs = [
+    versionCheckHook
+    writableTmpDirAsHomeHook
+  ];
+  doInstallCheck = true;
+  versionCheckKeepEnvironment = [ "HOME" ];
+  versionCheckProgramArg = "--version";
+
+  passthru = {
+    jsonschema = "${placeholder "out"}/share/opencode/schema.json";
+  };
+
   meta = {
-    description = "AI coding agent built for the terminal";
-    longDescription = ''
-      OpenCode is a terminal-based agent that can build anything.
-      It combines a TypeScript/JavaScript core with a Go-based TUI
-      to provide an interactive AI coding experience.
-    '';
-    homepage = "https://github.com/sst/opencode";
+    description = "The open source coding agent";
+    homepage = "https://opencode.ai/";
     license = lib.licenses.mit;
-    platforms = [
-      "aarch64-linux"
-      "x86_64-linux"
-      "aarch64-darwin"
-      "x86_64-darwin"
-    ];
     mainProgram = "opencode";
+    inherit (node_modules.meta) platforms;
   };
 })

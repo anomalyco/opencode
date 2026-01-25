@@ -6,16 +6,45 @@ import path from "path"
 import { UI } from "@/cli/ui"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
+import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
+import type { Event } from "@opencode-ai/sdk/v2"
+import type { EventSource } from "./context/sdk"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
+}
+
+type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
+
+function createWorkerFetch(client: RpcClient): typeof fetch {
+  const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const request = new Request(input, init)
+    const body = request.body ? await request.text() : undefined
+    const result = await client.call("fetch", {
+      url: request.url,
+      method: request.method,
+      headers: Object.fromEntries(request.headers.entries()),
+      body,
+    })
+    return new Response(result.body, {
+      status: result.status,
+      headers: result.headers,
+    })
+  }
+  return fn as typeof fetch
+}
+
+function createEventSource(client: RpcClient): EventSource {
+  return {
+    on: (handler) => client.on<Event>("event", handler),
+  }
 }
 
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
   describe: "start opencode tui",
   builder: (yargs) =>
-    yargs
+    withNetworkOptions(yargs)
       .positional("project", {
         type: "string",
         describe: "path to start opencode in",
@@ -36,38 +65,24 @@ export const TuiThreadCommand = cmd({
         describe: "session id to continue",
       })
       .option("prompt", {
-        alias: ["p"],
         type: "string",
         describe: "prompt to use",
       })
       .option("agent", {
         type: "string",
         describe: "agent to use",
-      })
-      .option("port", {
-        type: "number",
-        describe: "port to listen on",
-        default: 0,
-      })
-      .option("hostname", {
-        type: "string",
-        describe: "hostname to listen on",
-        default: "127.0.0.1",
       }),
   handler: async (args) => {
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
     const baseCwd = process.env.PWD ?? process.cwd()
     const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
-    const defaultWorker = new URL("./worker.ts", import.meta.url)
-    // Nix build creates a bundled worker next to the binary; prefer it when present.
-    const execDir = path.dirname(process.execPath)
-    const bundledWorker = path.join(execDir, "opencode-worker.js")
-    const hasBundledWorker = await Bun.file(bundledWorker).exists()
-    const workerPath = (() => {
+    const localWorker = new URL("./worker.ts", import.meta.url)
+    const distWorker = new URL("./cli/cmd/tui/worker.js", import.meta.url)
+    const workerPath = await iife(async () => {
       if (typeof OPENCODE_WORKER_PATH !== "undefined") return OPENCODE_WORKER_PATH
-      if (hasBundledWorker) return bundledWorker
-      return defaultWorker
-    })()
+      if (await Bun.file(distWorker).exists()) return distWorker
+      return localWorker
+    })
     try {
       process.chdir(cwd)
     } catch (e) {
@@ -90,17 +105,45 @@ export const TuiThreadCommand = cmd({
     process.on("unhandledRejection", (e) => {
       Log.Default.error(e)
     })
-    const server = await client.call("server", {
-      port: args.port,
-      hostname: args.hostname,
+    process.on("SIGUSR2", async () => {
+      await client.call("reload", undefined)
     })
+
     const prompt = await iife(async () => {
       const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
       if (!args.prompt) return piped
       return piped ? piped + "\n" + args.prompt : args.prompt
     })
-    await tui({
-      url: server.url,
+
+    // Check if server should be started (port or hostname explicitly set in CLI or config)
+    const networkOpts = await resolveNetworkOptions(args)
+    const shouldStartServer =
+      process.argv.includes("--port") ||
+      process.argv.includes("--hostname") ||
+      process.argv.includes("--mdns") ||
+      networkOpts.mdns ||
+      networkOpts.port !== 0 ||
+      networkOpts.hostname !== "127.0.0.1"
+
+    let url: string
+    let customFetch: typeof fetch | undefined
+    let events: EventSource | undefined
+
+    if (shouldStartServer) {
+      // Start HTTP server for external access
+      const server = await client.call("server", networkOpts)
+      url = server.url
+    } else {
+      // Use direct RPC communication (no HTTP)
+      url = "http://opencode.internal"
+      customFetch = createWorkerFetch(client)
+      events = createEventSource(client)
+    }
+
+    const tuiPromise = tui({
+      url,
+      fetch: customFetch,
+      events,
       args: {
         continue: args.continue,
         sessionID: args.session,
@@ -112,5 +155,11 @@ export const TuiThreadCommand = cmd({
         await client.call("shutdown", undefined)
       },
     })
+
+    setTimeout(() => {
+      client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+    }, 1000)
+
+    await tuiPromise
   },
 })

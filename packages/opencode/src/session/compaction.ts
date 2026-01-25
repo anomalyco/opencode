@@ -1,26 +1,25 @@
-import { streamText, wrapLanguageModel, type ModelMessage } from "ai"
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { Session } from "."
 import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { MessageV2 } from "./message-v2"
-import { SystemPrompt } from "./system"
-import { Bus } from "../bus"
 import z from "zod"
-import type { ModelsDev } from "../provider/models"
 import { SessionPrompt } from "./prompt"
-import { Flag } from "../flag/flag"
 import { Token } from "../util/token"
 import { Log } from "../util/log"
-import { ProviderTransform } from "@/provider/transform"
 import { SessionProcessor } from "./processor"
 import { fn } from "@/util/fn"
+import { Agent } from "@/agent/agent"
+import { Plugin } from "@/plugin"
+import { Config } from "@/config/config"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
 
   export const Event = {
-    Compacted: Bus.event(
+    Compacted: BusEvent.define(
       "session.compacted",
       z.object({
         sessionID: z.string(),
@@ -28,24 +27,28 @@ export namespace SessionCompaction {
     ),
   }
 
-  export function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: ModelsDev.Model }) {
-    if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) return false
+  export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
+    const config = await Config.get()
+    if (config.compaction?.auto === false) return false
     const context = input.model.limit.context
     if (context === 0) return false
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
     const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
-    const usable = context - output
+    const usable = input.model.limit.input || context - output
     return count > usable
   }
 
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
 
+  const PRUNE_PROTECTED_TOOLS = ["skill"]
+
   // goes backwards through parts until there are 40_000 tokens worth of tool
   // calls. then erases output of previous tool calls. idea is to throw away old
   // tool calls that are no longer relevant.
   export async function prune(input: { sessionID: string }) {
-    if (Flag.OPENCODE_DISABLE_PRUNE) return
+    const config = await Config.get()
+    if (config.compaction?.prune === false) return
     log.info("pruning")
     const msgs = await Session.messages({ sessionID: input.sessionID })
     let total = 0
@@ -62,6 +65,8 @@ export namespace SessionCompaction {
         const part = msg.parts[partIndex]
         if (part.type === "tool")
           if (part.state.status === "completed") {
+            if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
+
             if (part.state.time.compacted) break loop
             const estimate = Token.estimate(part.state.output)
             total += estimate
@@ -88,20 +93,21 @@ export namespace SessionCompaction {
     parentID: string
     messages: MessageV2.WithParts[]
     sessionID: string
-    model: {
-      providerID: string
-      modelID: string
-    }
     abort: AbortSignal
+    auto: boolean
   }) {
-    const model = await Provider.getModel(input.model.providerID, input.model.modelID)
-    const system = [...SystemPrompt.summarize(model.providerID)]
+    const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+    const agent = await Agent.get("compaction")
+    const model = agent.model
+      ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
+      : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
       parentID: input.parentID,
       sessionID: input.sessionID,
-      mode: "build",
+      mode: "compaction",
+      agent: "compaction",
       summary: true,
       path: {
         cwd: Instance.directory,
@@ -114,7 +120,7 @@ export namespace SessionCompaction {
         reasoning: 0,
         cache: { read: 0, write: 0 },
       },
-      modelID: input.model.modelID,
+      modelID: model.id,
       providerID: model.providerID,
       time: {
         created: Date.now(),
@@ -123,75 +129,41 @@ export namespace SessionCompaction {
     const processor = SessionProcessor.create({
       assistantMessage: msg,
       sessionID: input.sessionID,
-      providerID: input.model.providerID,
-      model: model.info,
+      model,
       abort: input.abort,
     })
-    const result = await processor.process(() =>
-      streamText({
-        onError(error) {
-          log.error("stream error", {
-            error,
-          })
-        },
-        // set to 0, we handle loop
-        maxRetries: 0,
-        providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, {
-          ...ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", input.sessionID),
-          ...model.info.options,
-        }),
-        headers: model.info.headers,
-        abortSignal: input.abort,
-        tools: model.info.tool_call ? {} : undefined,
-        messages: [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...MessageV2.toModelMessage(
-            input.messages.filter((m) => {
-              if (m.info.role !== "assistant" || m.info.error === undefined) {
-                return true
-              }
-              if (
-                MessageV2.AbortedError.isInstance(m.info.error) &&
-                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-              ) {
-                return true
-              }
-
-              return false
-            }),
-          ),
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Provide a detailed but concise summary of our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.",
-              },
-            ],
-          },
-        ],
-        model: wrapLanguageModel({
-          model: model.language,
-          middleware: [
+    // Allow plugins to inject context or replace compaction prompt
+    const compacting = await Plugin.trigger(
+      "experimental.session.compacting",
+      { sessionID: input.sessionID },
+      { context: [], prompt: undefined },
+    )
+    const defaultPrompt =
+      "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation."
+    const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+    const result = await processor.process({
+      user: userMessage,
+      agent,
+      abort: input.abort,
+      sessionID: input.sessionID,
+      tools: {},
+      system: [],
+      messages: [
+        ...MessageV2.toModelMessages(input.messages, model),
+        {
+          role: "user",
+          content: [
             {
-              async transformParams(args) {
-                if (args.type === "stream") {
-                  // @ts-expect-error
-                  args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
-                }
-                return args.params
-              },
+              type: "text",
+              text: promptText,
             },
           ],
-        }),
-      }),
-    )
-    if (result === "continue") {
+        },
+      ],
+      model,
+    })
+
+    if (result === "continue" && input.auto) {
       const continueMsg = await Session.updateMessage({
         id: Identifier.ascending("message"),
         role: "user",
@@ -199,8 +171,8 @@ export namespace SessionCompaction {
         time: {
           created: Date.now(),
         },
-        agent: "build",
-        model: input.model,
+        agent: userMessage.agent,
+        model: userMessage.model,
       })
       await Session.updatePart({
         id: Identifier.ascending("part"),
@@ -216,16 +188,19 @@ export namespace SessionCompaction {
       })
     }
     if (processor.message.error) return "stop"
+    Bus.publish(Event.Compacted, { sessionID: input.sessionID })
     return "continue"
   }
 
   export const create = fn(
     z.object({
       sessionID: Identifier.schema("session"),
+      agent: z.string(),
       model: z.object({
         providerID: z.string(),
         modelID: z.string(),
       }),
+      auto: z.boolean(),
     }),
     async (input) => {
       const msg = await Session.updateMessage({
@@ -233,7 +208,7 @@ export namespace SessionCompaction {
         role: "user",
         model: input.model,
         sessionID: input.sessionID,
-        agent: "build",
+        agent: input.agent,
         time: {
           created: Date.now(),
         },
@@ -243,6 +218,7 @@ export namespace SessionCompaction {
         messageID: msg.id,
         sessionID: msg.sessionID,
         type: "compaction",
+        auto: input.auto,
       })
     },
   )

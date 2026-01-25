@@ -9,7 +9,7 @@ export default $config({
       home: "cloudflare",
       providers: {
         stripe: {
-          apiKey: process.env.STRIPE_SECRET_KEY,
+          apiKey: process.env.STRIPE_SECRET_KEY!,
         },
         planetscale: "0.4.1",
       },
@@ -18,6 +18,6 @@ export default $config({
   async run() {
     await import("./infra/app.js")
     await import("./infra/console.js")
-    await import("./infra/desktop.js")
+    await import("./infra/enterprise.js")
   },
 })

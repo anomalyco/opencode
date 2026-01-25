@@ -1,5 +1,6 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import z from "zod"
-import { Bus } from "../bus"
 import { Storage } from "../storage/storage"
 
 export namespace Todo {
@@ -14,7 +15,7 @@ export namespace Todo {
   export type Info = z.infer<typeof Info>
 
   export const Event = {
-    Updated: Bus.event(
+    Updated: BusEvent.define(
       "todo.updated",
       z.object({
         sessionID: z.string(),

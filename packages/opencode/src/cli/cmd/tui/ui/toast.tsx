@@ -23,7 +23,6 @@ export function Toast() {
           alignItems="flex-start"
           top={2}
           right={2}
-          width={Math.min(60, dimensions().width - 6)}
           maxWidth={Math.min(60, dimensions().width - 6)}
           paddingLeft={2}
           paddingRight={2}
@@ -39,7 +38,9 @@ export function Toast() {
               {current().title}
             </text>
           </Show>
-          <text fg={theme.text}>{current().message}</text>
+          <text fg={theme.text} wrapMode="word" width="100%">
+            {current().message}
+          </text>
         </box>
       )}
     </Show>

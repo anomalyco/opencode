@@ -5,7 +5,7 @@ import { Icon, IconProps } from "./icon"
 export interface ButtonProps
   extends ComponentProps<typeof Kobalte>,
     Pick<ComponentProps<"button">, "class" | "classList" | "children"> {
-  size?: "normal" | "large"
+  size?: "small" | "normal" | "large"
   variant?: "primary" | "secondary" | "ghost"
   icon?: IconProps["name"]
 }
@@ -25,7 +25,7 @@ export function Button(props: ButtonProps) {
       }}
     >
       <Show when={split.icon}>
-        <Icon data-slot="icon" name={split.icon!} size="small" />
+        <Icon name={split.icon!} size="small" />
       </Show>
       {props.children}
     </Kobalte>

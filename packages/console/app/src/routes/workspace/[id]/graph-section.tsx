@@ -1,9 +1,9 @@
-import { and, Database, eq, gte, inArray, isNull, lte, or, sql } from "@opencode-ai/console-core/drizzle/index.js"
+import { and, Database, eq, gte, inArray, isNull, lte, or, sql, sum } from "@opencode-ai/console-core/drizzle/index.js"
 import { UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { AuthTable } from "@opencode-ai/console-core/schema/auth.sql.js"
-import { createAsync, query, useParams } from "@solidjs/router"
+import { useParams } from "@solidjs/router"
 import { createEffect, createMemo, onCleanup, Show, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { withActor } from "~/context/auth.withActor"
@@ -28,15 +28,14 @@ async function getCosts(workspaceID: string, year: number, month: number) {
   return withActor(async () => {
     const startDate = new Date(year, month, 1)
     const endDate = new Date(year, month + 1, 0)
-
-    // First query: get usage data without joining keys
     const usageData = await Database.use((tx) =>
       tx
         .select({
           date: sql<string>`DATE(${UsageTable.timeCreated})`,
           model: UsageTable.model,
-          totalCost: sql<number>`SUM(${UsageTable.cost})`,
+          totalCost: sum(UsageTable.cost),
           keyId: UsageTable.keyID,
+          subscription: sql<boolean>`COALESCE(JSON_EXTRACT(${UsageTable.enrichment}, '$.plan') = 'sub', false)`,
         })
         .from(UsageTable)
         .where(
@@ -46,7 +45,19 @@ async function getCosts(workspaceID: string, year: number, month: number) {
             lte(UsageTable.timeCreated, endDate),
           ),
         )
-        .groupBy(sql`DATE(${UsageTable.timeCreated})`, UsageTable.model, UsageTable.keyID),
+        .groupBy(
+          sql`DATE(${UsageTable.timeCreated})`,
+          UsageTable.model,
+          UsageTable.keyID,
+          sql`COALESCE(JSON_EXTRACT(${UsageTable.enrichment}, '$.plan') = 'sub', false)`,
+        )
+        .then((x) =>
+          x.map((r) => ({
+            ...r,
+            totalCost: r.totalCost ? parseInt(r.totalCost) : 0,
+            subscription: Boolean(r.subscription),
+          })),
+        ),
     )
 
     // Get unique key IDs from usage
@@ -87,8 +98,6 @@ async function getCosts(workspaceID: string, year: number, month: number) {
     }
   }, workspaceID)
 }
-
-const queryCosts = query(getCosts, "costs.get")
 
 const MODEL_COLORS: Record<string, string> = {
   "claude-sonnet-4-5": "#D4745C",
@@ -152,32 +161,27 @@ export function GraphSection() {
     model: null as string | null,
     modelDropdownOpen: false,
     keyDropdownOpen: false,
+    colorScheme: "light" as "light" | "dark",
   })
-  const initialData = createAsync(() => queryCosts(params.id!, store.year, store.month))
-
   const onPreviousMonth = async () => {
     const month = store.month === 0 ? 11 : store.month - 1
     const year = store.month === 0 ? store.year - 1 : store.year
-    const data = await getCosts(params.id!, year, month)
-    setStore({ month, year, data })
+    setStore({ month, year })
   }
 
   const onNextMonth = async () => {
     const month = store.month === 11 ? 0 : store.month + 1
     const year = store.month === 11 ? store.year + 1 : store.year
-    setStore({ month, year, data: await getCosts(params.id!, year, month) })
+    setStore({ month, year })
   }
 
   const onSelectModel = (model: string | null) => setStore({ model, modelDropdownOpen: false })
 
   const onSelectKey = (keyID: string | null) => setStore({ key: keyID, keyDropdownOpen: false })
 
-  const getData = createMemo(() => store.data ?? initialData())
-
   const getModels = createMemo(() => {
-    const data = getData()
-    if (!data?.usage) return []
-    return Array.from(new Set(data.usage.map((row) => row.model))).sort()
+    if (!store.data?.usage) return []
+    return Array.from(new Set(store.data.usage.map((row) => row.model))).sort()
   })
 
   const getDates = createMemo(() => {
@@ -200,35 +204,67 @@ export function GraphSection() {
   const isCurrentMonth = () => store.year === now.getFullYear() && store.month === now.getMonth()
 
   const chartConfig = createMemo((): ChartConfiguration | null => {
-    const data = getData()
+    const data = store.data
     const dates = getDates()
     if (!data?.usage?.length) return null
 
-    const filteredUsageResults = store.key ? data.usage.filter((row) => row.keyId === store.key) : data.usage
+    store.colorScheme
+    const styles = getComputedStyle(document.documentElement)
+    const colorTextMuted = styles.getPropertyValue("--color-text-muted").trim()
+    const colorBorderMuted = styles.getPropertyValue("--color-border-muted").trim()
+    const colorBgElevated = styles.getPropertyValue("--color-bg-elevated").trim()
+    const colorText = styles.getPropertyValue("--color-text").trim()
+    const colorTextSecondary = styles.getPropertyValue("--color-text-secondary").trim()
+    const colorBorder = styles.getPropertyValue("--color-border").trim()
 
-    const dailyData = new Map<string, Map<string, number>>()
-    for (const dateKey of dates) dailyData.set(dateKey, new Map())
-
-    for (const row of filteredUsageResults) {
-      const dayMap = dailyData.get(row.date)
-      if (dayMap) {
-        const existing = dayMap.get(row.model) || 0
-        dayMap.set(row.model, existing + row.totalCost)
-      }
+    const dailyDataSub = new Map<string, Map<string, number>>()
+    const dailyDataNonSub = new Map<string, Map<string, number>>()
+    for (const dateKey of dates) {
+      dailyDataSub.set(dateKey, new Map())
+      dailyDataNonSub.set(dateKey, new Map())
     }
+
+    data.usage
+      .filter((row) => (store.key ? row.keyId === store.key : true))
+      .forEach((row) => {
+        const targetMap = row.subscription ? dailyDataSub : dailyDataNonSub
+        const dayMap = targetMap.get(row.date)
+        if (!dayMap) return
+        dayMap.set(row.model, (dayMap.get(row.model) ?? 0) + row.totalCost)
+      })
 
     const filteredModels = store.model === null ? getModels() : [store.model]
 
-    const datasets = filteredModels.map((model) => {
-      const color = getModelColor(model)
-      return {
-        label: model,
-        data: dates.map((date) => (dailyData.get(date)?.get(model) || 0) / 100000000),
-        backgroundColor: color,
-        hoverBackgroundColor: color,
-        borderWidth: 0,
-      }
-    })
+    // Create datasets: non-subscription first, then subscription (with hatched pattern effect via opacity)
+    const datasets = [
+      ...filteredModels
+        .filter((model) => dates.some((date) => (dailyDataNonSub.get(date)?.get(model) || 0) > 0))
+        .map((model) => {
+          const color = getModelColor(model)
+          return {
+            label: model,
+            data: dates.map((date) => (dailyDataNonSub.get(date)?.get(model) || 0) / 100_000_000),
+            backgroundColor: color,
+            hoverBackgroundColor: color,
+            borderWidth: 0,
+            stack: "usage",
+          }
+        }),
+      ...filteredModels
+        .filter((model) => dates.some((date) => (dailyDataSub.get(date)?.get(model) || 0) > 0))
+        .map((model) => {
+          const color = getModelColor(model)
+          return {
+            label: `${model} (sub)`,
+            data: dates.map((date) => (dailyDataSub.get(date)?.get(model) || 0) / 100_000_000),
+            backgroundColor: addOpacityToColor(color, 0.5),
+            hoverBackgroundColor: addOpacityToColor(color, 0.7),
+            borderWidth: 1,
+            borderColor: color,
+            stack: "subscription",
+          }
+        }),
+    ]
 
     return {
       type: "bar",
@@ -248,7 +284,7 @@ export function GraphSection() {
             ticks: {
               maxRotation: 0,
               autoSkipPadding: 20,
-              color: "rgba(255, 255, 255, 0.5)",
+              color: colorTextMuted,
               font: {
                 family: "monospace",
                 size: 11,
@@ -259,10 +295,10 @@ export function GraphSection() {
             stacked: true,
             beginAtZero: true,
             grid: {
-              color: "rgba(255, 255, 255, 0.1)",
+              color: colorBorderMuted,
             },
             ticks: {
-              color: "rgba(255, 255, 255, 0.5)",
+              color: colorTextMuted,
               font: {
                 family: "monospace",
                 size: 11,
@@ -278,26 +314,23 @@ export function GraphSection() {
           tooltip: {
             mode: "index",
             intersect: false,
-            backgroundColor: "rgba(0, 0, 0, 0.9)",
-            titleColor: "rgba(255, 255, 255, 0.9)",
-            bodyColor: "rgba(255, 255, 255, 0.8)",
-            borderColor: "rgba(255, 255, 255, 0.1)",
+            backgroundColor: colorBgElevated,
+            titleColor: colorText,
+            bodyColor: colorTextSecondary,
+            borderColor: colorBorder,
             borderWidth: 1,
             padding: 12,
             displayColors: true,
+            filter: (item) => (item.parsed.y ?? 0) > 0,
             callbacks: {
-              label: (context) => {
-                const value = context.parsed.y
-                if (!value || value === 0) return
-                return `${context.dataset.label}: $${value.toFixed(2)}`
-              },
+              label: (context) => `${context.dataset.label}: $${(context.parsed.y ?? 0).toFixed(2)}`,
             },
           },
           legend: {
             display: true,
             position: "bottom",
             labels: {
-              color: "rgba(255, 255, 255, 0.7)",
+              color: colorTextSecondary,
               font: {
                 size: 12,
               },
@@ -310,8 +343,12 @@ export function GraphSection() {
               const chart = legend.chart
               chart.data.datasets?.forEach((dataset, i) => {
                 const meta = chart.getDatasetMeta(i)
-                const baseColor = getModelColor(dataset.label || "")
-                const color = i === legendItem.datasetIndex ? baseColor : addOpacityToColor(baseColor, 0.3)
+                const label = dataset.label || ""
+                const isSub = label.endsWith(" (sub)")
+                const model = isSub ? label.slice(0, -6) : label
+                const baseColor = getModelColor(model)
+                const originalColor = isSub ? addOpacityToColor(baseColor, 0.5) : baseColor
+                const color = i === legendItem.datasetIndex ? originalColor : addOpacityToColor(baseColor, 0.15)
                 meta.data.forEach((bar: any) => {
                   bar.options.backgroundColor = color
                 })
@@ -322,9 +359,13 @@ export function GraphSection() {
               const chart = legend.chart
               chart.data.datasets?.forEach((dataset, i) => {
                 const meta = chart.getDatasetMeta(i)
-                const baseColor = getModelColor(dataset.label || "")
+                const label = dataset.label || ""
+                const isSub = label.endsWith(" (sub)")
+                const model = isSub ? label.slice(0, -6) : label
+                const baseColor = getModelColor(model)
+                const color = isSub ? addOpacityToColor(baseColor, 0.5) : baseColor
                 meta.data.forEach((bar: any) => {
-                  bar.options.backgroundColor = baseColor
+                  bar.options.backgroundColor = color
                 })
               })
               chart.update("none")
@@ -335,15 +376,32 @@ export function GraphSection() {
     }
   })
 
+  createEffect(async () => {
+    const data = await getCosts(params.id!, store.year, store.month)
+    setStore({ data })
+  })
+
   createEffect(() => {
     const config = chartConfig()
     if (!config || !canvasRef) return
 
     if (chartInstance) chartInstance.destroy()
     chartInstance = new Chart(canvasRef, config)
+
+    onCleanup(() => chartInstance?.destroy())
   })
 
-  onCleanup(() => chartInstance?.destroy())
+  createEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
+    setStore({ colorScheme: mediaQuery.matches ? "dark" : "light" })
+
+    const handleColorSchemeChange = (e: MediaQueryListEvent) => {
+      setStore({ colorScheme: e.matches ? "dark" : "light" })
+    }
+
+    mediaQuery.addEventListener("change", handleColorSchemeChange)
+    onCleanup(() => mediaQuery.removeEventListener("change", handleColorSchemeChange))
+  })
 
   return (
     <section class={styles.root}>
@@ -352,55 +410,53 @@ export function GraphSection() {
         <p>Usage costs broken down by model.</p>
       </div>
 
-      <Show when={getData()}>
-        <div data-slot="filter-container">
-          <div data-slot="month-picker">
-            <button data-slot="month-button" onClick={onPreviousMonth}>
-              <IconChevronLeft />
-            </button>
-            <span data-slot="month-label">{formatMonthYear()}</span>
-            <button data-slot="month-button" onClick={onNextMonth} disabled={isCurrentMonth()}>
-              <IconChevronRight />
-            </button>
-          </div>
-          <Dropdown
-            trigger={store.model === null ? "All Models" : store.model}
-            open={store.modelDropdownOpen}
-            onOpenChange={(open) => setStore({ modelDropdownOpen: open })}
-          >
-            <>
-              <button data-slot="model-item" onClick={() => onSelectModel(null)}>
-                <span>All Models</span>
-              </button>
-              <For each={getModels()}>
-                {(model) => (
-                  <button data-slot="model-item" onClick={() => onSelectModel(model)}>
-                    <span>{model}</span>
-                  </button>
-                )}
-              </For>
-            </>
-          </Dropdown>
-          <Dropdown
-            trigger={getKeyName(store.key)}
-            open={store.keyDropdownOpen}
-            onOpenChange={(open) => setStore({ keyDropdownOpen: open })}
-          >
-            <>
-              <button data-slot="model-item" onClick={() => onSelectKey(null)}>
-                <span>All Keys</span>
-              </button>
-              <For each={getData()?.keys || []}>
-                {(key) => (
-                  <button data-slot="model-item" onClick={() => onSelectKey(key.id)}>
-                    <span>{key.displayName}</span>
-                  </button>
-                )}
-              </For>
-            </>
-          </Dropdown>
+      <div data-slot="filter-container">
+        <div data-slot="month-picker">
+          <button data-slot="month-button" onClick={onPreviousMonth}>
+            <IconChevronLeft />
+          </button>
+          <span data-slot="month-label">{formatMonthYear()}</span>
+          <button data-slot="month-button" onClick={onNextMonth} disabled={isCurrentMonth()}>
+            <IconChevronRight />
+          </button>
         </div>
-      </Show>
+        <Dropdown
+          trigger={store.model === null ? "All Models" : store.model}
+          open={store.modelDropdownOpen}
+          onOpenChange={(open) => setStore({ modelDropdownOpen: open })}
+        >
+          <>
+            <button data-slot="model-item" onClick={() => onSelectModel(null)}>
+              <span>All Models</span>
+            </button>
+            <For each={getModels()}>
+              {(model) => (
+                <button data-slot="model-item" onClick={() => onSelectModel(model)}>
+                  <span>{model}</span>
+                </button>
+              )}
+            </For>
+          </>
+        </Dropdown>
+        <Dropdown
+          trigger={getKeyName(store.key)}
+          open={store.keyDropdownOpen}
+          onOpenChange={(open) => setStore({ keyDropdownOpen: open })}
+        >
+          <>
+            <button data-slot="model-item" onClick={() => onSelectKey(null)}>
+              <span>All Keys</span>
+            </button>
+            <For each={store.data?.keys || []}>
+              {(key) => (
+                <button data-slot="model-item" onClick={() => onSelectKey(key.id)}>
+                  <span>{key.displayName}</span>
+                </button>
+              )}
+            </For>
+          </>
+        </Dropdown>
+      </div>
 
       <Show
         when={chartConfig()}

@@ -1,6 +1,6 @@
-import { action, redirect } from "@solidjs/router"
+import { action } from "@solidjs/router"
 import { getRequestEvent } from "solid-js/web"
-import { useAuthSession } from "~/context/auth.session"
+import { useAuthSession } from "~/context/auth"
 import { Dropdown } from "~/component/dropdown"
 import "./user-menu.css"
 
@@ -17,18 +17,15 @@ const logout = action(async () => {
       event!.locals.actor = undefined
       return val
     })
-  throw redirect("/zen")
-})
+}, "auth.logout")
 
 export function UserMenu(props: { email: string | null | undefined }) {
   return (
     <div data-component="user-menu">
       <Dropdown trigger={props.email ?? ""} align="right">
-        <form action={logout} method="post">
-          <button type="submit" formaction={logout} data-slot="item">
-            Logout
-          </button>
-        </form>
+        <a href="/auth/logout" data-slot="item">
+          Logout
+        </a>
       </Dropdown>
     </div>
   )

@@ -3,6 +3,8 @@ import { batch, createContext, Show, useContext, type JSX, type ParentProps } fr
 import { useTheme } from "@tui/context/theme"
 import { Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
+import { Clipboard } from "@tui/util/clipboard"
+import { useToast } from "./toast"
 
 export function Dialog(
   props: ParentProps<{
@@ -12,10 +14,12 @@ export function Dialog(
 ) {
   const dimensions = useTerminalDimensions()
   const { theme } = useTheme()
+  const renderer = useRenderer()
 
   return (
     <box
       onMouseUp={async () => {
+        if (renderer.getSelection()) return
         props.onClose?.()
       }}
       width={dimensions().width}
@@ -29,6 +33,7 @@ export function Dialog(
     >
       <box
         onMouseUp={async (e) => {
+          if (renderer.getSelection()) return
           e.stopPropagation()
         }}
         width={props.size === "large" ? 80 : 60}
@@ -57,6 +62,7 @@ function init() {
       current.onClose?.()
       setStore("stack", store.stack.slice(0, -1))
       evt.preventDefault()
+      evt.stopPropagation()
       refocus()
     }
   })
@@ -94,6 +100,7 @@ function init() {
     replace(input: any, onClose?: () => void) {
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
+        focus?.blur()
       }
       for (const item of store.stack) {
         if (item.onClose) item.onClose()
@@ -124,10 +131,23 @@ const ctx = createContext<DialogContext>()
 
 export function DialogProvider(props: ParentProps) {
   const value = init()
+  const renderer = useRenderer()
+  const toast = useToast()
   return (
     <ctx.Provider value={value}>
       {props.children}
-      <box position="absolute">
+      <box
+        position="absolute"
+        onMouseUp={async () => {
+          const text = renderer.getSelection()?.getSelectedText()
+          if (text && text.length > 0) {
+            await Clipboard.copy(text)
+              .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+              .catch(toast.error)
+            renderer.clearSelection()
+          }
+        }}
+      >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size}>
             {value.stack.at(-1)!.element}

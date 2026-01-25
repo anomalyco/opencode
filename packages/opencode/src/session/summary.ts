@@ -1,18 +1,21 @@
 import { Provider } from "@/provider/provider"
+
 import { fn } from "@/util/fn"
 import z from "zod"
 import { Session } from "."
-import { generateText, type ModelMessage } from "ai"
+
 import { MessageV2 } from "./message-v2"
 import { Identifier } from "@/id/id"
 import { Snapshot } from "@/snapshot"
-import { ProviderTransform } from "@/provider/transform"
-import { SystemPrompt } from "./system"
+
 import { Log } from "@/util/log"
 import path from "path"
 import { Instance } from "@/project/instance"
 import { Storage } from "@/storage/storage"
 import { Bus } from "@/bus"
+
+import { LLM } from "./llm"
+import { Agent } from "@/agent/agent"
 
 export namespace SessionSummary {
   const log = Log.create({ service: "session.summary" })
@@ -37,7 +40,7 @@ export namespace SessionSummary {
         .flatMap((x) => x.parts)
         .filter((x) => x.type === "patch")
         .flatMap((x) => x.files)
-        .map((x) => path.relative(Instance.worktree, x)),
+        .map((x) => path.relative(Instance.worktree, x).replaceAll("\\", "/")),
     )
     const diffs = await computeDiff({ messages: input.messages }).then((x) =>
       x.filter((x) => {
@@ -71,22 +74,20 @@ export namespace SessionSummary {
     }
     await Session.updateMessage(userMsg)
 
-    const assistantMsg = messages.find((m) => m.info.role === "assistant")!.info as MessageV2.Assistant
-    const small = await Provider.getSmallModel(assistantMsg.providerID)
-    if (!small) return
-
     const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
     if (textPart && !userMsg.summary?.title) {
-      const result = await generateText({
-        maxOutputTokens: small.info.reasoning ? 1500 : 20,
-        providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, {}),
+      const agent = await Agent.get("title")
+      if (!agent) return
+      const stream = await LLM.stream({
+        agent,
+        user: userMsg,
+        tools: {},
+        model: agent.model
+          ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
+          : ((await Provider.getSmallModel(userMsg.model.providerID)) ??
+            (await Provider.getModel(userMsg.model.providerID, userMsg.model.modelID))),
+        small: true,
         messages: [
-          ...SystemPrompt.title(small.providerID).map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
           {
             role: "user" as const,
             content: `
@@ -97,44 +98,14 @@ export namespace SessionSummary {
             `,
           },
         ],
-        headers: small.info.headers,
-        model: small.language,
+        abort: new AbortController().signal,
+        sessionID: userMsg.sessionID,
+        system: [],
+        retries: 3,
       })
-      log.info("title", { title: result.text })
-      userMsg.summary.title = result.text
-      await Session.updateMessage(userMsg)
-    }
-
-    if (
-      messages.some(
-        (m) =>
-          m.info.role === "assistant" && m.parts.some((p) => p.type === "step-finish" && p.reason !== "tool-calls"),
-      )
-    ) {
-      let summary = messages
-        .findLast((m) => m.info.role === "assistant")
-        ?.parts.findLast((p) => p.type === "text")?.text
-      if (!summary || diffs.length > 0) {
-        const result = await generateText({
-          model: small.language,
-          maxOutputTokens: 100,
-          messages: [
-            {
-              role: "user",
-              content: `
-            Summarize the following conversation into 2 sentences MAX explaining what the assistant did and why. Do not explain the user's input. Do not speak in the third person about the assistant.
-            <conversation>
-            ${JSON.stringify(MessageV2.toModelMessage(messages))}
-            </conversation>
-            `,
-            },
-          ],
-          headers: small.info.headers,
-        }).catch(() => {})
-        if (result) summary = result.text
-      }
-      userMsg.summary.body = summary
-      log.info("body", { body: summary })
+      const result = await stream.text
+      log.info("title", { title: result })
+      userMsg.summary.title = result
       await Session.updateMessage(userMsg)
     }
   }
@@ -149,7 +120,7 @@ export namespace SessionSummary {
     },
   )
 
-  async function computeDiff(input: { messages: MessageV2.WithParts[] }) {
+  export async function computeDiff(input: { messages: MessageV2.WithParts[] }) {
     let from: string | undefined
     let to: string | undefined
 

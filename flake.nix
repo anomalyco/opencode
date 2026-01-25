@@ -6,10 +6,7 @@
   };
 
   outputs =
-    {
-      nixpkgs,
-      ...
-    }:
+    { self, nixpkgs, ... }:
     let
       systems = [
         "aarch64-linux"
@@ -17,91 +14,56 @@
         "aarch64-darwin"
         "x86_64-darwin"
       ];
-      lib = nixpkgs.lib;
-      forEachSystem = lib.genAttrs systems;
-      pkgsFor = system: nixpkgs.legacyPackages.${system};
-      packageJson = builtins.fromJSON (builtins.readFile ./packages/opencode/package.json);
-      bunTarget = {
-        "aarch64-linux" = "bun-linux-arm64";
-        "x86_64-linux" = "bun-linux-x64";
-        "aarch64-darwin" = "bun-darwin-arm64";
-        "x86_64-darwin" = "bun-darwin-x64";
-      };
-      defaultNodeModules = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
-      hashesFile = "${./nix}/hashes.json";
-      hashesData =
-        if builtins.pathExists hashesFile then builtins.fromJSON (builtins.readFile hashesFile) else { };
-      nodeModulesHash = hashesData.nodeModules or defaultNodeModules;
-      modelsDev = forEachSystem (
-        system:
-        let
-          pkgs = pkgsFor system;
-        in
-        pkgs."models-dev"
-      );
+      forEachSystem = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      rev = self.shortRev or self.dirtyShortRev or "dirty";
     in
     {
-      devShells = forEachSystem (
-        system:
-        let
-          pkgs = pkgsFor system;
-        in
-        {
-          default = pkgs.mkShell {
-            packages = with pkgs; [
-              bun
-              nodejs_20
-              pkg-config
-              openssl
-              git
-            ];
-          };
-        }
-      );
+      devShells = forEachSystem (pkgs: {
+        default = pkgs.mkShell {
+          packages = with pkgs; [
+            bun
+            nodejs_20
+            pkg-config
+            openssl
+            git
+          ];
+        };
+      });
 
       packages = forEachSystem (
-        system:
+        pkgs:
         let
-          pkgs = pkgsFor system;
-          mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
-            hash = nodeModulesHash;
+          node_modules = pkgs.callPackage ./nix/node_modules.nix {
+            inherit rev;
           };
-          mkPackage = pkgs.callPackage ./nix/opencode.nix { };
+          opencode = pkgs.callPackage ./nix/opencode.nix {
+            inherit node_modules;
+          };
+          desktop = pkgs.callPackage ./nix/desktop.nix {
+            inherit opencode;
+          };
+          # nixpkgs cpu naming to bun cpu naming
+          cpuMap = { x86_64 = "x64"; aarch64 = "arm64"; };
+          # matrix of node_modules builds - these will always fail due to fakeHash usage
+          # but allow computation of the correct hash from any build machine for any cpu/os
+          # see the update-nix-hashes workflow for usage
+          moduleUpdaters = pkgs.lib.listToAttrs (
+            pkgs.lib.concatMap (cpu:
+              map (os: {
+                name = "${cpu}-${os}_node_modules";
+                value = node_modules.override {
+                  bunCpu = cpuMap.${cpu};
+                  bunOs = os;
+                  hash = pkgs.lib.fakeHash;
+                };
+              }) [ "linux" "darwin" ]
+            ) [ "x86_64" "aarch64" ]
+          );
         in
         {
-          default = mkPackage {
-            version = packageJson.version;
-            src = ./.;
-            scripts = ./nix/scripts;
-            target = bunTarget.${system};
-            modelsDev = "${modelsDev.${system}}/dist/_api.json";
-            mkNodeModules = mkNodeModules;
-          };
-        }
-      );
-
-      apps = forEachSystem (
-        system:
-        let
-          pkgs = pkgsFor system;
-        in
-        {
-          opencode-dev = {
-            type = "app";
-            meta = {
-              description = "Nix devshell shell for OpenCode";
-              runtimeInputs = [ pkgs.bun ];
-            };
-            program = "${
-              pkgs.writeShellApplication {
-                name = "opencode-dev";
-                text = ''
-                  exec bun run dev "$@"
-                '';
-              }
-            }/bin/opencode-dev";
-          };
-        }
+          default = opencode;
+          inherit opencode desktop;
+        } // moduleUpdaters
       );
     };
 }

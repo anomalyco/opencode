@@ -36,12 +36,18 @@ export function ProgressCircle(props: ProgressCircleProps) {
         [split.class ?? ""]: !!split.class,
       }}
     >
-      <circle cx={center} cy={center} r={radius()} data-slot="background" stroke-width={strokeWidth()} />
       <circle
         cx={center}
         cy={center}
         r={radius()}
-        data-slot="progress"
+        data-slot="progress-circle-background"
+        stroke-width={strokeWidth()}
+      />
+      <circle
+        cx={center}
+        cy={center}
+        r={radius()}
+        data-slot="progress-circle-progress"
         stroke-width={strokeWidth()}
         stroke-dasharray={circumference().toString()}
         stroke-dashoffset={offset()}

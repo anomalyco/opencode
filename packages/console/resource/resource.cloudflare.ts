@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers"
+export { waitUntil } from "cloudflare:workers"
 
 export const Resource = new Proxy(
   {},

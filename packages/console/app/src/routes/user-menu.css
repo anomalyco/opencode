@@ -12,6 +12,7 @@
 
     [data-slot="item"] {
       color: var(--color-danger);
+      text-decoration: none;
     }
   }
 }

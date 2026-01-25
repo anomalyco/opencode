@@ -8,7 +8,8 @@
   }
 }
 
-[data-page="enterprise"] {
+[data-page="enterprise"],
+[data-page="legal"] {
   --color-background: hsl(0, 20%, 99%);
   --color-background-weak: hsl(0, 8%, 97%);
   --color-background-weak-hover: hsl(0, 8%, 94%);
@@ -84,7 +85,16 @@
       ul {
         display: flex;
         justify-content: space-between;
+        align-items: center;
         gap: 48px;
+
+        @media (max-width: 55rem) {
+          gap: 32px;
+        }
+
+        @media (max-width: 48rem) {
+          gap: 24px;
+        }
         li {
           display: inline-block;
           a {
@@ -97,6 +107,25 @@
             text-decoration: underline;
             text-underline-offset: 2px;
             text-decoration-thickness: 1px;
+          }
+          [data-slot="cta-button"] {
+            background: var(--color-background-strong);
+            color: var(--color-text-inverted);
+            padding: 8px 16px 8px 10px;
+            border-radius: 4px;
+            font-weight: 500;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+
+            @media (max-width: 55rem) {
+              display: none;
+            }
+          }
+          [data-slot="cta-button"]:hover {
+            background: var(--color-background-strong-hover);
+            text-decoration: none;
           }
         }
       }
@@ -266,7 +295,7 @@
 
     h1 {
       font-size: 1.5rem;
-      font-weight: 500;
+      font-weight: 700;
       color: var(--color-text-strong);
       margin-bottom: 1rem;
     }

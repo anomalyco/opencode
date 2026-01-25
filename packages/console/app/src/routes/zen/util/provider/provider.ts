@@ -25,24 +25,27 @@ import {
 } from "./openai-compatible"
 import { gatewayzHelper } from "./gatewayz"
 
-export type ProviderHelper = {
+export type UsageInfo = {
+  inputTokens: number
+  outputTokens: number
+  reasoningTokens?: number
+  cacheReadTokens?: number
+  cacheWrite5mTokens?: number
+  cacheWrite1hTokens?: number
+}
+
+export type ProviderHelper = (input: { reqModel: string; providerModel: string }) => {
   format: ZenData.Format
-  modifyUrl: (providerApi: string, model?: string, isStream?: boolean) => string
+  modifyUrl: (providerApi: string, isStream?: boolean) => string
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => void
   modifyBody: (body: Record<string, any>) => Record<string, any>
+  createBinaryStreamDecoder: () => ((chunk: Uint8Array) => Uint8Array | undefined) | undefined
   streamSeparator: string
   createUsageParser: () => {
     parse: (chunk: string) => void
     retrieve: () => any
   }
-  normalizeUsage: (usage: any) => {
-    inputTokens: number
-    outputTokens: number
-    reasoningTokens?: number
-    cacheReadTokens?: number
-    cacheWrite5mTokens?: number
-    cacheWrite1hTokens?: number
-  }
+  normalizeUsage: (usage: any) => UsageInfo
 }
 
 export interface CommonMessage {

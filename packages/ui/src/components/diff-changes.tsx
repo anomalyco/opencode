@@ -105,8 +105,8 @@ export function DiffChanges(props: {
             </svg>
           </Match>
           <Match when={variant() === "default"}>
-            <span data-slot="additions">{`+${additions()}`}</span>
-            <span data-slot="deletions">{`-${deletions()}`}</span>
+            <span data-slot="diff-changes-additions">{`+${additions()}`}</span>
+            <span data-slot="diff-changes-deletions">{`-${deletions()}`}</span>
           </Match>
         </Switch>
       </div>

@@ -63,6 +63,12 @@
       align-items: center;
       justify-content: center;
       padding: 14px 24px;
+      outline: none;
+
+      &:focus-visible {
+        outline: none;
+        box-shadow: none;
+      }
     }
 
     [data-slot="tabs-trigger-close-button"] {
@@ -81,7 +87,7 @@
     }
     &:focus-visible {
       outline: none;
-      box-shadow: 0 0 0 2px var(--border-focus);
+      box-shadow: none;
     }
     &:has([data-hidden]) {
       [data-slot="tabs-trigger-close-button"] {
@@ -127,6 +133,233 @@
 
     &:focus-visible {
       outline: none;
+    }
+  }
+
+  &[data-variant="alt"] {
+    [data-slot="tabs-list"] {
+      padding-left: 24px;
+      padding-right: 24px;
+      gap: 12px;
+      border-bottom: 1px solid var(--border-weak-base);
+      background-color: transparent;
+
+      &::after {
+        border: none;
+        background-color: transparent;
+      }
+      &:empty::after {
+        display: none;
+      }
+    }
+
+    [data-slot="tabs-trigger-wrapper"] {
+      border: none;
+      color: var(--text-base);
+      background-color: transparent;
+      border-bottom-width: 2px;
+      border-bottom-style: solid;
+      border-bottom-color: transparent;
+      gap: 4px;
+
+      /* text-14-regular */
+      font-family: var(--font-family-sans);
+      font-size: var(--font-size-base);
+      font-style: normal;
+      font-weight: var(--font-weight-regular);
+      line-height: var(--line-height-x-large); /* 171.429% */
+      letter-spacing: var(--letter-spacing-normal);
+
+      [data-slot="tabs-trigger"] {
+        height: 100%;
+        padding: 4px;
+        background-color: transparent;
+        border-bottom-width: 2px;
+        border-bottom-color: transparent;
+      }
+
+      [data-slot="tabs-trigger-close-button"] {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      [data-component="icon-button"] {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+      }
+
+      &:has([data-selected]) {
+        color: var(--text-strong);
+        background-color: transparent;
+        border-bottom-color: var(--icon-strong-base);
+      }
+
+      &:hover:not(:disabled):not([data-selected]) {
+        color: var(--text-strong);
+      }
+
+      &:has([data-slot="tabs-trigger-close-button"]) {
+        padding-right: 0;
+        [data-slot="tabs-trigger"] {
+          padding-right: 0;
+        }
+      }
+    }
+
+    /* [data-slot="tabs-content"] { */
+    /* } */
+  }
+
+  &[data-orientation="vertical"] {
+    flex-direction: row;
+
+    [data-slot="tabs-list"] {
+      flex-direction: column;
+      width: auto;
+      height: 100%;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding: 8px;
+      gap: 4px;
+      background-color: var(--background-base);
+      border-right: 1px solid var(--border-weak-base);
+
+      &::after {
+        display: none;
+      }
+    }
+
+    [data-slot="tabs-trigger-wrapper"] {
+      width: 100%;
+      height: 32px;
+      border: none;
+      border-radius: 8px;
+      background-color: transparent;
+
+      [data-slot="tabs-trigger"] {
+        padding: 0 8px;
+        gap: 8px;
+        justify-content: flex-start;
+      }
+
+      &:hover:not(:disabled) {
+        background-color: var(--surface-raised-base-hover);
+      }
+
+      &:has([data-selected]) {
+        background-color: var(--surface-raised-base-active);
+        color: var(--text-strong);
+      }
+    }
+
+    [data-slot="tabs-content"] {
+      overflow-x: auto;
+      overflow-y: auto;
+    }
+
+    &[data-variant="alt"] {
+      [data-slot="tabs-list"] {
+        padding: 8px;
+        gap: 4px;
+        border: none;
+
+        &::after {
+          display: none;
+        }
+      }
+
+      [data-slot="tabs-trigger-wrapper"] {
+        height: 32px;
+        border: none;
+        border-radius: 8px;
+
+        [data-slot="tabs-trigger"] {
+          border: none;
+          padding: 0 8px;
+          gap: 8px;
+          justify-content: flex-start;
+        }
+
+        &:hover:not(:disabled) {
+          background-color: var(--surface-raised-base-hover);
+        }
+
+        &:has([data-selected]) {
+          background-color: var(--surface-raised-base-hover);
+          color: var(--text-strong);
+        }
+      }
+    }
+
+    &[data-variant="settings"] {
+      [data-slot="tabs-list"] {
+        width: 200px;
+        min-width: 200px;
+        padding: 12px;
+        gap: 0;
+        background-color: var(--background-base);
+        border-right: 1px solid var(--border-weak-base);
+
+        &::after {
+          display: none;
+        }
+      }
+
+      [data-slot="tabs-section-title"] {
+        width: 100%;
+        padding: 0 0 0 4px;
+        font-family: var(--font-family-sans);
+        font-size: var(--font-size-small);
+        font-weight: var(--font-weight-medium);
+        color: var(--text-weak);
+      }
+
+      [data-slot="tabs-trigger-wrapper"] {
+        height: 32px;
+        border: none;
+        border-radius: var(--radius-md);
+
+        /* text-14-medium */
+        font-family: var(--font-family-sans);
+        font-size: var(--font-size-base);
+        font-weight: var(--font-weight-medium);
+        line-height: var(--line-height-large);
+
+        [data-slot="tabs-trigger"] {
+          border: none;
+          padding: 0 8px;
+          gap: 12px;
+          justify-content: flex-start;
+          width: 100%;
+        }
+
+        [data-component="icon"] {
+          color: var(--icon-base);
+        }
+
+        &:hover:not(:disabled) {
+          background-color: var(--surface-raised-base-hover);
+        }
+
+        &:has([data-selected]) {
+          background-color: var(--surface-raised-base-active);
+          color: var(--text-strong);
+
+          [data-component="icon"] {
+            color: var(--icon-strong-base);
+          }
+
+          &:hover:not(:disabled) {
+            background-color: var(--surface-raised-base-active);
+          }
+        }
+      }
+
+      [data-slot="tabs-content"] {
+        background-color: var(--surface-raised-stronger-non-alpha);
+      }
     }
   }
 }

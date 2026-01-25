@@ -4,7 +4,7 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background-color: transparent;
+  background-color: hsl(from var(--background-base) h s l / 0.2);
 
   /* animation: overlayHide 250ms ease 100ms forwards; */
   /**/
@@ -20,35 +20,43 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 
-  [data-slot="container"] {
+  [data-slot="dialog-container"] {
     position: relative;
     z-index: 50;
-    width: min(calc(100vw - 16px), 624px);
+    width: min(calc(100vw - 16px), 640px);
     height: min(calc(100vh - 16px), 512px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-items: start;
+    overflow: visible;
 
-    [data-slot="content"] {
+    [data-slot="dialog-content"] {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
       align-self: stretch;
-      gap: 8px;
       width: 100%;
       max-height: 100%;
+      min-height: 280px;
+      overflow: auto;
+      pointer-events: auto;
+
+      /* Hide scrollbar */
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      &::-webkit-scrollbar {
+        display: none;
+      }
 
       /* padding: 8px; */
-      padding: 8px 8px 0 8px;
-      border: 1px solid var(--border-base);
-      border-radius: var(--radius-md);
+      /* padding: 8px 8px 0 8px; */
+      border-radius: var(--radius-xl);
       background: var(--surface-raised-stronger-non-alpha);
-      box-shadow:
-        0 15px 45px 0 rgba(19, 16, 16, 0.22),
-        0 3.35px 10.051px 0 rgba(19, 16, 16, 0.13),
-        0 0.998px 2.993px 0 rgba(19, 16, 16, 0.09);
+      background-clip: padding-box;
+      box-shadow: var(--shadow-lg-border-base);
 
       /* animation: contentHide 300ms ease-in forwards; */
       /**/
@@ -56,16 +64,15 @@
       /*   animation: contentShow 300ms ease-out; */
       /* } */
 
-      [data-slot="header"] {
+      [data-slot="dialog-header"] {
         display: flex;
-        height: 40px;
-        padding: 4px 4px 4px 8px;
+        padding: 20px;
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0;
         align-self: stretch;
 
-        [data-slot="title"] {
+        [data-slot="dialog-title"] {
           color: var(--text-strong);
 
           /* text-16-medium */
@@ -76,18 +83,67 @@
           line-height: var(--line-height-x-large); /* 150% */
           letter-spacing: var(--letter-spacing-tight);
         }
-        /* [data-slot="close-button"] {} */
+        /* [data-slot="dialog-close-button"] {} */
       }
-      /* [data-slot="description"] {} */
-      [data-slot="body"] {
+
+      [data-slot="dialog-description"] {
+        display: flex;
+        padding: 16px;
+        padding-left: 24px;
+        padding-top: 0;
+        margin-top: -8px;
+        justify-content: space-between;
+        align-items: center;
+        flex-shrink: 0;
+        align-self: stretch;
+
+        color: var(--text-base);
+
+        /* text-14-regular */
+        font-family: var(--font-family-sans);
+        font-size: 14px;
+        font-style: normal;
+        font-weight: var(--font-weight-regular);
+        line-height: var(--line-height-large); /* 142.857% */
+        letter-spacing: var(--letter-spacing-normal);
+      }
+
+      [data-slot="dialog-body"] {
         width: 100%;
         position: relative;
         display: flex;
         flex-direction: column;
         flex: 1;
-        overflow-y: auto;
+        overflow: hidden;
+
+        &:focus-visible {
+          outline: none;
+        }
+      }
+      &:focus-visible {
+        outline: none;
       }
     }
+  }
+
+  &[data-fit] {
+    [data-slot="dialog-container"] {
+      height: auto;
+
+      [data-slot="dialog-content"] {
+        min-height: 0;
+      }
+    }
+  }
+
+  &[data-size="large"] [data-slot="dialog-container"] {
+    width: min(calc(100vw - 32px), 800px);
+    height: min(calc(100vh - 32px), 600px);
+  }
+
+  &[data-size="x-large"] [data-slot="dialog-container"] {
+    width: min(calc(100vw - 32px), 960px);
+    height: min(calc(100vh - 32px), 600px);
   }
 }
 

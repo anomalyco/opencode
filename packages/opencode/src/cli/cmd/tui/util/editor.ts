@@ -6,7 +6,7 @@ import { CliRenderer } from "@opentui/core"
 
 export namespace Editor {
   export async function open(opts: { value: string; renderer: CliRenderer }): Promise<string | undefined> {
-    const editor = process.env["EDITOR"]
+    const editor = process.env["VISUAL"] || process.env["EDITOR"]
     if (!editor) return
 
     const filepath = join(tmpdir(), `${Date.now()}.md`)

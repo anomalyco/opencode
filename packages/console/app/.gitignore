@@ -3,7 +3,6 @@ dist
 .output
 .vercel
 .netlify
-.vinxi
 app.config.timestamp_*.js
 
 # Environment

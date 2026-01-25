@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-
-set -e
-
-cd "$(dirname "$0")/.."
-
-echo "==> Running gofmt -s -w"
-gofmt -s -w .

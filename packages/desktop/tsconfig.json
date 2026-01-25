@@ -1,5 +1,4 @@
 {
-  "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -10,11 +9,13 @@
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
     "allowJs": true,
+    "resolveJsonModule": true,
     "strict": true,
-    "noEmit": true,
     "isolatedModules": true,
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  }
+    "noEmit": true,
+    "emitDeclarationOnly": false,
+    "outDir": "node_modules/.ts-dist"
+  },
+  "references": [{ "path": "../app" }],
+  "include": ["src", "package.json"]
 }
