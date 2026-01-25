@@ -1251,19 +1251,40 @@ export default function Page() {
     autoScroll.forceScrollToBottom()
   }
 
+  const closestMessage = (node: Element | null): HTMLElement | null => {
+    if (!node) return null
+    const match = node.closest?.("[data-message-id]") as HTMLElement | null
+    if (match) return match
+    const root = node.getRootNode?.()
+    if (root instanceof ShadowRoot) return closestMessage(root.host)
+    return null
+  }
+
   const getActiveMessageId = (container: HTMLDivElement) => {
+    const rect = container.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+
+    const x = Math.min(window.innerWidth - 1, Math.max(0, rect.left + rect.width / 2))
+    const y = Math.min(window.innerHeight - 1, Math.max(0, rect.top + 100))
+
+    const hit = document.elementFromPoint(x, y)
+    const host = closestMessage(hit)
+    const id = host?.dataset.messageId
+    if (id) return id
+
+    // Fallback: DOM query (handles edge hit-testing cases)
     const cutoff = container.scrollTop + 100
     const nodes = container.querySelectorAll<HTMLElement>("[data-message-id]")
-    let id: string | undefined
+    let last: string | undefined
 
     for (const node of nodes) {
       const next = node.dataset.messageId
       if (!next) continue
       if (node.offsetTop > cutoff) break
-      id = next
+      last = next
     }
 
-    return id
+    return last
   }
 
   const scheduleScrollSpy = (container: HTMLDivElement) => {
@@ -1900,6 +1921,8 @@ export default function Page() {
                     const [positions, setPositions] = createSignal<Record<string, number>>({})
                     const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
 
+                    const empty = {} as Record<string, number>
+
                     const commentLabel = (range: SelectedLineRange) => {
                       const start = Math.min(range.start, range.end)
                       const end = Math.max(range.start, range.end)
@@ -1933,12 +1956,22 @@ export default function Page() {
                       return rect.top - wrapperRect.top + Math.max(0, (rect.height - 20) / 2)
                     }
 
+                    const equal = (a: Record<string, number>, b: Record<string, number>) => {
+                      const aKeys = Object.keys(a)
+                      const bKeys = Object.keys(b)
+                      if (aKeys.length !== bKeys.length) return false
+                      for (const key of aKeys) {
+                        if (a[key] !== b[key]) return false
+                      }
+                      return true
+                    }
+
                     const updateComments = () => {
                       const el = wrap
                       const root = getRoot()
                       if (!el || !root) {
-                        setPositions({})
-                        setDraftTop(undefined)
+                        setPositions((prev) => (Object.keys(prev).length === 0 ? prev : empty))
+                        setDraftTop((prev) => (prev === undefined ? prev : undefined))
                         return
                       }
 
@@ -1949,7 +1982,7 @@ export default function Page() {
                         next[comment.id] = markerTop(el, marker)
                       }
 
-                      setPositions(next)
+                      setPositions((prev) => (equal(prev, next) ? prev : next))
 
                       const range = commenting()
                       if (!range) {
@@ -1963,11 +1996,18 @@ export default function Page() {
                         return
                       }
 
-                      setDraftTop(markerTop(el, marker))
+                      const nextTop = markerTop(el, marker)
+                      setDraftTop((prev) => (prev === nextTop ? prev : nextTop))
                     }
 
+                    let commentFrame: number | undefined
+
                     const scheduleComments = () => {
-                      requestAnimationFrame(updateComments)
+                      if (commentFrame !== undefined) return
+                      commentFrame = requestAnimationFrame(() => {
+                        commentFrame = undefined
+                        updateComments()
+                      })
                     }
 
                     createEffect(() => {
@@ -2225,6 +2265,7 @@ export default function Page() {
                     )
 
                     onCleanup(() => {
+                      if (commentFrame !== undefined) cancelAnimationFrame(commentFrame)
                       for (const item of codeScroll) {
                         item.removeEventListener("scroll", handleCodeScroll)
                       }
