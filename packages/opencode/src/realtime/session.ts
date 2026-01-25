@@ -7,6 +7,8 @@
 import { RealtimeProtocol } from "./protocol"
 import { RealtimeTransport } from "./transport"
 import { RealtimeTools } from "./tools"
+import { RealtimePersistence } from "./persistence"
+import { MessageV2 } from "../session/message-v2"
 import { Log } from "../util/log"
 
 export namespace RealtimeSession {
@@ -33,6 +35,8 @@ export namespace RealtimeSession {
     onToolExecutionComplete?: (call_id: string, name: string, output: string) => void
     /** Called when a tool execution is interrupted */
     onToolInterrupted?: (call_id: string, name: string) => void
+    /** Called when a transcript part is created (for persistence) */
+    onTranscriptPart?: (part: MessageV2.Part) => void
   }
 
   export interface CreateOptions {
@@ -52,6 +56,11 @@ export namespace RealtimeSession {
     autoExecuteTools?: boolean
     /** Session configuration to send on connect */
     sessionConfig?: Partial<RealtimeProtocol.SessionConfig>
+    /** Enable transcript persistence */
+    persistence?: {
+      /** Message ID to attach transcript parts to */
+      messageID: string
+    }
   }
 
   export interface Session {
@@ -107,6 +116,18 @@ export namespace RealtimeSession {
     // Create tool executor if tools provided
     if (options.tools && options.tools.length > 0) {
       toolExecutor = RealtimeTools.createToolExecutor(options.tools)
+    }
+
+    // Create persistence handler if enabled
+    let persistenceHandler: RealtimePersistence.Handler | undefined
+    if (options.persistence) {
+      persistenceHandler = RealtimePersistence.create({
+        sessionID,
+        messageID: options.persistence.messageID,
+        onPartCreated: (part) => {
+          events.onTranscriptPart?.(part)
+        },
+      })
     }
 
     // Create or use provided transport
@@ -167,6 +188,11 @@ export namespace RealtimeSession {
       // Forward to client
       const json = JSON.stringify(event)
       events.onClientMessage?.(json)
+
+      // Handle persistence (transcripts and events)
+      if (persistenceHandler) {
+        persistenceHandler.handleServerEvent(event)
+      }
 
       // Handle function calls specially
       if (event.type === "response.function_call_arguments.done") {
@@ -251,6 +277,7 @@ export namespace RealtimeSession {
       stop() {
         log.info("stopping realtime session", { sessionID })
         toolExecutor?.cancelAll()
+        persistenceHandler?.cleanup()
         transport.disconnect()
         setState("disconnected")
         registry.delete(sessionID)

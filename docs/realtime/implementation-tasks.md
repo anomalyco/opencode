@@ -102,15 +102,18 @@ Each task follows Test-Driven Development: write the test first, then implement.
 
 ---
 
-## Phase 5: Session Persistence ⏳
+## Phase 5: Transcript Persistence ✅
 
-**Goal**: Persist transcripts and events to session history.
+**Goal**: Persist transcripts and VAD events to session history (no audio storage).
 
 | # | Status | Task | File | Description |
 |---|--------|------|------|-------------|
-| 5.1 | ⏳ | Save transcripts | `src/session/realtime.ts` | Save as AudioPart with transcript |
-| 5.2 | ⏳ | Bus events | `src/realtime/events.ts` | Publish realtime events to Bus |
-| 5.3 | ⏳ | Tests | `test/session/realtime.test.ts` | Persistence tests |
+| 5.1 | ✅ | RealtimePersistence module | `src/realtime/persistence.ts` | Handle transcript and VAD events |
+| 5.2 | ✅ | User transcript persistence | `src/realtime/persistence.ts` | Save user speech as TextPart |
+| 5.3 | ✅ | Assistant transcript persistence | `src/realtime/persistence.ts` | Save assistant speech as TextPart (with delta accumulation) |
+| 5.4 | ✅ | VAD event persistence | `src/realtime/persistence.ts` | Save speech_started/stopped as RealtimeEventPart |
+| 5.5 | ✅ | Wire into RealtimeSession | `src/realtime/session.ts` | Persistence option with onTranscriptPart callback |
+| 5.6 | ✅ | Tests | `test/realtime/persistence.test.ts` | 14 persistence tests
 
 ---
 
@@ -134,9 +137,9 @@ Each task follows Test-Driven Development: write the test first, then implement.
 | Phase 2: Protocol & Transport | 47 | ✅ |
 | Phase 3: Server | 15 | ✅ |
 | Phase 4: Tools | 15 | ✅ |
-| Phase 5: Persistence | 0 | ⏳ |
+| Phase 5: Persistence | 14 | ✅ |
 | Phase 6: Client | 0 | ⏳ |
-| **Total** | **104** | - |
+| **Total** | **118** | - |
 
 ---
 
@@ -148,7 +151,8 @@ src/realtime/
 ├── protocol.ts        ✅ All Zod schemas for WebSocket events
 ├── transport.ts       ✅ Transport interface + OpenAI + Mock
 ├── session.ts         ✅ RealtimeSession class (client WS ↔ OpenAI bridge)
-└── tools.ts           ✅ Zod→JSON Schema converter + tool executor
+├── tools.ts           ✅ Zod→JSON Schema converter + tool executor
+└── persistence.ts     ✅ Transcript and VAD event persistence
 
 src/server/routes/
 └── realtime.ts        ✅ WebSocket and REST endpoints
@@ -159,7 +163,8 @@ test/realtime/
 ├── protocol.test.ts   ✅ All event types
 ├── transport.test.ts  ✅ Transport interface and flows
 ├── session.test.ts    ✅ Session lifecycle and message routing
-└── tools.test.ts      ✅ Schema conversion and tool execution
+├── tools.test.ts      ✅ Schema conversion and tool execution
+└── persistence.test.ts ✅ Transcript persistence tests
 ```
 
 ## Files Modified
