@@ -154,7 +154,7 @@ export function SessionIndicator() {
               <DropdownMenu.Separator />
               <Show when={isDeviceTrusted()}>
                 <DropdownMenu.Item onSelect={handleForgetDevice}>
-                  <DropdownMenu.ItemLabel>Forget this device</DropdownMenu.ItemLabel>
+                  <DropdownMenu.ItemLabel>Forget this device (require 2FA)</DropdownMenu.ItemLabel>
                 </DropdownMenu.Item>
               </Show>
               <DropdownMenu.Item onSelect={handleSetup2FA}>
