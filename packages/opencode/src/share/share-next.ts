@@ -48,10 +48,14 @@ export namespace ShareNext {
       }
     })
     Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+      // Skip realtime-specific parts that aren't in SDK types
+      if (evt.properties.part.type === "audio" || evt.properties.part.type === "realtime_event") {
+        return
+      }
       await sync(evt.properties.part.sessionID, [
         {
           type: "part",
-          data: evt.properties.part,
+          data: evt.properties.part as SDK.Part,
         },
       ])
     })
@@ -186,7 +190,12 @@ export namespace ShareNext {
         type: "message" as const,
         data: x.info,
       })),
-      ...messages.flatMap((x) => x.parts.map((y) => ({ type: "part" as const, data: y }))),
+      ...messages.flatMap((x) =>
+        x.parts
+          // Filter out realtime-specific parts that aren't in SDK types
+          .filter((y) => y.type !== "audio" && y.type !== "realtime_event")
+          .map((y) => ({ type: "part" as const, data: y as SDK.Part })),
+      ),
       {
         type: "session_diff",
         data: diffs,

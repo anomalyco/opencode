@@ -57,26 +57,26 @@ Each task follows Test-Driven Development: write the test first, then implement.
 
 ---
 
-## Phase 3: Server Integration ⏳
+## Phase 3: Server Integration ✅
 
 **Goal**: Implement server-side WebSocket endpoint.
 
-### 3.1 WebSocket Route
+### 3.1 WebSocket Route ✅
 
 | # | Status | Task | File | Description |
 |---|--------|------|------|-------------|
-| 3.1.1 | ⏳ | Route registration | `src/server/routes/realtime.ts` | `/realtime/:sessionID/connect` endpoint |
-| 3.1.2 | ⏳ | Session validation | `src/server/routes/realtime.ts` | Validate session before upgrade |
-| 3.1.3 | ⏳ | Message routing | `src/server/routes/realtime.ts` | Route client messages to transport |
-| 3.1.4 | ⏳ | Tests | `test/server/realtime-route.test.ts` | Route and WebSocket tests |
+| 3.1.1 | ✅ | Route registration | `src/server/routes/realtime.ts` | `/realtime/:sessionID/connect` endpoint |
+| 3.1.2 | ✅ | Session validation | `src/server/routes/realtime.ts` | Validate session before upgrade |
+| 3.1.3 | ✅ | Message routing | `src/server/routes/realtime.ts` | Route client messages to transport |
+| 3.1.4 | ✅ | Additional endpoints | `src/server/routes/realtime.ts` | /start, /stop, /status endpoints |
 
-### 3.2 Realtime Session
+### 3.2 Realtime Session ✅
 
 | # | Status | Task | File | Description |
 |---|--------|------|------|-------------|
-| 3.2.1 | ⏳ | RealtimeSession class | `src/realtime/session.ts` | Bridge between client WS and OpenAI WS |
-| 3.2.2 | ⏳ | State management | `src/realtime/session.ts` | Track active connections per instance |
-| 3.2.3 | ⏳ | Tests | `test/realtime/session.test.ts` | Session lifecycle tests |
+| 3.2.1 | ✅ | RealtimeSession class | `src/realtime/session.ts` | Bridge between client WS and OpenAI WS |
+| 3.2.2 | ✅ | State management | `src/realtime/session.ts` | Track active connections per instance |
+| 3.2.3 | ✅ | Tests | `test/realtime/session.test.ts` | 15 session lifecycle tests |
 
 ---
 
@@ -131,11 +131,11 @@ Each task follows Test-Driven Development: write the test first, then implement.
 |-------|-------|--------|
 | Phase 1: Types | 27 | ✅ |
 | Phase 2: Protocol & Transport | 47 | ✅ |
-| Phase 3: Server | 0 | ⏳ |
+| Phase 3: Server | 15 | ✅ |
 | Phase 4: Tools | 0 | ⏳ |
 | Phase 5: Persistence | 0 | ⏳ |
 | Phase 6: Client | 0 | ⏳ |
-| **Total** | **74** | - |
+| **Total** | **89** | - |
 
 ---
 
@@ -145,13 +145,18 @@ Each task follows Test-Driven Development: write the test first, then implement.
 src/realtime/
 ├── index.ts           ✅ Re-exports
 ├── protocol.ts        ✅ All Zod schemas for WebSocket events
-└── transport.ts       ✅ Transport interface + OpenAI + Mock
+├── transport.ts       ✅ Transport interface + OpenAI + Mock
+└── session.ts         ✅ RealtimeSession class (client WS ↔ OpenAI bridge)
+
+src/server/routes/
+└── realtime.ts        ✅ WebSocket and REST endpoints
 
 test/realtime/
 ├── types.test.ts      ✅ AudioPart, RealtimeEventPart, ToolStateInterrupted
 ├── config.test.ts     ✅ RealtimeConfig schema
 ├── protocol.test.ts   ✅ All event types
-└── transport.test.ts  ✅ Transport interface and flows
+├── transport.test.ts  ✅ Transport interface and flows
+└── session.test.ts    ✅ Session lifecycle and message routing
 ```
 
 ## Files Modified
@@ -159,4 +164,5 @@ test/realtime/
 ```
 src/session/message-v2.ts  ✅ AudioPart, RealtimeEventPart, ToolStateInterrupted
 src/config/config.ts       ✅ experimental.realtime config
+src/server/server.ts       ✅ Mount realtime routes
 ```

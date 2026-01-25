@@ -5,3 +5,4 @@
  */
 export { RealtimeProtocol } from "./protocol"
 export { RealtimeTransport } from "./transport"
+export { RealtimeSession } from "./session"
