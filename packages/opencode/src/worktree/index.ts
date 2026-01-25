@@ -517,8 +517,32 @@ export namespace Worktree {
     }
 
     const dirty = outputText(status.stdout)
-    if (!dirty) return true
+    if (dirty) {
+      throw new ResetFailedError({ message: `Worktree reset left local changes:\n${dirty}` })
+    }
 
-    throw new ResetFailedError({ message: `Worktree reset left local changes:\n${dirty}` })
+    const projectID = Instance.project.id
+    setTimeout(() => {
+      const start = async () => {
+        const project = await Storage.read<Project.Info>(["project", projectID]).catch(() => undefined)
+        const startup = project?.commands?.start?.trim() ?? ""
+        if (!startup) return
+
+        const ran = await runStartCommand(worktreePath, startup)
+        if (ran.exitCode === 0) return
+
+        log.error("worktree start command failed", {
+          kind: "project",
+          directory: worktreePath,
+          message: errorText(ran),
+        })
+      }
+
+      void start().catch((error) => {
+        log.error("worktree start task failed", { directory: worktreePath, error })
+      })
+    }, 0)
+
+    return true
   })
 }
