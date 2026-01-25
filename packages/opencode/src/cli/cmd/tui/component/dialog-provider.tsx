@@ -44,6 +44,34 @@ export function createDialogProviderOptions() {
           category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
           footer: isConnected ? "Connected" : undefined,
           async onSelect() {
+            // If provider is connected, show disconnect option
+            if (isConnected) {
+              const action = await new Promise<"disconnect" | "reconnect" | null>((resolve) => {
+                dialog.replace(
+                  () => (
+                    <DialogSelect
+                      title={provider.name}
+                      options={[
+                        { title: "Disconnect", value: "disconnect" as const },
+                        { title: "Reconnect", value: "reconnect" as const },
+                      ]}
+                      onSelect={(option) => resolve(option.value)}
+                    />
+                  ),
+                  () => resolve(null),
+                )
+              })
+              if (action === null) return
+              if (action === "disconnect") {
+                await sdk.client.auth.remove({ providerID: provider.id })
+                await sdk.client.instance.dispose()
+                await sync.bootstrap()
+                dialog.clear()
+                return
+              }
+              // action === "reconnect" - fall through to normal connect flow
+            }
+
             const methods = sync.data.provider_auth[provider.id] ?? [
               {
                 type: "api",
