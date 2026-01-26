@@ -1,7 +1,12 @@
 import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
+import fuzzysort from "fuzzysort"
 import { formatKeybind, parseKeybind, useCommand } from "@/context/command"
+import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
@@ -16,6 +21,23 @@ type KeybindMeta = {
 }
 
 const GROUPS: KeybindGroup[] = ["General", "Session", "Navigation", "Model and agent", "Terminal", "Prompt"]
+
+type GroupKey =
+  | "settings.shortcuts.group.general"
+  | "settings.shortcuts.group.session"
+  | "settings.shortcuts.group.navigation"
+  | "settings.shortcuts.group.modelAndAgent"
+  | "settings.shortcuts.group.terminal"
+  | "settings.shortcuts.group.prompt"
+
+const groupKey: Record<KeybindGroup, GroupKey> = {
+  General: "settings.shortcuts.group.general",
+  Session: "settings.shortcuts.group.session",
+  Navigation: "settings.shortcuts.group.navigation",
+  "Model and agent": "settings.shortcuts.group.modelAndAgent",
+  Terminal: "settings.shortcuts.group.terminal",
+  Prompt: "settings.shortcuts.group.prompt",
+}
 
 function groupFor(id: string): KeybindGroup {
   if (id === PALETTE_ID) return "General"
@@ -86,9 +108,11 @@ function signatures(config: string | undefined) {
 
 export const SettingsKeybinds: Component = () => {
   const command = useCommand()
+  const language = useLanguage()
   const settings = useSettings()
 
   const [active, setActive] = createSignal<string | null>(null)
+  const [filter, setFilter] = createSignal("")
 
   const stop = () => {
     if (!active()) return
@@ -117,12 +141,16 @@ export const SettingsKeybinds: Component = () => {
   const resetAll = () => {
     stop()
     settings.keybinds.resetAll()
-    showToast({ title: "Shortcuts reset", description: "Keyboard shortcuts have been reset to defaults." })
+    showToast({
+      title: language.t("settings.shortcuts.reset.toast.title"),
+      description: language.t("settings.shortcuts.reset.toast.description"),
+    })
   }
 
   const list = createMemo(() => {
+    language.locale()
     const out = new Map<string, KeybindMeta>()
-    out.set(PALETTE_ID, { title: "Command palette", group: "General" })
+    out.set(PALETTE_ID, { title: language.t("command.palette"), group: "General" })
 
     for (const opt of command.catalog) {
       if (opt.id.startsWith("suggested.")) continue
@@ -174,6 +202,45 @@ export const SettingsKeybinds: Component = () => {
     return out
   })
 
+  const filtered = createMemo(() => {
+    const query = filter().toLowerCase().trim()
+    if (!query) return grouped()
+
+    const map = list()
+    const out = new Map<KeybindGroup, string[]>()
+
+    for (const group of GROUPS) out.set(group, [])
+
+    const items = Array.from(map.entries()).map(([id, meta]) => ({
+      id,
+      title: meta.title,
+      group: meta.group,
+      keybind: command.keybind(id) || "",
+    }))
+
+    const results = fuzzysort.go(query, items, {
+      keys: ["title", "keybind"],
+      threshold: -10000,
+    })
+
+    for (const result of results) {
+      const item = result.obj
+      const ids = out.get(item.group)
+      if (!ids) continue
+      ids.push(item.id)
+    }
+
+    return out
+  })
+
+  const hasResults = createMemo(() => {
+    for (const group of GROUPS) {
+      const ids = filtered().get(group) ?? []
+      if (ids.length > 0) return true
+    }
+    return false
+  })
+
   const used = createMemo(() => {
     const map = new Map<string, { id: string; title: string }[]>()
 
@@ -188,7 +255,7 @@ export const SettingsKeybinds: Component = () => {
 
     const palette = settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND
     for (const sig of signatures(palette)) {
-      add(sig, { id: PALETTE_ID, title: "Command palette" })
+      add(sig, { id: PALETTE_ID, title: title(PALETTE_ID) })
     }
 
     const valueFor = (id: string) => {
@@ -258,8 +325,11 @@ export const SettingsKeybinds: Component = () => {
 
       if (conflicts.size > 0) {
         showToast({
-          title: "Shortcut already in use",
-          description: `${formatKeybind(next)} is already assigned to ${[...conflicts.values()].join(", ")}.`,
+          title: language.t("settings.shortcuts.conflict.title"),
+          description: language.t("settings.shortcuts.conflict.description", {
+            keybind: formatKeybind(next),
+            titles: [...conflicts.values()].join(", "),
+          }),
         })
         return
       }
@@ -279,42 +349,69 @@ export const SettingsKeybinds: Component = () => {
   })
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
-      <div class="sticky top-0 z-10 bg-background-base border-b border-border-weak-base">
-        <div class="flex items-start justify-between gap-4 p-8 max-w-[720px]">
-          <div class="flex flex-col gap-1">
-            <h2 class="text-16-medium text-text-strong">Keyboard shortcuts</h2>
-            <p class="text-14-regular text-text-weak">Click a shortcut to edit. Press Esc to cancel.</p>
+    <div class="flex flex-col h-full overflow-y-auto no-scrollbar" style={{ padding: "0 40px 40px 40px" }}>
+      <div
+        class="sticky top-0 z-10"
+        style={{
+          background:
+            "linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha) calc(100% - 24px), transparent)",
+        }}
+      >
+        <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
+          <div class="flex items-center justify-between gap-4">
+            <h2 class="text-16-medium text-text-strong">{language.t("settings.shortcuts.title")}</h2>
+            <Button size="small" variant="secondary" onClick={resetAll} disabled={!hasOverrides()}>
+              {language.t("settings.shortcuts.reset.button")}
+            </Button>
           </div>
-          <Button size="small" variant="secondary" onClick={resetAll} disabled={!hasOverrides()}>
-            Reset to defaults
-          </Button>
+
+          <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface-base">
+            <Icon name="magnifying-glass" class="text-icon-weak-base flex-shrink-0" />
+            <TextField
+              variant="ghost"
+              type="text"
+              value={filter()}
+              onChange={setFilter}
+              placeholder={language.t("settings.shortcuts.search.placeholder")}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+              class="flex-1"
+            />
+            <Show when={filter()}>
+              <IconButton icon="circle-x" variant="ghost" onClick={() => setFilter("")} />
+            </Show>
+          </div>
         </div>
       </div>
 
-      <div class="flex flex-col gap-6 p-8 pt-6 max-w-[720px]">
+      <div class="flex flex-col gap-8 max-w-[720px]">
         <For each={GROUPS}>
           {(group) => (
-            <Show when={(grouped().get(group) ?? []).length > 0}>
-              <div class="flex flex-col gap-2">
-                <h3 class="text-14-medium text-text-strong">{group}</h3>
-                <div class="border border-border-weak-base rounded-lg overflow-hidden">
-                  <For each={grouped().get(group) ?? []}>
+            <Show when={(filtered().get(group) ?? []).length > 0}>
+              <div class="flex flex-col gap-1">
+                <h3 class="text-14-medium text-text-strong pb-2">{language.t(groupKey[group])}</h3>
+                <div class="bg-surface-raised-base px-4 rounded-lg">
+                  <For each={filtered().get(group) ?? []}>
                     {(id) => (
-                      <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-border-weak-base last:border-none">
+                      <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
                         <span class="text-14-regular text-text-strong">{title(id)}</span>
                         <button
                           type="button"
                           classList={{
-                            "h-8 px-3 rounded-md text-12-regular border border-border-base": true,
+                            "h-8 px-3 rounded-md text-12-regular": true,
                             "bg-surface-base text-text-subtle hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active":
                               active() !== id,
-                            "bg-surface-raised-stronger-non-alpha text-text-strong": active() === id,
+                            "border border-border-weak-base bg-surface-inset-base text-text-weak": active() === id,
                           }}
                           onClick={() => start(id)}
                         >
-                          <Show when={active() === id} fallback={command.keybind(id) || "Unassigned"}>
-                            Press keys
+                          <Show
+                            when={active() === id}
+                            fallback={command.keybind(id) || language.t("settings.shortcuts.unassigned")}
+                          >
+                            {language.t("settings.shortcuts.pressKeys")}
                           </Show>
                         </button>
                       </div>
@@ -325,6 +422,15 @@ export const SettingsKeybinds: Component = () => {
             </Show>
           )}
         </For>
+
+        <Show when={filter() && !hasResults()}>
+          <div class="flex flex-col items-center justify-center py-12 text-center">
+            <span class="text-14-regular text-text-weak">{language.t("settings.shortcuts.search.empty")}</span>
+            <Show when={filter()}>
+              <span class="text-14-regular text-text-strong mt-1">"{filter()}"</span>
+            </Show>
+          </div>
+        </Show>
       </div>
     </div>
   )

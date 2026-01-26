@@ -16,9 +16,11 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   children?: (item: T | undefined) => JSX.Element
+  triggerStyle?: JSX.CSSProperties
+  triggerVariant?: "settings"
 }
 
-export function Select<T>(props: SelectProps<T> & ButtonProps) {
+export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">) {
   const [local, others] = splitProps(props, [
     "class",
     "classList",
@@ -32,6 +34,8 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
     "onHighlight",
     "onOpenChange",
     "children",
+    "triggerStyle",
+    "triggerVariant",
   ])
 
   const state = {
@@ -79,7 +83,9 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
     <Kobalte<T, { category: string; options: T[] }>
       {...others}
       data-component="select"
-      placement="bottom-start"
+      data-trigger-style={local.triggerVariant}
+      placement={local.triggerVariant === "settings" ? "bottom-end" : "bottom-start"}
+      gutter={4}
       value={local.current}
       options={grouped()}
       optionValue={(x) => (local.value ? local.value(x) : (x as string))}
@@ -99,6 +105,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
           }}
           onPointerEnter={() => move(itemProps.item.rawValue)}
           onPointerMove={() => move(itemProps.item.rawValue)}
+          onFocus={() => move(itemProps.item.rawValue)}
         >
           <Kobalte.ItemLabel data-slot="select-select-item-label">
             {local.children
@@ -127,6 +134,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
         as={Button}
         size={props.size}
         variant={props.variant}
+        style={local.triggerStyle}
         classList={{
           ...(local.classList ?? {}),
           [local.class ?? ""]: !!local.class,
@@ -141,7 +149,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
           }}
         </Kobalte.Value>
         <Kobalte.Icon data-slot="select-select-trigger-icon">
-          <Icon name="chevron-down" size="small" />
+          <Icon name={local.triggerVariant === "settings" ? "selector" : "chevron-down"} size="small" />
         </Kobalte.Icon>
       </Kobalte.Trigger>
       <Kobalte.Portal>
@@ -151,6 +159,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
             [local.class ?? ""]: !!local.class,
           }}
           data-component="select-content"
+          data-trigger-style={local.triggerVariant}
         >
           <Kobalte.Listbox data-slot="select-select-content-list" />
         </Kobalte.Content>

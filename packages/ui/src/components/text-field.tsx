@@ -1,6 +1,7 @@
 import { TextField as Kobalte } from "@kobalte/core/text-field"
 import { createSignal, Show, splitProps } from "solid-js"
 import type { ComponentProps } from "solid-js"
+import { useI18n } from "../context/i18n"
 import { IconButton } from "./icon-button"
 import { Tooltip } from "./tooltip"
 
@@ -30,6 +31,7 @@ export interface TextFieldProps
 }
 
 export function TextField(props: TextFieldProps) {
+  const i18n = useI18n()
   const [local, others] = splitProps(props, [
     "name",
     "defaultValue",
@@ -90,13 +92,21 @@ export function TextField(props: TextFieldProps) {
           <Kobalte.TextArea {...others} autoResize data-slot="input-input" class={local.class} />
         </Show>
         <Show when={local.copyable}>
-          <Tooltip value={copied() ? "Copied" : "Copy to clipboard"} placement="top" gutter={8}>
+          <Tooltip
+            value={copied() ? i18n.t("ui.textField.copied") : i18n.t("ui.textField.copyLink")}
+            placement="top"
+            gutter={4}
+            forceOpen={copied()}
+            skipDelayDuration={0}
+          >
             <IconButton
               type="button"
-              icon={copied() ? "check" : "copy"}
+              icon={copied() ? "check" : "link"}
               variant="ghost"
               onClick={handleCopy}
+              tabIndex={-1}
               data-slot="input-copy-button"
+              aria-label={copied() ? i18n.t("ui.textField.copied") : i18n.t("ui.textField.copyLink")}
             />
           </Tooltip>
         </Show>

@@ -106,8 +106,26 @@
 [data-component="text-part"] {
   width: 100%;
 
-  [data-component="markdown"] {
+  [data-slot="text-part-body"] {
+    position: relative;
     margin-top: 32px;
+  }
+
+  [data-slot="text-part-copy-wrapper"] {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 1;
+  }
+
+  [data-slot="text-part-body"]:hover [data-slot="text-part-copy-wrapper"] {
+    opacity: 1;
+  }
+
+  [data-component="markdown"] {
+    margin-top: 0;
     font-size: var(--font-size-base);
   }
 }
@@ -230,6 +248,9 @@
 
   [data-slot="message-part-title"] {
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-style: normal;
@@ -237,7 +258,14 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--text-base);
+  }
+
+  [data-slot="message-part-title-text"] {
     text-transform: capitalize;
+  }
+
+  [data-slot="message-part-title-filename"] {
+    /* No text-transform - preserve original filename casing */
   }
 
   [data-slot="message-part-path"] {
