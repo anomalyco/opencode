@@ -520,20 +520,6 @@ export function Session() {
       },
     },
     {
-      title: usernameVisible() ? "Hide username" : "Show username",
-      value: "session.username_visible.toggle",
-      keybind: "username_toggle",
-      category: "Session",
-      onSelect: (dialog) => {
-        setUsernameVisible((prev) => {
-          const next = !prev
-          kv.set("username_visible", next)
-          return next
-        })
-        dialog.clear()
-      },
-    },
-    {
       title: "Toggle code concealment",
       value: "session.toggle.conceal",
       keybind: "messages_toggle_conceal" as any,
