@@ -5,7 +5,7 @@ import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { config } from "~/config"
-import { For, Show } from "solid-js"
+import { For, Show, createSignal } from "solid-js"
 
 type Release = {
   tag_name: string
@@ -40,21 +40,22 @@ function formatDate(dateString: string) {
   })
 }
 
-type Highlight = {
-  source: string
+type HighlightMedia = { type: "video"; src: string } | { type: "image"; src: string; width: string; height: string }
+
+type HighlightItem = {
   title: string
   description: string
   shortDescription?: string
-  image?: {
-    src: string
-    width: string
-    height: string
-  }
-  video?: string
+  media: HighlightMedia
 }
 
-function parseHighlights(body: string): Highlight[] {
-  const highlights: Highlight[] = []
+type HighlightGroup = {
+  source: string
+  items: HighlightItem[]
+}
+
+function parseHighlights(body: string): HighlightGroup[] {
+  const groups = new Map<string, HighlightItem[]>()
   const regex = /<highlight\s+source="([^"]+)">([\s\S]*?)<\/highlight>/g
   let match
 
@@ -64,33 +65,32 @@ function parseHighlights(body: string): Highlight[] {
 
     const titleMatch = content.match(/<h2>([^<]+)<\/h2>/)
     const pMatch = content.match(/<p(?:\s+short="([^"]*)")?>([^<]+)<\/p>/)
-    const imgMatch = content.match(/<img\s+width="([^"]+)"\s+height="([^"]+)"\s+alt="([^"]*)"\s+src="([^"]+)"/)
-    // Match standalone GitHub asset URLs (videos)
+    const imgMatch = content.match(/<img\s+width="([^"]+)"\s+height="([^"]+)"\s+alt="[^"]*"\s+src="([^"]+)"/)
     const videoMatch = content.match(/^\s*(https:\/\/github\.com\/user-attachments\/assets\/[a-f0-9-]+)\s*$/m)
 
-    if (titleMatch) {
-      highlights.push({
-        source,
+    let media: HighlightMedia | undefined
+    if (videoMatch) {
+      media = { type: "video", src: videoMatch[1] }
+    } else if (imgMatch) {
+      media = { type: "image", src: imgMatch[3], width: imgMatch[1], height: imgMatch[2] }
+    }
+
+    if (titleMatch && media) {
+      const item: HighlightItem = {
         title: titleMatch[1],
         description: pMatch?.[2] || "",
         shortDescription: pMatch?.[1],
-        image: imgMatch
-          ? {
-              width: imgMatch[1],
-              height: imgMatch[2],
-              src: imgMatch[4],
-            }
-          : undefined,
-        video: videoMatch?.[1],
-      })
+        media,
+      }
+
+      if (!groups.has(source)) {
+        groups.set(source, [])
+      }
+      groups.get(source)!.push(item)
     }
   }
 
-  return highlights
-}
-
-function toTitleCase(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
+  return Array.from(groups.entries()).map(([source, items]) => ({ source, items }))
 }
 
 function parseMarkdown(body: string) {
@@ -142,23 +142,56 @@ function ReleaseItem(props: { item: string }) {
   )
 }
 
-function HighlightCard(props: { highlight: Highlight }) {
+function HighlightSection(props: { group: HighlightGroup }) {
   return (
     <div data-component="highlight">
-      <h4>{props.highlight.source}</h4>
-      <p data-slot="title">{props.highlight.title}</p>
-      <p>{props.highlight.description}</p>
-      <Show when={props.highlight.video}>
-        <video src={props.highlight.video} controls autoplay loop muted playsinline />
+      <h4>{props.group.source}</h4>
+      <hr />
+      <For each={props.group.items}>
+        {(item) => (
+          <div data-slot="highlight-item">
+            <p data-slot="title">{item.title}</p>
+            <p>{item.description}</p>
+            <Show when={item.media.type === "video"}>
+              <video src={item.media.src} controls autoplay loop muted playsinline />
+            </Show>
+            <Show when={item.media.type === "image"}>
+              <img
+                src={item.media.src}
+                alt={item.title}
+                width={(item.media as { width: string }).width}
+                height={(item.media as { height: string }).height}
+              />
+            </Show>
+          </div>
+        )}
+      </For>
+    </div>
+  )
+}
+
+function CollapsibleSection(props: { section: { title: string; items: string[] } }) {
+  const [open, setOpen] = createSignal(false)
+
+  return (
+    <div data-component="collapsible-section">
+      <button data-slot="toggle" onClick={() => setOpen(!open())}>
+        <span data-slot="icon">{open() ? "▾" : "▸"}</span>
+        <span>{props.section.title}</span>
+      </button>
+      <Show when={open()}>
+        <ul>
+          <For each={props.section.items}>{(item) => <ReleaseItem item={item} />}</For>
+        </ul>
       </Show>
-      <Show when={props.highlight.image && !props.highlight.video}>
-        <img
-          src={props.highlight.image!.src}
-          alt={props.highlight.title}
-          width={props.highlight.image!.width}
-          height={props.highlight.image!.height}
-        />
-      </Show>
+    </div>
+  )
+}
+
+function CollapsibleSections(props: { sections: { title: string; items: string[] }[] }) {
+  return (
+    <div data-component="collapsible-sections">
+      <For each={props.sections}>{(section) => <CollapsibleSection section={section} />}</For>
     </div>
   )
 }
@@ -198,19 +231,24 @@ export default function Changelog() {
                     <div data-slot="content">
                       <Show when={parsed().highlights.length > 0}>
                         <div data-component="highlights">
-                          <For each={parsed().highlights}>{(highlight) => <HighlightCard highlight={highlight} />}</For>
+                          <For each={parsed().highlights}>{(group) => <HighlightSection group={group} />}</For>
                         </div>
                       </Show>
-                      <For each={parsed().sections}>
-                        {(section) => (
-                          <div data-component="section">
-                            <h3>{section.title}</h3>
-                            <ul>
-                              <For each={section.items}>{(item) => <ReleaseItem item={item} />}</For>
-                            </ul>
-                          </div>
-                        )}
-                      </For>
+                      <Show when={parsed().highlights.length > 0 && parsed().sections.length > 0}>
+                        <CollapsibleSections sections={parsed().sections} />
+                      </Show>
+                      <Show when={parsed().highlights.length === 0}>
+                        <For each={parsed().sections}>
+                          {(section) => (
+                            <div data-component="section">
+                              <h3>{section.title}</h3>
+                              <ul>
+                                <For each={section.items}>{(item) => <ReleaseItem item={item} />}</For>
+                              </ul>
+                            </div>
+                          )}
+                        </For>
+                      </Show>
                     </div>
                   </article>
                 )
