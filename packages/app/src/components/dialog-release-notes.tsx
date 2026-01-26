@@ -2,11 +2,11 @@ import { createSignal, createEffect, onMount, onCleanup } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useSettings } from "@/context/settings"
 
 export type Highlight = {
   title: string
   description: string
-  tag?: string
   media?: {
     type: "image" | "video"
     src: string
@@ -16,6 +16,7 @@ export type Highlight = {
 
 export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
   const dialog = useDialog()
+  const settings = useSettings()
   const [index, setIndex] = createSignal(0)
 
   const total = () => props.highlights.length
@@ -34,9 +35,20 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
     dialog.close()
   }
 
+  function handleDisable() {
+    settings.general.setReleaseNotes(false)
+    handleClose()
+  }
+
   let focusTrap: HTMLDivElement | undefined
 
   function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      e.preventDefault()
+      handleClose()
+      return
+    }
+
     if (!paged()) return
     if (e.key === "ArrowLeft" && !isFirst()) {
       e.preventDefault()
@@ -50,8 +62,6 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
 
   onMount(() => {
     focusTrap?.focus()
-
-    if (!paged()) return
     document.addEventListener("keydown", handleKeyDown)
     onCleanup(() => document.removeEventListener("keydown", handleKeyDown))
   })
@@ -72,14 +82,6 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
         <div class="flex flex-col gap-2 pt-22">
           <div class="flex items-center gap-2">
             <h1 class="text-16-medium text-text-strong">{feature()?.title ?? ""}</h1>
-            {feature()?.tag && (
-              <span
-                class="text-12-medium text-text-weak px-1.5 py-0.5 bg-surface-base rounded-sm border border-border-weak-base"
-                style={{ "border-width": "0.5px" }}
-              >
-                {feature()!.tag}
-              </span>
-            )}
           </div>
           <p class="text-14-regular text-text-base">{feature()?.description ?? ""}</p>
         </div>
@@ -89,7 +91,7 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
 
         {/* Bottom section - buttons and indicators (fixed position) */}
         <div class="flex flex-col gap-12">
-          <div class="flex items-center gap-3">
+          <div class="flex flex-col items-start gap-3">
             {isLast() ? (
               <Button variant="primary" size="large" onClick={handleClose}>
                 Get started
@@ -99,6 +101,10 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
                 Next
               </Button>
             )}
+
+            <Button variant="ghost" size="small" onClick={handleDisable}>
+              Don't show these in the future
+            </Button>
           </div>
 
           {paged() && (

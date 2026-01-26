@@ -18,6 +18,7 @@ export interface SoundSettings {
 export interface Settings {
   general: {
     autoSave: boolean
+    releaseNotes: boolean
   }
   appearance: {
     fontSize: number
@@ -34,6 +35,7 @@ export interface Settings {
 const defaultSettings: Settings = {
   general: {
     autoSave: true,
+    releaseNotes: true,
   },
   appearance: {
     fontSize: 14,
@@ -96,6 +98,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         autoSave: createMemo(() => store.general?.autoSave ?? defaultSettings.general.autoSave),
         setAutoSave(value: boolean) {
           setStore("general", "autoSave", value)
+        },
+        releaseNotes: createMemo(() => store.general?.releaseNotes ?? defaultSettings.general.releaseNotes),
+        setReleaseNotes(value: boolean) {
+          setStore("general", "releaseNotes", value)
         },
       },
       appearance: {

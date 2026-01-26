@@ -525,6 +525,7 @@ export const dict = {
 
   "settings.general.section.appearance": "Appearance",
   "settings.general.section.notifications": "System notifications",
+  "settings.general.section.updates": "Updates",
   "settings.general.section.sounds": "Sound effects",
 
   "settings.general.row.language.title": "Language",
@@ -535,6 +536,9 @@ export const dict = {
   "settings.general.row.theme.description": "Customise how OpenCode is themed.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+
+  "settings.general.row.releaseNotes.title": "Release notes",
+  "settings.general.row.releaseNotes.description": "Show What's New popups after updates",
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",

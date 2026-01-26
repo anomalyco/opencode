@@ -3,10 +3,11 @@ import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { usePlatform } from "@/context/platform"
+import { useSettings } from "@/context/settings"
 import { persisted } from "@/utils/persist"
 import { DialogReleaseNotes, type Highlight } from "@/components/dialog-release-notes"
 
-const CHANGELOG_URL = "https://dev.opencode.ai/changelog.json"
+const CHANGELOG_URL = "https://opencode.ai/changelog.json"
 
 type Store = {
   version?: string
@@ -18,7 +19,7 @@ type ParsedRelease = {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function getText(value: unknown): string | undefined {
@@ -40,14 +41,14 @@ function normalizeVersion(value: string | undefined) {
 function parseMedia(value: unknown, alt: string): Highlight["media"] | undefined {
   if (!isRecord(value)) return
   const type = getText(value.type)?.toLowerCase()
-  const src = getText(value.src)
+  const src = getText(value.src) ?? getText(value.url)
   if (!src) return
   if (type !== "image" && type !== "video") return
 
   return { type, src, alt }
 }
 
-function parseHighlight(value: unknown, tag: string | undefined): Highlight | undefined {
+function parseHighlight(value: unknown): Highlight | undefined {
   if (!isRecord(value)) return
 
   const title = getText(value.title)
@@ -57,7 +58,7 @@ function parseHighlight(value: unknown, tag: string | undefined): Highlight | un
   if (!description) return
 
   const media = parseMedia(value.media, title)
-  return { title, description, tag, media }
+  return { title, description, media }
 }
 
 function parseRelease(value: unknown): ParsedRelease | undefined {
@@ -70,11 +71,18 @@ function parseRelease(value: unknown): ParsedRelease | undefined {
 
   const highlights = value.highlights.flatMap((group) => {
     if (!isRecord(group)) return []
-    if (!Array.isArray(group.items)) return []
+
     const source = getText(group.source)
-    return group.items
-      .map((item) => parseHighlight(item, source))
-      .filter((item): item is Highlight => item !== undefined)
+    if (!source) return []
+    if (!source.toLowerCase().includes("desktop")) return []
+
+    if (Array.isArray(group.items)) {
+      return group.items.map((item) => parseHighlight(item)).filter((item): item is Highlight => item !== undefined)
+    }
+
+    const item = parseHighlight(group)
+    if (!item) return []
+    return [item]
   })
 
   return { tag, highlights }
@@ -108,10 +116,17 @@ function sliceHighlights(input: { releases: ParsedRelease[]; current?: string; p
     return index === -1 ? releases.length : index
   })()
 
-  return releases
-    .slice(start, end)
-    .flatMap((release) => release.highlights)
-    .slice(0, 3)
+  const highlights = releases.slice(start, end).flatMap((release) => release.highlights)
+  const seen = new Set<string>()
+  const unique = highlights.filter((highlight) => {
+    const key = [highlight.title, highlight.description, highlight.media?.type ?? "", highlight.media?.src ?? ""].join(
+      "\n",
+    )
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  return unique.slice(0, 3)
 }
 
 export const { use: useHighlights, provider: HighlightsProvider } = createSimpleContext({
@@ -120,6 +135,7 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
   init: () => {
     const platform = usePlatform()
     const dialog = useDialog()
+    const settings = useSettings()
     const [store, setStore, _, ready] = persisted("highlights.v1", createStore<Store>({ version: undefined }))
 
     const [from, setFrom] = createSignal<string | undefined>(undefined)
@@ -135,6 +151,7 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
     createEffect(() => {
       if (state.started) return
       if (!ready()) return
+      if (!settings.ready()) return
       if (!platform.version) return
       state.started = true
 
@@ -148,6 +165,11 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
 
       setFrom(previous)
       setTo(platform.version)
+
+      if (!settings.general.releaseNotes()) {
+        markSeen()
+        return
+      }
 
       const fetcher = platform.fetch ?? fetch
       const controller = new AbortController()
@@ -182,10 +204,8 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
           }
 
           const timer = setTimeout(() => {
-            dialog.show(
-              () => <DialogReleaseNotes highlights={highlights} />,
-              () => markSeen(),
-            )
+            markSeen()
+            dialog.show(() => <DialogReleaseNotes highlights={highlights} />)
           }, 500)
           setTimer(timer)
         })
