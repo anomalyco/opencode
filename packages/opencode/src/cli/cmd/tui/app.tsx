@@ -481,98 +481,6 @@ function App() {
       category: "System",
     },
     {
-      title: "Help",
-      value: "help.show",
-      slash: {
-        name: "help",
-      },
-      onSelect: () => {
-        dialog.replace(() => <DialogHelp />)
-      },
-      category: "System",
-    },
-    {
-      title: "Open docs",
-      value: "docs.open",
-      onSelect: () => {
-        open("https://opencode.ai/docs").catch(() => {})
-        dialog.clear()
-      },
-      category: "System",
-    },
-    {
-      title: "Exit the app",
-      value: "app.exit",
-      slash: {
-        name: "exit",
-        aliases: ["quit", "q"],
-      },
-      onSelect: () => exit(),
-      category: "System",
-    },
-    {
-      title: "Toggle debug panel",
-      category: "System",
-      value: "app.debug",
-      onSelect: (dialog) => {
-        renderer.toggleDebugOverlay()
-        dialog.clear()
-      },
-    },
-    {
-      title: "Toggle console",
-      category: "System",
-      value: "app.console",
-      onSelect: (dialog) => {
-        renderer.console.toggle()
-        dialog.clear()
-      },
-    },
-    {
-      title: "Write heap snapshot",
-      category: "System",
-      value: "app.heap_snapshot",
-      onSelect: (dialog) => {
-        const path = writeHeapSnapshot()
-        toast.show({
-          variant: "info",
-          message: `Heap snapshot written to ${path}`,
-          duration: 5000,
-        })
-        dialog.clear()
-      },
-    },
-    {
-      title: "Suspend terminal",
-      value: "terminal.suspend",
-      keybind: "terminal_suspend",
-      category: "System",
-      hidden: true,
-      onSelect: () => {
-        process.once("SIGCONT", () => {
-          renderer.resume()
-        })
-
-        renderer.suspend()
-        // pid=0 means send the signal to all processes in the process group
-        process.kill(0, "SIGTSTP")
-      },
-    },
-    {
-      title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
-      value: "terminal.title.toggle",
-      keybind: "terminal_title_toggle",
-      category: "System",
-      onSelect: (dialog) => {
-        setTerminalTitleEnabled((prev) => {
-          const next = !prev
-          if (!next) renderer.setTerminalTitle("")
-          return next
-        })
-        dialog.clear()
-      },
-    },
-    {
       title: animationsEnabled() ? "Disable animations" : "Enable animations",
       value: "app.toggle.animations",
       category: "System",
@@ -645,6 +553,98 @@ function App() {
         setShowScrollbar((prev) => !prev)
         dialog.clear()
       },
+    },
+    {
+      title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
+      value: "terminal.title.toggle",
+      keybind: "terminal_title_toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        setTerminalTitleEnabled((prev) => {
+          const next = !prev
+          if (!next) renderer.setTerminalTitle("")
+          return next
+        })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle debug panel",
+      category: "System",
+      value: "app.debug",
+      onSelect: (dialog) => {
+        renderer.toggleDebugOverlay()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle console",
+      category: "System",
+      value: "app.console",
+      onSelect: (dialog) => {
+        renderer.console.toggle()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Write heap snapshot",
+      category: "System",
+      value: "app.heap_snapshot",
+      onSelect: (dialog) => {
+        const path = writeHeapSnapshot()
+        toast.show({
+          variant: "info",
+          message: `Heap snapshot written to ${path}`,
+          duration: 5000,
+        })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Suspend terminal",
+      value: "terminal.suspend",
+      keybind: "terminal_suspend",
+      category: "System",
+      hidden: true,
+      onSelect: () => {
+        process.once("SIGCONT", () => {
+          renderer.resume()
+        })
+
+        renderer.suspend()
+        // pid=0 means send the signal to all processes in the process group
+        process.kill(0, "SIGTSTP")
+      },
+    },
+    {
+      title: "Help",
+      value: "help.show",
+      slash: {
+        name: "help",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogHelp />)
+      },
+      category: "System",
+    },
+    {
+      title: "Open docs",
+      value: "docs.open",
+      onSelect: () => {
+        open("https://opencode.ai/docs").catch(() => {})
+        dialog.clear()
+      },
+      category: "System",
+    },
+    {
+      title: "Exit app",
+      value: "app.exit",
+      slash: {
+        name: "exit",
+        aliases: ["quit", "q"],
+      },
+      onSelect: () => exit(),
+      category: "System",
     },
   ])
 
