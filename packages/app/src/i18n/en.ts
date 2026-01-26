@@ -8,6 +8,7 @@ export const dict = {
   "command.category.theme": "Theme",
   "command.category.language": "Language",
   "command.category.file": "File",
+  "command.category.context": "Context",
   "command.category.terminal": "Terminal",
   "command.category.model": "Model",
   "command.category.mcp": "MCP",
@@ -42,7 +43,10 @@ export const dict = {
   "command.session.new": "New session",
   "command.file.open": "Open file",
   "command.file.open.description": "Search files and commands",
+  "command.context.addSelection": "Add selection to context",
+  "command.context.addSelection.description": "Add selected lines from the current file",
   "command.terminal.toggle": "Toggle terminal",
+  "command.fileTree.toggle": "Toggle file tree",
   "command.review.toggle": "Toggle review",
   "command.terminal.new": "New terminal",
   "command.terminal.new.description": "Create a new terminal tab",
@@ -172,6 +176,8 @@ export const dict = {
 
   "prompt.placeholder.shell": "Enter shell command...",
   "prompt.placeholder.normal": 'Ask anything... "{{example}}"',
+  "prompt.placeholder.summarizeComments": "Summarize comments…",
+  "prompt.placeholder.summarizeComment": "Summarize comment…",
   "prompt.mode.shell": "Shell",
   "prompt.mode.shell.exit": "esc to exit",
 
@@ -342,6 +348,10 @@ export const dict = {
   "toast.model.none.description": "Connect a provider to summarize this session",
 
   "toast.file.loadFailed.title": "Failed to load file",
+  "toast.file.listFailed.title": "Failed to list files",
+
+  "toast.context.noLineSelection.title": "No line selection",
+  "toast.context.noLineSelection.description": "Select a line range in a file tab first.",
 
   "toast.session.share.copyFailed.title": "Failed to copy URL to clipboard",
   "toast.session.share.success.title": "Session shared",
@@ -417,8 +427,15 @@ export const dict = {
   "session.tab.context": "Context",
   "session.panel.reviewAndFiles": "Review and files",
   "session.review.filesChanged": "{{count}} Files Changed",
+  "session.review.change.one": "Change",
+  "session.review.change.other": "Changes",
   "session.review.loadingChanges": "Loading changes...",
   "session.review.empty": "No changes in this session yet",
+  "session.review.noChanges": "No changes",
+
+  "session.files.selectToOpen": "Select a file to open",
+  "session.files.all": "All files",
+
   "session.messages.renderEarlier": "Render earlier messages",
   "session.messages.loadingEarlier": "Loading earlier messages...",
   "session.messages.loadEarlier": "Load earlier messages",
@@ -494,6 +511,8 @@ export const dict = {
   "sidebar.gettingStarted.line2": "Connect any provider to use models, inc. Claude, GPT, Gemini etc.",
   "sidebar.project.recentSessions": "Recent sessions",
   "sidebar.project.viewAllSessions": "View all sessions",
+
+  "app.name.desktop": "OpenCode Desktop",
 
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Server",
@@ -678,6 +697,7 @@ export const dict = {
   "workspace.reset.failed.title": "Failed to reset workspace",
   "workspace.reset.success.title": "Workspace reset",
   "workspace.reset.success.description": "Workspace now matches the default branch.",
+  "workspace.error.stillPreparing": "Workspace is still preparing",
   "workspace.status.checking": "Checking for unmerged changes...",
   "workspace.status.error": "Unable to verify git status.",
   "workspace.status.clean": "No unmerged changes detected.",

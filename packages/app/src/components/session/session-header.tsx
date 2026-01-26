@@ -281,7 +281,7 @@ export function SessionHeader() {
                 </TooltipKeybind>
               </div>
               <div class="hidden md:block shrink-0">
-                <Tooltip value="Toggle file tree" placement="bottom">
+                <Tooltip value={language.t("command.fileTree.toggle")} placement="bottom">
                   <Button
                     variant="ghost"
                     class="group/file-tree-toggle size-5 p-0"
@@ -290,7 +290,7 @@ export function SessionHeader() {
                       if (opening && !view().reviewPanel.opened()) view().reviewPanel.open()
                       layout.fileTree.toggle()
                     }}
-                    aria-label="Toggle file tree"
+                    aria-label={language.t("command.fileTree.toggle")}
                     aria-expanded={layout.fileTree.opened()}
                   >
                     <div class="relative flex items-center justify-center size-4">
