@@ -11,6 +11,7 @@ interface ConnectionsState {
   activeConnection: ServerConnection | null
   client: Client | null
   currentProject: Project | null
+  serverHome: string | null // Home directory on the server machine (for ~ expansion)
   isLoading: boolean
   error: string | null
 
@@ -32,6 +33,7 @@ export const useConnections = create<ConnectionsState>((set, get) => ({
   connections: [],
   activeConnection: null,
   client: null,
+  serverHome: null,
   currentProject: null,
   isLoading: true,
   error: null,
@@ -48,6 +50,7 @@ export const useConnections = create<ConnectionsState>((set, get) => ({
       // Create client for active connection
       let client: Client | null = null
       let project: Project | null = null
+      let home: string | null = null
       if (active) {
         const password = await SecureStore.getItemAsync(`${PASSWORDS_PREFIX}${active.id}`)
         client = createClient({
@@ -55,15 +58,27 @@ export const useConnections = create<ConnectionsState>((set, get) => ({
           directory: active.directory,
           auth: active.username && password ? { username: active.username, password } : undefined,
         })
-        // Fetch current project info
+        // Fetch current project info and server paths
         try {
-          project = await client.project.current()
+          const [proj, paths] = await Promise.all([
+            client.project.current().catch(() => null),
+            client.path.get().catch(() => null),
+          ])
+          project = proj
+          home = paths?.home || null
         } catch {
           // Server might be offline
         }
       }
 
-      set({ connections, activeConnection: active, client, currentProject: project, isLoading: false })
+      set({
+        connections,
+        activeConnection: active,
+        client,
+        currentProject: project,
+        serverHome: home,
+        isLoading: false,
+      })
     } catch (error) {
       set({ error: "Failed to load connections", isLoading: false })
     }
@@ -143,6 +158,7 @@ export const useConnections = create<ConnectionsState>((set, get) => ({
     const active = connections.find((c) => c.id === id) || null
     let client: Client | null = null
     let project: Project | null = null
+    let home: string | null = null
 
     if (active) {
       const password = await SecureStore.getItemAsync(`${PASSWORDS_PREFIX}${active.id}`)
@@ -152,9 +168,13 @@ export const useConnections = create<ConnectionsState>((set, get) => ({
         auth: active.username && password ? { username: active.username, password } : undefined,
       })
 
-      // Fetch current project info
       try {
-        project = await client.project.current()
+        const [proj, paths] = await Promise.all([
+          client.project.current().catch(() => null),
+          client.path.get().catch(() => null),
+        ])
+        project = proj
+        home = paths?.home || null
       } catch {
         // Server might be offline
       }
@@ -164,7 +184,7 @@ export const useConnections = create<ConnectionsState>((set, get) => ({
       await SecureStore.setItemAsync(CONNECTIONS_KEY, JSON.stringify(connections))
     }
 
-    set({ connections, activeConnection: active, client, currentProject: project })
+    set({ connections, activeConnection: active, client, currentProject: project, serverHome: home })
   },
 
   testConnection: async (connection, password) => {
@@ -196,14 +216,15 @@ export const useConnections = create<ConnectionsState>((set, get) => ({
         directory: active.directory,
         auth: active.username && password ? { username: active.username, password } : undefined,
       })
-      // Fetch current project info
-      let project: Project | null = null
       try {
-        project = await client.project.current()
+        const [project, paths] = await Promise.all([
+          client.project.current().catch(() => null),
+          client.path.get().catch(() => null),
+        ])
+        set({ connections, activeConnection: active, client, currentProject: project, serverHome: paths?.home || null })
       } catch {
-        // Server might be offline
+        set({ connections, activeConnection: active, client, currentProject: null })
       }
-      set({ connections, activeConnection: active, client, currentProject: project })
     } else {
       set({ connections })
     }

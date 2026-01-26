@@ -16,6 +16,7 @@ import { useLocalSearchParams, Stack, useRouter } from "expo-router"
 import { Ionicons } from "@expo/vector-icons"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import * as ImagePicker from "expo-image-picker"
+import * as ImageManipulator from "expo-image-manipulator"
 import * as Clipboard from "expo-clipboard"
 import type BottomSheet from "@gorhom/bottom-sheet"
 import {
@@ -201,30 +202,37 @@ export default function SessionScreen() {
 
   // --- Image picking ---
 
-  // Normalize MIME types that LLM providers don't support (e.g. HEIC/HEIF from iOS)
-  function normalizeImageMime(mime: string): string {
-    const lower = mime.toLowerCase()
-    if (lower === "image/heic" || lower === "image/heif") return "image/jpeg"
-    if (lower.startsWith("image/")) return lower
-    return "image/jpeg"
+  // Convert any image (including HEIC/HEIF from iOS) to guaranteed JPEG bytes
+  const MAX_DIMENSION = 1568 // Anthropic recommended max
+  async function toJpeg(uri: string, width: number, height: number): Promise<Attachment> {
+    const actions: ImageManipulator.Action[] = []
+    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+      const scale = MAX_DIMENSION / Math.max(width, height)
+      actions.push({ resize: { width: Math.round(width * scale), height: Math.round(height * scale) } })
+    }
+    const result = await ImageManipulator.manipulateAsync(uri, actions, {
+      format: ImageManipulator.SaveFormat.JPEG,
+      compress: 0.8,
+      base64: true,
+    })
+    return {
+      uri: result.uri,
+      mime: "image/jpeg",
+      filename: "image.jpg",
+      width: result.width,
+      height: result.height,
+      base64: result.base64 || undefined,
+    }
   }
 
   const pickFromLibrary = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsMultipleSelection: true,
-      quality: 0.8,
-      base64: true,
+      quality: 1, // full quality - we compress in manipulator
     })
     if (result.canceled) return
-    const items: Attachment[] = result.assets.map((a) => ({
-      uri: a.uri,
-      mime: normalizeImageMime(a.mimeType || "image/jpeg"),
-      filename: a.fileName || undefined,
-      width: a.width,
-      height: a.height,
-      base64: a.base64 || undefined,
-    }))
+    const items = await Promise.all(result.assets.map((a) => toJpeg(a.uri, a.width, a.height)))
     setAttachments((prev) => [...prev, ...items])
   }, [])
 
@@ -234,23 +242,11 @@ export default function SessionScreen() {
       Alert.alert("Permission needed", "Camera access is required to take photos.")
       return
     }
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.8,
-      base64: true,
-    })
+    const result = await ImagePicker.launchCameraAsync({ quality: 1 })
     if (result.canceled) return
     const a = result.assets[0]
-    setAttachments((prev) => [
-      ...prev,
-      {
-        uri: a.uri,
-        mime: normalizeImageMime(a.mimeType || "image/jpeg"),
-        filename: a.fileName || undefined,
-        width: a.width,
-        height: a.height,
-        base64: a.base64 || undefined,
-      },
-    ])
+    const item = await toJpeg(a.uri, a.width, a.height)
+    setAttachments((prev) => [...prev, item])
   }, [])
 
   const pasteFromClipboard = useCallback(async () => {
@@ -258,10 +254,12 @@ export default function SessionScreen() {
     if (hasImage) {
       const img = await Clipboard.getImageAsync({ format: "png" })
       if (img?.data) {
+        // img.data may already be a full data URI or just raw base64
+        const uri = img.data.startsWith("data:") ? img.data : `data:image/png;base64,${img.data}`
         setAttachments((prev) => [
           ...prev,
           {
-            uri: `data:image/png;base64,${img.data}`,
+            uri,
             mime: "image/png",
             filename: "clipboard.png",
             width: img.size.width,

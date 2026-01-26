@@ -2,41 +2,6 @@ import { create } from "zustand"
 import type { Session, Message, Part, Event, MessageWithParts } from "../lib/sdk"
 import { useConnections } from "./connections"
 
-// Normalize MIME types that LLM providers don't support (e.g. HEIC/HEIF from iOS)
-function normalizeImageMime(mime: string): string {
-  const lower = mime.toLowerCase()
-  if (lower === "image/heic" || lower === "image/heif") return "image/jpeg"
-  if (lower.startsWith("image/")) return lower
-  return "image/jpeg"
-}
-
-// Convert a local file URI to a data URI by reading it as base64
-// This handles cases where expo-image-picker didn't return base64 data
-async function fileToDataUri(uri: string, mime: string): Promise<string | null> {
-  try {
-    const response = await fetch(uri)
-    const blob = await response.blob()
-    return new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        const result = reader.result as string
-        // FileReader returns data:mime;base64,... format but we normalize the mime
-        if (result?.startsWith("data:")) {
-          const comma = result.indexOf(",")
-          resolve(`data:${mime};base64,${result.slice(comma + 1)}`)
-        } else {
-          resolve(null)
-        }
-      }
-      reader.onerror = () => resolve(null)
-      reader.readAsDataURL(blob)
-    })
-  } catch {
-    console.error("Failed to read file as data URI:", uri)
-    return null
-  }
-}
-
 // Helper to convert API response to our internal format
 function parseMessages(response: MessageWithParts[]): { messages: Message[]; parts: Record<string, Part[]> } {
   const messages: Message[] = []
@@ -223,7 +188,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
         parts: { ...state.parts, [userMessage.id]: optimisticParts },
       }))
 
-      // Build prompt parts
+      // Build prompt parts - images are already converted to JPEG with base64 by toJpeg()
       const promptParts: Array<
         { type: "text"; text: string } | { type: "file"; mime: string; url: string; filename?: string }
       > = []
@@ -232,35 +197,32 @@ export const useSessions = create<SessionsState>((set, get) => ({
       }
       if (files) {
         for (const f of files) {
-          // Normalize MIME type for LLM provider compatibility
-          const mime = normalizeImageMime(f.mime)
-          // Build data URI - prefer base64 if available, otherwise use existing data: URI
-          const url =
-            f.base64 && !f.uri.startsWith("data:")
-              ? `data:${mime};base64,${f.base64}`
-              : f.uri.startsWith("data:")
-                ? f.uri
-                : await fileToDataUri(f.uri, mime)
-          if (!url) continue
-          promptParts.push({ type: "file", mime, url, filename: f.filename })
+          const url = f.base64 ? `data:${f.mime};base64,${f.base64}` : f.uri
+          promptParts.push({ type: "file", mime: f.mime, url, filename: f.filename })
         }
       }
 
       // Fire and forget - SSE events will update messages/parts/status in real-time
+      const payload = { parts: promptParts, model, agent }
+      console.log("[sendMessage] sending to prompt_async:", {
+        sessionID: session.id,
+        partCount: promptParts.length,
+        partTypes: promptParts.map((p) => p.type),
+        bodySize: JSON.stringify(payload).length,
+      })
       client.session
-        .prompt(session.id, {
-          parts: promptParts,
-          model,
-          agent,
+        .prompt(session.id, payload)
+        .then(() => {
+          console.log("[sendMessage] prompt_async accepted")
         })
         .catch((error) => {
-          console.error("Failed to send message:", error)
-          set({ error: "Failed to send message", isSending: false })
+          console.error("[sendMessage] prompt_async failed:", error)
+          set({ error: String(error), isSending: false })
           get().refreshMessages()
         })
     } catch (error) {
-      console.error("Failed to send message:", error)
-      set({ error: "Failed to send message", isSending: false })
+      console.error("[sendMessage] error:", error)
+      set({ error: String(error), isSending: false })
       get().refreshMessages()
     }
   },

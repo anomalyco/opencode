@@ -84,7 +84,7 @@ export default function SessionsScreen() {
   const [isCreating, setIsCreating] = useState(false)
 
   const { sessions, isLoading, error, loadSessions, createSession } = useSessions()
-  const { activeConnection, client, currentProject, refreshProject, updateConnection } = useConnections()
+  const { activeConnection, client, currentProject, serverHome, refreshProject, updateConnection } = useConnections()
   const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
@@ -258,13 +258,39 @@ export default function SessionsScreen() {
                 </Text>
                 <TextInput
                   style={[styles.modalInput, isDark && styles.modalInputDark]}
-                  placeholder="/path/to/project"
+                  placeholder={serverHome ? `${serverHome}/...` : "/path/to/project"}
                   placeholderTextColor={isDark ? "#666666" : "#999999"}
                   value={customDir}
-                  onChangeText={setCustomDir}
+                  onChangeText={(text) => {
+                    // Expand ~ to server home directory
+                    if (serverHome && text.startsWith("~/")) {
+                      setCustomDir(serverHome + text.slice(1))
+                    } else if (serverHome && text === "~") {
+                      setCustomDir(serverHome)
+                    } else {
+                      setCustomDir(text)
+                    }
+                  }}
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
+                {/* Quick path shortcuts */}
+                {serverHome && (
+                  <View style={styles.pathChips}>
+                    <TouchableOpacity
+                      style={[styles.pathChip, isDark && styles.pathChipDark]}
+                      onPress={() => setCustomDir(serverHome)}
+                    >
+                      <Text style={[styles.pathChipText, isDark && styles.pathChipTextDark]}>~</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.pathChip, isDark && styles.pathChipDark]}
+                      onPress={() => setCustomDir(serverHome + "/")}
+                    >
+                      <Text style={[styles.pathChipText, isDark && styles.pathChipTextDark]}>~/</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
 
               <View style={styles.modalActions}>
@@ -561,6 +587,28 @@ const styles = StyleSheet.create({
   modalInputDark: {
     backgroundColor: "#2a2a2a",
     color: "#ffffff",
+  },
+  pathChips: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  pathChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#e8e5f0",
+    borderRadius: 16,
+  },
+  pathChipDark: {
+    backgroundColor: "#2a2040",
+  },
+  pathChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6d28d9",
+  },
+  pathChipTextDark: {
+    color: "#c4b5fd",
   },
   modalHint: {
     fontSize: 13,

@@ -238,6 +238,11 @@ export function createClient(config: ClientConfig) {
       current: () => request<Project>(config, "/project/current"),
     },
 
+    path: {
+      get: () =>
+        request<{ home: string; state: string; config: string; worktree: string; directory: string }>(config, "/path"),
+    },
+
     session: {
       list: (params?: { roots?: boolean; limit?: number; search?: string }) => {
         const query = new URLSearchParams()
@@ -273,15 +278,19 @@ export function createClient(config: ClientConfig) {
       ): Promise<void> => {
         const url = `${config.baseUrl}/session/${sessionID}/prompt_async`
         const headers = createHeaders(config)
+        const body = JSON.stringify(params)
+        console.log(`[sdk.prompt] POST ${url} body=${body.length} bytes`)
 
         const response = await fetch(url, {
           method: "POST",
           headers,
-          body: JSON.stringify(params),
+          body,
         })
 
+        console.log(`[sdk.prompt] response: ${response.status} ${response.statusText}`)
         if (!response.ok) {
           const error = await response.text()
+          console.error(`[sdk.prompt] error body: ${error.slice(0, 500)}`)
           throw new Error(`Failed to send message: ${response.status} - ${error}`)
         }
       },
