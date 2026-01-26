@@ -436,6 +436,9 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             // Set authorization header with access token
             headers.set("authorization", `Bearer ${currentAuth.access}`)
 
+            // Set OpenAI-Beta header required for Codex responses endpoint
+            headers.set("OpenAI-Beta", "responses=experimental")
+
             // Set ChatGPT-Account-Id header for organization subscriptions
             if (authWithAccount.accountId) {
               headers.set("ChatGPT-Account-Id", authWithAccount.accountId)
