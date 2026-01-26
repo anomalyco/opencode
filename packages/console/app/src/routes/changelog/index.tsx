@@ -5,7 +5,7 @@ import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { config } from "~/config"
-import { For, Show } from "solid-js"
+import { For, Show, createSignal } from "solid-js"
 
 type Release = {
   tag_name: string
@@ -40,6 +40,59 @@ function formatDate(dateString: string) {
   })
 }
 
+type HighlightMedia = { type: "video"; src: string } | { type: "image"; src: string; width: string; height: string }
+
+type HighlightItem = {
+  title: string
+  description: string
+  shortDescription?: string
+  media: HighlightMedia
+}
+
+type HighlightGroup = {
+  source: string
+  items: HighlightItem[]
+}
+
+function parseHighlights(body: string): HighlightGroup[] {
+  const groups = new Map<string, HighlightItem[]>()
+  const regex = /<highlight\s+source="([^"]+)">([\s\S]*?)<\/highlight>/g
+  let match
+
+  while ((match = regex.exec(body)) !== null) {
+    const source = match[1]
+    const content = match[2]
+
+    const titleMatch = content.match(/<h2>([^<]+)<\/h2>/)
+    const pMatch = content.match(/<p(?:\s+short="([^"]*)")?>([^<]+)<\/p>/)
+    const imgMatch = content.match(/<img\s+width="([^"]+)"\s+height="([^"]+)"\s+alt="[^"]*"\s+src="([^"]+)"/)
+    const videoMatch = content.match(/^\s*(https:\/\/github\.com\/user-attachments\/assets\/[a-f0-9-]+)\s*$/m)
+
+    let media: HighlightMedia | undefined
+    if (videoMatch) {
+      media = { type: "video", src: videoMatch[1] }
+    } else if (imgMatch) {
+      media = { type: "image", src: imgMatch[3], width: imgMatch[1], height: imgMatch[2] }
+    }
+
+    if (titleMatch && media) {
+      const item: HighlightItem = {
+        title: titleMatch[1],
+        description: pMatch?.[2] || "",
+        shortDescription: pMatch?.[1],
+        media,
+      }
+
+      if (!groups.has(source)) {
+        groups.set(source, [])
+      }
+      groups.get(source)!.push(item)
+    }
+  }
+
+  return Array.from(groups.entries()).map(([source, items]) => ({ source, items }))
+}
+
 function parseMarkdown(body: string) {
   const lines = body.split("\n")
   const sections: { title: string; items: string[] }[] = []
@@ -60,7 +113,9 @@ function parseMarkdown(body: string) {
   }
   if (current) sections.push(current)
 
-  return { sections }
+  const highlights = parseHighlights(body)
+
+  return { sections, highlights }
 }
 
 function ReleaseItem(props: { item: string }) {
@@ -84,6 +139,60 @@ function ReleaseItem(props: { item: string }) {
         </a>
       </Show>
     </li>
+  )
+}
+
+function HighlightSection(props: { group: HighlightGroup }) {
+  return (
+    <div data-component="highlight">
+      <h4>{props.group.source}</h4>
+      <hr />
+      <For each={props.group.items}>
+        {(item) => (
+          <div data-slot="highlight-item">
+            <p data-slot="title">{item.title}</p>
+            <p>{item.description}</p>
+            <Show when={item.media.type === "video"}>
+              <video src={item.media.src} controls autoplay loop muted playsinline />
+            </Show>
+            <Show when={item.media.type === "image"}>
+              <img
+                src={item.media.src}
+                alt={item.title}
+                width={(item.media as { width: string }).width}
+                height={(item.media as { height: string }).height}
+              />
+            </Show>
+          </div>
+        )}
+      </For>
+    </div>
+  )
+}
+
+function CollapsibleSection(props: { section: { title: string; items: string[] } }) {
+  const [open, setOpen] = createSignal(false)
+
+  return (
+    <div data-component="collapsible-section">
+      <button data-slot="toggle" onClick={() => setOpen(!open())}>
+        <span data-slot="icon">{open() ? "▾" : "▸"}</span>
+        <span>{props.section.title}</span>
+      </button>
+      <Show when={open()}>
+        <ul>
+          <For each={props.section.items}>{(item) => <ReleaseItem item={item} />}</For>
+        </ul>
+      </Show>
+    </div>
+  )
+}
+
+function CollapsibleSections(props: { sections: { title: string; items: string[] }[] }) {
+  return (
+    <div data-component="collapsible-sections">
+      <For each={props.sections}>{(section) => <CollapsibleSection section={section} />}</For>
+    </div>
   )
 }
 
@@ -120,16 +229,26 @@ export default function Changelog() {
                       <time dateTime={release.published_at}>{formatDate(release.published_at)}</time>
                     </header>
                     <div data-slot="content">
-                      <For each={parsed().sections}>
-                        {(section) => (
-                          <div data-component="section">
-                            <h3>{section.title}</h3>
-                            <ul>
-                              <For each={section.items}>{(item) => <ReleaseItem item={item} />}</For>
-                            </ul>
-                          </div>
-                        )}
-                      </For>
+                      <Show when={parsed().highlights.length > 0}>
+                        <div data-component="highlights">
+                          <For each={parsed().highlights}>{(group) => <HighlightSection group={group} />}</For>
+                        </div>
+                      </Show>
+                      <Show when={parsed().highlights.length > 0 && parsed().sections.length > 0}>
+                        <CollapsibleSections sections={parsed().sections} />
+                      </Show>
+                      <Show when={parsed().highlights.length === 0}>
+                        <For each={parsed().sections}>
+                          {(section) => (
+                            <div data-component="section">
+                              <h3>{section.title}</h3>
+                              <ul>
+                                <For each={section.items}>{(item) => <ReleaseItem item={item} />}</For>
+                              </ul>
+                            </div>
+                          )}
+                        </For>
+                      </Show>
                     </div>
                   </article>
                 )

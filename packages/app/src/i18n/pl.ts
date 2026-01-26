@@ -100,7 +100,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Darmowe modele dostarczane przez OpenCode",
   "dialog.model.unpaid.addMore.title": "Dodaj więcej modeli od popularnych dostawców",
 
-  "dialog.provider.viewAll": "Zobacz wszystkich dostawców",
+  "dialog.provider.viewAll": "Zobacz więcej dostawców",
 
   "provider.connect.title": "Połącz {{provider}}",
   "provider.connect.title.anthropicProMax": "Zaloguj się z Claude Pro/Max",
@@ -304,19 +304,20 @@ export const dict = {
   "context.usage.clickToView": "Kliknij, aby zobaczyć kontekst",
   "context.usage.view": "Pokaż użycie kontekstu",
 
-  "language.en": "Angielski",
-  "language.zh": "Chiński",
-  "language.ko": "Koreański",
-  "language.de": "Niemiecki",
-  "language.es": "Hiszpański",
-  "language.fr": "Francuski",
-  "language.ja": "Japoński",
-  "language.da": "Duński",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
   "language.pl": "Polski",
-  "language.ru": "Rosyjski",
-  "language.ar": "Arabski",
-  "language.no": "Norweski",
-  "language.br": "Portugalski (Brazylia)",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Język",
   "toast.language.description": "Przełączono na {{language}}",
@@ -426,6 +427,14 @@ export const dict = {
 
   "session.header.search.placeholder": "Szukaj {{project}}",
   "session.header.searchFiles": "Szukaj plików",
+
+  "status.popover.trigger": "Status",
+  "status.popover.ariaLabel": "Konfiguracje serwerów",
+  "status.popover.tab.servers": "Serwery",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Wtyczki",
+  "status.popover.action.manageServers": "Zarządzaj serwerami",
 
   "session.share.popover.title": "Opublikuj w sieci",
   "session.share.popover.description.shared":

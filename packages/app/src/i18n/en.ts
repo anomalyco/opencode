@@ -100,7 +100,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Free models provided by OpenCode",
   "dialog.model.unpaid.addMore.title": "Add more models from popular providers",
 
-  "dialog.provider.viewAll": "View all providers",
+  "dialog.provider.viewAll": "Show more providers",
 
   "provider.connect.title": "Connect {{provider}}",
   "provider.connect.title.anthropicProMax": "Login with Claude Pro/Max",
@@ -137,6 +137,9 @@ export const dict = {
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
 
+  "provider.disconnect.toast.disconnected.title": "{{provider}} disconnected",
+  "provider.disconnect.toast.disconnected.description": "{{provider}} models are no longer available.",
+
   "model.tag.free": "Free",
   "model.tag.latest": "Latest",
   "model.provider.anthropic": "Anthropic",
@@ -159,6 +162,8 @@ export const dict = {
   "common.loading": "Loading",
   "common.loading.ellipsis": "...",
   "common.cancel": "Cancel",
+  "common.connect": "Connect",
+  "common.disconnect": "Disconnect",
   "common.submit": "Submit",
   "common.save": "Save",
   "common.saving": "Saving...",
@@ -308,19 +313,19 @@ export const dict = {
   "context.usage.view": "View context usage",
 
   "language.en": "English",
-  "language.zh": "Chinese (Simplified)",
-  "language.zht": "Chinese (Traditional)",
-  "language.ko": "Korean",
-  "language.de": "German",
-  "language.es": "Spanish",
-  "language.fr": "French",
-  "language.ja": "Japanese",
-  "language.da": "Danish",
-  "language.ru": "Russian",
-  "language.pl": "Polish",
-  "language.ar": "Arabic",
-  "language.no": "Norwegian",
-  "language.br": "Portuguese (Brazil)",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Language",
   "toast.language.description": "Switched to {{language}}",
@@ -430,6 +435,14 @@ export const dict = {
   "session.header.search.placeholder": "Search {{project}}",
   "session.header.searchFiles": "Search files",
 
+  "status.popover.trigger": "Status",
+  "status.popover.ariaLabel": "Server configurations",
+  "status.popover.tab.servers": "Servers",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Plugins",
+  "status.popover.action.manageServers": "Manage servers",
+
   "session.share.popover.title": "Publish on web",
   "session.share.popover.description.shared":
     "This session is public on the web. It is accessible to anyone with the link.",
@@ -483,6 +496,7 @@ export const dict = {
   "sidebar.project.viewAllSessions": "View all sessions",
 
   "settings.section.desktop": "Desktop",
+  "settings.section.server": "Server",
   "settings.tab.general": "General",
   "settings.tab.shortcuts": "Shortcuts",
 
@@ -591,6 +605,13 @@ export const dict = {
 
   "settings.providers.title": "Providers",
   "settings.providers.description": "Provider settings will be configurable here.",
+  "settings.providers.section.connected": "Connected providers",
+  "settings.providers.connected.empty": "No connected providers",
+  "settings.providers.section.popular": "Popular providers",
+  "settings.providers.tag.environment": "Environment",
+  "settings.providers.tag.config": "Config",
+  "settings.providers.tag.custom": "Custom",
+  "settings.providers.tag.other": "Other",
   "settings.models.title": "Models",
   "settings.models.description": "Model settings will be configurable here.",
   "settings.agents.title": "Agents",

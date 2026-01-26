@@ -100,7 +100,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Бесплатные модели от OpenCode",
   "dialog.model.unpaid.addMore.title": "Добавьте больше моделей от популярных провайдеров",
 
-  "dialog.provider.viewAll": "Посмотреть всех провайдеров",
+  "dialog.provider.viewAll": "Показать больше провайдеров",
 
   "provider.connect.title": "Подключить {{provider}}",
   "provider.connect.title.anthropicProMax": "Войти с помощью Claude Pro/Max",
@@ -305,18 +305,20 @@ export const dict = {
   "context.usage.clickToView": "Нажмите для просмотра контекста",
   "context.usage.view": "Показать использование контекста",
 
-  "language.en": "Английский",
-  "language.zh": "Китайский",
-  "language.ko": "Корейский",
-  "language.de": "Немецкий",
-  "language.es": "Испанский",
-  "language.fr": "Французский",
-  "language.ja": "Японский",
-  "language.da": "Датский",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
   "language.ru": "Русский",
-  "language.ar": "Арабский",
-  "language.no": "Норвежский",
-  "language.br": "Португальский (Бразилия)",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Язык",
   "toast.language.description": "Переключено на {{language}}",
@@ -427,6 +429,14 @@ export const dict = {
 
   "session.header.search.placeholder": "Поиск {{project}}",
   "session.header.searchFiles": "Поиск файлов",
+
+  "status.popover.trigger": "Статус",
+  "status.popover.ariaLabel": "Настройки серверов",
+  "status.popover.tab.servers": "Серверы",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Плагины",
+  "status.popover.action.manageServers": "Управлять серверами",
 
   "session.share.popover.title": "Опубликовать в интернете",
   "session.share.popover.description.shared":

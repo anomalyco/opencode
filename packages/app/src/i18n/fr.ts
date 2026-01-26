@@ -98,7 +98,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Modèles gratuits fournis par OpenCode",
   "dialog.model.unpaid.addMore.title": "Ajouter plus de modèles de fournisseurs populaires",
 
-  "dialog.provider.viewAll": "Voir tous les fournisseurs",
+  "dialog.provider.viewAll": "Voir plus de fournisseurs",
 
   "provider.connect.title": "Connecter {{provider}}",
   "provider.connect.title.anthropicProMax": "Connexion avec Claude Pro/Max",
@@ -287,20 +287,20 @@ export const dict = {
   "context.usage.clickToView": "Cliquez pour voir le contexte",
   "context.usage.view": "Voir l'utilisation du contexte",
 
-  "language.en": "Anglais",
-  "language.zh": "Chinois (simplifié)",
-  "language.zht": "Chinois (traditionnel)",
-  "language.ko": "Coréen",
-  "language.de": "Allemand",
-  "language.es": "Espagnol",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
   "language.fr": "Français",
-  "language.ja": "Japonais",
-  "language.da": "Danois",
-  "language.ru": "Russe",
-  "language.pl": "Polonais",
-  "language.ar": "Arabe",
-  "language.no": "Norvégien",
-  "language.br": "Portugais (Brésil)",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Langue",
   "toast.language.description": "Passé à {{language}}",
@@ -414,6 +414,14 @@ export const dict = {
 
   "session.header.search.placeholder": "Rechercher {{project}}",
   "session.header.searchFiles": "Rechercher des fichiers",
+
+  "status.popover.trigger": "Statut",
+  "status.popover.ariaLabel": "Configurations des serveurs",
+  "status.popover.tab.servers": "Serveurs",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Plugins",
+  "status.popover.action.manageServers": "Gérer les serveurs",
 
   "session.share.popover.title": "Publier sur le web",
   "session.share.popover.description.shared":

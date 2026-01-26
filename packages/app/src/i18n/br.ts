@@ -100,7 +100,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Modelos gratuitos fornecidos pelo OpenCode",
   "dialog.model.unpaid.addMore.title": "Adicionar mais modelos de provedores populares",
 
-  "dialog.provider.viewAll": "Ver todos os provedores",
+  "dialog.provider.viewAll": "Ver mais provedores",
 
   "provider.connect.title": "Conectar {{provider}}",
   "provider.connect.title.anthropicProMax": "Entrar com Claude Pro/Max",
@@ -298,19 +298,19 @@ export const dict = {
   "context.usage.clickToView": "Clique para ver o contexto",
   "context.usage.view": "Ver uso do contexto",
 
-  "language.en": "Inglês",
-  "language.zh": "Chinês (Simplificado)",
-  "language.zht": "Chinês (Tradicional)",
-  "language.ko": "Coreano",
-  "language.de": "Alemão",
-  "language.es": "Espanhol",
-  "language.fr": "Francês",
-  "language.ja": "Japonês",
-  "language.da": "Dinamarquês",
-  "language.ru": "Russo",
-  "language.pl": "Polonês",
-  "language.ar": "Árabe",
-  "language.no": "Norueguês",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
   "language.br": "Português (Brasil)",
 
   "toast.language.title": "Idioma",
@@ -421,6 +421,14 @@ export const dict = {
 
   "session.header.search.placeholder": "Buscar {{project}}",
   "session.header.searchFiles": "Buscar arquivos",
+
+  "status.popover.trigger": "Status",
+  "status.popover.ariaLabel": "Configurações de servidores",
+  "status.popover.tab.servers": "Servidores",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Plugins",
+  "status.popover.action.manageServers": "Gerenciar servidores",
 
   "session.share.popover.title": "Publicar na web",
   "session.share.popover.description.shared":

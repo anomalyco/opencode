@@ -102,7 +102,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Kostenlose Modelle von OpenCode",
   "dialog.model.unpaid.addMore.title": "Weitere Modelle von beliebten Anbietern hinzufügen",
 
-  "dialog.provider.viewAll": "Alle Anbieter anzeigen",
+  "dialog.provider.viewAll": "Mehr Anbieter anzeigen",
 
   "provider.connect.title": "{{provider}} verbinden",
   "provider.connect.title.anthropicProMax": "Mit Claude Pro/Max anmelden",
@@ -292,20 +292,20 @@ export const dict = {
   "context.usage.clickToView": "Klicken, um Kontext anzuzeigen",
   "context.usage.view": "Kontextnutzung anzeigen",
 
-  "language.en": "Englisch",
-  "language.zh": "Chinesisch (Vereinfacht)",
-  "language.zht": "Chinesisch (Traditionell)",
-  "language.ko": "Koreanisch",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
   "language.de": "Deutsch",
-  "language.es": "Spanisch",
-  "language.fr": "Französisch",
-  "language.ja": "Japanisch",
-  "language.da": "Dänisch",
-  "language.ru": "Russisch",
-  "language.pl": "Polnisch",
-  "language.ar": "Arabisch",
-  "language.no": "Norwegisch",
-  "language.br": "Portugiesisch (Brasilien)",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Sprache",
   "toast.language.description": "Zu {{language}} gewechselt",
@@ -415,6 +415,14 @@ export const dict = {
 
   "session.header.search.placeholder": "{{project}} durchsuchen",
   "session.header.searchFiles": "Dateien suchen",
+
+  "status.popover.trigger": "Status",
+  "status.popover.ariaLabel": "Serverkonfigurationen",
+  "status.popover.tab.servers": "Server",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Plugins",
+  "status.popover.action.manageServers": "Server verwalten",
 
   "session.share.popover.title": "Im Web veröffentlichen",
   "session.share.popover.description.shared":
