@@ -21,28 +21,12 @@ export const DialogSettings: Component = () => {
     <Dialog size="x-large">
       <Tabs orientation="vertical" variant="settings" defaultValue="general" class="h-full settings-dialog">
         <Tabs.List>
-          <div
-            style={{
-              display: "flex",
-              "flex-direction": "column",
-              "justify-content": "space-between",
-              height: "100%",
-              width: "100%",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                "flex-direction": "column",
-                gap: "12px",
-                width: "100%",
-                "padding-top": "12px",
-              }}
-            >
-              <div style={{ display: "flex", "flex-direction": "column", gap: "12px" }}>
-                <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
+          <div class="flex flex-col justify-between h-full w-full">
+            <div class="flex flex-col gap-3 w-full pt-3">
+              <div class="flex flex-col gap-3">
+                <div class="flex flex-col gap-1.5">
                   <Tabs.SectionTitle>{language.t("settings.section.desktop")}</Tabs.SectionTitle>
-                  <div style={{ display: "flex", "flex-direction": "column", gap: "6px", width: "100%" }}>
+                  <div class="flex flex-col gap-1.5 w-full">
                     <Tabs.Trigger value="general">
                       <Icon name="sliders" />
                       {language.t("settings.tab.general")}
@@ -54,9 +38,9 @@ export const DialogSettings: Component = () => {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", "flex-direction": "column", gap: "6px" }}>
+                <div class="flex flex-col gap-1.5">
                   <Tabs.SectionTitle>{language.t("settings.section.server")}</Tabs.SectionTitle>
-                  <div style={{ display: "flex", "flex-direction": "column", gap: "6px", width: "100%" }}>
+                  <div class="flex flex-col gap-1.5 w-full">
                     <Tabs.Trigger value="providers">
                       <Icon name="server" />
                       {language.t("settings.providers.title")}
