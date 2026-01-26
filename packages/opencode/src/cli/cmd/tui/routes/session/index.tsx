@@ -503,7 +503,7 @@ export function Session() {
       },
     },
     {
-      title: "Toggle code concealment",
+      title: conceal() ? "Disable code concealment" : "Enable code concealment",
       value: "session.toggle.conceal",
       keybind: "messages_toggle_conceal" as any,
       category: "Session",
@@ -539,7 +539,7 @@ export function Session() {
       },
     },
     {
-      title: "Toggle diff wrapping",
+      title: diffWrapMode() === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
       value: "session.toggle.diffwrap",
       category: "Session",
       slash: {
