@@ -465,6 +465,41 @@
         }
       }
     }
+
+    [data-component="highlights"] {
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    [data-component="highlight"] {
+      h4 {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--color-text-strong);
+        margin-bottom: 8px;
+      }
+
+      p[data-slot="title"] {
+        font-weight: 500;
+        color: var(--color-text-strong);
+        margin-bottom: 4px;
+      }
+
+      p {
+        color: var(--color-text);
+        line-height: 1.5;
+        margin-bottom: 12px;
+      }
+
+      img,
+      video {
+        max-width: 100%;
+        height: auto;
+        border-radius: 4px;
+      }
+    }
   }
 
   a {
