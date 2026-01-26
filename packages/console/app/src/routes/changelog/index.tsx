@@ -187,9 +187,9 @@ export default function Changelog() {
               }}
             </For>
           </section>
-
-          <Footer />
         </div>
+
+        <Footer />
       </div>
 
       <Legal />
