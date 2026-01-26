@@ -102,7 +102,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "OpenCode 提供的免费模型",
   "dialog.model.unpaid.addMore.title": "从热门提供商添加更多模型",
 
-  "dialog.provider.viewAll": "查看全部提供商",
+  "dialog.provider.viewAll": "查看更多提供商",
 
   "provider.connect.title": "连接 {{provider}}",
   "provider.connect.title.anthropicProMax": "使用 Claude Pro/Max 登录",

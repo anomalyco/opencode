@@ -63,12 +63,10 @@ export const SettingsProviders: Component = () => {
   }
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto px-10 pb-10 no-scrollbar">
+    <div class="flex flex-col h-full overflow-y-auto no-scrollbar" style={{ padding: "0 40px 40px 40px" }}>
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
-        <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
-          <div class="flex items-center justify-between gap-4">
-            <h2 class="text-16-medium text-text-strong">{language.t("settings.providers.title")}</h2>
-          </div>
+        <div class="flex flex-col gap-1 pt-6 pb-8 max-w-[720px]">
+          <h2 class="text-16-medium text-text-strong">{language.t("settings.providers.title")}</h2>
         </div>
       </div>
 
@@ -127,7 +125,7 @@ export const SettingsProviders: Component = () => {
                     </Show>
                   </div>
                   <Button
-                    size="small"
+                    size="large"
                     variant="secondary"
                     icon="plus-small"
                     onClick={() => {
@@ -143,8 +141,7 @@ export const SettingsProviders: Component = () => {
 
           <Button
             variant="ghost"
-            class="w-full justify-start px-[11px] py-3.5 gap-4.5 text-14-medium"
-            icon="dot-grid"
+            class="px-0 py-0 text-14-medium text-text-strong underline hover:bg-transparent active:bg-transparent"
             onClick={() => {
               dialog.show(() => <DialogSelectProvider />)
             }}
