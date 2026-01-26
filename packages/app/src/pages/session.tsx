@@ -2626,7 +2626,7 @@ export default function Page() {
 
             <Show when={layout.fileTree.opened()}>
               <div class="relative shrink-0 h-full" style={{ width: `${layout.fileTree.width()}px` }}>
-                <div class="h-full border-l border-border-weak-base flex flex-col overflow-hidden">
+                <div class="h-full border-l border-border-weak-base flex flex-col overflow-hidden group/filetree">
                   <Tabs
                     variant="pill"
                     value={fileTreeTab()}
