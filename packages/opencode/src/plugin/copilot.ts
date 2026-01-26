@@ -26,6 +26,9 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         const info = await getAuth()
         if (!info || info.type !== "oauth") return {}
 
+        const enterpriseUrl = info.enterpriseUrl
+        const baseURL = enterpriseUrl ? `https://copilot-api.${normalizeDomain(enterpriseUrl)}` : undefined
+
         if (provider && provider.models) {
           for (const model of Object.values(provider.models)) {
             model.cost = {
@@ -36,16 +39,23 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                 write: 0,
               },
             }
+
+            // TODO: move some of this hacky-ness to models.dev presets once we have better grasp of things here...
+            const base = baseURL ?? model.api.url
+            const claude = model.id.includes("claude")
+            const url = iife(() => {
+              if (!claude) return base
+              if (base.endsWith("/v1")) return base
+              if (base.endsWith("/")) return `${base}v1`
+              return `${base}/v1`
+            })
+
+            model.api.url = url
+            model.api.npm = claude ? "@ai-sdk/anthropic" : "@ai-sdk/github-copilot"
           }
         }
 
-        const enterpriseUrl = info.enterpriseUrl
-        const baseURL = enterpriseUrl
-          ? `https://copilot-api.${normalizeDomain(enterpriseUrl)}`
-          : "https://api.githubcopilot.com"
-
         return {
-          baseURL,
           apiKey: "",
           async fetch(request: RequestInfo | URL, init?: RequestInit) {
             const info = await getAuth()

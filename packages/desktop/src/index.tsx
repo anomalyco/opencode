@@ -328,21 +328,16 @@ render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
   const platform = createPlatform(() => serverPassword())
 
-  onMount(() => {
-    // Handle external links - open in system browser instead of webview
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      const link = target.closest("a") as HTMLAnchorElement | null
-
-      if (link?.href && !link.href.startsWith("javascript:") && !link.href.startsWith("#")) {
-        e.preventDefault()
-        e.stopPropagation()
-        e.stopImmediatePropagation()
-        void shellOpen(link.href).catch(() => undefined)
-      }
+  function handleClick(e: MouseEvent) {
+    const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
+    if (link?.href) {
+      e.preventDefault()
+      platform.openLink(link.href)
     }
+  }
 
-    document.addEventListener("click", handleClick, true)
+  onMount(() => {
+    document.addEventListener("click", handleClick)
 
     // Disable WebView2 browser context menu on Windows (Back/Forward buttons)
     const handleContextMenu = platform.os === "windows" ? (e: MouseEvent) => e.preventDefault() : null
@@ -351,7 +346,7 @@ render(() => {
     }
 
     onCleanup(() => {
-      document.removeEventListener("click", handleClick, true)
+      document.removeEventListener("click", handleClick)
       if (handleContextMenu) {
         document.removeEventListener("contextmenu", handleContextMenu, true)
       }

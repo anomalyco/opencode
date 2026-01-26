@@ -1,4 +1,4 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on, createSignal } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -198,12 +198,17 @@ export default function Page() {
     return next
   })
 
-  const [responding, setResponding] = createSignal(false)
+  const [ui, setUi] = createStore({
+    responding: false,
+    pendingMessage: undefined as string | undefined,
+    scrollGesture: 0,
+    autoCreated: false,
+  })
 
   createEffect(
     on(
       () => request()?.id,
-      () => setResponding(false),
+      () => setUi("responding", false),
       { defer: true },
     ),
   )
@@ -211,18 +216,17 @@ export default function Page() {
   const decide = (response: "once" | "always" | "reject") => {
     const perm = request()
     if (!perm) return
-    if (responding()) return
+    if (ui.responding) return
 
-    setResponding(true)
+    setUi("responding", true)
     sdk.client.permission
       .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
       })
-      .finally(() => setResponding(false))
+      .finally(() => setUi("responding", false))
   }
-  const [pendingMessage, setPendingMessage] = createSignal<string | undefined>(undefined)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
   const view = createMemo(() => layout.view(sessionKey))
@@ -439,7 +443,6 @@ export default function Page() {
   let promptDock: HTMLDivElement | undefined
   let scroller: HTMLDivElement | undefined
 
-  const [scrollGesture, setScrollGesture] = createSignal(0)
   const scrollGestureWindowMs = 250
 
   const markScrollGesture = (target?: EventTarget | null) => {
@@ -450,26 +453,24 @@ export default function Page() {
     const nested = el?.closest("[data-scrollable]")
     if (nested && nested !== root) return
 
-    setScrollGesture(Date.now())
+    setUi("scrollGesture", Date.now())
   }
 
-  const hasScrollGesture = () => Date.now() - scrollGesture() < scrollGestureWindowMs
+  const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
   createEffect(() => {
     if (!params.id) return
     sync.session.sync(params.id)
   })
 
-  const [autoCreated, setAutoCreated] = createSignal(false)
-
   createEffect(() => {
     if (!view().terminal.opened()) {
-      setAutoCreated(false)
+      setUi("autoCreated", false)
       return
     }
-    if (!terminal.ready() || terminal.all().length !== 0 || autoCreated()) return
+    if (!terminal.ready() || terminal.all().length !== 0 || ui.autoCreated) return
     terminal.new()
-    setAutoCreated(true)
+    setUi("autoCreated", true)
   })
 
   createEffect(
@@ -585,26 +586,26 @@ export default function Page() {
   command.register(() => [
     {
       id: "session.new",
-      title: "New session",
-      category: "Session",
+      title: language.t("command.session.new"),
+      category: language.t("command.category.session"),
       keybind: "mod+shift+s",
       slash: "new",
       onSelect: () => navigate(`/${params.dir}/session`),
     },
     {
       id: "file.open",
-      title: "Open file",
-      description: "Search files and commands",
-      category: "File",
+      title: language.t("command.file.open"),
+      description: language.t("command.file.open.description"),
+      category: language.t("command.category.file"),
       keybind: "mod+p",
       slash: "open",
       onSelect: () => dialog.show(() => <DialogSelectFile />),
     },
     {
       id: "context.addSelection",
-      title: "Add selection to context",
-      description: "Add selected lines from the current file",
-      category: "Context",
+      title: language.t("command.context.addSelection"),
+      description: language.t("command.context.addSelection.description"),
+      category: language.t("command.category.context"),
       keybind: "mod+shift+l",
       disabled: (() => {
         const active = tabs().active()
@@ -622,8 +623,8 @@ export default function Page() {
         const range = file.selectedLines(path)
         if (!range) {
           showToast({
-            title: "No line selection",
-            description: "Select a line range in a file tab first.",
+            title: language.t("toast.context.noLineSelection.title"),
+            description: language.t("toast.context.noLineSelection.description"),
           })
           return
         }
@@ -633,18 +634,18 @@ export default function Page() {
     },
     {
       id: "terminal.toggle",
-      title: "Toggle terminal",
+      title: language.t("command.terminal.toggle"),
       description: "",
-      category: "View",
+      category: language.t("command.category.view"),
       keybind: "ctrl+`",
       slash: "terminal",
       onSelect: () => view().terminal.toggle(),
     },
     {
       id: "review.toggle",
-      title: "Toggle review",
+      title: language.t("command.review.toggle"),
       description: "",
-      category: "View",
+      category: language.t("command.category.view"),
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     },
@@ -661,9 +662,9 @@ export default function Page() {
     },
     {
       id: "steps.toggle",
-      title: "Toggle steps",
-      description: "Show or hide steps for the current message",
-      category: "View",
+      title: language.t("command.steps.toggle"),
+      description: language.t("command.steps.toggle.description"),
+      category: language.t("command.category.view"),
       keybind: "mod+e",
       slash: "steps",
       disabled: !params.id,
@@ -675,62 +676,62 @@ export default function Page() {
     },
     {
       id: "message.previous",
-      title: "Previous message",
-      description: "Go to the previous user message",
-      category: "Session",
+      title: language.t("command.message.previous"),
+      description: language.t("command.message.previous.description"),
+      category: language.t("command.category.session"),
       keybind: "mod+arrowup",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(-1),
     },
     {
       id: "message.next",
-      title: "Next message",
-      description: "Go to the next user message",
-      category: "Session",
+      title: language.t("command.message.next"),
+      description: language.t("command.message.next.description"),
+      category: language.t("command.category.session"),
       keybind: "mod+arrowdown",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(1),
     },
     {
       id: "model.choose",
-      title: "Choose model",
-      description: "Select a different model",
-      category: "Model",
+      title: language.t("command.model.choose"),
+      description: language.t("command.model.choose.description"),
+      category: language.t("command.category.model"),
       keybind: "mod+'",
       slash: "model",
       onSelect: () => dialog.show(() => <DialogSelectModel />),
     },
     {
       id: "mcp.toggle",
-      title: "Toggle MCPs",
-      description: "Toggle MCPs",
-      category: "MCP",
+      title: language.t("command.mcp.toggle"),
+      description: language.t("command.mcp.toggle.description"),
+      category: language.t("command.category.mcp"),
       keybind: "mod+;",
       slash: "mcp",
       onSelect: () => dialog.show(() => <DialogSelectMcp />),
     },
     {
       id: "agent.cycle",
-      title: "Cycle agent",
-      description: "Switch to the next agent",
-      category: "Agent",
+      title: language.t("command.agent.cycle"),
+      description: language.t("command.agent.cycle.description"),
+      category: language.t("command.category.agent"),
       keybind: "mod+.",
       slash: "agent",
       onSelect: () => local.agent.move(1),
     },
     {
       id: "agent.cycle.reverse",
-      title: "Cycle agent backwards",
-      description: "Switch to the previous agent",
-      category: "Agent",
+      title: language.t("command.agent.cycle.reverse"),
+      description: language.t("command.agent.cycle.reverse.description"),
+      category: language.t("command.category.agent"),
       keybind: "shift+mod+.",
       onSelect: () => local.agent.move(-1),
     },
     {
       id: "model.variant.cycle",
-      title: "Cycle thinking effort",
-      description: "Switch to the next effort level",
-      category: "Model",
+      title: language.t("command.model.variant.cycle"),
+      description: language.t("command.model.variant.cycle.description"),
+      category: language.t("command.category.model"),
       keybind: "shift+mod+d",
       onSelect: () => {
         local.model.variant.cycle()
@@ -740,9 +741,9 @@ export default function Page() {
       id: "permissions.autoaccept",
       title:
         params.id && permission.isAutoAccepting(params.id, sdk.directory)
-          ? "Stop auto-accepting edits"
-          : "Auto-accept edits",
-      category: "Permissions",
+          ? language.t("command.permissions.autoaccept.disable")
+          : language.t("command.permissions.autoaccept.enable"),
+      category: language.t("command.category.permissions"),
       keybind: "mod+shift+a",
       disabled: !params.id || !permission.permissionsEnabled(),
       onSelect: () => {
@@ -751,19 +752,19 @@ export default function Page() {
         permission.toggleAutoAccept(sessionID, sdk.directory)
         showToast({
           title: permission.isAutoAccepting(sessionID, sdk.directory)
-            ? "Auto-accepting edits"
-            : "Stopped auto-accepting edits",
+            ? language.t("toast.permissions.autoaccept.on.title")
+            : language.t("toast.permissions.autoaccept.off.title"),
           description: permission.isAutoAccepting(sessionID, sdk.directory)
-            ? "Edit and write permissions will be automatically approved"
-            : "Edit and write permissions will require approval",
+            ? language.t("toast.permissions.autoaccept.on.description")
+            : language.t("toast.permissions.autoaccept.off.description"),
         })
       },
     },
     {
       id: "session.undo",
-      title: "Undo",
-      description: "Undo the last message",
-      category: "Session",
+      title: language.t("command.session.undo"),
+      description: language.t("command.session.undo.description"),
+      category: language.t("command.category.session"),
       slash: "undo",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -790,9 +791,9 @@ export default function Page() {
     },
     {
       id: "session.redo",
-      title: "Redo",
-      description: "Redo the last undone message",
-      category: "Session",
+      title: language.t("command.session.redo"),
+      description: language.t("command.session.redo.description"),
+      category: language.t("command.category.session"),
       slash: "redo",
       disabled: !params.id || !info()?.revert?.messageID,
       onSelect: async () => {
@@ -819,9 +820,9 @@ export default function Page() {
     },
     {
       id: "session.compact",
-      title: "Compact session",
-      description: "Summarize the session to reduce context size",
-      category: "Session",
+      title: language.t("command.session.compact"),
+      description: language.t("command.session.compact.description"),
+      category: language.t("command.category.session"),
       slash: "compact",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -830,8 +831,8 @@ export default function Page() {
         const model = local.model.current()
         if (!model) {
           showToast({
-            title: "No model selected",
-            description: "Connect a provider to summarize this session",
+            title: language.t("toast.model.none.title"),
+            description: language.t("toast.model.none.description"),
           })
           return
         }
@@ -844,9 +845,9 @@ export default function Page() {
     },
     {
       id: "session.fork",
-      title: "Fork from message",
-      description: "Create a new session from a previous message",
-      category: "Session",
+      title: language.t("command.session.fork"),
+      description: language.t("command.session.fork.description"),
+      category: language.t("command.category.session"),
       slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: () => dialog.show(() => <DialogFork />),
@@ -855,9 +856,9 @@ export default function Page() {
       ? [
           {
             id: "session.share",
-            title: "Share session",
-            description: "Share this session and copy the URL to clipboard",
-            category: "Session",
+            title: language.t("command.session.share"),
+            description: language.t("command.session.share.description"),
+            category: language.t("command.category.session"),
             slash: "share",
             disabled: !params.id || !!info()?.share?.url,
             onSelect: async () => {
@@ -867,22 +868,22 @@ export default function Page() {
                 .then((res) => {
                   navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
                     showToast({
-                      title: "Failed to copy URL to clipboard",
+                      title: language.t("toast.session.share.copyFailed.title"),
                       variant: "error",
                     }),
                   )
                 })
                 .then(() =>
                   showToast({
-                    title: "Session shared",
-                    description: "Share URL copied to clipboard!",
+                    title: language.t("toast.session.share.success.title"),
+                    description: language.t("toast.session.share.success.description"),
                     variant: "success",
                   }),
                 )
                 .catch(() =>
                   showToast({
-                    title: "Failed to share session",
-                    description: "An error occurred while sharing the session",
+                    title: language.t("toast.session.share.failed.title"),
+                    description: language.t("toast.session.share.failed.description"),
                     variant: "error",
                   }),
                 )
@@ -890,9 +891,9 @@ export default function Page() {
           },
           {
             id: "session.unshare",
-            title: "Unshare session",
-            description: "Stop sharing this session",
-            category: "Session",
+            title: language.t("command.session.unshare"),
+            description: language.t("command.session.unshare.description"),
+            category: language.t("command.category.session"),
             slash: "unshare",
             disabled: !params.id || !info()?.share?.url,
             onSelect: async () => {
@@ -901,15 +902,15 @@ export default function Page() {
                 .unshare({ sessionID: params.id })
                 .then(() =>
                   showToast({
-                    title: "Session unshared",
-                    description: "Session unshared successfully!",
+                    title: language.t("toast.session.unshare.success.title"),
+                    description: language.t("toast.session.unshare.success.description"),
                     variant: "success",
                   }),
                 )
                 .catch(() =>
                   showToast({
-                    title: "Failed to unshare session",
-                    description: "An error occurred while unsharing the session",
+                    title: language.t("toast.session.unshare.failed.title"),
+                    description: language.t("toast.session.unshare.failed.description"),
                     variant: "error",
                   }),
                 )
@@ -1019,9 +1020,18 @@ export default function Page() {
 
   const showTabs = createMemo(() => view().reviewPanel.opened())
 
-  const [fileTreeTab, setFileTreeTab] = createSignal<"changes" | "all">("changes")
-  const [reviewScroll, setReviewScroll] = createSignal<HTMLDivElement | undefined>(undefined)
-  const [pendingDiff, setPendingDiff] = createSignal<string | undefined>(undefined)
+  const [tree, setTree] = createStore({
+    fileTreeTab: "changes" as "changes" | "all",
+    reviewScroll: undefined as HTMLDivElement | undefined,
+    pendingDiff: undefined as string | undefined,
+  })
+
+  const fileTreeTab = () => tree.fileTreeTab
+  const setFileTreeTab = (value: "changes" | "all") => setTree("fileTreeTab", value)
+  const reviewScroll = () => tree.reviewScroll
+  const setReviewScroll = (value: HTMLDivElement | undefined) => setTree("reviewScroll", value)
+  const pendingDiff = () => tree.pendingDiff
+  const setPendingDiff = (value: string | undefined) => setTree("pendingDiff", value)
 
   createEffect(() => {
     if (!layout.fileTree.opened()) return
@@ -1316,7 +1326,7 @@ export default function Page() {
     if (pendingSessionID !== sessionID) return
 
     sessionStorage.removeItem("opencode.pendingMessage")
-    setPendingMessage(messageID)
+    setUi("pendingMessage", messageID)
   })
 
   const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
@@ -1484,7 +1494,7 @@ export default function Page() {
     store.turnStart
 
     const targetId =
-      pendingMessage() ??
+      ui.pendingMessage ??
       (() => {
         const hash = window.location.hash.slice(1)
         const match = hash.match(/^message-(.+)$/)
@@ -1496,7 +1506,7 @@ export default function Page() {
 
     const msg = visibleUserMessages().find((m) => m.id === targetId)
     if (!msg) return
-    if (pendingMessage() === targetId) setPendingMessage(undefined)
+    if (ui.pendingMessage === targetId) setUi("pendingMessage", undefined)
     requestAnimationFrame(() => scrollToMessage(msg, "auto"))
   })
 
@@ -1749,7 +1759,7 @@ export default function Page() {
                                 class="text-12-medium opacity-50"
                                 onClick={() => setStore("turnStart", 0)}
                               >
-                                Render earlier messages
+                                {language.t("session.messages.renderEarlier")}
                               </Button>
                             </div>
                           </Show>
@@ -1767,7 +1777,9 @@ export default function Page() {
                                   sync.session.history.loadMore(id)
                                 }}
                               >
-                                {historyLoading() ? "Loading earlier messages..." : "Load earlier messages"}
+                                {historyLoading()
+                                  ? language.t("session.messages.loadingEarlier")
+                                  : language.t("session.messages.loadEarlier")}
                               </Button>
                             </div>
                           </Show>
@@ -1877,18 +1889,18 @@ export default function Page() {
                     </BasicTool>
                     <div data-component="permission-prompt">
                       <div data-slot="permission-actions">
-                        <Button variant="ghost" size="small" onClick={() => decide("reject")} disabled={responding()}>
+                        <Button variant="ghost" size="small" onClick={() => decide("reject")} disabled={ui.responding}>
                           {language.t("ui.permission.deny")}
                         </Button>
                         <Button
                           variant="secondary"
                           size="small"
                           onClick={() => decide("always")}
-                          disabled={responding()}
+                          disabled={ui.responding}
                         >
                           {language.t("ui.permission.allowAlways")}
                         </Button>
-                        <Button variant="primary" size="small" onClick={() => decide("once")} disabled={responding()}>
+                        <Button variant="primary" size="small" onClick={() => decide("once")} disabled={ui.responding}>
                           {language.t("ui.permission.allowOnce")}
                         </Button>
                       </div>
@@ -1901,7 +1913,7 @@ export default function Page() {
                 when={prompt.ready()}
                 fallback={
                   <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                    {handoff.prompt || "Loading prompt..."}
+                    {handoff.prompt || language.t("prompt.loading")}
                   </div>
                 }
               >
@@ -2047,7 +2059,7 @@ export default function Page() {
                                   <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
                                     <Mark class="w-14 opacity-10" />
                                     <div class="text-13-regular text-text-weak max-w-56">
-                                      No changes in this session yet
+                                      {language.t("session.review.empty")}
                                     </div>
                                   </div>
                                 </Match>
@@ -2061,7 +2073,9 @@ export default function Page() {
                         <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                           <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
                             <Mark class="w-14 opacity-10" />
-                            <div class="text-13-regular text-text-weak max-w-56">Select a file to open</div>
+                            <div class="text-13-regular text-text-weak max-w-56">
+                              {language.t("session.files.selectToOpen")}
+                            </div>
                           </div>
                         </Tabs.Content>
                       </Show>
@@ -2144,11 +2158,40 @@ export default function Page() {
 
                           const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
 
-                          const [openedComment, setOpenedComment] = createSignal<string | null>(null)
-                          const [commenting, setCommenting] = createSignal<SelectedLineRange | null>(null)
-                          const [draft, setDraft] = createSignal("")
-                          const [positions, setPositions] = createSignal<Record<string, number>>({})
-                          const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
+                          const [note, setNote] = createStore({
+                            openedComment: null as string | null,
+                            commenting: null as SelectedLineRange | null,
+                            draft: "",
+                            positions: {} as Record<string, number>,
+                            draftTop: undefined as number | undefined,
+                          })
+
+                          const openedComment = () => note.openedComment
+                          const setOpenedComment = (
+                            value:
+                              | typeof note.openedComment
+                              | ((value: typeof note.openedComment) => typeof note.openedComment),
+                          ) => setNote("openedComment", value)
+
+                          const commenting = () => note.commenting
+                          const setCommenting = (
+                            value: typeof note.commenting | ((value: typeof note.commenting) => typeof note.commenting),
+                          ) => setNote("commenting", value)
+
+                          const draft = () => note.draft
+                          const setDraft = (
+                            value: typeof note.draft | ((value: typeof note.draft) => typeof note.draft),
+                          ) => setNote("draft", value)
+
+                          const positions = () => note.positions
+                          const setPositions = (
+                            value: typeof note.positions | ((value: typeof note.positions) => typeof note.positions),
+                          ) => setNote("positions", value)
+
+                          const draftTop = () => note.draftTop
+                          const setDraftTop = (
+                            value: typeof note.draftTop | ((value: typeof note.draftTop) => typeof note.draftTop),
+                          ) => setNote("draftTop", value)
 
                           const commentLabel = (range: SelectedLineRange) => {
                             const start = Math.min(range.start, range.end)
@@ -2570,7 +2613,9 @@ export default function Page() {
                       <Match when={true}>
                         <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
                           <Mark class="w-14 opacity-10" />
-                          <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet</div>
+                          <div class="text-13-regular text-text-weak max-w-56">
+                            {language.t("session.review.empty")}
+                          </div>
                         </div>
                       </Match>
                     </Switch>
@@ -2585,10 +2630,11 @@ export default function Page() {
                   <Tabs variant="pill" value={fileTreeTab()} onChange={setFileTreeTabValue} class="h-full">
                     <Tabs.List>
                       <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                        {reviewCount()} {reviewCount() === 1 ? "Change" : "Changes"}
+                        {reviewCount()}{" "}
+                        {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
                       </Tabs.Trigger>
                       <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
-                        All files
+                        {language.t("session.files.all")}
                       </Tabs.Trigger>
                     </Tabs.List>
                     <Tabs.Content value="changes" class="bg-background-base p-2">
@@ -2596,7 +2642,12 @@ export default function Page() {
                         <Match when={hasReview()}>
                           <Show
                             when={diffsReady()}
-                            fallback={<div class="px-2 py-2 text-12-regular text-text-weak">Loading...</div>}
+                            fallback={
+                              <div class="px-2 py-2 text-12-regular text-text-weak">
+                                {language.t("common.loading")}
+                                {language.t("common.loading.ellipsis")}
+                              </div>
+                            }
                           >
                             <FileTree
                               path=""
@@ -2608,7 +2659,9 @@ export default function Page() {
                           </Show>
                         </Match>
                         <Match when={true}>
-                          <div class="px-2 py-2 text-12-regular text-text-weak">No changes</div>
+                          <div class="px-2 py-2 text-12-regular text-text-weak">
+                            {language.t("session.review.noChanges")}
+                          </div>
                         </Match>
                       </Switch>
                     </Tabs.Content>
@@ -2663,9 +2716,14 @@ export default function Page() {
                     )}
                   </For>
                   <div class="flex-1" />
-                  <div class="text-text-weak pr-2">Loading...</div>
+                  <div class="text-text-weak pr-2">
+                    {language.t("common.loading")}
+                    {language.t("common.loading.ellipsis")}
+                  </div>
                 </div>
-                <div class="flex-1 flex items-center justify-center text-text-weak">Loading terminal...</div>
+                <div class="flex-1 flex items-center justify-center text-text-weak">
+                  {language.t("terminal.loading")}
+                </div>
               </div>
             }
           >
@@ -2695,7 +2753,7 @@ export default function Page() {
                             terminal={pty}
                             onClose={() => {
                               view().terminal.close()
-                              setAutoCreated(false)
+                              setUi("autoCreated", false)
                             }}
                           />
                         )}

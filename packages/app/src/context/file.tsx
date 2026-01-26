@@ -517,7 +517,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           )
           showToast({
             variant: "error",
-            title: "Failed to list files",
+            title: language.t("toast.file.listFailed.title"),
             description: e.message,
           })
         })
