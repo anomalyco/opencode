@@ -211,12 +211,13 @@ To use Amazon Bedrock with OpenCode:
    - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Create an IAM user and generate access keys in the AWS Console
    - **`AWS_PROFILE`**: Use named profiles from `~/.aws/credentials`. First configure with `aws configure --profile my-profile` or `aws sso login`
    - **`AWS_BEARER_TOKEN_BEDROCK`**: Generate long-term API keys from the Amazon Bedrock console
+   - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: For EKS IRSA (IAM Roles for Service Accounts) or other Kubernetes environments with OIDC federation. These environment variables are automatically injected by Kubernetes when using service account annotations.
 
    #### Authentication Precedence
 
    Amazon Bedrock uses the following authentication priority:
    1. **Bearer Token** - `AWS_BEARER_TOKEN_BEDROCK` environment variable or token from `/connect` command
-   2. **AWS Credential Chain** - Profile, access keys, shared credentials, IAM roles, instance metadata
+   2. **AWS Credential Chain** - Profile, access keys, shared credentials, IAM roles, Web Identity Tokens (EKS IRSA), instance metadata
 
    :::note
    When a bearer token is set (via `/connect` or `AWS_BEARER_TOKEN_BEDROCK`), it takes precedence over all AWS credential methods including configured profiles.
@@ -228,11 +229,30 @@ To use Amazon Bedrock with OpenCode:
    /models
    ```
 
+:::note
+For custom inference profiles, use the model and provider name in the key and set the `id` property to the arn. This ensures correct caching:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      // ...
+      "models": {
+        "anthropic-claude-sonnet-4.5": {
+          "id": "arn:aws:bedrock:us-east-1:xxx:application-inference-profile/yyy"
+        }
+      }
+    }
+  }
+}
+```
+
+:::
+
 ---
 
 ### Anthropic
-
-We recommend signing up for [Claude Pro](https://www.anthropic.com/news/claude-pro) or [Max](https://www.anthropic.com/max).
 
 1. Once you've signed up, run the `/connect` command and select Anthropic.
 
@@ -257,6 +277,10 @@ We recommend signing up for [Claude Pro](https://www.anthropic.com/news/claude-p
    ```txt
    /models
    ```
+
+:::info
+Using your Claude Pro/Max subscription in OpenCode is not officially supported by [Anthropic](https://anthropic.com).
+:::
 
 ##### Using API keys
 
@@ -557,6 +581,33 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ---
 
+### Firmware
+
+1. Head over to the [Firmware dashboard](https://app.firmware.ai/signup), create an account, and generate an API key.
+
+2. Run the `/connect` command and search for **Firmware**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Firmware API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### Fireworks AI
 
 1. Head over to the [Fireworks AI console](https://app.fireworks.ai/), create an account, and click **Create API Key**.
@@ -626,20 +677,76 @@ GitLab Duo provides AI-powered agentic chat with native tool calling capabilitie
    - **duo-chat-sonnet-4-5** - Balanced performance for most workflows
    - **duo-chat-opus-4-5** - Most capable for complex analysis
 
+:::note
+You can also specify 'GITLAB_TOKEN' environment variable if you don't want
+to store token in opencode auth storage.
+:::
+
 ##### Self-Hosted GitLab
+
+:::note[compliance note]
+OpenCode uses a small model for some AI tasks like generating the session title.
+It is configured to use gpt-5-nano by default, hosted by Zen. To lock OpenCode
+to only use your own GitLab-hosted instance, add the following to your
+`opencode.json` file. It is also recommended to disable session sharing.
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "small_model": "gitlab/duo-chat-haiku-4-5",
+  "share": "disabled"
+}
+```
+
+:::
 
 For self-hosted GitLab instances:
 
 ```bash
-GITLAB_INSTANCE_URL=https://gitlab.company.com GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx opencode
+export GITLAB_INSTANCE_URL=https://gitlab.company.com
+export GITLAB_TOKEN=glpat-...
+```
+
+If your instance runs a custom AI Gateway:
+
+```bash
+GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
 ```
 
 Or add to your bash profile:
 
 ```bash title="~/.bash_profile"
 export GITLAB_INSTANCE_URL=https://gitlab.company.com
-export GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx
+export GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
+export GITLAB_TOKEN=glpat-...
 ```
+
+:::note
+Your GitLab administrator must enable the following:
+
+1. [Duo Agent Platform](https://docs.gitlab.com/user/gitlab_duo/turn_on_off/) for the user, group, or instance
+2. Feature flags (via Rails console):
+   - `agent_platform_claude_code`
+   - `third_party_agents_enabled`
+     :::
+
+##### OAuth for Self-Hosted instances
+
+In order to make Oauth working for your self-hosted instance, you need to create
+a new application (Settings → Applications) with the
+callback URL `http://127.0.0.1:8080/callback` and following scopes:
+
+- api (Access the API on your behalf)
+- read_user (Read your personal information)
+- read_repository (Allows read-only access to the repository)
+
+Then expose application ID as environment variable:
+
+```bash
+export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
+```
+
+More documentation on [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth) homepage.
 
 ##### Configuration
 
@@ -662,7 +769,7 @@ Customize through `opencode.json`:
 }
 ```
 
-##### GitLab API Tools (Optional)
+##### GitLab API Tools (Optional, but highly recommended)
 
 To access GitLab tools (merge requests, issues, pipelines, CI/CD, etc.):
 

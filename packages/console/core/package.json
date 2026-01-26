@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/console-core",
-  "version": "1.1.19",
+  "version": "1.1.36",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -32,6 +32,7 @@
     "promote-models-to-dev": "script/promote-models.ts dev",
     "promote-models-to-prod": "script/promote-models.ts production",
     "pull-models-from-dev": "script/pull-models.ts dev",
+    "pull-models-from-prod": "script/pull-models.ts production",
     "update-black": "script/update-black.ts",
     "promote-black-to-dev": "script/promote-black.ts dev",
     "promote-black-to-prod": "script/promote-black.ts production",

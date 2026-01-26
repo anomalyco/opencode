@@ -70,6 +70,11 @@
     user-select: text;
   }
 
+  [data-slot="session-review-accordion-content"] {
+    position: relative;
+    overflow: hidden;
+  }
+
   [data-slot="session-review-trigger-content"] {
     display: flex;
     align-items: center;
@@ -136,5 +141,70 @@
     gap: 16px;
     align-items: center;
     justify-content: flex-end;
+  }
+
+  [data-slot="session-review-change"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+  }
+
+  [data-slot="session-review-change"][data-type="added"] {
+    color: var(--icon-diff-add-base);
+  }
+
+  [data-slot="session-review-change"][data-type="removed"] {
+    color: var(--icon-diff-delete-base);
+  }
+
+  [data-slot="session-review-file-container"] {
+    padding: 0;
+  }
+
+  [data-slot="session-review-image-container"] {
+    padding: 12px;
+    display: flex;
+    justify-content: center;
+    background: var(--background-stronger);
+  }
+
+  [data-slot="session-review-image"] {
+    max-width: 100%;
+    max-height: 60vh;
+    object-fit: contain;
+    border-radius: 8px;
+    border: 1px solid var(--border-weak-base);
+    background: var(--background-base);
+  }
+
+  [data-slot="session-review-image-placeholder"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    color: var(--text-weak);
+  }
+
+  [data-slot="session-review-audio-container"] {
+    padding: 12px;
+    display: flex;
+    justify-content: center;
+    background: var(--background-stronger);
+  }
+
+  [data-slot="session-review-audio"] {
+    width: 100%;
+    max-width: 560px;
+  }
+
+  [data-slot="session-review-audio-placeholder"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    color: var(--text-weak);
+  }
+
+  [data-slot="session-review-diff-wrapper"] {
+    position: relative;
+    overflow: hidden;
+    --line-comment-z: 5;
+    --line-comment-popover-z: 30;
   }
 }

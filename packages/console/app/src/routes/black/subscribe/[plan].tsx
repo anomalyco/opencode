@@ -18,10 +18,10 @@ import { Billing } from "@opencode-ai/console-core/billing.js"
 const plansMap = Object.fromEntries(plans.map((p) => [p.id, p])) as Record<PlanID, (typeof plans)[number]>
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY!)
 
-const getWorkspaces = query(async () => {
+const getWorkspaces = query(async (plan: string) => {
   "use server"
   const actor = await getActor()
-  if (actor.type === "public") throw redirect("/auth/authorize?continue=/black/subscribe")
+  if (actor.type === "public") throw redirect("/auth/authorize?continue=/black/subscribe/" + plan)
   return withActor(async () => {
     return Database.use((tx) =>
       tx
@@ -219,8 +219,6 @@ function IntentForm(props: { plan: PlanID; workspaceID: string; onSuccess: (data
       return
     }
 
-    // TODO
-    console.log(setupIntent)
     if (setupIntent?.status === "succeeded") {
       const pm = setupIntent.payment_method as PaymentMethod
 
@@ -258,15 +256,16 @@ function IntentForm(props: { plan: PlanID; workspaceID: string; onSuccess: (data
 }
 
 export default function BlackSubscribe() {
-  const workspaces = createAsync(() => getWorkspaces())
+  const params = useParams()
+  const planData = plansMap[(params.plan as PlanID) ?? "20"] ?? plansMap["20"]
+  const plan = planData.id
+
+  const workspaces = createAsync(() => getWorkspaces(plan))
   const [selectedWorkspace, setSelectedWorkspace] = createSignal<string | undefined>(undefined)
   const [success, setSuccess] = createSignal<SuccessData | undefined>(undefined)
   const [failure, setFailure] = createSignal<string | undefined>(undefined)
   const [clientSecret, setClientSecret] = createSignal<string | undefined>(undefined)
   const [stripe, setStripe] = createSignal<Stripe | undefined>(undefined)
-  const params = useParams()
-  const planData = plansMap[(params.plan as PlanID) ?? "20"] ?? plansMap["20"]
-  const plan = planData.id
 
   // Resolve stripe promise once
   createEffect(() => {

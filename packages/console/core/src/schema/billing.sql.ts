@@ -2,6 +2,7 @@ import { bigint, boolean, index, int, json, mysqlEnum, mysqlTable, uniqueIndex, 
 import { timestamps, ulid, utc, workspaceColumns } from "../drizzle/types"
 import { workspaceIndexes } from "./workspace.sql"
 
+export const SubscriptionPlan = ["20", "100", "200"] as const
 export const BillingTable = mysqlTable(
   "billing",
   {
@@ -21,10 +22,17 @@ export const BillingTable = mysqlTable(
     reloadError: varchar("reload_error", { length: 255 }),
     timeReloadError: utc("time_reload_error"),
     timeReloadLockedTill: utc("time_reload_locked_till"),
+    subscription: json("subscription").$type<{
+      status: "subscribed"
+      seats: number
+      plan: "20" | "100" | "200"
+      useBalance?: boolean
+      coupon?: string
+    }>(),
     subscriptionID: varchar("subscription_id", { length: 28 }),
-    subscriptionCouponID: varchar("subscription_coupon_id", { length: 28 }),
-    subscriptionPlan: mysqlEnum("subscription_plan", ["20", "100", "200"] as const),
+    subscriptionPlan: mysqlEnum("subscription_plan", SubscriptionPlan),
     timeSubscriptionBooked: utc("time_subscription_booked"),
+    timeSubscriptionSelected: utc("time_subscription_selected"),
   },
   (table) => [
     ...workspaceIndexes(table),

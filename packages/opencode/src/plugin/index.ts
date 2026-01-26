@@ -10,18 +10,15 @@ import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
+import { CopilotAuthPlugin } from "./copilot"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const BUILTIN = [
-    "opencode-copilot-auth@0.0.12",
-    "opencode-anthropic-auth@0.0.8",
-    "@gitlab/opencode-gitlab-auth@1.3.0",
-  ]
+  const BUILTIN = ["opencode-anthropic-auth@0.0.10", "@gitlab/opencode-gitlab-auth@1.3.2"]
 
   // Built-in plugins that are directly imported (not installed from npm)
-  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin]
+  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin]
 
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
@@ -53,7 +50,7 @@ export namespace Plugin {
 
     for (let plugin of plugins) {
       // ignore old codex plugin since it is supported first party now
-      if (plugin.includes("opencode-openai-codex-auth")) continue
+      if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
       log.info("loading plugin", { path: plugin })
       if (!plugin.startsWith("file://")) {
         const lastAtIndex = plugin.lastIndexOf("@")

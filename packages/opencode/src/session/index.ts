@@ -1,5 +1,5 @@
 import { Slug } from "@opencode-ai/util/slug"
-import pat from "path"
+import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
@@ -21,7 +21,7 @@ import { Snapshot } from "@/snapshot"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
-import path from "path"
+import { Global } from "@/global"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -233,7 +233,10 @@ export namespace Session {
   }
 
   export function plan(input: { slug: string; time: { created: number } }) {
-    return path.join(Instance.worktree, ".opencode", "plans", [input.time.created, input.slug].join("-") + ".md")
+    const base = Instance.project.vcs
+      ? path.join(Instance.worktree, ".opencode", "plans")
+      : path.join(Global.Path.data, "plans")
+    return path.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
@@ -252,11 +255,15 @@ export namespace Session {
     }
     const { ShareNext } = await import("@/share/share-next")
     const share = await ShareNext.create(id)
-    await update(id, (draft) => {
-      draft.share = {
-        url: share.url,
-      }
-    })
+    await update(
+      id,
+      (draft) => {
+        draft.share = {
+          url: share.url,
+        }
+      },
+      { touch: false },
+    )
     return share
   })
 
@@ -264,16 +271,22 @@ export namespace Session {
     // Use ShareNext to remove the share (same as share function uses ShareNext to create)
     const { ShareNext } = await import("@/share/share-next")
     await ShareNext.remove(id)
-    await update(id, (draft) => {
-      draft.share = undefined
-    })
+    await update(
+      id,
+      (draft) => {
+        draft.share = undefined
+      },
+      { touch: false },
+    )
   })
 
-  export async function update(id: string, editor: (session: Info) => void) {
+  export async function update(id: string, editor: (session: Info) => void, options?: { touch?: boolean }) {
     const project = Instance.project
     const result = await Storage.update<Info>(["session", project.id, id], (draft) => {
       editor(draft)
-      draft.time.updated = Date.now()
+      if (options?.touch !== false) {
+        draft.time.updated = Date.now()
+      }
     })
     Bus.publish(Event.Updated, {
       info: result,
