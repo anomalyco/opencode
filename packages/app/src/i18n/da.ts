@@ -98,7 +98,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Gratis modeller leveret af OpenCode",
   "dialog.model.unpaid.addMore.title": "Tilføj flere modeller fra populære udbydere",
 
-  "dialog.provider.viewAll": "Vis alle udbydere",
+  "dialog.provider.viewAll": "Vis flere udbydere",
 
   "provider.connect.title": "Forbind {{provider}}",
   "provider.connect.title.anthropicProMax": "Log ind med Claude Pro/Max",

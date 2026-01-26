@@ -98,7 +98,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Modèles gratuits fournis par OpenCode",
   "dialog.model.unpaid.addMore.title": "Ajouter plus de modèles de fournisseurs populaires",
 
-  "dialog.provider.viewAll": "Voir tous les fournisseurs",
+  "dialog.provider.viewAll": "Voir plus de fournisseurs",
 
   "provider.connect.title": "Connecter {{provider}}",
   "provider.connect.title.anthropicProMax": "Connexion avec Claude Pro/Max",

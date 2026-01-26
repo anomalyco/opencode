@@ -100,7 +100,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Бесплатные модели от OpenCode",
   "dialog.model.unpaid.addMore.title": "Добавьте больше моделей от популярных провайдеров",
 
-  "dialog.provider.viewAll": "Посмотреть всех провайдеров",
+  "dialog.provider.viewAll": "Показать больше провайдеров",
 
   "provider.connect.title": "Подключить {{provider}}",
   "provider.connect.title.anthropicProMax": "Войти с помощью Claude Pro/Max",
