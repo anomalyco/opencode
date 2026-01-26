@@ -31,11 +31,15 @@ type ChangelogRelease = {
   sections: { title: string; items: string[] }[]
 }
 
-async function getReleases() {
+function endpoint() {
   const event = getRequestEvent()
-  const url = event ? new URL("/changelog.json", event.request.url).toString() : "/changelog.json"
+  if (event) return new URL("/changelog.json", event.request.url).toString()
+  if (!import.meta.env.SSR) return "/changelog.json"
+  return `${config.baseUrl}/changelog.json`
+}
 
-  const response = await fetch(url).catch(() => undefined)
+async function getReleases() {
+  const response = await fetch(endpoint()).catch(() => undefined)
   if (!response?.ok) return []
 
   const json = await response.json().catch(() => undefined)

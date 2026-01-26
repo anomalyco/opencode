@@ -20,6 +20,12 @@ type HighlightGroup = {
   items: HighlightItem[]
 }
 
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+}
+
 const ok = "public, max-age=1, s-maxage=300, stale-while-revalidate=86400, stale-if-error=86400"
 const error = "public, max-age=1, s-maxage=60, stale-while-revalidate=600, stale-if-error=86400"
 
@@ -106,6 +112,7 @@ export async function GET() {
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": error,
+        ...cors,
       },
     })
 
@@ -134,7 +141,15 @@ export async function GET() {
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": ok,
+        ...cors,
       },
     },
   )
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 200,
+    headers: cors,
+  })
 }
