@@ -343,16 +343,37 @@ export default function SessionScreen() {
 
   const handlePermissionReply = async (requestID: string, reply: "once" | "always" | "reject") => {
     if (!client) return
+    // Optimistically remove from UI immediately
+    useEvents.setState((state) => ({
+      permissions: {
+        ...state.permissions,
+        [sessionID!]: (state.permissions[sessionID!] || []).filter((p) => p.id !== requestID),
+      },
+    }))
     client.permission.reply(requestID, reply).catch((err) => console.error("Permission reply failed:", err))
   }
 
   const handleQuestionReply = async (requestID: string, answers: string[][]) => {
     if (!client) return
+    // Optimistically remove from UI immediately
+    useEvents.setState((state) => ({
+      questions: {
+        ...state.questions,
+        [sessionID!]: (state.questions[sessionID!] || []).filter((q) => q.id !== requestID),
+      },
+    }))
     client.question.reply(requestID, answers).catch((err) => console.error("Question reply failed:", err))
   }
 
   const handleQuestionReject = async (requestID: string) => {
     if (!client) return
+    // Optimistically remove from UI immediately
+    useEvents.setState((state) => ({
+      questions: {
+        ...state.questions,
+        [sessionID!]: (state.questions[sessionID!] || []).filter((q) => q.id !== requestID),
+      },
+    }))
     client.question.reject(requestID).catch((err) => console.error("Question reject failed:", err))
   }
 
