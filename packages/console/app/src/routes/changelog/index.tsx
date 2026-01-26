@@ -1,11 +1,11 @@
 import "./index.css"
 import { Title, Meta, Link } from "@solidjs/meta"
-import { createAsync } from "@solidjs/router"
+import { createAsync, useSearchParams } from "@solidjs/router"
 import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { config } from "~/config"
-import { For, Show, createSignal } from "solid-js"
+import { For, Show, createSignal, onMount } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 
 type HighlightMedia = { type: "video"; src: string } | { type: "image"; src: string; width: string; height: string }
@@ -31,6 +31,21 @@ type ChangelogRelease = {
   sections: { title: string; items: string[] }[]
 }
 
+type LoadMeta = {
+  endpoint: string
+  ssr: boolean
+  hasEvent: boolean
+  ok: boolean
+  status?: number
+  contentType?: string
+  error?: string
+}
+
+type Load = {
+  releases: ChangelogRelease[]
+  meta: LoadMeta
+}
+
 function endpoint() {
   const event = getRequestEvent()
   if (event) return new URL("/changelog.json", event.request.url).toString()
@@ -38,12 +53,64 @@ function endpoint() {
   return `${config.baseUrl}/changelog.json`
 }
 
-async function getReleases() {
-  const response = await fetch(endpoint()).catch(() => undefined)
-  if (!response?.ok) return []
+async function getReleases(debug = false): Promise<Load> {
+  const url = endpoint()
+  const meta = {
+    endpoint: url,
+    ssr: import.meta.env.SSR,
+    hasEvent: Boolean(getRequestEvent()),
+    ok: false,
+  } satisfies LoadMeta
 
-  const json = await response.json().catch(() => undefined)
-  return Array.isArray(json?.releases) ? (json.releases as ChangelogRelease[]) : []
+  const response = await fetch(url).catch((err) => {
+    console.error("[changelog] fetch failed", {
+      ...meta,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return undefined
+  })
+
+  if (!response) return { releases: [], meta: { ...meta, error: "fetch_failed" } }
+  if (!response.ok) {
+    const contentType = response.headers.get("content-type") ?? undefined
+    const body = debug ? await response.text().catch(() => undefined) : undefined
+    console.error("[changelog] fetch non-ok", {
+      ...meta,
+      status: response.status,
+      contentType,
+      body: body?.slice(0, 300),
+    })
+    return { releases: [], meta: { ...meta, status: response.status, contentType, error: "bad_status" } }
+  }
+
+  const contentType = response.headers.get("content-type") ?? undefined
+  const copy = debug ? response.clone() : undefined
+  const json = await response.json().catch(async (err) => {
+    const body = copy ? await copy.text().catch(() => undefined) : undefined
+    console.error("[changelog] json parse failed", {
+      ...meta,
+      status: response.status,
+      contentType,
+      error: err instanceof Error ? err.message : String(err),
+      body: body?.slice(0, 300),
+    })
+    return undefined
+  })
+
+  const releases = Array.isArray(json?.releases) ? (json.releases as ChangelogRelease[]) : []
+  if (!releases.length) {
+    console.error("[changelog] empty releases", {
+      ...meta,
+      status: response.status,
+      contentType,
+      keys: json && typeof json === "object" ? Object.keys(json) : undefined,
+    })
+  }
+
+  return {
+    releases,
+    meta: { ...meta, ok: true, status: response.status, contentType },
+  }
 }
 
 function formatDate(dateString: string) {
@@ -134,7 +201,22 @@ function CollapsibleSections(props: { sections: { title: string; items: string[]
 }
 
 export default function Changelog() {
-  const releases = createAsync(() => getReleases())
+  const [params] = useSearchParams()
+  const debug = () => params.debug === "1"
+  const data = createAsync(() => getReleases(debug()))
+  const [client, setClient] = createSignal<Load | undefined>(undefined)
+  const releases = () => client()?.releases ?? data()?.releases ?? []
+
+  onMount(() => {
+    queueMicrotask(async () => {
+      const server = data()?.releases
+      if (!server) return
+      if (server.length) return
+
+      const next = await getReleases(debug())
+      setClient(next)
+    })
+  })
 
   return (
     <main data-page="changelog">
@@ -152,6 +234,23 @@ export default function Changelog() {
           </section>
 
           <section data-component="releases">
+            <Show when={releases().length === 0}>
+              <p>
+                No changelog entries found. <a href="/changelog.json">View JSON</a>
+              </p>
+            </Show>
+            <Show when={debug()}>
+              <pre style={{ "font-size": "12px", "line-height": "1.4", padding: "12px" }}>
+                {JSON.stringify(
+                  {
+                    server: data()?.meta,
+                    client: client()?.meta,
+                  },
+                  null,
+                  2,
+                )}
+              </pre>
+            </Show>
             <For each={releases()}>
               {(release) => {
                 return (

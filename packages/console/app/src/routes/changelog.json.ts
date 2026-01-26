@@ -104,7 +104,12 @@ export async function GET() {
       cacheTtl: 60 * 5,
       cacheEverything: true,
     },
-  } as any).catch(() => undefined)
+  } as any).catch((err) => {
+    console.error("[changelog.json] fetch failed", {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return undefined
+  })
 
   const fail = () =>
     new Response(JSON.stringify({ releases: [] }), {
@@ -116,10 +121,30 @@ export async function GET() {
       },
     })
 
-  if (!response?.ok) return fail()
+  if (!response) return fail()
+  if (!response.ok) {
+    const body = await response.text().catch(() => undefined)
+    console.error("[changelog.json] github non-ok", {
+      status: response.status,
+      remaining: response.headers.get("x-ratelimit-remaining"),
+      reset: response.headers.get("x-ratelimit-reset"),
+      body: body?.slice(0, 300),
+    })
+    return fail()
+  }
 
-  const data = await response.json().catch(() => undefined)
-  if (!Array.isArray(data)) return fail()
+  const data = await response.json().catch((err) => {
+    console.error("[changelog.json] json parse failed", {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return undefined
+  })
+  if (!Array.isArray(data)) {
+    console.error("[changelog.json] invalid json", {
+      type: typeof data,
+    })
+    return fail()
+  }
 
   const releases = data as Release[]
 
