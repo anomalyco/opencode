@@ -137,6 +137,8 @@ export default function Layout(props: ParentProps) {
   const [hoverSession, setHoverSession] = createSignal<string | undefined>()
   const [hoverProject, setHoverProject] = createSignal<string | undefined>()
 
+  const navRef = { current: undefined as HTMLElement | undefined }
+
   const sidebarHovering = createMemo(() => !layout.sidebar.opened() && hoverProject() !== undefined)
   const sidebarExpanded = createMemo(() => layout.sidebar.opened() || sidebarHovering())
 
@@ -150,6 +152,19 @@ export default function Layout(props: ParentProps) {
     if (!layout.sidebar.opened()) return
     setHoverProject(undefined)
   })
+
+  createEffect(
+    on(
+      () => ({ dir: params.dir, id: params.id }),
+      () => {
+        if (layout.sidebar.opened()) return
+        if (!hoverProject()) return
+        setHoverSession(undefined)
+        setHoverProject(undefined)
+      },
+      { defer: true },
+    ),
+  )
 
   const autoselecting = createMemo(() => {
     if (params.dir) return false
@@ -1044,6 +1059,10 @@ export default function Layout(props: ParentProps) {
 
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
+    if (!layout.sidebar.opened()) {
+      setHoverSession(undefined)
+      setHoverProject(undefined)
+    }
     server.projects.touch(directory)
     const lastSession = store.lastSession[directory]
     navigate(`/${base64Encode(directory)}${lastSession ? `/session/${lastSession}` : ""}`)
@@ -1052,6 +1071,10 @@ export default function Layout(props: ParentProps) {
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
+    if (!layout.sidebar.opened()) {
+      setHoverSession(undefined)
+      setHoverProject(undefined)
+    }
     navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
     layout.mobileSidebar.hide()
   }
@@ -1730,7 +1753,7 @@ export default function Layout(props: ParentProps) {
                 aria-label={language.t("common.moreOptions")}
               />
             </Tooltip>
-            <DropdownMenu.Portal>
+            <DropdownMenu.Portal mount={!props.mobile ? navRef.current : undefined}>
               <DropdownMenu.Content
                 onCloseAutoFocus={(event) => {
                   if (!pendingRename()) return
@@ -1980,7 +2003,7 @@ export default function Layout(props: ParentProps) {
                         aria-label={language.t("common.moreOptions")}
                       />
                     </Tooltip>
-                    <DropdownMenu.Portal>
+                    <DropdownMenu.Portal mount={!props.mobile ? navRef.current : undefined}>
                       <DropdownMenu.Content
                         onCloseAutoFocus={(event) => {
                           if (!pendingRename()) return
@@ -2291,6 +2314,10 @@ export default function Layout(props: ParentProps) {
   }
 
   const createWorkspace = async (project: LocalProject) => {
+    if (!layout.sidebar.opened()) {
+      setHoverSession(undefined)
+      setHoverProject(undefined)
+    }
     const created = await globalSDK.client.worktree
       .create({ directory: project.worktree })
       .then((x) => x.data)
@@ -2392,7 +2419,7 @@ export default function Layout(props: ParentProps) {
                       class="shrink-0 size-6 rounded-md opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100 data-[expanded]:bg-surface-base-active"
                       aria-label={language.t("common.moreOptions")}
                     />
-                    <DropdownMenu.Portal>
+                    <DropdownMenu.Portal mount={!panelProps.mobile ? navRef.current : undefined}>
                       <DropdownMenu.Content class="mt-1">
                         <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
@@ -2440,6 +2467,10 @@ export default function Layout(props: ParentProps) {
                           icon="plus-small"
                           class="w-full"
                           onClick={() => {
+                            if (!layout.sidebar.opened()) {
+                              setHoverSession(undefined)
+                              setHoverProject(undefined)
+                            }
                             navigate(`/${base64Encode(p.worktree)}/session`)
                             layout.mobileSidebar.hide()
                           }}
@@ -2628,7 +2659,13 @@ export default function Layout(props: ParentProps) {
             "relative shrink-0": true,
           }}
           style={{ width: layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "64px" }}
-          onMouseLeave={() => setHoverProject(undefined)}
+          ref={(el) => {
+            navRef.current = el
+          }}
+          onMouseLeave={() => {
+            setHoverSession(undefined)
+            setHoverProject(undefined)
+          }}
         >
           <div class="@container w-full h-full contain-strict">
             <SidebarContent />
