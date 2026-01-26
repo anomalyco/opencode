@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef } from "react"
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native"
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import BottomSheet, { BottomSheetBackdrop, BottomSheetSectionList } from "@gorhom/bottom-sheet"
+import BottomSheet, { BottomSheetBackdrop, BottomSheetSectionList, BottomSheetTextInput } from "@gorhom/bottom-sheet"
 
 interface ModelItem {
   providerID: string
@@ -66,6 +66,9 @@ export function ModelPicker({ providers, selected, isDark, onSelect, sheetRef }:
       index={-1}
       snapPoints={["50%", "80%"]}
       enablePanDownToClose
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
       backgroundStyle={isDark ? s.sheetDark : s.sheet}
       handleIndicatorStyle={{ backgroundColor: isDark ? "#666666" : "#cccccc" }}
       backdropComponent={(props) => (
@@ -77,7 +80,7 @@ export function ModelPicker({ providers, selected, isDark, onSelect, sheetRef }:
     >
       <View style={s.header}>
         <Text style={[s.title, isDark && s.textWhite]}>Select Model</Text>
-        <TextInput
+        <BottomSheetTextInput
           style={[s.search, isDark && s.searchDark]}
           placeholder="Search models..."
           placeholderTextColor={isDark ? "#666666" : "#999999"}
@@ -99,7 +102,7 @@ export function ModelPicker({ providers, selected, isDark, onSelect, sheetRef }:
           const active = selected?.providerID === item.providerID && selected?.modelID === item.modelID
           return (
             <TouchableOpacity
-              style={[s.row, isDark && s.rowDark, active && s.rowSelected]}
+              style={[s.row, isDark && s.rowDark, active && (isDark ? s.rowSelectedDark : s.rowSelected)]}
               onPress={() => handleSelect(item.providerID, item.modelID)}
             >
               <View style={s.rowText}>
@@ -159,6 +162,7 @@ const s = StyleSheet.create({
   },
   rowDark: { borderBottomColor: "#2a2a2a" },
   rowSelected: { backgroundColor: "#f5f3ff" },
+  rowSelectedDark: { backgroundColor: "#1f1a2e" },
   rowText: { flex: 1 },
   rowName: { fontSize: 15, fontWeight: "500", color: "#0a0a0a" },
   rowProvider: { fontSize: 12, color: "#999999", marginTop: 1 },

@@ -41,11 +41,7 @@ function ConnectionItem({
       onLongPress={handleLongPress}
     >
       <View style={styles.connectionIcon}>
-        <Ionicons
-          name={typeIcon}
-          size={24}
-          color={isActive ? (isDark ? "#0a0a0a" : "#ffffff") : isDark ? "#888888" : "#666666"}
-        />
+        <Ionicons name={typeIcon} size={24} color={isActive ? "#22c55e" : isDark ? "#888888" : "#666666"} />
       </View>
       <View style={styles.connectionContent}>
         <View style={styles.connectionHeader}>
@@ -172,10 +168,10 @@ const styles = StyleSheet.create({
     borderBottomColor: "#1a1a1a",
   },
   connectionItemActive: {
-    backgroundColor: "#0a0a0a",
+    backgroundColor: "#f0fdf4",
   },
   connectionItemActiveDark: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#1a2e1a",
   },
   connectionIcon: {
     width: 44,
@@ -200,10 +196,10 @@ const styles = StyleSheet.create({
     color: "#0a0a0a",
   },
   connectionNameActive: {
-    color: "#ffffff",
+    color: "#0a0a0a",
   },
   connectionNameActiveDark: {
-    color: "#0a0a0a",
+    color: "#ffffff",
   },
   textDark: {
     color: "#ffffff",
@@ -231,7 +227,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   connectionUrlActive: {
-    color: "#cccccc",
+    color: "#888888",
   },
   connectionMeta: {
     fontSize: 12,

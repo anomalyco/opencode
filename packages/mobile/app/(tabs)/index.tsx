@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from "react"
+import { useEffect, useCallback, useState, useRef } from "react"
 import {
   View,
   Text,
@@ -18,7 +18,9 @@ import { router } from "expo-router"
 import { Ionicons } from "@expo/vector-icons"
 import { useSessions } from "../../src/stores/sessions"
 import { useConnections } from "../../src/stores/connections"
+import type BottomSheet from "@gorhom/bottom-sheet"
 import type { Session } from "../../src/lib/sdk"
+import { DirectorySwitcher } from "../../src/components/chat"
 
 function formatTime(timestamp: number): string {
   const date = new Date(timestamp)
@@ -86,8 +88,28 @@ export default function SessionsScreen() {
   const [isCreating, setIsCreating] = useState(false)
 
   const { sessions, isLoading, error, loadSessions, createSession } = useSessions()
-  const { activeConnection, client, currentProject, serverHome, refreshProject, updateConnection } = useConnections()
+  const {
+    activeConnection,
+    client,
+    currentProject,
+    serverHome,
+    refreshProject,
+    clientForDirectory,
+    switchDirectory,
+    addRecentDirectory,
+    recentDirectories,
+  } = useConnections()
+  const dirSheetRef = useRef<BottomSheet>(null)
   const [refreshing, setRefreshing] = useState(false)
+
+  const handleSwitchDirectory = useCallback(
+    async (dir?: string) => {
+      await switchDirectory(dir)
+      loadSessions()
+      refreshProject()
+    },
+    [switchDirectory, loadSessions, refreshProject],
+  )
 
   useEffect(() => {
     if (client) {
@@ -114,30 +136,37 @@ export default function SessionsScreen() {
 
     setIsCreating(true)
 
-    // If a custom directory is specified, temporarily update the connection
+    // If a custom directory is specified, use a one-off client for that directory
+    // so we don't mutate the connection's default project
     if (dir && dir.trim()) {
-      const originalDir = activeConnection.directory
-      await updateConnection(activeConnection.id, { directory: dir.trim() })
-
-      const session = await createSession()
-
-      // Restore original directory
-      await updateConnection(activeConnection.id, { directory: originalDir })
-
-      setIsCreating(false)
-      setShowNewSession(false)
-      setCustomDir("")
-
-      if (session) {
-        router.push(`/session/${session.id}`)
+      const dirClient = clientForDirectory(dir.trim())
+      if (!dirClient) {
+        setIsCreating(false)
+        return
       }
-    } else {
-      const session = await createSession()
-      setIsCreating(false)
-      setShowNewSession(false)
-      if (session) {
-        router.push(`/session/${session.id}`)
+      try {
+        const session = await dirClient.session.create({})
+        addRecentDirectory(dir.trim())
+        setIsCreating(false)
+        setShowNewSession(false)
+        setCustomDir("")
+        if (session) {
+          router.push({ pathname: `/session/[id]`, params: { id: session.id, directory: dir.trim() } })
+        }
+      } catch (error) {
+        console.error("Failed to create session in directory:", error)
+        Alert.alert("Error", "Failed to create session in that directory.")
+        setIsCreating(false)
       }
+      return
+    }
+
+    const session = await createSession()
+    setIsCreating(false)
+    setShowNewSession(false)
+    setCustomDir("")
+    if (session) {
+      router.push(`/session/${session.id}`)
     }
   }
 
@@ -172,10 +201,11 @@ export default function SessionsScreen() {
 
   return (
     <View style={[styles.container, isDark && styles.containerDark]}>
-      {/* Connection indicator */}
+      {/* Connection indicator — tap to switch project */}
       <TouchableOpacity
         style={[styles.connectionBar, isDark && styles.connectionBarDark]}
-        onPress={() => router.push("/(tabs)/connections")}
+        onPress={() => dirSheetRef.current?.expand()}
+        onLongPress={() => router.push("/(tabs)/connections")}
         activeOpacity={0.7}
       >
         <View style={styles.connectionInfo}>
@@ -192,7 +222,7 @@ export default function SessionsScreen() {
             </>
           )}
         </View>
-        <Ionicons name="chevron-forward" size={16} color={isDark ? "#666666" : "#999999"} />
+        <Ionicons name="swap-horizontal-outline" size={16} color={isDark ? "#666666" : "#999999"} />
       </TouchableOpacity>
 
       {error && (
@@ -339,6 +369,16 @@ export default function SessionsScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Directory switcher bottom sheet */}
+      <DirectorySwitcher
+        sheetRef={dirSheetRef}
+        current={activeConnection?.directory}
+        recents={recentDirectories}
+        serverHome={serverHome}
+        isDark={isDark}
+        onSwitch={handleSwitchDirectory}
+      />
     </View>
   )
 }

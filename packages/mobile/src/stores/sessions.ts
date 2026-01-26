@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { Session, Message, Part, Event, MessageWithParts } from "../lib/sdk"
+import type { Session, Message, Part, Event, MessageWithParts, Client } from "../lib/sdk"
 import { useConnections } from "./connections"
 
 // Helper to convert API response to our internal format
@@ -30,7 +30,7 @@ interface SessionsState {
 
   // Actions
   loadSessions: () => Promise<void>
-  selectSession: (sessionID: string) => Promise<void>
+  selectSession: (sessionID: string, directory?: string) => Promise<void>
   loadOlderMessages: () => Promise<void>
   createSession: (title?: string) => Promise<Session | null>
   deleteSession: (sessionID: string) => Promise<void>
@@ -45,6 +45,15 @@ interface SessionsState {
 
   // Event handling
   handleEvent: (event: Event) => void
+}
+
+// Get the right client for a session's directory
+function clientFor(directory?: string): Client | null {
+  const connState = useConnections.getState()
+  if (!directory) return connState.client
+  const connDir = connState.activeConnection?.directory
+  if (directory !== connDir) return connState.clientForDirectory(directory)
+  return connState.client
 }
 
 export const useSessions = create<SessionsState>((set, get) => ({
@@ -74,8 +83,10 @@ export const useSessions = create<SessionsState>((set, get) => ({
     }
   },
 
-  selectSession: async (sessionID) => {
-    const client = useConnections.getState().client
+  selectSession: async (sessionID, directory) => {
+    // Use directory-specific client if the session belongs to a different project
+    const connState = useConnections.getState()
+    const client = directory ? connState.clientForDirectory(directory) : connState.client
     if (!client) {
       set({ error: "No active connection" })
       return
@@ -107,7 +118,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
   },
 
   loadOlderMessages: async () => {
-    const client = useConnections.getState().client
+    const client = clientFor(get().currentSession?.directory)
     const session = get().currentSession
     if (!client || !session) return
     if (get().loadingMore || !get().hasMore) return
@@ -145,14 +156,15 @@ export const useSessions = create<SessionsState>((set, get) => ({
 
     try {
       const session = await client.session.create({ title })
-      set((state) => ({
-        sessions: [session, ...state.sessions],
+      // Don't optimistically add to sessions list — let loadSessions() handle it
+      // to avoid duplicate key errors from race conditions
+      set({
         currentSession: session,
         messages: [],
         parts: {},
         hasMore: false,
         loadingMore: false,
-      }))
+      })
       return session
     } catch (error) {
       set({ error: "Failed to create session" })
@@ -181,7 +193,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
   },
 
   sendMessage: async (text, model, agent, files) => {
-    const client = useConnections.getState().client
+    const client = clientFor(get().currentSession?.directory)
     const session = get().currentSession
     if (!client || !session) {
       set({ error: "No active session" })
@@ -257,7 +269,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
   },
 
   abortSession: async () => {
-    const client = useConnections.getState().client
+    const client = clientFor(get().currentSession?.directory)
     const session = get().currentSession
     if (!client || !session) return
 
@@ -270,7 +282,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
   },
 
   refreshMessages: async () => {
-    const client = useConnections.getState().client
+    const client = clientFor(get().currentSession?.directory)
     const session = get().currentSession
     if (!client || !session) return
 

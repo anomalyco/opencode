@@ -76,7 +76,7 @@ function getShortDir(dir?: string): string | null {
 }
 
 export default function SessionScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const { id, directory } = useLocalSearchParams<{ id: string; directory?: string }>()
   const router = useRouter()
   const colorScheme = useColorScheme()
   const isDark = colorScheme === "dark"
@@ -154,7 +154,7 @@ export default function SessionScreen() {
   }, [])
 
   useEffect(() => {
-    if (id) selectSession(id)
+    if (id) selectSession(id, directory)
   }, [id])
 
   // Sync model chip from latest assistant message
