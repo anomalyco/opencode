@@ -16,6 +16,7 @@ import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"
 
 export * from "./tool"
+export { MegaPromptPlugin } from "./megaprompt"
 
 export type ProviderContext = {
   source: "env" | "config" | "custom" | "api"
