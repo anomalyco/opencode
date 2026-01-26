@@ -139,7 +139,7 @@
   animation: contentHide 100ms ease-in forwards;
 
   &[data-expanded] {
-    animation: contentShow 200ms ease-out;
+    animation: contentShow 150ms ease-out;
   }
 }
 
