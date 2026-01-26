@@ -217,7 +217,7 @@
 
     [data-slot="tabs-list"] {
       height: auto;
-      padding: 6px;
+      padding: 6px 0;
       gap: 4px;
       background-color: var(--background-base);
 
