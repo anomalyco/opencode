@@ -28,15 +28,18 @@ const Context = createContext<ReturnType<typeof init>>()
 
 function init() {
   const [active, setActive] = createSignal<Active | undefined>()
+  let closing = false
 
   const close = () => {
     const current = active()
-    if (!current) return
+    if (!current || closing) return
+    closing = true
     current.onClose?.()
     current.setClosing(true)
     setTimeout(() => {
       current.dispose()
       setActive(undefined)
+      closing = false
     }, 100)
   }
 
@@ -55,7 +58,13 @@ function init() {
   })
 
   const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {
-    close()
+    // Immediately dispose any existing dialog when showing a new one
+    const current = active()
+    if (current) {
+      current.dispose()
+      setActive(undefined)
+    }
+    closing = false
 
     const id = Math.random().toString(36).slice(2)
     let dispose: (() => void) | undefined
