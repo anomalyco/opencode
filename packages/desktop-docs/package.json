@@ -1,0 +1,17 @@
+{
+  "name": "@opencode-ai/desktop-docs",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "solid-js": "catalog:",
+    "@opencode-ai/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-solid": "catalog:"
+  },
+  "license": "MIT"
+}
