@@ -547,7 +547,9 @@ export function Prompt(props: PromptProps) {
     let sessionID = props.sessionID
     try {
       if (!props.sessionID) {
-        const newSessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
+        const newSessionID = await sdk.client.session
+          .create({ body: { workspaceID: args.workspaceID } })
+          .then((x) => x.data!.id)
         sessionID = newSessionID
 
         // Sync current agent to newly created session

@@ -166,6 +166,11 @@ import type {
   TuiControlNextResponses,
   TuiControlResponseData,
   TuiControlResponseResponses,
+  WorkspaceListData,
+  WorkspaceListResponses,
+  WorkspaceGetData,
+  WorkspaceGetResponses,
+  WorkspaceGetErrors,
   AuthSetData,
   AuthSetResponses,
   AuthSetErrors,
@@ -225,7 +230,7 @@ class Project extends _HeyApiClient {
   }
 
   /**
-   * Get the current project
+   * Get the current project with branch info
    */
   public current<ThrowOnError extends boolean = false>(options?: Options<ProjectCurrentData, ThrowOnError>) {
     return (options?.client ?? this._client).get<ProjectCurrentResponses, unknown, ThrowOnError>({
@@ -975,6 +980,28 @@ class Tui extends _HeyApiClient {
   control = new Control({ client: this._client })
 }
 
+class Workspace extends _HeyApiClient {
+  /**
+   * List workspaces for a repository
+   */
+  public list<ThrowOnError extends boolean = false>(options: Options<WorkspaceListData, ThrowOnError>) {
+    return (options.client ?? this._client).get<WorkspaceListResponses, unknown, ThrowOnError>({
+      url: "/workspace",
+      ...options,
+    })
+  }
+
+  /**
+   * Get workspace by ID
+   */
+  public get<ThrowOnError extends boolean = false>(options: Options<WorkspaceGetData, ThrowOnError>) {
+    return (options.client ?? this._client).get<WorkspaceGetResponses, WorkspaceGetErrors, ThrowOnError>({
+      url: "/workspace/{id}",
+      ...options,
+    })
+  }
+}
+
 class Auth extends _HeyApiClient {
   /**
    * Set authentication credentials
@@ -1039,6 +1066,7 @@ export class ForgeClient extends _HeyApiClient {
   lsp = new Lsp({ client: this._client })
   formatter = new Formatter({ client: this._client })
   tui = new Tui({ client: this._client })
+  workspace = new Workspace({ client: this._client })
   auth = new Auth({ client: this._client })
   event = new Event({ client: this._client })
 }

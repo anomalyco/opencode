@@ -14,6 +14,8 @@ import type {
   SessionStatus,
   ProviderListResponse,
   ProviderAuthMethod,
+  Workspace,
+  Project,
 } from "@forge/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
@@ -59,6 +61,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         [key: string]: McpStatus
       }
       formatter: FormatterStatus[]
+      workspace: Workspace[]
+      project: Project | null
     }>({
       provider_next: {
         all: [],
@@ -82,6 +86,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       lsp: [],
       mcp: {},
       formatter: [],
+      workspace: [],
+      project: null,
     })
 
     const sdk = useSDK()
@@ -275,6 +281,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
             sdk.client.session.status().then((x) => setStore("session_status", x.data!)),
             sdk.client.provider.auth().then((x) => setStore("provider_auth", x.data ?? {})),
+            // Fetch project first, then workspaces with repoID
+            sdk.client.project.current().then(async (x) => {
+              const project = x.data ?? null
+              setStore("project", project)
+              if (project?.id) {
+                const workspaces = await sdk.client.workspace.list({ query: { repoID: project.id } })
+                setStore("workspace", workspaces.data ?? [])
+              }
+            }),
           ]).then(() => {
             setStore("status", "complete")
           })
@@ -338,6 +353,33 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
           console.log("synced in " + (Date.now() - now), sessionID)
+        },
+      },
+      workspace: {
+        get(workspaceID: string) {
+          return store.workspace.find((w) => w.id === workspaceID)
+        },
+        /**
+         * Get sessions grouped by workspace ID.
+         * Sessions without a workspaceID are grouped under "main".
+         */
+        sessionsByWorkspace() {
+          const result = new Map<string | null, Session[]>()
+          result.set(null, []) // Main worktree sessions (no workspaceID)
+
+          for (const workspace of store.workspace) {
+            result.set(workspace.id, [])
+          }
+
+          for (const session of store.session) {
+            const key = session.workspaceID ?? null
+            if (!result.has(key)) {
+              result.set(key, [])
+            }
+            result.get(key)!.push(session)
+          }
+
+          return result
         },
       },
       bootstrap,

@@ -1,4 +1,5 @@
 import { $ } from "bun"
+import path from "path"
 import { Log } from "../util/log"
 
 export namespace Git {
@@ -121,6 +122,39 @@ export namespace Git {
       return []
     }
     return parseWorktreeOutput(result.text())
+  }
+
+  /**
+   * Get the main (non-linked) worktree for a repository.
+   * This works from any worktree in the repo - it always returns the original/main worktree.
+   *
+   * Uses `git rev-parse --git-common-dir` to find the shared .git directory,
+   * which is located in the main worktree.
+   */
+  export async function getMainWorktree(cwd: string): Promise<WorktreeInfo | null> {
+    // Get the path to the common .git directory (always in the main worktree)
+    const commonDirResult = await $`git rev-parse --path-format=absolute --git-common-dir`.cwd(cwd).quiet().nothrow()
+    if (commonDirResult.exitCode !== 0) {
+      return null
+    }
+
+    const gitCommonDir = commonDirResult.text().trim()
+    // The main worktree is the parent of the .git directory
+    const mainWorktreePath = path.dirname(gitCommonDir)
+
+    // Get the branch for the main worktree
+    const branchResult = await $`git rev-parse --abbrev-ref HEAD`.cwd(mainWorktreePath).quiet().nothrow()
+    const branch = branchResult.exitCode === 0 ? branchResult.text().trim() : null
+
+    // Get the HEAD commit
+    const headResult = await $`git rev-parse HEAD`.cwd(mainWorktreePath).quiet().nothrow()
+    const head = headResult.exitCode === 0 ? headResult.text().trim() : ""
+
+    return {
+      path: mainWorktreePath,
+      head,
+      branch: branch === "HEAD" ? null : branch, // "HEAD" means detached
+    }
   }
 
   /**

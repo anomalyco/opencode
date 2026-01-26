@@ -14,6 +14,8 @@ export namespace Project {
       id: z.string(),
       worktree: z.string(),
       vcs: z.literal("git").optional(),
+      branch: z.string().nullable().optional(),
+      mainBranch: z.string().nullable().optional(),
       time: z.object({
         created: z.number(),
         initialized: z.number().optional(),

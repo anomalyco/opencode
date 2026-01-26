@@ -46,6 +46,7 @@ import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
+import { WorkspaceSidebar } from "../../component/workspace-sidebar"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
@@ -96,12 +97,32 @@ export function Session() {
 
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
+  const [workspaceSidebar, setWorkspaceSidebar] = createSignal<"show" | "hide" | "auto">(
+    kv.get("workspace_sidebar", "auto"),
+  )
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = createSignal(true)
 
+  // Right sidebar (session details) visibility - needs 120+ width
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+
+  // Left sidebar (workspaces) visibility - needs 150+ width for both sidebars, 100+ for just workspace
+  const extraWide = createMemo(() => dimensions().width > 150)
+  const mediumWide = createMemo(() => dimensions().width > 100)
+  const workspaceSidebarVisible = createMemo(() => {
+    if (workspaceSidebar() === "show") return true
+    if (workspaceSidebar() === "hide") return false
+    // Auto: show workspace sidebar if medium wide, or extra wide when both sidebars shown
+    return sidebarVisible() ? extraWide() : mediumWide()
+  })
+
+  const contentWidth = createMemo(() => {
+    let width = dimensions().width - 4 // base padding
+    if (sidebarVisible()) width -= 42 // right sidebar
+    if (workspaceSidebarVisible()) width -= 32 // left sidebar
+    return width
+  })
 
   const scrollAcceleration = createMemo(() => {
     const tui = sync.data.config.tui
@@ -375,6 +396,21 @@ export function Session() {
         })
         if (sidebar() === "show") kv.set("sidebar", "auto")
         if (sidebar() === "hide") kv.set("sidebar", "hide")
+        dialog.clear()
+      },
+    },
+    {
+      title: workspaceSidebarVisible() ? "Hide workspace sidebar" : "Show workspace sidebar",
+      value: "session.workspace_sidebar.toggle",
+      category: "Session",
+      onSelect: (dialog) => {
+        setWorkspaceSidebar((prev) => {
+          if (prev === "auto") return workspaceSidebarVisible() ? "hide" : "show"
+          if (prev === "show") return "hide"
+          return "show"
+        })
+        if (workspaceSidebar() === "show") kv.set("workspace_sidebar", "auto")
+        if (workspaceSidebar() === "hide") kv.set("workspace_sidebar", "hide")
         dialog.clear()
       },
     },
@@ -701,6 +737,9 @@ export function Session() {
       }}
     >
       <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
+        <Show when={workspaceSidebarVisible()}>
+          <WorkspaceSidebar currentSessionID={route.sessionID} />
+        </Show>
         <box flexGrow={1} gap={1}>
           <Show when={session()}>
             <Show when={session().parentID}>

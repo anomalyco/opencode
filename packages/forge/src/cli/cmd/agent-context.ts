@@ -271,10 +271,11 @@ export async function resolveWorkspace(
   }
 
   // Create new workspace (will generate name if undefined)
-  return await Workspace.create({
+  const created = await Workspace.create({
     name,
     repoRoot,
   })
+  return created
 }
 
 export async function runAgentManage(agentName: string | undefined, subcommand: string | undefined, verbose: boolean) {
@@ -331,9 +332,11 @@ export async function runWithAgent(args: any) {
   }
 
   // Resolve workspace if flag provided
+  // Note: Check both 'workspace' and 'w' (alias) since yargs may have either depending on parse path
+  const workspaceArg = args.workspace ?? args.w
   let workspaceInfo: Workspace.Info | null = null
-  if (args.workspace !== undefined) {
-    workspaceInfo = await resolveWorkspace(args.workspace, cwd)
+  if (workspaceArg !== undefined) {
+    workspaceInfo = await resolveWorkspace(workspaceArg, cwd)
     if (workspaceInfo) {
       // Change to workspace worktree directory
       try {
@@ -395,6 +398,7 @@ export async function runWithAgent(args: any) {
       port: args.port,
       format: args.format,
       quietAgentLogs: true,
+      workspaceID: workspaceInfo?.id,
     })
     return
   }

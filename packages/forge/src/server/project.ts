@@ -3,6 +3,7 @@ import { describeRoute } from "hono-openapi"
 import { resolver } from "hono-openapi"
 import { Instance } from "../project/instance"
 import { Project } from "../project/project"
+import { Git } from "../git"
 
 export const ProjectRoute = new Hono()
   .get(
@@ -29,7 +30,7 @@ export const ProjectRoute = new Hono()
   .get(
     "/current",
     describeRoute({
-      description: "Get the current project",
+      description: "Get the current project with branch info",
       operationId: "project.current",
       responses: {
         200: {
@@ -43,6 +44,13 @@ export const ProjectRoute = new Hono()
       },
     }),
     async (c) => {
-      return c.json(Instance.project)
+      const branch = await Git.getCurrentBranch(Instance.worktree)
+      const mainWorktree = await Git.getMainWorktree(Instance.worktree)
+      const mainBranch = mainWorktree?.branch ?? branch
+      return c.json({
+        ...Instance.project,
+        branch,
+        mainBranch,
+      })
     },
   )

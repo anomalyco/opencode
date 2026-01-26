@@ -125,6 +125,7 @@ export namespace Session {
       .object({
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
+        workspaceID: Identifier.schema("workspace").optional(),
       })
       .optional(),
     async (input) => {
@@ -132,6 +133,7 @@ export namespace Session {
         parentID: input?.parentID,
         directory: Instance.directory,
         title: input?.title,
+        workspaceID: input?.workspaceID,
       })
     },
   )

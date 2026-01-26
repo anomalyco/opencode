@@ -44,6 +44,8 @@ import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "@/session/status"
 import { ShareNext } from "@/share/share-next"
 import { ACPOrchestrator } from "../acp/orchestrator"
+import { Workspace } from "../workspace"
+import { Git } from "../git"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -2058,6 +2060,67 @@ export namespace Server {
         },
       )
       .route("/tui/control", TuiRoute)
+      // Workspace endpoints
+      .get(
+        "/workspace",
+        describeRoute({
+          description: "List workspaces for a repository",
+          operationId: "workspace.list",
+          responses: {
+            200: {
+              description: "List of workspaces",
+              content: {
+                "application/json": {
+                  schema: resolver(Workspace.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "query",
+          z.object({
+            repoID: z.string(),
+          }),
+        ),
+        async (c) => {
+          const { repoID } = c.req.valid("query")
+          const workspaces = await Workspace.list(repoID)
+          return c.json(workspaces)
+        },
+      )
+      .get(
+        "/workspace/:id",
+        describeRoute({
+          description: "Get workspace by ID",
+          operationId: "workspace.get",
+          responses: {
+            200: {
+              description: "Workspace details",
+              content: {
+                "application/json": {
+                  schema: resolver(Workspace.Info),
+                },
+              },
+            },
+            ...errors(404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string(),
+          }),
+        ),
+        async (c) => {
+          const id = c.req.valid("param").id
+          const workspace = await Workspace.getByID(id)
+          if (!workspace) {
+            throw new Storage.NotFoundError({ message: `Workspace not found: ${id}` })
+          }
+          return c.json(workspace)
+        },
+      )
       .put(
         "/auth/:id",
         describeRoute({

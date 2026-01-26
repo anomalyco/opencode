@@ -45,6 +45,7 @@ export type RunHandlerArgs = {
   attach?: string
   port?: number
   quietAgentLogs?: boolean
+  workspaceID?: string
 }
 
 export const RunCommand = cmd({
@@ -401,7 +402,9 @@ export async function runNonInteractive(args: RunHandlerArgs) {
             : args.title
           : undefined
 
-      const result = await sdk.session.create({ body: title ? { title } : {} })
+      const result = await sdk.session.create({
+        body: { title, workspaceID: args.workspaceID },
+      })
       return result.data?.id
     })()
 
@@ -453,7 +456,9 @@ export async function runNonInteractive(args: RunHandlerArgs) {
             : args.title
           : undefined
 
-      const result = await sdk.session.create({ body: title ? { title } : {} })
+      const result = await sdk.session.create({
+        body: { title, workspaceID: args.workspaceID },
+      })
       return result.data?.id
     })()
 

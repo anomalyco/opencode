@@ -197,14 +197,17 @@ export namespace Workspace {
       log.info("skipping session cascade delete - no Instance context", { workspaceID: id })
     }
 
-    // Remove the git worktree
-    await Git.removeWorktree(workspace.repoRoot, workspace.worktreePath)
-
-    // Delete the branch
-    await Git.deleteBranch(workspace.repoRoot, workspace.branch)
-
-    // Remove from storage
+    // Remove from storage first - this ensures cleanup even if git operations fail
     await Storage.remove(["workspace", workspace.repoID, workspace.id])
+
+    // Remove the git worktree and branch (may fail if repo is already gone)
+    try {
+      await Git.removeWorktree(workspace.repoRoot, workspace.worktreePath)
+      await Git.deleteBranch(workspace.repoRoot, workspace.branch)
+    } catch (e) {
+      // Git operations may fail if the repo no longer exists, that's okay
+      log.info("git cleanup failed (repo may be gone)", { workspaceID: id, error: e })
+    }
   })
 
   /**

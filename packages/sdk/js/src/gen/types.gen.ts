@@ -488,6 +488,7 @@ export type Session = {
   projectID: string
   directory: string
   parentID?: string
+  workspaceID?: string
   summary?: {
     additions: number
     deletions: number
@@ -685,6 +686,8 @@ export type Project = {
   id: string
   worktree: string
   vcs?: "git"
+  branch?: string | null
+  mainBranch?: string | null
   time: {
     created: number
     initialized?: number
@@ -1450,6 +1453,19 @@ export type FormatterStatus = {
   enabled: boolean
 }
 
+export type Workspace = {
+  id: string
+  name: string
+  branch: string
+  repoID: string
+  repoRoot: string
+  worktreePath: string
+  time: {
+    created: number
+    accessed: number
+  }
+}
+
 export type OAuth = {
   type: "oauth"
   refresh: string
@@ -1682,6 +1698,7 @@ export type SessionCreateData = {
   body?: {
     parentID?: string
     title?: string
+    workspaceID?: string
   }
   path?: never
   query?: {
@@ -3292,6 +3309,54 @@ export type TuiControlResponseResponses = {
 }
 
 export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
+
+export type WorkspaceListData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    repoID: string
+  }
+  url: "/workspace"
+}
+
+export type WorkspaceListResponses = {
+  /**
+   * List of workspaces
+   */
+  200: Array<Workspace>
+}
+
+export type WorkspaceListResponse = WorkspaceListResponses[keyof WorkspaceListResponses]
+
+export type WorkspaceGetData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/workspace/{id}"
+}
+
+export type WorkspaceGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type WorkspaceGetError = WorkspaceGetErrors[keyof WorkspaceGetErrors]
+
+export type WorkspaceGetResponses = {
+  /**
+   * Workspace details
+   */
+  200: Workspace
+}
+
+export type WorkspaceGetResponse = WorkspaceGetResponses[keyof WorkspaceGetResponses]
 
 export type AuthSetData = {
   body?: Auth
