@@ -20,6 +20,9 @@ type HighlightGroup = {
   items: HighlightItem[]
 }
 
+const ok = "public, max-age=1, s-maxage=300, stale-while-revalidate=86400, stale-if-error=86400"
+const error = "public, max-age=1, s-maxage=60, stale-while-revalidate=600, stale-if-error=86400"
+
 function parseHighlights(body: string): HighlightGroup[] {
   const groups = new Map<string, HighlightItem[]>()
   const regex = /<highlight\s+source="([^"]+)">([\s\S]*?)<\/highlight>/g
@@ -90,25 +93,44 @@ export async function GET() {
       Accept: "application/vnd.github.v3+json",
       "User-Agent": "OpenCode-Console",
     },
-  })
+    cf: {
+      // best-effort edge caching (ignored outside Cloudflare)
+      cacheTtl: 60 * 5,
+      cacheEverything: true,
+    },
+  } as any)
 
   if (!response.ok) {
-    return { releases: [] }
+    return new Response(JSON.stringify({ releases: [] }), {
+      status: 503,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": error,
+      },
+    })
   }
 
   const releases = (await response.json()) as Release[]
 
-  return {
-    releases: releases.map((release) => {
-      const parsed = parseMarkdown(release.body || "")
-      return {
-        tag: release.tag_name,
-        name: release.name,
-        date: release.published_at,
-        url: release.html_url,
-        highlights: parsed.highlights,
-        sections: parsed.sections,
-      }
+  return new Response(
+    JSON.stringify({
+      releases: releases.map((release) => {
+        const parsed = parseMarkdown(release.body || "")
+        return {
+          tag: release.tag_name,
+          name: release.name,
+          date: release.published_at,
+          url: release.html_url,
+          highlights: parsed.highlights,
+          sections: parsed.sections,
+        }
+      }),
     }),
-  }
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": ok,
+      },
+    },
+  )
 }
