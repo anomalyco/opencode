@@ -11,6 +11,8 @@ import {
   Modal,
   TextInput,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native"
 import { router } from "expo-router"
 import { Ionicons } from "@expo/vector-icons"
@@ -232,111 +234,110 @@ export default function SessionsScreen() {
 
       {/* New Session Info Modal */}
       <Modal visible={showNewSession} animationType="slide" transparent>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowNewSession(false)}>
-          <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
-            <View style={[styles.modalContent, isDark && styles.modalContentDark]}>
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, isDark && styles.textDark]}>New Session</Text>
-                <TouchableOpacity onPress={() => setShowNewSession(false)}>
-                  <Ionicons name="close" size={24} color={isDark ? "#ffffff" : "#0a0a0a"} />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.modalBody}>
-                {/* Current directory */}
-                <Text style={[styles.modalLabel, isDark && styles.metaDark]}>Current Directory</Text>
-                <View style={[styles.modalDirBox, isDark && styles.modalDirBoxDark]}>
-                  <Ionicons name="folder" size={20} color={isDark ? "#888888" : "#666666"} />
-                  <Text style={[styles.modalDirText, isDark && styles.textDark]} numberOfLines={2}>
-                    {currentProject?.path?.absolute || activeConnection?.directory || "Server default"}
-                  </Text>
-                </View>
-
-                {/* Custom directory input */}
-                <Text style={[styles.modalLabel, isDark && styles.metaDark, { marginTop: 16 }]}>
-                  Or use a different folder
-                </Text>
-                <TextInput
-                  style={[styles.modalInput, isDark && styles.modalInputDark]}
-                  placeholder={serverHome ? `${serverHome}/...` : "/path/to/project"}
-                  placeholderTextColor={isDark ? "#666666" : "#999999"}
-                  value={customDir}
-                  onChangeText={(text) => {
-                    // Expand ~ to server home directory
-                    if (serverHome && text.startsWith("~/")) {
-                      setCustomDir(serverHome + text.slice(1))
-                    } else if (serverHome && text === "~") {
-                      setCustomDir(serverHome)
-                    } else {
-                      setCustomDir(text)
-                    }
-                  }}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                {/* Quick path shortcuts */}
-                {serverHome && (
-                  <View style={styles.pathChips}>
-                    <TouchableOpacity
-                      style={[styles.pathChip, isDark && styles.pathChipDark]}
-                      onPress={() => setCustomDir(serverHome)}
-                    >
-                      <Text style={[styles.pathChipText, isDark && styles.pathChipTextDark]}>~</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.pathChip, isDark && styles.pathChipDark]}
-                      onPress={() => setCustomDir(serverHome + "/")}
-                    >
-                      <Text style={[styles.pathChipText, isDark && styles.pathChipTextDark]}>~/</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.modalActions}>
-                {customDir.trim() ? (
-                  <TouchableOpacity
-                    style={[
-                      styles.modalButton,
-                      styles.modalButtonPrimary,
-                      isDark && styles.modalButtonPrimaryDark,
-                      styles.modalButtonFull,
-                    ]}
-                    onPress={() => onCreateInDirectory(customDir)}
-                    disabled={isCreating}
-                  >
-                    {isCreating ? (
-                      <ActivityIndicator size="small" color={isDark ? "#0a0a0a" : "#ffffff"} />
-                    ) : (
-                      <Text style={[styles.modalButtonTextPrimary, isDark && styles.modalButtonTextPrimaryDark]}>
-                        Create in {customDir.split("/").filter(Boolean).pop() || customDir}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[
-                      styles.modalButton,
-                      styles.modalButtonPrimary,
-                      isDark && styles.modalButtonPrimaryDark,
-                      styles.modalButtonFull,
-                    ]}
-                    onPress={() => onCreateInDirectory()}
-                    disabled={isCreating}
-                  >
-                    {isCreating ? (
-                      <ActivityIndicator size="small" color={isDark ? "#0a0a0a" : "#ffffff"} />
-                    ) : (
-                      <Text style={[styles.modalButtonTextPrimary, isDark && styles.modalButtonTextPrimaryDark]}>
-                        Create Session
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                )}
-              </View>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <TouchableOpacity style={styles.modalDismiss} activeOpacity={1} onPress={() => setShowNewSession(false)} />
+          <View style={[styles.modalContent, isDark && styles.modalContentDark]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, isDark && styles.textDark]}>New Session</Text>
+              <TouchableOpacity onPress={() => setShowNewSession(false)}>
+                <Ionicons name="close" size={24} color={isDark ? "#ffffff" : "#0a0a0a"} />
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
+
+            <View style={styles.modalBody}>
+              {/* Current directory */}
+              <Text style={[styles.modalLabel, isDark && styles.metaDark]}>Current Directory</Text>
+              <View style={[styles.modalDirBox, isDark && styles.modalDirBoxDark]}>
+                <Ionicons name="folder" size={20} color={isDark ? "#888888" : "#666666"} />
+                <Text style={[styles.modalDirText, isDark && styles.textDark]} numberOfLines={2}>
+                  {currentProject?.path?.absolute || activeConnection?.directory || "Server default"}
+                </Text>
+              </View>
+
+              {/* Custom directory input */}
+              <Text style={[styles.modalLabel, isDark && styles.metaDark, { marginTop: 16 }]}>
+                Or use a different folder
+              </Text>
+              <TextInput
+                style={[styles.modalInput, isDark && styles.modalInputDark]}
+                placeholder={serverHome ? `${serverHome}/...` : "/path/to/project"}
+                placeholderTextColor={isDark ? "#666666" : "#999999"}
+                value={customDir}
+                onChangeText={(text) => {
+                  // Expand ~ to server home directory
+                  if (serverHome && text.startsWith("~/")) {
+                    setCustomDir(serverHome + text.slice(1))
+                  } else if (serverHome && text === "~") {
+                    setCustomDir(serverHome)
+                  } else {
+                    setCustomDir(text)
+                  }
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {/* Quick path shortcuts */}
+              {serverHome && (
+                <View style={styles.pathChips}>
+                  <TouchableOpacity
+                    style={[styles.pathChip, isDark && styles.pathChipDark]}
+                    onPress={() => setCustomDir(serverHome)}
+                  >
+                    <Text style={[styles.pathChipText, isDark && styles.pathChipTextDark]}>~</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.pathChip, isDark && styles.pathChipDark]}
+                    onPress={() => setCustomDir(serverHome + "/")}
+                  >
+                    <Text style={[styles.pathChipText, isDark && styles.pathChipTextDark]}>~/</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.modalActions}>
+              {customDir.trim() ? (
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    styles.modalButtonPrimary,
+                    isDark && styles.modalButtonPrimaryDark,
+                    styles.modalButtonFull,
+                  ]}
+                  onPress={() => onCreateInDirectory(customDir)}
+                  disabled={isCreating}
+                >
+                  {isCreating ? (
+                    <ActivityIndicator size="small" color={isDark ? "#0a0a0a" : "#ffffff"} />
+                  ) : (
+                    <Text style={[styles.modalButtonTextPrimary, isDark && styles.modalButtonTextPrimaryDark]}>
+                      Create in {customDir.split("/").filter(Boolean).pop() || customDir}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    styles.modalButtonPrimary,
+                    isDark && styles.modalButtonPrimaryDark,
+                    styles.modalButtonFull,
+                  ]}
+                  onPress={() => onCreateInDirectory()}
+                  disabled={isCreating}
+                >
+                  {isCreating ? (
+                    <ActivityIndicator size="small" color={isDark ? "#0a0a0a" : "#ffffff"} />
+                  ) : (
+                    <Text style={[styles.modalButtonTextPrimary, isDark && styles.modalButtonTextPrimaryDark]}>
+                      Create Session
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   )
@@ -528,6 +529,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "flex-end",
+  },
+  modalDismiss: {
+    flex: 1,
   },
   modalContent: {
     backgroundColor: "#ffffff",

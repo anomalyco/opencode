@@ -1,6 +1,8 @@
 // SDK client wrapper for React Native
 // We create our own lightweight client that mirrors the opencode SDK patterns
 // but works in React Native environment
+// expo/fetch provides WinterCG-compliant fetch with ReadableStream support for SSE
+import { fetch as expoFetch } from "expo/fetch"
 
 export interface ClientConfig {
   baseUrl: string
@@ -196,9 +198,10 @@ export function createClient(config: ClientConfig) {
         // Remove Content-Type for SSE (it's text/event-stream)
         delete (headers as Record<string, string>)["Content-Type"]
 
-        const response = await fetch(url, { headers, signal })
+        // Must use expo/fetch for ReadableStream support on native
+        const response = await expoFetch(url, { headers, signal })
         if (!response.ok || !response.body) {
-          throw new Error("Failed to connect to event stream")
+          throw new Error(`Failed to connect to event stream: ${response.status}`)
         }
 
         const reader = response.body.getReader()
@@ -263,7 +266,12 @@ export function createClient(config: ClientConfig) {
 
       delete: (sessionID: string) => request<void>(config, `/session/${sessionID}`, { method: "DELETE" }),
 
-      messages: (sessionID: string) => request<MessageWithParts[]>(config, `/session/${sessionID}/message`),
+      messages: (sessionID: string, params?: { limit?: number }) => {
+        const query = new URLSearchParams()
+        if (params?.limit) query.set("limit", String(params.limit))
+        const qs = query.toString()
+        return request<MessageWithParts[]>(config, `/session/${sessionID}/message${qs ? `?${qs}` : ""}`)
+      },
 
       // Sends a message and returns the response
       // Fire-and-forget async prompt - SSE events drive all real-time updates
@@ -279,18 +287,14 @@ export function createClient(config: ClientConfig) {
         const url = `${config.baseUrl}/session/${sessionID}/prompt_async`
         const headers = createHeaders(config)
         const body = JSON.stringify(params)
-        console.log(`[sdk.prompt] POST ${url} body=${body.length} bytes`)
-
         const response = await fetch(url, {
           method: "POST",
           headers,
           body,
         })
 
-        console.log(`[sdk.prompt] response: ${response.status} ${response.statusText}`)
         if (!response.ok) {
           const error = await response.text()
-          console.error(`[sdk.prompt] error body: ${error.slice(0, 500)}`)
           throw new Error(`Failed to send message: ${response.status} - ${error}`)
         }
       },

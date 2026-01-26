@@ -15,6 +15,8 @@ function parseMessages(response: MessageWithParts[]): { messages: Message[]; par
   return { messages, parts }
 }
 
+const PAGE_SIZE = 25
+
 interface SessionsState {
   sessions: Session[]
   currentSession: Session | null
@@ -22,11 +24,14 @@ interface SessionsState {
   parts: Record<string, Part[]>
   isLoading: boolean
   isSending: boolean
+  loadingMore: boolean
+  hasMore: boolean
   error: string | null
 
   // Actions
   loadSessions: () => Promise<void>
   selectSession: (sessionID: string) => Promise<void>
+  loadOlderMessages: () => Promise<void>
   createSession: (title?: string) => Promise<Session | null>
   deleteSession: (sessionID: string) => Promise<void>
   sendMessage: (
@@ -49,6 +54,8 @@ export const useSessions = create<SessionsState>((set, get) => ({
   parts: {},
   isLoading: false,
   isSending: false,
+  loadingMore: false,
+  hasMore: false,
   error: null,
 
   loadSessions: async () => {
@@ -75,11 +82,11 @@ export const useSessions = create<SessionsState>((set, get) => ({
     }
 
     try {
-      set({ isLoading: true, error: null })
+      set({ isLoading: true, error: null, hasMore: false, loadingMore: false })
 
       const [session, messagesResponse] = await Promise.all([
         client.session.get(sessionID),
-        client.session.messages(sessionID),
+        client.session.messages(sessionID, { limit: PAGE_SIZE }),
       ])
 
       // Parse the API response format: array of { info, parts }
@@ -90,10 +97,42 @@ export const useSessions = create<SessionsState>((set, get) => ({
         messages,
         parts,
         isLoading: false,
+        // If we got exactly PAGE_SIZE messages, there are probably more
+        hasMore: messagesResponse.length >= PAGE_SIZE,
       })
     } catch (error) {
       console.error("Failed to load session:", error)
       set({ error: "Failed to load session", isLoading: false })
+    }
+  },
+
+  loadOlderMessages: async () => {
+    const client = useConnections.getState().client
+    const session = get().currentSession
+    if (!client || !session) return
+    if (get().loadingMore || !get().hasMore) return
+
+    try {
+      set({ loadingMore: true })
+
+      // Fetch ALL messages for this session
+      const response = await client.session.messages(session.id)
+      const { messages: all, parts: allParts } = parseMessages(response)
+
+      // Merge: use all messages from full fetch, but keep any temp/optimistic messages
+      const existing = get().messages
+      const temp = existing.filter((m) => m.id.startsWith("temp-"))
+      const merged = [...all, ...temp]
+
+      set({
+        messages: merged,
+        parts: { ...allParts, ...Object.fromEntries(temp.map((m) => [m.id, get().parts[m.id] || []])) },
+        loadingMore: false,
+        hasMore: false, // We loaded everything
+      })
+    } catch (error) {
+      console.error("Failed to load older messages:", error)
+      set({ loadingMore: false })
     }
   },
 
@@ -111,6 +150,8 @@ export const useSessions = create<SessionsState>((set, get) => ({
         currentSession: session,
         messages: [],
         parts: {},
+        hasMore: false,
+        loadingMore: false,
       }))
       return session
     } catch (error) {
@@ -203,23 +244,11 @@ export const useSessions = create<SessionsState>((set, get) => ({
       }
 
       // Fire and forget - SSE events will update messages/parts/status in real-time
-      const payload = { parts: promptParts, model, agent }
-      console.log("[sendMessage] sending to prompt_async:", {
-        sessionID: session.id,
-        partCount: promptParts.length,
-        partTypes: promptParts.map((p) => p.type),
-        bodySize: JSON.stringify(payload).length,
+      client.session.prompt(session.id, { parts: promptParts, model, agent }).catch((error) => {
+        console.error("Failed to send message:", error)
+        set({ error: String(error), isSending: false })
+        get().refreshMessages()
       })
-      client.session
-        .prompt(session.id, payload)
-        .then(() => {
-          console.log("[sendMessage] prompt_async accepted")
-        })
-        .catch((error) => {
-          console.error("[sendMessage] prompt_async failed:", error)
-          set({ error: String(error), isSending: false })
-          get().refreshMessages()
-        })
     } catch (error) {
       console.error("[sendMessage] error:", error)
       set({ error: String(error), isSending: false })

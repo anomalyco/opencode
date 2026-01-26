@@ -87,8 +87,19 @@ export default function SessionScreen() {
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<Attachment[]>([])
 
-  const { currentSession, messages, parts, isLoading, isSending, selectSession, sendMessage, abortSession } =
-    useSessions()
+  const {
+    currentSession,
+    messages,
+    parts,
+    isLoading,
+    isSending,
+    loadingMore,
+    hasMore,
+    selectSession,
+    sendMessage,
+    abortSession,
+    loadOlderMessages,
+  } = useSessions()
 
   const { authenticateForMessage } = useAuth()
   const { client } = useConnections()
@@ -110,9 +121,6 @@ export default function SessionScreen() {
 
   const shortDir = getShortDir(currentSession?.directory)
   const [showScrollButton, setShowScrollButton] = useState(false)
-  const initialScrollUntil = useRef(0)
-  const prevMessageCount = useRef(0)
-  const userHasScrolled = useRef(false)
 
   // Slash command state
   const slashActive = input.startsWith("/") && !input.includes(" ")
@@ -129,22 +137,24 @@ export default function SessionScreen() {
     return [...custom, ...BUILTIN_COMMANDS]
   }, [serverCommands])
 
-  const messageData = (messages || []).map((msg) => ({
-    message: msg,
-    parts: (parts && parts[msg.id]) || [],
-  }))
+  // Inverted FlatList: data is reversed (newest first) so newest renders at bottom
+  const messageData = useMemo(
+    () =>
+      (messages || [])
+        .map((msg) => ({
+          message: msg,
+          parts: (parts && parts[msg.id]) || [],
+        }))
+        .reverse(),
+    [messages, parts],
+  )
 
   const scrollToBottom = useCallback((animated = true) => {
-    flatListRef.current?.scrollToOffset({ offset: 999999, animated })
+    flatListRef.current?.scrollToOffset({ offset: 0, animated })
   }, [])
 
   useEffect(() => {
-    if (id) {
-      initialScrollUntil.current = Date.now() + 2000
-      prevMessageCount.current = 0
-      userHasScrolled.current = false
-      selectSession(id)
-    }
+    if (id) selectSession(id)
   }, [id])
 
   // Sync model chip from latest assistant message
@@ -162,14 +172,6 @@ export default function SessionScreen() {
       }
     }
   }, [currentSession?.id, messages?.length])
-
-  useEffect(() => {
-    const count = messages?.length || 0
-    if (count > prevMessageCount.current && prevMessageCount.current > 0 && !isLoading) {
-      scrollToBottom(true)
-    }
-    prevMessageCount.current = count
-  }, [messages?.length])
 
   // Slash command handler
   const handleSlashSelect = useCallback(
@@ -310,26 +312,25 @@ export default function SessionScreen() {
     await sendMessage(text, model || undefined, agent || undefined, files)
   }
 
+  // In inverted mode, offset 0 = bottom. Show scroll button when scrolled away from bottom.
   const handleScroll = useCallback((event: any) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
-    const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height
-    setShowScrollButton(distanceFromBottom > 200)
-    if (Date.now() < initialScrollUntil.current && distanceFromBottom > 300) {
-      userHasScrolled.current = true
-    }
+    const { contentOffset } = event.nativeEvent
+    setShowScrollButton(contentOffset.y > 200)
   }, [])
 
-  const handleContentSizeChange = useCallback(
-    (_w: number, h: number) => {
-      if (h <= 0) return
-      if (Date.now() < initialScrollUntil.current && !userHasScrolled.current) {
-        scrollToBottom(false)
-        return
-      }
-      if (isSending) scrollToBottom(true)
-    },
-    [isSending, scrollToBottom],
-  )
+  // Debounce: onEndReached can fire multiple times during a single scroll gesture
+  const loadingTriggered = useRef(false)
+  const handleLoadMore = useCallback(() => {
+    if (hasMore && !loadingMore && !loadingTriggered.current) {
+      loadingTriggered.current = true
+      loadOlderMessages()
+    }
+  }, [hasMore, loadingMore, loadOlderMessages])
+
+  // Reset trigger when loading finishes
+  useEffect(() => {
+    if (!loadingMore) loadingTriggered.current = false
+  }, [loadingMore])
 
   const handlePermissionReply = async (requestID: string, reply: "once" | "always" | "reject") => {
     if (!client) return
@@ -390,14 +391,26 @@ export default function SessionScreen() {
             <FlatList
               ref={flatListRef}
               data={messageData}
+              inverted
               keyExtractor={(item) => item.message.id}
               renderItem={({ item }) => <MessageBubble message={item.message} parts={item.parts} isDark={isDark} />}
               contentContainerStyle={s.messageList}
               onScroll={handleScroll}
               scrollEventThrottle={100}
-              onContentSizeChange={handleContentSizeChange}
+              onEndReached={handleLoadMore}
+              onEndReachedThreshold={0.5}
+              // Prevent jump when older messages are prepended
+              maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+              ListFooterComponent={
+                loadingMore ? (
+                  <View style={s.loadingMore}>
+                    <ActivityIndicator size="small" color={isDark ? "#888888" : "#666666"} />
+                    <Text style={[s.loadingMoreText, isDark && s.metaDark]}>Loading older messages...</Text>
+                  </View>
+                ) : null
+              }
               ListEmptyComponent={
-                <View style={s.empty}>
+                <View style={s.emptyInverted}>
                   <Ionicons name="chatbubble-outline" size={48} color={isDark ? "#444444" : "#cccccc"} />
                   <Text style={[s.emptyText, isDark && s.metaDark]}>Start a conversation</Text>
                   <Text style={[s.emptyHint, isDark && s.metaDark]}>Type / for commands</Text>
@@ -550,6 +563,25 @@ const s = StyleSheet.create({
     elevation: 4,
   },
   scrollBtnDark: { backgroundColor: "#2a2a2a" },
+
+  // Loading more (appears at top in inverted list = ListFooterComponent)
+  loadingMore: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 16,
+  },
+  loadingMoreText: { fontSize: 13, color: "#999999" },
+
+  // Empty (inverted list flips content, so use transform to un-flip)
+  emptyInverted: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 64,
+    transform: [{ scaleY: -1 }],
+  },
 
   // Empty
   empty: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 64 },
