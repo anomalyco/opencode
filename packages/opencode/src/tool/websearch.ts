@@ -38,6 +38,7 @@ interface McpSearchResponse {
 }
 
 export const WebSearchTool = Tool.define("websearch", async () => {
+  if (process.env.OPENCODE_ONLY_GITHUB) throw new Error("websearch tool disabled in GitHub-only mode")
   return {
     get description() {
       return DESCRIPTION.replace("{{date}}", new Date().toISOString().slice(0, 10))
