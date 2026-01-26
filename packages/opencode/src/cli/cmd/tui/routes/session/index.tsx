@@ -150,7 +150,6 @@ export function Session() {
   const [showAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
   const [showScrollbar] = kv.signal("scrollbar_visible", false)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
-  const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
