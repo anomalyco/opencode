@@ -7,17 +7,17 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { type ModelKey, useLocal } from "@/context/local"
+import { useModels } from "@/context/models"
 import { popularProviders } from "@/hooks/use-providers"
 
-type ModelItem = ReturnType<ReturnType<typeof useLocal>["model"]["list"]>[number]
+type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
 
 export const SettingsModels: Component = () => {
-  const local = useLocal()
   const language = useLanguage()
+  const models = useModels()
 
   const list = useFilteredList<ModelItem>({
-    items: (_filter) => local.model.list(),
+    items: (_filter) => models.list(),
     key: (x) => `${x.provider.id}:${x.id}`,
     filterKeys: ["provider.name", "name", "id"],
     sortBy: (a, b) => a.name.localeCompare(b.name),
@@ -103,7 +103,7 @@ export const SettingsModels: Component = () => {
                   <div class="bg-surface-raised-base px-4 rounded-lg">
                     <For each={group.items}>
                       {(item) => {
-                        const key: ModelKey = { providerID: item.provider.id, modelID: item.id }
+                        const key = { providerID: item.provider.id, modelID: item.id }
                         return (
                           <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
                             <div class="min-w-0">
@@ -111,9 +111,9 @@ export const SettingsModels: Component = () => {
                             </div>
                             <div class="flex-shrink-0">
                               <Switch
-                                checked={!!local.model.visible(key)}
+                                checked={models.visible(key)}
                                 onChange={(checked) => {
-                                  local.model.setVisibility(key, checked)
+                                  models.setVisibility(key, checked)
                                 }}
                                 hideLabel
                               >

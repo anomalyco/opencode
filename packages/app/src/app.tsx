@@ -21,6 +21,7 @@ import { PromptProvider } from "@/context/prompt"
 import { FileProvider } from "@/context/file"
 import { CommentsProvider } from "@/context/comments"
 import { NotificationProvider } from "@/context/notification"
+import { ModelsProvider } from "@/context/models"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
 import { LanguageProvider, useLanguage } from "@/context/language"
@@ -116,9 +117,11 @@ export function AppInterface(props: { defaultUrl?: string }) {
                   <PermissionProvider>
                     <LayoutProvider>
                       <NotificationProvider>
-                        <CommandProvider>
-                          <Layout>{props.children}</Layout>
-                        </CommandProvider>
+                        <ModelsProvider>
+                          <CommandProvider>
+                            <Layout>{props.children}</Layout>
+                          </CommandProvider>
+                        </ModelsProvider>
                       </NotificationProvider>
                     </LayoutProvider>
                   </PermissionProvider>
