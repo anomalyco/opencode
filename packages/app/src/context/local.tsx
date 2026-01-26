@@ -1,6 +1,5 @@
 import { createStore } from "solid-js/store"
 import { batch, createMemo } from "solid-js"
-import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
@@ -8,30 +7,7 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { useProviders } from "@/hooks/use-providers"
 import { useModels } from "@/context/models"
 
-export type LocalFile = FileNode &
-  Partial<{
-    loaded: boolean
-    pinned: boolean
-    expanded: boolean
-    content: FileContent
-    selection: { startLine: number; startChar: number; endLine: number; endChar: number }
-    scrollTop: number
-    view: "raw" | "diff-unified" | "diff-split"
-    folded: string[]
-    selectedChange: number
-    status: FileStatus
-  }>
-export type TextSelection = LocalFile["selection"]
-export type View = LocalFile["view"]
-
-export type LocalModel = Omit<Model, "provider"> & {
-  provider: Provider
-  latest?: boolean
-}
 export type ModelKey = { providerID: string; modelID: string }
-
-export type FileContext = { type: "file"; path: string; selection?: TextSelection }
-export type ContextItem = FileContext
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
