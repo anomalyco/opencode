@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 8: Session Enhancements** - Remember me and session activity indicator
 - [x] **Phase 9: Connection Security UI** - HTTPS/HTTP security badge in UI
 - [x] **Phase 10: Two-Factor Authentication** - TOTP support via PAM integration
-- [ ] **Phase 11: Documentation** - Reverse proxy and PAM configuration guides
+- [x] **Phase 11: Documentation** - Reverse proxy and PAM configuration guides
 - [ ] **Phase 12: Server-Side TOTP Registration** - Offload .google_authenticator file generation to server
 - [ ] **Phase 13: Passkeys Investigation** - Investigate adding passkeys and passkey management to opencode auth
 - [ ] **Phase 14: Persistent Session Storage** - Add persistent session storage for multi-instance deployments
