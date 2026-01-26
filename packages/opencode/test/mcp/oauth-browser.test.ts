@@ -20,17 +20,7 @@ mock.module("open", () => ({
   },
 }))
 
-
-// Prevent Config.get() from performing networked `bun info` calls during tests.
-// MCP.startAuth() calls Config.get(), and Config may check registry freshness.
-mock.module("@/bun/registry", () => ({
-  PackageRegistry: {
-    info: async () => null,
-    isOutdated: async () => false,
-  },
-}))
-
-async function waitFor(check: () => boolean, timeoutMs = 2000) {
+async function waitFor(check: () => boolean, timeoutMs = 8_000) {
   const start = Date.now()
   async function loop(): Promise<void> {
     if (check()) return
@@ -42,7 +32,6 @@ async function waitFor(check: () => boolean, timeoutMs = 2000) {
   }
   await loop()
 }
-
 
 // Mock UnauthorizedError
 class MockUnauthorizedError extends Error {
@@ -162,7 +151,7 @@ test("BrowserOpenFailed event is published when open() throws", async () => {
       const authPromise = MCP.authenticate("test-oauth-server").catch(() => undefined)
 
       // Wait until we see the failure event (Config.get() can be slow in tests)
-      await waitFor(() => events.length === 1, 3000)
+      await waitFor(() => events.length === 1)
 
       // Stop the callback server and cancel any pending auth
       await McpOAuthCallback.stop()
@@ -211,7 +200,7 @@ test("BrowserOpenFailed event is NOT published when open() succeeds", async () =
       const authPromise = MCP.authenticate("test-oauth-server-2").catch(() => undefined)
 
       // Wait until open() is called (Config.get() can be slow in tests)
-      await waitFor(() => openCalledWith !== undefined, 3000)
+      await waitFor(() => openCalledWith !== undefined)
 
       // See note in the previous test: give authenticate() time to move past
       // the 500ms open() error-detection window.
@@ -260,7 +249,7 @@ test("open() is called with the authorization URL", async () => {
       const authPromise = MCP.authenticate("test-oauth-server-3").catch(() => undefined)
 
       // Wait until open() is called (Config.get() can be slow in tests)
-      await waitFor(() => openCalledWith !== undefined, 3000)
+      await waitFor(() => openCalledWith !== undefined)
 
       // authenticate() waits ~500ms to detect async open() failures before it
       // starts awaiting the OAuth callback promise. If we stop the callback

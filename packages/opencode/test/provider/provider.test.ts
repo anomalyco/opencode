@@ -15,10 +15,6 @@ mock.module("../../src/bun/index", () => ({
     which: () => process.execPath,
     InstallFailedError: class extends Error {},
   },
-  PackageRegistry: {
-    info: async () => null,
-    isOutdated: async () => false,
-  },
 }))
 
 const mockPlugin = () => ({})

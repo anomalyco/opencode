@@ -21,10 +21,6 @@ mock.module("../../src/bun/index", () => ({
     which: () => process.execPath,
     InstallFailedError: class extends Error {},
   },
-  PackageRegistry: {
-    info: async () => null,
-    isOutdated: async () => false,
-  },
 }))
 
 mock.module("@aws-sdk/credential-providers", () => ({
