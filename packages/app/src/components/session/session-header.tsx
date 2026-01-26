@@ -315,7 +315,7 @@ export function SessionHeader() {
                 <Tooltip value="Toggle file tree" placement="bottom">
                   <Button
                     variant="ghost"
-                    class="group/file-tree-toggle size-5 p-0"
+                    class="group/file-tree-toggle size-6 p-0"
                     onClick={() => {
                       const opening = !layout.fileTree.opened()
                       if (opening && !view().reviewPanel.opened()) view().reviewPanel.open()
