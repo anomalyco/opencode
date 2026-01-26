@@ -57,6 +57,62 @@ function stripQueryAndHash(input: string) {
   return input
 }
 
+function unquoteGitPath(input: string) {
+  if (!input.startsWith('"')) return input
+  if (!input.endsWith('"')) return input
+  const body = input.slice(1, -1)
+  const bytes: number[] = []
+
+  for (let i = 0; i < body.length; i++) {
+    const char = body[i]!
+    if (char !== "\\") {
+      bytes.push(char.charCodeAt(0))
+      continue
+    }
+
+    const next = body[i + 1]
+    if (!next) {
+      bytes.push("\\".charCodeAt(0))
+      continue
+    }
+
+    if (next >= "0" && next <= "7") {
+      const chunk = body.slice(i + 1, i + 4)
+      const match = chunk.match(/^[0-7]{1,3}/)
+      if (!match) {
+        bytes.push(next.charCodeAt(0))
+        i++
+        continue
+      }
+      bytes.push(parseInt(match[0], 8))
+      i += match[0].length
+      continue
+    }
+
+    const escaped =
+      next === "n"
+        ? "\n"
+        : next === "r"
+          ? "\r"
+          : next === "t"
+            ? "\t"
+            : next === "b"
+              ? "\b"
+              : next === "f"
+                ? "\f"
+                : next === "v"
+                  ? "\v"
+                  : next === "\\" || next === '"'
+                    ? next
+                    : undefined
+
+    bytes.push((escaped ?? next).charCodeAt(0))
+    i++
+  }
+
+  return new TextDecoder().decode(new Uint8Array(bytes))
+}
+
 export function selectionFromLines(range: SelectedLineRange): FileSelection {
   const startLine = Math.min(range.start, range.end)
   const endLine = Math.max(range.start, range.end)
@@ -189,26 +245,15 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const params = useParams()
     const language = useLanguage()
 
+    const scope = createMemo(() => sdk.directory)
+
     const directory = createMemo(() => sync.data.path.directory)
 
     function normalize(input: string) {
       const root = directory()
       const prefix = root.endsWith("/") ? root : root + "/"
 
-      let path = input
-
-      // Only strip protocol and decode if it's a file URI
-      if (path.startsWith("file://")) {
-        const raw = stripQueryAndHash(stripFileProtocol(path))
-        try {
-          // Attempt to treat as a standard URI
-          path = decodeURIComponent(raw)
-        } catch {
-          // Fallback for legacy paths that might contain invalid URI sequences (e.g. "100%")
-          // In this case, we treat the path as raw, but still strip the protocol
-          path = raw
-        }
-      }
+      let path = unquoteGitPath(stripQueryAndHash(stripFileProtocol(input)))
 
       if (path.startsWith(prefix)) {
         path = path.slice(prefix.length)
@@ -231,8 +276,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     function tab(input: string) {
       const path = normalize(input)
-      const encoded = path.split("/").map(encodeURIComponent).join("/")
-      return `file://${encoded}`
+      return `file://${path}`
     }
 
     function pathFromTab(tabValue: string) {
@@ -246,6 +290,12 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       file: Record<string, FileState>
     }>({
       file: {},
+    })
+
+    createEffect(() => {
+      scope()
+      inflight.clear()
+      setStore("file", {})
     })
 
     const viewCache = new Map<string, ViewCacheEntry>()
@@ -298,12 +348,16 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const path = normalize(input)
       if (!path) return Promise.resolve()
 
+      const directory = scope()
+      const key = `${directory}\n${path}`
+      const client = sdk.client
+
       ensure(path)
 
       const current = store.file[path]
       if (!options?.force && current?.loaded) return Promise.resolve()
 
-      const pending = inflight.get(path)
+      const pending = inflight.get(key)
       if (pending) return pending
 
       setStore(
@@ -315,9 +369,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         }),
       )
 
-      const promise = sdk.client.file
+      const promise = client.file
         .read({ path })
         .then((x) => {
+          if (scope() !== directory) return
           setStore(
             "file",
             path,
@@ -329,6 +384,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           )
         })
         .catch((e) => {
+          if (scope() !== directory) return
           setStore(
             "file",
             path,
@@ -344,10 +400,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           })
         })
         .finally(() => {
-          inflight.delete(path)
+          inflight.delete(key)
         })
 
-      inflight.set(path, promise)
+      inflight.set(key, promise)
       return promise
     }
 

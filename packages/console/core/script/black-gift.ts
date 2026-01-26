@@ -5,8 +5,11 @@ import { BillingTable, PaymentTable, SubscriptionTable } from "../src/schema/bil
 import { Identifier } from "../src/identifier.js"
 import { centsToMicroCents } from "../src/util/price.js"
 import { AuthTable } from "../src/schema/auth.sql.js"
+import { BlackData } from "../src/black.js"
+import { Actor } from "../src/actor.js"
 
 const plan = "200"
+const couponID = "JAIr0Pe1"
 const workspaceID = process.argv[2]
 const seats = parseInt(process.argv[3])
 
@@ -61,16 +64,18 @@ const customerID =
       .then((customer) => customer.id))())
 console.log(`Customer ID: ${customerID}`)
 
-const couponID = "JAIr0Pe1"
 const subscription = await Billing.stripe().subscriptions.create({
   customer: customerID!,
   items: [
     {
-      price: `price_1SmfyI2StuRr0lbXovxJNeZn`,
+      price: BlackData.planToPriceID({ plan }),
       discounts: [{ coupon: couponID }],
       quantity: seats,
     },
   ],
+  metadata: {
+    workspaceID,
+  },
 })
 console.log(`Subscription ID: ${subscription.id}`)
 

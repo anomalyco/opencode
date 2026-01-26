@@ -86,6 +86,8 @@ export const dict = {
   "dialog.provider.group.other": "Autre",
   "dialog.provider.tag.recommended": "Recommandé",
   "dialog.provider.anthropic.note": "Connectez-vous avec Claude Pro/Max ou une clé API",
+  "dialog.provider.openai.note": "Connectez-vous avec ChatGPT Pro/Plus ou une clé API",
+  "dialog.provider.copilot.note": "Connectez-vous avec Copilot ou une clé API",
 
   "dialog.model.select.title": "Sélectionner un modèle",
   "dialog.model.search.placeholder": "Rechercher des modèles",
@@ -96,7 +98,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Modèles gratuits fournis par OpenCode",
   "dialog.model.unpaid.addMore.title": "Ajouter plus de modèles de fournisseurs populaires",
 
-  "dialog.provider.viewAll": "Voir tous les fournisseurs",
+  "dialog.provider.viewAll": "Voir plus de fournisseurs",
 
   "provider.connect.title": "Connecter {{provider}}",
   "provider.connect.title.anthropicProMax": "Connexion avec Claude Pro/Max",
@@ -203,6 +205,9 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} sur {{total}} activés",
   "dialog.mcp.empty": "Aucun MCP configuré",
 
+  "dialog.lsp.empty": "LSPs détectés automatiquement par type de fichier",
+  "dialog.plugins.empty": "Plugins configurés dans opencode.json",
+
   "mcp.status.connected": "connecté",
   "mcp.status.failed": "échoué",
   "mcp.status.needs_auth": "nécessite auth",
@@ -222,7 +227,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "Impossible de se connecter au serveur",
   "dialog.server.add.checking": "Vérification...",
-  "dialog.server.add.button": "Ajouter",
+  "dialog.server.add.button": "Ajouter un serveur",
   "dialog.server.default.title": "Serveur par défaut",
   "dialog.server.default.description":
     "Se connecter à ce serveur au lancement de l'application au lieu de démarrer un serveur local. Nécessite un redémarrage.",
@@ -230,6 +235,13 @@ export const dict = {
   "dialog.server.default.set": "Définir le serveur actuel comme défaut",
   "dialog.server.default.clear": "Effacer",
   "dialog.server.action.remove": "Supprimer le serveur",
+
+  "dialog.server.menu.edit": "Modifier",
+  "dialog.server.menu.default": "Définir par défaut",
+  "dialog.server.menu.defaultRemove": "Supprimer par défaut",
+  "dialog.server.menu.delete": "Supprimer",
+  "dialog.server.current": "Serveur actuel",
+  "dialog.server.status.default": "Défaut",
 
   "dialog.project.edit.title": "Modifier le projet",
   "dialog.project.edit.name": "Nom",
@@ -275,19 +287,20 @@ export const dict = {
   "context.usage.clickToView": "Cliquez pour voir le contexte",
   "context.usage.view": "Voir l'utilisation du contexte",
 
-  "language.en": "Anglais",
-  "language.zh": "Chinois (simplifié)",
-  "language.zht": "Chinois (traditionnel)",
-  "language.ko": "Coréen",
-  "language.de": "Allemand",
-  "language.es": "Espagnol",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
   "language.fr": "Français",
-  "language.ja": "Japonais",
-  "language.da": "Danois",
-  "language.ru": "Russe",
-  "language.pl": "Polonais",
-  "language.ar": "Arabe",
-  "language.no": "Norvégien",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Langue",
   "toast.language.description": "Passé à {{language}}",
@@ -402,6 +415,14 @@ export const dict = {
   "session.header.search.placeholder": "Rechercher {{project}}",
   "session.header.searchFiles": "Rechercher des fichiers",
 
+  "status.popover.trigger": "Statut",
+  "status.popover.ariaLabel": "Configurations des serveurs",
+  "status.popover.tab.servers": "Serveurs",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Plugins",
+  "status.popover.action.manageServers": "Gérer les serveurs",
+
   "session.share.popover.title": "Publier sur le web",
   "session.share.popover.description.shared":
     "Cette session est publique sur le web. Elle est accessible à toute personne disposant du lien.",
@@ -432,6 +453,7 @@ export const dict = {
   "common.learnMore": "En savoir plus",
   "common.rename": "Renommer",
   "common.reset": "Réinitialiser",
+  "common.archive": "Archiver",
   "common.delete": "Supprimer",
   "common.close": "Fermer",
   "common.edit": "Modifier",
@@ -555,6 +577,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "Accéder aux fichiers en dehors du répertoire du projet",
   "settings.permissions.tool.doom_loop.title": "Boucle infernale",
   "settings.permissions.tool.doom_loop.description": "Détecter les appels d'outils répétés avec une entrée identique",
+
+  "session.delete.failed.title": "Échec de la suppression de la session",
+  "session.delete.title": "Supprimer la session",
+  "session.delete.confirm": 'Supprimer la session "{{name}}" ?',
+  "session.delete.button": "Supprimer la session",
 
   "workspace.new": "Nouvel espace de travail",
   "workspace.type.local": "local",

@@ -25,6 +25,7 @@
 @import "../components/icon-button.css" layer(components);
 @import "../components/image-preview.css" layer(components);
 @import "../components/keybind.css" layer(components);
+@import "../components/line-comment.css" layer(components);
 @import "../components/text-field.css" layer(components);
 @import "../components/inline-input.css" layer(components);
 @import "../components/list.css" layer(components);

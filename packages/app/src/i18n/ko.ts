@@ -90,6 +90,8 @@ export const dict = {
   "dialog.provider.group.other": "기타",
   "dialog.provider.tag.recommended": "추천",
   "dialog.provider.anthropic.note": "Claude Pro/Max 또는 API 키로 연결",
+  "dialog.provider.openai.note": "ChatGPT Pro/Plus 또는 API 키로 연결",
+  "dialog.provider.copilot.note": "Copilot 또는 API 키로 연결",
 
   "dialog.model.select.title": "모델 선택",
   "dialog.model.search.placeholder": "모델 검색",
@@ -100,7 +102,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "OpenCode에서 제공하는 무료 모델",
   "dialog.model.unpaid.addMore.title": "인기 공급자의 모델 추가",
 
-  "dialog.provider.viewAll": "모든 공급자 보기",
+  "dialog.provider.viewAll": "더 많은 공급자 보기",
 
   "provider.connect.title": "{{provider}} 연결",
   "provider.connect.title.anthropicProMax": "Claude Pro/Max로 로그인",
@@ -206,6 +208,9 @@ export const dict = {
   "dialog.mcp.description": "{{total}}개 중 {{enabled}}개 활성화됨",
   "dialog.mcp.empty": "구성된 MCP 없음",
 
+  "dialog.lsp.empty": "파일 유형에서 자동 감지된 LSP",
+  "dialog.plugins.empty": "opencode.json에 구성된 플러그인",
+
   "mcp.status.connected": "연결됨",
   "mcp.status.failed": "실패",
   "mcp.status.needs_auth": "인증 필요",
@@ -225,7 +230,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "서버에 연결할 수 없습니다",
   "dialog.server.add.checking": "확인 중...",
-  "dialog.server.add.button": "추가",
+  "dialog.server.add.button": "서버 추가",
   "dialog.server.default.title": "기본 서버",
   "dialog.server.default.description":
     "로컬 서버를 시작하는 대신 앱 실행 시 이 서버에 연결합니다. 다시 시작해야 합니다.",
@@ -233,6 +238,13 @@ export const dict = {
   "dialog.server.default.set": "현재 서버를 기본값으로 설정",
   "dialog.server.default.clear": "지우기",
   "dialog.server.action.remove": "서버 제거",
+
+  "dialog.server.menu.edit": "편집",
+  "dialog.server.menu.default": "기본값으로 설정",
+  "dialog.server.menu.defaultRemove": "기본값 제거",
+  "dialog.server.menu.delete": "삭제",
+  "dialog.server.current": "현재 서버",
+  "dialog.server.status.default": "기본값",
 
   "dialog.project.edit.title": "프로젝트 편집",
   "dialog.project.edit.name": "이름",
@@ -277,19 +289,20 @@ export const dict = {
   "context.usage.clickToView": "컨텍스트를 보려면 클릭",
   "context.usage.view": "컨텍스트 사용량 보기",
 
-  "language.en": "영어",
-  "language.zh": "중국어 (간체)",
-  "language.zht": "중국어 (번체)",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
   "language.ko": "한국어",
-  "language.de": "독일어",
-  "language.es": "스페인어",
-  "language.fr": "프랑스어",
-  "language.ja": "일본어",
-  "language.da": "덴마크어",
-  "language.ru": "러시아어",
-  "language.pl": "폴란드어",
-  "language.ar": "아랍어",
-  "language.no": "노르웨이어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "언어",
   "toast.language.description": "{{language}}(으)로 전환됨",
@@ -397,6 +410,14 @@ export const dict = {
   "session.header.search.placeholder": "{{project}} 검색",
   "session.header.searchFiles": "파일 검색",
 
+  "status.popover.trigger": "상태",
+  "status.popover.ariaLabel": "서버 구성",
+  "status.popover.tab.servers": "서버",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "플러그인",
+  "status.popover.action.manageServers": "서버 관리",
+
   "session.share.popover.title": "웹에 게시",
   "session.share.popover.description.shared": "이 세션은 웹에 공개되었습니다. 링크가 있는 누구나 액세스할 수 있습니다.",
   "session.share.popover.description.unshared":
@@ -426,6 +447,7 @@ export const dict = {
   "common.learnMore": "더 알아보기",
   "common.rename": "이름 바꾸기",
   "common.reset": "초기화",
+  "common.archive": "보관",
   "common.delete": "삭제",
   "common.close": "닫기",
   "common.edit": "편집",
@@ -543,6 +565,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "프로젝트 디렉터리 외부의 파일에 액세스",
   "settings.permissions.tool.doom_loop.title": "무한 반복",
   "settings.permissions.tool.doom_loop.description": "동일한 입력으로 반복되는 도구 호출 감지",
+
+  "session.delete.failed.title": "세션 삭제 실패",
+  "session.delete.title": "세션 삭제",
+  "session.delete.confirm": '"{{name}}" 세션을 삭제하시겠습니까?',
+  "session.delete.button": "세션 삭제",
 
   "workspace.new": "새 작업 공간",
   "workspace.type.local": "로컬",

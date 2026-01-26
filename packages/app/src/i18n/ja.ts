@@ -86,6 +86,8 @@ export const dict = {
   "dialog.provider.group.other": "その他",
   "dialog.provider.tag.recommended": "推奨",
   "dialog.provider.anthropic.note": "Claude Pro/MaxまたはAPIキーで接続",
+  "dialog.provider.openai.note": "ChatGPT Pro/PlusまたはAPIキーで接続",
+  "dialog.provider.copilot.note": "CopilotまたはAPIキーで接続",
 
   "dialog.model.select.title": "モデルを選択",
   "dialog.model.search.placeholder": "モデルを検索",
@@ -96,7 +98,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "OpenCodeが提供する無料モデル",
   "dialog.model.unpaid.addMore.title": "人気のプロバイダーからモデルを追加",
 
-  "dialog.provider.viewAll": "すべてのプロバイダーを表示",
+  "dialog.provider.viewAll": "さらにプロバイダーを表示",
 
   "provider.connect.title": "{{provider}}を接続",
   "provider.connect.title.anthropicProMax": "Claude Pro/Maxでログイン",
@@ -202,6 +204,9 @@ export const dict = {
   "dialog.mcp.description": "{{total}}個中{{enabled}}個が有効",
   "dialog.mcp.empty": "MCPが設定されていません",
 
+  "dialog.lsp.empty": "ファイルタイプから自動検出されたLSP",
+  "dialog.plugins.empty": "opencode.jsonで設定されたプラグイン",
+
   "mcp.status.connected": "接続済み",
   "mcp.status.failed": "失敗",
   "mcp.status.needs_auth": "認証が必要",
@@ -221,7 +226,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "サーバーに接続できませんでした",
   "dialog.server.add.checking": "確認中...",
-  "dialog.server.add.button": "追加",
+  "dialog.server.add.button": "サーバーを追加",
   "dialog.server.default.title": "デフォルトサーバー",
   "dialog.server.default.description":
     "ローカルサーバーを起動する代わりに、アプリ起動時にこのサーバーに接続します。再起動が必要です。",
@@ -229,6 +234,13 @@ export const dict = {
   "dialog.server.default.set": "現在のサーバーをデフォルトに設定",
   "dialog.server.default.clear": "クリア",
   "dialog.server.action.remove": "サーバーを削除",
+
+  "dialog.server.menu.edit": "編集",
+  "dialog.server.menu.default": "デフォルトに設定",
+  "dialog.server.menu.defaultRemove": "デフォルト設定を解除",
+  "dialog.server.menu.delete": "削除",
+  "dialog.server.current": "現在のサーバー",
+  "dialog.server.status.default": "デフォルト",
 
   "dialog.project.edit.title": "プロジェクトを編集",
   "dialog.project.edit.name": "名前",
@@ -273,19 +285,20 @@ export const dict = {
   "context.usage.clickToView": "クリックしてコンテキストを表示",
   "context.usage.view": "コンテキスト使用量を表示",
 
-  "language.en": "英語",
-  "language.zh": "中国語(簡体字)",
-  "language.zht": "中国語(繁体字)",
-  "language.ko": "韓国語",
-  "language.de": "ドイツ語",
-  "language.es": "スペイン語",
-  "language.fr": "フランス語",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
   "language.ja": "日本語",
-  "language.da": "デンマーク語",
-  "language.ru": "ロシア語",
-  "language.pl": "ポーランド語",
-  "language.ar": "アラビア語",
-  "language.no": "ノルウェー語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "言語",
   "toast.language.description": "{{language}}に切り替えました",
@@ -394,6 +407,14 @@ export const dict = {
   "session.header.search.placeholder": "{{project}}を検索",
   "session.header.searchFiles": "ファイルを検索",
 
+  "status.popover.trigger": "ステータス",
+  "status.popover.ariaLabel": "サーバー設定",
+  "status.popover.tab.servers": "サーバー",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "プラグイン",
+  "status.popover.action.manageServers": "サーバーを管理",
+
   "session.share.popover.title": "ウェブで公開",
   "session.share.popover.description.shared":
     "このセッションはウェブで公開されています。リンクを知っている人なら誰でもアクセスできます。",
@@ -424,6 +445,7 @@ export const dict = {
   "common.learnMore": "詳細",
   "common.rename": "名前変更",
   "common.reset": "リセット",
+  "common.archive": "アーカイブ",
   "common.delete": "削除",
   "common.close": "閉じる",
   "common.edit": "編集",
@@ -542,6 +564,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "プロジェクトディレクトリ外のファイルへのアクセス",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
   "settings.permissions.tool.doom_loop.description": "同一入力による繰り返しのツール呼び出しを検出",
+
+  "session.delete.failed.title": "セッションの削除に失敗しました",
+  "session.delete.title": "セッションの削除",
+  "session.delete.confirm": 'セッション "{{name}}" を削除しますか？',
+  "session.delete.button": "セッションを削除",
 
   "workspace.new": "新しいワークスペース",
   "workspace.type.local": "ローカル",

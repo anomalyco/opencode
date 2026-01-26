@@ -14,12 +14,14 @@ import { GlobalSyncProvider } from "@/context/global-sync"
 import { PermissionProvider } from "@/context/permission"
 import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
-import { ServerProvider, useServer } from "@/context/server"
+import { normalizeServerUrl, ServerProvider, useServer } from "@/context/server"
 import { SettingsProvider } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptProvider } from "@/context/prompt"
 import { FileProvider } from "@/context/file"
+import { CommentsProvider } from "@/context/comments"
 import { NotificationProvider } from "@/context/notification"
+import { ModelsProvider } from "@/context/models"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
 import { LanguageProvider, useLanguage } from "@/context/language"
@@ -84,8 +86,19 @@ function ServerKey(props: ParentProps) {
 }
 
 export function AppInterface(props: { defaultUrl?: string }) {
+  const platform = usePlatform()
+
+  const stored = (() => {
+    if (platform.platform !== "web") return
+    const result = platform.getDefaultServerUrl?.()
+    if (result instanceof Promise) return
+    if (!result) return
+    return normalizeServerUrl(result)
+  })()
+
   const defaultServerUrl = () => {
     if (props.defaultUrl) return props.defaultUrl
+    if (stored) return stored
     if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
     if (import.meta.env.DEV)
       return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
@@ -104,9 +117,11 @@ export function AppInterface(props: { defaultUrl?: string }) {
                   <PermissionProvider>
                     <LayoutProvider>
                       <NotificationProvider>
-                        <CommandProvider>
-                          <Layout>{props.children}</Layout>
-                        </CommandProvider>
+                        <ModelsProvider>
+                          <CommandProvider>
+                            <Layout>{props.children}</Layout>
+                          </CommandProvider>
+                        </ModelsProvider>
                       </NotificationProvider>
                     </LayoutProvider>
                   </PermissionProvider>
@@ -126,13 +141,15 @@ export function AppInterface(props: { defaultUrl?: string }) {
                 <Route
                   path="/session/:id?"
                   component={(p) => (
-                    <Show when={p.params.id ?? "new"} keyed>
+                    <Show when={p.params.id ?? "new"}>
                       <TerminalProvider>
                         <FileProvider>
                           <PromptProvider>
-                            <Suspense fallback={<Loading />}>
-                              <Session />
-                            </Suspense>
+                            <CommentsProvider>
+                              <Suspense fallback={<Loading />}>
+                                <Session />
+                              </Suspense>
+                            </CommentsProvider>
                           </PromptProvider>
                         </FileProvider>
                       </TerminalProvider>

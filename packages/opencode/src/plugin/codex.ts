@@ -355,7 +355,13 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
         if (auth.type !== "oauth") return {}
 
         // Filter models to only allowed Codex models for OAuth
-        const allowedModels = new Set(["gpt-5.1-codex-max", "gpt-5.1-codex-mini", "gpt-5.2", "gpt-5.2-codex"])
+        const allowedModels = new Set([
+          "gpt-5.1-codex-max",
+          "gpt-5.1-codex-mini",
+          "gpt-5.2",
+          "gpt-5.2-codex",
+          "gpt-5.1-codex",
+        ])
         for (const modelId of Object.keys(provider.models)) {
           if (!allowedModels.has(modelId)) {
             delete provider.models[modelId]
@@ -399,7 +405,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               const tokens = await refreshAccessToken(currentAuth.refresh)
               const newAccountId = extractAccountId(tokens) || authWithAccount.accountId
               await input.client.auth.set({
-                path: { id: "codex" },
+                path: { id: "openai" },
                 body: {
                   type: "oauth",
                   refresh: tokens.refresh_token,

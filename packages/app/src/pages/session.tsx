@@ -1,21 +1,9 @@
-import {
-  For,
-  Index,
-  onCleanup,
-  onMount,
-  Show,
-  Match,
-  Switch,
-  createMemo,
-  createEffect,
-  on,
-  createSignal,
-} from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on, createSignal } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
 import { useLocal } from "@/context/local"
-import { selectionFromLines, useFile, type SelectedLineRange } from "@/context/file"
+import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
 import { SessionContextUsage } from "@/components/session-context-usage"
@@ -27,7 +15,9 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
+import { LineComment as LineCommentView, LineCommentEditor } from "@opencode-ai/ui/line-comment"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
+import { BasicTool } from "@opencode-ai/ui/basic-tool"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { Mark } from "@opencode-ai/ui/logo"
@@ -39,6 +29,7 @@ import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
 import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
+import { findLast } from "@opencode-ai/util/array"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
@@ -51,6 +42,7 @@ import { UserMessage } from "@opencode-ai/sdk/v2"
 import type { FileDiff } from "@opencode-ai/sdk/v2/client"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
+import { useComments, type LineComment } from "@/context/comments"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
@@ -63,7 +55,6 @@ import {
   SortableTerminalTab,
   NewSessionView,
 } from "@/components/session"
-import { usePlatform } from "@/context/platform"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
 
@@ -81,6 +72,10 @@ interface SessionReviewTabProps {
   diffStyle: DiffStyle
   onDiffStyleChange?: (style: DiffStyle) => void
   onViewFile?: (file: string) => void
+  onLineComment?: (comment: { file: string; selection: SelectedLineRange; comment: string; preview?: string }) => void
+  comments?: LineComment[]
+  focusedComment?: { file: string; id: string } | null
+  onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
   classes?: {
     root?: string
     header?: string
@@ -93,18 +88,21 @@ function SessionReviewTab(props: SessionReviewTabProps) {
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
 
-  const restoreScroll = (retries = 0) => {
+  const sdk = useSDK()
+
+  const readFile = async (path: string) => {
+    return sdk.client.file
+      .read({ path })
+      .then((x) => x.data)
+      .catch(() => undefined)
+  }
+
+  const restoreScroll = () => {
     const el = scroll
     if (!el) return
 
     const s = props.view().scroll("review")
     if (!s) return
-
-    // Wait for content to be scrollable - content may not have rendered yet
-    if (el.scrollHeight <= el.clientHeight && retries < 10) {
-      requestAnimationFrame(() => restoreScroll(retries + 1))
-      return
-    }
 
     if (el.scrollTop !== s.y) el.scrollTop = s.y
     if (el.scrollLeft !== s.x) el.scrollLeft = s.x
@@ -150,6 +148,7 @@ function SessionReviewTab(props: SessionReviewTabProps) {
         restoreScroll()
       }}
       onScroll={handleScroll}
+      onDiffRendered={() => requestAnimationFrame(restoreScroll)}
       open={props.view().review.open()}
       onOpenChange={props.view().review.setOpen}
       classes={{
@@ -161,6 +160,11 @@ function SessionReviewTab(props: SessionReviewTabProps) {
       diffStyle={props.diffStyle}
       onDiffStyleChange={props.onDiffStyleChange}
       onViewFile={props.onViewFile}
+      readFile={readFile}
+      onLineComment={props.onLineComment}
+      comments={props.comments}
+      focusedComment={props.focusedComment}
+      onFocusedCommentChange={props.onFocusedCommentChange}
     />
   )
 }
@@ -175,17 +179,50 @@ export default function Page() {
   const codeComponent = useCodeComponent()
   const command = useCommand()
   const language = useLanguage()
-  const platform = usePlatform()
   const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
   const prompt = usePrompt()
+  const comments = useComments()
   const permission = usePermission()
+
+  const request = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID) return
+    const next = sync.data.permission[sessionID]?.[0]
+    if (!next) return
+    if (next.tool) return
+    return next
+  })
+
+  const [responding, setResponding] = createSignal(false)
+
+  createEffect(
+    on(
+      () => request()?.id,
+      () => setResponding(false),
+      { defer: true },
+    ),
+  )
+
+  const decide = (response: "once" | "always" | "reject") => {
+    const perm = request()
+    if (!perm) return
+    if (responding()) return
+
+    setResponding(true)
+    sdk.client.permission
+      .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err)
+        showToast({ title: language.t("common.requestFailed"), description: message })
+      })
+      .finally(() => setResponding(false))
+  }
   const [pendingMessage, setPendingMessage] = createSignal<string | undefined>(undefined)
-  const [pendingHash, setPendingHash] = createSignal<string | undefined>(undefined)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey()))
-  const view = createMemo(() => layout.view(sessionKey()))
+  const tabs = createMemo(() => layout.tabs(sessionKey))
+  const view = createMemo(() => layout.view(sessionKey))
 
   if (import.meta.env.DEV) {
     createEffect(
@@ -301,12 +338,22 @@ export default function Page() {
     return sync.session.history.loading(id)
   })
   const emptyUserMessages: UserMessage[] = []
-  const userMessages = createMemo(() => messages().filter((m) => m.role === "user") as UserMessage[], emptyUserMessages)
-  const visibleUserMessages = createMemo(() => {
-    const revert = revertMessageID()
-    if (!revert) return userMessages()
-    return userMessages().filter((m) => m.id < revert)
-  }, emptyUserMessages)
+  const userMessages = createMemo(
+    () => messages().filter((m) => m.role === "user") as UserMessage[],
+    emptyUserMessages,
+    { equals: same },
+  )
+  const visibleUserMessages = createMemo(
+    () => {
+      const revert = revertMessageID()
+      if (!revert) return userMessages()
+      return userMessages().filter((m) => m.id < revert)
+    },
+    emptyUserMessages,
+    {
+      equals: same,
+    },
+  )
   const lastUserMessage = createMemo(() => visibleUserMessages().at(-1))
 
   createEffect(
@@ -332,13 +379,19 @@ export default function Page() {
     promptHeight: 0,
   })
 
-  const renderedUserMessages = createMemo(() => {
-    const msgs = visibleUserMessages()
-    const start = store.turnStart
-    if (start <= 0) return msgs
-    if (start >= msgs.length) return emptyUserMessages
-    return msgs.slice(start)
-  }, emptyUserMessages)
+  const renderedUserMessages = createMemo(
+    () => {
+      const msgs = visibleUserMessages()
+      const start = store.turnStart
+      if (start <= 0) return msgs
+      if (start >= msgs.length) return emptyUserMessages
+      return msgs.slice(start)
+    },
+    emptyUserMessages,
+    {
+      equals: same,
+    },
+  )
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
@@ -484,38 +537,109 @@ export default function Page() {
     setStore("expanded", id, status().type !== "idle")
   })
 
+  const selectionPreview = (path: string, selection: FileSelection) => {
+    const content = file.get(path)?.content?.content
+    if (!content) return undefined
+    const start = Math.max(1, Math.min(selection.startLine, selection.endLine))
+    const end = Math.max(selection.startLine, selection.endLine)
+    const lines = content.split("\n").slice(start - 1, end)
+    if (lines.length === 0) return undefined
+    return lines.slice(0, 2).join("\n")
+  }
+
+  const addSelectionToContext = (path: string, selection: FileSelection) => {
+    const preview = selectionPreview(path, selection)
+    prompt.context.add({ type: "file", path, selection, preview })
+  }
+
+  const addCommentToContext = (input: {
+    file: string
+    selection: SelectedLineRange
+    comment: string
+    preview?: string
+    origin?: "review" | "file"
+  }) => {
+    const selection = selectionFromLines(input.selection)
+    const preview = input.preview ?? selectionPreview(input.file, selection)
+    const saved = comments.add({
+      file: input.file,
+      selection: input.selection,
+      comment: input.comment,
+    })
+    prompt.context.add({
+      type: "file",
+      path: input.file,
+      selection,
+      comment: input.comment,
+      commentID: saved.id,
+      commentOrigin: input.origin,
+      preview,
+    })
+  }
+
   command.register(() => [
     {
       id: "session.new",
-      title: language.t("command.session.new"),
-      category: language.t("command.category.session"),
+      title: "New session",
+      category: "Session",
       keybind: "mod+shift+s",
       slash: "new",
       onSelect: () => navigate(`/${params.dir}/session`),
     },
     {
       id: "file.open",
-      title: language.t("command.file.open"),
-      description: language.t("command.file.open.description"),
-      category: language.t("command.category.file"),
+      title: "Open file",
+      description: "Search files and commands",
+      category: "File",
       keybind: "mod+p",
       slash: "open",
       onSelect: () => dialog.show(() => <DialogSelectFile />),
     },
     {
+      id: "context.addSelection",
+      title: "Add selection to context",
+      description: "Add selected lines from the current file",
+      category: "Context",
+      keybind: "mod+shift+l",
+      disabled: (() => {
+        const active = tabs().active()
+        if (!active) return true
+        const path = file.pathFromTab(active)
+        if (!path) return true
+        return file.selectedLines(path) == null
+      })(),
+      onSelect: () => {
+        const active = tabs().active()
+        if (!active) return
+        const path = file.pathFromTab(active)
+        if (!path) return
+
+        const range = file.selectedLines(path)
+        if (!range) {
+          showToast({
+            title: "No line selection",
+            description: "Select a line range in a file tab first.",
+          })
+          return
+        }
+
+        addSelectionToContext(path, selectionFromLines(range))
+      },
+    },
+    {
       id: "terminal.toggle",
-      title: language.t("command.terminal.toggle"),
+      title: "Toggle terminal",
       description: "",
-      category: language.t("command.category.view"),
+      category: "View",
       keybind: "ctrl+`",
       slash: "terminal",
       onSelect: () => view().terminal.toggle(),
     },
     {
       id: "review.toggle",
-      title: language.t("command.review.toggle"),
+      title: "Toggle review",
       description: "",
-      category: language.t("command.category.view"),
+      category: "View",
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     },
@@ -532,9 +656,9 @@ export default function Page() {
     },
     {
       id: "steps.toggle",
-      title: language.t("command.steps.toggle"),
-      description: language.t("command.steps.toggle.description"),
-      category: language.t("command.category.view"),
+      title: "Toggle steps",
+      description: "Show or hide steps for the current message",
+      category: "View",
       keybind: "mod+e",
       slash: "steps",
       disabled: !params.id,
@@ -546,62 +670,62 @@ export default function Page() {
     },
     {
       id: "message.previous",
-      title: language.t("command.message.previous"),
-      description: language.t("command.message.previous.description"),
-      category: language.t("command.category.session"),
+      title: "Previous message",
+      description: "Go to the previous user message",
+      category: "Session",
       keybind: "mod+arrowup",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(-1),
     },
     {
       id: "message.next",
-      title: language.t("command.message.next"),
-      description: language.t("command.message.next.description"),
-      category: language.t("command.category.session"),
+      title: "Next message",
+      description: "Go to the next user message",
+      category: "Session",
       keybind: "mod+arrowdown",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(1),
     },
     {
       id: "model.choose",
-      title: language.t("command.model.choose"),
-      description: language.t("command.model.choose.description"),
-      category: language.t("command.category.model"),
+      title: "Choose model",
+      description: "Select a different model",
+      category: "Model",
       keybind: "mod+'",
       slash: "model",
       onSelect: () => dialog.show(() => <DialogSelectModel />),
     },
     {
       id: "mcp.toggle",
-      title: language.t("command.mcp.toggle"),
-      description: language.t("command.mcp.toggle.description"),
-      category: language.t("command.category.mcp"),
+      title: "Toggle MCPs",
+      description: "Toggle MCPs",
+      category: "MCP",
       keybind: "mod+;",
       slash: "mcp",
       onSelect: () => dialog.show(() => <DialogSelectMcp />),
     },
     {
       id: "agent.cycle",
-      title: language.t("command.agent.cycle"),
-      description: language.t("command.agent.cycle.description"),
-      category: language.t("command.category.agent"),
+      title: "Cycle agent",
+      description: "Switch to the next agent",
+      category: "Agent",
       keybind: "mod+.",
       slash: "agent",
       onSelect: () => local.agent.move(1),
     },
     {
       id: "agent.cycle.reverse",
-      title: language.t("command.agent.cycle.reverse"),
-      description: language.t("command.agent.cycle.reverse.description"),
-      category: language.t("command.category.agent"),
+      title: "Cycle agent backwards",
+      description: "Switch to the previous agent",
+      category: "Agent",
       keybind: "shift+mod+.",
       onSelect: () => local.agent.move(-1),
     },
     {
       id: "model.variant.cycle",
-      title: language.t("command.model.variant.cycle"),
-      description: language.t("command.model.variant.cycle.description"),
-      category: language.t("command.category.model"),
+      title: "Cycle thinking effort",
+      description: "Switch to the next effort level",
+      category: "Model",
       keybind: "shift+mod+d",
       onSelect: () => {
         local.model.variant.cycle()
@@ -611,31 +735,30 @@ export default function Page() {
       id: "permissions.autoaccept",
       title:
         params.id && permission.isAutoAccepting(params.id, sdk.directory)
-          ? language.t("command.permissions.autoaccept.disable")
-          : language.t("command.permissions.autoaccept.enable"),
-      category: language.t("command.category.permissions"),
+          ? "Stop auto-accepting edits"
+          : "Auto-accept edits",
+      category: "Permissions",
       keybind: "mod+shift+a",
       disabled: !params.id || !permission.permissionsEnabled(),
       onSelect: () => {
         const sessionID = params.id
         if (!sessionID) return
         permission.toggleAutoAccept(sessionID, sdk.directory)
-        const enabled = permission.isAutoAccepting(sessionID, sdk.directory)
         showToast({
-          title: enabled
-            ? language.t("toast.permissions.autoaccept.on.title")
-            : language.t("toast.permissions.autoaccept.off.title"),
-          description: enabled
-            ? language.t("toast.permissions.autoaccept.on.description")
-            : language.t("toast.permissions.autoaccept.off.description"),
+          title: permission.isAutoAccepting(sessionID, sdk.directory)
+            ? "Auto-accepting edits"
+            : "Stopped auto-accepting edits",
+          description: permission.isAutoAccepting(sessionID, sdk.directory)
+            ? "Edit and write permissions will be automatically approved"
+            : "Edit and write permissions will require approval",
         })
       },
     },
     {
       id: "session.undo",
-      title: language.t("command.session.undo"),
-      description: language.t("command.session.undo.description"),
-      category: language.t("command.category.session"),
+      title: "Undo",
+      description: "Undo the last message",
+      category: "Session",
       slash: "undo",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -646,28 +769,25 @@ export default function Page() {
         }
         const revert = info()?.revert?.messageID
         // Find the last user message that's not already reverted
-        const message = userMessages().findLast((x) => !revert || x.id < revert)
+        const message = findLast(userMessages(), (x) => !revert || x.id < revert)
         if (!message) return
         await sdk.client.session.revert({ sessionID, messageID: message.id })
         // Restore the prompt from the reverted message
         const parts = sync.data.part[message.id]
         if (parts) {
-          const restored = extractPromptFromParts(parts, {
-            directory: sdk.directory,
-            attachmentName: language.t("common.attachment"),
-          })
+          const restored = extractPromptFromParts(parts, { directory: sdk.directory })
           prompt.set(restored)
         }
         // Navigate to the message before the reverted one (which will be the new last visible message)
-        const priorMessage = userMessages().findLast((x) => x.id < message.id)
+        const priorMessage = findLast(userMessages(), (x) => x.id < message.id)
         setActiveMessage(priorMessage)
       },
     },
     {
       id: "session.redo",
-      title: language.t("command.session.redo"),
-      description: language.t("command.session.redo.description"),
-      category: language.t("command.category.session"),
+      title: "Redo",
+      description: "Redo the last undone message",
+      category: "Session",
       slash: "redo",
       disabled: !params.id || !info()?.revert?.messageID,
       onSelect: async () => {
@@ -681,22 +801,22 @@ export default function Page() {
           await sdk.client.session.unrevert({ sessionID })
           prompt.reset()
           // Navigate to the last message (the one that was at the revert point)
-          const lastMsg = userMessages().findLast((x) => x.id >= revertMessageID)
+          const lastMsg = findLast(userMessages(), (x) => x.id >= revertMessageID)
           setActiveMessage(lastMsg)
           return
         }
         // Partial redo - move forward to next message
         await sdk.client.session.revert({ sessionID, messageID: nextMessage.id })
         // Navigate to the message before the new revert point
-        const priorMsg = userMessages().findLast((x) => x.id < nextMessage.id)
+        const priorMsg = findLast(userMessages(), (x) => x.id < nextMessage.id)
         setActiveMessage(priorMsg)
       },
     },
     {
       id: "session.compact",
-      title: language.t("command.session.compact"),
-      description: language.t("command.session.compact.description"),
-      category: language.t("command.category.session"),
+      title: "Compact session",
+      description: "Summarize the session to reduce context size",
+      category: "Session",
       slash: "compact",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -705,8 +825,8 @@ export default function Page() {
         const model = local.model.current()
         if (!model) {
           showToast({
-            title: language.t("toast.model.none.title"),
-            description: language.t("toast.model.none.description"),
+            title: "No model selected",
+            description: "Connect a provider to summarize this session",
           })
           return
         }
@@ -719,9 +839,9 @@ export default function Page() {
     },
     {
       id: "session.fork",
-      title: language.t("command.session.fork"),
-      description: language.t("command.session.fork.description"),
-      category: language.t("command.category.session"),
+      title: "Fork from message",
+      description: "Create a new session from a previous message",
+      category: "Session",
       slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: () => dialog.show(() => <DialogFork />),
@@ -730,9 +850,9 @@ export default function Page() {
       ? [
           {
             id: "session.share",
-            title: language.t("command.session.share"),
-            description: language.t("command.session.share.description"),
-            category: language.t("command.category.session"),
+            title: "Share session",
+            description: "Share this session and copy the URL to clipboard",
+            category: "Session",
             slash: "share",
             disabled: !params.id || !!info()?.share?.url,
             onSelect: async () => {
@@ -742,22 +862,22 @@ export default function Page() {
                 .then((res) => {
                   navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
                     showToast({
-                      title: language.t("toast.session.share.copyFailed.title"),
+                      title: "Failed to copy URL to clipboard",
                       variant: "error",
                     }),
                   )
                 })
                 .then(() =>
                   showToast({
-                    title: language.t("toast.session.share.success.title"),
-                    description: language.t("toast.session.share.success.description"),
+                    title: "Session shared",
+                    description: "Share URL copied to clipboard!",
                     variant: "success",
                   }),
                 )
                 .catch(() =>
                   showToast({
-                    title: language.t("toast.session.share.failed.title"),
-                    description: language.t("toast.session.share.failed.description"),
+                    title: "Failed to share session",
+                    description: "An error occurred while sharing the session",
                     variant: "error",
                   }),
                 )
@@ -765,9 +885,9 @@ export default function Page() {
           },
           {
             id: "session.unshare",
-            title: language.t("command.session.unshare"),
-            description: language.t("command.session.unshare.description"),
-            category: language.t("command.category.session"),
+            title: "Unshare session",
+            description: "Stop sharing this session",
+            category: "Session",
             slash: "unshare",
             disabled: !params.id || !info()?.share?.url,
             onSelect: async () => {
@@ -776,15 +896,15 @@ export default function Page() {
                 .unshare({ sessionID: params.id })
                 .then(() =>
                   showToast({
-                    title: language.t("toast.session.unshare.success.title"),
-                    description: language.t("toast.session.unshare.success.description"),
+                    title: "Session unshared",
+                    description: "Session unshared successfully!",
                     variant: "success",
                   }),
                 )
                 .catch(() =>
                   showToast({
-                    title: language.t("toast.session.unshare.failed.title"),
-                    description: language.t("toast.session.unshare.failed.description"),
+                    title: "Failed to unshare session",
+                    description: "An error occurred while unsharing the session",
                     variant: "error",
                   }),
                 )
@@ -896,7 +1016,7 @@ export default function Page() {
 
   const activeTab = createMemo(() => {
     const active = tabs().active()
-    if (active) return active
+    if (active) return normalizeTab(active)
     if (hasReview()) return "review"
 
     const first = openedTabs()[0]
@@ -1083,39 +1203,63 @@ export default function Page() {
 
     const a = el.getBoundingClientRect()
     const b = root.getBoundingClientRect()
-    const offset = (info()?.title ? 40 : 0) + 12
-    const top = a.top - b.top + root.scrollTop - offset
-    root.scrollTo({ top: top > 0 ? top : 0, behavior })
+    const top = a.top - b.top + root.scrollTop
+    root.scrollTo({ top, behavior })
     return true
   }
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
-    // Navigating to a specific message should always pause auto-follow.
-    autoScroll.pause()
     setActiveMessage(message)
-    updateHash(message.id)
 
     const msgs = visibleUserMessages()
     const index = msgs.findIndex((m) => m.id === message.id)
     if (index !== -1 && index < store.turnStart) {
       setStore("turnStart", index)
       scheduleTurnBackfill()
+
+      requestAnimationFrame(() => {
+        const el = document.getElementById(anchor(message.id))
+        if (!el) {
+          requestAnimationFrame(() => {
+            const next = document.getElementById(anchor(message.id))
+            if (!next) return
+            scrollToElement(next, behavior)
+          })
+          return
+        }
+        scrollToElement(el, behavior)
+      })
+
+      updateHash(message.id)
+      return
     }
 
-    const id = anchor(message.id)
-    const attempt = (tries: number) => {
-      const el = document.getElementById(id)
-      if (el && scrollToElement(el, behavior)) return
-      if (tries >= 8) return
-      requestAnimationFrame(() => attempt(tries + 1))
+    const el = document.getElementById(anchor(message.id))
+    if (!el) {
+      updateHash(message.id)
+      requestAnimationFrame(() => {
+        const next = document.getElementById(anchor(message.id))
+        if (!next) return
+        if (!scrollToElement(next, behavior)) return
+      })
+      return
     }
-    attempt(0)
+    if (scrollToElement(el, behavior)) {
+      updateHash(message.id)
+      return
+    }
+
+    requestAnimationFrame(() => {
+      const next = document.getElementById(anchor(message.id))
+      if (!next) return
+      if (!scrollToElement(next, behavior)) return
+    })
+    updateHash(message.id)
   }
 
   const applyHash = (behavior: ScrollBehavior) => {
     const hash = window.location.hash.slice(1)
     if (!hash) {
-      setPendingHash(undefined)
       autoScroll.forceScrollToBottom()
       return
     }
@@ -1124,41 +1268,58 @@ export default function Page() {
     if (match) {
       const msg = visibleUserMessages().find((m) => m.id === match[1])
       if (msg) {
-        setPendingHash(undefined)
         scrollToMessage(msg, behavior)
         return
       }
 
       // If we have a message hash but the message isn't loaded/rendered yet,
       // don't fall back to "bottom". We'll retry once messages arrive.
-      setPendingHash(match[1])
       return
     }
 
     const target = document.getElementById(hash)
     if (target) {
-      setPendingHash(undefined)
       scrollToElement(target, behavior)
       return
     }
 
-    setPendingHash(undefined)
     autoScroll.forceScrollToBottom()
   }
 
+  const closestMessage = (node: Element | null): HTMLElement | null => {
+    if (!node) return null
+    const match = node.closest?.("[data-message-id]") as HTMLElement | null
+    if (match) return match
+    const root = node.getRootNode?.()
+    if (root instanceof ShadowRoot) return closestMessage(root.host)
+    return null
+  }
+
   const getActiveMessageId = (container: HTMLDivElement) => {
+    const rect = container.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+
+    const x = Math.min(window.innerWidth - 1, Math.max(0, rect.left + rect.width / 2))
+    const y = Math.min(window.innerHeight - 1, Math.max(0, rect.top + 100))
+
+    const hit = document.elementFromPoint(x, y)
+    const host = closestMessage(hit)
+    const id = host?.dataset.messageId
+    if (id) return id
+
+    // Fallback: DOM query (handles edge hit-testing cases)
     const cutoff = container.scrollTop + 100
     const nodes = container.querySelectorAll<HTMLElement>("[data-message-id]")
-    let id: string | undefined
+    let last: string | undefined
 
     for (const node of nodes) {
       const next = node.dataset.messageId
       if (!next) continue
       if (node.offsetTop > cutoff) break
-      id = next
+      last = next
     }
 
-    return id
+    return last
   }
 
   const scheduleScrollSpy = (container: HTMLDivElement) => {
@@ -1200,14 +1361,20 @@ export default function Page() {
     visibleUserMessages().length
     store.turnStart
 
-    const targetId = pendingMessage() ?? pendingHash()
+    const targetId =
+      pendingMessage() ??
+      (() => {
+        const hash = window.location.hash.slice(1)
+        const match = hash.match(/^message-(.+)$/)
+        if (!match) return undefined
+        return match[1]
+      })()
     if (!targetId) return
     if (store.messageId === targetId) return
 
     const msg = visibleUserMessages().find((m) => m.id === targetId)
     if (!msg) return
     if (pendingMessage() === targetId) setPendingMessage(undefined)
-    if (pendingHash() === targetId) setPendingHash(undefined)
     requestAnimationFrame(() => scrollToMessage(msg, "auto"))
   })
 
@@ -1318,7 +1485,7 @@ export default function Page() {
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
-            "flex-1 md:flex-none py-6 md:py-3": true,
+            "flex-1 md:flex-none pt-6 md:pt-3": true,
           }}
           style={{
             width: isDesktop() && showTabs() ? `${layout.session.width()}px` : "100%",
@@ -1347,6 +1514,10 @@ export default function Page() {
                                 diffs={diffs}
                                 view={view}
                                 diffStyle="unified"
+                                onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+                                comments={comments.all()}
+                                focusedComment={comments.focus()}
+                                onFocusedCommentChange={comments.setFocus}
                                 onViewFile={(path) => {
                                   const value = file.tab(path)
                                   tabs().open(value)
@@ -1363,7 +1534,7 @@ export default function Page() {
                           <Match when={true}>
                             <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
                               <Mark class="w-14 opacity-10" />
-                              <div class="text-14-regular text-text-weak max-w-56">
+                              <div class="text-13-regular text-text-weak max-w-56">
                                 {language.t("session.review.empty")}
                               </div>
                             </div>
@@ -1403,12 +1574,13 @@ export default function Page() {
                           if (!hasScrollGesture()) return
                           markScrollGesture(e.target)
                           autoScroll.handleScroll()
-                          if (isDesktop() && autoScroll.userScrolled()) scheduleScrollSpy(e.currentTarget)
+                          if (isDesktop()) scheduleScrollSpy(e.currentTarget)
                         }}
+                        onClick={autoScroll.handleInteraction}
                         class="relative min-w-0 w-full h-full overflow-y-auto session-scroller"
-                        style={{ "--session-title-height": info()?.title ? "40px" : "0px" }}
+                        style={{ "--session-title-height": info()?.title || info()?.parentID ? "40px" : "0px" }}
                       >
-                        <Show when={info()?.title}>
+                        <Show when={info()?.title || info()?.parentID}>
                           <div
                             classList={{
                               "sticky top-0 z-30 bg-background-stronger": true,
@@ -1417,8 +1589,21 @@ export default function Page() {
                               "md:max-w-200 md:mx-auto": !showTabs(),
                             }}
                           >
-                            <div class="h-10 flex items-center">
-                              <h1 class="text-16-medium text-text-strong truncate">{info()?.title}</h1>
+                            <div class="h-10 flex items-center gap-1">
+                              <Show when={info()?.parentID}>
+                                <IconButton
+                                  tabIndex={-1}
+                                  icon="arrow-left"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    navigate(`/${params.dir}/session/${info()?.parentID}`)
+                                  }}
+                                  aria-label={language.t("common.goBack")}
+                                />
+                              </Show>
+                              <Show when={info()?.title}>
+                                <h1 class="text-16-medium text-text-strong truncate">{info()?.title}</h1>
+                              </Show>
                             </div>
                           </div>
                         </Show>
@@ -1442,7 +1627,7 @@ export default function Page() {
                                 class="text-12-medium opacity-50"
                                 onClick={() => setStore("turnStart", 0)}
                               >
-                                {language.t("session.messages.renderEarlier")}
+                                Render earlier messages
                               </Button>
                             </div>
                           </Show>
@@ -1460,9 +1645,7 @@ export default function Page() {
                                   sync.session.history.loadMore(id)
                                 }}
                               >
-                                {historyLoading()
-                                  ? language.t("session.messages.loadingEarlier")
-                                  : language.t("session.messages.loadEarlier")}
+                                {historyLoading() ? "Loading earlier messages..." : "Load earlier messages"}
                               </Button>
                             </div>
                           </Show>
@@ -1534,19 +1717,69 @@ export default function Page() {
           {/* Prompt input */}
           <div
             ref={(el) => (promptDock = el)}
-            class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-6 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+            class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
           >
             <div
               classList={{
-                "w-full md:px-6 pointer-events-auto": true,
+                "w-full px-4 pointer-events-auto": true,
                 "md:max-w-200": !showTabs(),
               }}
             >
+              <Show when={request()} keyed>
+                {(perm) => (
+                  <div data-component="tool-part-wrapper" data-permission="true" class="mb-3">
+                    <BasicTool
+                      icon="checklist"
+                      locked
+                      defaultOpen
+                      trigger={{
+                        title: language.t("notification.permission.title"),
+                        subtitle:
+                          perm.permission === "doom_loop"
+                            ? language.t("settings.permissions.tool.doom_loop.title")
+                            : perm.permission,
+                      }}
+                    >
+                      <Show when={perm.patterns.length > 0}>
+                        <div class="flex flex-col gap-1 py-2 px-3 max-h-40 overflow-y-auto no-scrollbar">
+                          <For each={perm.patterns}>
+                            {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
+                          </For>
+                        </div>
+                      </Show>
+                      <Show when={perm.permission === "doom_loop"}>
+                        <div class="text-12-regular text-text-weak pb-2 px-3">
+                          {language.t("settings.permissions.tool.doom_loop.description")}
+                        </div>
+                      </Show>
+                    </BasicTool>
+                    <div data-component="permission-prompt">
+                      <div data-slot="permission-actions">
+                        <Button variant="ghost" size="small" onClick={() => decide("reject")} disabled={responding()}>
+                          {language.t("ui.permission.deny")}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="small"
+                          onClick={() => decide("always")}
+                          disabled={responding()}
+                        >
+                          {language.t("ui.permission.allowAlways")}
+                        </Button>
+                        <Button variant="primary" size="small" onClick={() => decide("once")} disabled={responding()}>
+                          {language.t("ui.permission.allowOnce")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </Show>
+
               <Show
                 when={prompt.ready()}
                 fallback={
                   <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                    {handoff.prompt || language.t("prompt.loading")}
+                    {handoff.prompt || "Loading prompt..."}
                   </div>
                 }
               >
@@ -1669,6 +1902,10 @@ export default function Page() {
                                 view={view}
                                 diffStyle={layout.review.diffStyle()}
                                 onDiffStyleChange={layout.review.setDiffStyle}
+                                onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+                                comments={comments.all()}
+                                focusedComment={comments.focus()}
+                                onFocusedCommentChange={comments.setFocus}
                                 onViewFile={(path) => {
                                   const value = file.tab(path)
                                   tabs().open(value)
@@ -1680,9 +1917,7 @@ export default function Page() {
                           <Match when={true}>
                             <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
                               <Mark class="w-14 opacity-10" />
-                              <div class="text-14-regular text-text-weak max-w-56">
-                                {language.t("session.review.empty")}
-                              </div>
+                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet</div>
                             </div>
                           </Match>
                         </Switch>
@@ -1709,6 +1944,8 @@ export default function Page() {
                     let scroll: HTMLDivElement | undefined
                     let scrollFrame: number | undefined
                     let pending: { x: number; y: number } | undefined
+                    let codeScroll: HTMLElement[] = []
+                    let focusToken = 0
 
                     const path = createMemo(() => file.pathFromTab(tab))
                     const state = createMemo(() => {
@@ -1753,40 +1990,302 @@ export default function Page() {
                       if (file.ready()) return file.selectedLines(p) ?? null
                       return handoff.files[p] ?? null
                     })
-                    const selection = createMemo(() => {
-                      const range = selectedLines()
-                      if (!range) return
-                      return selectionFromLines(range)
-                    })
-                    const selectionLabel = createMemo(() => {
-                      const sel = selection()
-                      if (!sel) return
-                      if (sel.startLine === sel.endLine) return `L${sel.startLine}`
-                      return `L${sel.startLine}-${sel.endLine}`
+
+                    let wrap: HTMLDivElement | undefined
+
+                    const fileComments = createMemo(() => {
+                      const p = path()
+                      if (!p) return []
+                      return comments.list(p)
                     })
 
-                    const restoreScroll = (retries = 0) => {
-                      const el = scroll
+                    const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
+
+                    const [openedComment, setOpenedComment] = createSignal<string | null>(null)
+                    const [commenting, setCommenting] = createSignal<SelectedLineRange | null>(null)
+                    const [draft, setDraft] = createSignal("")
+                    const [positions, setPositions] = createSignal<Record<string, number>>({})
+                    const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
+
+                    const empty = {} as Record<string, number>
+
+                    const commentLabel = (range: SelectedLineRange) => {
+                      const start = Math.min(range.start, range.end)
+                      const end = Math.max(range.start, range.end)
+                      if (start === end) return `line ${start}`
+                      return `lines ${start}-${end}`
+                    }
+
+                    const getRoot = () => {
+                      const el = wrap
                       if (!el) return
 
-                      const s = view()?.scroll(tab)
-                      if (!s) return
+                      const host = el.querySelector("diffs-container")
+                      if (!(host instanceof HTMLElement)) return
 
-                      // Wait for content to be scrollable - content may not have rendered yet
-                      if (el.scrollHeight <= el.clientHeight && retries < 10) {
-                        requestAnimationFrame(() => restoreScroll(retries + 1))
+                      const root = host.shadowRoot
+                      if (!root) return
+
+                      return root
+                    }
+
+                    const findMarker = (root: ShadowRoot, range: SelectedLineRange) => {
+                      const line = Math.max(range.start, range.end)
+                      const node = root.querySelector(`[data-line="${line}"]`)
+                      if (!(node instanceof HTMLElement)) return
+                      return node
+                    }
+
+                    const markerTop = (wrapper: HTMLElement, marker: HTMLElement) => {
+                      const wrapperRect = wrapper.getBoundingClientRect()
+                      const rect = marker.getBoundingClientRect()
+                      return rect.top - wrapperRect.top + Math.max(0, (rect.height - 20) / 2)
+                    }
+
+                    const equal = (a: Record<string, number>, b: Record<string, number>) => {
+                      const aKeys = Object.keys(a)
+                      const bKeys = Object.keys(b)
+                      if (aKeys.length !== bKeys.length) return false
+                      for (const key of aKeys) {
+                        if (a[key] !== b[key]) return false
+                      }
+                      return true
+                    }
+
+                    const updateComments = () => {
+                      const el = wrap
+                      const root = getRoot()
+                      if (!el || !root) {
+                        setPositions((prev) => (Object.keys(prev).length === 0 ? prev : empty))
+                        setDraftTop((prev) => (prev === undefined ? prev : undefined))
                         return
                       }
 
-                      if (el.scrollTop !== s.y) el.scrollTop = s.y
-                      if (el.scrollLeft !== s.x) el.scrollLeft = s.x
+                      const next: Record<string, number> = {}
+                      for (const comment of fileComments()) {
+                        const marker = findMarker(root, comment.selection)
+                        if (!marker) continue
+                        next[comment.id] = markerTop(el, marker)
+                      }
+
+                      setPositions((prev) => (equal(prev, next) ? prev : next))
+
+                      const range = commenting()
+                      if (!range) {
+                        setDraftTop(undefined)
+                        return
+                      }
+
+                      const marker = findMarker(root, range)
+                      if (!marker) {
+                        setDraftTop(undefined)
+                        return
+                      }
+
+                      const nextTop = markerTop(el, marker)
+                      setDraftTop((prev) => (prev === nextTop ? prev : nextTop))
                     }
 
-                    const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-                      pending = {
-                        x: event.currentTarget.scrollLeft,
-                        y: event.currentTarget.scrollTop,
+                    let commentFrame: number | undefined
+
+                    const scheduleComments = () => {
+                      if (commentFrame !== undefined) return
+                      commentFrame = requestAnimationFrame(() => {
+                        commentFrame = undefined
+                        updateComments()
+                      })
+                    }
+
+                    createEffect(() => {
+                      fileComments()
+                      scheduleComments()
+                    })
+
+                    createEffect(() => {
+                      commenting()
+                      scheduleComments()
+                    })
+
+                    createEffect(() => {
+                      const range = commenting()
+                      if (!range) return
+                      setDraft("")
+                    })
+
+                    createEffect(() => {
+                      const focus = comments.focus()
+                      const p = path()
+                      if (!focus || !p) return
+                      if (focus.file !== p) return
+                      if (activeTab() !== tab) return
+
+                      const target = fileComments().find((comment) => comment.id === focus.id)
+                      if (!target) return
+
+                      focusToken++
+                      const token = focusToken
+
+                      setOpenedComment(target.id)
+                      setCommenting(null)
+                      file.setSelectedLines(p, target.selection)
+
+                      const scrollTo = (attempt: number) => {
+                        if (token !== focusToken) return
+
+                        const root = scroll
+                        if (!root) {
+                          if (attempt >= 120) return
+                          requestAnimationFrame(() => scrollTo(attempt + 1))
+                          return
+                        }
+
+                        const anchor = root.querySelector(`[data-comment-id="${target.id}"]`)
+                        const ready =
+                          anchor instanceof HTMLElement &&
+                          anchor.style.pointerEvents !== "none" &&
+                          anchor.style.opacity !== "0"
+
+                        const shadow = getRoot()
+                        const marker = shadow ? findMarker(shadow, target.selection) : undefined
+                        const node = (ready ? anchor : (marker ?? wrap)) as HTMLElement | undefined
+                        if (!node) {
+                          if (attempt >= 120) return
+                          requestAnimationFrame(() => scrollTo(attempt + 1))
+                          return
+                        }
+
+                        const rootRect = root.getBoundingClientRect()
+                        const targetRect = node.getBoundingClientRect()
+                        const offset = targetRect.top - rootRect.top
+                        const next = root.scrollTop + offset - rootRect.height / 2 + targetRect.height / 2
+                        root.scrollTop = Math.max(0, next)
+
+                        if (ready || marker) return
+                        if (attempt >= 120) return
+                        requestAnimationFrame(() => scrollTo(attempt + 1))
                       }
+
+                      requestAnimationFrame(() => scrollTo(0))
+                      requestAnimationFrame(() => comments.clearFocus())
+                    })
+
+                    const renderCode = (source: string, wrapperClass: string) => (
+                      <div
+                        ref={(el) => {
+                          wrap = el
+                          scheduleComments()
+                        }}
+                        class={`relative overflow-hidden ${wrapperClass}`}
+                      >
+                        <Dynamic
+                          component={codeComponent}
+                          file={{
+                            name: path() ?? "",
+                            contents: source,
+                            cacheKey: cacheKey(),
+                          }}
+                          enableLineSelection
+                          selectedLines={selectedLines()}
+                          commentedLines={commentedLines()}
+                          onRendered={() => {
+                            requestAnimationFrame(restoreScroll)
+                            requestAnimationFrame(scheduleComments)
+                          }}
+                          onLineSelected={(range: SelectedLineRange | null) => {
+                            const p = path()
+                            if (!p) return
+                            file.setSelectedLines(p, range)
+                            if (!range) setCommenting(null)
+                          }}
+                          onLineSelectionEnd={(range: SelectedLineRange | null) => {
+                            if (!range) {
+                              setCommenting(null)
+                              return
+                            }
+
+                            setOpenedComment(null)
+                            setCommenting(range)
+                          }}
+                          overflow="scroll"
+                          class="select-text"
+                        />
+                        <For each={fileComments()}>
+                          {(comment) => (
+                            <LineCommentView
+                              id={comment.id}
+                              top={positions()[comment.id]}
+                              open={openedComment() === comment.id}
+                              onMouseEnter={() => {
+                                const p = path()
+                                if (!p) return
+                                file.setSelectedLines(p, comment.selection)
+                              }}
+                              onClick={() => {
+                                const p = path()
+                                if (!p) return
+                                setCommenting(null)
+                                setOpenedComment((current) => (current === comment.id ? null : comment.id))
+                                file.setSelectedLines(p, comment.selection)
+                              }}
+                              comment={comment.comment}
+                              selection={commentLabel(comment.selection)}
+                            />
+                          )}
+                        </For>
+                        <Show when={commenting()}>
+                          {(range) => (
+                            <Show when={draftTop() !== undefined}>
+                              <LineCommentEditor
+                                top={draftTop()}
+                                value={draft()}
+                                selection={commentLabel(range())}
+                                onInput={setDraft}
+                                onCancel={() => setCommenting(null)}
+                                onSubmit={(comment) => {
+                                  const p = path()
+                                  if (!p) return
+                                  addCommentToContext({
+                                    file: p,
+                                    selection: range(),
+                                    comment,
+                                    origin: "file",
+                                  })
+                                  setCommenting(null)
+                                }}
+                                onPopoverFocusOut={(e) => {
+                                  const target = e.relatedTarget as Node | null
+                                  if (target && e.currentTarget.contains(target)) return
+                                  // Delay to allow click handlers to fire first
+                                  setTimeout(() => {
+                                    if (!document.activeElement || !e.currentTarget.contains(document.activeElement)) {
+                                      setCommenting(null)
+                                    }
+                                  }, 0)
+                                }}
+                              />
+                            </Show>
+                          )}
+                        </Show>
+                      </div>
+                    )
+
+                    const getCodeScroll = () => {
+                      const el = scroll
+                      if (!el) return []
+
+                      const host = el.querySelector("diffs-container")
+                      if (!(host instanceof HTMLElement)) return []
+
+                      const root = host.shadowRoot
+                      if (!root) return []
+
+                      return Array.from(root.querySelectorAll("[data-code]")).filter(
+                        (node): node is HTMLElement => node instanceof HTMLElement && node.clientWidth > 0,
+                      )
+                    }
+
+                    const queueScrollUpdate = (next: { x: number; y: number }) => {
+                      pending = next
                       if (scrollFrame !== undefined) return
 
                       scrollFrame = requestAnimationFrame(() => {
@@ -1797,6 +2296,65 @@ export default function Page() {
                         if (!next) return
 
                         view().setScroll(tab, next)
+                      })
+                    }
+
+                    const handleCodeScroll = (event: Event) => {
+                      const el = scroll
+                      if (!el) return
+
+                      const target = event.currentTarget
+                      if (!(target instanceof HTMLElement)) return
+
+                      queueScrollUpdate({
+                        x: target.scrollLeft,
+                        y: el.scrollTop,
+                      })
+                    }
+
+                    const syncCodeScroll = () => {
+                      const next = getCodeScroll()
+                      if (next.length === codeScroll.length && next.every((el, i) => el === codeScroll[i])) return
+
+                      for (const item of codeScroll) {
+                        item.removeEventListener("scroll", handleCodeScroll)
+                      }
+
+                      codeScroll = next
+
+                      for (const item of codeScroll) {
+                        item.addEventListener("scroll", handleCodeScroll)
+                      }
+                    }
+
+                    const restoreScroll = () => {
+                      const el = scroll
+                      if (!el) return
+
+                      const s = view()?.scroll(tab)
+                      if (!s) return
+
+                      syncCodeScroll()
+
+                      if (codeScroll.length > 0) {
+                        for (const item of codeScroll) {
+                          if (item.scrollLeft !== s.x) item.scrollLeft = s.x
+                        }
+                      }
+
+                      if (el.scrollTop !== s.y) el.scrollTop = s.y
+
+                      if (codeScroll.length > 0) return
+
+                      if (el.scrollLeft !== s.x) el.scrollLeft = s.x
+                    }
+
+                    const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+                      if (codeScroll.length === 0) syncCodeScroll()
+
+                      queueScrollUpdate({
+                        x: codeScroll[0]?.scrollLeft ?? event.currentTarget.scrollLeft,
+                        y: event.currentTarget.scrollTop,
                       })
                     }
 
@@ -1834,6 +2392,11 @@ export default function Page() {
                     )
 
                     onCleanup(() => {
+                      if (commentFrame !== undefined) cancelAnimationFrame(commentFrame)
+                      for (const item of codeScroll) {
+                        item.removeEventListener("scroll", handleCodeScroll)
+                      }
+
                       if (scrollFrame === undefined) return
                       cancelAnimationFrame(scrollFrame)
                     })
@@ -1841,93 +2404,42 @@ export default function Page() {
                     return (
                       <Tabs.Content
                         value={tab}
-                        class="mt-3"
+                        class="mt-3 relative"
                         ref={(el: HTMLDivElement) => {
                           scroll = el
                           restoreScroll()
                         }}
                         onScroll={handleScroll}
                       >
-                        <Show when={activeTab() === tab}>
-                          <Show when={selection()}>
-                            {(sel) => (
-                              <div class="hidden sticky top-0 z-10 px-6 py-2 _flex justify-end bg-background-base border-b border-border-weak-base">
-                                <button
-                                  type="button"
-                                  class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base text-12-regular text-text-strong hover:bg-surface-raised-base-hover"
-                                  onClick={() => {
-                                    const p = path()
-                                    if (!p) return
-                                    prompt.context.add({ type: "file", path: p, selection: sel() })
-                                  }}
-                                >
-                                  <Icon name="plus-small" size="small" />
-                                  <span>
-                                    {language.t("session.context.addToContext", { selection: selectionLabel() ?? "" })}
-                                  </span>
-                                </button>
-                              </div>
-                            )}
-                          </Show>
-                          <Switch>
-                            <Match when={state()?.loaded && isImage()}>
-                              <div class="px-6 py-4 pb-40">
-                                <img src={imageDataUrl()} alt={path()} class="max-w-full" />
-                              </div>
-                            </Match>
-                            <Match when={state()?.loaded && isSvg()}>
-                              <div class="flex flex-col gap-4 px-6 py-4">
-                                <Dynamic
-                                  component={codeComponent}
-                                  file={{
-                                    name: path() ?? "",
-                                    contents: svgContent() ?? "",
-                                    cacheKey: cacheKey(),
-                                  }}
-                                  enableLineSelection
-                                  selectedLines={selectedLines()}
-                                  onLineSelected={(range: SelectedLineRange | null) => {
-                                    const p = path()
-                                    if (!p) return
-                                    file.setSelectedLines(p, range)
-                                  }}
-                                  overflow="scroll"
-                                  class="select-text"
-                                />
-                                <Show when={svgPreviewUrl()}>
-                                  <div class="flex justify-center pb-40">
-                                    <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
-                                  </div>
-                                </Show>
-                              </div>
-                            </Match>
-                            <Match when={state()?.loaded}>
-                              <Dynamic
-                                component={codeComponent}
-                                file={{
-                                  name: path() ?? "",
-                                  contents: contents(),
-                                  cacheKey: cacheKey(),
-                                }}
-                                enableLineSelection
-                                selectedLines={selectedLines()}
-                                onLineSelected={(range: SelectedLineRange | null) => {
-                                  const p = path()
-                                  if (!p) return
-                                  file.setSelectedLines(p, range)
-                                }}
-                                overflow="scroll"
-                                class="select-text pb-40"
+                        <Switch>
+                          <Match when={state()?.loaded && isImage()}>
+                            <div class="px-6 py-4 pb-40">
+                              <img
+                                src={imageDataUrl()}
+                                alt={path()}
+                                class="max-w-full"
+                                onLoad={() => requestAnimationFrame(restoreScroll)}
                               />
-                            </Match>
-                            <Match when={state()?.loading}>
-                              <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
-                            </Match>
-                            <Match when={state()?.error}>
-                              {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
-                            </Match>
-                          </Switch>
-                        </Show>
+                            </div>
+                          </Match>
+                          <Match when={state()?.loaded && isSvg()}>
+                            <div class="flex flex-col gap-4 px-6 py-4">
+                              {renderCode(svgContent() ?? "", "")}
+                              <Show when={svgPreviewUrl()}>
+                                <div class="flex justify-center pb-40">
+                                  <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
+                                </div>
+                              </Show>
+                            </div>
+                          </Match>
+                          <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>
+                          <Match when={state()?.loading}>
+                            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+                          </Match>
+                          <Match when={state()?.error}>
+                            {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
+                          </Match>
+                        </Switch>
                       </Tabs.Content>
                     )
                   }}
@@ -1980,11 +2492,9 @@ export default function Page() {
                     )}
                   </For>
                   <div class="flex-1" />
-                  <div class="text-text-weak pr-2">{language.t("common.loading")}...</div>
+                  <div class="text-text-weak pr-2">Loading...</div>
                 </div>
-                <div class="flex-1 flex items-center justify-center text-text-weak">
-                  {language.t("terminal.loading")}
-                </div>
+                <div class="flex-1 flex items-center justify-center text-text-weak">Loading terminal...</div>
               </div>
             }
           >
@@ -2039,66 +2549,23 @@ export default function Page() {
                 </Tabs>
                 <div class="flex-1 min-h-0 relative">
                   <For each={terminal.all()}>
-                    {(pty) => {
-                      const [dismissed, setDismissed] = createSignal(false)
-                      return (
-                        <div
-                          id={`terminal-wrapper-${pty.id}`}
-                          class="absolute inset-0"
-                          style={{
-                            display: terminal.active() === pty.id ? "block" : "none",
-                          }}
-                        >
+                    {(pty) => (
+                      <div
+                        id={`terminal-wrapper-${pty.id}`}
+                        class="absolute inset-0"
+                        style={{
+                          display: terminal.active() === pty.id ? "block" : "none",
+                        }}
+                      >
+                        <Show when={pty.id} keyed>
                           <Terminal
                             pty={pty}
-                            onCleanup={(data) => terminal.update({ ...data, id: pty.id })}
-                            onConnect={() => {
-                              terminal.update({ id: pty.id, error: false })
-                              setDismissed(false)
-                            }}
-                            onConnectError={() => {
-                              setDismissed(false)
-                              terminal.update({ id: pty.id, error: true })
-                            }}
+                            onCleanup={terminal.update}
+                            onConnectError={() => terminal.clone(pty.id)}
                           />
-                          <Show when={pty.error && !dismissed()}>
-                            <div
-                              class="absolute inset-0 flex flex-col items-center justify-center gap-3"
-                              style={{ "background-color": "rgba(0, 0, 0, 0.6)" }}
-                            >
-                              <Icon
-                                name="circle-ban-sign"
-                                class="w-8 h-8"
-                                style={{ color: "rgba(239, 68, 68, 0.8)" }}
-                              />
-                              <div class="text-center" style={{ color: "rgba(255, 255, 255, 0.7)" }}>
-                                <div class="text-14-semibold mb-1">{language.t("terminal.connectionLost.title")}</div>
-                                <div class="text-12-regular" style={{ color: "rgba(255, 255, 255, 0.5)" }}>
-                                  {language.t("terminal.connectionLost.description")}
-                                </div>
-                              </div>
-                              <button
-                                class="mt-2 px-3 py-1.5 text-12-medium rounded-lg transition-colors"
-                                style={{
-                                  "background-color": "rgba(255, 255, 255, 0.1)",
-                                  color: "rgba(255, 255, 255, 0.7)",
-                                  border: "1px solid rgba(255, 255, 255, 0.2)",
-                                }}
-                                onMouseEnter={(e) =>
-                                  (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)")
-                                }
-                                onMouseLeave={(e) =>
-                                  (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.1)")
-                                }
-                                onClick={() => setDismissed(true)}
-                              >
-                                {language.t("common.dismiss")}
-                              </button>
-                            </div>
-                          </Show>
-                        </div>
-                      )
-                    }}
+                        </Show>
+                      </div>
+                    )}
                   </For>
                 </div>
               </div>
