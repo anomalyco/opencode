@@ -24,6 +24,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
+import { TelemetryProvider, TelemetryConfig } from "@/telemetry"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -260,7 +261,22 @@ export namespace LLM {
           extractReasoningMiddleware({ tagName: "think", startWithReasoning: false }),
         ],
       }),
-      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+      experimental_telemetry: (() => {
+        const telemetryCfg = TelemetryConfig.normalize(cfg.experimental?.openTelemetry)
+        return {
+          isEnabled: telemetryCfg.enabled,
+          recordInputs: telemetryCfg.recordInputs,
+          recordOutputs: telemetryCfg.recordOutputs,
+          functionId: `llm.stream.${input.model.providerID}.${input.model.id}`,
+          metadata: {
+            sessionID: input.sessionID,
+            providerID: input.model.providerID,
+            modelID: input.model.id,
+            agentName: input.agent.name,
+          },
+          tracer: TelemetryProvider.getTracer(),
+        }
+      })(),
     })
   }
 

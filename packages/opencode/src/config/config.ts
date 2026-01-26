@@ -1072,9 +1072,24 @@ export namespace Config {
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
           openTelemetry: z
-            .boolean()
+            .union([
+              z.boolean(),
+              z.object({
+                enabled: z.boolean().default(false),
+                serviceName: z.string().default("opencode"),
+                endpoint: z.string().optional(),
+                protocol: z.enum(["http", "grpc"]).default("http"),
+                headers: z.record(z.string(), z.string()).optional(),
+                exportInterval: z.number().default(5000),
+                maxQueueSize: z.number().default(2048),
+                recordInputs: z.boolean().default(true),
+                recordOutputs: z.boolean().default(true),
+                sampleRate: z.number().min(0).max(1).default(1.0),
+                attributes: z.record(z.string(), z.any()).optional(),
+              }),
+            ])
             .optional()
-            .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
+            .describe("OpenTelemetry configuration for AI SDK telemetry spans"),
           primary_tools: z
             .array(z.string())
             .optional()

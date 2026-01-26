@@ -13,9 +13,14 @@ import { Log } from "@/util/log"
 import { ShareNext } from "@/share/share-next"
 import { Snapshot } from "../snapshot"
 import { Truncate } from "../tool/truncation"
+import { TelemetryProvider } from "@/telemetry"
+import { Config } from "@/config/config"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
+
+  const cfg = await Config.get()
+  await TelemetryProvider.init(cfg.experimental?.openTelemetry)
   await Plugin.init()
   Share.init()
   ShareNext.init()
