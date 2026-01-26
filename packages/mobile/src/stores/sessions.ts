@@ -29,7 +29,7 @@ interface SessionsState {
   selectSession: (sessionID: string) => Promise<void>
   createSession: (title?: string) => Promise<Session | null>
   deleteSession: (sessionID: string) => Promise<void>
-  sendMessage: (text: string) => Promise<void>
+  sendMessage: (text: string, model?: { providerID: string; modelID: string }, agent?: string) => Promise<void>
   abortSession: () => Promise<void>
   refreshMessages: () => Promise<void>
 
@@ -134,7 +134,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
     }
   },
 
-  sendMessage: async (text) => {
+  sendMessage: async (text, model, agent) => {
     const client = useConnections.getState().client
     const session = get().currentSession
     if (!client || !session) {
@@ -152,6 +152,8 @@ export const useSessions = create<SessionsState>((set, get) => ({
         sessionID: session.id,
         role: "user",
         time: { created: ts },
+        model,
+        agent,
       }
       const userPart: Part = {
         id: `temp-part-${ts}`,
@@ -169,6 +171,8 @@ export const useSessions = create<SessionsState>((set, get) => ({
       client.session
         .prompt(session.id, {
           parts: [{ type: "text", text }],
+          model,
+          agent,
         })
         .catch((error) => {
           console.error("Failed to send message:", error)

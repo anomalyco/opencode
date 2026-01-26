@@ -85,6 +85,7 @@ export default function SessionsScreen() {
 
   const { sessions, isLoading, error, loadSessions, createSession } = useSessions()
   const { activeConnection, client, currentProject, refreshProject, updateConnection } = useConnections()
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     if (client) {
@@ -93,9 +94,10 @@ export default function SessionsScreen() {
     }
   }, [client])
 
-  const onRefresh = useCallback(() => {
-    loadSessions()
-    refreshProject()
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await Promise.all([loadSessions(), refreshProject()])
+    setRefreshing(false)
   }, [])
 
   const onCreateSession = async () => {
@@ -202,7 +204,7 @@ export default function SessionsScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <SessionItem session={item} isDark={isDark} />}
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={isDark ? "#ffffff" : "#0a0a0a"} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={isDark ? "#ffffff" : "#0a0a0a"} />
         }
         ListEmptyComponent={
           isLoading ? (

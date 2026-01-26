@@ -103,6 +103,32 @@ export interface Part {
   filename?: string
 }
 
+export interface Agent {
+  name: string
+  description?: string
+  mode: "subagent" | "primary" | "all"
+  native?: boolean
+  hidden?: boolean
+  topP?: number
+  temperature?: number
+  color?: string
+  model?: { modelID: string; providerID: string }
+  prompt?: string
+  options: Record<string, unknown>
+  steps?: number
+}
+
+export interface Command {
+  name: string
+  description?: string
+  agent?: string
+  model?: string
+  mcp?: boolean
+  template: string
+  subtask?: boolean
+  hints: string[]
+}
+
 export interface Project {
   id: string
   name?: string
@@ -239,9 +265,10 @@ export function createClient(config: ClientConfig) {
       prompt: async (
         sessionID: string,
         params: {
-          parts: Array<{ type: "text"; text: string }>
+          parts: Array<{ type: "text"; text: string } | { type: "file"; mime: string; url: string; filename?: string }>
           model?: { providerID: string; modelID: string }
           agent?: string
+          variant?: string
         },
       ): Promise<MessageWithParts> => {
         const url = `${config.baseUrl}/session/${sessionID}/message`
@@ -260,6 +287,32 @@ export function createClient(config: ClientConfig) {
 
         const text = await response.text()
         return JSON.parse(text)
+      },
+
+      command: async (
+        sessionID: string,
+        params: {
+          command: string
+          arguments: string
+          agent?: string
+          model?: string
+          variant?: string
+          parts?: Array<{ type: "file"; mime: string; url: string; filename?: string }>
+        },
+      ): Promise<void> => {
+        const url = `${config.baseUrl}/session/${sessionID}/command`
+        const headers = createHeaders(config)
+
+        const response = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ ...params, sessionID }),
+        })
+
+        if (!response.ok) {
+          const error = await response.text()
+          throw new Error(`Failed to run command: ${response.status} - ${error}`)
+        }
       },
 
       abort: (sessionID: string) => request<boolean>(config, `/session/${sessionID}/abort`, { method: "POST" }),
@@ -296,13 +349,41 @@ export function createClient(config: ClientConfig) {
         }),
     },
 
+    agent: {
+      list: () => request<Agent[]>(config, "/agent"),
+    },
+
+    command: {
+      list: () => request<Command[]>(config, "/command"),
+    },
+
+    provider: {
+      list: () =>
+        request<{
+          all: Array<{
+            id: string
+            name: string
+            models: Record<
+              string,
+              {
+                id: string
+                name: string
+                attachment: boolean
+                reasoning: boolean
+                tool_call: boolean
+                cost?: { input: number; output: number }
+                limit: { context: number; output: number }
+                status?: "alpha" | "beta" | "deprecated" | "active"
+              }
+            >
+          }>
+          default: Record<string, string>
+          connected: string[]
+        }>(config, "/provider"),
+    },
+
     config: {
       get: () => request<unknown>(config, "/config"),
-      providers: () =>
-        request<Array<{ id: string; name: string; models: Array<{ id: string; name: string }> }>>(
-          config,
-          "/config/providers",
-        ),
     },
   }
 }

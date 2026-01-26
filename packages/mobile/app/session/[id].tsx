@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import {
   View,
   Text,
@@ -10,15 +10,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  ScrollView,
 } from "react-native"
-import { useLocalSearchParams, Stack } from "expo-router"
+import { useLocalSearchParams, Stack, useRouter } from "expo-router"
 import { Ionicons } from "@expo/vector-icons"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import BottomSheet, { BottomSheetBackdrop, BottomSheetSectionList } from "@gorhom/bottom-sheet"
 import { Markdown } from "../../src/components/markdown"
 import { useSessions } from "../../src/stores/sessions"
 import { useEvents } from "../../src/stores/events"
 import { useConnections } from "../../src/stores/connections"
 import { useAuth } from "../../src/stores/auth"
-import type { Message, Part } from "../../src/lib/sdk"
+import { useCatalog } from "../../src/stores/catalog"
+import type { Message, Part, Command } from "../../src/lib/sdk"
 
 // --- Tool icon mapping ---
 const TOOL_ICONS: Record<string, string> = {
@@ -36,6 +40,47 @@ const TOOL_ICONS: Record<string, string> = {
   todoread: "checkbox-outline",
   question: "chatbubble-ellipses-outline",
 }
+
+// --- Slash command definitions ---
+interface SlashCommand {
+  trigger: string
+  title: string
+  description?: string
+  icon: string
+  type: "builtin" | "custom"
+}
+
+const BUILTIN_COMMANDS: SlashCommand[] = [
+  {
+    trigger: "new",
+    title: "New Session",
+    description: "Start a new session",
+    icon: "add-circle-outline",
+    type: "builtin",
+  },
+  {
+    trigger: "model",
+    title: "Switch Model",
+    description: "Choose a different model",
+    icon: "hardware-chip-outline",
+    type: "builtin",
+  },
+  {
+    trigger: "agent",
+    title: "Switch Agent",
+    description: "Cycle to next agent",
+    icon: "person-outline",
+    type: "builtin",
+  },
+  {
+    trigger: "compact",
+    title: "Compact",
+    description: "Summarize conversation",
+    icon: "contract-outline",
+    type: "builtin",
+  },
+  { trigger: "clear", title: "Clear", description: "Clear the session", icon: "trash-outline", type: "builtin" },
+]
 
 function ToolCallCard({ tool, isDark }: { tool: Part; isDark: boolean }) {
   const icon = (tool.tool && TOOL_ICONS[tool.tool]) || "extension-puzzle-outline"
@@ -87,13 +132,13 @@ function MessageBubble({ message, parts, isDark }: { message: Message; parts: Pa
         <Text style={[styles.messageRole, isUser && styles.userRole, isDark && styles.textDark]}>
           {isUser ? "You" : "Assistant"}
         </Text>
-        {message.model && <Text style={[styles.modelTag, isDark && styles.metaDark]}>{message.model.modelID}</Text>}
+        {message.model && <Text style={[styles.modelTag, isDark && styles.modelTagDark]}>{message.model.modelID}</Text>}
       </View>
 
       {/* Reasoning (collapsible) */}
       {reasoning && <ReasoningBlock text={reasoning} isDark={isDark} />}
 
-      {/* Message text - use StreamdownRN for assistant, plain for user */}
+      {/* Message text */}
       {text &&
         (isUser ? (
           <Text style={[styles.messageText, isDark && styles.textDark]} selectable>
@@ -221,7 +266,6 @@ function QuestionPrompt({
         copy[currentQ] = current.includes(label) ? current.filter((a) => a !== label) : [...current, label]
       } else {
         copy[currentQ] = [label]
-        // Auto-advance for single-select single-question
         if (request.questions.length === 1) {
           setTimeout(() => onReply(copy), 100)
         }
@@ -250,7 +294,6 @@ function QuestionPrompt({
       </View>
       <Text style={[styles.questionText, isDark && styles.textDark]}>{q.question}</Text>
 
-      {/* Options */}
       <View style={styles.questionOptions}>
         {q.options.map((opt) => {
           const selected = (answers[currentQ] || []).includes(opt.label)
@@ -281,7 +324,6 @@ function QuestionPrompt({
           )
         })}
 
-        {/* Custom answer */}
         {q.custom !== false &&
           (showCustom ? (
             <View style={styles.questionCustomRow}>
@@ -308,7 +350,6 @@ function QuestionPrompt({
           ))}
       </View>
 
-      {/* Multi-question navigation / submit */}
       <View style={styles.questionFooter}>
         <TouchableOpacity onPress={onReject}>
           <Text style={[styles.questionDismiss, isDark && styles.metaDark]}>Dismiss</Text>
@@ -351,6 +392,59 @@ function StatusIndicator({ sessionID, isDark }: { sessionID: string; isDark: boo
   )
 }
 
+// --- Slash autocomplete popover ---
+function SlashPopover({
+  query,
+  commands,
+  isDark,
+  onSelect,
+}: {
+  query: string
+  commands: SlashCommand[]
+  isDark: boolean
+  onSelect: (cmd: SlashCommand) => void
+}) {
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase()
+    return commands.filter((c) => c.trigger.toLowerCase().startsWith(q) || c.title.toLowerCase().includes(q))
+  }, [query, commands])
+
+  if (filtered.length === 0) return null
+
+  return (
+    <View style={[styles.slashPopover, isDark && styles.slashPopoverDark]}>
+      <ScrollView keyboardShouldPersistTaps="handled" style={styles.slashScroll}>
+        {filtered.map((cmd) => (
+          <TouchableOpacity
+            key={cmd.trigger}
+            style={[styles.slashItem, isDark && styles.slashItemDark]}
+            onPress={() => onSelect(cmd)}
+          >
+            <Ionicons
+              name={cmd.icon as any}
+              size={18}
+              color={cmd.type === "custom" ? "#8b5cf6" : isDark ? "#888888" : "#666666"}
+            />
+            <View style={styles.slashTextCol}>
+              <Text style={[styles.slashTrigger, isDark && styles.textDark]}>/{cmd.trigger}</Text>
+              {cmd.description && (
+                <Text style={[styles.slashDesc, isDark && styles.metaDark]} numberOfLines={1}>
+                  {cmd.description}
+                </Text>
+              )}
+            </View>
+            {cmd.type === "custom" && (
+              <View style={[styles.slashBadge, isDark && styles.slashBadgeDark]}>
+                <Text style={styles.slashBadgeText}>cmd</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  )
+}
+
 // --- Main screen ---
 function getShortDir(dir?: string): string | null {
   if (!dir) return null
@@ -360,17 +454,31 @@ function getShortDir(dir?: string): string | null {
 
 export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
+  const router = useRouter()
   const colorScheme = useColorScheme()
   const isDark = colorScheme === "dark"
+  const insets = useSafeAreaInsets()
 
   const flatListRef = useRef<FlatList>(null)
+  const modelSheetRef = useRef<BottomSheet>(null)
   const [input, setInput] = useState("")
+  const [modelSearch, setModelSearch] = useState("")
 
   const { currentSession, messages, parts, isLoading, isSending, selectSession, sendMessage, abortSession } =
     useSessions()
 
   const { authenticateForMessage } = useAuth()
   const { client } = useConnections()
+
+  // Catalog: agents, commands, providers, current model/agent
+  const catalog = useCatalog()
+  const agents = Array.isArray(catalog.agents) ? catalog.agents : []
+  const serverCommands = Array.isArray(catalog.commands) ? catalog.commands : []
+  const providers = Array.isArray(catalog.providers) ? catalog.providers : []
+  const agent = catalog.agent || ""
+  const model = catalog.model
+  const setModel = catalog.setModel
+  const cycleAgent = catalog.cycleAgent
 
   // Permission & question state for this session
   const sessionID = currentSession?.id
@@ -382,6 +490,47 @@ export default function SessionScreen() {
   const initialScrollUntil = useRef(0)
   const prevMessageCount = useRef(0)
   const userHasScrolled = useRef(false)
+
+  // Slash command state
+  const slashActive = input.startsWith("/") && !input.includes(" ")
+  const slashQuery = slashActive ? input.slice(1) : ""
+
+  // Build full command list: custom server commands first, then builtins
+  const allCommands = useMemo<SlashCommand[]>(() => {
+    const custom: SlashCommand[] = serverCommands.map((cmd) => ({
+      trigger: cmd.name,
+      title: cmd.name,
+      description: cmd.description,
+      icon: "code-slash-outline",
+      type: "custom",
+    }))
+    return [...custom, ...BUILTIN_COMMANDS]
+  }, [serverCommands])
+
+  // Model sheet sections with search filtering
+  const modelSections = useMemo(() => {
+    const list = Array.isArray(providers) ? providers : []
+    const q = modelSearch.toLowerCase()
+    return list
+      .map((p) => {
+        const models = (p.models || [])
+          .filter(
+            (m) =>
+              !q ||
+              m.id.toLowerCase().includes(q) ||
+              m.name.toLowerCase().includes(q) ||
+              p.name.toLowerCase().includes(q),
+          )
+          .map((m) => ({
+            providerID: p.id,
+            providerName: p.name || p.id,
+            modelID: m.id,
+            modelName: m.name || m.id,
+          }))
+        return { title: p.name || p.id, data: models }
+      })
+      .filter((s) => s.data.length > 0)
+  }, [providers, modelSearch])
 
   const messageData = (messages || []).map((msg) => ({
     message: msg,
@@ -401,6 +550,23 @@ export default function SessionScreen() {
     }
   }, [id])
 
+  // Sync model chip from the session's latest assistant message
+  useEffect(() => {
+    if (!messages || messages.length === 0) return
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i]
+      if (msg.role === "assistant" && msg.providerID && msg.modelID) {
+        setModel({ providerID: msg.providerID, modelID: msg.modelID })
+        return
+      }
+      // Also check user messages that specified a model
+      if (msg.role === "user" && msg.model) {
+        setModel(msg.model)
+        return
+      }
+    }
+  }, [currentSession?.id, messages?.length])
+
   useEffect(() => {
     const count = messages?.length || 0
     if (count > prevMessageCount.current && prevMessageCount.current > 0 && !isLoading) {
@@ -408,6 +574,37 @@ export default function SessionScreen() {
     }
     prevMessageCount.current = count
   }, [messages?.length])
+
+  // Handle slash command selection
+  const handleSlashSelect = useCallback(
+    (cmd: SlashCommand) => {
+      if (cmd.type === "builtin") {
+        switch (cmd.trigger) {
+          case "new":
+            router.back()
+            return
+          case "model":
+            setInput("")
+            modelSheetRef.current?.expand()
+            return
+          case "agent":
+            setInput("")
+            cycleAgent()
+            return
+          case "compact":
+            // TODO: call client.session.summarize when available
+            setInput("")
+            return
+          case "clear":
+            setInput("")
+            return
+        }
+      }
+      // Custom server command: put the trigger in the input so user can add arguments and press send
+      setInput(`/${cmd.trigger} `)
+    },
+    [router, cycleAgent],
+  )
 
   const handleSend = async () => {
     if (!input.trim()) return
@@ -420,11 +617,28 @@ export default function SessionScreen() {
     // If busy, abort first then send (interrupt)
     if (isSending) {
       await abortSession()
-      // Small delay to let abort propagate
       await new Promise((r) => setTimeout(r, 300))
     }
 
-    await sendMessage(text)
+    // Check for server slash commands
+    if (text.startsWith("/")) {
+      const [cmdName, ...args] = text.split(" ")
+      const name = cmdName.slice(1)
+      const match = serverCommands.find((c) => c.name === name)
+      if (match && client && currentSession) {
+        client.session
+          .command(currentSession.id, {
+            command: name,
+            arguments: args.join(" "),
+            agent,
+            model: model ? `${model.providerID}/${model.modelID}` : undefined,
+          })
+          .catch((err) => console.error("Command failed:", err))
+        return
+      }
+    }
+
+    await sendMessage(text, model || undefined, agent || undefined)
   }
 
   const handleScroll = useCallback((event: any) => {
@@ -477,6 +691,20 @@ export default function SessionScreen() {
     }
   }
 
+  const handleModelSelect = useCallback(
+    (providerID: string, modelID: string) => {
+      setModel({ providerID, modelID })
+      setModelSearch("")
+      modelSheetRef.current?.close()
+    },
+    [setModel],
+  )
+
+  // Current agent display info
+  const currentAgent = agents.find((a) => a.name === agent)
+  const agentColor = currentAgent?.color || "#8b5cf6"
+  const modelLabel = model?.modelID ? model.modelID.split("/").pop() || model.modelID : "default"
+
   return (
     <>
       <Stack.Screen
@@ -519,6 +747,7 @@ export default function SessionScreen() {
                 <View style={styles.emptyContainer}>
                   <Ionicons name="chatbubble-outline" size={48} color={isDark ? "#444444" : "#cccccc"} />
                   <Text style={[styles.emptyText, isDark && styles.metaDark]}>Start a conversation</Text>
+                  <Text style={[styles.emptyHint, isDark && styles.metaDark]}>Type / for commands</Text>
                 </View>
               }
             />
@@ -557,8 +786,42 @@ export default function SessionScreen() {
           />
         ))}
 
+        {/* Slash command popover */}
+        {slashActive && (
+          <SlashPopover query={slashQuery} commands={allCommands} isDark={isDark} onSelect={handleSlashSelect} />
+        )}
+
+        {/* Agent/model bar */}
+        <View style={[styles.toolbar, isDark && styles.toolbarDark]}>
+          <TouchableOpacity
+            style={[styles.agentChip, { borderColor: agentColor }]}
+            onPress={() => cycleAgent()}
+            onLongPress={() => cycleAgent(-1)}
+          >
+            <View style={[styles.agentDot, { backgroundColor: agentColor }]} />
+            <Text style={[styles.agentLabel, isDark && styles.textDark]}>{agent || "build"}</Text>
+            <Ionicons name="swap-horizontal-outline" size={12} color={isDark ? "#888888" : "#666666"} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.modelChip, isDark && styles.modelChipDark]}
+            onPress={() => modelSheetRef.current?.expand()}
+          >
+            <Ionicons name="hardware-chip-outline" size={14} color={isDark ? "#888888" : "#666666"} />
+            <Text style={[styles.modelLabel, isDark && styles.metaDark]} numberOfLines={1}>
+              {modelLabel}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Input area */}
-        <View style={[styles.inputContainer, isDark && styles.inputContainerDark]}>
+        <View
+          style={[
+            styles.inputContainer,
+            isDark && styles.inputContainerDark,
+            { paddingBottom: Math.max(12, insets.bottom) },
+          ]}
+        >
           <TextInput
             style={[styles.input, isDark && styles.inputDark]}
             placeholder={isSending ? "Type to interrupt..." : "Type a message..."}
@@ -583,6 +846,69 @@ export default function SessionScreen() {
           )}
         </View>
       </KeyboardAvoidingView>
+
+      {/* Model picker bottom sheet */}
+      <BottomSheet
+        ref={modelSheetRef}
+        index={-1}
+        snapPoints={["50%", "80%"]}
+        enablePanDownToClose
+        backgroundStyle={isDark ? styles.sheetDark : styles.sheet}
+        handleIndicatorStyle={{ backgroundColor: isDark ? "#666666" : "#cccccc" }}
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.5} />
+        )}
+        onChange={(idx) => {
+          if (idx === -1) setModelSearch("")
+        }}
+      >
+        <View style={styles.sheetHeader}>
+          <Text style={[styles.sheetTitle, isDark && styles.textDark]}>Select Model</Text>
+          <TextInput
+            style={[styles.sheetSearch, isDark && styles.sheetSearchDark]}
+            placeholder="Search models..."
+            placeholderTextColor={isDark ? "#666666" : "#999999"}
+            value={modelSearch}
+            onChangeText={setModelSearch}
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+        </View>
+        <BottomSheetSectionList
+          sections={modelSections}
+          keyExtractor={(item: { providerID: string; modelID: string }) => `${item.providerID}/${item.modelID}`}
+          renderSectionHeader={({ section }: { section: { title: string } }) => (
+            <View style={[styles.sectionHeader, isDark && styles.sectionHeaderDark]}>
+              <Text style={[styles.sectionTitle, isDark && styles.metaDark]}>{section.title}</Text>
+            </View>
+          )}
+          renderItem={({
+            item,
+          }: {
+            item: { providerID: string; providerName: string; modelID: string; modelName: string }
+          }) => {
+            const selected = model?.providerID === item.providerID && model?.modelID === item.modelID
+            return (
+              <TouchableOpacity
+                style={[styles.modelRow, isDark && styles.modelRowDark, selected && styles.modelRowSelected]}
+                onPress={() => handleModelSelect(item.providerID, item.modelID)}
+              >
+                <View style={styles.modelRowText}>
+                  <Text style={[styles.modelRowName, isDark && styles.textDark]} numberOfLines={1}>
+                    {item.modelName || item.modelID}
+                  </Text>
+                  <Text style={[styles.modelRowProvider, isDark && styles.metaDark]}>
+                    {item.providerName || item.providerID}
+                  </Text>
+                </View>
+                {selected && <Ionicons name="checkmark-circle" size={20} color="#8b5cf6" />}
+              </TouchableOpacity>
+            )
+          }}
+          contentContainerStyle={styles.sheetContent}
+          stickySectionHeadersEnabled
+        />
+      </BottomSheet>
     </>
   )
 }
@@ -631,6 +957,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
   },
+  modelTagDark: { backgroundColor: "#2a2a2a", color: "#888888" },
   messageText: { fontSize: 15, lineHeight: 22, color: "#0a0a0a" },
   markdownContainer: { marginHorizontal: -4 },
   tokenInfo: { fontSize: 11, color: "#999999", marginTop: 8 },
@@ -754,6 +1081,71 @@ const styles = StyleSheet.create({
   // Empty
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 64 },
   emptyText: { fontSize: 16, color: "#999999", marginTop: 12 },
+  emptyHint: { fontSize: 13, color: "#bbbbbb", marginTop: 4 },
+
+  // Slash popover
+  slashPopover: {
+    backgroundColor: "#ffffff",
+    borderTopWidth: 1,
+    borderTopColor: "#e5e5e5",
+    maxHeight: 220,
+  },
+  slashPopoverDark: { backgroundColor: "#1a1a1a", borderTopColor: "#2a2a2a" },
+  slashScroll: { paddingVertical: 4 },
+  slashItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  slashItemDark: {},
+  slashTextCol: { flex: 1 },
+  slashTrigger: { fontSize: 14, fontWeight: "600", color: "#0a0a0a" },
+  slashDesc: { fontSize: 12, color: "#999999", marginTop: 1 },
+  slashBadge: {
+    backgroundColor: "#f3e8ff",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  slashBadgeDark: { backgroundColor: "#2a1a3e" },
+  slashBadgeText: { fontSize: 10, color: "#8b5cf6", fontWeight: "600" },
+
+  // Toolbar (agent + model)
+  toolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e5e5",
+    backgroundColor: "#ffffff",
+  },
+  toolbarDark: { borderTopColor: "#1a1a1a", backgroundColor: "#0a0a0a" },
+  agentChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  agentDot: { width: 8, height: 8, borderRadius: 4 },
+  agentLabel: { fontSize: 12, fontWeight: "600", color: "#0a0a0a" },
+  modelChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  modelChipDark: { backgroundColor: "#1a1a1a" },
+  modelLabel: { fontSize: 12, color: "#666666", maxWidth: 160 },
 
   // Input
   inputContainer: {
@@ -795,7 +1187,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginLeft: 8,
   },
-  abortButton: { padding: 8 },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   dirBadge: {
     flexDirection: "row",
@@ -809,4 +1200,40 @@ const styles = StyleSheet.create({
   dirBadgeDark: { backgroundColor: "#1a1a1a" },
   dirText: { fontSize: 12, color: "#666666", fontWeight: "500" },
   dirTextDark: { color: "#888888" },
+
+  // Bottom sheet
+  sheet: { backgroundColor: "#ffffff" },
+  sheetDark: { backgroundColor: "#1a1a1a" },
+  sheetHeader: { paddingHorizontal: 16, paddingBottom: 12, gap: 10 },
+  sheetTitle: { fontSize: 18, fontWeight: "700", color: "#0a0a0a" },
+  sheetSearch: {
+    backgroundColor: "#f5f5f5",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: "#0a0a0a",
+  },
+  sheetSearchDark: { backgroundColor: "#2a2a2a", color: "#ffffff" },
+  sheetContent: { paddingBottom: 40 },
+  sectionHeader: {
+    backgroundColor: "#f5f5f5",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  sectionHeaderDark: { backgroundColor: "#111111" },
+  sectionTitle: { fontSize: 12, fontWeight: "700", color: "#999999", textTransform: "uppercase", letterSpacing: 0.5 },
+  modelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e5e5e5",
+  },
+  modelRowDark: { borderBottomColor: "#2a2a2a" },
+  modelRowSelected: { backgroundColor: "#f5f3ff" },
+  modelRowText: { flex: 1 },
+  modelRowName: { fontSize: 15, fontWeight: "500", color: "#0a0a0a" },
+  modelRowProvider: { fontSize: 12, color: "#999999", marginTop: 1 },
 })

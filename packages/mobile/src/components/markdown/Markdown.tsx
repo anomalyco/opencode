@@ -1,13 +1,23 @@
-import { View, useColorScheme, Platform, type ViewStyle, type TextStyle } from "react-native"
+import type { ReactNode } from "react"
+import { View, Text, useColorScheme, Platform, type ViewStyle, type TextStyle } from "react-native"
 import RNMarkdown, { Renderer, type RendererInterface } from "react-native-marked"
 import { CodeBlock } from "./CodeBlock"
 
-class CustomRenderer extends Renderer implements RendererInterface {
+class CustomRenderer extends Renderer {
   code(text: string, language?: string, containerStyle?: ViewStyle, _textStyle?: TextStyle) {
     return (
       <View key={this.getKey()} style={containerStyle}>
         <CodeBlock code={text} language={language} />
       </View>
+    )
+  }
+
+  // @ts-expect-error React 18/19 ReactNode type mismatch with library
+  codespan(text: string, styles?: TextStyle): ReactNode {
+    return (
+      <Text selectable key={this.getKey()} style={[styles, { fontStyle: "normal", fontWeight: "normal" }]}>
+        {text}
+      </Text>
     )
   }
 }
@@ -40,6 +50,15 @@ const lightTheme = {
     paddingVertical: 2,
     borderRadius: 4,
   },
+  codespan: {
+    backgroundColor: "#e8e5f0",
+    color: "#6d28d9",
+    fontFamily: mono,
+    fontSize: 13,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
   list: { marginBottom: 4 },
   listItem: { marginBottom: 2 },
   hr: { backgroundColor: "#e5e5e5", height: 1, marginVertical: 12 },
@@ -65,6 +84,11 @@ const darkTheme = {
     backgroundColor: "#2a2040",
     color: "#c4b5fd",
   },
+  codespan: {
+    ...lightTheme.codespan,
+    backgroundColor: "#2a2040",
+    color: "#c4b5fd",
+  },
   hr: { ...lightTheme.hr, backgroundColor: "#2a2a2a" },
 }
 
@@ -81,7 +105,7 @@ export function Markdown({ children }: Props) {
   return (
     <RNMarkdown
       value={children}
-      renderer={renderer}
+      renderer={renderer as any}
       styles={theme}
       flatListProps={{
         scrollEnabled: false,

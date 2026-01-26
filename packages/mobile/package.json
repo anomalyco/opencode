@@ -5,12 +5,14 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
+    "start:clear": "expo start --clear",
     "ios": "expo run:ios",
     "android": "expo run:android",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@gorhom/bottom-sheet": "5.2.8",
     "@react-navigation/native": "^7.0.14",
     "@tanstack/react-query": "^5.62.0",
     "expo": "^54.0.0",
