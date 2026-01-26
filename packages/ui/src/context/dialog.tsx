@@ -1,8 +1,10 @@
 import {
   createContext,
+  createEffect,
   createRoot,
   createSignal,
   getOwner,
+  onCleanup,
   type Owner,
   type ParentProps,
   runWithOwner,
@@ -34,6 +36,20 @@ function init() {
     setActive(undefined)
   }
 
+  createEffect(() => {
+    if (!active()) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      close()
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    window.addEventListener("keydown", onKeyDown, true)
+    onCleanup(() => window.removeEventListener("keydown", onKeyDown, true))
+  })
+
   const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {
     close()
 
@@ -41,13 +57,13 @@ function init() {
     let dispose: (() => void) | undefined
 
     const node = runWithOwner(owner, () =>
-      createRoot((d) => {
+      createRoot((d: () => void) => {
         dispose = d
         return (
           <Kobalte
             modal
             open={true}
-            onOpenChange={(open) => {
+            onOpenChange={(open: boolean) => {
               if (open) return
               close()
             }}

@@ -5,8 +5,6 @@ import { useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
-// import { useServer } from "@/context/server"
-// import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { usePlatform } from "@/context/platform"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -163,7 +161,10 @@ export function SessionHeader() {
                         ? language.t("session.share.popover.description.shared")
                         : language.t("session.share.popover.description.unshared")
                     }
-                    gutter={8}
+                    gutter={6}
+                    placement="bottom-end"
+                    shift={-64}
+                    class="rounded-xl [&_[data-slot=popover-close-button]]:hidden"
                     triggerAs={Button}
                     triggerProps={{
                       variant: "secondary",
@@ -192,8 +193,8 @@ export function SessionHeader() {
                           </div>
                         }
                       >
-                        <div class="flex flex-col gap-2 w-72">
-                          <TextField value={shareUrl() ?? ""} readOnly copyable class="w-full" />
+                        <div class="flex flex-col gap-2">
+                          <TextField value={shareUrl() ?? ""} readOnly copyable tabIndex={-1} class="w-full" />
                           <div class="grid grid-cols-2 gap-2">
                             <Button
                               size="large"
@@ -231,7 +232,7 @@ export function SessionHeader() {
                       gutter={8}
                     >
                       <IconButton
-                        icon={state.copied ? "check" : "copy"}
+                        icon={state.copied ? "check" : "link"}
                         variant="secondary"
                         class="rounded-l-none"
                         onClick={copyLink}
@@ -246,14 +247,14 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
-              <div class="hidden md:block shrink-0">
+              <div class="hidden md:flex items-center gap-3 ml-2 shrink-0">
                 <TooltipKeybind
                   title={language.t("command.terminal.toggle")}
                   keybind={command.keybind("terminal.toggle")}
                 >
                   <Button
                     variant="ghost"
-                    class="group/terminal-toggle size-5 p-0"
+                    class="group/terminal-toggle size-6 p-0"
                     onClick={() => view().terminal.toggle()}
                     aria-label={language.t("command.terminal.toggle")}
                     aria-expanded={view().terminal.opened()}
@@ -283,7 +284,7 @@ export function SessionHeader() {
                 <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button
                     variant="ghost"
-                    class="group/review-toggle size-5 p-0"
+                    class="group/review-toggle size-6 p-0"
                     onClick={() => view().reviewPanel.toggle()}
                     aria-label={language.t("command.review.toggle")}
                     aria-expanded={view().reviewPanel.opened()}

@@ -24,6 +24,15 @@ function normalizeKey(key: string) {
   return key.toLowerCase()
 }
 
+function signature(key: string, ctrl: boolean, meta: boolean, shift: boolean, alt: boolean) {
+  const mask = (ctrl ? 1 : 0) | (meta ? 2 : 0) | (shift ? 4 : 0) | (alt ? 8 : 0)
+  return `${key}:${mask}`
+}
+
+function signatureFromEvent(event: KeyboardEvent) {
+  return signature(normalizeKey(event.key), event.ctrlKey, event.metaKey, event.shiftKey, event.altKey)
+}
+
 export type KeybindConfig = string
 
 export interface Keybind {
@@ -223,6 +232,30 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
 
     const suspended = () => suspendCount() > 0
 
+    const palette = createMemo(() => {
+      const config = settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND
+      const keybinds = parseKeybind(config)
+      return new Set(keybinds.map((kb) => signature(kb.key, kb.ctrl, kb.meta, kb.shift, kb.alt)))
+    })
+
+    const keymap = createMemo(() => {
+      const map = new Map<string, CommandOption>()
+      for (const option of options()) {
+        if (option.id.startsWith(SUGGESTED_PREFIX)) continue
+        if (option.disabled) continue
+        if (!option.keybind) continue
+
+        const keybinds = parseKeybind(option.keybind)
+        for (const kb of keybinds) {
+          if (!kb.key) continue
+          const sig = signature(kb.key, kb.ctrl, kb.meta, kb.shift, kb.alt)
+          if (map.has(sig)) continue
+          map.set(sig, option)
+        }
+      }
+      return map
+    })
+
     const run = (id: string, source?: "palette" | "keybind" | "slash") => {
       for (const option of options()) {
         if (option.id === id || option.id === "suggested." + id) {
@@ -239,24 +272,18 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const handleKeyDown = (event: KeyboardEvent) => {
       if (suspended() || dialog.active) return
 
-      const paletteKeybinds = parseKeybind(settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND)
-      if (matchKeybind(paletteKeybinds, event)) {
+      const sig = signatureFromEvent(event)
+
+      if (palette().has(sig)) {
         event.preventDefault()
         showPalette()
         return
       }
 
-      for (const option of options()) {
-        if (option.disabled) continue
-        if (!option.keybind) continue
-
-        const keybinds = parseKeybind(option.keybind)
-        if (matchKeybind(keybinds, event)) {
-          event.preventDefault()
-          option.onSelect?.("keybind")
-          return
-        }
-      }
+      const option = keymap().get(sig)
+      if (!option) return
+      event.preventDefault()
+      option.onSelect?.("keybind")
     }
 
     onMount(() => {
