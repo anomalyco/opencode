@@ -20,11 +20,31 @@ function writeOsc52(text: string): void {
   process.stdout.write(sequence)
 }
 
+/**
+ * Detect if running in a remote session (SSH, tmux, screen)
+ * where rich text clipboard may not be supported
+ */
+function isRemoteSession(): boolean {
+  return !!(process.env["SSH_CLIENT"] || process.env["SSH_TTY"] || process.env["TMUX"] || process.env["STY"])
+}
+
+/**
+ * Check if a command exists in PATH
+ */
+function commandExists(cmd: string): boolean {
+  return !!Bun.which(cmd)
+}
+
 export namespace Clipboard {
   export interface Content {
     data: string
     mime: string
   }
+
+  export type CopyRichResult =
+    | { ok: true; rich: true }
+    | { ok: true; rich: false; reason: string }
+    | { ok: false; error: string }
 
   export async function read(): Promise<Content | undefined> {
     const os = platform()
@@ -156,5 +176,141 @@ export namespace Clipboard {
   export async function copy(text: string): Promise<void> {
     writeOsc52(text)
     await getCopyMethod()(text)
+  }
+
+  /**
+   * Copy both plain text and HTML to clipboard (Linux Wayland)
+   */
+  async function copyRichWayland(plain: string, html: string): Promise<CopyRichResult> {
+    if (!commandExists("wl-copy")) {
+      await copy(plain)
+      return { ok: true, rich: false, reason: "Install wl-clipboard for rich text support" }
+    }
+
+    try {
+      const proc = Bun.spawn(["wl-copy", "--type", "text/html"], {
+        stdin: "pipe",
+        stdout: "ignore",
+        stderr: "ignore",
+      })
+      proc.stdin.write(html)
+      proc.stdin.end()
+      const exitCode = await proc.exited
+
+      if (exitCode !== 0) {
+        await copy(plain)
+        return { ok: true, rich: false, reason: "wl-copy failed" }
+      }
+
+      return { ok: true, rich: true }
+    } catch (error) {
+      await copy(plain)
+      return { ok: true, rich: false, reason: "wl-copy failed" }
+    }
+  }
+
+  /**
+   * Copy both plain text and HTML to clipboard (Linux X11)
+   */
+  async function copyRichX11(plain: string, html: string): Promise<CopyRichResult> {
+    if (!commandExists("xclip")) {
+      await copy(plain)
+      return { ok: true, rich: false, reason: "Install xclip for rich text support" }
+    }
+
+    try {
+      const proc = Bun.spawn(["xclip", "-selection", "clipboard", "-t", "text/html"], {
+        stdin: "pipe",
+        stdout: "ignore",
+        stderr: "ignore",
+      })
+      proc.stdin.write(html)
+      proc.stdin.end()
+      const exitCode = await proc.exited
+
+      if (exitCode !== 0) {
+        await copy(plain)
+        return { ok: true, rich: false, reason: "xclip failed" }
+      }
+
+      return { ok: true, rich: true }
+    } catch (error) {
+      await copy(plain)
+      return { ok: true, rich: false, reason: "xclip failed" }
+    }
+  }
+
+  /**
+   * Copy both plain text and HTML to clipboard (macOS)
+   */
+  async function copyRichMac(plain: string, html: string): Promise<CopyRichResult> {
+    if (!commandExists("osascript")) {
+      await copy(plain)
+      return { ok: true, rich: false, reason: "osascript not found" }
+    }
+
+    try {
+      // Escape special characters for AppleScript
+      const escapeAppleScript = (str: string): string => {
+        return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r")
+      }
+
+      const escapedHtml = escapeAppleScript(html)
+      const escapedPlain = escapeAppleScript(plain)
+
+      // AppleScript to set both HTML and plain text on pasteboard
+      const script = `set the clipboard to {«class HTML»:«data HTML${Buffer.from(html).toString("hex")}», string:"${escapedPlain}"}`
+
+      const proc = Bun.spawn(["osascript", "-e", script], {
+        stdout: "ignore",
+        stderr: "ignore",
+      })
+      const exitCode = await proc.exited
+
+      if (exitCode !== 0) {
+        await copy(plain)
+        return { ok: true, rich: false, reason: "osascript failed" }
+      }
+
+      return { ok: true, rich: true }
+    } catch (error) {
+      await copy(plain)
+      return { ok: true, rich: false, reason: "osascript failed" }
+    }
+  }
+
+  /**
+   * Fallback for platforms that don't support rich text
+   */
+  async function copyRichFallback(plain: string, reason: string): Promise<CopyRichResult> {
+    await copy(plain)
+    return { ok: true, rich: false, reason }
+  }
+
+  /**
+   * Copy text as both plain text and rich text (HTML) to clipboard.
+   * Falls back to plain text if rich text is not supported.
+   */
+  export async function copyRich(plain: string, html: string): Promise<CopyRichResult> {
+    // Remote sessions (SSH/tmux) can't do rich text
+    if (isRemoteSession()) {
+      return copyRichFallback(plain, "Rich text not supported over SSH/tmux")
+    }
+
+    const os = platform()
+
+    if (os === "darwin") {
+      return copyRichMac(plain, html)
+    }
+
+    if (os === "linux") {
+      if (process.env["WAYLAND_DISPLAY"]) {
+        return copyRichWayland(plain, html)
+      }
+      return copyRichX11(plain, html)
+    }
+
+    // Windows and other platforms: plain text fallback
+    return copyRichFallback(plain, "Rich text not supported on this platform")
   }
 }
