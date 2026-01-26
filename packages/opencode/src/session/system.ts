@@ -171,7 +171,7 @@ export namespace SystemPrompt {
   }
 
   /**
-   * Reads MEMORY.md files before every message.
+   * Reads files configured in the memory array before every message.
    * Unlike custom() which runs once at session start, this runs before each API call.
    * The model can also write to these files using the memory_write tool.
    * Always returns memory instructions so the model knows about memory_create.
