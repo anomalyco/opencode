@@ -4,6 +4,8 @@ import { Log } from "../util/log"
 export namespace PackageRegistry {
   const log = Log.create({ service: "bun" })
 
+  const EXACT_VERSION = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
+
   function which() {
     return process.execPath
   }
@@ -39,6 +41,10 @@ export namespace PackageRegistry {
       log.warn("Failed to resolve latest version, using cached", { pkg, cachedVersion })
       return false
     }
-    return semver.satisfies(cachedVersion, latestVersion)
+
+    const isRange = /[\s^~*xX<>|=]/.test(cachedVersion)
+    if (isRange) return !semver.satisfies(latestVersion, cachedVersion)
+
+    return semver.order(cachedVersion, latestVersion) === -1
   }
 }
