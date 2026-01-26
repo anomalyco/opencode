@@ -765,7 +765,7 @@ export default function Page() {
         const sessionID = params.id
         if (!sessionID) return
         if (status()?.type !== "idle") {
-          await sdk.client.session.abort({ sessionID }).catch(() => { })
+          await sdk.client.session.abort({ sessionID }).catch(() => {})
         }
         const revert = info()?.revert?.messageID
         // Find the last user message that's not already reverted
@@ -848,69 +848,69 @@ export default function Page() {
     },
     ...(sync.data.config.share !== "disabled"
       ? [
-        {
-          id: "session.share",
-          title: "Share session",
-          description: "Share this session and copy the URL to clipboard",
-          category: "Session",
-          slash: "share",
-          disabled: !params.id || !!info()?.share?.url,
-          onSelect: async () => {
-            if (!params.id) return
-            await sdk.client.session
-              .share({ sessionID: params.id })
-              .then((res) => {
-                navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
+          {
+            id: "session.share",
+            title: "Share session",
+            description: "Share this session and copy the URL to clipboard",
+            category: "Session",
+            slash: "share",
+            disabled: !params.id || !!info()?.share?.url,
+            onSelect: async () => {
+              if (!params.id) return
+              await sdk.client.session
+                .share({ sessionID: params.id })
+                .then((res) => {
+                  navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
+                    showToast({
+                      title: "Failed to copy URL to clipboard",
+                      variant: "error",
+                    }),
+                  )
+                })
+                .then(() =>
                   showToast({
-                    title: "Failed to copy URL to clipboard",
+                    title: "Session shared",
+                    description: "Share URL copied to clipboard!",
+                    variant: "success",
+                  }),
+                )
+                .catch(() =>
+                  showToast({
+                    title: "Failed to share session",
+                    description: "An error occurred while sharing the session",
                     variant: "error",
                   }),
                 )
-              })
-              .then(() =>
-                showToast({
-                  title: "Session shared",
-                  description: "Share URL copied to clipboard!",
-                  variant: "success",
-                }),
-              )
-              .catch(() =>
-                showToast({
-                  title: "Failed to share session",
-                  description: "An error occurred while sharing the session",
-                  variant: "error",
-                }),
-              )
+            },
           },
-        },
-        {
-          id: "session.unshare",
-          title: "Unshare session",
-          description: "Stop sharing this session",
-          category: "Session",
-          slash: "unshare",
-          disabled: !params.id || !info()?.share?.url,
-          onSelect: async () => {
-            if (!params.id) return
-            await sdk.client.session
-              .unshare({ sessionID: params.id })
-              .then(() =>
-                showToast({
-                  title: "Session unshared",
-                  description: "Session unshared successfully!",
-                  variant: "success",
-                }),
-              )
-              .catch(() =>
-                showToast({
-                  title: "Failed to unshare session",
-                  description: "An error occurred while unsharing the session",
-                  variant: "error",
-                }),
-              )
+          {
+            id: "session.unshare",
+            title: "Unshare session",
+            description: "Stop sharing this session",
+            category: "Session",
+            slash: "unshare",
+            disabled: !params.id || !info()?.share?.url,
+            onSelect: async () => {
+              if (!params.id) return
+              await sdk.client.session
+                .unshare({ sessionID: params.id })
+                .then(() =>
+                  showToast({
+                    title: "Session unshared",
+                    description: "Session unshared successfully!",
+                    variant: "success",
+                  }),
+                )
+                .catch(() =>
+                  showToast({
+                    title: "Failed to unshare session",
+                    description: "An error occurred while unsharing the session",
+                    variant: "error",
+                  }),
+                )
+            },
           },
-        },
-      ]
+        ]
       : []),
   ])
 
