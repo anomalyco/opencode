@@ -10,10 +10,13 @@ interface Props {
 export function StatusIndicator({ sessionID, isDark }: Props) {
   const status = useEvents((s) => s.sessionStatus[sessionID])
   const text = useEvents((s) => s.statusText[sessionID])
-  const sending = useSessions((s) => s.isSending)
+  const optimistic = useSessions((s) => s.sending[sessionID])
 
-  // Show indicator when SSE reports busy/retry OR when we're awaiting response
-  const busy = sending || (status && status.type !== "idle")
+  // SSE status is the source of truth. The optimistic `sending` flag only
+  // covers the gap between the user tapping send and SSE confirming busy.
+  // Once SSE reports idle, the indicator hides regardless of the optimistic flag.
+  const sseBusy = status && status.type !== "idle"
+  const busy = sseBusy || (optimistic && !status)
   if (!busy) return null
 
   const label = status?.type === "retry" ? `Retrying (attempt ${status.attempt})...` : text || "Working..."

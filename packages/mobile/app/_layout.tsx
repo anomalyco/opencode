@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { Stack } from "expo-router"
+import { Stack, router } from "expo-router"
 import { StatusBar } from "expo-status-bar"
 import { useColorScheme, View, ActivityIndicator } from "react-native"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
@@ -11,6 +11,7 @@ import { useEvents } from "../src/stores/events"
 import { useCatalog } from "../src/stores/catalog"
 import { useSettings } from "../src/stores/settings"
 import { AuthGate } from "../src/components/AuthGate"
+import * as notifications from "../src/lib/notifications"
 
 const queryClient = new QueryClient()
 
@@ -26,6 +27,14 @@ export default function RootLayout() {
     initAuth()
     loadConnections()
     useSettings.getState().load()
+
+    // Connect notification preferences to the notification module
+    notifications.configure(() => useSettings.getState().notifications)
+
+    // Navigate to session when user taps a notification
+    return notifications.onTap((data) => {
+      router.push(`/session/${data.sessionId}`)
+    })
   }, [])
 
   // Connect/disconnect SSE and load catalog when client changes

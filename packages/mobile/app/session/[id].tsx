@@ -32,7 +32,7 @@ import {
   type Attachment,
 } from "../../src/components/chat"
 import { useSessions } from "../../src/stores/sessions"
-import { useEvents } from "../../src/stores/events"
+import { useEvents, refreshPending } from "../../src/stores/events"
 import { useConnections } from "../../src/stores/connections"
 import { useAuth } from "../../src/stores/auth"
 import { useCatalog } from "../../src/stores/catalog"
@@ -94,7 +94,6 @@ export default function SessionScreen() {
     messages,
     parts,
     isLoading,
-    isSending,
     loadingMore,
     hasMore,
     selectSession,
@@ -102,6 +101,9 @@ export default function SessionScreen() {
     abortSession,
     loadOlderMessages,
   } = useSessions()
+
+  // Derive sending state for this specific session
+  const isSending = useSessions((s) => !!(currentSession && s.sending[currentSession.id]))
 
   const { authenticateForMessage } = useAuth()
   const { client } = useConnections()
@@ -156,7 +158,12 @@ export default function SessionScreen() {
   }, [])
 
   useEffect(() => {
-    if (id) selectSession(id, directory)
+    if (!id) return
+    selectSession(id, directory).then(() => {
+      // Re-fetch pending permissions/questions from the server to recover from
+      // missed SSE events or failed optimistic removals
+      if (client) refreshPending(client, id)
+    })
   }, [id])
 
   // Sync model chip from latest assistant message
@@ -344,39 +351,66 @@ export default function SessionScreen() {
   }, [loadingMore])
 
   const handlePermissionReply = async (requestID: string, reply: "once" | "always" | "reject") => {
-    if (!client) return
-    // Optimistically remove from UI immediately
+    if (!client || !sessionID) return
+    // Snapshot for rollback
+    const snapshot = useEvents.getState().permissions[sessionID] || []
+    // Optimistically remove from UI
     useEvents.setState((state) => ({
       permissions: {
         ...state.permissions,
-        [sessionID!]: (state.permissions[sessionID!] || []).filter((p) => p.id !== requestID),
+        [sessionID]: snapshot.filter((p) => p.id !== requestID),
       },
     }))
-    client.permission.reply(requestID, reply).catch((err) => console.error("Permission reply failed:", err))
+    try {
+      await client.permission.reply(requestID, reply)
+    } catch (err) {
+      console.error("Permission reply failed:", err)
+      // Restore the prompt so the user can retry
+      useEvents.setState((state) => ({
+        permissions: { ...state.permissions, [sessionID]: snapshot },
+      }))
+      Alert.alert("Reply Failed", "Could not send your response. Please try again.")
+    }
   }
 
   const handleQuestionReply = async (requestID: string, answers: string[][]) => {
-    if (!client) return
-    // Optimistically remove from UI immediately
+    if (!client || !sessionID) return
+    const snapshot = useEvents.getState().questions[sessionID] || []
     useEvents.setState((state) => ({
       questions: {
         ...state.questions,
-        [sessionID!]: (state.questions[sessionID!] || []).filter((q) => q.id !== requestID),
+        [sessionID]: snapshot.filter((q) => q.id !== requestID),
       },
     }))
-    client.question.reply(requestID, answers).catch((err) => console.error("Question reply failed:", err))
+    try {
+      await client.question.reply(requestID, answers)
+    } catch (err) {
+      console.error("Question reply failed:", err)
+      useEvents.setState((state) => ({
+        questions: { ...state.questions, [sessionID]: snapshot },
+      }))
+      Alert.alert("Reply Failed", "Could not send your response. Please try again.")
+    }
   }
 
   const handleQuestionReject = async (requestID: string) => {
-    if (!client) return
-    // Optimistically remove from UI immediately
+    if (!client || !sessionID) return
+    const snapshot = useEvents.getState().questions[sessionID] || []
     useEvents.setState((state) => ({
       questions: {
         ...state.questions,
-        [sessionID!]: (state.questions[sessionID!] || []).filter((q) => q.id !== requestID),
+        [sessionID]: snapshot.filter((q) => q.id !== requestID),
       },
     }))
-    client.question.reject(requestID).catch((err) => console.error("Question reject failed:", err))
+    try {
+      await client.question.reject(requestID)
+    } catch (err) {
+      console.error("Question reject failed:", err)
+      useEvents.setState((state) => ({
+        questions: { ...state.questions, [sessionID]: snapshot },
+      }))
+      Alert.alert("Reject Failed", "Could not send your response. Please try again.")
+    }
   }
 
   const handleModelSelect = useCallback(

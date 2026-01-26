@@ -26,7 +26,8 @@ interface SessionsState {
   messages: Message[]
   parts: Record<string, Part[]>
   isLoading: boolean
-  isSending: boolean
+  // Per-session optimistic sending flag — bridging gap between user tap and SSE busy
+  sending: Record<string, boolean>
   loadingMore: boolean
   hasMore: boolean
   error: string | null
@@ -65,7 +66,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
   messages: [],
   parts: {},
   isLoading: false,
-  isSending: false,
+  sending: {},
   loadingMore: false,
   hasMore: false,
   error: null,
@@ -96,7 +97,14 @@ export const useSessions = create<SessionsState>((set, get) => ({
     }
 
     try {
-      set({ isLoading: true, error: null, hasMore: false, loadingMore: false })
+      // Reset optimistic sending — SSE sessionStatus is the source of truth
+      set((state) => ({
+        isLoading: true,
+        error: null,
+        hasMore: false,
+        loadingMore: false,
+        sending: { ...state.sending, [sessionID]: false },
+      }))
 
       const [session, messagesResponse] = await Promise.all([
         client.session.get(sessionID),
@@ -114,8 +122,8 @@ export const useSessions = create<SessionsState>((set, get) => ({
         // If we got exactly PAGE_SIZE messages, there are probably more
         hasMore: messagesResponse.length >= pageSize(),
       })
-    } catch (error) {
-      console.error("Failed to load session:", error)
+    } catch (err) {
+      console.error("Failed to load session:", err)
       set({ error: "Failed to load session", isLoading: false })
     }
   },
@@ -204,7 +212,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
     }
 
     try {
-      set({ isSending: true, error: null })
+      set((state) => ({ sending: { ...state.sending, [session.id]: true }, error: null }))
 
       // Add user message optimistically
       const ts = Date.now()
@@ -259,14 +267,14 @@ export const useSessions = create<SessionsState>((set, get) => ({
       }
 
       // Fire and forget - SSE events will update messages/parts/status in real-time
-      client.session.prompt(session.id, { parts: promptParts, model, agent }).catch((error) => {
-        console.error("Failed to send message:", error)
-        set({ error: String(error), isSending: false })
+      client.session.prompt(session.id, { parts: promptParts, model, agent }).catch((err) => {
+        console.error("Failed to send message:", err)
+        set((state) => ({ error: String(err), sending: { ...state.sending, [session.id]: false } }))
         get().refreshMessages()
       })
-    } catch (error) {
-      console.error("[sendMessage] error:", error)
-      set({ error: String(error), isSending: false })
+    } catch (err) {
+      console.error("[sendMessage] error:", err)
+      set((state) => ({ error: String(err), sending: { ...state.sending, [session.id]: false } }))
       get().refreshMessages()
     }
   },
@@ -278,8 +286,8 @@ export const useSessions = create<SessionsState>((set, get) => ({
 
     try {
       await client.session.abort(session.id)
-      set({ isSending: false })
-    } catch (error) {
+      set((state) => ({ sending: { ...state.sending, [session.id]: false } }))
+    } catch {
       set({ error: "Failed to abort session" })
     }
   },

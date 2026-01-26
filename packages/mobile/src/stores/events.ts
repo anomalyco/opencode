@@ -1,7 +1,8 @@
 import { create } from "zustand"
 import { useConnections } from "./connections"
 import { useSessions } from "./sessions"
-import type { Part, Session, Message } from "../lib/sdk"
+import { send as notify } from "../lib/notifications"
+import type { Client, Part, Session, Message } from "../lib/sdk"
 
 // Session status from the server
 type SessionStatus = { type: "idle" } | { type: "busy" } | { type: "retry"; attempt: number; message: string }
@@ -67,6 +68,23 @@ interface EventsState {
 
 let controller: AbortController | null = null
 
+// Re-fetch pending permissions and questions from the server for a session.
+// Called when entering a session to recover from missed SSE events or failed
+// optimistic removals.
+export async function refreshPending(client: Client, sessionID: string) {
+  try {
+    const [perms, questions] = await Promise.all([client.permission.list(), client.question.list()])
+    const sessionPerms = (perms || []).filter((p: Record<string, unknown>) => p.sessionID === sessionID)
+    const sessionQuestions = (questions || []).filter((q: Record<string, unknown>) => q.sessionID === sessionID)
+    useEvents.setState((state) => ({
+      permissions: { ...state.permissions, [sessionID]: sessionPerms as any },
+      questions: { ...state.questions, [sessionID]: sessionQuestions as any },
+    }))
+  } catch (err) {
+    console.warn("[Events] Failed to refresh pending:", err)
+  }
+}
+
 export const useEvents = create<EventsState>((set, get) => ({
   connected: false,
   sessionStatus: {},
@@ -101,22 +119,36 @@ export const useEvents = create<EventsState>((set, get) => ({
               const status = props.status as SessionStatus
               if (!sessionID) break
 
+              // Detect busy → idle transition for completion notification
+              const previous = get().sessionStatus[sessionID]
+              const completed = previous?.type === "busy" && status.type === "idle"
+
               set((state) => ({
                 sessionStatus: { ...state.sessionStatus, [sessionID]: status },
                 // Clear status text when idle
                 statusText: status.type === "idle" ? { ...state.statusText, [sessionID]: "" } : state.statusText,
               }))
 
-              // Update isSending in sessions store
-              const sessions = useSessions.getState()
-              if (sessions.currentSession?.id === sessionID) {
-                if (status.type === "idle") {
-                  useSessions.setState({ isSending: false })
-                  // Refresh to get final state
+              // SSE is the source of truth — update sending state unconditionally
+              if (status.type === "idle") {
+                useSessions.setState((state) => ({
+                  sending: { ...state.sending, [sessionID]: false },
+                }))
+                // Refresh messages if this is the session the user is viewing
+                const sessions = useSessions.getState()
+                if (sessions.currentSession?.id === sessionID) {
                   sessions.refreshMessages()
-                } else if (status.type === "busy") {
-                  useSessions.setState({ isSending: true })
                 }
+              }
+
+              if (completed) {
+                const match = useSessions.getState().sessions.find((s) => s.id === sessionID)
+                notify({
+                  category: "completed",
+                  title: "Task completed",
+                  body: match?.title || "Session finished processing",
+                  sessionId: sessionID,
+                })
               }
               break
             }
@@ -167,15 +199,23 @@ export const useEvents = create<EventsState>((set, get) => ({
               const error = props.error as { message?: string } | undefined
               const sessionID = props.sessionID as string
               if (!sessionID) break
-              // Surface the error and clear sending state
-              const sessions = useSessions.getState()
-              if (sessions.currentSession?.id === sessionID) {
-                useSessions.setState({
-                  error: error?.message || "Session error occurred",
-                  isSending: false,
-                })
-                sessions.refreshMessages()
+              // Clear sending state unconditionally — SSE is truth
+              useSessions.setState((state) => ({
+                sending: { ...state.sending, [sessionID]: false },
+                // Surface error only if user is viewing this session
+                ...(state.currentSession?.id === sessionID
+                  ? { error: error?.message || "Session error occurred" }
+                  : {}),
+              }))
+              if (useSessions.getState().currentSession?.id === sessionID) {
+                useSessions.getState().refreshMessages()
               }
+              notify({
+                category: "errors",
+                title: "Session error",
+                body: error?.message || "Something went wrong",
+                sessionId: sessionID,
+              })
               break
             }
 
@@ -188,6 +228,12 @@ export const useEvents = create<EventsState>((set, get) => ({
                   [req.sessionID]: [...(state.permissions[req.sessionID] || []), req],
                 },
               }))
+              notify({
+                category: "permissions",
+                title: req.permission || "Permission requested",
+                body: req.patterns?.join(", ") || "A tool needs your approval",
+                sessionId: req.sessionID,
+              })
               break
             }
 
@@ -213,6 +259,12 @@ export const useEvents = create<EventsState>((set, get) => ({
                   [req.sessionID]: [...(state.questions[req.sessionID] || []), req],
                 },
               }))
+              notify({
+                category: "questions",
+                title: req.questions?.[0]?.header || "Input needed",
+                body: req.questions?.[0]?.question || "The assistant has a question",
+                sessionId: req.sessionID,
+              })
               break
             }
 

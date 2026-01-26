@@ -1,6 +1,25 @@
-import { View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet, useColorScheme, Linking } from "react-native"
+import { useCallback, useState } from "react"
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Switch,
+  StyleSheet,
+  useColorScheme,
+  Linking,
+  Alert,
+} from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../../src/stores/auth"
+import { useSettings } from "../../src/stores/settings"
+import {
+  categories,
+  categoryMeta,
+  setup as setupNotifications,
+  granted as notificationsGranted,
+} from "../../src/lib/notifications"
+import type { Category } from "../../src/lib/notifications"
 
 function SettingRow({
   icon,
@@ -51,6 +70,32 @@ export default function SettingsScreen() {
   const isDark = colorScheme === "dark"
 
   const { settings, hasBiometrics, updateSettings, lock } = useAuth()
+  const { notifications, setNotification } = useSettings()
+  const [osGranted, setOsGranted] = useState<boolean | null>(null)
+
+  // Check OS permission state on first toggle attempt
+  const handleToggle = useCallback(
+    async (category: Category, enabled: boolean) => {
+      if (enabled) {
+        const ok = await setupNotifications()
+        setOsGranted(ok)
+        if (!ok) {
+          Alert.alert(
+            "Notifications Disabled",
+            "Enable notifications for OpenCode in your device settings to receive alerts.",
+          )
+          return
+        }
+      }
+      setNotification(category, enabled)
+    },
+    [setNotification],
+  )
+
+  // Lazy-check OS permission for status display
+  if (osGranted === null) {
+    notificationsGranted().then(setOsGranted)
+  }
 
   return (
     <ScrollView style={[styles.container, isDark && styles.containerDark]} contentContainerStyle={styles.content}>
@@ -94,6 +139,35 @@ export default function SettingsScreen() {
             onPress={lock}
             right={<Ionicons name="chevron-forward" size={20} color={isDark ? "#666666" : "#999999"} />}
           />
+        )}
+      </SettingSection>
+
+      <SettingSection title="Notifications" isDark={isDark}>
+        {categories.map((category) => {
+          const meta = categoryMeta[category]
+          return (
+            <SettingRow
+              key={category}
+              icon={meta.icon as keyof typeof Ionicons.glyphMap}
+              label={meta.label}
+              description={meta.description}
+              isDark={isDark}
+              right={
+                <Switch
+                  value={notifications[category]}
+                  onValueChange={(value) => handleToggle(category, value)}
+                  trackColor={{ false: "#767577", true: "#22c55e" }}
+                />
+              }
+            />
+          )
+        })}
+        {osGranted === false && (
+          <View style={[styles.settingRow, isDark && styles.settingRowDark]}>
+            <Text style={[styles.settingDescription, { color: "#ef4444", paddingLeft: 48 }]}>
+              Notifications are disabled at the system level. Enable them in Settings to receive alerts.
+            </Text>
+          </View>
         )}
       </SettingSection>
 
