@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from "react-native"
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Keyboard, Platform } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 
 export interface SlashCommand {
@@ -27,7 +27,7 @@ export function SlashPopover({ query, commands, isDark, onSelect }: Props) {
 
   return (
     <View style={[s.popover, isDark && s.popoverDark]}>
-      <ScrollView keyboardShouldPersistTaps="handled" style={s.scroll}>
+      <ScrollView keyboardShouldPersistTaps="always" style={s.scroll}>
         {filtered.map((cmd) => (
           <TouchableOpacity key={cmd.trigger} style={[s.item, isDark && s.itemDark]} onPress={() => onSelect(cmd)}>
             <Ionicons

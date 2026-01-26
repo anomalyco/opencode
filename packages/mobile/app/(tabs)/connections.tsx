@@ -2,7 +2,10 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, useColorScheme, Ale
 import { router } from "expo-router"
 import { Ionicons } from "@expo/vector-icons"
 import { useConnections } from "../../src/stores/connections"
+import { useSettings } from "../../src/stores/settings"
 import type { ServerConnection } from "../../src/lib/types"
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200] as const
 
 function ConnectionItem({
   connection,
@@ -85,6 +88,7 @@ export default function ConnectionsScreen() {
   const isDark = colorScheme === "dark"
 
   const { connections, activeConnection, setActiveConnection, removeConnection } = useConnections()
+  const { pageSize, setPageSize } = useSettings()
 
   const handleDelete = (connection: ServerConnection) => {
     Alert.alert("Delete Connection", `Are you sure you want to delete "${connection.name}"?`, [
@@ -124,6 +128,44 @@ export default function ConnectionsScreen() {
         ListHeaderComponent={
           <View style={[styles.header, isDark && styles.headerDark]}>
             <Text style={[styles.headerText, isDark && styles.metaDark]}>Tap to switch, long press for options</Text>
+          </View>
+        }
+        ListFooterComponent={
+          <View style={[styles.settingsSection, isDark && styles.settingsSectionDark]}>
+            <Text style={[styles.settingsTitle, isDark && styles.textDark]}>Preferences</Text>
+            <View style={styles.settingRow}>
+              <View style={styles.settingLabel}>
+                <Ionicons name="layers-outline" size={18} color={isDark ? "#888888" : "#666666"} />
+                <Text style={[styles.settingText, isDark && styles.textDark]}>Messages per page</Text>
+              </View>
+              <View style={styles.pagePicker}>
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <TouchableOpacity
+                    key={size}
+                    style={[
+                      styles.pageOption,
+                      isDark && styles.pageOptionDark,
+                      pageSize === size && styles.pageOptionActive,
+                      pageSize === size && isDark && styles.pageOptionActiveDark,
+                    ]}
+                    onPress={() => setPageSize(size)}
+                  >
+                    <Text
+                      style={[
+                        styles.pageOptionText,
+                        isDark && styles.metaDark,
+                        pageSize === size && styles.pageOptionTextActive,
+                      ]}
+                    >
+                      {size}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            <Text style={[styles.settingHint, isDark && styles.metaDark]}>
+              How many messages to load when opening a session. Lower = faster.
+            </Text>
           </View>
         }
         contentContainerStyle={connections.length === 0 ? styles.emptyContent : undefined}
@@ -276,5 +318,70 @@ const styles = StyleSheet.create({
   },
   fabDark: {
     backgroundColor: "#ffffff",
+  },
+  settingsSection: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e5e5",
+    marginTop: 16,
+    gap: 10,
+  },
+  settingsSectionDark: {
+    borderTopColor: "#1a1a1a",
+  },
+  settingsTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0a0a0a",
+  },
+  settingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  settingLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  settingText: {
+    fontSize: 14,
+    color: "#0a0a0a",
+  },
+  pagePicker: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  pageOption: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e5e5e5",
+    backgroundColor: "#f5f5f5",
+  },
+  pageOptionDark: {
+    borderColor: "#2a2a2a",
+    backgroundColor: "#1a1a1a",
+  },
+  pageOptionActive: {
+    backgroundColor: "#0a0a0a",
+    borderColor: "#0a0a0a",
+  },
+  pageOptionActiveDark: {
+    backgroundColor: "#3b82f6",
+    borderColor: "#3b82f6",
+  },
+  pageOptionText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#666666",
+  },
+  pageOptionTextActive: {
+    color: "#ffffff",
+  },
+  settingHint: {
+    fontSize: 12,
+    color: "#999999",
   },
 })

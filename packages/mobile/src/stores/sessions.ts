@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import type { Session, Message, Part, Event, MessageWithParts, Client } from "../lib/sdk"
 import { useConnections } from "./connections"
+import { useSettings } from "./settings"
 
 // Helper to convert API response to our internal format
 function parseMessages(response: MessageWithParts[]): { messages: Message[]; parts: Record<string, Part[]> } {
@@ -15,7 +16,9 @@ function parseMessages(response: MessageWithParts[]): { messages: Message[]; par
   return { messages, parts }
 }
 
-const PAGE_SIZE = 25
+function pageSize(): number {
+  return useSettings.getState().pageSize
+}
 
 interface SessionsState {
   sessions: Session[]
@@ -97,7 +100,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
 
       const [session, messagesResponse] = await Promise.all([
         client.session.get(sessionID),
-        client.session.messages(sessionID, { limit: PAGE_SIZE }),
+        client.session.messages(sessionID, { limit: pageSize() }),
       ])
 
       // Parse the API response format: array of { info, parts }
@@ -109,7 +112,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
         parts,
         isLoading: false,
         // If we got exactly PAGE_SIZE messages, there are probably more
-        hasMore: messagesResponse.length >= PAGE_SIZE,
+        hasMore: messagesResponse.length >= pageSize(),
       })
     } catch (error) {
       console.error("Failed to load session:", error)

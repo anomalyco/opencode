@@ -27,6 +27,7 @@ import {
   SlashPopover,
   ModelPicker,
   ImageAttachments,
+  SessionInfo,
   type SlashCommand,
   type Attachment,
 } from "../../src/components/chat"
@@ -86,6 +87,7 @@ export default function SessionScreen() {
   const modelSheetRef = useRef<BottomSheet>(null)
   const [input, setInput] = useState("")
   const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [showInfo, setShowInfo] = useState(false)
 
   const {
     currentSession,
@@ -402,6 +404,13 @@ export default function SessionScreen() {
                   <Text style={[s.dirText, isDark && s.dirTextDark]}>{shortDir}</Text>
                 </View>
               )}
+              <TouchableOpacity onPress={() => setShowInfo((v) => !v)} hitSlop={8}>
+                <Ionicons
+                  name={showInfo ? "stats-chart" : "stats-chart-outline"}
+                  size={20}
+                  color={showInfo ? "#3b82f6" : isDark ? "#888888" : "#666666"}
+                />
+              </TouchableOpacity>
             </View>
           ),
         }}
@@ -412,6 +421,24 @@ export default function SessionScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
+        {/* Session info pulldown */}
+        <SessionInfo
+          session={currentSession}
+          messages={messages || []}
+          providers={providers}
+          visible={showInfo}
+          isDark={isDark}
+          hasMore={hasMore}
+          loadingAll={loadingMore}
+          onLoadAll={() => {
+            if (hasMore && !loadingMore) loadOlderMessages()
+          }}
+          onScrollToTop={() => {
+            flatListRef.current?.scrollToEnd({ animated: true })
+          }}
+          onClose={() => setShowInfo(false)}
+        />
+
         {isLoading ? (
           <View style={s.loading}>
             <ActivityIndicator size="large" color={isDark ? "#ffffff" : "#0a0a0a"} />

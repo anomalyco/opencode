@@ -7,6 +7,7 @@ export interface ProviderModel {
   name: string
   reasoning: boolean
   attachment: boolean
+  limit?: { context: number; output: number }
 }
 
 export interface Provider {
@@ -78,6 +79,7 @@ export const useCatalog = create<CatalogState>((set, get) => ({
                 name: m.name || m.id,
                 reasoning: m.reasoning ?? false,
                 attachment: m.attachment ?? false,
+                limit: m.limit,
               })),
           }))
           .filter((p) => p.models.length > 0)

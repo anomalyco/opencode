@@ -9,6 +9,7 @@ import { useAuth } from "../src/stores/auth"
 import { useConnections } from "../src/stores/connections"
 import { useEvents } from "../src/stores/events"
 import { useCatalog } from "../src/stores/catalog"
+import { useSettings } from "../src/stores/settings"
 import { AuthGate } from "../src/components/AuthGate"
 
 const queryClient = new QueryClient()
@@ -24,6 +25,7 @@ export default function RootLayout() {
   useEffect(() => {
     initAuth()
     loadConnections()
+    useSettings.getState().load()
   }, [])
 
   // Connect/disconnect SSE and load catalog when client changes
