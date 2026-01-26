@@ -1,0 +1,16 @@
+{
+  "name": "@opencode-ai/desktop-viz",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "solid-js": "catalog:",
+    "@opencode-ai/ui": "workspace:*",
+    "@opencode-ai/app": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.2",
+    "vite": "catalog:"
+  }
+}
