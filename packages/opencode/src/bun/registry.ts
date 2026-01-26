@@ -4,7 +4,6 @@ import { Log } from "../util/log"
 export namespace PackageRegistry {
   const log = Log.create({ service: "bun" })
 
-
   function which() {
     return process.execPath
   }

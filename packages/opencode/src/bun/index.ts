@@ -76,19 +76,14 @@ export namespace BunProc {
     const modExists = await Filesystem.exists(mod)
     const cachedVersion = dependencies[pkg]
 
-    if (modExists && cachedVersion) {
-      if (version !== "latest") {
-        if (cachedVersion === version) return mod
-      }
-
-      if (version === "latest") {
-        const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
-        if (!isOutdated) return mod
-        log.info("Cached version is outdated, proceeding with install", {
-          pkg,
-          cachedVersion,
-        })
-      }
+    if (!modExists || !cachedVersion) {
+      // continue to install
+    } else if (version !== "latest" && cachedVersion === version) {
+      return mod
+    } else if (version === "latest") {
+      const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
+      if (!isOutdated) return mod
+      log.info("Cached version is outdated, proceeding with install", { pkg, cachedVersion })
     }
 
     const proxied = !!(
