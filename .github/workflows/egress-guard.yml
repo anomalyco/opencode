@@ -1,0 +1,20 @@
+name: Egress Guard
+
+on: [push, pull_request]
+
+jobs:
+  egress-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run grep for banned integrations
+        run: |
+          set -e
+          banned=(stripe sendgrid mailgun mailchimp twilio @aws-sdk cloudflare vercel netlify segment amplitude mixpanel algolia s3 redis mongodb)
+          for b in "${banned[@]}"; do
+            if rg -n --hidden --no-ignore-vcs "\b$b\b" -S | head -n 1 >/dev/null; then
+              echo "Found banned integration: $b"
+              rg -n --hidden --no-ignore-vcs "\b$b\b" -S | sed -n '1,200p'
+              exit 1
+            fi
+          done
