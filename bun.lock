@@ -185,6 +185,8 @@
       "version": "1.1.36",
       "dependencies": {
         "@opencode-ai/app": "workspace:*",
+        "@opencode-ai/desktop-docs": "workspace:*",
+        "@opencode-ai/desktop-viz": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
         "@solid-primitives/storage": "catalog:",
         "@tauri-apps/api": "^2",
@@ -207,6 +209,33 @@
         "@typescript/native-preview": "catalog:",
         "typescript": "~5.6.2",
         "vite": "catalog:",
+      },
+    },
+    "packages/desktop-docs": {
+      "name": "@opencode-ai/desktop-docs",
+      "version": "0.0.1",
+      "dependencies": {
+        "@opencode-ai/ui": "workspace:*",
+        "solid-js": "catalog:",
+      },
+      "devDependencies": {
+        "typescript": "catalog:",
+        "vite": "catalog:",
+        "vite-plugin-solid": "catalog:",
+      },
+    },
+    "packages/desktop-viz": {
+      "name": "@opencode-ai/desktop-viz",
+      "version": "0.0.1",
+      "dependencies": {
+        "@opencode-ai/app": "workspace:*",
+        "@opencode-ai/ui": "workspace:*",
+        "solid-js": "catalog:",
+      },
+      "devDependencies": {
+        "typescript": "catalog:",
+        "vite": "catalog:",
+        "vite-plugin-solid": "catalog:",
       },
     },
     "packages/enterprise": {
@@ -1202,6 +1231,10 @@
     "@opencode-ai/console-resource": ["@opencode-ai/console-resource@workspace:packages/console/resource"],
 
     "@opencode-ai/desktop": ["@opencode-ai/desktop@workspace:packages/desktop"],
+
+    "@opencode-ai/desktop-docs": ["@opencode-ai/desktop-docs@workspace:packages/desktop-docs"],
+
+    "@opencode-ai/desktop-viz": ["@opencode-ai/desktop-viz@workspace:packages/desktop-viz"],
 
     "@opencode-ai/enterprise": ["@opencode-ai/enterprise@workspace:packages/enterprise"],
 
