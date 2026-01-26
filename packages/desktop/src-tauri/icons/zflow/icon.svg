@@ -1,0 +1,49 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Gradient -->
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366F1;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#8B5CF6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#A855F7;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Icon Gradient -->
+    <linearGradient id="icon-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#E0E7FF;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Glow Effect -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background Circle -->
+  <circle cx="256" cy="256" r="240" fill="url(#bg-gradient)" />
+
+  <!-- Z Shape with Flow Lines -->
+  <g filter="url(#glow)">
+    <!-- Top horizontal line -->
+    <path d="M 156 156 L 356 156" stroke="url(#icon-gradient)" stroke-width="16" stroke-linecap="round" />
+
+    <!-- Diagonal line -->
+    <path d="M 156 156 L 356 356" stroke="url(#icon-gradient)" stroke-width="16" stroke-linecap="round" />
+
+    <!-- Bottom horizontal line -->
+    <path d="M 156 356 L 356 356" stroke="url(#icon-gradient)" stroke-width="16" stroke-linecap="round" />
+
+    <!-- Flow accent lines -->
+    <path d="M 176 196 Q 256 216 336 196" stroke="#E0E7FF" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.6" />
+    <path d="M 176 336 Q 256 356 336 336" stroke="#E0E7FF" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.6" />
+  </g>
+
+  <!-- Small flow particles -->
+  <circle cx="130" cy="180" r="8" fill="#FFFFFF" opacity="0.4" />
+  <circle cx="380" cy="280" r="6" fill="#FFFFFF" opacity="0.3" />
+  <circle cx="140" cy="330" r="5" fill="#FFFFFF" opacity="0.35" />
+</svg>
