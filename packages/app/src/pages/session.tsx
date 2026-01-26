@@ -1,4 +1,4 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on, createSignal } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -198,12 +198,17 @@ export default function Page() {
     return next
   })
 
-  const [responding, setResponding] = createSignal(false)
+  const [ui, setUi] = createStore({
+    responding: false,
+    pendingMessage: undefined as string | undefined,
+    scrollGesture: 0,
+    autoCreated: false,
+  })
 
   createEffect(
     on(
       () => request()?.id,
-      () => setResponding(false),
+      () => setUi("responding", false),
       { defer: true },
     ),
   )
@@ -211,18 +216,17 @@ export default function Page() {
   const decide = (response: "once" | "always" | "reject") => {
     const perm = request()
     if (!perm) return
-    if (responding()) return
+    if (ui.responding) return
 
-    setResponding(true)
+    setUi("responding", true)
     sdk.client.permission
       .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
       })
-      .finally(() => setResponding(false))
+      .finally(() => setUi("responding", false))
   }
-  const [pendingMessage, setPendingMessage] = createSignal<string | undefined>(undefined)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
   const view = createMemo(() => layout.view(sessionKey))
@@ -439,7 +443,6 @@ export default function Page() {
   let promptDock: HTMLDivElement | undefined
   let scroller: HTMLDivElement | undefined
 
-  const [scrollGesture, setScrollGesture] = createSignal(0)
   const scrollGestureWindowMs = 250
 
   const markScrollGesture = (target?: EventTarget | null) => {
@@ -450,26 +453,24 @@ export default function Page() {
     const nested = el?.closest("[data-scrollable]")
     if (nested && nested !== root) return
 
-    setScrollGesture(Date.now())
+    setUi("scrollGesture", Date.now())
   }
 
-  const hasScrollGesture = () => Date.now() - scrollGesture() < scrollGestureWindowMs
+  const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
   createEffect(() => {
     if (!params.id) return
     sync.session.sync(params.id)
   })
 
-  const [autoCreated, setAutoCreated] = createSignal(false)
-
   createEffect(() => {
     if (!view().terminal.opened()) {
-      setAutoCreated(false)
+      setUi("autoCreated", false)
       return
     }
-    if (!terminal.ready() || terminal.all().length !== 0 || autoCreated()) return
+    if (!terminal.ready() || terminal.all().length !== 0 || ui.autoCreated) return
     terminal.new()
-    setAutoCreated(true)
+    setUi("autoCreated", true)
   })
 
   createEffect(
@@ -1019,9 +1020,18 @@ export default function Page() {
 
   const showTabs = createMemo(() => view().reviewPanel.opened())
 
-  const [fileTreeTab, setFileTreeTab] = createSignal<"changes" | "all">("changes")
-  const [reviewScroll, setReviewScroll] = createSignal<HTMLDivElement | undefined>(undefined)
-  const [pendingDiff, setPendingDiff] = createSignal<string | undefined>(undefined)
+  const [tree, setTree] = createStore({
+    fileTreeTab: "changes" as "changes" | "all",
+    reviewScroll: undefined as HTMLDivElement | undefined,
+    pendingDiff: undefined as string | undefined,
+  })
+
+  const fileTreeTab = () => tree.fileTreeTab
+  const setFileTreeTab = (value: "changes" | "all") => setTree("fileTreeTab", value)
+  const reviewScroll = () => tree.reviewScroll
+  const setReviewScroll = (value: HTMLDivElement | undefined) => setTree("reviewScroll", value)
+  const pendingDiff = () => tree.pendingDiff
+  const setPendingDiff = (value: string | undefined) => setTree("pendingDiff", value)
 
   createEffect(() => {
     if (!layout.fileTree.opened()) return
@@ -1316,7 +1326,7 @@ export default function Page() {
     if (pendingSessionID !== sessionID) return
 
     sessionStorage.removeItem("opencode.pendingMessage")
-    setPendingMessage(messageID)
+    setUi("pendingMessage", messageID)
   })
 
   const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
@@ -1484,7 +1494,7 @@ export default function Page() {
     store.turnStart
 
     const targetId =
-      pendingMessage() ??
+      ui.pendingMessage ??
       (() => {
         const hash = window.location.hash.slice(1)
         const match = hash.match(/^message-(.+)$/)
@@ -1496,7 +1506,7 @@ export default function Page() {
 
     const msg = visibleUserMessages().find((m) => m.id === targetId)
     if (!msg) return
-    if (pendingMessage() === targetId) setPendingMessage(undefined)
+    if (ui.pendingMessage === targetId) setUi("pendingMessage", undefined)
     requestAnimationFrame(() => scrollToMessage(msg, "auto"))
   })
 
@@ -1877,18 +1887,18 @@ export default function Page() {
                     </BasicTool>
                     <div data-component="permission-prompt">
                       <div data-slot="permission-actions">
-                        <Button variant="ghost" size="small" onClick={() => decide("reject")} disabled={responding()}>
+                        <Button variant="ghost" size="small" onClick={() => decide("reject")} disabled={ui.responding}>
                           {language.t("ui.permission.deny")}
                         </Button>
                         <Button
                           variant="secondary"
                           size="small"
                           onClick={() => decide("always")}
-                          disabled={responding()}
+                          disabled={ui.responding}
                         >
                           {language.t("ui.permission.allowAlways")}
                         </Button>
-                        <Button variant="primary" size="small" onClick={() => decide("once")} disabled={responding()}>
+                        <Button variant="primary" size="small" onClick={() => decide("once")} disabled={ui.responding}>
                           {language.t("ui.permission.allowOnce")}
                         </Button>
                       </div>
@@ -2144,11 +2154,40 @@ export default function Page() {
 
                           const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
 
-                          const [openedComment, setOpenedComment] = createSignal<string | null>(null)
-                          const [commenting, setCommenting] = createSignal<SelectedLineRange | null>(null)
-                          const [draft, setDraft] = createSignal("")
-                          const [positions, setPositions] = createSignal<Record<string, number>>({})
-                          const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
+                          const [note, setNote] = createStore({
+                            openedComment: null as string | null,
+                            commenting: null as SelectedLineRange | null,
+                            draft: "",
+                            positions: {} as Record<string, number>,
+                            draftTop: undefined as number | undefined,
+                          })
+
+                          const openedComment = () => note.openedComment
+                          const setOpenedComment = (
+                            value:
+                              | typeof note.openedComment
+                              | ((value: typeof note.openedComment) => typeof note.openedComment),
+                          ) => setNote("openedComment", value)
+
+                          const commenting = () => note.commenting
+                          const setCommenting = (
+                            value: typeof note.commenting | ((value: typeof note.commenting) => typeof note.commenting),
+                          ) => setNote("commenting", value)
+
+                          const draft = () => note.draft
+                          const setDraft = (
+                            value: typeof note.draft | ((value: typeof note.draft) => typeof note.draft),
+                          ) => setNote("draft", value)
+
+                          const positions = () => note.positions
+                          const setPositions = (
+                            value: typeof note.positions | ((value: typeof note.positions) => typeof note.positions),
+                          ) => setNote("positions", value)
+
+                          const draftTop = () => note.draftTop
+                          const setDraftTop = (
+                            value: typeof note.draftTop | ((value: typeof note.draftTop) => typeof note.draftTop),
+                          ) => setNote("draftTop", value)
 
                           const commentLabel = (range: SelectedLineRange) => {
                             const start = Math.min(range.start, range.end)
@@ -2695,7 +2734,7 @@ export default function Page() {
                             terminal={pty}
                             onClose={() => {
                               view().terminal.close()
-                              setAutoCreated(false)
+                              setUi("autoCreated", false)
                             }}
                           />
                         )}
