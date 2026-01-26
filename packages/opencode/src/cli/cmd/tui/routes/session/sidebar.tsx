@@ -29,35 +29,41 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     subagents: true,
   })
 
-  const subagents = createMemo(() => {
-    const parts = new Map<string, ToolPart>()
+  // Group subagents by type for sidebar display
+  // We store part IDs and messageIDs to look up fresh data from the store
+  const subagentGroups = createMemo((): SubagentGroup[] => {
+    const groups = new Map<string, { partId: string; messageId: string; type: string }[]>()
     for (const message of messages()) {
       for (const part of sync.data.part[message.id] ?? []) {
         if (part.type === "tool" && part.state.input?.subagent_type) {
-          parts.set(part.id, part)
+          const type = part.state.input.subagent_type as string
+          if (!groups.has(type)) groups.set(type, [])
+          groups.get(type)!.push({ partId: part.id, messageId: message.id, type })
         }
       }
     }
-    return Array.from(parts.values())
-  })
-
-  // Group subagents by type for sidebar display
-  const subagentGroups = (): SubagentGroup[] => {
-    const groups = new Map<string, ToolPart[]>()
-    for (const part of subagents()) {
-      const type = part.state.input?.subagent_type as string
-      if (!groups.has(type)) groups.set(type, [])
-      groups.get(type)!.push(part)
-    }
-    return Array.from(groups.entries()).map(([name, parts]) => ({
+    return Array.from(groups.entries()).map(([name, partRefs]) => ({
       name,
-      parts: parts.map((part) => {
-        const input = part.state.input as Record<string, unknown>
+      parts: partRefs.map((ref) => {
+        // Look up fresh data from store each time status/sessionId is accessed
+        const getPart = () => {
+          const parts = sync.data.part[ref.messageId] ?? []
+          return parts.find((p) => p.id === ref.partId) as ToolPart | undefined
+        }
         return {
-          id: part.id,
-          status: () => part.state.status as "pending" | "running" | "completed" | "error",
-          description: (input?.description as string) ?? "",
+          id: ref.partId,
+          status: () => {
+            const part = getPart()
+            return (part?.state.status ?? "pending") as "pending" | "running" | "completed" | "error"
+          },
+          description: (() => {
+            const part = getPart()
+            const input = part?.state.input as Record<string, unknown> | undefined
+            return (input?.description as string) ?? ""
+          })(),
           sessionId: () => {
+            const part = getPart()
+            if (!part) return undefined
             const metadata =
               part.state.status === "completed"
                 ? part.state.metadata
@@ -67,7 +73,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         }
       }),
     }))
-  }
+  })
 
   // Sort MCP servers alphabetically for consistent display order
   const mcpEntries = createMemo(() => Object.entries(sync.data.mcp).sort(([a], [b]) => a.localeCompare(b)))
