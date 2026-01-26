@@ -334,15 +334,24 @@ render(() => {
       const target = e.target as HTMLElement
       const link = target.closest("a") as HTMLAnchorElement | null
 
-      if (link?.href && !link.href.startsWith("javascript:") && !link.href.startsWith("#")) {
-        e.preventDefault()
-        e.stopPropagation()
-        e.stopImmediatePropagation()
-        void shellOpen(link.href).catch(() => undefined)
+      if (!link?.href) return
+
+      try {
+        const linkUrl = new URL(link.href, window.location.href)
+        const isExternal = linkUrl.origin !== window.location.origin
+
+        if (isExternal) {
+          e.preventDefault()
+          e.stopPropagation()
+          e.stopImmediatePropagation()
+          void shellOpen(link.href).catch(() => undefined)
+        }
+      } catch {
+        // Invalid URL, let it through
       }
     }
 
-    document.addEventListener("click", handleClick, true)
+    document.addEventListener("click", handleClick)
     onCleanup(() => {
       document.removeEventListener("click", handleClick, true)
     })

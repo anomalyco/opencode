@@ -64,6 +64,24 @@ const platform: Platform = {
   },
 }
 
+document.addEventListener(
+  "click",
+  (e) => {
+    const anchor = (e.target as HTMLElement).closest("a")
+    if (!anchor) return
+
+    const href = anchor.getAttribute("href")
+    if (!href) return
+
+    if (href.startsWith("http://") || href.startsWith("https://")) {
+      e.preventDefault()
+      e.stopPropagation()
+      platform.openLink(href)
+    }
+  },
+  true
+)
+
 render(
   () => (
     <PlatformProvider value={platform}>
