@@ -84,7 +84,7 @@ export const SettingsProviders: Component = () => {
             >
               <For each={connected()}>
                 {(item) => (
-                  <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
+                  <div class="flex items-center justify-between gap-4 h-14 border-b border-border-weak-base last:border-none">
                     <div class="flex items-center gap-3 min-w-0">
                       <ProviderIcon id={item.id as IconName} class="size-5 shrink-0 icon-strong-base" />
                       <span class="text-14-regular text-text-strong truncate">{item.name}</span>
@@ -107,7 +107,7 @@ export const SettingsProviders: Component = () => {
           <div class="bg-surface-raised-base px-4 rounded-lg">
             <For each={popular()}>
               {(item) => (
-                <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
+                <div class="flex items-center justify-between gap-4 h-14 border-b border-border-weak-base last:border-none">
                   <div class="flex items-center gap-x-3 min-w-0">
                     <ProviderIcon id={item.id as IconName} class="size-5 shrink-0 icon-strong-base" />
                     <span class="text-14-regular text-text-strong">{item.name}</span>
