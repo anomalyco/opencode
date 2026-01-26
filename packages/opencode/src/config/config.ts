@@ -565,6 +565,10 @@ export namespace Config {
       temperature: z.number().optional(),
       top_p: z.number().optional(),
       prompt: z.string().optional(),
+      instructions: z
+        .array(z.string())
+        .optional()
+        .describe("Additional per-agents instruction files or patterns to include"),
       tools: z.record(z.string(), z.boolean()).optional().describe("@deprecated Use 'permission' field instead"),
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
@@ -594,6 +598,7 @@ export namespace Config {
         "name",
         "model",
         "prompt",
+        "instructions",
         "description",
         "temperature",
         "top_p",

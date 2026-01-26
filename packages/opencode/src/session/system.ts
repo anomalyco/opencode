@@ -17,6 +17,7 @@ import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 import PROMPT_CODEX from "./prompt/codex_header.txt"
 import type { Provider } from "@/provider/provider"
 import { Flag } from "@/flag/flag"
+import type { Agent } from "@/agent/agent"
 
 const log = Log.create({ service: "system-prompt" })
 
@@ -31,6 +32,48 @@ async function resolveRelativeInstruction(instruction: string): Promise<string[]
     return []
   }
   return Filesystem.globUp(instruction, Flag.OPENCODE_CONFIG_DIR, Flag.OPENCODE_CONFIG_DIR).catch(() => [])
+}
+
+async function loadInstructions(instructions: string[]): Promise<string[]> {
+  const paths = new Set<string>()
+  const urls: string[] = []
+
+  for (let instruction of instructions) {
+    if (instruction.startsWith("https://") || instruction.startsWith("http://")) {
+      urls.push(instruction)
+      continue
+    }
+    if (instruction.startsWith("~/")) {
+      instruction = path.join(os.homedir(), instruction.slice(2))
+    }
+    let matches: string[] = []
+    if (path.isAbsolute(instruction)) {
+      matches = await Array.fromAsync(
+        new Bun.Glob(path.basename(instruction)).scan({
+          cwd: path.dirname(instruction),
+          absolute: true,
+          onlyFiles: true,
+        }),
+      ).catch(() => [])
+    } else {
+      matches = await resolveRelativeInstruction(instruction)
+    }
+    matches.forEach((p) => paths.add(p))
+  }
+
+  const foundFiles = Array.from(paths).map((p) =>
+    Bun.file(p)
+      .text()
+      .catch(() => "")
+      .then((x) => "Instructions from: " + p + "\n" + x),
+  )
+  const foundUrls = urls.map((url) =>
+    fetch(url, { signal: AbortSignal.timeout(5000) })
+      .then((res) => (res.ok ? res.text() : ""))
+      .catch(() => "")
+      .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
+  )
+  return Promise.all([...foundFiles, ...foundUrls]).then((result) => result.filter(Boolean))
 }
 
 export namespace SystemPrompt {
@@ -109,44 +152,22 @@ export namespace SystemPrompt {
       }
     }
 
-    const urls: string[] = []
-    if (config.instructions) {
-      for (let instruction of config.instructions) {
-        if (instruction.startsWith("https://") || instruction.startsWith("http://")) {
-          urls.push(instruction)
-          continue
-        }
-        if (instruction.startsWith("~/")) {
-          instruction = path.join(os.homedir(), instruction.slice(2))
-        }
-        let matches: string[] = []
-        if (path.isAbsolute(instruction)) {
-          matches = await Array.fromAsync(
-            new Bun.Glob(path.basename(instruction)).scan({
-              cwd: path.dirname(instruction),
-              absolute: true,
-              onlyFiles: true,
-            }),
-          ).catch(() => [])
-        } else {
-          matches = await resolveRelativeInstruction(instruction)
-        }
-        matches.forEach((path) => paths.add(path))
-      }
-    }
-
-    const foundFiles = Array.from(paths).map((p) =>
+    // Load AGENTS.md and global rule files
+    const ruleFiles = Array.from(paths).map((p) =>
       Bun.file(p)
         .text()
         .catch(() => "")
         .then((x) => "Instructions from: " + p + "\n" + x),
     )
-    const foundUrls = urls.map((url) =>
-      fetch(url, { signal: AbortSignal.timeout(5000) })
-        .then((res) => (res.ok ? res.text() : ""))
-        .catch(() => "")
-        .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
-    )
-    return Promise.all([...foundFiles, ...foundUrls]).then((result) => result.filter(Boolean))
+
+    // Load config.instructions
+    const configInstructions = config.instructions ? await loadInstructions(config.instructions) : []
+
+    return Promise.all(ruleFiles).then((result) => [...result.filter(Boolean), ...configInstructions])
+  }
+
+  export async function agent(agent: Agent.Info): Promise<string[]> {
+    if (!agent.instructions?.length) return []
+    return loadInstructions(agent.instructions)
   }
 }

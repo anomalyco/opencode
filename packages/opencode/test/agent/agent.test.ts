@@ -297,6 +297,25 @@ test("agent prompt can be set from config", async () => {
   })
 })
 
+test("agent instructions can be set from config", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        build: {
+          instructions: ["~/.config/opencode/build-only.md", "custom-rules.md"],
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const build = await Agent.get("build")
+      expect(build?.instructions).toEqual(["~/.config/opencode/build-only.md", "custom-rules.md"])
+    },
+  })
+})
+
 test("unknown agent properties are placed into options", async () => {
   await using tmp = await tmpdir({
     config: {

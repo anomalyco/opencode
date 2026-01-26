@@ -38,6 +38,7 @@ export namespace Agent {
         })
         .optional(),
       prompt: z.string().optional(),
+      instructions: z.array(z.string()).optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
     })
@@ -213,6 +214,7 @@ export namespace Agent {
         }
       if (value.model) item.model = Provider.parseModel(value.model)
       item.prompt = value.prompt ?? item.prompt
+      item.instructions = value.instructions ?? item.instructions
       item.description = value.description ?? item.description
       item.temperature = value.temperature ?? item.temperature
       item.topP = value.top_p ?? item.topP

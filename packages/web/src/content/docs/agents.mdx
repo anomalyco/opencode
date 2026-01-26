@@ -311,6 +311,32 @@ Specify a custom system prompt file for this agent with the `prompt` config. The
 
 This path is relative to where the config file is located. So this works for both the global OpenCode config and the project specific config.
 
+:::note
+Using `prompt` on a built-in agent **replaces** that agent's default prompt entirely. If you want to add instructions without replacing the default prompt, use `instructions` instead.
+:::
+
+---
+
+### Instructions
+
+Add custom instructions that are **appended** to the agent's system prompt without replacing it. This is useful for adding agent-specific rules while keeping the default behavior.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "build": {
+      "instructions": ["~/.config/opencode/prompts/build-only.md", "./project-rules.md"]
+    }
+  }
+}
+```
+
+The `instructions` array accepts the same formats as the [global instructions](/docs/rules).
+
+:::tip
+Use `instructions` when you want to add rules to a specific agent without affecting other agents. For example, adding "Always use the Researcher agent for lookups" only to the Build agent.
+:::
+
 ---
 
 ### Model
