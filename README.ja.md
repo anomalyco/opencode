@@ -15,20 +15,20 @@
 </p>
 
 <p align="center">
-  <a href="README.md">英語</a> |
-  <a href="README.zh.md">中国語（簡体字）</a> |
-  <a href="README.zht.md">中国語（繁体字）</a> |
-  <a href="README.ko.md">韓国語</a> |
-  <a href="README.de.md">ドイツ語</a> |
-  <a href="README.es.md">スペイン語</a> |
-  <a href="README.fr.md">フランス語</a> |
-  <a href="README.da.md">デンマーク語</a> |
+  <a href="README.md">English</a> |
+  <a href="README.zh.md">简体中文</a> |
+  <a href="README.zht.md">繁體中文</a> |
+  <a href="README.ko.md">한국어</a> |
+  <a href="README.de.md">Deutsch</a> |
+  <a href="README.es.md">Español</a> |
+  <a href="README.fr.md">Français</a> |
+  <a href="README.da.md">Dansk</a> |
   <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">ポーランド語</a> |
-  <a href="README.ru.md">ロシア語</a> |
-  <a href="README.ar.md">アラビア語</a> |
-  <a href="README.no.md">ノルウェー語</a> |
-  <a href="README.br.md">ポルトガル語（ブラジル）</a>
+  <a href="README.pl.md">Polski</a> |
+  <a href="README.ru.md">Русский</a> |
+  <a href="README.ar.md">العربية</a> |
+  <a href="README.no.md">Norsk</a> |
+  <a href="README.br.md">Português (Brasil)</a>
 </p>
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)

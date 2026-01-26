@@ -489,15 +489,6 @@ function App() {
       category: "System",
     },
     {
-      title: "Open WebUI",
-      value: "webui.open",
-      onSelect: () => {
-        open(sdk.url).catch(() => {})
-        dialog.clear()
-      },
-      category: "System",
-    },
-    {
       title: "Exit the app",
       value: "app.exit",
       slash: {

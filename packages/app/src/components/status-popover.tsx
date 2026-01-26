@@ -153,7 +153,7 @@ export function StatusPopover() {
               "bg-border-weak-base": server.healthy() === undefined,
             }}
           />
-          <span class="text-12-regular text-text-strong">Status</span>
+          <span class="text-12-regular text-text-strong">{language.t("status.popover.trigger")}</span>
         </div>
       }
       class="[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
@@ -166,7 +166,7 @@ export function StatusPopover() {
         style={{ "box-shadow": "var(--shadow-lg-border-base)" }}
       >
         <Tabs
-          aria-label="Server Configurations"
+          aria-label={language.t("status.popover.ariaLabel")}
           class="tabs"
           data-component="tabs"
           data-active="servers"
@@ -189,16 +189,20 @@ export function StatusPopover() {
             }}
           >
             <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
-              {serverCount() > 0 ? `${serverCount()} ` : ""}Servers
+              {serverCount() > 0 ? `${serverCount()} ` : ""}
+              {language.t("status.popover.tab.servers")}
             </Tabs.Trigger>
             <Tabs.Trigger value="mcp" data-slot="tab" class="text-12-regular">
-              {mcpConnected() > 0 ? `${mcpConnected()} ` : ""}MCP
+              {mcpConnected() > 0 ? `${mcpConnected()} ` : ""}
+              {language.t("status.popover.tab.mcp")}
             </Tabs.Trigger>
             <Tabs.Trigger value="lsp" data-slot="tab" class="text-12-regular">
-              {lspCount() > 0 ? `${lspCount()} ` : ""}LSP
+              {lspCount() > 0 ? `${lspCount()} ` : ""}
+              {language.t("status.popover.tab.lsp")}
             </Tabs.Trigger>
             <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
-              {pluginCount() > 0 ? `${pluginCount()} ` : ""}Plugins
+              {pluginCount() > 0 ? `${pluginCount()} ` : ""}
+              {language.t("status.popover.tab.plugins")}
             </Tabs.Trigger>
           </Tabs.List>
 
@@ -274,7 +278,7 @@ export function StatusPopover() {
                           </Show>
                           <Show when={isDefault()}>
                             <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
-                              Default
+                              {language.t("common.default")}
                             </span>
                           </Show>
                           <div class="flex-1" />
@@ -292,7 +296,7 @@ export function StatusPopover() {
                   class="mt-3 self-start h-8 px-3 py-1.5"
                   onClick={() => dialog.show(() => <DialogSelectServer />)}
                 >
-                  Manage servers
+                  {language.t("status.popover.action.manageServers")}
                 </Button>
               </div>
             </div>
@@ -304,7 +308,9 @@ export function StatusPopover() {
                 <Show
                   when={mcpItems().length > 0}
                   fallback={
-                    <div class="text-14-regular text-text-base text-center my-auto">No MCP servers configured</div>
+                    <div class="text-14-regular text-text-base text-center my-auto">
+                      {language.t("dialog.mcp.empty")}
+                    </div>
                   }
                 >
                   <For each={mcpItems()}>
@@ -351,7 +357,7 @@ export function StatusPopover() {
                   when={lspItems().length > 0}
                   fallback={
                     <div class="text-14-regular text-text-base text-center my-auto">
-                      LSPs auto-detected from file types
+                      {language.t("dialog.lsp.empty")}
                     </div>
                   }
                 >
@@ -381,8 +387,19 @@ export function StatusPopover() {
                   when={plugins().length > 0}
                   fallback={
                     <div class="text-14-regular text-text-base text-center my-auto">
-                      Plugins configured in{" "}
-                      <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm text-text-base">opencode.json</code>
+                      {(() => {
+                        const value = language.t("dialog.plugins.empty")
+                        const file = "opencode.json"
+                        const parts = value.split(file)
+                        if (parts.length === 1) return value
+                        return (
+                          <>
+                            {parts[0]}
+                            <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm text-text-base">{file}</code>
+                            {parts.slice(1).join(file)}
+                          </>
+                        )
+                      })()}
                     </div>
                   }
                 >
