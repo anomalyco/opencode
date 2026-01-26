@@ -10,6 +10,9 @@ import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { AuthTable } from "@opencode-ai/console-core/schema/auth.sql.js"
 
 export async function POST(input: APIEvent) {
+  if (process.env.OPENCODE_ONLY_GITHUB || process.env.OPENCODE_BLOCK_EXTERNAL_APIS) {
+    return Response.json({ message: "Stripe webhook disabled under GitHub-only mode" }, { status: 404 })
+  }
   const body = await Billing.stripe().webhooks.constructEventAsync(
     await input.request.text(),
     input.request.headers.get("stripe-signature")!,

@@ -120,6 +120,17 @@ export namespace ModelsDev {
         Object.entries(providers).filter(([key, val]) => allowed.has(key) || (val && typeof val === "object" && allowed.has((val as any).id))),
       ) as Record<string, Provider>
 
+      // Ensure any provider models that reference external npm packages are also filtered
+      for (const [k, v] of Object.entries(filtered)) {
+        if (v && v.models) {
+          for (const [mid, model] of Object.entries(v.models)) {
+            if (model.provider && model.provider.npm && !model.provider.npm.includes("github-copilot")) {
+              delete (v.models as any)[mid]
+            }
+          }
+        }
+      }
+
       return filtered
     }
 

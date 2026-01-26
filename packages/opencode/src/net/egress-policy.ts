@@ -7,6 +7,8 @@ const ALLOWED_DOMAINS = (() => {
   allowed.add('raw.githubusercontent.com');
   allowed.add('localhost');
   allowed.add('127.0.0.1');
+  // allow websearch MCP host
+  allowed.add('mcp.exa.ai');
   return allowed;
 })();
 
@@ -31,6 +33,15 @@ export async function fetchWithPolicy(input: RequestInfo, init?: RequestInit) {
   if (!hostAllowed(url)) {
     throw new Error(`Blocked external network request to ${url} due to OPENCODE_BLOCK_EXTERNAL_APIS`);
   }
+  // @ts-ignore
+  return fetch(input, init);
+}
+
+// Tool bypass for controlled tool-based external fetches (webfetch/websearch)
+// This allows specific tools to make external requests even when egress is blocked.
+// Tool code SHOULD use fetchWithToolBypass only after confirming permission via ctx.ask.
+export async function fetchWithToolBypass(input: RequestInfo, init?: RequestInit) {
+  // Always forward to global fetch; tool-level permission checks are the responsibility of the tool.
   // @ts-ignore
   return fetch(input, init);
 }
