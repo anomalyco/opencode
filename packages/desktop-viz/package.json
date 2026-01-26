@@ -10,6 +10,9 @@
     "@opencode-ai/ui": "workspace:*",
     "@opencode-ai/app": "workspace:*"
   },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "devDependencies": {
     "typescript": "catalog:",
     "vite": "catalog:",
