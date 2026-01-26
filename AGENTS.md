@@ -10,8 +10,9 @@
 - Avoid using the `any` type
 - Prefer single word variable names where possible
 - Use Bun APIs when possible, like `Bun.file()`
+- Rely on type inference when possible; avoid explicit type annotations or interfaces unless necessary for exports or clarity
 
-# Avoid let statements
+### Avoid let statements
 
 We don't like `let` statements, especially combined with if/else statements.
 Prefer `const`.
@@ -31,7 +32,7 @@ if (condition) foo = 1
 else foo = 2
 ```
 
-# Avoid else statements
+### Avoid else statements
 
 Prefer early returns or using an `iife` to avoid else statements.
 
@@ -53,7 +54,7 @@ function foo() {
 }
 ```
 
-# Prefer single word naming
+### Prefer single word naming
 
 Try your best to find a single word name for your variables, functions, etc.
 Only use multiple words if you cannot.
@@ -73,3 +74,8 @@ const fooBar = 1
 const barBaz = 2
 const bazFoo = 3
 ```
+
+## Testing
+
+You MUST avoid using `mocks` as much as possible.
+Tests MUST test actual implementation, do not duplicate logic into a test.
