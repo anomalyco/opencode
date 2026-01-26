@@ -409,7 +409,7 @@ export namespace MCP {
       const [cmd, ...args] = mcp.command
       const cwd = Instance.directory
       const transport = new StdioClientTransport({
-        stderr: "ignore",
+        stderr: "pipe",
         command: cmd,
         args,
         cwd,
@@ -418,6 +418,9 @@ export namespace MCP {
           ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
         },
+      })
+      transport.stderr?.on("data", (chunk: Buffer) => {
+        log.info(`mcp stderr: ${chunk.toString()}`, { key })
       })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
@@ -795,6 +798,11 @@ export namespace MCP {
     // The SDK has already added the state parameter to the authorization URL
     // We just need to open the browser
     log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
+
+    // Register the callback BEFORE opening the browser to avoid race condition
+    // when the IdP has an active SSO session and redirects immediately
+    const callbackPromise = McpOAuthCallback.waitForCallback(oauthState)
+
     try {
       const subprocess = await open(authorizationUrl)
       // The open package spawns a detached process and returns immediately.
@@ -822,8 +830,8 @@ export namespace MCP {
       Bus.publish(BrowserOpenFailed, { mcpName, url: authorizationUrl })
     }
 
-    // Wait for callback using the OAuth state parameter
-    const code = await McpOAuthCallback.waitForCallback(oauthState)
+    // Wait for callback using the already-registered promise
+    const code = await callbackPromise
 
     // Validate and clear the state
     const storedState = await McpAuth.getOAuthState(mcpName)
