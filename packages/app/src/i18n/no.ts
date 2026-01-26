@@ -683,7 +683,7 @@ export const dict = {
 
   "session.delete.failed.title": "Kunne ikke slette sesjon",
   "session.delete.title": "Slett sesjon",
-  "session.delete.confirm": "Slette sesjonen \"{{name}}\"?",
+  "session.delete.confirm": 'Slette sesjonen "{{name}}"?',
   "session.delete.button": "Slett sesjon",
   "workspace.new": "Nytt arbeidsområde",
   "workspace.type.local": "lokal",

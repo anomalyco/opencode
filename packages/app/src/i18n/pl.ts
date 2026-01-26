@@ -281,7 +281,8 @@ export const dict = {
   "dialog.project.edit.color.select": "Wybierz kolor {{color}}",
 
   "dialog.project.edit.worktree.startup": "Skrypt uruchamiania przestrzeni roboczej",
-  "dialog.project.edit.worktree.startup.description": "Uruchamiany po utworzeniu nowej przestrzeni roboczej (drzewa roboczego).",
+  "dialog.project.edit.worktree.startup.description":
+    "Uruchamiany po utworzeniu nowej przestrzeni roboczej (drzewa roboczego).",
   "dialog.project.edit.worktree.startup.placeholder": "np. bun install",
   "context.breakdown.title": "Podział kontekstu",
   "context.breakdown.note": 'Przybliżony podział tokenów wejściowych. "Inne" obejmuje definicje narzędzi i narzut.',

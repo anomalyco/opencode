@@ -481,7 +481,8 @@ export const dict = {
   "terminal.close": "터미널 닫기",
 
   "terminal.connectionLost.title": "연결 끊김",
-  "terminal.connectionLost.description": "터미널 연결이 중단되었습니다. 서버가 재시작하면 이런 일이 발생할 수 있습니다.",
+  "terminal.connectionLost.description":
+    "터미널 연결이 중단되었습니다. 서버가 재시작하면 이런 일이 발생할 수 있습니다.",
   "common.closeTab": "탭 닫기",
   "common.dismiss": "닫기",
   "common.requestFailed": "요청 실패",

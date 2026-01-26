@@ -280,7 +280,8 @@ export const dict = {
   "dialog.project.edit.color.select": "{{color}}の色を選択",
 
   "dialog.project.edit.worktree.startup": "ワークスペース起動スクリプト",
-  "dialog.project.edit.worktree.startup.description": "新しいワークスペース (ワークツリー) を作成した後に実行されます。",
+  "dialog.project.edit.worktree.startup.description":
+    "新しいワークスペース (ワークツリー) を作成した後に実行されます。",
   "dialog.project.edit.worktree.startup.placeholder": "例: bun install",
   "context.breakdown.title": "コンテキストの内訳",
   "context.breakdown.note": '入力トークンのおおよその内訳です。"その他"にはツールの定義やオーバーヘッドが含まれます。',
@@ -479,7 +480,8 @@ export const dict = {
   "terminal.close": "ターミナルを閉じる",
 
   "terminal.connectionLost.title": "接続が失われました",
-  "terminal.connectionLost.description": "ターミナルの接続が中断されました。これはサーバーが再起動したときに発生することがあります。",
+  "terminal.connectionLost.description":
+    "ターミナルの接続が中断されました。これはサーバーが再起動したときに発生することがあります。",
   "common.closeTab": "タブを閉じる",
   "common.dismiss": "閉じる",
   "common.requestFailed": "リクエスト失敗",

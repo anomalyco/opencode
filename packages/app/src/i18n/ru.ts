@@ -281,7 +281,8 @@ export const dict = {
   "dialog.project.edit.color.select": "Выбрать цвет {{color}}",
 
   "dialog.project.edit.worktree.startup": "Скрипт запуска рабочего пространства",
-  "dialog.project.edit.worktree.startup.description": "Запускается после создания нового рабочего пространства (worktree).",
+  "dialog.project.edit.worktree.startup.description":
+    "Запускается после создания нового рабочего пространства (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "например, bun install",
   "context.breakdown.title": "Разбивка контекста",
   "context.breakdown.note":
