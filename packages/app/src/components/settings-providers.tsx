@@ -84,13 +84,20 @@ export const SettingsProviders: Component = () => {
             >
               <For each={connected()}>
                 {(item) => (
-                  <div class="flex items-center justify-between gap-4 h-14 border-b border-border-weak-base last:border-none">
+                  <div class="group flex items-center justify-between gap-4 h-14 border-b border-border-weak-base last:border-none">
                     <div class="flex items-center gap-3 min-w-0">
                       <ProviderIcon id={item.id as IconName} class="size-5 shrink-0 icon-strong-base" />
                       <span class="text-14-regular text-text-strong truncate">{item.name}</span>
                       <Tag>{type(item)}</Tag>
                     </div>
-                    <Show when={canDisconnect(item)}>
+                    <Show
+                      when={canDisconnect(item)}
+                      fallback={
+                        <span class="text-14-regular text-text-base opacity-0 group-hover:opacity-100 transition-opacity duration-200 pr-3">
+                          Connected from your environment variables
+                        </span>
+                      }
+                    >
                       <Button size="large" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
                         {language.t("common.disconnect")}
                       </Button>
