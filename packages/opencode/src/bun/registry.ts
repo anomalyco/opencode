@@ -4,7 +4,6 @@ import { Log } from "../util/log"
 export namespace PackageRegistry {
   const log = Log.create({ service: "bun" })
 
-  const EXACT_VERSION = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
 
   function which() {
     return process.execPath
