@@ -218,7 +218,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
-      const [childStore] = globalSync.child(project.worktree)
+      const [childStore] = globalSync.child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
       const metadata = projectID
         ? globalSync.data.project.find((x) => x.id === projectID)

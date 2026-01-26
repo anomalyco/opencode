@@ -26,6 +26,14 @@ export function SessionContextTab(props: SessionContextTabProps) {
   const sync = useSync()
   const language = useLanguage()
 
+  const usd = createMemo(
+    () =>
+      new Intl.NumberFormat(language.locale(), {
+        style: "currency",
+        currency: "USD",
+      }),
+  )
+
   const ctx = createMemo(() => {
     const last = findLast(props.messages(), (x) => {
       if (x.role !== "assistant") return false
@@ -62,12 +70,8 @@ export function SessionContextTab(props: SessionContextTabProps) {
   })
 
   const cost = createMemo(() => {
-    const locale = language.locale()
     const total = props.messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency: "USD",
-    }).format(total)
+    return usd().format(total)
   })
 
   const counts = createMemo(() => {
