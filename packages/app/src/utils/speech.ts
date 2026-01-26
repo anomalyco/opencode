@@ -1,4 +1,5 @@
-import { createSignal, onCleanup } from "solid-js"
+import { onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
 
 // Minimal types to avoid relying on non-standard DOM typings
 type RecognitionResult = {
@@ -59,9 +60,15 @@ export function createSpeechRecognition(opts?: {
     typeof window !== "undefined" &&
     Boolean((window as any).webkitSpeechRecognition || (window as any).SpeechRecognition)
 
-  const [isRecording, setIsRecording] = createSignal(false)
-  const [committed, setCommitted] = createSignal("")
-  const [interim, setInterim] = createSignal("")
+  const [store, setStore] = createStore({
+    isRecording: false,
+    committed: "",
+    interim: "",
+  })
+
+  const isRecording = () => store.isRecording
+  const committed = () => store.committed
+  const interim = () => store.interim
 
   let recognition: Recognition | undefined
   let shouldContinue = false
@@ -82,7 +89,7 @@ export function createSpeechRecognition(opts?: {
     const nextCommitted = appendSegment(committedText, segment)
     if (nextCommitted === committedText) return
     committedText = nextCommitted
-    setCommitted(committedText)
+    setStore("committed", committedText)
     if (opts?.onFinal) opts.onFinal(segment.trim())
   }
 
@@ -98,7 +105,7 @@ export function createSpeechRecognition(opts?: {
     pendingHypothesis = ""
     lastInterimSuffix = ""
     shrinkCandidate = undefined
-    setInterim("")
+    setStore("interim", "")
     if (opts?.onInterim) opts.onInterim("")
   }
 
@@ -107,7 +114,7 @@ export function createSpeechRecognition(opts?: {
     pendingHypothesis = hypothesis
     lastInterimSuffix = suffix
     shrinkCandidate = undefined
-    setInterim(suffix)
+    setStore("interim", suffix)
     if (opts?.onInterim) {
       opts.onInterim(suffix ? appendSegment(committedText, suffix) : "")
     }
@@ -122,7 +129,7 @@ export function createSpeechRecognition(opts?: {
       pendingHypothesis = ""
       lastInterimSuffix = ""
       shrinkCandidate = undefined
-      setInterim("")
+      setStore("interim", "")
       if (opts?.onInterim) opts.onInterim("")
     }, COMMIT_DELAY)
   }
@@ -162,7 +169,7 @@ export function createSpeechRecognition(opts?: {
         pendingHypothesis = ""
         lastInterimSuffix = ""
         shrinkCandidate = undefined
-        setInterim("")
+        setStore("interim", "")
         if (opts?.onInterim) opts.onInterim("")
         return
       }
@@ -211,7 +218,7 @@ export function createSpeechRecognition(opts?: {
       lastInterimSuffix = ""
       shrinkCandidate = undefined
       if (e.error === "no-speech" && shouldContinue) {
-        setInterim("")
+        setStore("interim", "")
         if (opts?.onInterim) opts.onInterim("")
         setTimeout(() => {
           try {
@@ -221,7 +228,7 @@ export function createSpeechRecognition(opts?: {
         return
       }
       shouldContinue = false
-      setIsRecording(false)
+      setStore("isRecording", false)
     }
 
     recognition.onstart = () => {
@@ -230,16 +237,16 @@ export function createSpeechRecognition(opts?: {
       cancelPendingCommit()
       lastInterimSuffix = ""
       shrinkCandidate = undefined
-      setInterim("")
+      setStore("interim", "")
       if (opts?.onInterim) opts.onInterim("")
-      setIsRecording(true)
+      setStore("isRecording", true)
     }
 
     recognition.onend = () => {
       cancelPendingCommit()
       lastInterimSuffix = ""
       shrinkCandidate = undefined
-      setIsRecording(false)
+      setStore("isRecording", false)
       if (shouldContinue) {
         setTimeout(() => {
           try {
@@ -258,7 +265,7 @@ export function createSpeechRecognition(opts?: {
     cancelPendingCommit()
     lastInterimSuffix = ""
     shrinkCandidate = undefined
-    setInterim("")
+    setStore("interim", "")
     try {
       recognition.start()
     } catch {}
@@ -271,7 +278,7 @@ export function createSpeechRecognition(opts?: {
     cancelPendingCommit()
     lastInterimSuffix = ""
     shrinkCandidate = undefined
-    setInterim("")
+    setStore("interim", "")
     if (opts?.onInterim) opts.onInterim("")
     try {
       recognition.stop()
@@ -284,7 +291,7 @@ export function createSpeechRecognition(opts?: {
     cancelPendingCommit()
     lastInterimSuffix = ""
     shrinkCandidate = undefined
-    setInterim("")
+    setStore("interim", "")
     if (opts?.onInterim) opts.onInterim("")
     try {
       recognition?.stop()

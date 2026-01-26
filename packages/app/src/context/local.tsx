@@ -1,14 +1,12 @@
 import { createStore, produce, reconcile } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
-import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useProviders } from "@/hooks/use-providers"
-import { DateTime } from "luxon"
-import { Persist, persisted } from "@/utils/persist"
+import { useModels } from "@/context/models"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
 
@@ -112,75 +110,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })()
 
     const model = (() => {
-      const [store, setStore, _, modelReady] = persisted(
-        Persist.global("model", ["model.v1"]),
-        createStore<{
-          user: (ModelKey & { visibility: "show" | "hide"; favorite?: boolean })[]
-          recent: ModelKey[]
-          variant?: Record<string, string | undefined>
-        }>({
-          user: [],
-          recent: [],
-          variant: {},
-        }),
-      )
+      const models = useModels()
 
       const [ephemeral, setEphemeral] = createStore<{
         model: Record<string, ModelKey | undefined>
       }>({
         model: {},
       })
-
-      const available = createMemo(() =>
-        providers.connected().flatMap((p) =>
-          Object.values(p.models).map((m) => ({
-            ...m,
-            provider: p,
-          })),
-        ),
-      )
-
-      const latest = createMemo(() =>
-        pipe(
-          available(),
-          filter((x) => Math.abs(DateTime.fromISO(x.release_date).diffNow().as("months")) < 6),
-          groupBy((x) => x.provider.id),
-          mapValues((models) =>
-            pipe(
-              models,
-              groupBy((x) => x.family),
-              values(),
-              (groups) =>
-                groups.flatMap((g) => {
-                  const first = firstBy(g, [(x) => x.release_date, "desc"])
-                  return first ? [{ modelID: first.id, providerID: first.provider.id }] : []
-                }),
-            ),
-          ),
-          values(),
-          flat(),
-        ),
-      )
-
-      const latestSet = createMemo(() => new Set(latest().map((x) => `${x.providerID}:${x.modelID}`)))
-
-      const userVisibilityMap = createMemo(() => {
-        const map = new Map<string, "show" | "hide">()
-        for (const item of store.user) {
-          map.set(`${item.providerID}:${item.modelID}`, item.visibility)
-        }
-        return map
-      })
-
-      const list = createMemo(() =>
-        available().map((m) => ({
-          ...m,
-          name: m.name.replace("(latest)", "").trim(),
-          latest: m.name.includes("(latest)"),
-        })),
-      )
-
-      const find = (key: ModelKey) => list().find((m) => m.id === key?.modelID && m.provider.id === key.providerID)
 
       const fallbackModel = createMemo<ModelKey | undefined>(() => {
         if (sync.data.config.model) {
@@ -193,7 +129,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        for (const item of store.recent) {
+        for (const item of models.recent.list()) {
           if (isModelValid(item)) {
             return item
           }
@@ -225,10 +161,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           fallbackModel,
         )
         if (!key) return undefined
-        return find(key)
+        return models.find(key)
       })
 
-      const recent = createMemo(() => store.recent.map(find).filter(Boolean))
+      const recent = createMemo(() => models.recent.list().map(models.find).filter(Boolean))
 
       const cycle = (direction: 1 | -1) => {
         const recentList = recent()
@@ -253,54 +189,32 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
       }
 
-      function updateVisibility(model: ModelKey, visibility: "show" | "hide") {
-        const index = store.user.findIndex((x) => x.modelID === model.modelID && x.providerID === model.providerID)
-        if (index >= 0) {
-          setStore("user", index, { visibility })
-        } else {
-          setStore("user", store.user.length, { ...model, visibility })
-        }
-      }
-
       return {
-        ready: modelReady,
+        ready: models.ready,
         current,
         recent,
-        list,
+        list: models.list,
         cycle,
         set(model: ModelKey | undefined, options?: { recent?: boolean }) {
           batch(() => {
             const currentAgent = agent.current()
             const next = model ?? fallbackModel()
             if (currentAgent) setEphemeral("model", currentAgent.name, next)
-            if (model) updateVisibility(model, "show")
-            if (options?.recent && model) {
-              const uniq = uniqueBy([model, ...store.recent], (x) => x.providerID + x.modelID)
-              if (uniq.length > 5) uniq.pop()
-              setStore("recent", uniq)
-            }
+            if (model) models.setVisibility(model, true)
+            if (options?.recent && model) models.recent.push(model)
           })
         },
         visible(model: ModelKey) {
-          const key = `${model.providerID}:${model.modelID}`
-          const visibility = userVisibilityMap().get(key)
-          if (visibility === "hide") return false
-          if (visibility === "show") return true
-          if (latestSet().has(key)) return true
-          // For models without valid release_date (e.g. custom models), show by default
-          const m = find(model)
-          if (!m?.release_date || !DateTime.fromISO(m.release_date).isValid) return true
-          return false
+          return models.visible(model)
         },
         setVisibility(model: ModelKey, visible: boolean) {
-          updateVisibility(model, visible ? "show" : "hide")
+          models.setVisibility(model, visible)
         },
         variant: {
           current() {
             const m = current()
             if (!m) return undefined
-            const key = `${m.provider.id}/${m.id}`
-            return store.variant?.[key]
+            return models.variant.get({ providerID: m.provider.id, modelID: m.id })
           },
           list() {
             const m = current()
@@ -311,12 +225,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           set(value: string | undefined) {
             const m = current()
             if (!m) return
-            const key = `${m.provider.id}/${m.id}`
-            if (!store.variant) {
-              setStore("variant", { [key]: value })
-            } else {
-              setStore("variant", key, value)
-            }
+            models.variant.set({ providerID: m.provider.id, modelID: m.id }, value)
           },
           cycle() {
             const variants = this.list()
