@@ -1,6 +1,7 @@
 import { useFile } from "@/context/file"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import {
   createEffect,
@@ -174,7 +175,9 @@ export default function FileTree(props: {
                   <Collapsible.Trigger>
                     <Wrapper>
                       <Node node={node}>
-                        <Collapsible.Arrow class="text-icon-weak ml-1" />
+                        <div class="ml-1 size-4 flex items-center justify-center text-icon-weak">
+                          <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
+                        </div>
                         <FileIcon node={node} expanded={expanded()} class="text-icon-weak -ml-1 size-4" />
                       </Node>
                     </Wrapper>
