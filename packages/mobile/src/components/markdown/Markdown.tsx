@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { View, Text, useColorScheme, Platform, type ViewStyle, type TextStyle } from "react-native"
-import RNMarkdown, { Renderer, type RendererInterface } from "react-native-marked"
+import RNMarkdown, { Renderer } from "react-native-marked"
 import { CodeBlock } from "./CodeBlock"
 
 class CustomRenderer extends Renderer {
@@ -12,7 +12,6 @@ class CustomRenderer extends Renderer {
     )
   }
 
-  // @ts-expect-error React 18/19 ReactNode type mismatch with library
   codespan(text: string, styles?: TextStyle): ReactNode {
     return (
       <Text selectable key={this.getKey()} style={[styles, { fontStyle: "normal", fontWeight: "normal" }]}>
@@ -105,7 +104,7 @@ export function Markdown({ children }: Props) {
   return (
     <RNMarkdown
       value={children}
-      renderer={renderer as any}
+      renderer={renderer}
       styles={theme}
       flatListProps={{
         scrollEnabled: false,
