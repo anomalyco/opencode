@@ -46,7 +46,7 @@
     &:hover:not(:disabled) {
       background-color: var(--surface-raised-base-hover);
     }
-    &:focus:not(:disabled) {
+    &:focus-visible:not(:disabled) {
       background-color: var(--surface-raised-base-hover);
     }
     &:active:not(:disabled) {
@@ -148,7 +148,7 @@
       padding: 0 12px 0 8px;
     }
 
-    gap: 8px;
+    gap: 4px;
 
     /* text-14-medium */
     font-family: var(--font-family-sans);
