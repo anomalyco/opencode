@@ -90,6 +90,8 @@ export const dict = {
   "dialog.provider.group.other": "Andere",
   "dialog.provider.tag.recommended": "Empfohlen",
   "dialog.provider.anthropic.note": "Mit Claude Pro/Max oder API-Schlüssel verbinden",
+  "dialog.provider.openai.note": "Mit ChatGPT Pro/Plus oder API-Schlüssel verbinden",
+  "dialog.provider.copilot.note": "Mit Copilot oder API-Schlüssel verbinden",
 
   "dialog.model.select.title": "Modell auswählen",
   "dialog.model.search.placeholder": "Modelle durchsuchen",
@@ -100,7 +102,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Kostenlose Modelle von OpenCode",
   "dialog.model.unpaid.addMore.title": "Weitere Modelle von beliebten Anbietern hinzufügen",
 
-  "dialog.provider.viewAll": "Alle Anbieter anzeigen",
+  "dialog.provider.viewAll": "Mehr Anbieter anzeigen",
 
   "provider.connect.title": "{{provider}} verbinden",
   "provider.connect.title.anthropicProMax": "Mit Claude Pro/Max anmelden",
@@ -208,6 +210,9 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} von {{total}} aktiviert",
   "dialog.mcp.empty": "Keine MCPs konfiguriert",
 
+  "dialog.lsp.empty": "LSPs automatisch nach Dateityp erkannt",
+  "dialog.plugins.empty": "In opencode.json konfigurierte Plugins",
+
   "mcp.status.connected": "verbunden",
   "mcp.status.failed": "fehlgeschlagen",
   "mcp.status.needs_auth": "benötigt Authentifizierung",
@@ -227,7 +232,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "Verbindung zum Server fehlgeschlagen",
   "dialog.server.add.checking": "Prüfen...",
-  "dialog.server.add.button": "Hinzufügen",
+  "dialog.server.add.button": "Server hinzufügen",
   "dialog.server.default.title": "Standardserver",
   "dialog.server.default.description":
     "Beim App-Start mit diesem Server verbinden, anstatt einen lokalen Server zu starten. Erfordert Neustart.",
@@ -235,6 +240,13 @@ export const dict = {
   "dialog.server.default.set": "Aktuellen Server als Standard setzen",
   "dialog.server.default.clear": "Löschen",
   "dialog.server.action.remove": "Server entfernen",
+
+  "dialog.server.menu.edit": "Bearbeiten",
+  "dialog.server.menu.default": "Als Standard festlegen",
+  "dialog.server.menu.defaultRemove": "Standard entfernen",
+  "dialog.server.menu.delete": "Löschen",
+  "dialog.server.current": "Aktueller Server",
+  "dialog.server.status.default": "Standard",
 
   "dialog.project.edit.title": "Projekt bearbeiten",
   "dialog.project.edit.name": "Name",
@@ -280,20 +292,20 @@ export const dict = {
   "context.usage.clickToView": "Klicken, um Kontext anzuzeigen",
   "context.usage.view": "Kontextnutzung anzeigen",
 
-  "language.en": "Englisch",
-  "language.zh": "Chinesisch (Vereinfacht)",
-  "language.zht": "Chinesisch (Traditionell)",
-  "language.ko": "Koreanisch",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
   "language.de": "Deutsch",
-  "language.es": "Spanisch",
-  "language.fr": "Französisch",
-  "language.ja": "Japanisch",
-  "language.da": "Dänisch",
-  "language.ru": "Russisch",
-  "language.pl": "Polnisch",
-  "language.ar": "Arabisch",
-  "language.no": "Norwegisch",
-  "language.br": "Portugiesisch (Brasilien)",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Sprache",
   "toast.language.description": "Zu {{language}} gewechselt",
@@ -403,6 +415,14 @@ export const dict = {
 
   "session.header.search.placeholder": "{{project}} durchsuchen",
   "session.header.searchFiles": "Dateien suchen",
+
+  "status.popover.trigger": "Status",
+  "status.popover.ariaLabel": "Serverkonfigurationen",
+  "status.popover.tab.servers": "Server",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Plugins",
+  "status.popover.action.manageServers": "Server verwalten",
 
   "session.share.popover.title": "Im Web veröffentlichen",
   "session.share.popover.description.shared":

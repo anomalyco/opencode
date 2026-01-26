@@ -189,6 +189,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const params = useParams()
     const language = useLanguage()
 
+    const scope = createMemo(() => sdk.directory)
+
     const directory = createMemo(() => sync.data.path.directory)
 
     function normalize(input: string) {
@@ -232,6 +234,12 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       file: Record<string, FileState>
     }>({
       file: {},
+    })
+
+    createEffect(() => {
+      scope()
+      inflight.clear()
+      setStore("file", {})
     })
 
     const viewCache = new Map<string, ViewCacheEntry>()
@@ -284,12 +292,16 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const path = normalize(input)
       if (!path) return Promise.resolve()
 
+      const directory = scope()
+      const key = `${directory}\n${path}`
+      const client = sdk.client
+
       ensure(path)
 
       const current = store.file[path]
       if (!options?.force && current?.loaded) return Promise.resolve()
 
-      const pending = inflight.get(path)
+      const pending = inflight.get(key)
       if (pending) return pending
 
       setStore(
@@ -301,9 +313,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         }),
       )
 
-      const promise = sdk.client.file
+      const promise = client.file
         .read({ path })
         .then((x) => {
+          if (scope() !== directory) return
           setStore(
             "file",
             path,
@@ -315,6 +328,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           )
         })
         .catch((e) => {
+          if (scope() !== directory) return
           setStore(
             "file",
             path,
@@ -330,10 +344,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           })
         })
         .finally(() => {
-          inflight.delete(path)
+          inflight.delete(key)
         })
 
-      inflight.set(path, promise)
+      inflight.set(key, promise)
       return promise
     }
 

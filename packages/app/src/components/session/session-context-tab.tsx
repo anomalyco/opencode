@@ -5,6 +5,7 @@ import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
 import { useLayout } from "@/context/layout"
 import { checksum } from "@opencode-ai/util/encode"
+import { findLast } from "@opencode-ai/util/array"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
@@ -25,8 +26,16 @@ export function SessionContextTab(props: SessionContextTabProps) {
   const sync = useSync()
   const language = useLanguage()
 
+  const usd = createMemo(
+    () =>
+      new Intl.NumberFormat(language.locale(), {
+        style: "currency",
+        currency: "USD",
+      }),
+  )
+
   const ctx = createMemo(() => {
-    const last = props.messages().findLast((x) => {
+    const last = findLast(props.messages(), (x) => {
       if (x.role !== "assistant") return false
       const total = x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
       return total > 0
@@ -61,12 +70,8 @@ export function SessionContextTab(props: SessionContextTabProps) {
   })
 
   const cost = createMemo(() => {
-    const locale = language.locale()
     const total = props.messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency: "USD",
-    }).format(total)
+    return usd().format(total)
   })
 
   const counts = createMemo(() => {
@@ -81,7 +86,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
   })
 
   const systemPrompt = createMemo(() => {
-    const msg = props.visibleUserMessages().findLast((m) => !!m.system)
+    const msg = findLast(props.visibleUserMessages(), (m) => !!m.system)
     const system = msg?.system
     if (!system) return
     const trimmed = system.trim()
@@ -282,7 +287,9 @@ export function SessionContextTab(props: SessionContextTabProps) {
       }
     })
 
-    return <Code file={file()} overflow="wrap" class="select-text" />
+    return (
+      <Code file={file()} overflow="wrap" class="select-text" onRendered={() => requestAnimationFrame(restoreScroll)} />
+    )
   }
 
   function RawMessage(msgProps: { message: Message }) {
@@ -314,18 +321,12 @@ export function SessionContextTab(props: SessionContextTabProps) {
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
 
-  const restoreScroll = (retries = 0) => {
+  const restoreScroll = () => {
     const el = scroll
     if (!el) return
 
     const s = props.view()?.scroll("context")
     if (!s) return
-
-    // Wait for content to be scrollable - content may not have rendered yet
-    if (el.scrollHeight <= el.clientHeight && retries < 10) {
-      requestAnimationFrame(() => restoreScroll(retries + 1))
-      return
-    }
 
     if (el.scrollTop !== s.y) el.scrollTop = s.y
     if (el.scrollLeft !== s.x) el.scrollLeft = s.x

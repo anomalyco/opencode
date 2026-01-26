@@ -88,6 +88,8 @@ export const dict = {
   "dialog.provider.group.other": "آخر",
   "dialog.provider.tag.recommended": "موصى به",
   "dialog.provider.anthropic.note": "اتصل باستخدام Claude Pro/Max أو مفتاح API",
+  "dialog.provider.openai.note": "اتصل باستخدام ChatGPT Pro/Plus أو مفتاح API",
+  "dialog.provider.copilot.note": "اتصل باستخدام Copilot أو مفتاح API",
 
   "dialog.model.select.title": "تحديد نموذج",
   "dialog.model.search.placeholder": "البحث عن نماذج",
@@ -98,7 +100,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "نماذج مجانية مقدمة من OpenCode",
   "dialog.model.unpaid.addMore.title": "إضافة المزيد من النماذج من موفرين مشهورين",
 
-  "dialog.provider.viewAll": "عرض جميع الموفرين",
+  "dialog.provider.viewAll": "عرض المزيد من الموفرين",
 
   "provider.connect.title": "اتصال {{provider}}",
   "provider.connect.title.anthropicProMax": "تسجيل الدخول باستخدام Claude Pro/Max",
@@ -221,6 +223,9 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} من {{total}} مفعل",
   "dialog.mcp.empty": "لم يتم تكوين MCPs",
 
+  "dialog.lsp.empty": "تم الكشف تلقائيًا عن LSPs من أنواع الملفات",
+  "dialog.plugins.empty": "الإضافات المكونة في opencode.json",
+
   "mcp.status.connected": "متصل",
   "mcp.status.failed": "فشل",
   "mcp.status.needs_auth": "يحتاج إلى مصادقة",
@@ -240,7 +245,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "تعذر الاتصال بالخادم",
   "dialog.server.add.checking": "جارٍ التحقق...",
-  "dialog.server.add.button": "إضافة",
+  "dialog.server.add.button": "إضافة خادم",
   "dialog.server.default.title": "الخادم الافتراضي",
   "dialog.server.default.description":
     "الاتصال بهذا الخادم عند بدء تشغيل التطبيق بدلاً من بدء خادم محلي. يتطلب إعادة التشغيل.",
@@ -248,6 +253,13 @@ export const dict = {
   "dialog.server.default.set": "تعيين الخادم الحالي كافتراضي",
   "dialog.server.default.clear": "مسح",
   "dialog.server.action.remove": "إزالة الخادم",
+
+  "dialog.server.menu.edit": "تعديل",
+  "dialog.server.menu.default": "تعيين كافتراضي",
+  "dialog.server.menu.defaultRemove": "إزالة الافتراضي",
+  "dialog.server.menu.delete": "حذف",
+  "dialog.server.current": "الخادم الحالي",
+  "dialog.server.status.default": "افتراضي",
 
   "dialog.project.edit.title": "تحرير المشروع",
   "dialog.project.edit.name": "الاسم",
@@ -292,20 +304,20 @@ export const dict = {
   "context.usage.clickToView": "انقر لعرض السياق",
   "context.usage.view": "عرض استخدام السياق",
 
-  "language.en": "الإنجليزية",
-  "language.zh": "الصينية (المبسطة)",
-  "language.zht": "الصينية (التقليدية)",
-  "language.ko": "الكورية",
-  "language.de": "الألمانية",
-  "language.es": "الإسبانية",
-  "language.fr": "الفرنسية",
-  "language.ja": "اليابانية",
-  "language.da": "الدانماركية",
-  "language.ru": "الروسية",
-  "language.pl": "البولندية",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
   "language.ar": "العربية",
-  "language.no": "النرويجية",
-  "language.br": "البرتغالية (البرازيل)",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "لغة",
   "toast.language.description": "تم التبديل إلى {{language}}",
@@ -413,6 +425,14 @@ export const dict = {
 
   "session.header.search.placeholder": "بحث {{project}}",
   "session.header.searchFiles": "بحث عن الملفات",
+
+  "status.popover.trigger": "الحالة",
+  "status.popover.ariaLabel": "إعدادات الخوادم",
+  "status.popover.tab.servers": "الخوادم",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "الإضافات",
+  "status.popover.action.manageServers": "إدارة الخوادم",
 
   "session.share.popover.title": "نشر على الويب",
   "session.share.popover.description.shared": "هذه الجلسة عامة على الويب. يمكن لأي شخص لديه الرابط الوصول إليها.",

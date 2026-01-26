@@ -86,6 +86,8 @@ export const dict = {
   "dialog.provider.group.other": "Otro",
   "dialog.provider.tag.recommended": "Recomendado",
   "dialog.provider.anthropic.note": "Conectar con Claude Pro/Max o clave API",
+  "dialog.provider.openai.note": "Conectar con ChatGPT Pro/Plus o clave API",
+  "dialog.provider.copilot.note": "Conectar con Copilot o clave API",
 
   "dialog.model.select.title": "Seleccionar modelo",
   "dialog.model.search.placeholder": "Buscar modelos",
@@ -96,7 +98,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Modelos gratuitos proporcionados por OpenCode",
   "dialog.model.unpaid.addMore.title": "Añadir más modelos de proveedores populares",
 
-  "dialog.provider.viewAll": "Ver todos los proveedores",
+  "dialog.provider.viewAll": "Ver más proveedores",
 
   "provider.connect.title": "Conectar {{provider}}",
   "provider.connect.title.anthropicProMax": "Iniciar sesión con Claude Pro/Max",
@@ -203,6 +205,9 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} de {{total}} habilitados",
   "dialog.mcp.empty": "No hay MCPs configurados",
 
+  "dialog.lsp.empty": "LSPs detectados automáticamente por tipo de archivo",
+  "dialog.plugins.empty": "Plugins configurados en opencode.json",
+
   "mcp.status.connected": "conectado",
   "mcp.status.failed": "fallido",
   "mcp.status.needs_auth": "necesita auth",
@@ -222,7 +227,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "No se pudo conectar al servidor",
   "dialog.server.add.checking": "Comprobando...",
-  "dialog.server.add.button": "Añadir",
+  "dialog.server.add.button": "Añadir servidor",
   "dialog.server.default.title": "Servidor predeterminado",
   "dialog.server.default.description":
     "Conectar a este servidor al iniciar la app en lugar de iniciar un servidor local. Requiere reinicio.",
@@ -230,6 +235,13 @@ export const dict = {
   "dialog.server.default.set": "Establecer servidor actual como predeterminado",
   "dialog.server.default.clear": "Limpiar",
   "dialog.server.action.remove": "Eliminar servidor",
+
+  "dialog.server.menu.edit": "Editar",
+  "dialog.server.menu.default": "Establecer como predeterminado",
+  "dialog.server.menu.defaultRemove": "Quitar predeterminado",
+  "dialog.server.menu.delete": "Eliminar",
+  "dialog.server.current": "Servidor actual",
+  "dialog.server.status.default": "Predeterminado",
 
   "dialog.project.edit.title": "Editar proyecto",
   "dialog.project.edit.name": "Nombre",
@@ -275,20 +287,20 @@ export const dict = {
   "context.usage.clickToView": "Haz clic para ver contexto",
   "context.usage.view": "Ver uso del contexto",
 
-  "language.en": "Inglés",
-  "language.zh": "Chino (simplificado)",
-  "language.zht": "Chino (tradicional)",
-  "language.ko": "Coreano",
-  "language.de": "Alemán",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
   "language.es": "Español",
-  "language.fr": "Francés",
-  "language.ja": "Japonés",
-  "language.da": "Danés",
-  "language.ru": "Ruso",
-  "language.pl": "Polaco",
-  "language.ar": "Árabe",
-  "language.no": "Noruego",
-  "language.br": "Portugués (Brasil)",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Idioma",
   "toast.language.description": "Cambiado a {{language}}",
@@ -397,6 +409,14 @@ export const dict = {
 
   "session.header.search.placeholder": "Buscar {{project}}",
   "session.header.searchFiles": "Buscar archivos",
+
+  "status.popover.trigger": "Estado",
+  "status.popover.ariaLabel": "Configuraciones del servidor",
+  "status.popover.tab.servers": "Servidores",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Plugins",
+  "status.popover.action.manageServers": "Administrar servidores",
 
   "session.share.popover.title": "Publicar en web",
   "session.share.popover.description.shared":

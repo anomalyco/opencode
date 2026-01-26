@@ -1,5 +1,5 @@
 import { createStore, produce, reconcile } from "solid-js/store"
-import { batch, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -126,7 +126,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       )
 
       const [ephemeral, setEphemeral] = createStore<{
-        model: Record<string, ModelKey>
+        model: Record<string, ModelKey | undefined>
       }>({
         model: {},
       })
@@ -182,7 +182,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const find = (key: ModelKey) => list().find((m) => m.id === key?.modelID && m.provider.id === key.providerID)
 
-      const fallbackModel = createMemo(() => {
+      const fallbackModel = createMemo<ModelKey | undefined>(() => {
         if (sync.data.config.model) {
           const [providerID, modelID] = sync.data.config.model.split("/")
           if (isModelValid({ providerID, modelID })) {
@@ -199,16 +199,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
+        const defaults = providers.default()
         for (const p of providers.connected()) {
-          if (p.id in providers.default()) {
-            return {
-              providerID: p.id,
-              modelID: providers.default()[p.id],
-            }
+          const configured = defaults[p.id]
+          if (configured) {
+            const key = { providerID: p.id, modelID: configured }
+            if (isModelValid(key)) return key
           }
+
+          const first = Object.values(p.models)[0]
+          if (!first) continue
+          const key = { providerID: p.id, modelID: first.id }
+          if (isModelValid(key)) return key
         }
 
-        throw new Error("No default model found")
+        return undefined
       })
 
       const current = createMemo(() => {
@@ -266,7 +271,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         set(model: ModelKey | undefined, options?: { recent?: boolean }) {
           batch(() => {
             const currentAgent = agent.current()
-            if (currentAgent) setEphemeral("model", currentAgent.name, model ?? fallbackModel())
+            const next = model ?? fallbackModel()
+            if (currentAgent) setEphemeral("model", currentAgent.name, next)
             if (model) updateVisibility(model, "show")
             if (options?.recent && model) {
               const uniq = uniqueBy([model, ...store.recent], (x) => x.providerID + x.modelID)
@@ -338,6 +344,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         node: {}, //  Object.fromEntries(sync.data.node.map((x) => [x.path, x])),
       })
 
+      const scope = createMemo(() => sdk.directory)
+      createEffect(() => {
+        scope()
+        setStore("node", {})
+      })
+
       // const changeset = createMemo(() => new Set(sync.data.changes.map((f) => f.path)))
       // const changes = createMemo(() => Array.from(changeset()).sort((a, b) => a.localeCompare(b)))
 
@@ -394,10 +406,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const relative = (path: string) => path.replace(sync.data.path.directory + "/", "")
 
       const load = async (path: string) => {
+        const directory = scope()
+        const client = sdk.client
         const relativePath = relative(path)
-        await sdk.client.file
+        await client.file
           .read({ path: relativePath })
           .then((x) => {
+            if (scope() !== directory) return
             if (!store.node[relativePath]) return
             setStore(
               "node",
@@ -409,6 +424,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             )
           })
           .catch((e) => {
+            if (scope() !== directory) return
             showToast({
               variant: "error",
               title: language.t("toast.file.loadFailed.title"),
@@ -453,9 +469,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
 
       const list = async (path: string) => {
-        return sdk.client.file
+        const directory = scope()
+        const client = sdk.client
+        return client.file
           .list({ path: path + "/" })
           .then((x) => {
+            if (scope() !== directory) return
             setStore(
               "node",
               produce((draft) => {
