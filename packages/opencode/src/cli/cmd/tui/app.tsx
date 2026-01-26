@@ -570,6 +570,16 @@ function App() {
         dialog.clear()
       },
     },
+    {
+      title: kv.get("diff_style", "auto") === "auto" ? "Use unified diff style" : "Use automatic diff style",
+      value: "tui.diff_style.toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        const current = kv.get("diff_style", "auto")
+        kv.set("diff_style", current === "auto" ? "unified" : "auto")
+        dialog.clear()
+      },
+    },
   ])
 
   createEffect(() => {
