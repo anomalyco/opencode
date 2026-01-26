@@ -37,6 +37,7 @@ import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from ".
 
 
 import { ProviderTransform } from "./transform"
+import { packageAllowed } from "../net/egress-policy";
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -1017,7 +1018,11 @@ export namespace Provider {
 
       let installedPath: string
       if (!model.api.npm.startsWith("file://")) {
-        installedPath = await BunProc.install(model.api.npm, "latest")
+        // Prevent installing packages not allowed under OPENCODE_BLOCK_EXTERNAL_APIS
+          if (!packageAllowed(model.api.npm)) {
+            throw new Error(`Blocked install of package ${model.api.npm} due to OPENCODE_BLOCK_EXTERNAL_APIS`)
+          }
+          installedPath = await BunProc.install(model.api.npm, "latest")
       } else {
         log.info("loading local provider", { pkg: model.api.npm })
         installedPath = model.api.npm

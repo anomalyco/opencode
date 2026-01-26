@@ -77,6 +77,25 @@ export namespace ModelsDev {
   export type Provider = z.infer<typeof Provider>
 
   export async function get() {
+  // When OPENCODE_ONLY_GITHUB is enabled, filter models to only include github-copilot
+  if (process.env.OPENCODE_ONLY_GITHUB) {
+    const data = await getRawModels()
+    const filtered: { [k: string]: any } = {}
+    for (const [k, v] of Object.entries(data)) {
+      if (k.startsWith("github-copilot")) filtered[k] = v
+    }
+    return filtered
+  }
+
+  // When OPENCODE_ONLY_GITHUB is enabled, filter models to only include github-copilot
+  if (process.env.OPENCODE_ONLY_GITHUB) {
+    const data = await getRawModels()
+    const filtered: { [k: string]: any } = {}
+    for (const [k, v] of Object.entries(data)) {
+      if (k.startsWith("github-copilot")) filtered[k] = v
+    }
+    return filtered
+  }
     refresh()
     const file = Bun.file(filepath)
     let result = await file.json().catch(() => {})
