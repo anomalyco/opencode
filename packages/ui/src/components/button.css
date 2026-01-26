@@ -46,7 +46,7 @@
     &:hover:not(:disabled) {
       background-color: var(--surface-raised-base-hover);
     }
-    &:focus:not(:disabled) {
+    &:focus-visible:not(:disabled) {
       background-color: var(--surface-raised-base-hover);
     }
     &:active:not(:disabled) {

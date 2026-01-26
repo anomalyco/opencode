@@ -854,10 +854,9 @@ export namespace Provider {
       // Load for the main provider if auth exists
       if (auth) {
         const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
-        mergeProvider(plugin.auth.provider, {
-          source: "custom",
-          options: options,
-        })
+        const opts = options ?? {}
+        const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
+        mergeProvider(providerID, patch)
       }
 
       // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
@@ -870,10 +869,11 @@ export namespace Provider {
               () => Auth.get(enterpriseProviderID) as any,
               database[enterpriseProviderID],
             )
-            mergeProvider(enterpriseProviderID, {
-              source: "custom",
-              options: enterpriseOptions,
-            })
+            const opts = enterpriseOptions ?? {}
+            const patch: Partial<Info> = providers[enterpriseProviderID]
+              ? { options: opts }
+              : { source: "custom", options: opts }
+            mergeProvider(enterpriseProviderID, patch)
           }
         }
       }
@@ -889,10 +889,9 @@ export namespace Provider {
       const result = await fn(data)
       if (result && (result.autoload || providers[providerID])) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
-        mergeProvider(providerID, {
-          source: "custom",
-          options: result.options,
-        })
+        const opts = result.options ?? {}
+        const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
+        mergeProvider(providerID, patch)
       }
     }
 

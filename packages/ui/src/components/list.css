@@ -40,7 +40,7 @@
       transition: opacity 0.15s ease;
 
       &:hover:not(:disabled),
-      &:focus:not(:disabled),
+      &:focus-visible:not(:disabled),
       &:active:not(:disabled) {
         background-color: transparent;
         opacity: 0.7;
@@ -91,7 +91,7 @@
       transition: opacity 0.15s ease;
 
       &:hover:not(:disabled),
-      &:focus:not(:disabled),
+      &:focus-visible:not(:disabled),
       &:active:not(:disabled) {
         background-color: transparent;
         opacity: 0.7;
