@@ -21,6 +21,7 @@ type Active = {
   dispose: () => void
   owner: Owner
   onClose?: () => void
+  setClosing: (closing: boolean) => void
 }
 
 const Context = createContext<ReturnType<typeof init>>()
@@ -32,8 +33,11 @@ function init() {
     const current = active()
     if (!current) return
     current.onClose?.()
-    current.dispose()
-    setActive(undefined)
+    current.setClosing(true)
+    setTimeout(() => {
+      current.dispose()
+      setActive(undefined)
+    }, 100)
   }
 
   createEffect(() => {
@@ -55,14 +59,17 @@ function init() {
 
     const id = Math.random().toString(36).slice(2)
     let dispose: (() => void) | undefined
+    let setClosing: ((closing: boolean) => void) | undefined
 
     const node = runWithOwner(owner, () =>
       createRoot((d: () => void) => {
         dispose = d
+        const [closing, setClosingSignal] = createSignal(false)
+        setClosing = setClosingSignal
         return (
           <Kobalte
             modal
-            open={true}
+            open={!closing()}
             onOpenChange={(open: boolean) => {
               if (open) return
               close()
@@ -77,9 +84,9 @@ function init() {
       }),
     )
 
-    if (!dispose) return
+    if (!dispose || !setClosing) return
 
-    setActive({ id, node, dispose, owner, onClose })
+    setActive({ id, node, dispose, owner, onClose, setClosing })
   }
 
   return {
