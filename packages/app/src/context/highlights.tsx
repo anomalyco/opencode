@@ -6,7 +6,7 @@ import { usePlatform } from "@/context/platform"
 import { persisted } from "@/utils/persist"
 import { DialogReleaseNotes, type Highlight } from "@/components/dialog-release-notes"
 
-const CHANGELOG_URL = "https://opencode.ai/changelog.json"
+const CHANGELOG_URL = "https://dev.opencode.ai/changelog.json"
 
 type Store = {
   version?: string
@@ -81,6 +81,10 @@ function parseRelease(value: unknown): ParsedRelease | undefined {
 }
 
 function parseChangelog(value: unknown): ParsedRelease[] | undefined {
+  if (Array.isArray(value)) {
+    return value.map(parseRelease).filter((release): release is ParsedRelease => release !== undefined)
+  }
+
   if (!isRecord(value)) return
   if (!Array.isArray(value.releases)) return
 
@@ -163,6 +167,7 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
           if (!json) return
           const releases = parseChangelog(json)
           if (!releases) return
+          if (releases.length === 0) return
           const highlights = sliceHighlights({
             releases,
             current: platform.version,
