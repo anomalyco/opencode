@@ -48,8 +48,11 @@ Reference the entry point in `opencode.json` config.
 Config files are discovered in multiple places.
 
 - Global config (`~/.config/opencode/opencode.json`)
-- Project config (`opencode.json`)
 - Hidden project config (`.opencode/opencode.json`)
+
+Config files in these places are not discovered, at least the plugins are not loaded:
+
+- Project config (`opencode.json`)
 
 #### Dependencies
 
