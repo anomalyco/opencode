@@ -1042,13 +1042,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
+    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+
     if (store.popover) {
       if (event.key === "Tab") {
         selectPopoverActive()
         event.preventDefault()
         return
       }
-      if (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter") {
+      const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
+      const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
+      if (nav || ctrlNav) {
         if (store.popover === "at") {
           atOnKeyDown(event)
           event.preventDefault()
@@ -1061,8 +1065,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
     }
-
-    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
 
     if (ctrl && event.code === "KeyG") {
       if (store.popover) {
