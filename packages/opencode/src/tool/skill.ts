@@ -1,8 +1,10 @@
+import { $ } from "bun"
 import path from "path"
 import { pathToFileURL } from "url"
 import z from "zod"
 import { Tool } from "./tool"
 import { Skill } from "../skill"
+import { ConfigMarkdown } from "../config/markdown"
 import { PermissionNext } from "../permission/next"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
@@ -76,6 +78,24 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       const dir = path.dirname(skill.location)
       const base = pathToFileURL(dir).href
 
+      // Process dynamic context: execute shell commands in !`command` syntax
+      let content = skill.content
+      const shellCommands = ConfigMarkdown.shell(content)
+      if (shellCommands.length > 0) {
+        const results = await Promise.all(
+          shellCommands.map(async ([, cmd]) => {
+            try {
+              return await $`${{ raw: cmd }}`.quiet().nothrow().text()
+            } catch (error) {
+              return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
+            }
+          }),
+        )
+        let index = 0
+        const shellRegex = /!`([^`]+)`/g
+        content = content.replace(shellRegex, () => results[index++]!)
+      }
+
       const limit = 10
       const files = await iife(async () => {
         const arr = []
@@ -102,7 +122,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           `<skill_content name="${skill.name}">`,
           `# Skill: ${skill.name}`,
           "",
-          skill.content.trim(),
+          content.trim(),
           "",
           `Base directory for this skill: ${base}`,
           "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",

@@ -386,3 +386,328 @@ description: A skill in the .opencode/skills directory.
     },
   })
 })
+
+test("executes shell commands in skill content with !`command` syntax", async () => {
+  const originalLine = 'The answer is: [!`echo "forty-two"`]'
+  const renderedLine = "The answer is: [forty-two\n]"
+
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "dynamic-skill")
+      const skillContent = [
+        "---",
+        "name: dynamic-skill",
+        "description: A skill with dynamic content.",
+        "---",
+        "",
+        "# Dynamic Skill",
+        "",
+        originalLine,
+        "",
+        "That's it.",
+      ].join("\n")
+      await Bun.write(path.join(skillDir, "SKILL.md"), skillContent)
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const { SkillTool } = await import("../../src/tool/skill")
+      const skillTool = await SkillTool.init()
+      const ctx = {
+        sessionID: "test",
+        messageID: "",
+        callID: "",
+        agent: "coder",
+        abort: AbortSignal.any([]),
+        messages: [],
+        metadata: () => {},
+        ask: async () => {},
+      }
+
+      const result = await skillTool.execute({ name: "dynamic-skill" }, ctx)
+
+      expect(result.output).not.toContain(originalLine)
+      expect(result.output).toContain(renderedLine)
+    },
+  })
+})
+
+test("handles multiple shell commands in a single skill", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "multi-cmd-skill")
+      const skillContent = [
+        "---",
+        "name: multi-cmd-skill",
+        "description: A skill with multiple dynamic commands.",
+        "---",
+        "",
+        "# Multi Command Skill",
+        "",
+        'First value: [!`echo "one"`]',
+        "",
+        'Second value: [!`echo "two"`]',
+        "",
+        'Third value: [!`echo "three"`]',
+      ].join("\n")
+      await Bun.write(path.join(skillDir, "SKILL.md"), skillContent)
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const { SkillTool } = await import("../../src/tool/skill")
+      const skillTool = await SkillTool.init()
+      const ctx = {
+        sessionID: "test",
+        messageID: "",
+        callID: "",
+        agent: "coder",
+        abort: AbortSignal.any([]),
+        messages: [],
+        metadata: () => {},
+        ask: async () => {},
+      }
+
+      const result = await skillTool.execute({ name: "multi-cmd-skill" }, ctx)
+
+      expect(result.output).toContain("First value: [one\n]")
+      expect(result.output).toContain("Second value: [two\n]")
+      expect(result.output).toContain("Third value: [three\n]")
+      expect(result.output).not.toContain("!`echo")
+    },
+  })
+})
+
+test("executes shell commands in the project directory", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "cwd-skill")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        [
+          "---",
+          "name: cwd-skill",
+          "description: A skill that checks its working directory.",
+          "---",
+          "",
+          "Current dir: [!`pwd`]",
+        ].join("\n"),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const { SkillTool } = await import("../../src/tool/skill")
+      const skillTool = await SkillTool.init()
+      const ctx = {
+        sessionID: "test",
+        messageID: "",
+        callID: "",
+        agent: "coder",
+        abort: AbortSignal.any([]),
+        messages: [],
+        metadata: () => {},
+        ask: async () => {},
+      }
+
+      const result = await skillTool.execute({ name: "cwd-skill" }, ctx)
+
+      // Commands run in project directory, matching prompt.ts behavior
+      expect(result.output).toContain(tmp.path)
+    },
+  })
+})
+
+test("handles failing shell commands gracefully", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "fail-skill")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        [
+          "---",
+          "name: fail-skill",
+          "description: A skill with a failing command.",
+          "---",
+          "",
+          "Result: [!`nonexistent_command_12345`]",
+        ].join("\n"),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const { SkillTool } = await import("../../src/tool/skill")
+      const skillTool = await SkillTool.init()
+      const ctx = {
+        sessionID: "test",
+        messageID: "",
+        callID: "",
+        agent: "coder",
+        abort: AbortSignal.any([]),
+        messages: [],
+        metadata: () => {},
+        ask: async () => {},
+      }
+
+      // Should not throw - failing commands are handled gracefully
+      const result = await skillTool.execute({ name: "fail-skill" }, ctx)
+
+      // The output should still be returned (with empty or error output from the command)
+      expect(result.output).toContain("Result:")
+      // The !`command` syntax should be replaced (not left as-is)
+      expect(result.output).not.toContain("!`nonexistent_command_12345`")
+    },
+  })
+})
+
+test("handles commands that output nothing", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "empty-output-skill")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        [
+          "---",
+          "name: empty-output-skill",
+          "description: A skill with a command that outputs nothing.",
+          "---",
+          "",
+          "Before [!`true`] After",
+        ].join("\n"),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const { SkillTool } = await import("../../src/tool/skill")
+      const skillTool = await SkillTool.init()
+      const ctx = {
+        sessionID: "test",
+        messageID: "",
+        callID: "",
+        agent: "coder",
+        abort: AbortSignal.any([]),
+        messages: [],
+        metadata: () => {},
+        ask: async () => {},
+      }
+
+      const result = await skillTool.execute({ name: "empty-output-skill" }, ctx)
+
+      // Command with no output should be replaced with empty string
+      expect(result.output).toContain("Before [] After")
+      expect(result.output).not.toContain("!`true`")
+    },
+  })
+})
+
+test("handles multiple skill executions correctly", async () => {
+  // This test verifies that skills can be loaded multiple times in sequence.
+  // Uses a local regex (matching prompt.ts pattern) instead of shared ConfigMarkdown.SHELL_REGEX
+  // for defensive coding and consistency.
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "regex-test-skill")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        [
+          "---",
+          "name: regex-test-skill",
+          "description: A skill to test regex state handling.",
+          "---",
+          "",
+          'Value: [!`echo "test-value"`]',
+        ].join("\n"),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const { SkillTool } = await import("../../src/tool/skill")
+      const skillTool = await SkillTool.init()
+      const ctx = {
+        sessionID: "test",
+        messageID: "",
+        callID: "",
+        agent: "coder",
+        abort: AbortSignal.any([]),
+        messages: [],
+        metadata: () => {},
+        ask: async () => {},
+      }
+
+      // Execute the skill multiple times in sequence
+      // If using a shared global regex, lastIndex state could cause failures
+      for (let i = 0; i < 3; i++) {
+        const result = await skillTool.execute({ name: "regex-test-skill" }, ctx)
+        expect(result.output).toContain("Value: [test-value\n]")
+        expect(result.output).not.toContain("!`echo")
+      }
+    },
+  })
+})
+
+test("handles commands with special characters", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "special-chars-skill")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        [
+          "---",
+          "name: special-chars-skill",
+          "description: A skill with special characters in commands.",
+          "---",
+          "",
+          "Quoted string: [!`echo \"hello world\"`]",
+          "With pipe: [!`echo test | cat`]",
+        ].join("\n"),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const { SkillTool } = await import("../../src/tool/skill")
+      const skillTool = await SkillTool.init()
+      const ctx = {
+        sessionID: "test",
+        messageID: "",
+        callID: "",
+        agent: "coder",
+        abort: AbortSignal.any([]),
+        messages: [],
+        metadata: () => {},
+        ask: async () => {},
+      }
+
+      const result = await skillTool.execute({ name: "special-chars-skill" }, ctx)
+
+      // Commands with special characters should work
+      expect(result.output).toContain("Quoted string: [hello world\n]")
+      expect(result.output).toContain("With pipe: [test\n]")
+      expect(result.output).not.toContain("!`echo")
+    },
+  })
+})
