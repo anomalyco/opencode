@@ -1,6 +1,7 @@
 import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import { uniqueBy } from "remeda"
+import { DateTime } from "luxon"
+import { filter, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
@@ -52,6 +53,24 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       })),
     )
 
+    const latest = createMemo(() =>
+      pipe(
+        available(),
+        filter((x) => Math.abs(DateTime.fromISO(x.release_date).diffNow().as("months")) < 6),
+        groupBy((x) => x.provider.id),
+        mapValues((models) =>
+          models.map((model) => ({
+            modelID: model.id,
+            providerID: model.provider.id,
+          })),
+        ),
+        values(),
+        flat(),
+      ),
+    )
+
+    const latestSet = createMemo(() => new Set(latest().map((x) => `${x.providerID}:${x.modelID}`)))
+
     const find = (key: ModelKey) => list().find((m) => m.id === key.modelID && m.provider.id === key.providerID)
 
     function update(model: ModelKey, state: Visibility) {
@@ -70,7 +89,8 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       if (state === "show") return true
       const m = find(model)
       if (m?.status === "deprecated") return false
-      return true
+      if (!m?.release_date || !DateTime.fromISO(m.release_date).isValid) return true
+      return latestSet().has(key)
     }
 
     const setVisibility = (model: ModelKey, state: boolean) => {
