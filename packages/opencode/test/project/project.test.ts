@@ -89,6 +89,74 @@ describe("Project.fromDirectory with worktrees", () => {
   })
 })
 
+describe("Project.fromDirectory with bare repo", () => {
+  test("should handle git bare repo with no commits", async () => {
+    await using tmp = await tmpdir()
+    const bare = path.join(tmp.path, "bare.git")
+    await $`git init --bare ${bare}`.quiet()
+
+    const { project } = await Project.fromDirectory(bare)
+
+    expect(project).toBeDefined()
+    expect(project.id).toBe("global")
+    expect(project.vcs).toBe("git")
+    expect(project.worktree).toBe(bare)
+
+    const file = path.join(bare, "opencode")
+    const exists = await Bun.file(file).exists()
+    expect(exists).toBe(false)
+  })
+
+  test("should handle git bare repo with commits", async () => {
+    await using tmp = await tmpdir()
+    const bare = path.join(tmp.path, "bare.git")
+    await $`git init --bare ${bare}`.quiet()
+
+    const worktreePath = path.join(tmp.path, "worktree")
+    await $`git worktree add ${worktreePath} -b test`.cwd(bare).quiet()
+    await $`git commit --allow-empty -m "root commit ${worktreePath}"`.cwd(worktreePath).quiet()
+
+    const { project, sandbox } = await Project.fromDirectory(bare)
+
+    expect(project).toBeDefined()
+    expect(project.id).not.toBe("global")
+    expect(project.vcs).toBe("git")
+    expect(project.worktree).toBe(bare)
+    expect(sandbox).toBe(bare)
+    expect(project.sandboxes).toBeEmpty()
+
+    const file = path.join(bare, "opencode")
+    const exists = await Bun.file(file).exists()
+    expect(exists).toBe(true)
+
+    await $`git worktree remove ${worktreePath}`.cwd(bare).quiet()
+  })
+})
+
+describe("Project.fromDirectory with worktrees created from bare repo", () => {
+  test("should set worktree to bare repo when called from a worktree", async () => {
+    await using tmp = await tmpdir()
+    const bare = path.join(tmp.path, "bare.git")
+    await $`git init --bare ${bare}`.quiet()
+
+    const worktreePath = path.join(tmp.path, "worktree")
+    await $`git worktree add ${worktreePath} -b test`.cwd(bare).quiet()
+    await $`git commit --allow-empty -m "root commit ${worktreePath}"`.cwd(worktreePath).quiet()
+
+    const { project, sandbox } = await Project.fromDirectory(worktreePath)
+
+    expect(project).toBeDefined()
+    expect(project.id).not.toBe("global")
+    expect(project.vcs).toBe("git")
+    expect(project.worktree).toBe(bare)
+    expect(sandbox).toBe(worktreePath)
+    expect(project.sandboxes).toContain(worktreePath)
+    expect(project.sandboxes).not.toContain(bare)
+
+    await $`git worktree remove ${worktreePath}`.cwd(bare).quiet()
+  })
+})
+
 describe("Project.discover", () => {
   test("should discover favicon.png in root", async () => {
     await using tmp = await tmpdir({ git: true })
