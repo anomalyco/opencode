@@ -17,6 +17,11 @@ import {
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 
+type Filter = {
+  files: Set<string>
+  dirs: Set<string>
+}
+
 export default function FileTree(props: {
   path: string
   class?: string
@@ -27,26 +32,19 @@ export default function FileTree(props: {
   draggable?: boolean
   tooltip?: boolean
   onFileClick?: (file: FileNode) => void
+
+  _filter?: Filter
+  _marks?: Set<string>
+  _deeps?: Map<string, number>
 }) {
   const file = useFile()
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
   const tooltip = () => props.tooltip ?? true
 
-  const maxOpen = (dir: string, lvl: number): number => {
-    const expanded = file.tree.state(dir)?.expanded ?? false
-    if (!expanded) return -1
-
-    const nodes = file.tree.children(dir)
-    const child = nodes.reduce((max, node) => {
-      if (node.type !== "directory") return max
-      return Math.max(max, maxOpen(node.path, lvl + 1))
-    }, -1)
-
-    return Math.max(lvl, child)
-  }
-
   const filter = createMemo(() => {
+    if (props._filter) return props._filter
+
     const allowed = props.allowed
     if (!allowed) return
 
@@ -66,9 +64,36 @@ export default function FileTree(props: {
   })
 
   const marks = createMemo(() => {
+    if (props._marks) return props._marks
+
     const modified = props.modified
     if (!modified || modified.length === 0) return
     return new Set(modified)
+  })
+
+  const deeps = createMemo(() => {
+    if (props._deeps) return props._deeps
+
+    const out = new Map<string, number>()
+
+    const visit = (dir: string, lvl: number): number => {
+      const expanded = file.tree.state(dir)?.expanded ?? false
+      if (!expanded) return -1
+
+      const nodes = file.tree.children(dir)
+      const max = nodes.reduce((max, node) => {
+        if (node.type !== "directory") return max
+        const open = file.tree.state(node.path)?.expanded ?? false
+        if (!open) return max
+        return Math.max(max, visit(node.path, lvl + 1))
+      }, lvl)
+
+      out.set(dir, max)
+      return max
+    }
+
+    visit(props.path, level - 1)
+    return out
   })
 
   createEffect(() => {
@@ -84,7 +109,8 @@ export default function FileTree(props: {
   })
 
   createEffect(() => {
-    void file.tree.list(props.path)
+    const path = props.path
+    untrack(() => void file.tree.list(path))
   })
 
   const nodes = createMemo(() => {
@@ -165,7 +191,7 @@ export default function FileTree(props: {
       <For each={nodes()}>
         {(node) => {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
-          const deep = createMemo(() => (node.type === "directory" ? maxOpen(node.path, level) : -1))
+          const deep = () => deeps().get(node.path) ?? -1
           const Wrapper = (p: ParentProps) => {
             if (!tooltip()) return p.children
             return (
@@ -212,6 +238,9 @@ export default function FileTree(props: {
                       draggable={props.draggable}
                       tooltip={props.tooltip}
                       onFileClick={props.onFileClick}
+                      _filter={filter()}
+                      _marks={marks()}
+                      _deeps={deeps()}
                     />
                   </Collapsible.Content>
                 </Collapsible>
