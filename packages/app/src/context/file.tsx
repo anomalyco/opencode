@@ -561,6 +561,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     const stop = sdk.event.listen((e) => {
       const event = e.details
+      console.log(event)
       if (event.type !== "file.watcher.updated") return
       const path = normalize(event.properties.file)
       if (!path) return
