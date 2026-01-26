@@ -12,6 +12,7 @@ import { trimDiff } from "./edit"
 import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
+import { File } from "../file"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -157,13 +158,29 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       }
     }
 
+    // Build per-file metadata for UI rendering (used for both permission and result)
+    const files = fileChanges.map((change) => ({
+      filePath: change.filePath,
+      relativePath: path.relative(Instance.worktree, change.movePath ?? change.filePath),
+      type: change.type,
+      diff: change.diff,
+      before: change.oldContent,
+      after: change.newContent,
+      additions: change.additions,
+      deletions: change.deletions,
+      movePath: change.movePath,
+    }))
+
     // Check permissions if needed
+    const relativePaths = fileChanges.map((c) => path.relative(Instance.worktree, c.filePath))
     await ctx.ask({
       permission: "edit",
-      patterns: fileChanges.map((c) => path.relative(Instance.worktree, c.filePath)),
+      patterns: relativePaths,
       always: ["*"],
       metadata: {
+        filepath: relativePaths.join(", "),
         diff: totalDiff,
+        files,
       },
     })
 
@@ -171,6 +188,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     const changedFiles: string[] = []
 
     for (const change of fileChanges) {
+      const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
       switch (change.type) {
         case "add":
           // Create parent directories (recursive: true is safe on existing/root dirs)
@@ -198,6 +216,12 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           await fs.unlink(change.filePath)
           changedFiles.push(change.filePath)
           break
+      }
+
+      if (edited) {
+        await Bus.publish(File.Event.Edited, {
+          file: edited,
+        })
       }
     }
 
@@ -242,19 +266,6 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         output += `\n\nLSP errors detected in ${path.relative(Instance.worktree, target)}, please fix:\n<diagnostics file="${target}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
       }
     }
-
-    // Build per-file metadata for UI rendering
-    const files = fileChanges.map((change) => ({
-      filePath: change.filePath,
-      relativePath: path.relative(Instance.worktree, change.movePath ?? change.filePath),
-      type: change.type,
-      diff: change.diff,
-      before: change.oldContent,
-      after: change.newContent,
-      additions: change.additions,
-      deletions: change.deletions,
-      movePath: change.movePath,
-    }))
 
     return {
       title: output,

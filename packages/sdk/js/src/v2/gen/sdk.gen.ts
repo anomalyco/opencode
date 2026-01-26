@@ -9,6 +9,8 @@ import type {
   AppLogResponses,
   AppSkillsResponses,
   Auth as Auth3,
+  AuthRemoveErrors,
+  AuthRemoveResponses,
   AuthSetErrors,
   AuthSetResponses,
   CommandListResponses,
@@ -294,7 +296,7 @@ export class Project extends HeyApiClient {
   /**
    * Update project
    *
-   * Update project properties such as name, icon and color.
+   * Update project properties such as name, icon, and commands.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
@@ -305,6 +307,12 @@ export class Project extends HeyApiClient {
         url?: string
         override?: string
         color?: string
+      }
+      commands?: {
+        /**
+         * Startup script to run when creating a new workspace (worktree)
+         */
+        start?: string
       }
     },
     options?: Options<never, ThrowOnError>,
@@ -318,6 +326,7 @@ export class Project extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "body", key: "name" },
             { in: "body", key: "icon" },
+            { in: "body", key: "commands" },
           ],
         },
       ],
@@ -719,7 +728,7 @@ export class Worktree extends HeyApiClient {
   /**
    * Create worktree
    *
-   * Create a new git worktree for the current project.
+   * Create a new git worktree for the current project and run any configured startup scripts.
    */
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2554,7 +2563,17 @@ export class Control extends HeyApiClient {
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }, { in: "body" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "body", map: "body" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).post<TuiControlResponseResponses, unknown, ThrowOnError>({
       url: "/tui/control/response",
       ...options,
@@ -2806,7 +2825,17 @@ export class Tui extends HeyApiClient {
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }, { in: "body" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "body", map: "body" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).post<TuiPublishResponses, TuiPublishErrors, ThrowOnError>({
       url: "/tui/publish",
       ...options,
@@ -3070,6 +3099,36 @@ export class Formatter extends HeyApiClient {
 }
 
 export class Auth2 extends HeyApiClient {
+  /**
+   * Remove auth credentials
+   *
+   * Remove authentication credentials
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<AuthRemoveResponses, AuthRemoveErrors, ThrowOnError>({
+      url: "/auth/{providerID}",
+      ...options,
+      ...params,
+    })
+  }
+
   /**
    * Set auth credentials
    *

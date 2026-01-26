@@ -19,6 +19,7 @@ import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup }
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
 import pkg from "../package.json"
+import "./styles.css"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -269,7 +270,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
       .then(() => {
         const notification = new Notification(title, {
           body: description ?? "",
-          icon: "https://opencode.ai/favicon-96x96-v2.png",
+          icon: "https://opencode.ai/favicon-96x96-v3.png",
         })
         notification.onclick = () => {
           const win = getCurrentWindow()
@@ -315,6 +316,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   setDefaultServerUrl: async (url: string | null) => {
     await invoke("set_default_server_url", { url })
   },
+
+  parseMarkdown: async (markdown: string) => {
+    return invoke<string>("parse_markdown_command", { markdown })
+  },
 })
 
 createMenu()
@@ -359,19 +364,57 @@ type ServerReadyData = { url: string; password: string | null }
 
 // Gate component that waits for the server to be ready
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
-  const [serverData] = createResource<ServerReadyData>(() => invoke("ensure_server_ready"))
+  const [serverData] = createResource<ServerReadyData>(() =>
+    invoke("ensure_server_ready").then((v) => {
+      return new Promise((res) => setTimeout(() => res(v as ServerReadyData), 2000))
+    }),
+  )
+
+  const errorMessage = () => {
+    const error = serverData.error
+    if (!error) return "Unknown error"
+    if (typeof error === "string") return error
+    if (error instanceof Error) return error.message
+    return String(error)
+  }
+
+  const restartApp = async () => {
+    await invoke("kill_sidecar").catch(() => undefined)
+    await relaunch().catch(() => undefined)
+  }
 
   return (
     // Not using suspense as not all components are compatible with it (undefined refs)
     <Show
-      when={serverData.state !== "pending" && serverData()}
+      when={serverData.state === "errored"}
       fallback={
-        <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-        </div>
+        <Show
+          when={serverData.state !== "pending" && serverData()}
+          fallback={
+            <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
+              <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+              <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
+            </div>
+          }
+        >
+          {(data) => props.children(data)}
+        </Show>
       }
     >
-      {(data) => props.children(data)}
+      <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base gap-4 px-6">
+        <div class="text-16-semibold">OpenCode failed to start</div>
+        <div class="text-12-regular opacity-70 text-center max-w-xl">
+          The local OpenCode server could not be started. Restart the app, or check your network settings (VPN/proxy)
+          and try again.
+        </div>
+        <div class="w-full max-w-3xl rounded border border-border bg-background-base overflow-auto max-h-64">
+          <pre class="p-3 whitespace-pre-wrap break-words text-11-regular">{errorMessage()}</pre>
+        </div>
+        <button class="px-3 py-2 rounded bg-primary text-primary-foreground" onClick={() => void restartApp()}>
+          Restart App
+        </button>
+        <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
+      </div>
     </Show>
   )
 }
