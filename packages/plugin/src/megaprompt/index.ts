@@ -63,29 +63,31 @@ export const MegaPromptPlugin: Plugin = async (ctx: PluginInput): Promise<Hooks>
 
             const sessionID = sessionResult.data.id
 
-            // Send the prompt to this specific model
-            const promptResult = await ctx.client.session.prompt({
-              path: { id: sessionID },
-              body: {
-                parts: [{ type: "text", text: userPrompt }],
-                providerID: model.providerID,
-                modelID: model.modelID,
-              },
-            })
+            try {
+              // Send the prompt to this specific model
+              const promptResult = await ctx.client.session.prompt({
+                path: { id: sessionID },
+                body: {
+                  parts: [{ type: "text", text: userPrompt }],
+                  providerID: model.providerID,
+                  modelID: model.modelID,
+                },
+              })
 
-            if (!promptResult.data) {
-              throw new Error(`Failed to get response from ${model.providerID}/${model.modelID}`)
+              if (!promptResult.data) {
+                throw new Error(`Failed to get response from ${model.providerID}/${model.modelID}`)
+              }
+
+              // Extract the text response from the message parts
+              const response = promptResult.data
+              const textParts = response.parts.filter((p: { type: string }) => p.type === "text")
+              const text = textParts.map((p: { type: string; text?: string }) => p.text || "").join("\n")
+
+              return text
+            } finally {
+              // Always clean up the session - ignore cleanup failures as they don't affect the response
+              await ctx.client.session.delete({ path: { id: sessionID } }).catch(() => undefined)
             }
-
-            // Extract the text response from the message parts
-            const response = promptResult.data
-            const textParts = response.parts.filter((p: { type: string }) => p.type === "text")
-            const text = textParts.map((p: { type: string; text?: string }) => p.text || "").join("\n")
-
-            // Clean up the session - ignore cleanup failures as they don't affect the response
-            await ctx.client.session.delete({ path: { id: sessionID } }).catch(() => undefined)
-
-            return text
           }
 
           // Orchestrate parallel queries to all models
@@ -100,6 +102,21 @@ export const MegaPromptPlugin: Plugin = async (ctx: PluginInput): Promise<Hooks>
 
           if (successCount === 0) {
             return `MegaPrompt failed: No models responded successfully.\n\nErrors:\n${responses.map((r) => `- ${r.providerID}/${r.modelID}: ${r.error}`).join("\n")}`
+          }
+
+          // Short-circuit for single successful response - no need for evaluator
+          if (successCount === 1) {
+            const winner = responses.find((r) => r.success)!
+            let output = `# MegaPrompt Results\n\n`
+            output += `**Original Prompt:** ${prompt}\n\n`
+            output += `**Models Queried:** ${models.map((m) => `${m.providerID}/${m.modelID}`).join(", ")}\n\n`
+            output += `## Winner\n\n`
+            output += `**Model:** ${winner.providerID}/${winner.modelID}\n`
+            output += `**Reason:** Only model that responded successfully.\n\n`
+            output += `## Winning Response\n\n`
+            output += winner.text
+            output += formatFailures(responses)
+            return output
           }
 
           context.metadata({
