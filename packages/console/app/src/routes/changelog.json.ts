@@ -6,21 +6,22 @@ type Release = {
   html_url: string
 }
 
-type Highlight = {
-  source: string
+type HighlightMedia = { type: "video"; src: string } | { type: "image"; src: string; width: string; height: string }
+
+type HighlightItem = {
   title: string
   description: string
   shortDescription?: string
-  image?: {
-    src: string
-    width: string
-    height: string
-  }
-  video?: string
+  media: HighlightMedia
 }
 
-function parseHighlights(body: string): Highlight[] {
-  const highlights: Highlight[] = []
+type HighlightGroup = {
+  source: string
+  items: HighlightItem[]
+}
+
+function parseHighlights(body: string): HighlightGroup[] {
+  const groups = new Map<string, HighlightItem[]>()
   const regex = /<highlight\s+source="([^"]+)">([\s\S]*?)<\/highlight>/g
   let match
 
@@ -30,29 +31,32 @@ function parseHighlights(body: string): Highlight[] {
 
     const titleMatch = content.match(/<h2>([^<]+)<\/h2>/)
     const pMatch = content.match(/<p(?:\s+short="([^"]*)")?>([^<]+)<\/p>/)
-    const imgMatch = content.match(/<img\s+width="([^"]+)"\s+height="([^"]+)"\s+alt="([^"]*)"\s+src="([^"]+)"/)
-    // Match standalone GitHub asset URLs (videos)
+    const imgMatch = content.match(/<img\s+width="([^"]+)"\s+height="([^"]+)"\s+alt="[^"]*"\s+src="([^"]+)"/)
     const videoMatch = content.match(/^\s*(https:\/\/github\.com\/user-attachments\/assets\/[a-f0-9-]+)\s*$/m)
 
-    if (titleMatch) {
-      highlights.push({
-        source,
+    let media: HighlightMedia | undefined
+    if (videoMatch) {
+      media = { type: "video", src: videoMatch[1] }
+    } else if (imgMatch) {
+      media = { type: "image", src: imgMatch[3], width: imgMatch[1], height: imgMatch[2] }
+    }
+
+    if (titleMatch && media) {
+      const item: HighlightItem = {
         title: titleMatch[1],
         description: pMatch?.[2] || "",
         shortDescription: pMatch?.[1],
-        image: imgMatch
-          ? {
-              width: imgMatch[1],
-              height: imgMatch[2],
-              src: imgMatch[4],
-            }
-          : undefined,
-        video: videoMatch?.[1],
-      })
+        media,
+      }
+
+      if (!groups.has(source)) {
+        groups.set(source, [])
+      }
+      groups.get(source)!.push(item)
     }
   }
 
-  return highlights
+  return Array.from(groups.entries()).map(([source, items]) => ({ source, items }))
 }
 
 function parseMarkdown(body: string) {
