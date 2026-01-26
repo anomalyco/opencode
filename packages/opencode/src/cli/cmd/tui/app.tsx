@@ -489,15 +489,6 @@ function App() {
       category: "System",
     },
     {
-      title: "Open WebUI",
-      value: "webui.open",
-      onSelect: () => {
-        open(sdk.url).catch(() => {})
-        dialog.clear()
-      },
-      category: "System",
-    },
-    {
       title: "Exit the app",
       value: "app.exit",
       slash: {
@@ -556,27 +547,60 @@ function App() {
       },
     },
     {
-      title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
-      value: "terminal.title.toggle",
-      keybind: "terminal_title_toggle",
-      category: "System",
-      onSelect: (dialog) => {
-        setTerminalTitleEnabled((prev) => {
-          const next = !prev
-          kv.set("terminal_title_enabled", next)
-          if (!next) renderer.setTerminalTitle("")
-          return next
-        })
-        dialog.clear()
-      },
-    },
-    {
       title: kv.get("sidebar_overlay", true) ? "Disable sidebar overlay" : "Enable sidebar overlay",
       value: "sidebar_overlay",
       keybind: "sidebar_overlay_toggle",
       category: "System",
       onSelect: (dialog) => {
         kv.set("sidebar_overlay", !kv.get("sidebar_overlay", true))
+        dialog.clear()
+      },
+    },
+    {
+      title: kv.get("animations_enabled", true) ? "Disable animations" : "Enable animations",
+      value: "app.toggle.animations",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("animations_enabled", !kv.get("animations_enabled", true))
+        dialog.clear()
+      },
+    },
+    {
+      title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
+      value: "app.toggle.diffwrap",
+      category: "System",
+      onSelect: (dialog) => {
+        const current = kv.get("diff_wrap_mode", "word")
+        kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
+        dialog.clear()
+      },
+    },
+    },
+    {
+<<<<<<< HEAD
+      title: kv.get("sidebar_overlay", true) ? "Disable sidebar overlay" : "Enable sidebar overlay",
+      value: "sidebar_overlay",
+      keybind: "sidebar_overlay_toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("sidebar_overlay", !kv.get("sidebar_overlay", true))
+=======
+      title: kv.get("animations_enabled", true) ? "Disable animations" : "Enable animations",
+      value: "app.toggle.animations",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("animations_enabled", !kv.get("animations_enabled", true))
+        dialog.clear()
+      },
+    },
+    {
+      title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
+      value: "app.toggle.diffwrap",
+      category: "System",
+      onSelect: (dialog) => {
+        const current = kv.get("diff_wrap_mode", "word")
+        kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
+>>>>>>> dev
         dialog.clear()
       },
     },

@@ -148,7 +148,7 @@ export function Session() {
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
   const [userMessageMarkdown, setUserMessageMarkdown] = kv.signal("user_message_markdown", true)
   const [sidebarOverlayEnabled, setSidebarOverlayEnabled] = kv.signal("sidebar_overlay", true)
-  const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
+  const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
 
   const wide = createMemo(() => dimensions().width > 120)
@@ -510,7 +510,7 @@ export function Session() {
       },
     },
     {
-      title: "Toggle code concealment",
+      title: conceal() ? "Disable code concealment" : "Enable code concealment",
       value: "session.toggle.conceal",
       keybind: "messages_toggle_conceal" as any,
       category: "Session",
@@ -546,18 +546,6 @@ export function Session() {
       },
     },
     {
-      title: "Toggle diff wrapping",
-      value: "session.toggle.diffwrap",
-      category: "Session",
-      slash: {
-        name: "diffwrap",
-      },
-      onSelect: (dialog) => {
-        setDiffWrapMode((prev) => (prev === "word" ? "none" : "word"))
-        dialog.clear()
-      },
-    },
-    {
       title: showDetails() ? "Hide tool details" : "Show tool details",
       value: "session.toggle.actions",
       keybind: "tool_details",
@@ -574,15 +562,6 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         setShowScrollbar((prev) => !prev)
-        dialog.clear()
-      },
-    },
-    {
-      title: animationsEnabled() ? "Disable animations" : "Enable animations",
-      value: "session.toggle.animations",
-      category: "Session",
-      onSelect: (dialog) => {
-        setAnimationsEnabled((prev) => !prev)
         dialog.clear()
       },
     },
@@ -1721,10 +1700,29 @@ function Glob(props: ToolProps<typeof GlobTool>) {
 }
 
 function Read(props: ToolProps<typeof ReadTool>) {
+  const { theme } = useTheme()
+  const loaded = createMemo(() => {
+    if (props.part.state.status !== "completed") return []
+    if (props.part.state.time.compacted) return []
+    const value = props.metadata.loaded
+    if (!value || !Array.isArray(value)) return []
+    return value.filter((p): p is string => typeof p === "string")
+  })
   return (
-    <InlineTool icon="→" pending="Reading file..." complete={props.input.filePath} part={props.part}>
-      Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
-    </InlineTool>
+    <>
+      <InlineTool icon="→" pending="Reading file..." complete={props.input.filePath} part={props.part}>
+        Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
+      </InlineTool>
+      <For each={loaded()}>
+        {(filepath) => (
+          <box paddingLeft={3}>
+            <text paddingLeft={3} fg={theme.textMuted}>
+              ↳ Loaded {normalizePath(filepath)}
+            </text>
+          </box>
+        )}
+      </For>
+    </>
   )
 }
 
