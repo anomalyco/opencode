@@ -570,6 +570,16 @@ function App() {
         dialog.clear()
       },
     },
+    {
+      title: kv.get("sidebar_overlay", true) ? "Disable sidebar overlay" : "Enable sidebar overlay",
+      value: "sidebar_overlay",
+      keybind: "sidebar_overlay_toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("sidebar_overlay", !kv.get("sidebar_overlay", true))
+        dialog.clear()
+      },
+    },
   ])
 
   createEffect(() => {

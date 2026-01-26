@@ -510,16 +510,6 @@ export function Session() {
       },
     },
     {
-      title: sidebarOverlayEnabled() ? "Disable sidebar overlay" : "Enable sidebar overlay",
-      value: "sidebar_overlay",
-      keybind: "sidebar_overlay_toggle",
-      category: "System",
-      onSelect: (dialog) => {
-        setSidebarOverlayEnabled((prev) => !prev)
-        dialog.clear()
-      },
-    },
-    {
       title: "Toggle code concealment",
       value: "session.toggle.conceal",
       keybind: "messages_toggle_conceal" as any,
