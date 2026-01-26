@@ -88,6 +88,8 @@ export const dict = {
   "dialog.provider.group.other": "Inne",
   "dialog.provider.tag.recommended": "Zalecane",
   "dialog.provider.anthropic.note": "Połącz z Claude Pro/Max lub kluczem API",
+  "dialog.provider.openai.note": "Połącz z ChatGPT Pro/Plus lub kluczem API",
+  "dialog.provider.copilot.note": "Połącz z Copilot lub kluczem API",
 
   "dialog.model.select.title": "Wybierz model",
   "dialog.model.search.placeholder": "Szukaj modeli",
@@ -98,7 +100,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Darmowe modele dostarczane przez OpenCode",
   "dialog.model.unpaid.addMore.title": "Dodaj więcej modeli od popularnych dostawców",
 
-  "dialog.provider.viewAll": "Zobacz wszystkich dostawców",
+  "dialog.provider.viewAll": "Zobacz więcej dostawców",
 
   "provider.connect.title": "Połącz {{provider}}",
   "provider.connect.title.anthropicProMax": "Zaloguj się z Claude Pro/Max",
@@ -221,6 +223,9 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} z {{total}} włączone",
   "dialog.mcp.empty": "Brak skonfigurowanych MCP",
 
+  "dialog.lsp.empty": "LSP wykryte automatycznie na podstawie typów plików",
+  "dialog.plugins.empty": "Wtyczki skonfigurowane w opencode.json",
+
   "mcp.status.connected": "połączono",
   "mcp.status.failed": "niepowodzenie",
   "mcp.status.needs_auth": "wymaga autoryzacji",
@@ -240,7 +245,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "Nie można połączyć się z serwerem",
   "dialog.server.add.checking": "Sprawdzanie...",
-  "dialog.server.add.button": "Dodaj",
+  "dialog.server.add.button": "Dodaj serwer",
   "dialog.server.default.title": "Domyślny serwer",
   "dialog.server.default.description":
     "Połącz z tym serwerem przy uruchomieniu aplikacji zamiast uruchamiać lokalny serwer. Wymaga restartu.",
@@ -248,6 +253,13 @@ export const dict = {
   "dialog.server.default.set": "Ustaw bieżący serwer jako domyślny",
   "dialog.server.default.clear": "Wyczyść",
   "dialog.server.action.remove": "Usuń serwer",
+
+  "dialog.server.menu.edit": "Edytuj",
+  "dialog.server.menu.default": "Ustaw jako domyślny",
+  "dialog.server.menu.defaultRemove": "Usuń domyślny",
+  "dialog.server.menu.delete": "Usuń",
+  "dialog.server.current": "Obecny serwer",
+  "dialog.server.status.default": "Domyślny",
 
   "dialog.project.edit.title": "Edytuj projekt",
   "dialog.project.edit.name": "Nazwa",
@@ -292,19 +304,20 @@ export const dict = {
   "context.usage.clickToView": "Kliknij, aby zobaczyć kontekst",
   "context.usage.view": "Pokaż użycie kontekstu",
 
-  "language.en": "Angielski",
-  "language.zh": "Chiński",
-  "language.ko": "Koreański",
-  "language.de": "Niemiecki",
-  "language.es": "Hiszpański",
-  "language.fr": "Francuski",
-  "language.ja": "Japoński",
-  "language.da": "Duński",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
   "language.pl": "Polski",
-  "language.ru": "Rosyjski",
-  "language.ar": "Arabski",
-  "language.no": "Norweski",
-  "language.br": "Portugalski (Brazylia)",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Język",
   "toast.language.description": "Przełączono na {{language}}",
@@ -414,6 +427,14 @@ export const dict = {
 
   "session.header.search.placeholder": "Szukaj {{project}}",
   "session.header.searchFiles": "Szukaj plików",
+
+  "status.popover.trigger": "Status",
+  "status.popover.ariaLabel": "Konfiguracje serwerów",
+  "status.popover.tab.servers": "Serwery",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Wtyczki",
+  "status.popover.action.manageServers": "Zarządzaj serwerami",
 
   "session.share.popover.title": "Opublikuj w sieci",
   "session.share.popover.description.shared":

@@ -631,7 +631,7 @@ export namespace MessageV2 {
       sessionID: Identifier.schema("session"),
       messageID: Identifier.schema("message"),
     }),
-    async (input) => {
+    async (input): Promise<WithParts> => {
       return {
         info: await Storage.read<MessageV2.Info>(["message", input.sessionID, input.messageID]),
         parts: await parts(input.messageID),

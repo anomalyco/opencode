@@ -88,6 +88,8 @@ export const dict = {
   "dialog.provider.group.other": "Другие",
   "dialog.provider.tag.recommended": "Рекомендуемые",
   "dialog.provider.anthropic.note": "Подключитесь с помощью Claude Pro/Max или API ключа",
+  "dialog.provider.openai.note": "Подключитесь с помощью ChatGPT Pro/Plus или API ключа",
+  "dialog.provider.copilot.note": "Подключитесь с помощью Copilot или API ключа",
 
   "dialog.model.select.title": "Выбрать модель",
   "dialog.model.search.placeholder": "Поиск моделей",
@@ -98,7 +100,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Бесплатные модели от OpenCode",
   "dialog.model.unpaid.addMore.title": "Добавьте больше моделей от популярных провайдеров",
 
-  "dialog.provider.viewAll": "Посмотреть всех провайдеров",
+  "dialog.provider.viewAll": "Показать больше провайдеров",
 
   "provider.connect.title": "Подключить {{provider}}",
   "provider.connect.title.anthropicProMax": "Войти с помощью Claude Pro/Max",
@@ -221,6 +223,9 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} из {{total}} включено",
   "dialog.mcp.empty": "MCP не настроены",
 
+  "dialog.lsp.empty": "LSP автоматически обнаружены по типам файлов",
+  "dialog.plugins.empty": "Плагины настроены в opencode.json",
+
   "mcp.status.connected": "подключено",
   "mcp.status.failed": "ошибка",
   "mcp.status.needs_auth": "требуется авторизация",
@@ -240,7 +245,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "Не удалось подключиться к серверу",
   "dialog.server.add.checking": "Проверка...",
-  "dialog.server.add.button": "Добавить",
+  "dialog.server.add.button": "Добавить сервер",
   "dialog.server.default.title": "Сервер по умолчанию",
   "dialog.server.default.description":
     "Подключаться к этому серверу при запуске приложения вместо запуска локального сервера. Требуется перезапуск.",
@@ -248,6 +253,13 @@ export const dict = {
   "dialog.server.default.set": "Установить текущий сервер по умолчанию",
   "dialog.server.default.clear": "Очистить",
   "dialog.server.action.remove": "Удалить сервер",
+
+  "dialog.server.menu.edit": "Редактировать",
+  "dialog.server.menu.default": "Сделать по умолчанию",
+  "dialog.server.menu.defaultRemove": "Удалить по умолчанию",
+  "dialog.server.menu.delete": "Удалить",
+  "dialog.server.current": "Текущий сервер",
+  "dialog.server.status.default": "По умолч.",
 
   "dialog.project.edit.title": "Редактировать проект",
   "dialog.project.edit.name": "Название",
@@ -293,18 +305,20 @@ export const dict = {
   "context.usage.clickToView": "Нажмите для просмотра контекста",
   "context.usage.view": "Показать использование контекста",
 
-  "language.en": "Английский",
-  "language.zh": "Китайский",
-  "language.ko": "Корейский",
-  "language.de": "Немецкий",
-  "language.es": "Испанский",
-  "language.fr": "Французский",
-  "language.ja": "Японский",
-  "language.da": "Датский",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
   "language.ru": "Русский",
-  "language.ar": "Арабский",
-  "language.no": "Норвежский",
-  "language.br": "Португальский (Бразилия)",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Язык",
   "toast.language.description": "Переключено на {{language}}",
@@ -415,6 +429,14 @@ export const dict = {
 
   "session.header.search.placeholder": "Поиск {{project}}",
   "session.header.searchFiles": "Поиск файлов",
+
+  "status.popover.trigger": "Статус",
+  "status.popover.ariaLabel": "Настройки серверов",
+  "status.popover.tab.servers": "Серверы",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Плагины",
+  "status.popover.action.manageServers": "Управлять серверами",
 
   "session.share.popover.title": "Опубликовать в интернете",
   "session.share.popover.description.shared":

@@ -70,6 +70,11 @@
     user-select: text;
   }
 
+  [data-slot="session-review-accordion-content"] {
+    position: relative;
+    overflow: hidden;
+  }
+
   [data-slot="session-review-trigger-content"] {
     display: flex;
     align-items: center;
@@ -194,5 +199,12 @@
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     color: var(--text-weak);
+  }
+
+  [data-slot="session-review-diff-wrapper"] {
+    position: relative;
+    overflow: hidden;
+    --line-comment-z: 5;
+    --line-comment-popover-z: 30;
   }
 }

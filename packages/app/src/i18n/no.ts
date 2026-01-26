@@ -91,6 +91,8 @@ export const dict = {
   "dialog.provider.group.other": "Andre",
   "dialog.provider.tag.recommended": "Anbefalt",
   "dialog.provider.anthropic.note": "Koble til med Claude Pro/Max eller API-nøkkel",
+  "dialog.provider.openai.note": "Koble til med ChatGPT Pro/Plus eller API-nøkkel",
+  "dialog.provider.copilot.note": "Koble til med Copilot eller API-nøkkel",
 
   "dialog.model.select.title": "Velg modell",
   "dialog.model.search.placeholder": "Søk etter modeller",
@@ -101,7 +103,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Gratis modeller levert av OpenCode",
   "dialog.model.unpaid.addMore.title": "Legg til flere modeller fra populære leverandører",
 
-  "dialog.provider.viewAll": "Vis alle leverandører",
+  "dialog.provider.viewAll": "Vis flere leverandører",
 
   "provider.connect.title": "Koble til {{provider}}",
   "provider.connect.title.anthropicProMax": "Logg inn med Claude Pro/Max",
@@ -224,6 +226,9 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} av {{total}} aktivert",
   "dialog.mcp.empty": "Ingen MCP-er konfigurert",
 
+  "dialog.lsp.empty": "LSP-er automatisk oppdaget fra filtyper",
+  "dialog.plugins.empty": "Plugins konfigurert i opencode.json",
+
   "mcp.status.connected": "tilkoblet",
   "mcp.status.failed": "mislyktes",
   "mcp.status.needs_auth": "trenger autentisering",
@@ -243,7 +248,7 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "Kunne ikke koble til server",
   "dialog.server.add.checking": "Sjekker...",
-  "dialog.server.add.button": "Legg til",
+  "dialog.server.add.button": "Legg til server",
   "dialog.server.default.title": "Standardserver",
   "dialog.server.default.description":
     "Koble til denne serveren ved oppstart i stedet for å starte en lokal server. Krever omstart.",
@@ -251,6 +256,13 @@ export const dict = {
   "dialog.server.default.set": "Sett gjeldende server som standard",
   "dialog.server.default.clear": "Tøm",
   "dialog.server.action.remove": "Fjern server",
+
+  "dialog.server.menu.edit": "Rediger",
+  "dialog.server.menu.default": "Sett som standard",
+  "dialog.server.menu.defaultRemove": "Fjern standard",
+  "dialog.server.menu.delete": "Slett",
+  "dialog.server.current": "Gjeldende server",
+  "dialog.server.status.default": "Standard",
 
   "dialog.project.edit.title": "Rediger prosjekt",
   "dialog.project.edit.name": "Navn",
@@ -295,20 +307,20 @@ export const dict = {
   "context.usage.clickToView": "Klikk for å se kontekst",
   "context.usage.view": "Se kontekstforbruk",
 
-  "language.en": "Engelsk",
-  "language.zh": "Kinesisk (forenklet)",
-  "language.zht": "Kinesisk (tradisjonell)",
-  "language.ko": "Koreansk",
-  "language.de": "Tysk",
-  "language.es": "Spansk",
-  "language.fr": "Fransk",
-  "language.ja": "Japansk",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
   "language.da": "Dansk",
-  "language.ru": "Russisk",
-  "language.pl": "Polsk",
-  "language.ar": "Arabisk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
   "language.no": "Norsk",
-  "language.br": "Portugisisk (Brasil)",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Språk",
   "toast.language.description": "Byttet til {{language}}",
@@ -417,6 +429,14 @@ export const dict = {
 
   "session.header.search.placeholder": "Søk i {{project}}",
   "session.header.searchFiles": "Søk etter filer",
+
+  "status.popover.trigger": "Status",
+  "status.popover.ariaLabel": "Serverkonfigurasjoner",
+  "status.popover.tab.servers": "Servere",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Plugins",
+  "status.popover.action.manageServers": "Administrer servere",
 
   "session.share.popover.title": "Publiser på nett",
   "session.share.popover.description.shared":

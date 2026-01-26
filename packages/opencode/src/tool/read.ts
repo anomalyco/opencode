@@ -8,6 +8,7 @@ import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import { assertExternalDirectory } from "./external-directory"
+import { InstructionPrompt } from "../session/instruction"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -59,6 +60,8 @@ export const ReadTool = Tool.define("read", {
       throw new Error(`File not found: ${filepath}`)
     }
 
+    const instructions = await InstructionPrompt.resolve(ctx.messages, filepath)
+
     // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
     const isImage =
       file.type.startsWith("image/") && file.type !== "image/svg+xml" && file.type !== "image/vnd.fastbidsheet"
@@ -72,6 +75,7 @@ export const ReadTool = Tool.define("read", {
         metadata: {
           preview: msg,
           truncated: false,
+          ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
         },
         attachments: [
           {
@@ -133,12 +137,17 @@ export const ReadTool = Tool.define("read", {
     LSP.touchFile(filepath, false)
     FileTime.read(ctx.sessionID, filepath)
 
+    if (instructions.length > 0) {
+      output += `\n\n<system-reminder>\n${instructions.map((i) => i.content).join("\n\n")}\n</system-reminder>`
+    }
+
     return {
       title,
       output,
       metadata: {
         preview,
         truncated,
+        ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
       },
     }
   },
