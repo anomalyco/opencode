@@ -98,7 +98,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Gratis modeller leveret af OpenCode",
   "dialog.model.unpaid.addMore.title": "Tilføj flere modeller fra populære udbydere",
 
-  "dialog.provider.viewAll": "Vis alle udbydere",
+  "dialog.provider.viewAll": "Vis flere udbydere",
 
   "provider.connect.title": "Forbind {{provider}}",
   "provider.connect.title.anthropicProMax": "Log ind med Claude Pro/Max",
@@ -287,20 +287,20 @@ export const dict = {
   "context.usage.clickToView": "Klik for at se kontekst",
   "context.usage.view": "Se kontekstforbrug",
 
-  "language.en": "Engelsk",
-  "language.zh": "Kinesisk (forenklet)",
-  "language.zht": "Kinesisk (traditionelt)",
-  "language.ko": "Koreansk",
-  "language.de": "Tysk",
-  "language.es": "Spansk",
-  "language.fr": "Fransk",
-  "language.ja": "Japansk",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
   "language.da": "Dansk",
-  "language.ru": "Russisk",
-  "language.pl": "Polsk",
-  "language.ar": "Arabisk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
   "language.no": "Norsk",
-  "language.br": "Portugisisk (Brasilien)",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Sprog",
   "toast.language.description": "Skiftede til {{language}}",
@@ -408,6 +408,14 @@ export const dict = {
 
   "session.header.search.placeholder": "Søg {{project}}",
   "session.header.searchFiles": "Søg efter filer",
+
+  "status.popover.trigger": "Status",
+  "status.popover.ariaLabel": "Serverkonfigurationer",
+  "status.popover.tab.servers": "Servere",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Plugins",
+  "status.popover.action.manageServers": "Administrer servere",
 
   "session.share.popover.title": "Udgiv på nettet",
   "session.share.popover.description.shared":

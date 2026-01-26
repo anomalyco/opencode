@@ -3,7 +3,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Icon } from "@opencode-ai/ui/icon"
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
@@ -29,35 +29,34 @@ export function DialogEditProject(props: { project: LocalProject }) {
     iconUrl: props.project.icon?.override || "",
     startup: props.project.commands?.start ?? "",
     saving: false,
+    dragOver: false,
+    iconHover: false,
   })
-
-  const [dragOver, setDragOver] = createSignal(false)
-  const [iconHover, setIconHover] = createSignal(false)
 
   function handleFileSelect(file: File) {
     if (!file.type.startsWith("image/")) return
     const reader = new FileReader()
     reader.onload = (e) => {
       setStore("iconUrl", e.target?.result as string)
-      setIconHover(false)
+      setStore("iconHover", false)
     }
     reader.readAsDataURL(file)
   }
 
   function handleDrop(e: DragEvent) {
     e.preventDefault()
-    setDragOver(false)
+    setStore("dragOver", false)
     const file = e.dataTransfer?.files[0]
     if (file) handleFileSelect(file)
   }
 
   function handleDragOver(e: DragEvent) {
     e.preventDefault()
-    setDragOver(true)
+    setStore("dragOver", true)
   }
 
   function handleDragLeave() {
-    setDragOver(false)
+    setStore("dragOver", false)
   }
 
   function handleInputChange(e: Event) {
@@ -116,19 +115,23 @@ export function DialogEditProject(props: { project: LocalProject }) {
           <div class="flex flex-col gap-2">
             <label class="text-12-medium text-text-weak">{language.t("dialog.project.edit.icon")}</label>
             <div class="flex gap-3 items-start">
-              <div class="relative" onMouseEnter={() => setIconHover(true)} onMouseLeave={() => setIconHover(false)}>
+              <div
+                class="relative"
+                onMouseEnter={() => setStore("iconHover", true)}
+                onMouseLeave={() => setStore("iconHover", false)}
+              >
                 <div
                   class="relative size-16 rounded-md transition-colors cursor-pointer"
                   classList={{
-                    "border-text-interactive-base bg-surface-info-base/20": dragOver(),
-                    "border-border-base hover:border-border-strong": !dragOver(),
+                    "border-text-interactive-base bg-surface-info-base/20": store.dragOver,
+                    "border-border-base hover:border-border-strong": !store.dragOver,
                     "overflow-hidden": !!store.iconUrl,
                   }}
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onClick={() => {
-                    if (store.iconUrl && iconHover()) {
+                    if (store.iconUrl && store.iconHover) {
                       clearIcon()
                     } else {
                       document.getElementById("icon-upload")?.click()
@@ -166,7 +169,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                     "border-radius": "6px",
                     "z-index": 10,
                     "pointer-events": "none",
-                    opacity: iconHover() && !store.iconUrl ? 1 : 0,
+                    opacity: store.iconHover && !store.iconUrl ? 1 : 0,
                     display: "flex",
                     "align-items": "center",
                     "justify-content": "center",
@@ -185,7 +188,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                     "border-radius": "6px",
                     "z-index": 10,
                     "pointer-events": "none",
-                    opacity: iconHover() && store.iconUrl ? 1 : 0,
+                    opacity: store.iconHover && store.iconUrl ? 1 : 0,
                     display: "flex",
                     "align-items": "center",
                     "justify-content": "center",
