@@ -2,6 +2,7 @@ import z from "zod"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
+import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
@@ -64,6 +65,14 @@ export namespace BunProc {
   export async function install(pkg: string, version = "latest") {
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
+
+    // Ensure cache directory exists with a package.json so bun doesn't traverse up
+    // to find a parent workspace (e.g., if user has package.json in home directory)
+    await fs.mkdir(Global.Path.cache, { recursive: true })
+    const pkgJsonPath = path.join(Global.Path.cache, "package.json")
+    if (!(await Filesystem.exists(pkgJsonPath))) {
+      await Bun.write(pkgJsonPath, "{}")
+    }
 
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
     const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
