@@ -2627,7 +2627,13 @@ export default function Page() {
             <Show when={layout.fileTree.opened()}>
               <div class="relative shrink-0 h-full" style={{ width: `${layout.fileTree.width()}px` }}>
                 <div class="h-full border-l border-border-weak-base flex flex-col overflow-hidden">
-                  <Tabs variant="pill" value={fileTreeTab()} onChange={setFileTreeTabValue} class="h-full">
+                  <Tabs
+                    variant="pill"
+                    value={fileTreeTab()}
+                    onChange={setFileTreeTabValue}
+                    class="h-full"
+                    data-scope="filetree"
+                  >
                     <Tabs.List>
                       <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
                         {reviewCount()}{" "}
