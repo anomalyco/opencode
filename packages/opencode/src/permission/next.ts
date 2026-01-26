@@ -220,9 +220,12 @@ export namespace PermissionNext {
           pending.resolve()
         }
 
-        // TODO: we don't save the permission ruleset to disk yet until there's
-        // UI to manage it
-        // await Storage.write(["permission", Instance.project.id], s.approved)
+        // Persist approved permissions to storage
+        // Note: Permissions are saved per-project. Future UI may be needed for
+        // managing/removing persisted permission rules.
+        Storage.write(["permission", Instance.project.id], s.approved).catch((e) =>
+          log.error("Failed to persist permission ruleset", { error: e }),
+        )
         return
       }
     },

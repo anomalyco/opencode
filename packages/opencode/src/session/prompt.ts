@@ -53,6 +53,47 @@ export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
+  /**
+   * Centralized tool execution wrapper with plugin hooks.
+   * Handles before/after plugin triggers for consistent tool execution lifecycle.
+   *
+   * @param toolID - Identifier for the tool being executed
+   * @param args - Arguments to pass to the tool
+   * @param context - Execution context containing sessionID, callID, abort signal, etc.
+   * @param executeFn - The actual tool execution function
+   * @returns Result from tool execution
+   */
+  async function executeTool<T>(
+    toolID: string,
+    args: any,
+    context: { sessionID: string; callID: string },
+    executeFn: () => Promise<T>,
+  ): Promise<T> {
+    await Plugin.trigger(
+      "tool.execute.before",
+      {
+        tool: toolID,
+        sessionID: context.sessionID,
+        callID: context.callID,
+      },
+      { args },
+    )
+
+    const result = await executeFn()
+
+    await Plugin.trigger(
+      "tool.execute.after",
+      {
+        tool: toolID,
+        sessionID: context.sessionID,
+        callID: context.callID,
+      },
+      result,
+    )
+
+    return result
+  }
+
   const state = Instance.state(
     () => {
       const data: Record<
@@ -314,7 +355,7 @@ export namespace SessionPrompt {
       const task = tasks.pop()
 
       // pending subtask
-      // TODO: centralize "invoke tool" logic
+      // Tool invocation centralized via executeTool() helper with plugin hooks
       if (task?.type === "subtask") {
         const taskTool = await TaskTool.init()
         const taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
@@ -368,15 +409,6 @@ export namespace SessionPrompt {
           subagent_type: task.agent,
           command: task.command,
         }
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: "task",
-            sessionID,
-            callID: part.id,
-          },
-          { args: taskArgs },
-        )
         let executionError: Error | undefined
         const taskAgent = await Agent.get(task.agent)
         const taskCtx: Tool.Context = {
@@ -404,19 +436,16 @@ export namespace SessionPrompt {
             })
           },
         }
-        const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
-          executionError = error
-          log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
-          return undefined
-        })
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: "task",
-            sessionID,
-            callID: part.id,
-          },
-          result,
+        const result = await executeTool(
+          "task",
+          taskArgs,
+          { sessionID, callID: part.id },
+          () =>
+            taskTool.execute(taskArgs, taskCtx).catch((error) => {
+              executionError = error
+              log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+              return undefined
+            }),
         )
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
@@ -699,28 +728,7 @@ export namespace SessionPrompt {
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
           const ctx = context(args, options)
-          await Plugin.trigger(
-            "tool.execute.before",
-            {
-              tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
-            },
-            {
-              args,
-            },
-          )
-          const result = await item.execute(args, ctx)
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
-            },
-            result,
-          )
-          return result
+          return executeTool(item.id, args, { sessionID: ctx.sessionID, callID: ctx.callID! }, () => item.execute(args, ctx))
         },
       })
     }
@@ -733,35 +741,20 @@ export namespace SessionPrompt {
       item.execute = async (args, opts) => {
         const ctx = context(args, opts)
 
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
-          },
-          {
-            args,
-          },
-        )
+        const result = await executeTool(
+          key,
+          args,
+          { sessionID: ctx.sessionID, callID: opts.toolCallId! },
+          async () => {
+            await ctx.ask({
+              permission: key,
+              metadata: {},
+              patterns: ["*"],
+              always: ["*"],
+            })
 
-        await ctx.ask({
-          permission: key,
-          metadata: {},
-          patterns: ["*"],
-          always: ["*"],
-        })
-
-        const result = await execute(args, opts)
-
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
+            return execute(args, opts)
           },
-          result,
         )
 
         const textParts: string[] = []
@@ -1072,7 +1065,12 @@ export namespace SessionPrompt {
                   metadata: async () => {},
                   ask: async () => {},
                 }
-                const result = await ListTool.init().then((t) => t.execute(args, listCtx))
+                const result = await executeTool(
+                  "ls",
+                  args,
+                  { sessionID: input.sessionID, callID: info.id },
+                  () => ListTool.init().then((t) => t.execute(args, listCtx)),
+                )
                 return [
                   {
                     id: Identifier.ascending("part"),
