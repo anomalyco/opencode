@@ -6,12 +6,8 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
-import { SettingsPermissions } from "./settings-permissions"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
-import { SettingsAgents } from "./settings-agents"
-import { SettingsCommands } from "./settings-commands"
-import { SettingsMcp } from "./settings-mcp"
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
@@ -45,6 +41,10 @@ export const DialogSettings: Component = () => {
                       <Icon name="server" />
                       {language.t("settings.providers.title")}
                     </Tabs.Trigger>
+                    <Tabs.Trigger value="models">
+                      <Icon name="server" />
+                      {language.t("settings.models.title")}
+                    </Tabs.Trigger>
                   </div>
                 </div>
               </div>
@@ -64,9 +64,9 @@ export const DialogSettings: Component = () => {
         <Tabs.Content value="providers" class="no-scrollbar">
           <SettingsProviders />
         </Tabs.Content>
-        {/* <Tabs.Content value="models" class="no-scrollbar"> */}
-        {/*   <SettingsModels /> */}
-        {/* </Tabs.Content> */}
+        <Tabs.Content value="models" class="no-scrollbar">
+          <SettingsModels />
+        </Tabs.Content>
         {/* <Tabs.Content value="agents" class="no-scrollbar"> */}
         {/*   <SettingsAgents /> */}
         {/* </Tabs.Content> */}
