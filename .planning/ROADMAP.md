@@ -26,6 +26,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 12: Server-Side TOTP Registration** - Offload .google_authenticator file generation to server
 - [ ] **Phase 13: Passkeys Investigation** - Investigate adding passkeys and passkey management to opencode auth
 - [ ] **Phase 14: Persistent Session Storage** - Add persistent session storage for multi-instance deployments
+- [ ] **Phase 15: Update docs to use opencode fork (pRizz)** - Update docs to use the opencode fork at https://github.com/pRizz/opencode which actually has the auth implementation
 
 ## Phase Details
 
@@ -267,10 +268,21 @@ Plans:
 **Details:**
 [To be added during planning]
 
+### Phase 15: Update docs to use opencode fork (pRizz)
+**Goal**: [To be planned]
+**Depends on**: Phase 14
+**Plans**: 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 15 to break down)
+
+**Details:**
+Update docs to use the opencode fork at https://github.com/pRizz/opencode which actually has the auth implementation. [To be added during planning.]
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13 -> 14
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13 -> 14 -> 15
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -288,3 +300,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 12. Server-Side TOTP Registration | 0/TBD | Not started | - |
 | 13. Passkeys Investigation | 0/TBD | Not started | - |
 | 14. Persistent Session Storage | 0/TBD | Not started | - |
+| 15. Update docs to use opencode fork (pRizz) | 0/TBD | Not started | - |

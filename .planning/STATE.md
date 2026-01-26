@@ -167,6 +167,7 @@ Recent decisions affecting current work:
 - Phase 12 added: Server-Side TOTP Registration - offload .google_authenticator file generation to server
 - Phase 13 added: Passkeys Investigation - investigate adding passkeys and passkey management to opencode auth
 - Phase 14 added: Persistent Session Storage - add persistent session storage for multi-instance deployments
+- Phase 15 added: Update docs to use opencode fork (pRizz) - point documentation to https://github.com/pRizz/opencode which has the auth implementation
 
 ### Pending Todos
 
