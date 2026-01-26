@@ -2,6 +2,11 @@ name: Close stale PRs
 
 on:
   workflow_dispatch:
+    inputs:
+      dryRun:
+        description: "Log actions without closing PRs"
+        type: boolean
+        default: false
   schedule:
     - cron: "0 6 * * *"
 
@@ -22,7 +27,7 @@ jobs:
             const DAYS_INACTIVE = 60
             const cutoff = new Date(Date.now() - DAYS_INACTIVE * 24 * 60 * 60 * 1000)
             const { owner, repo } = context.repo
-            const dryRun = false
+            const dryRun = context.payload.inputs?.dryRun === "true"
             const stalePrs = []
 
             core.info(`Dry run mode: ${dryRun}`)
