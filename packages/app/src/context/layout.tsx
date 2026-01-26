@@ -82,6 +82,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           diffStyle: "split" as ReviewDiffStyle,
           panelOpened: true,
         },
+        fileTree: {
+          opened: false,
+          width: 260,
+        },
         session: {
           width: 600,
         },
@@ -218,7 +222,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
-      const [childStore] = globalSync.child(project.worktree)
+      const [childStore] = globalSync.child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
       const metadata = projectID
         ? globalSync.data.project.find((x) => x.id === projectID)
@@ -447,6 +451,38 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
           setStore("review", "diffStyle", diffStyle)
+        },
+      },
+      fileTree: {
+        opened: createMemo(() => store.fileTree?.opened ?? false),
+        width: createMemo(() => store.fileTree?.width ?? 260),
+        open() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width: 260 })
+            return
+          }
+          setStore("fileTree", "opened", true)
+        },
+        close() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: false, width: 260 })
+            return
+          }
+          setStore("fileTree", "opened", false)
+        },
+        toggle() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width: 260 })
+            return
+          }
+          setStore("fileTree", "opened", (x) => !x)
+        },
+        resize(width: number) {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width })
+            return
+          }
+          setStore("fileTree", "width", width)
         },
       },
       session: {
