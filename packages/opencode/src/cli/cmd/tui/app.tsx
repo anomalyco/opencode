@@ -210,6 +210,11 @@ function App() {
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+  const [codeConceal, setCodeConceal] = kv.signal("conceal_code", true)
+  const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
+  const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
+  const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
+  const [_,setShowScrollbar] = kv.signal("scrollbar_visible", false)
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -581,6 +586,62 @@ function App() {
       onSelect: (dialog) => {
         const current = kv.get("diff_wrap_mode", "word")
         kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
+        dialog.clear()
+      },
+    },
+    {
+      title: codeConceal() ? "Disable code concealment" : "Enable code concealment",
+      value: "app.toggle.conceal",
+      keybind: "messages_toggle_conceal",
+      category: "System",
+      onSelect: (dialog) => {
+        setCodeConceal((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: timestamps() === "show" ? "Hide timestamps" : "Show timestamps",
+      value: "app.toggle.timestamps",
+      category: "System",
+      slash: {
+        name: "timestamps",
+        aliases: ["toggle-timestamps"],
+      },
+      onSelect: (dialog) => {
+        setTimestamps((prev) => (prev === "show" ? "hide" : "show"))
+        dialog.clear()
+      },
+    },
+    {
+      title: showThinking() ? "Hide thinking" : "Show thinking",
+      value: "app.toggle.thinking",
+      category: "System",
+      slash: {
+        name: "thinking",
+        aliases: ["toggle-thinking"],
+      },
+      onSelect: (dialog) => {
+        setShowThinking((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: showDetails() ? "Hide tool details" : "Show tool details",
+      value: "app.toggle.actions",
+      keybind: "tool_details",
+      category: "System",
+      onSelect: (dialog) => {
+        setShowDetails((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle session scrollbar",
+      value: "app.toggle.scrollbar",
+      keybind: "scrollbar_toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        setShowScrollbar((prev) => !prev)
         dialog.clear()
       },
     },
