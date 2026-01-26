@@ -463,6 +463,23 @@ export default function Page() {
     sync.session.sync(params.id)
   })
 
+  // Resync session when tab becomes visible (iOS backgrounding fix)
+  onMount(() => {
+    let lastHidden = 0
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        lastHidden = Date.now()
+        return
+      }
+      // Only resync if we were hidden for at least 1 second (avoid spurious triggers)
+      if (!params.id) return
+      if (Date.now() - lastHidden < 1000) return
+      sync.session.sync(params.id)
+    }
+    document.addEventListener("visibilitychange", handleVisibility)
+    onCleanup(() => document.removeEventListener("visibilitychange", handleVisibility))
+  })
+
   createEffect(() => {
     if (!view().terminal.opened()) {
       setUi("autoCreated", false)

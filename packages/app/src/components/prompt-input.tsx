@@ -58,6 +58,7 @@ import { createOpencodeClient, type Message, type Part } from "@opencode-ai/sdk/
 import { Binary } from "@opencode-ai/util/binary"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
+import { wasRecentlyBackgrounded } from "@/utils/visibility"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
@@ -1260,10 +1261,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           command: text,
         })
         .catch((err) => {
-          showToast({
-            title: language.t("prompt.toast.shellSendFailed.title"),
-            description: errorMessage(err),
-          })
+          // Suppress toast if failure likely due to iOS backgrounding
+          if (!wasRecentlyBackgrounded()) {
+            showToast({
+              title: language.t("prompt.toast.shellSendFailed.title"),
+              description: errorMessage(err),
+            })
+          }
           restoreInput()
         })
       return
@@ -1292,10 +1296,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             })),
           })
           .catch((err) => {
-            showToast({
-              title: language.t("prompt.toast.commandSendFailed.title"),
-              description: errorMessage(err),
-            })
+            // Suppress toast if failure likely due to iOS backgrounding
+            if (!wasRecentlyBackgrounded()) {
+              showToast({
+                title: language.t("prompt.toast.commandSendFailed.title"),
+                description: errorMessage(err),
+              })
+            }
             restoreInput()
           })
         return
@@ -1589,10 +1596,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
     }
 
-    void send().catch((err) => {
+    void send().catch(async (err) => {
       pending.delete(session.id)
       if (sessionDirectory === projectDirectory) {
         sync.set("session_status", session.id, { type: "idle" })
+      }
+      // If we just resumed from background, the request may have actually succeeded
+      // Resync to check before showing error and removing optimistic message
+      if (wasRecentlyBackgrounded()) {
+        await sync.session.sync(session.id).catch(() => {})
+        // Check if message actually landed
+        const messages = sync.data.message[session.id] ?? []
+        const found = messages.find((m) => m.id === messageID)
+        if (found) return // Message was delivered, don't show error
       }
       showToast({
         title: language.t("prompt.toast.promptSendFailed.title"),
