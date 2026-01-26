@@ -185,23 +185,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {
     if (!item.commentID) return
 
-    comments.setFocus({ file: item.path, id: item.commentID })
-    comments.setActive({ file: item.path, id: item.commentID })
+    const focus = { file: item.path, id: item.commentID }
+    comments.setActive(focus)
     view().reviewPanel.open()
 
     if (item.commentOrigin === "review") {
       tabs().open("review")
+      requestAnimationFrame(() => comments.setFocus(focus))
       return
     }
 
     if (item.commentOrigin !== "file" && commentInReview(item.path)) {
       tabs().open("review")
+      requestAnimationFrame(() => comments.setFocus(focus))
       return
     }
 
     const tab = files.tab(item.path)
     tabs().open(tab)
     files.load(item.path)
+    requestAnimationFrame(() => comments.setFocus(focus))
   }
 
   const recent = createMemo(() => {

@@ -91,6 +91,19 @@ export function Code<T>(props: CodeProps<T>) {
     return root
   }
 
+  const applyScheme = () => {
+    const host = container.querySelector("diffs-container")
+    if (!(host instanceof HTMLElement)) return
+
+    const scheme = document.documentElement.dataset.colorScheme
+    if (scheme === "dark" || scheme === "light") {
+      host.dataset.colorScheme = scheme
+      return
+    }
+
+    host.removeAttribute("data-color-scheme")
+  }
+
   const applyCommentedLines = (ranges: SelectedLineRange[]) => {
     const root = getRoot()
     if (!root) return
@@ -369,8 +382,22 @@ export function Code<T>(props: CodeProps<T>) {
       containerWrapper: container,
     })
 
+    applyScheme()
+
     setRendered((value) => value + 1)
     notifyRendered()
+  })
+
+  createEffect(() => {
+    if (typeof document === "undefined") return
+    if (typeof MutationObserver === "undefined") return
+
+    const root = document.documentElement
+    const monitor = new MutationObserver(() => applyScheme())
+    monitor.observe(root, { attributes: true, attributeFilter: ["data-color-scheme"] })
+    applyScheme()
+
+    onCleanup(() => monitor.disconnect())
   })
 
   createEffect(() => {
