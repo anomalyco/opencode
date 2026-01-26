@@ -917,6 +917,16 @@ export namespace SessionPrompt {
           }
           const url = new URL(part.url)
           switch (url.protocol) {
+            case "http:":
+            case "https:":
+              return [
+                {
+                  ...part,
+                  id: part.id ?? Identifier.ascending("part"),
+                  messageID: info.id,
+                  sessionID: input.sessionID,
+                },
+              ]
             case "data:":
               if (part.mime === "text/plain") {
                 return [
@@ -950,7 +960,32 @@ export namespace SessionPrompt {
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
               const filepath = fileURLToPath(part.url)
-              const stat = await Bun.file(filepath).stat()
+              const stat = await Bun.file(filepath).stat().catch(() => undefined)
+
+              if (!stat) {
+                const message = `File not found: ${filepath}`
+                log.error("file not found", { filepath })
+                Bus.publish(Session.Event.Error, {
+                  sessionID: input.sessionID,
+                  error: new NamedError.Unknown({ message }).toObject(),
+                })
+                return [
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: message,
+                  },
+                  {
+                    ...part,
+                    id: part.id ?? Identifier.ascending("part"),
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                  },
+                ]
+              }
 
               if (stat.isDirectory()) {
                 part.mime = "application/x-directory"
