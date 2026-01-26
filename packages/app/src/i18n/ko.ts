@@ -410,6 +410,14 @@ export const dict = {
   "session.header.search.placeholder": "{{project}} 검색",
   "session.header.searchFiles": "파일 검색",
 
+  "status.popover.trigger": "상태",
+  "status.popover.ariaLabel": "서버 구성",
+  "status.popover.tab.servers": "서버",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "플러그인",
+  "status.popover.action.manageServers": "서버 관리",
+
   "session.share.popover.title": "웹에 게시",
   "session.share.popover.description.shared": "이 세션은 웹에 공개되었습니다. 링크가 있는 누구나 액세스할 수 있습니다.",
   "session.share.popover.description.unshared":

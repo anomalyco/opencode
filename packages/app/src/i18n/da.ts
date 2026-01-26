@@ -409,6 +409,14 @@ export const dict = {
   "session.header.search.placeholder": "Søg {{project}}",
   "session.header.searchFiles": "Søg efter filer",
 
+  "status.popover.trigger": "Status",
+  "status.popover.ariaLabel": "Serverkonfigurationer",
+  "status.popover.tab.servers": "Servere",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Plugins",
+  "status.popover.action.manageServers": "Administrer servere",
+
   "session.share.popover.title": "Udgiv på nettet",
   "session.share.popover.description.shared":
     "Denne session er offentlig på nettet. Den er tilgængelig for alle med linket.",

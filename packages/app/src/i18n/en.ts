@@ -430,6 +430,14 @@ export const dict = {
   "session.header.search.placeholder": "Search {{project}}",
   "session.header.searchFiles": "Search files",
 
+  "status.popover.trigger": "Status",
+  "status.popover.ariaLabel": "Server configurations",
+  "status.popover.tab.servers": "Servers",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Plugins",
+  "status.popover.action.manageServers": "Manage servers",
+
   "session.share.popover.title": "Publish on web",
   "session.share.popover.description.shared":
     "This session is public on the web. It is accessible to anyone with the link.",

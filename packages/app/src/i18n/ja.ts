@@ -407,6 +407,14 @@ export const dict = {
   "session.header.search.placeholder": "{{project}}を検索",
   "session.header.searchFiles": "ファイルを検索",
 
+  "status.popover.trigger": "ステータス",
+  "status.popover.ariaLabel": "サーバー設定",
+  "status.popover.tab.servers": "サーバー",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "プラグイン",
+  "status.popover.action.manageServers": "サーバーを管理",
+
   "session.share.popover.title": "ウェブで公開",
   "session.share.popover.description.shared":
     "このセッションはウェブで公開されています。リンクを知っている人なら誰でもアクセスできます。",

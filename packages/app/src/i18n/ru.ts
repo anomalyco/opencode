@@ -430,6 +430,14 @@ export const dict = {
   "session.header.search.placeholder": "Поиск {{project}}",
   "session.header.searchFiles": "Поиск файлов",
 
+  "status.popover.trigger": "Статус",
+  "status.popover.ariaLabel": "Настройки серверов",
+  "status.popover.tab.servers": "Серверы",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Плагины",
+  "status.popover.action.manageServers": "Управлять серверами",
+
   "session.share.popover.title": "Опубликовать в интернете",
   "session.share.popover.description.shared":
     "Эта сессия общедоступна. Доступ к ней может получить любой, у кого есть ссылка.",

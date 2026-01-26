@@ -405,6 +405,14 @@ export const dict = {
   "session.header.search.placeholder": "搜索 {{project}}",
   "session.header.searchFiles": "搜索文件",
 
+  "status.popover.trigger": "状态",
+  "status.popover.ariaLabel": "服务器配置",
+  "status.popover.tab.servers": "服务器",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "插件",
+  "status.popover.action.manageServers": "管理服务器",
+
   "session.share.popover.title": "发布到网页",
   "session.share.popover.description.shared": "此会话已在网页上公开。任何拥有链接的人都可以访问。",
   "session.share.popover.description.unshared": "在网页上公开分享此会话。任何拥有链接的人都可以访问。",

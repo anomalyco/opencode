@@ -426,6 +426,14 @@ export const dict = {
   "session.header.search.placeholder": "بحث {{project}}",
   "session.header.searchFiles": "بحث عن الملفات",
 
+  "status.popover.trigger": "الحالة",
+  "status.popover.ariaLabel": "إعدادات الخوادم",
+  "status.popover.tab.servers": "الخوادم",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "الإضافات",
+  "status.popover.action.manageServers": "إدارة الخوادم",
+
   "session.share.popover.title": "نشر على الويب",
   "session.share.popover.description.shared": "هذه الجلسة عامة على الويب. يمكن لأي شخص لديه الرابط الوصول إليها.",
   "session.share.popover.description.unshared": "شارك الجلسة علنًا على الويب. ستكون متاحة لأي شخص لديه الرابط.",
