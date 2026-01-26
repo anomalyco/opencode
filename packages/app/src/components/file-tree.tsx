@@ -33,6 +33,19 @@ export default function FileTree(props: {
   const draggable = () => props.draggable ?? true
   const tooltip = () => props.tooltip ?? true
 
+  const maxOpen = (dir: string, lvl: number): number => {
+    const expanded = file.tree.state(dir)?.expanded ?? false
+    if (!expanded) return -1
+
+    const nodes = file.tree.children(dir)
+    const child = nodes.reduce((max, node) => {
+      if (node.type !== "directory") return max
+      return Math.max(max, maxOpen(node.path, lvl + 1))
+    }, -1)
+
+    return Math.max(lvl, child)
+  }
+
   const filter = createMemo(() => {
     const allowed = props.allowed
     if (!allowed) return
@@ -152,6 +165,7 @@ export default function FileTree(props: {
       <For each={nodes()}>
         {(node) => {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
+          const deep = createMemo(() => (node.type === "directory" ? maxOpen(node.path, level) : -1))
           const Wrapper = (p: ParentProps) => {
             if (!tooltip()) return p.children
             return (
@@ -181,7 +195,15 @@ export default function FileTree(props: {
                       </Node>
                     </Wrapper>
                   </Collapsible.Trigger>
-                  <Collapsible.Content class="mt-0.5">
+                  <Collapsible.Content class="relative pt-0.5">
+                    <div
+                      classList={{
+                        "absolute top-0 bottom-0 w-px pointer-events-none bg-border-weak-base": true,
+                        "opacity-100": expanded() && deep() === level,
+                        "opacity-50": !(expanded() && deep() === level),
+                      }}
+                      style={`left: ${Math.max(0, 8 + level * 12 - 4) + 8}px`}
+                    />
                     <FileTree
                       path={node.path}
                       level={level + 1}
