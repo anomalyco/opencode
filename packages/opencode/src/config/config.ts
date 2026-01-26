@@ -810,6 +810,7 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    tips: z.boolean().optional().describe("Show input placeholder hints on home screen"),
   })
 
   export const Server = z

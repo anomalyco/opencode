@@ -1632,6 +1632,10 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Show input placeholder hints on home screen
+     */
+    tips?: boolean
   }
   server?: ServerConfig
   /**

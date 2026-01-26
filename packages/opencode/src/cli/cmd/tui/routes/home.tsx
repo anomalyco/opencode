@@ -39,6 +39,8 @@ export function Home() {
   const showTips = createMemo(() => {
     // Don't show tips for first-time users
     if (isFirstTimeUser()) return false
+    // Config takes precedence over KV toggle
+    if (sync.data.config.tui?.tips === false) return false
     return !tipsHidden()
   })
 
