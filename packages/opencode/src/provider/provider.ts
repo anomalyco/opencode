@@ -374,6 +374,44 @@ export namespace Provider {
         },
       }
     },
+    "google-vertex-openai": async () => {
+      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
+      const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global"
+
+      if (!project) return { autoload: false }
+
+      const { GoogleAuth } = await import(await BunProc.install("google-auth-library"))
+      const auth = new GoogleAuth({
+        scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+      })
+
+      // Verify credentials are available
+      try {
+        await auth.getClient()
+      } catch {
+        return { autoload: false }
+      }
+
+      // Host differs for global vs regional
+      const host = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`
+
+      return {
+        autoload: true,
+        options: {
+          baseURL: `https://${host}/v1/projects/${project}/locations/${location}/endpoints/openapi`,
+          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            const client = await auth.getClient()
+            const tokenResponse = await client.getAccessToken()
+            const token = tokenResponse.token
+
+            const headers = new Headers(init?.headers)
+            headers.set("Authorization", `Bearer ${token}`)
+
+            return fetch(input, { ...init, headers })
+          },
+        },
+      }
+    },
     "sap-ai-core": async () => {
       const auth = await Auth.get("sap-ai-core")
       const envServiceKey = iife(() => {
