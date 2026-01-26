@@ -32,12 +32,12 @@ export const MegaPromptPlugin: Plugin = async (ctx: PluginInput): Promise<Hooks>
             .string()
             .optional()
             .describe(
-              "Comma-separated list of models to query (format: provider/model). Defaults to gpt-4o, claude-3-5-sonnet, gemini-2.0-flash",
+              "Comma-separated list of models to query (format: provider/model). Defaults to openai/gpt-4o, anthropic/claude-3-5-sonnet-20241022, google/gemini-2.0-flash-exp",
             ),
           evaluator: tool.schema
             .string()
             .optional()
-            .describe("The evaluator model to use for judging (format: provider/model). Defaults to gemini-2.0-flash"),
+            .describe("The evaluator model to use for judging (format: provider/model). Defaults to google/gemini-2.0-flash-exp"),
         },
         async execute(args, context) {
           const { prompt, models: modelsArg, evaluator: evaluatorArg } = args
@@ -82,8 +82,8 @@ export const MegaPromptPlugin: Plugin = async (ctx: PluginInput): Promise<Hooks>
             const textParts = response.parts.filter((p: { type: string }) => p.type === "text")
             const text = textParts.map((p: { type: string; text?: string }) => p.text || "").join("\n")
 
-            // Clean up the session
-            await ctx.client.session.delete({ path: { id: sessionID } }).catch(() => {})
+            // Clean up the session - ignore cleanup failures as they don't affect the response
+            await ctx.client.session.delete({ path: { id: sessionID } }).catch(() => undefined)
 
             return text
           }

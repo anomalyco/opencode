@@ -40,7 +40,7 @@ ${r.text}
     )
     .join("\n---\n")
 
-  return `Role: Improvement Specialist (Gemini 3)
+  return `Role: Improvement Specialist
 Context: You are evaluating responses from ${successfulResponses.length} different AI models to the following prompt:
 
 ---

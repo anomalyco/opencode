@@ -23,7 +23,8 @@ export async function orchestrate(input: OrchestrationInput): Promise<ModelRespo
       const text = await Promise.race([
         input.generate(model, input.prompt),
         new Promise<never>((_, reject) => {
-          controller.signal.addEventListener("abort", () => reject(new Error("Request timed out")))
+          const handler = () => reject(new Error("Request timed out"))
+          controller.signal.addEventListener("abort", handler)
         }),
       ])
 
@@ -43,6 +44,7 @@ export async function orchestrate(input: OrchestrationInput): Promise<ModelRespo
       }
     } finally {
       clearTimeout(timeoutId)
+      controller.abort() // Clean up the controller to remove any listeners
     }
   })
 
