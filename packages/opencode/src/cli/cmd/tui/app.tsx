@@ -214,7 +214,10 @@ function App() {
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
-  const [_,setShowScrollbar] = kv.signal("scrollbar_visible", false)
+  const [_, setShowScrollbar] = kv.signal("scrollbar_visible", false)
+  const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
+  const [diffWrapMode, setDiffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
+  const [openrouterWarning, setOpenrouterWarning] = kv.signal("openrouter_warning", false)
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -570,21 +573,20 @@ function App() {
       },
     },
     {
-      title: kv.get("animations_enabled", true) ? "Disable animations" : "Enable animations",
+      title: animationsEnabled() ? "Disable animations" : "Enable animations",
       value: "app.toggle.animations",
       category: "System",
       onSelect: (dialog) => {
-        kv.set("animations_enabled", !kv.get("animations_enabled", true))
+        setAnimationsEnabled((prev) => !prev)
         dialog.clear()
       },
     },
     {
-      title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
+      title: diffWrapMode() === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
       value: "app.toggle.diffwrap",
       category: "System",
       onSelect: (dialog) => {
-        const current = kv.get("diff_wrap_mode", "word")
-        kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
+        setDiffWrapMode((prev) => (prev === "word" ? "none" : "word"))
         dialog.clear()
       },
     },
@@ -649,13 +651,13 @@ function App() {
   createEffect(() => {
     const currentModel = local.model.current()
     if (!currentModel) return
-    if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
+    if (currentModel.providerID === "openrouter" && !openrouterWarning()) {
       untrack(() => {
         DialogAlert.show(
           dialog,
           "Warning",
           "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out OpenCode Zen\nhttps://opencode.ai/zen",
-        ).then(() => kv.set("openrouter_warning", true))
+        ).then(() => setOpenrouterWarning(() => true))
       })
     }
   })
