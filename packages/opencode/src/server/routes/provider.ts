@@ -47,6 +47,13 @@ export const ProviderRoutes = lazy(() =>
           }
         }
 
+        // If GitHub-only mode, further restrict to only github-copilot
+        if (process.env.OPENCODE_ONLY_GITHUB) {
+          for (const k of Object.keys(filteredProviders)) {
+            if (!k.startsWith("github-copilot")) delete filteredProviders[k]
+          }
+        }
+
         const connected = await Provider.list()
         const providers = Object.assign(
           mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
