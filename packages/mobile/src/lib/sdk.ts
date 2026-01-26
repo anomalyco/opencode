@@ -261,7 +261,7 @@ export function createClient(config: ClientConfig) {
       messages: (sessionID: string) => request<MessageWithParts[]>(config, `/session/${sessionID}/message`),
 
       // Sends a message and returns the response
-      // The server streams but returns a single JSON object
+      // Fire-and-forget async prompt - SSE events drive all real-time updates
       prompt: async (
         sessionID: string,
         params: {
@@ -270,8 +270,8 @@ export function createClient(config: ClientConfig) {
           agent?: string
           variant?: string
         },
-      ): Promise<MessageWithParts> => {
-        const url = `${config.baseUrl}/session/${sessionID}/message`
+      ): Promise<void> => {
+        const url = `${config.baseUrl}/session/${sessionID}/prompt_async`
         const headers = createHeaders(config)
 
         const response = await fetch(url, {
@@ -284,9 +284,6 @@ export function createClient(config: ClientConfig) {
           const error = await response.text()
           throw new Error(`Failed to send message: ${response.status} - ${error}`)
         }
-
-        const text = await response.text()
-        return JSON.parse(text)
       },
 
       command: async (

@@ -10,10 +10,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from "react-native"
 import { useLocalSearchParams, Stack, useRouter } from "expo-router"
 import { Ionicons } from "@expo/vector-icons"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import * as ImagePicker from "expo-image-picker"
+import * as Clipboard from "expo-clipboard"
 import type BottomSheet from "@gorhom/bottom-sheet"
 import {
   MessageBubble,
@@ -22,7 +25,9 @@ import {
   StatusIndicator,
   SlashPopover,
   ModelPicker,
+  ImageAttachments,
   type SlashCommand,
+  type Attachment,
 } from "../../src/components/chat"
 import { useSessions } from "../../src/stores/sessions"
 import { useEvents } from "../../src/stores/events"
@@ -79,6 +84,7 @@ export default function SessionScreen() {
   const flatListRef = useRef<FlatList>(null)
   const modelSheetRef = useRef<BottomSheet>(null)
   const [input, setInput] = useState("")
+  const [attachments, setAttachments] = useState<Attachment[]>([])
 
   const { currentSession, messages, parts, isLoading, isSending, selectSession, sendMessage, abortSession } =
     useSessions()
@@ -193,21 +199,98 @@ export default function SessionScreen() {
     [router, cycleAgent],
   )
 
+  // --- Image picking ---
+
+  // Normalize MIME types that LLM providers don't support (e.g. HEIC/HEIF from iOS)
+  function normalizeImageMime(mime: string): string {
+    const lower = mime.toLowerCase()
+    if (lower === "image/heic" || lower === "image/heif") return "image/jpeg"
+    if (lower.startsWith("image/")) return lower
+    return "image/jpeg"
+  }
+
+  const pickFromLibrary = useCallback(async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsMultipleSelection: true,
+      quality: 0.8,
+      base64: true,
+    })
+    if (result.canceled) return
+    const items: Attachment[] = result.assets.map((a) => ({
+      uri: a.uri,
+      mime: normalizeImageMime(a.mimeType || "image/jpeg"),
+      filename: a.fileName || undefined,
+      width: a.width,
+      height: a.height,
+      base64: a.base64 || undefined,
+    }))
+    setAttachments((prev) => [...prev, ...items])
+  }, [])
+
+  const pickFromCamera = useCallback(async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync()
+    if (!perm.granted) {
+      Alert.alert("Permission needed", "Camera access is required to take photos.")
+      return
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.8,
+      base64: true,
+    })
+    if (result.canceled) return
+    const a = result.assets[0]
+    setAttachments((prev) => [
+      ...prev,
+      {
+        uri: a.uri,
+        mime: normalizeImageMime(a.mimeType || "image/jpeg"),
+        filename: a.fileName || undefined,
+        width: a.width,
+        height: a.height,
+        base64: a.base64 || undefined,
+      },
+    ])
+  }, [])
+
+  const pasteFromClipboard = useCallback(async () => {
+    const hasImage = await Clipboard.hasImageAsync()
+    if (hasImage) {
+      const img = await Clipboard.getImageAsync({ format: "png" })
+      if (img?.data) {
+        setAttachments((prev) => [
+          ...prev,
+          {
+            uri: `data:image/png;base64,${img.data}`,
+            mime: "image/png",
+            filename: "clipboard.png",
+            width: img.size.width,
+            height: img.size.height,
+          },
+        ])
+        return
+      }
+    }
+    Alert.alert("No image", "Clipboard does not contain an image.")
+  }, [])
+
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index))
+  }, [])
+
+  // --- Send ---
   const handleSend = async () => {
-    if (!input.trim()) return
+    if (!input.trim() && attachments.length === 0) return
     const authenticated = await authenticateForMessage()
     if (!authenticated) return
 
     const text = input.trim()
+    const files = [...attachments]
     setInput("")
+    setAttachments([])
 
-    if (isSending) {
-      await abortSession()
-      await new Promise((r) => setTimeout(r, 300))
-    }
-
-    // Server slash commands
-    if (text.startsWith("/")) {
+    // Server slash commands (no attachments for commands)
+    if (text.startsWith("/") && files.length === 0) {
       const [cmdName, ...args] = text.split(" ")
       const name = cmdName.slice(1)
       const match = serverCommands.find((c) => c.name === name)
@@ -224,7 +307,9 @@ export default function SessionScreen() {
       }
     }
 
-    await sendMessage(text, model || undefined, agent || undefined)
+    // Messages are queued server-side when the session is busy.
+    // No need to abort - just send and it will be processed after current response.
+    await sendMessage(text, model || undefined, agent || undefined, files)
   }
 
   const handleScroll = useCallback((event: any) => {
@@ -381,32 +466,50 @@ export default function SessionScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Attachment preview */}
+        <ImageAttachments attachments={attachments} isDark={isDark} onRemove={removeAttachment} />
+
         {/* Input */}
         <View
           style={[s.inputContainer, isDark && s.inputContainerDark, { paddingBottom: Math.max(12, insets.bottom) }]}
         >
-          <TextInput
-            style={[s.input, isDark && s.inputDark]}
-            placeholder={isSending ? "Type to interrupt..." : "Type a message..."}
-            placeholderTextColor={isDark ? "#666666" : "#999999"}
-            value={input}
-            onChangeText={setInput}
-            multiline
-            maxLength={10000}
-          />
-          {isSending && !input.trim() ? (
-            <TouchableOpacity style={s.stopBtn} onPress={abortSession}>
-              <Ionicons name="stop" size={20} color="#ffffff" />
+          <View style={s.inputRow}>
+            {/* Attach button */}
+            <TouchableOpacity style={s.attachBtn} onPress={pickFromLibrary} onLongPress={pickFromCamera}>
+              <Ionicons name="add-circle-outline" size={26} color={isDark ? "#888888" : "#666666"} />
             </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[s.sendBtn, !input.trim() && s.sendBtnDisabled]}
-              onPress={handleSend}
-              disabled={!input.trim()}
-            >
-              <Ionicons name={isSending ? "arrow-up" : "send"} size={20} color="#ffffff" />
+
+            {/* Clipboard paste button */}
+            <TouchableOpacity style={s.attachBtn} onPress={pasteFromClipboard}>
+              <Ionicons name="clipboard-outline" size={22} color={isDark ? "#888888" : "#666666"} />
             </TouchableOpacity>
-          )}
+
+            <TextInput
+              style={[s.input, isDark && s.inputDark]}
+              placeholder={isSending ? "Send a follow-up..." : "Type a message..."}
+              placeholderTextColor={isDark ? "#666666" : "#999999"}
+              value={input}
+              onChangeText={setInput}
+              multiline
+              maxLength={10000}
+            />
+            {/* Stop button: only when busy and no input */}
+            {isSending && !input.trim() && attachments.length === 0 && (
+              <TouchableOpacity style={s.stopBtn} onPress={abortSession}>
+                <Ionicons name="stop" size={20} color="#ffffff" />
+              </TouchableOpacity>
+            )}
+            {/* Send button: when there's input or not sending */}
+            {(!isSending || input.trim() || attachments.length > 0) && (
+              <TouchableOpacity
+                style={[s.sendBtn, !input.trim() && attachments.length === 0 && s.sendBtnDisabled]}
+                onPress={handleSend}
+                disabled={!input.trim() && attachments.length === 0}
+              >
+                <Ionicons name="send" size={20} color="#ffffff" />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </KeyboardAvoidingView>
 
@@ -494,14 +597,22 @@ const s = StyleSheet.create({
 
   // Input
   inputContainer: {
-    flexDirection: "row",
-    alignItems: "flex-end",
     padding: 12,
     borderTopWidth: 1,
     borderTopColor: "#e5e5e5",
     backgroundColor: "#ffffff",
   },
   inputContainerDark: { borderTopColor: "#1a1a1a", backgroundColor: "#0a0a0a" },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+  },
+  attachBtn: {
+    width: 36,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   input: {
     flex: 1,
     backgroundColor: "#f5f5f5",

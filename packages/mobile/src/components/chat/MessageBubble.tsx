@@ -1,9 +1,15 @@
-import { View, Text, StyleSheet } from "react-native"
+import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { Markdown } from "../markdown"
 import { ToolCallCard } from "./ToolCallCard"
 import { ReasoningBlock } from "./ReasoningBlock"
 import type { Message, Part } from "../../lib/sdk"
+
+const SCREEN_WIDTH = Dimensions.get("window").width
+
+function isImageMime(mime?: string): boolean {
+  return !!mime && mime.startsWith("image/")
+}
 
 interface Props {
   message: Message
@@ -17,6 +23,7 @@ export function MessageBubble({ message, parts, isDark }: Props) {
   const textParts = parts.filter((p) => p.type === "text")
   const reasoningParts = parts.filter((p) => p.type === "reasoning")
   const toolParts = parts.filter((p) => p.type === "tool")
+  const fileParts = parts.filter((p) => p.type === "file" && isImageMime(p.mime))
   const text = textParts.map((p) => p.text).join("\n") || ""
   const reasoning = reasoningParts.map((p) => p.text).join("\n") || ""
 
@@ -40,6 +47,27 @@ export function MessageBubble({ message, parts, isDark }: Props) {
         {message.model && <Text style={[s.modelTag, isDark && s.modelTagDark]}>{message.model.modelID}</Text>}
         {!isUser && message.modelID && <Text style={[s.modelTag, isDark && s.modelTagDark]}>{message.modelID}</Text>}
       </View>
+
+      {/* Image attachments */}
+      {fileParts.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.imageRow}
+          style={s.imageScroll}
+        >
+          {fileParts.map((fp) => (
+            <View key={fp.id} style={s.imageWrap}>
+              <Image source={{ uri: fp.url }} style={s.attachedImage} resizeMode="cover" />
+              {fp.filename && (
+                <Text style={[s.imageLabel, isDark && s.imageLabelDark]} numberOfLines={1}>
+                  {fp.filename}
+                </Text>
+              )}
+            </View>
+          ))}
+        </ScrollView>
+      )}
 
       {/* Reasoning (collapsible) */}
       {reasoning.length > 0 && <ReasoningBlock text={reasoning} isDark={isDark} />}
@@ -100,4 +128,17 @@ const s = StyleSheet.create({
 
   tokens: { fontSize: 11, color: "#999999", marginTop: 8 },
   tokensDark: { color: "#666666" },
+
+  // Images
+  imageScroll: { marginBottom: 8 },
+  imageRow: { gap: 8 },
+  imageWrap: { alignItems: "center" },
+  attachedImage: {
+    width: Math.min(200, SCREEN_WIDTH * 0.5),
+    height: Math.min(200, SCREEN_WIDTH * 0.5),
+    borderRadius: 8,
+    backgroundColor: "#e5e5e5",
+  },
+  imageLabel: { fontSize: 10, color: "#666666", marginTop: 2, maxWidth: 200 },
+  imageLabelDark: { color: "#888888" },
 })

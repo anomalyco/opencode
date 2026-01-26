@@ -2,6 +2,41 @@ import { create } from "zustand"
 import type { Session, Message, Part, Event, MessageWithParts } from "../lib/sdk"
 import { useConnections } from "./connections"
 
+// Normalize MIME types that LLM providers don't support (e.g. HEIC/HEIF from iOS)
+function normalizeImageMime(mime: string): string {
+  const lower = mime.toLowerCase()
+  if (lower === "image/heic" || lower === "image/heif") return "image/jpeg"
+  if (lower.startsWith("image/")) return lower
+  return "image/jpeg"
+}
+
+// Convert a local file URI to a data URI by reading it as base64
+// This handles cases where expo-image-picker didn't return base64 data
+async function fileToDataUri(uri: string, mime: string): Promise<string | null> {
+  try {
+    const response = await fetch(uri)
+    const blob = await response.blob()
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const result = reader.result as string
+        // FileReader returns data:mime;base64,... format but we normalize the mime
+        if (result?.startsWith("data:")) {
+          const comma = result.indexOf(",")
+          resolve(`data:${mime};base64,${result.slice(comma + 1)}`)
+        } else {
+          resolve(null)
+        }
+      }
+      reader.onerror = () => resolve(null)
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    console.error("Failed to read file as data URI:", uri)
+    return null
+  }
+}
+
 // Helper to convert API response to our internal format
 function parseMessages(response: MessageWithParts[]): { messages: Message[]; parts: Record<string, Part[]> } {
   const messages: Message[] = []
@@ -29,7 +64,12 @@ interface SessionsState {
   selectSession: (sessionID: string) => Promise<void>
   createSession: (title?: string) => Promise<Session | null>
   deleteSession: (sessionID: string) => Promise<void>
-  sendMessage: (text: string, model?: { providerID: string; modelID: string }, agent?: string) => Promise<void>
+  sendMessage: (
+    text: string,
+    model?: { providerID: string; modelID: string },
+    agent?: string,
+    files?: Array<{ uri: string; mime: string; filename?: string; base64?: string }>,
+  ) => Promise<void>
   abortSession: () => Promise<void>
   refreshMessages: () => Promise<void>
 
@@ -134,7 +174,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
     }
   },
 
-  sendMessage: async (text, model, agent) => {
+  sendMessage: async (text, model, agent, files) => {
     const client = useConnections.getState().client
     const session = get().currentSession
     if (!client || !session) {
@@ -155,22 +195,61 @@ export const useSessions = create<SessionsState>((set, get) => ({
         model,
         agent,
       }
-      const userPart: Part = {
-        id: `temp-part-${ts}`,
-        messageID: userMessage.id,
-        type: "text",
-        text,
+      const optimisticParts: Part[] = []
+      if (text) {
+        optimisticParts.push({
+          id: `temp-part-text-${ts}`,
+          messageID: userMessage.id,
+          type: "text",
+          text,
+        })
+      }
+      if (files) {
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i]
+          optimisticParts.push({
+            id: `temp-part-file-${ts}-${i}`,
+            messageID: userMessage.id,
+            type: "file",
+            mime: f.mime,
+            url: f.uri,
+            filename: f.filename,
+          })
+        }
       }
 
       set((state) => ({
         messages: [...state.messages, userMessage],
-        parts: { ...state.parts, [userMessage.id]: [userPart] },
+        parts: { ...state.parts, [userMessage.id]: optimisticParts },
       }))
+
+      // Build prompt parts
+      const promptParts: Array<
+        { type: "text"; text: string } | { type: "file"; mime: string; url: string; filename?: string }
+      > = []
+      if (text) {
+        promptParts.push({ type: "text", text })
+      }
+      if (files) {
+        for (const f of files) {
+          // Normalize MIME type for LLM provider compatibility
+          const mime = normalizeImageMime(f.mime)
+          // Build data URI - prefer base64 if available, otherwise use existing data: URI
+          const url =
+            f.base64 && !f.uri.startsWith("data:")
+              ? `data:${mime};base64,${f.base64}`
+              : f.uri.startsWith("data:")
+                ? f.uri
+                : await fileToDataUri(f.uri, mime)
+          if (!url) continue
+          promptParts.push({ type: "file", mime, url, filename: f.filename })
+        }
+      }
 
       // Fire and forget - SSE events will update messages/parts/status in real-time
       client.session
         .prompt(session.id, {
-          parts: [{ type: "text", text }],
+          parts: promptParts,
           model,
           agent,
         })

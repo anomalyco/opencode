@@ -163,6 +163,22 @@ export const useEvents = create<EventsState>((set, get) => ({
               break
             }
 
+            case "session.error": {
+              const error = props.error as { message?: string } | undefined
+              const sessionID = props.sessionID as string
+              if (!sessionID) break
+              // Surface the error and clear sending state
+              const sessions = useSessions.getState()
+              if (sessions.currentSession?.id === sessionID) {
+                useSessions.setState({
+                  error: error?.message || "Session error occurred",
+                  isSending: false,
+                })
+                sessions.refreshMessages()
+              }
+              break
+            }
+
             case "permission.asked": {
               const req = props as any
               if (!req.id || !req.sessionID) break

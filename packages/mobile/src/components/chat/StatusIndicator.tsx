@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native"
 import { useEvents } from "../../stores/events"
+import { useSessions } from "../../stores/sessions"
 
 interface Props {
   sessionID: string
@@ -9,15 +10,18 @@ interface Props {
 export function StatusIndicator({ sessionID, isDark }: Props) {
   const status = useEvents((s) => s.sessionStatus[sessionID])
   const text = useEvents((s) => s.statusText[sessionID])
+  const sending = useSessions((s) => s.isSending)
 
-  if (!status || status.type === "idle") return null
+  // Show indicator when SSE reports busy/retry OR when we're awaiting response
+  const busy = sending || (status && status.type !== "idle")
+  if (!busy) return null
+
+  const label = status?.type === "retry" ? `Retrying (attempt ${status.attempt})...` : text || "Working..."
 
   return (
     <View style={[s.bar, isDark && s.barDark]}>
       <ActivityIndicator size="small" color="#8b5cf6" />
-      <Text style={[s.text, isDark && s.textDark]}>
-        {status.type === "retry" ? `Retrying (attempt ${status.attempt})...` : text || "Working..."}
-      </Text>
+      <Text style={[s.text, isDark && s.textDark]}>{label}</Text>
     </View>
   )
 }
