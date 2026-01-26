@@ -489,15 +489,6 @@ function App() {
       category: "System",
     },
     {
-      title: "Open WebUI",
-      value: "webui.open",
-      onSelect: () => {
-        open(sdk.url).catch(() => {})
-        dialog.clear()
-      },
-      category: "System",
-    },
-    {
       title: "Exit the app",
       value: "app.exit",
       slash: {
@@ -567,6 +558,15 @@ function App() {
           if (!next) renderer.setTerminalTitle("")
           return next
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: kv.get("animations_enabled", true) ? "Disable animations" : "Enable animations",
+      value: "app.toggle.animations",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("animations_enabled", !kv.get("animations_enabled", true))
         dialog.clear()
       },
     },
