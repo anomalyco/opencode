@@ -35,16 +35,38 @@ function formatTime(timestamp: number): string {
   return date.toLocaleDateString()
 }
 
-function SessionItem({ session, isDark }: { session: Session; isDark: boolean }) {
+function SessionItem({
+  session,
+  isDark,
+  onRename,
+  onDelete,
+}: {
+  session: Session
+  isDark: boolean
+  onRename: () => void
+  onDelete: () => void
+}) {
   const onPress = () => {
     router.push(`/session/${session.id}`)
+  }
+
+  const onLongPress = () => {
+    Alert.alert(session.title || "Untitled Session", undefined, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Rename", onPress: onRename },
+      { text: "Delete", style: "destructive", onPress: onDelete },
+    ])
   }
 
   // Extract short directory name from session
   const shortDir = session.directory ? session.directory.split("/").filter(Boolean).pop() : null
 
   return (
-    <TouchableOpacity style={[styles.sessionItem, isDark && styles.sessionItemDark]} onPress={onPress}>
+    <TouchableOpacity
+      style={[styles.sessionItem, isDark && styles.sessionItemDark]}
+      onPress={onPress}
+      onLongPress={onLongPress}
+    >
       <View style={styles.sessionContent}>
         <View style={styles.sessionHeader}>
           <Text style={[styles.sessionTitle, isDark && styles.textDark]} numberOfLines={1}>
@@ -86,8 +108,10 @@ export default function SessionsScreen() {
   const [showNewSession, setShowNewSession] = useState(false)
   const [customDir, setCustomDir] = useState("")
   const [isCreating, setIsCreating] = useState(false)
+  const [renaming, setRenaming] = useState<Session | null>(null)
+  const [renameText, setRenameText] = useState("")
 
-  const { sessions, isLoading, error, loadSessions, createSession } = useSessions()
+  const { sessions, isLoading, error, loadSessions, createSession, deleteSession } = useSessions()
   const {
     activeConnection,
     client,
@@ -123,6 +147,36 @@ export default function SessionsScreen() {
     await Promise.all([loadSessions(), refreshProject()])
     setRefreshing(false)
   }, [])
+
+  const handleRename = useCallback((session: Session) => {
+    setRenameText(session.title || "")
+    setRenaming(session)
+  }, [])
+
+  const submitRename = useCallback(async () => {
+    const title = renameText.trim()
+    if (!title || !renaming || !client) return
+    await client.session.update(renaming.id, { title })
+    setRenaming(null)
+    setRenameText("")
+    loadSessions()
+  }, [renaming, renameText, client, loadSessions])
+
+  const handleDelete = useCallback(
+    (session: Session) => {
+      Alert.alert("Delete Session", `Delete "${session.title || "Untitled Session"}"?`, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            await deleteSession(session.id)
+          },
+        },
+      ])
+    },
+    [deleteSession],
+  )
 
   const onCreateSession = async () => {
     const session = await createSession()
@@ -234,7 +288,14 @@ export default function SessionsScreen() {
       <FlatList
         data={sessions}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <SessionItem session={item} isDark={isDark} />}
+        renderItem={({ item }) => (
+          <SessionItem
+            session={item}
+            isDark={isDark}
+            onRename={() => handleRename(item)}
+            onDelete={() => handleDelete(item)}
+          />
+        )}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={isDark ? "#ffffff" : "#0a0a0a"} />
         }
@@ -367,6 +428,43 @@ export default function SessionsScreen() {
               )}
             </View>
           </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Rename modal */}
+      <Modal visible={!!renaming} animationType="fade" transparent>
+        <KeyboardAvoidingView
+          style={[styles.modalOverlay, { justifyContent: "center" }]}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <TouchableOpacity style={styles.modalDismiss} activeOpacity={1} onPress={() => setRenaming(null)} />
+          <View style={[styles.renameCard, isDark && styles.renameCardDark]}>
+            <Text style={[styles.renameTitle, isDark && styles.textDark]}>Rename Session</Text>
+            <TextInput
+              style={[styles.modalInput, isDark && styles.modalInputDark]}
+              value={renameText}
+              onChangeText={setRenameText}
+              onSubmitEditing={submitRename}
+              returnKeyType="done"
+              autoFocus
+              selectTextOnFocus
+              autoCapitalize="sentences"
+              autoCorrect={false}
+            />
+            <View style={styles.renameActions}>
+              <TouchableOpacity style={[styles.renameBtn, styles.renameBtnCancel]} onPress={() => setRenaming(null)}>
+                <Text style={styles.renameBtnCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.renameBtn, styles.modalButtonPrimary, isDark && styles.modalButtonPrimaryDark]}
+                onPress={submitRename}
+                disabled={!renameText.trim()}
+              >
+                <Text style={[styles.modalButtonTextPrimary, isDark && styles.modalButtonTextPrimaryDark]}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.modalDismiss} activeOpacity={1} onPress={() => setRenaming(null)} />
         </KeyboardAvoidingView>
       </Modal>
 
@@ -700,5 +798,39 @@ const styles = StyleSheet.create({
   modalButtonFull: {
     flex: 0,
     width: "100%",
+  },
+  // Rename modal
+  renameCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 32,
+    gap: 16,
+  },
+  renameCardDark: {
+    backgroundColor: "#1a1a1a",
+  },
+  renameTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#0a0a0a",
+  },
+  renameActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  renameBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  renameBtnCancel: {
+    backgroundColor: "transparent",
+  },
+  renameBtnCancelText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#888888",
   },
 })

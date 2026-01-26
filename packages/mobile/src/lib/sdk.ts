@@ -266,6 +266,12 @@ export function createClient(config: ClientConfig) {
 
       delete: (sessionID: string) => request<void>(config, `/session/${sessionID}`, { method: "DELETE" }),
 
+      update: (sessionID: string, params: { title?: string; time?: { archived?: number } }) =>
+        request<Session>(config, `/session/${sessionID}`, {
+          method: "PATCH",
+          body: JSON.stringify(params),
+        }),
+
       messages: (sessionID: string, params?: { limit?: number }) => {
         const query = new URLSearchParams()
         if (params?.limit) query.set("limit", String(params.limit))

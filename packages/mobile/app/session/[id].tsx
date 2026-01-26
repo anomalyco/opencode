@@ -252,11 +252,11 @@ export default function SessionScreen() {
   }, [])
 
   const pasteFromClipboard = useCallback(async () => {
+    // Try image first
     const hasImage = await Clipboard.hasImageAsync()
     if (hasImage) {
       const img = await Clipboard.getImageAsync({ format: "png" })
       if (img?.data) {
-        // img.data may already be a full data URI or just raw base64
         const uri = img.data.startsWith("data:") ? img.data : `data:image/png;base64,${img.data}`
         setAttachments((prev) => [
           ...prev,
@@ -271,7 +271,16 @@ export default function SessionScreen() {
         return
       }
     }
-    Alert.alert("No image", "Clipboard does not contain an image.")
+    // Fall back to text
+    const hasText = await Clipboard.hasStringAsync()
+    if (hasText) {
+      const text = await Clipboard.getStringAsync()
+      if (text) {
+        setInput((prev) => prev + text)
+        return
+      }
+    }
+    Alert.alert("Empty clipboard", "Clipboard does not contain text or an image.")
   }, [])
 
   const removeAttachment = useCallback((index: number) => {
