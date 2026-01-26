@@ -143,7 +143,7 @@ export function DialogSelectFile() {
   })
 
   return (
-    <Dialog class="pt-3 pb-0 !max-h-[480px]">
+    <Dialog class="pt-3 pb-0 !max-h-[480px]" transition>
       <List
         search={{
           placeholder: language.t("palette.search.placeholder"),
