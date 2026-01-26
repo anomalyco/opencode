@@ -281,32 +281,6 @@ export function SessionHeader() {
                 </TooltipKeybind>
               </div>
               <div class="hidden md:block shrink-0">
-                <Tooltip value={language.t("command.fileTree.toggle")} placement="bottom">
-                  <Button
-                    variant="ghost"
-                    class="group/file-tree-toggle size-5 p-0"
-                    onClick={() => {
-                      const opening = !layout.fileTree.opened()
-                      if (opening && !view().reviewPanel.opened()) view().reviewPanel.open()
-                      layout.fileTree.toggle()
-                    }}
-                    aria-label={language.t("command.fileTree.toggle")}
-                    aria-expanded={layout.fileTree.opened()}
-                  >
-                    <div class="relative flex items-center justify-center size-4">
-                      <Icon
-                        size="small"
-                        name="bullet-list"
-                        classList={{
-                          "text-icon-strong": layout.fileTree.opened(),
-                          "text-icon-weak": !layout.fileTree.opened(),
-                        }}
-                      />
-                    </div>
-                  </Button>
-                </Tooltip>
-              </div>
-              <div class="hidden md:block shrink-0">
                 <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button
                     variant="ghost"
@@ -336,6 +310,32 @@ export function SessionHeader() {
                     </div>
                   </Button>
                 </TooltipKeybind>
+              </div>
+              <div class="hidden md:block shrink-0">
+                <Tooltip value="Toggle file tree" placement="bottom">
+                  <Button
+                    variant="ghost"
+                    class="group/file-tree-toggle size-5 p-0"
+                    onClick={() => {
+                      const opening = !layout.fileTree.opened()
+                      if (opening && !view().reviewPanel.opened()) view().reviewPanel.open()
+                      layout.fileTree.toggle()
+                    }}
+                    aria-label="Toggle file tree"
+                    aria-expanded={layout.fileTree.opened()}
+                  >
+                    <div class="relative flex items-center justify-center size-4">
+                      <Icon
+                        size="small"
+                        name="bullet-list"
+                        classList={{
+                          "text-icon-strong": layout.fileTree.opened(),
+                          "text-icon-weak": !layout.fileTree.opened(),
+                        }}
+                      />
+                    </div>
+                  </Button>
+                </Tooltip>
               </div>
             </div>
           </Portal>
