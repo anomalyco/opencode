@@ -1,6 +1,7 @@
 import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 import { Flag } from "../flag/flag"
+import { SmartRule } from "../smart-rule"
 
 export namespace FileTime {
   const log = Log.create({ service: "file.time" })
@@ -26,6 +27,9 @@ export namespace FileTime {
     const { read } = state()
     read[sessionID] = read[sessionID] || {}
     read[sessionID][file] = new Date()
+
+    // Track for smart rules (no-op if feature disabled)
+    SmartRule.track(sessionID, file)
   }
 
   export function get(sessionID: string, file: string) {

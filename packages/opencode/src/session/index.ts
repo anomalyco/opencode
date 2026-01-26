@@ -22,6 +22,7 @@ import { Snapshot } from "@/snapshot"
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
+import { SmartRule } from "@/smart-rule"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -348,6 +349,8 @@ export namespace Session {
         await Storage.remove(msg)
       }
       await Storage.remove(["session", project.id, sessionID])
+      // Clean up smart rule tracking for this session
+      SmartRule.clearSession(sessionID)
       Bus.publish(Event.Deleted, {
         info: session,
       })
