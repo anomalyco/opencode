@@ -125,13 +125,21 @@ export function StatusPopover() {
 
   const [defaultServerUrl, setDefaultServerUrl] = createSignal<string | undefined>()
 
-  createEffect(() => {
+  const refreshDefaultServerUrl = () => {
     const result = platform.getDefaultServerUrl?.()
+    if (!result) {
+      setDefaultServerUrl(undefined)
+      return
+    }
     if (result instanceof Promise) {
       result.then((url) => setDefaultServerUrl(url ? normalizeServerUrl(url) : undefined))
       return
     }
-    if (result) setDefaultServerUrl(normalizeServerUrl(result))
+    setDefaultServerUrl(normalizeServerUrl(result))
+  }
+
+  createEffect(() => {
+    refreshDefaultServerUrl()
   })
 
   return (
@@ -294,7 +302,7 @@ export function StatusPopover() {
                 <Button
                   variant="secondary"
                   class="mt-3 self-start h-8 px-3 py-1.5"
-                  onClick={() => dialog.show(() => <DialogSelectServer />)}
+                  onClick={() => dialog.show(() => <DialogSelectServer />, refreshDefaultServerUrl)}
                 >
                   {language.t("status.popover.action.manageServers")}
                 </Button>
