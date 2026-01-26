@@ -3,7 +3,6 @@ import path from "path"
 import * as fs from "fs/promises"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Instance } from "../../src/project/instance"
-import { FileTime } from "../../src/file/time"
 import { tmpdir } from "../fixture/fixture"
 
 const baseCtx = {
@@ -12,6 +11,7 @@ const baseCtx = {
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
+  messages: [],
   metadata: () => {},
 }
 
@@ -19,7 +19,21 @@ type AskInput = {
   permission: string
   patterns: string[]
   always: string[]
-  metadata: { diff: string }
+  metadata: {
+    diff: string
+    filepath: string
+    files: Array<{
+      filePath: string
+      relativePath: string
+      type: "add" | "update" | "delete" | "move"
+      diff: string
+      before: string
+      after: string
+      additions: number
+      deletions: number
+      movePath?: string
+    }>
+  }
 }
 
 type ToolCtx = typeof baseCtx & {
@@ -61,7 +75,7 @@ describe("tool.apply_patch freeform", () => {
   })
 
   test("applies add/update/delete in one patch", async () => {
-    await using fixture = await tmpdir()
+    await using fixture = await tmpdir({ git: true })
     const { ctx, calls } = makeCtx()
 
     await Instance.provide({
@@ -71,8 +85,6 @@ describe("tool.apply_patch freeform", () => {
         const deletePath = path.join(fixture.path, "delete.txt")
         await fs.writeFile(modifyPath, "line1\nline2\n", "utf-8")
         await fs.writeFile(deletePath, "obsolete\n", "utf-8")
-        FileTime.read(ctx.sessionID, modifyPath)
-        FileTime.read(ctx.sessionID, deletePath)
 
         const patchText =
           "*** Begin Patch\n*** Add File: nested/new.txt\n+created\n*** Delete File: delete.txt\n*** Update File: modify.txt\n@@\n-line2\n+changed\n*** End Patch"
@@ -84,10 +96,55 @@ describe("tool.apply_patch freeform", () => {
         expect(result.metadata.diff).toContain("Index:")
         expect(calls.length).toBe(1)
 
+        // Verify permission metadata includes files array for UI rendering
+        const permissionCall = calls[0]
+        expect(permissionCall.metadata.files).toHaveLength(3)
+        expect(permissionCall.metadata.files.map((f) => f.type).sort()).toEqual(["add", "delete", "update"])
+
+        const addFile = permissionCall.metadata.files.find((f) => f.type === "add")
+        expect(addFile).toBeDefined()
+        expect(addFile!.relativePath).toBe("nested/new.txt")
+        expect(addFile!.after).toBe("created\n")
+
+        const updateFile = permissionCall.metadata.files.find((f) => f.type === "update")
+        expect(updateFile).toBeDefined()
+        expect(updateFile!.before).toContain("line2")
+        expect(updateFile!.after).toContain("changed")
+
         const added = await fs.readFile(path.join(fixture.path, "nested", "new.txt"), "utf-8")
         expect(added).toBe("created\n")
         expect(await fs.readFile(modifyPath, "utf-8")).toBe("line1\nchanged\n")
         await expect(fs.readFile(deletePath, "utf-8")).rejects.toThrow()
+      },
+    })
+  })
+
+  test("permission metadata includes move file info", async () => {
+    await using fixture = await tmpdir({ git: true })
+    const { ctx, calls } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const original = path.join(fixture.path, "old", "name.txt")
+        await fs.mkdir(path.dirname(original), { recursive: true })
+        await fs.writeFile(original, "old content\n", "utf-8")
+
+        const patchText =
+          "*** Begin Patch\n*** Update File: old/name.txt\n*** Move to: renamed/dir/name.txt\n@@\n-old content\n+new content\n*** End Patch"
+
+        await execute({ patchText }, ctx)
+
+        expect(calls.length).toBe(1)
+        const permissionCall = calls[0]
+        expect(permissionCall.metadata.files).toHaveLength(1)
+
+        const moveFile = permissionCall.metadata.files[0]
+        expect(moveFile.type).toBe("move")
+        expect(moveFile.relativePath).toBe("renamed/dir/name.txt")
+        expect(moveFile.movePath).toBe(path.join(fixture.path, "renamed/dir/name.txt"))
+        expect(moveFile.before).toBe("old content\n")
+        expect(moveFile.after).toBe("new content\n")
       },
     })
   })
@@ -101,7 +158,6 @@ describe("tool.apply_patch freeform", () => {
       fn: async () => {
         const target = path.join(fixture.path, "multi.txt")
         await fs.writeFile(target, "line1\nline2\nline3\nline4\n", "utf-8")
-        FileTime.read(ctx.sessionID, target)
 
         const patchText =
           "*** Begin Patch\n*** Update File: multi.txt\n@@\n-line2\n+changed2\n@@\n-line4\n+changed4\n*** End Patch"
@@ -122,7 +178,6 @@ describe("tool.apply_patch freeform", () => {
       fn: async () => {
         const target = path.join(fixture.path, "insert_only.txt")
         await fs.writeFile(target, "alpha\nomega\n", "utf-8")
-        FileTime.read(ctx.sessionID, target)
 
         const patchText = "*** Begin Patch\n*** Update File: insert_only.txt\n@@\n alpha\n+beta\n omega\n*** End Patch"
 
@@ -142,7 +197,6 @@ describe("tool.apply_patch freeform", () => {
       fn: async () => {
         const target = path.join(fixture.path, "no_newline.txt")
         await fs.writeFile(target, "no newline at end", "utf-8")
-        FileTime.read(ctx.sessionID, target)
 
         const patchText =
           "*** Begin Patch\n*** Update File: no_newline.txt\n@@\n-no newline at end\n+first line\n+second line\n*** End Patch"
@@ -166,7 +220,6 @@ describe("tool.apply_patch freeform", () => {
         const original = path.join(fixture.path, "old", "name.txt")
         await fs.mkdir(path.dirname(original), { recursive: true })
         await fs.writeFile(original, "old content\n", "utf-8")
-        FileTime.read(ctx.sessionID, original)
 
         const patchText =
           "*** Begin Patch\n*** Update File: old/name.txt\n*** Move to: renamed/dir/name.txt\n@@\n-old content\n+new content\n*** End Patch"
@@ -193,7 +246,6 @@ describe("tool.apply_patch freeform", () => {
         await fs.mkdir(path.dirname(destination), { recursive: true })
         await fs.writeFile(original, "from\n", "utf-8")
         await fs.writeFile(destination, "existing\n", "utf-8")
-        FileTime.read(ctx.sessionID, original)
 
         const patchText =
           "*** Begin Patch\n*** Update File: old/name.txt\n*** Move to: renamed/dir/name.txt\n@@\n-from\n+new\n*** End Patch"
@@ -294,7 +346,6 @@ describe("tool.apply_patch freeform", () => {
       fn: async () => {
         const target = path.join(fixture.path, "modify.txt")
         await fs.writeFile(target, "line1\nline2\n", "utf-8")
-        FileTime.read(ctx.sessionID, target)
 
         const patchText = "*** Begin Patch\n*** Update File: modify.txt\n@@\n-missing\n+changed\n*** End Patch"
 
@@ -331,7 +382,6 @@ describe("tool.apply_patch freeform", () => {
       fn: async () => {
         const target = path.join(fixture.path, "tail.txt")
         await fs.writeFile(target, "alpha\nlast\n", "utf-8")
-        FileTime.read(ctx.sessionID, target)
 
         const patchText = "*** Begin Patch\n*** Update File: tail.txt\n@@\n-last\n+end\n*** End of File\n*** End Patch"
 
@@ -350,7 +400,6 @@ describe("tool.apply_patch freeform", () => {
       fn: async () => {
         const target = path.join(fixture.path, "two_chunks.txt")
         await fs.writeFile(target, "a\nb\nc\nd\n", "utf-8")
-        FileTime.read(ctx.sessionID, target)
 
         const patchText = "*** Begin Patch\n*** Update File: two_chunks.txt\n@@\n-b\n+B\n\n-d\n+D\n*** End Patch"
 
@@ -369,7 +418,6 @@ describe("tool.apply_patch freeform", () => {
       fn: async () => {
         const target = path.join(fixture.path, "multi_ctx.txt")
         await fs.writeFile(target, "fn a\nx=10\ny=2\nfn b\nx=10\ny=20\n", "utf-8")
-        FileTime.read(ctx.sessionID, target)
 
         const patchText = "*** Begin Patch\n*** Update File: multi_ctx.txt\n@@ fn b\n-x=10\n+x=11\n*** End Patch"
 
@@ -389,7 +437,6 @@ describe("tool.apply_patch freeform", () => {
         const target = path.join(fixture.path, "eof_anchor.txt")
         // File has duplicate "marker" lines - one in middle, one at end
         await fs.writeFile(target, "start\nmarker\nmiddle\nmarker\nend\n", "utf-8")
-        FileTime.read(ctx.sessionID, target)
 
         // With EOF anchor, should match the LAST "marker" line, not the first
         const patchText =
@@ -454,7 +501,6 @@ EOF`
         const target = path.join(fixture.path, "trailing_ws.txt")
         // File has trailing spaces on some lines
         await fs.writeFile(target, "line1  \nline2\nline3   \n", "utf-8")
-        FileTime.read(ctx.sessionID, target)
 
         // Patch doesn't have trailing spaces - should still match via rstrip pass
         const patchText = "*** Begin Patch\n*** Update File: trailing_ws.txt\n@@\n-line2\n+changed\n*** End Patch"
@@ -475,7 +521,6 @@ EOF`
         const target = path.join(fixture.path, "leading_ws.txt")
         // File has leading spaces
         await fs.writeFile(target, "  line1\nline2\n  line3\n", "utf-8")
-        FileTime.read(ctx.sessionID, target)
 
         // Patch without leading spaces - should match via trim pass
         const patchText = "*** Begin Patch\n*** Update File: leading_ws.txt\n@@\n-line2\n+changed\n*** End Patch"
@@ -499,7 +544,6 @@ EOF`
         const rightQuote = "\u201D"
         const emDash = "\u2014"
         await fs.writeFile(target, `He said ${leftQuote}hello${rightQuote}\nsome${emDash}dash\nend\n`, "utf-8")
-        FileTime.read(ctx.sessionID, target)
 
         // Patch uses ASCII equivalents - should match via normalized pass
         // The replacement uses ASCII quotes from the patch (not preserving Unicode)
