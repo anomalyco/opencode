@@ -3,6 +3,7 @@ import { useServer } from '@opencode-ai/app/context/server'
 import { TaskTimeline, type TaskStep } from '../components/TaskTimeline'
 import { StepVisualization } from '../components/StepVisualization'
 import { ToolCallMonitor } from '../components/ToolCallMonitor'
+import { useTaskProgress } from '../hooks/useTaskProgress'
 import styles from './TaskView.module.css'
 
 /**
@@ -11,61 +12,15 @@ import styles from './TaskView.module.css'
  * Displays real-time task execution progress with timeline, step details, and tool call monitoring.
  * This is a central hub for visualizing AI agent task execution.
  *
- * TODO: Replace mock data with real SSE event integration (Task 8)
+ * Connects to OpenCode SSE events to display actual task progress.
  */
 
 const TaskView: Component = () => {
   const server = useServer()
   const [selectedStepId, setSelectedStepId] = createSignal<string | null>(null)
 
-  // Mock data - will be replaced with real data in Task 8
-  const mockSteps: TaskStep[] = [
-    {
-      id: '1',
-      title: 'Analyze project structure',
-      status: 'completed',
-      startTime: new Date(Date.now() - 10000),
-      endTime: new Date(Date.now() - 5000),
-      toolCalls: [
-        {
-          id: '1-1',
-          name: 'bash',
-          parameters: { command: 'find . -type f -name "*.ts"' },
-          result: { files: ['src/index.ts', 'src/app.tsx'] },
-          startTime: new Date(Date.now() - 10000),
-          endTime: new Date(Date.now() - 8000)
-        }
-      ]
-    },
-    {
-      id: '2',
-      title: 'Implement TaskView component',
-      status: 'running',
-      startTime: new Date(Date.now() - 4000),
-      toolCalls: [
-        {
-          id: '2-1',
-          name: 'write',
-          parameters: { path: 'TaskView.tsx', content: 'export const TaskView = () => {}' },
-          startTime: new Date(Date.now() - 3000)
-        }
-      ]
-    },
-    {
-      id: '3',
-      title: 'Add routing configuration',
-      status: 'pending',
-      toolCalls: []
-    },
-    {
-      id: '4',
-      title: 'Test and verify integration',
-      status: 'pending',
-      toolCalls: []
-    }
-  ]
-
-  const [steps, setSteps] = createSignal<TaskStep[]>(mockSteps)
+  // Use the useTaskProgress hook to connect to SSE events
+  const { steps, isConnected } = useTaskProgress()
 
   const selectedStep = () => {
     const id = selectedStepId()
@@ -84,6 +39,9 @@ const TaskView: Component = () => {
         <div class={styles.status}>
           <span class={styles.serverStatus}>
             Server: {server.url() ? 'Connected' : 'Disconnected'}
+          </span>
+          <span class={styles.serverStatus}>
+            SSE: {isConnected() ? 'Active' : 'Connecting...'}
           </span>
         </div>
       </div>
@@ -141,7 +99,7 @@ const TaskView: Component = () => {
       {/* Footer */}
       <div class={styles.footer}>
         <div class={styles.footerNote}>
-          Mock data is currently displayed. Real-time data integration coming in Task 8.
+          Connected to OpenCode SSE events. Real-time task progress visualization active.
         </div>
       </div>
     </div>
