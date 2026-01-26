@@ -1034,7 +1034,7 @@ export namespace Provider {
           .finally(() => {
             if (timer) clearTimeout(timer)
           })
-          .catch((error) => {
+          .catch((error: unknown) => {
             if (controller.signal.aborted && !base?.aborted) {
               throw new DOMException("Request timed out", "TimeoutError")
             }
