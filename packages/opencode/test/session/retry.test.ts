@@ -137,7 +137,7 @@ describe("session.message-v2.fromError", () => {
       requestBodyValues: {},
       statusCode: 404,
       responseHeaders: { "content-type": "application/json" },
-      responseBody: "{\"error\":\"boom\"}",
+      responseBody: '{"error":"boom"}',
       isRetryable: false,
     })
     const result = MessageV2.fromError(error, { providerID: "openai" }) as MessageV2.APIError
