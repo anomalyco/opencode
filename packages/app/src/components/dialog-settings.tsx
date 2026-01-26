@@ -42,7 +42,7 @@ export const DialogSettings: Component = () => {
                       {language.t("settings.providers.title")}
                     </Tabs.Trigger>
                     <Tabs.Trigger value="models">
-                      <Icon name="server" />
+                      <Icon name="models" />
                       {language.t("settings.models.title")}
                     </Tabs.Trigger>
                   </div>
