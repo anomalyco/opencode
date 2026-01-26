@@ -153,6 +153,11 @@ export const SettingsProviders: Component = () => {
                         {language.t("dialog.provider.openrouter.note")}
                       </span>
                     </Show>
+                    <Show when={item.id === "vercel"}>
+                      <span class="text-12-regular text-text-weak pl-8">
+                        {language.t("dialog.provider.vercel.note")}
+                      </span>
+                    </Show>
                   </div>
                   <Button
                     size="large"
