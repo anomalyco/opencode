@@ -76,7 +76,34 @@ export namespace ModelsDev {
 
   export type Provider = z.infer<typeof Provider>
 
-  export async function get() {
+  async function getRawModels() {
+  // Try cached file first
+  const file = Bun.file(filepath)
+  let result = await file.json().catch(() => {})
+  if (result) return result
+
+  // If models-macro exports a function, call it to get embedded data
+  if (typeof data === 'function') {
+    const json = await data()
+    return JSON.parse(json)
+  }
+
+  // If models-macro exports a string, parse it
+  if (typeof data === 'string') {
+    try {
+      return JSON.parse(data)
+    } catch (e) {
+      // fallthrough
+    }
+  }
+
+  // Fallback to fetching from models.dev
+  const url = Global.Path.modelsDevUrl
+  const json = await fetch(`${url}/api.json`).then((x) => x.text())
+  return JSON.parse(json)
+}
+
+export async function get() {
   // When OPENCODE_ONLY_GITHUB is enabled, filter models to only include github-copilot
   if (process.env.OPENCODE_ONLY_GITHUB) {
     const data = await getRawModels()
