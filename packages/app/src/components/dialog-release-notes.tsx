@@ -4,6 +4,107 @@ import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { markReleaseNotesSeen } from "@/lib/release-notes"
 
+const CHANGELOG_URL = "https://opencode.ai/changelog.json"
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
+
+function getText(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const text = value.trim()
+    return text.length > 0 ? text : undefined
+  }
+
+  if (!Array.isArray(value)) return
+  const parts = value.map((item) => (typeof item === "string" ? item.trim() : "")).filter((item) => item.length > 0)
+  if (parts.length === 0) return
+  return parts.join(" ")
+}
+
+function normalizeRemoteUrl(url: string): string {
+  if (url.startsWith("https://") || url.startsWith("http://")) return url
+  if (url.startsWith("/")) return `https://opencode.ai${url}`
+  return `https://opencode.ai/${url}`
+}
+
+function parseMedia(value: unknown): ReleaseFeature["media"] | undefined {
+  if (!isRecord(value)) return
+
+  const type = getText(value.type)?.toLowerCase()
+  const src = getText(value.src)
+  if (!src) return
+  if (type !== "image" && type !== "video") return
+
+  return {
+    type,
+    src: normalizeRemoteUrl(src),
+    alt: getText(value.alt),
+  }
+}
+
+function parseFeature(value: unknown): ReleaseFeature | undefined {
+  if (!isRecord(value)) return
+
+  const title = getText(value.title) ?? getText(value.name) ?? getText(value.heading)
+  const description = getText(value.description) ?? getText(value.body) ?? getText(value.text)
+
+  if (!title) return
+  if (!description) return
+
+  const tag = getText(value.tag) ?? getText(value.label) ?? "New"
+
+  const media = (() => {
+    const parsed = parseMedia(value.media)
+    if (parsed) return parsed
+
+    const alt = getText(value.alt)
+    const image = getText(value.image)
+    if (image) return { type: "image" as const, src: normalizeRemoteUrl(image), alt }
+
+    const video = getText(value.video)
+    if (video) return { type: "video" as const, src: normalizeRemoteUrl(video), alt }
+  })()
+
+  return { title, description, tag, media }
+}
+
+function parseChangelog(value: unknown): ReleaseNote | undefined {
+  const releases = (() => {
+    if (Array.isArray(value)) return value
+    if (!isRecord(value)) return
+    if (Array.isArray(value.releases)) return value.releases
+    if (Array.isArray(value.versions)) return value.versions
+    if (Array.isArray(value.changelog)) return value.changelog
+  })()
+
+  if (!releases) {
+    if (!isRecord(value)) return
+    if (!Array.isArray(value.highlights)) return
+    const features = value.highlights.map(parseFeature).filter((item): item is ReleaseFeature => item !== undefined)
+    if (features.length === 0) return
+    return { version: CURRENT_RELEASE.version, features: features.slice(0, 3) }
+  }
+
+  const version = (() => {
+    const head = releases[0]
+    if (!isRecord(head)) return
+    return getText(head.version) ?? getText(head.tag_name) ?? getText(head.tag) ?? getText(head.name)
+  })()
+
+  const features = releases
+    .flatMap((item) => {
+      if (!isRecord(item)) return []
+      const highlights = item.highlights
+      if (!Array.isArray(highlights)) return []
+      return highlights.map(parseFeature).filter((feature): feature is ReleaseFeature => feature !== undefined)
+    })
+    .slice(0, 3)
+
+  if (features.length === 0) return
+  return { version: version ?? CURRENT_RELEASE.version, features }
+}
+
 export interface ReleaseFeature {
   title: string
   description: string
@@ -59,13 +160,13 @@ export const CURRENT_RELEASE: ReleaseNote = {
 
 export function DialogReleaseNotes(props: { release?: ReleaseNote }) {
   const dialog = useDialog()
-  const release = props.release ?? CURRENT_RELEASE
+  const [note, setNote] = createSignal(props.release ?? CURRENT_RELEASE)
   const [index, setIndex] = createSignal(0)
 
-  const feature = () => release.features[index()]
-  const total = release.features.length
+  const feature = () => note().features[index()] ?? note().features[0] ?? CURRENT_RELEASE.features[0]!
+  const total = () => note().features.length
   const isFirst = () => index() === 0
-  const isLast = () => index() === total - 1
+  const isLast = () => index() === total() - 1
 
   function handleNext() {
     if (!isLast()) setIndex(index() + 1)
@@ -97,6 +198,26 @@ export function DialogReleaseNotes(props: { release?: ReleaseNote }) {
     focusTrap?.focus()
     document.addEventListener("keydown", handleKeyDown)
     onCleanup(() => document.removeEventListener("keydown", handleKeyDown))
+
+    const controller = new AbortController()
+    fetch(CHANGELOG_URL, {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    })
+      .then((response) => (response.ok ? (response.json() as Promise<unknown>) : undefined))
+      .then((json) => {
+        if (!json) return
+        const parsed = parseChangelog(json)
+        if (!parsed) return
+        setNote({
+          version: parsed.version,
+          features: parsed.features,
+        })
+        setIndex(0)
+      })
+      .catch(() => undefined)
+
+    onCleanup(() => controller.abort())
   })
 
   // Refocus the trap when index changes to ensure escape always works
@@ -144,16 +265,20 @@ export function DialogReleaseNotes(props: { release?: ReleaseNote }) {
             )}
           </div>
 
-          {total > 1 && (
+          {total() > 1 && (
             <div class="flex items-center gap-1.5 -my-2.5">
-              {release.features.map((_, i) => (
+              {note().features.map((_, i) => (
                 <button
                   type="button"
-                  class="w-8 h-6 flex items-center cursor-pointer bg-transparent border-none p-0"
+                  class="h-6 flex items-center cursor-pointer bg-transparent border-none p-0 transition-all duration-200"
+                  classList={{
+                    "w-8": i === index(),
+                    "w-3": i !== index(),
+                  }}
                   onClick={() => setIndex(i)}
                 >
                   <div
-                    class="w-full h-0.5 rounded-[1px] transition-colors"
+                    class="w-full h-0.5 rounded-[1px] transition-colors duration-200"
                     classList={{
                       "bg-icon-strong-base": i === index(),
                       "bg-icon-weak-base": i !== index(),
