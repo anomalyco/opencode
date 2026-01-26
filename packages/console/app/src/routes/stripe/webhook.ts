@@ -396,27 +396,17 @@ export async function POST(input: APIEvent) {
 }
   */
     }
+    if (body.type === "customer.subscription.updated" && body.data.object.status === "incomplete_expired") {
+      const subscriptionID = body.data.object.id
+      if (!subscriptionID) throw new Error("Subscription ID not found")
+
+      await Billing.unsubscribe({ subscriptionID })
+    }
     if (body.type === "customer.subscription.deleted") {
       const subscriptionID = body.data.object.id
       if (!subscriptionID) throw new Error("Subscription ID not found")
 
-      const workspaceID = await Database.use((tx) =>
-        tx
-          .select({ workspaceID: BillingTable.workspaceID })
-          .from(BillingTable)
-          .where(eq(BillingTable.subscriptionID, subscriptionID))
-          .then((rows) => rows[0]?.workspaceID),
-      )
-      if (!workspaceID) throw new Error("Workspace ID not found for subscription")
-
-      await Database.transaction(async (tx) => {
-        await tx
-          .update(BillingTable)
-          .set({ subscriptionID: null, subscription: null })
-          .where(eq(BillingTable.workspaceID, workspaceID))
-
-        await tx.delete(SubscriptionTable).where(eq(SubscriptionTable.workspaceID, workspaceID))
-      })
+      await Billing.unsubscribe({ subscriptionID })
     }
     if (body.type === "invoice.payment_succeeded") {
       if (

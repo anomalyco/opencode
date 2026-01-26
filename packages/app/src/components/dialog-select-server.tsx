@@ -155,7 +155,7 @@ export function DialogSelectServer() {
     },
     { initialValue: null },
   )
-  const isDesktop = platform.platform === "desktop"
+  const canDefault = createMemo(() => !!platform.getDefaultServerUrl && !!platform.setDefaultServerUrl)
 
   const looksComplete = (value: string) => {
     const normalized = normalizeServerUrl(value)
@@ -505,7 +505,7 @@ export function DialogSelectServer() {
                           >
                             <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
                           </DropdownMenu.Item>
-                          <Show when={isDesktop && defaultUrl() !== i}>
+                          <Show when={canDefault() && defaultUrl() !== i}>
                             <DropdownMenu.Item
                               onSelect={async () => {
                                 await platform.setDefaultServerUrl?.(i)
@@ -517,7 +517,7 @@ export function DialogSelectServer() {
                               </DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
                           </Show>
-                          <Show when={isDesktop && defaultUrl() === i}>
+                          <Show when={canDefault() && defaultUrl() === i}>
                             <DropdownMenu.Item
                               onSelect={async () => {
                                 await platform.setDefaultServerUrl?.(null)
