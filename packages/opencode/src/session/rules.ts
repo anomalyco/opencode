@@ -1,4 +1,5 @@
 import { Rules } from "../config/rules"
+import { Injection } from "../config/injection"
 import { Instance } from "../project/instance"
 import { GlobalBus } from "@/bus/global"
 import { Log } from "../util/log"
@@ -31,12 +32,21 @@ export namespace SessionRules {
 
   export async function getMatchingRules(filepath: string, sessionID: string, callID?: string): Promise<string[]> {
     const rulesFromPath = await Rules.loadForFile(filepath)
+    const instructionRules = await Rules.loadInstructions()
+
+    const allRules = [...rulesFromPath, ...instructionRules]
 
     const sessionRules = injectedRules.get(sessionID) ?? new Map()
     const matchedRules: InjectedRule[] = []
 
-    const matching = rulesFromPath.filter((rule) => {
-      if (!rule.paths || rule.paths.length === 0) return true
+    const matching = allRules.filter((rule) => {
+      // For instructionRules, we only want to inject them if they have paths (scoped).
+      // Global instructionRules are already in the system prompt.
+      // For rulesFromPath (subdirectoryRules), they are already scoped by directory.
+      if (instructionRules.includes(rule) && (!rule.paths || rule.paths.length === 0)) {
+        return false
+      }
+
       const patterns = Rules.matchRulesForFile([rule], filepath)
       return patterns.length > 0
     })
@@ -58,9 +68,10 @@ export namespace SessionRules {
       }
 
       log.info("injecting rule", { filePath: rule.filePath, callID })
+      const content = await Injection.process(rule.content, sessionID)
       const injected = {
         filePath: rule.filePath,
-        content: rule.content,
+        content,
         injectedAt: Date.now(),
         callIDs: new Set(callID ? [callID] : []),
       }

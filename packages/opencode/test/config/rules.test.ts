@@ -150,4 +150,45 @@ describe("Rules", () => {
       })
     })
   })
+
+  describe("loadInstructions", () => {
+    test("loads instructions from config", async () => {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          await fs.mkdir(path.join(dir, "instructions"), { recursive: true })
+          await fs.writeFile(path.join(dir, "instructions", "global.md"), "Global Instruction")
+          await fs.writeFile(
+            path.join(dir, "instructions", "scoped.md"),
+            "---\npaths: ['**/src/**/*.ts']\n---\nScoped Instruction",
+          )
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const originalGet = Config.get
+          Config.get = async () =>
+            ({
+              instructions: [
+                path.join(tmp.path, "instructions", "global.md"),
+                path.join(tmp.path, "instructions", "scoped.md"),
+              ],
+            }) as any
+
+          const rules = await Rules.loadInstructions()
+          expect(rules.length).toBe(2)
+
+          const globalRule = rules.find((r) => r.content === "Global Instruction")
+          expect(globalRule).toBeDefined()
+          expect(globalRule?.paths).toBeUndefined()
+
+          const scopedRule = rules.find((r) => r.content === "Scoped Instruction")
+          expect(scopedRule).toBeDefined()
+          expect(scopedRule?.paths).toEqual(["**/src/**/*.ts"])
+
+          Config.get = originalGet
+        },
+      })
+    })
+  })
 })

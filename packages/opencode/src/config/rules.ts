@@ -5,6 +5,7 @@ import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 import { existsSync } from "fs"
 import { SystemPrompt } from "@/session/system"
+import os from "os"
 
 export interface Rule {
   filePath: string
@@ -13,7 +14,7 @@ export interface Rule {
 }
 
 export namespace Rules {
-  async function parse(filePath: string): Promise<Rule> {
+  export async function parse(filePath: string): Promise<Rule> {
     const md = await ConfigMarkdown.parse(filePath)
     const frontmatter = md.data as Record<string, unknown> | undefined
 
@@ -33,6 +34,38 @@ export namespace Rules {
       paths: pathsArray,
       content: md.content.trim(),
     }
+  }
+
+  export async function loadInstructions(): Promise<Rule[]> {
+    const config = await Config.get()
+    const instructions = config.instructions ?? []
+    const paths = new Set<string>()
+
+    for (let instruction of instructions) {
+      if (instruction.startsWith("https://") || instruction.startsWith("http://")) {
+        // We don't support remote instructions as Rule objects yet since we need a local path
+        // for Rule.filePath, but SystemPrompt.custom() handles them.
+        continue
+      }
+      if (instruction.startsWith("~/")) {
+        instruction = path.join(os.homedir(), instruction.slice(2))
+      }
+      let matches: string[] = []
+      if (path.isAbsolute(instruction)) {
+        matches = await Array.fromAsync(
+          new Bun.Glob(path.basename(instruction)).scan({
+            cwd: path.dirname(instruction),
+            absolute: true,
+            onlyFiles: true,
+          }),
+        ).catch(() => [])
+      } else {
+        matches = await Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
+      }
+      matches.forEach((p) => paths.add(p))
+    }
+
+    return Promise.all(Array.from(paths).map((p) => parse(p)))
   }
 
   function sortPatternsBySpecificity(patterns: string[]): string[] {

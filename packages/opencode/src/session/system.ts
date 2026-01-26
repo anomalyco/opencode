@@ -4,6 +4,8 @@ import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
 
 import { Instance } from "../project/instance"
+import { Rules } from "../config/rules"
+import { Injection } from "../config/injection"
 import path from "path"
 import os from "os"
 
@@ -75,7 +77,7 @@ export namespace SystemPrompt {
     GLOBAL_RULE_FILES.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
   }
 
-  export async function custom() {
+  export async function custom(sessionID?: string) {
     const config = await Config.get()
     const paths = new Set<string>()
 
@@ -94,38 +96,31 @@ export namespace SystemPrompt {
       }
     }
 
-    const urls: string[] = []
-    if (config.instructions) {
-      for (let instruction of config.instructions) {
-        if (instruction.startsWith("https://") || instruction.startsWith("http://")) {
-          urls.push(instruction)
-          continue
-        }
-        if (instruction.startsWith("~/")) {
-          instruction = path.join(os.homedir(), instruction.slice(2))
-        }
-        let matches: string[] = []
-        if (path.isAbsolute(instruction)) {
-          matches = await Array.fromAsync(
-            new Bun.Glob(path.basename(instruction)).scan({
-              cwd: path.dirname(instruction),
-              absolute: true,
-              onlyFiles: true,
-            }),
-          ).catch(() => [])
-        } else {
-          matches = await Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
-        }
-        matches.forEach((path) => paths.add(path))
-      }
-    }
-
-    const foundFiles = Array.from(paths).map((p) =>
+    const foundFiles: Promise<string>[] = Array.from(paths).map((p) =>
       Bun.file(p)
         .text()
         .catch(() => "")
-        .then((x) => "Instructions from: " + p + "\n" + x),
+        .then(async (x) => "Instructions from: " + p + "\n" + (await Injection.process(x, sessionID))),
     )
+
+    const rules = await Rules.loadInstructions()
+    for (const rule of rules) {
+      if (!rule.paths || rule.paths.length === 0) {
+        // Global instruction - process injections and add to system prompt
+        const content = await Injection.process(rule.content, sessionID)
+        foundFiles.push(Promise.resolve("Instructions from: " + rule.filePath + "\n" + content))
+      }
+    }
+
+    const urls: string[] = []
+    if (config.instructions) {
+      for (const instruction of config.instructions) {
+        if (instruction.startsWith("https://") || instruction.startsWith("http://")) {
+          urls.push(instruction)
+        }
+      }
+    }
+
     const foundUrls = urls.map((url) =>
       fetch(url, { signal: AbortSignal.timeout(5000) })
         .then((res) => (res.ok ? res.text() : ""))

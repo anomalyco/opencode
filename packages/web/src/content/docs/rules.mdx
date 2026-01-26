@@ -138,7 +138,7 @@ By default, rules are loaded in **top-down order** (root to leaf). This means a 
 
 ### Path Filtering
 
-Hierarchical files support YAML frontmatter to further restrict their application:
+Hierarchical files and custom instructions support YAML frontmatter to further restrict their application:
 
 ```markdown title="src/components/AGENTS.md"
 ---
@@ -151,6 +151,35 @@ Only apply these rules to React components.
 ```
 
 `paths` is a list of glob expressions to match when opencode attempts to apply a rule. If the globs do not match, the rule is not included.
+
+Rules without `paths` frontmatter are considered global and are included in the initial system prompt. Rules with `paths` are dynamically injected when a matching file is read into the session.
+
+---
+
+## Command Injection
+
+You can inject the output of shell commands directly into your instructions using the `!` followed by backticks syntax. This is useful for including dynamic information like project structure, environment variables, or current branch information.
+
+```markdown title="AGENTS.md"
+# Project Context
+
+Current Directory Structure:
+!`ls -F`
+
+Git Information:
+Branch: !`git branch --show-current`
+Last Commit: !`git log -1 --oneline`
+```
+
+When opencode encounters a command injection:
+
+1. It parses the command within the backticks.
+2. If a session is active, it requests `bash` permission from the user.
+3. It executes the command and replaces the `!` followed by backticks syntax with the command's output.
+
+:::warning
+Command injections are executed whenever the instruction file is loaded. Ensure you only use safe, non-destructive commands.
+:::
 
 ---
 
