@@ -658,6 +658,26 @@ export namespace MessageV2 {
 
   export function fromError(e: unknown, ctx: { providerID: string }) {
     switch (true) {
+      case e instanceof DOMException && e.name === "TimeoutError":
+        return new MessageV2.APIError(
+          {
+            message: "Request timed out",
+            isRetryable: true,
+          },
+          {
+            cause: e,
+          },
+        ).toObject()
+      case e instanceof Error && e.name === "TimeoutError":
+        return new MessageV2.APIError(
+          {
+            message: "Request timed out",
+            isRetryable: true,
+          },
+          {
+            cause: e,
+          },
+        ).toObject()
       case e instanceof DOMException && e.name === "AbortError":
         return new MessageV2.AbortedError(
           { message: e.message },

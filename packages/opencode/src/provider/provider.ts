@@ -987,13 +987,22 @@ export namespace Provider {
         const fetchFn = customFetch ?? fetch
         const opts = init ?? {}
 
-        if (options["timeout"] !== undefined && options["timeout"] !== null) {
+        const timeout = options["timeout"]
+        const base = opts.signal
+        const ms = typeof timeout === "number" ? timeout : 0
+        const controller =
+          timeout !== undefined && timeout !== null && timeout !== false ? new AbortController() : undefined
+        const timer = controller
+          ? setTimeout(() => {
+              controller.abort(new DOMException("Request timed out", "TimeoutError"))
+            }, ms)
+          : undefined
+
+        if (controller) {
           const signals: AbortSignal[] = []
-          if (opts.signal) signals.push(opts.signal)
-          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
-
+          if (base) signals.push(base)
+          signals.push(controller.signal)
           const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
-
           opts.signal = combined
         }
 
@@ -1015,11 +1024,22 @@ export namespace Provider {
           }
         }
 
-        return fetchFn(input, {
+        const result = fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
         })
+        if (!controller) return result
+        return result
+          .finally(() => {
+            if (timer) clearTimeout(timer)
+          })
+          .catch((error) => {
+            if (controller.signal.aborted && !base?.aborted) {
+              throw new DOMException("Request timed out", "TimeoutError")
+            }
+            throw error
+          })
       }
 
       // Special case: google-vertex-anthropic uses a subpath import
