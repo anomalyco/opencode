@@ -571,6 +571,18 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       }
 
       const kind = event.properties.event
+      if (kind === "change") {
+        const dir = (() => {
+          if (path === "") return ""
+          const node = tree.node[path]
+          if (node?.type !== "directory") return
+          return path
+        })()
+        if (dir === undefined) return
+        if (!tree.dir[dir]?.loaded) return
+        listDir(dir, { force: true })
+        return
+      }
       if (kind !== "add" && kind !== "unlink") return
 
       const parent = path.split("/").slice(0, -1).join("/")
