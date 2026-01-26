@@ -103,7 +103,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Gratis modeller levert av OpenCode",
   "dialog.model.unpaid.addMore.title": "Legg til flere modeller fra populære leverandører",
 
-  "dialog.provider.viewAll": "Vis alle leverandører",
+  "dialog.provider.viewAll": "Vis flere leverandører",
 
   "provider.connect.title": "Koble til {{provider}}",
   "provider.connect.title.anthropicProMax": "Logg inn med Claude Pro/Max",
@@ -307,20 +307,20 @@ export const dict = {
   "context.usage.clickToView": "Klikk for å se kontekst",
   "context.usage.view": "Se kontekstforbruk",
 
-  "language.en": "Engelsk",
-  "language.zh": "Kinesisk (forenklet)",
-  "language.zht": "Kinesisk (tradisjonell)",
-  "language.ko": "Koreansk",
-  "language.de": "Tysk",
-  "language.es": "Spansk",
-  "language.fr": "Fransk",
-  "language.ja": "Japansk",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
   "language.da": "Dansk",
-  "language.ru": "Russisk",
-  "language.pl": "Polsk",
-  "language.ar": "Arabisk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
   "language.no": "Norsk",
-  "language.br": "Portugisisk (Brasil)",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Språk",
   "toast.language.description": "Byttet til {{language}}",
@@ -429,6 +429,14 @@ export const dict = {
 
   "session.header.search.placeholder": "Søk i {{project}}",
   "session.header.searchFiles": "Søk etter filer",
+
+  "status.popover.trigger": "Status",
+  "status.popover.ariaLabel": "Serverkonfigurasjoner",
+  "status.popover.tab.servers": "Servere",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Plugins",
+  "status.popover.action.manageServers": "Administrer servere",
 
   "session.share.popover.title": "Publiser på nett",
   "session.share.popover.description.shared":

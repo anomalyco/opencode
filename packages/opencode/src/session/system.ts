@@ -34,11 +34,6 @@ async function resolveRelativeInstruction(instruction: string): Promise<string[]
 }
 
 export namespace SystemPrompt {
-  export function header(providerID: string) {
-    if (providerID.includes("anthropic")) return [PROMPT_ANTHROPIC_SPOOF.trim()]
-    return []
-  }
-
   export function instructions() {
     return PROMPT_CODEX.trim()
   }
