@@ -97,12 +97,12 @@ export default function FileTree(props: {
       <Dynamic
         component={local.as ?? "div"}
         classList={{
-          "w-full min-w-0 h-6 flex items-center justify-start gap-x-2 rounded-md px-2 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
+          "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-2 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
           ...(local.classList ?? {}),
           [local.class ?? ""]: !!local.class,
           [props.nodeClass ?? ""]: !!props.nodeClass,
         }}
-        style={`padding-left: ${8 + level * 12}px`}
+        style={`padding-left: ${Math.max(0, 8 + level * 12 - (local.node.type === "file" ? 24 : 0))}px`}
         draggable={draggable()}
         onDragStart={(e: DragEvent) => {
           if (!draggable()) return
@@ -175,10 +175,9 @@ export default function FileTree(props: {
                   <Collapsible.Trigger>
                     <Wrapper>
                       <Node node={node}>
-                        <div class="ml-1 size-4 flex items-center justify-center text-icon-weak">
+                        <div class="size-4 flex items-center justify-center text-icon-weak">
                           <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
                         </div>
-                        <FileIcon node={node} expanded={expanded()} class="text-icon-weak -ml-1 size-4" />
                       </Node>
                     </Wrapper>
                   </Collapsible.Trigger>
