@@ -17,6 +17,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { LineComment as LineCommentView, LineCommentEditor } from "@opencode-ai/ui/line-comment"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
+import { BasicTool } from "@opencode-ai/ui/basic-tool"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { Mark } from "@opencode-ai/ui/logo"
@@ -184,6 +185,40 @@ export default function Page() {
   const prompt = usePrompt()
   const comments = useComments()
   const permission = usePermission()
+
+  const request = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID) return
+    const next = sync.data.permission[sessionID]?.[0]
+    if (!next) return
+    if (next.tool) return
+    return next
+  })
+
+  const [responding, setResponding] = createSignal(false)
+
+  createEffect(
+    on(
+      () => request()?.id,
+      () => setResponding(false),
+      { defer: true },
+    ),
+  )
+
+  const decide = (response: "once" | "always" | "reject") => {
+    const perm = request()
+    if (!perm) return
+    if (responding()) return
+
+    setResponding(true)
+    sdk.client.permission
+      .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err)
+        showToast({ title: language.t("common.requestFailed"), description: message })
+      })
+      .finally(() => setResponding(false))
+  }
   const [pendingMessage, setPendingMessage] = createSignal<string | undefined>(undefined)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
@@ -730,7 +765,7 @@ export default function Page() {
         const sessionID = params.id
         if (!sessionID) return
         if (status()?.type !== "idle") {
-          await sdk.client.session.abort({ sessionID }).catch(() => {})
+          await sdk.client.session.abort({ sessionID }).catch(() => { })
         }
         const revert = info()?.revert?.messageID
         // Find the last user message that's not already reverted
@@ -813,69 +848,69 @@ export default function Page() {
     },
     ...(sync.data.config.share !== "disabled"
       ? [
-          {
-            id: "session.share",
-            title: "Share session",
-            description: "Share this session and copy the URL to clipboard",
-            category: "Session",
-            slash: "share",
-            disabled: !params.id || !!info()?.share?.url,
-            onSelect: async () => {
-              if (!params.id) return
-              await sdk.client.session
-                .share({ sessionID: params.id })
-                .then((res) => {
-                  navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
-                    showToast({
-                      title: "Failed to copy URL to clipboard",
-                      variant: "error",
-                    }),
-                  )
-                })
-                .then(() =>
+        {
+          id: "session.share",
+          title: "Share session",
+          description: "Share this session and copy the URL to clipboard",
+          category: "Session",
+          slash: "share",
+          disabled: !params.id || !!info()?.share?.url,
+          onSelect: async () => {
+            if (!params.id) return
+            await sdk.client.session
+              .share({ sessionID: params.id })
+              .then((res) => {
+                navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
                   showToast({
-                    title: "Session shared",
-                    description: "Share URL copied to clipboard!",
-                    variant: "success",
-                  }),
-                )
-                .catch(() =>
-                  showToast({
-                    title: "Failed to share session",
-                    description: "An error occurred while sharing the session",
+                    title: "Failed to copy URL to clipboard",
                     variant: "error",
                   }),
                 )
-            },
+              })
+              .then(() =>
+                showToast({
+                  title: "Session shared",
+                  description: "Share URL copied to clipboard!",
+                  variant: "success",
+                }),
+              )
+              .catch(() =>
+                showToast({
+                  title: "Failed to share session",
+                  description: "An error occurred while sharing the session",
+                  variant: "error",
+                }),
+              )
           },
-          {
-            id: "session.unshare",
-            title: "Unshare session",
-            description: "Stop sharing this session",
-            category: "Session",
-            slash: "unshare",
-            disabled: !params.id || !info()?.share?.url,
-            onSelect: async () => {
-              if (!params.id) return
-              await sdk.client.session
-                .unshare({ sessionID: params.id })
-                .then(() =>
-                  showToast({
-                    title: "Session unshared",
-                    description: "Session unshared successfully!",
-                    variant: "success",
-                  }),
-                )
-                .catch(() =>
-                  showToast({
-                    title: "Failed to unshare session",
-                    description: "An error occurred while unsharing the session",
-                    variant: "error",
-                  }),
-                )
-            },
+        },
+        {
+          id: "session.unshare",
+          title: "Unshare session",
+          description: "Stop sharing this session",
+          category: "Session",
+          slash: "unshare",
+          disabled: !params.id || !info()?.share?.url,
+          onSelect: async () => {
+            if (!params.id) return
+            await sdk.client.session
+              .unshare({ sessionID: params.id })
+              .then(() =>
+                showToast({
+                  title: "Session unshared",
+                  description: "Session unshared successfully!",
+                  variant: "success",
+                }),
+              )
+              .catch(() =>
+                showToast({
+                  title: "Failed to unshare session",
+                  description: "An error occurred while unsharing the session",
+                  variant: "error",
+                }),
+              )
           },
-        ]
+        },
+      ]
       : []),
   ])
 
@@ -1690,6 +1725,56 @@ export default function Page() {
                 "md:max-w-200": !showTabs(),
               }}
             >
+              <Show when={request()} keyed>
+                {(perm) => (
+                  <div data-component="tool-part-wrapper" data-permission="true" class="mb-3">
+                    <BasicTool
+                      icon="checklist"
+                      locked
+                      defaultOpen
+                      trigger={{
+                        title: language.t("notification.permission.title"),
+                        subtitle:
+                          perm.permission === "doom_loop"
+                            ? language.t("settings.permissions.tool.doom_loop.title")
+                            : perm.permission,
+                      }}
+                    >
+                      <Show when={perm.patterns.length > 0}>
+                        <div class="flex flex-col gap-1 py-2 px-3 max-h-40 overflow-y-auto no-scrollbar">
+                          <For each={perm.patterns}>
+                            {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
+                          </For>
+                        </div>
+                      </Show>
+                      <Show when={perm.permission === "doom_loop"}>
+                        <div class="text-12-regular text-text-weak pb-2 px-3">
+                          {language.t("settings.permissions.tool.doom_loop.description")}
+                        </div>
+                      </Show>
+                    </BasicTool>
+                    <div data-component="permission-prompt">
+                      <div data-slot="permission-actions">
+                        <Button variant="ghost" size="small" onClick={() => decide("reject")} disabled={responding()}>
+                          {language.t("ui.permission.deny")}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="small"
+                          onClick={() => decide("always")}
+                          disabled={responding()}
+                        >
+                          {language.t("ui.permission.allowAlways")}
+                        </Button>
+                        <Button variant="primary" size="small" onClick={() => decide("once")} disabled={responding()}>
+                          {language.t("ui.permission.allowOnce")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </Show>
+
               <Show
                 when={prompt.ready()}
                 fallback={
