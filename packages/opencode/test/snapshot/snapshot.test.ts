@@ -1011,7 +1011,13 @@ test("snapshot config with positive integer uses specified retention", async () 
     directory: tmp.path,
     fn: async () => {
       await Config.update({ snapshot: 3 })
-      expect(await Snapshot.track()).toBeTruthy()
+      await Instance.dispose()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          expect(await Snapshot.track()).toBeTruthy()
+        },
+      })
     },
   })
 })
@@ -1023,7 +1029,13 @@ test("snapshot config with various positive integers", async () => {
     fn: async () => {
       for (const days of [1, 3, 7, 14, 30, 90]) {
         await Config.update({ snapshot: days })
-        expect(await Snapshot.track()).toBeTruthy()
+        await Instance.dispose()
+        await Instance.provide({
+          directory: tmp.path,
+          fn: async () => {
+            expect(await Snapshot.track()).toBeTruthy()
+          },
+        })
       }
     },
   })

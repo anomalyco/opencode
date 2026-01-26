@@ -24,7 +24,7 @@ export namespace Snapshot {
   export async function cleanup() {
     if (Instance.project.vcs !== "git") return
     const cfg = await Config.get()
-    if (cfg.snapshot === false) return
+    if (cfg.snapshot === false || cfg.snapshot === 0) return
     const prune = cfg.snapshot === true ? "7.days" : `${cfg.snapshot}.days`
     const git = gitdir()
     const exists = await fs
@@ -50,7 +50,7 @@ export namespace Snapshot {
   export async function track() {
     if (Instance.project.vcs !== "git") return
     const cfg = await Config.get()
-    if (cfg.snapshot === false) return
+    if (cfg.snapshot === false || cfg.snapshot === 0) return
     const git = gitdir()
     if (await fs.mkdir(git, { recursive: true })) {
       await $`git init`
