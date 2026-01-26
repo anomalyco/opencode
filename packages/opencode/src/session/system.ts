@@ -20,6 +20,26 @@ import { Flag } from "@/flag/flag"
 
 const log = Log.create({ service: "system-prompt" })
 
+// Store resolved memory paths for the write tool to use
+let resolvedMemoryPaths: string[] = []
+
+export function getMemoryPaths(): string[] {
+  return resolvedMemoryPaths
+}
+
+export function addMemoryPath(resolvedPath: string): void {
+  if (!resolvedMemoryPaths.includes(resolvedPath)) {
+    resolvedMemoryPaths.push(resolvedPath)
+  }
+}
+
+export function removeMemoryPath(resolvedPath: string): void {
+  const index = resolvedMemoryPaths.indexOf(resolvedPath)
+  if (index !== -1) {
+    resolvedMemoryPaths.splice(index, 1)
+  }
+}
+
 async function resolveRelativeInstruction(instruction: string): Promise<string[]> {
   if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
     return Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
@@ -148,5 +168,107 @@ export namespace SystemPrompt {
         .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
     )
     return Promise.all([...foundFiles, ...foundUrls]).then((result) => result.filter(Boolean))
+  }
+
+  /**
+   * Reads MEMORY.md files before every message.
+   * Unlike custom() which runs once at session start, this runs before each API call.
+   * The model can also write to these files using the memory_write tool.
+   * Always returns memory instructions so the model knows about memory_create.
+   */
+  export async function memory(): Promise<string[]> {
+    const config = await Config.get()
+    
+    const instructions = [
+      "# Memory System",
+      "",
+      "You have access to a persistent memory system that survives across chat sessions.",
+      "",
+      "## Tools",
+      "- `memory_create`: Create a new memory file for a directory or purpose. Use this when the user asks to remember information about a specific part of the project, or when you discover important context that should persist.",
+      "- `memory_write`: Write or append content to an existing memory file.",
+      "",
+      "## When to create memory files",
+      "- When the user explicitly asks to create a memory file or remember something persistently",
+      "- When you discover important project conventions, patterns, or decisions that would be useful in future sessions",
+      "- When working on a specific subdirectory that has its own context worth remembering",
+      "",
+      "## Naming convention",
+      "- Name files based on the directory or purpose: `api_memory.md`, `frontend_memory.md`, `project_memory.md`",
+      "- Use lowercase with underscores",
+      "- Always use .md extension",
+      "",
+    ]
+
+    if (!config.memory || config.memory.length === 0) {
+      resolvedMemoryPaths = []
+      return [
+        [
+          ...instructions,
+          "## Current status",
+          "No memory files are configured yet. Use `memory_create` to create your first memory file.",
+        ].join("\n"),
+      ]
+    }
+
+    const resolvedPaths: string[] = []
+    
+    for (let memoryPath of config.memory) {
+      // Handle ~/ paths
+      if (memoryPath.startsWith("~/")) {
+        memoryPath = path.join(os.homedir(), memoryPath.slice(2))
+      }
+      // Handle relative paths (resolve from project directory)
+      else if (!path.isAbsolute(memoryPath)) {
+        memoryPath = path.join(Instance.directory, memoryPath)
+      }
+      // Normalize the path
+      memoryPath = path.normalize(memoryPath)
+      resolvedPaths.push(memoryPath)
+    }
+
+    // Store resolved paths for the memory_write tool
+    resolvedMemoryPaths = resolvedPaths
+
+    // Read all memory files
+    const results: string[] = []
+    for (const memoryPath of resolvedPaths) {
+      try {
+        const file = Bun.file(memoryPath)
+        if (await file.exists()) {
+          const content = await file.text()
+          if (content.trim()) {
+            results.push(
+              `<memory-file path="${memoryPath}">\n${content}\n</memory-file>`
+            )
+          }
+        }
+      } catch (e) {
+        log.warn(`Failed to read memory file: ${memoryPath}`, { error: e })
+      }
+    }
+
+    if (results.length > 0) {
+      return [
+        [
+          ...instructions,
+          "## Current memory files",
+          "The following memory files are available. Use `memory_write` to update them.",
+          "",
+          ...results,
+        ].join("\n"),
+      ]
+    }
+
+    return [
+      [
+        ...instructions,
+        "## Current status",
+        `${resolvedPaths.length} memory path(s) configured but no files exist yet. Use \`memory_write\` to create content in them, or \`memory_create\` for a new location.`,
+        "",
+        "Configured paths:",
+        ...resolvedPaths.map(p => `- ${p}`),
+      ].join("\n"),
+    ]
   }
 }

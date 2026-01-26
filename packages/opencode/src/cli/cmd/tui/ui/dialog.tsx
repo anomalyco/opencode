@@ -8,13 +8,24 @@ import { useToast } from "./toast"
 
 export function Dialog(
   props: ParentProps<{
-    size?: "medium" | "large"
+    size?: "medium" | "large" | "xlarge"
     onClose: () => void
   }>,
 ) {
   const dimensions = useTerminalDimensions()
   const { theme } = useTheme()
   const renderer = useRenderer()
+
+  const width = () => {
+    if (props.size === "xlarge") return Math.min(160, dimensions().width - 4)
+    if (props.size === "large") return 80
+    return 60
+  }
+
+  const paddingTop = () => {
+    if (props.size === "xlarge") return Math.floor(dimensions().height * 0.1)
+    return Math.floor(dimensions().height / 4)
+  }
 
   return (
     <box
@@ -26,7 +37,7 @@ export function Dialog(
       height={dimensions().height}
       alignItems="center"
       position="absolute"
-      paddingTop={dimensions().height / 4}
+      paddingTop={paddingTop()}
       left={0}
       top={0}
       backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
@@ -36,7 +47,7 @@ export function Dialog(
           if (renderer.getSelection()) return
           e.stopPropagation()
         }}
-        width={props.size === "large" ? 80 : 60}
+        width={width()}
         maxWidth={dimensions().width - 2}
         backgroundColor={theme.backgroundPanel}
         paddingTop={1}
@@ -53,7 +64,7 @@ function init() {
       element: JSX.Element
       onClose?: () => void
     }[],
-    size: "medium" as "medium" | "large",
+    size: "medium" as "medium" | "large" | "xlarge",
   })
 
   useKeyboard((evt) => {
@@ -119,7 +130,7 @@ function init() {
     get size() {
       return store.size
     },
-    setSize(size: "medium" | "large") {
+    setSize(size: "medium" | "large" | "xlarge") {
       setStore("size", size)
     },
   }

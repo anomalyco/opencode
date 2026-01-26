@@ -1030,6 +1030,7 @@ export namespace Config {
           },
         ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
+      memory: z.array(z.string()).optional().describe("Paths to MEMORY.md files that are read before every message and can be written to by the model"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
