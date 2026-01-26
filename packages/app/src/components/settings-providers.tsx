@@ -21,9 +21,9 @@ export const SettingsProviders: Component = () => {
   const providers = useProviders()
 
   const connected = createMemo(() => {
-    const paid = providers.paid().length > 0
-    return providers.connected().filter((p) => p.id !== "opencode" || paid)
+    return providers.connected().filter((p) => p.id !== "opencode" || Object.values(p.models).find((m) => m.cost?.input))
   })
+
   const popular = createMemo(() => {
     const connectedIDs = new Set(connected().map((p) => p.id))
     const items = providers
