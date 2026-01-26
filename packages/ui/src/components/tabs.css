@@ -219,7 +219,6 @@
       height: auto;
       padding: 6px;
       gap: 4px;
-      border-bottom: 1px solid var(--border-weak-base);
       background-color: var(--background-base);
 
       &::after {
@@ -230,7 +229,7 @@
     [data-slot="tabs-trigger-wrapper"] {
       height: 32px;
       border: none;
-      border-radius: 999px;
+      border-radius: var(--radius-sm);
       background-color: transparent;
       gap: 0;
 

@@ -22,6 +22,7 @@ export default function FileTree(props: {
   nodeClass?: string
   level?: number
   allowed?: readonly string[]
+  modified?: readonly string[]
   draggable?: boolean
   tooltip?: boolean
   onFileClick?: (file: FileNode) => void
@@ -48,6 +49,12 @@ export default function FileTree(props: {
     }
 
     return { files, dirs }
+  })
+
+  const marks = createMemo(() => {
+    const modified = props.modified
+    if (!modified || modified.length === 0) return
+    return new Set(modified)
   })
 
   createEffect(() => {
@@ -89,7 +96,7 @@ export default function FileTree(props: {
       <Dynamic
         component={local.as ?? "div"}
         classList={{
-          "w-full flex items-center gap-x-2 rounded-md px-2 py-1 hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
+          "w-full min-w-0 flex items-center gap-x-2 rounded-md px-2 py-1 hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
           ...(local.classList ?? {}),
           [local.class ?? ""]: !!local.class,
           [props.nodeClass ?? ""]: !!props.nodeClass,
@@ -125,13 +132,16 @@ export default function FileTree(props: {
         {local.children}
         <span
           classList={{
-            "text-12-regular whitespace-nowrap truncate": true,
+            "flex-1 min-w-0 text-12-regular whitespace-nowrap truncate": true,
             "text-text-weaker": local.node.ignored,
             "text-text-weak": !local.node.ignored,
           }}
         >
           {local.node.name}
         </span>
+        {local.node.type === "file" && marks()?.has(local.node.path) ? (
+          <div class="shrink-0 size-1.5 rounded-full bg-surface-warning-strong" />
+        ) : null}
       </Dynamic>
     )
   }
@@ -173,6 +183,7 @@ export default function FileTree(props: {
                       path={node.path}
                       level={level + 1}
                       allowed={props.allowed}
+                      modified={props.modified}
                       draggable={props.draggable}
                       tooltip={props.tooltip}
                       onFileClick={props.onFileClick}

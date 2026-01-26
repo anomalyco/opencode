@@ -425,6 +425,8 @@ export default function Page() {
   }
 
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
+  const emptyDiffFiles: string[] = []
+  const diffFiles = createMemo(() => diffs().map((d) => d.file), emptyDiffFiles, { equals: same })
   const diffsReady = createMemo(() => {
     const id = params.id
     if (!id) return true
@@ -1934,7 +1936,609 @@ export default function Page() {
             class="relative flex-1 min-w-0 h-full border-l border-border-weak-base flex"
           >
             <div class="flex-1 min-w-0 h-full">
-              <Show when={layout.fileTree.opened() && fileTreeTab() === "changes"}>
+              <Show
+                when={layout.fileTree.opened() && fileTreeTab() === "changes"}
+                fallback={
+                  <DragDropProvider
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={handleDragOver}
+                    collisionDetector={closestCenter}
+                  >
+                    <DragDropSensors />
+                    <ConstrainDragYAxis />
+                    <Tabs value={activeTab()} onChange={openTab}>
+                      <div class="sticky top-0 shrink-0 flex">
+                        <Tabs.List>
+                          <Show when={!layout.fileTree.opened()}>
+                            <Tabs.Trigger value="review">
+                              <div class="flex items-center gap-3">
+                                <Show when={diffs()}>
+                                  <DiffChanges changes={diffs()} variant="bars" />
+                                </Show>
+                                <div class="flex items-center gap-1.5">
+                                  <div>{language.t("session.tab.review")}</div>
+                                  <Show when={info()?.summary?.files}>
+                                    <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
+                                      {info()?.summary?.files ?? 0}
+                                    </div>
+                                  </Show>
+                                </div>
+                              </div>
+                            </Tabs.Trigger>
+                          </Show>
+                          <Show when={!layout.fileTree.opened() && contextOpen()}>
+                            <Tabs.Trigger
+                              value="context"
+                              closeButton={
+                                <Tooltip value={language.t("common.closeTab")} placement="bottom">
+                                  <IconButton
+                                    icon="close"
+                                    variant="ghost"
+                                    onClick={() => tabs().close("context")}
+                                    aria-label={language.t("common.closeTab")}
+                                  />
+                                </Tooltip>
+                              }
+                              hideCloseButton
+                              onMiddleClick={() => tabs().close("context")}
+                            >
+                              <div class="flex items-center gap-2">
+                                <SessionContextUsage variant="indicator" />
+                                <div>{language.t("session.tab.context")}</div>
+                              </div>
+                            </Tabs.Trigger>
+                          </Show>
+                          <SortableProvider ids={openedTabs()}>
+                            <For each={openedTabs()}>
+                              {(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}
+                            </For>
+                          </SortableProvider>
+                          <div class="bg-background-base h-full shrink-0 sticky right-0 z-10 flex items-center justify-center border-b border-l border-border-weak-base px-3">
+                            <TooltipKeybind
+                              title={language.t("command.file.open")}
+                              keybind={command.keybind("file.open")}
+                              class="flex items-center"
+                            >
+                              <IconButton
+                                icon="plus-small"
+                                variant="ghost"
+                                iconSize="large"
+                                onClick={() => dialog.show(() => <DialogSelectFile />)}
+                                aria-label={language.t("command.file.open")}
+                              />
+                            </TooltipKeybind>
+                          </div>
+                        </Tabs.List>
+                      </div>
+                      <Show when={!layout.fileTree.opened()}>
+                        <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
+                          <Show when={activeTab() === "review"}>
+                            <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                              <Switch>
+                                <Match when={hasReview()}>
+                                  <Show
+                                    when={diffsReady()}
+                                    fallback={
+                                      <div class="px-6 py-4 text-text-weak">
+                                        {language.t("session.review.loadingChanges")}
+                                      </div>
+                                    }
+                                  >
+                                    <SessionReviewTab
+                                      diffs={diffs}
+                                      view={view}
+                                      diffStyle={layout.review.diffStyle()}
+                                      onDiffStyleChange={layout.review.setDiffStyle}
+                                      onScrollRef={setReviewScroll}
+                                      onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+                                      comments={comments.all()}
+                                      focusedComment={comments.focus()}
+                                      onFocusedCommentChange={comments.setFocus}
+                                      onViewFile={(path) => {
+                                        const value = file.tab(path)
+                                        tabs().open(value)
+                                        file.load(path)
+                                      }}
+                                    />
+                                  </Show>
+                                </Match>
+                                <Match when={true}>
+                                  <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
+                                    <Mark class="w-14 opacity-10" />
+                                    <div class="text-13-regular text-text-weak max-w-56">
+                                      No changes in this session yet
+                                    </div>
+                                  </div>
+                                </Match>
+                              </Switch>
+                            </div>
+                          </Show>
+                        </Tabs.Content>
+                      </Show>
+
+                      <Show when={layout.fileTree.opened() && fileTreeTab() === "all" && openedTabs().length === 0}>
+                        <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
+                          <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
+                            <Mark class="w-14 opacity-10" />
+                            <div class="text-13-regular text-text-weak max-w-56">Select a file to open</div>
+                          </div>
+                        </Tabs.Content>
+                      </Show>
+
+                      <Show when={!layout.fileTree.opened() && contextOpen()}>
+                        <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
+                          <Show when={activeTab() === "context"}>
+                            <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                              <SessionContextTab
+                                messages={messages}
+                                visibleUserMessages={visibleUserMessages}
+                                view={view}
+                                info={info}
+                              />
+                            </div>
+                          </Show>
+                        </Tabs.Content>
+                      </Show>
+
+                      <For each={openedTabs()}>
+                        {(tab) => {
+                          let scroll: HTMLDivElement | undefined
+                          let scrollFrame: number | undefined
+                          let pending: { x: number; y: number } | undefined
+                          let codeScroll: HTMLElement[] = []
+
+                          const path = createMemo(() => file.pathFromTab(tab))
+                          const state = createMemo(() => {
+                            const p = path()
+                            if (!p) return
+                            return file.get(p)
+                          })
+                          const contents = createMemo(() => state()?.content?.content ?? "")
+                          const cacheKey = createMemo(() => checksum(contents()))
+                          const isImage = createMemo(() => {
+                            const c = state()?.content
+                            return (
+                              c?.encoding === "base64" &&
+                              c?.mimeType?.startsWith("image/") &&
+                              c?.mimeType !== "image/svg+xml"
+                            )
+                          })
+                          const isSvg = createMemo(() => {
+                            const c = state()?.content
+                            return c?.mimeType === "image/svg+xml"
+                          })
+                          const svgContent = createMemo(() => {
+                            if (!isSvg()) return
+                            const c = state()?.content
+                            if (!c) return
+                            if (c.encoding === "base64") return base64Decode(c.content)
+                            return c.content
+                          })
+                          const svgPreviewUrl = createMemo(() => {
+                            if (!isSvg()) return
+                            const c = state()?.content
+                            if (!c) return
+                            if (c.encoding === "base64") return `data:image/svg+xml;base64,${c.content}`
+                            return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(c.content)}`
+                          })
+                          const imageDataUrl = createMemo(() => {
+                            if (!isImage()) return
+                            const c = state()?.content
+                            return `data:${c?.mimeType};base64,${c?.content}`
+                          })
+                          const selectedLines = createMemo(() => {
+                            const p = path()
+                            if (!p) return null
+                            if (file.ready()) return file.selectedLines(p) ?? null
+                            return handoff.files[p] ?? null
+                          })
+
+                          let wrap: HTMLDivElement | undefined
+
+                          const fileComments = createMemo(() => {
+                            const p = path()
+                            if (!p) return []
+                            return comments.list(p)
+                          })
+
+                          const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
+
+                          const [openedComment, setOpenedComment] = createSignal<string | null>(null)
+                          const [commenting, setCommenting] = createSignal<SelectedLineRange | null>(null)
+                          const [draft, setDraft] = createSignal("")
+                          const [positions, setPositions] = createSignal<Record<string, number>>({})
+                          const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
+
+                          const commentLabel = (range: SelectedLineRange) => {
+                            const start = Math.min(range.start, range.end)
+                            const end = Math.max(range.start, range.end)
+                            if (start === end) return `line ${start}`
+                            return `lines ${start}-${end}`
+                          }
+
+                          const getRoot = () => {
+                            const el = wrap
+                            if (!el) return
+
+                            const host = el.querySelector("diffs-container")
+                            if (!(host instanceof HTMLElement)) return
+
+                            const root = host.shadowRoot
+                            if (!root) return
+
+                            return root
+                          }
+
+                          const findMarker = (root: ShadowRoot, range: SelectedLineRange) => {
+                            const line = Math.max(range.start, range.end)
+                            const node = root.querySelector(`[data-line="${line}"]`)
+                            if (!(node instanceof HTMLElement)) return
+                            return node
+                          }
+
+                          const markerTop = (wrapper: HTMLElement, marker: HTMLElement) => {
+                            const wrapperRect = wrapper.getBoundingClientRect()
+                            const rect = marker.getBoundingClientRect()
+                            return rect.top - wrapperRect.top + Math.max(0, (rect.height - 20) / 2)
+                          }
+
+                          const updateComments = () => {
+                            const el = wrap
+                            const root = getRoot()
+                            if (!el || !root) {
+                              setPositions({})
+                              setDraftTop(undefined)
+                              return
+                            }
+
+                            const next: Record<string, number> = {}
+                            for (const comment of fileComments()) {
+                              const marker = findMarker(root, comment.selection)
+                              if (!marker) continue
+                              next[comment.id] = markerTop(el, marker)
+                            }
+
+                            setPositions(next)
+
+                            const range = commenting()
+                            if (!range) {
+                              setDraftTop(undefined)
+                              return
+                            }
+
+                            const marker = findMarker(root, range)
+                            if (!marker) {
+                              setDraftTop(undefined)
+                              return
+                            }
+
+                            setDraftTop(markerTop(el, marker))
+                          }
+
+                          const scheduleComments = () => {
+                            requestAnimationFrame(updateComments)
+                          }
+
+                          createEffect(() => {
+                            fileComments()
+                            scheduleComments()
+                          })
+
+                          createEffect(() => {
+                            const range = commenting()
+                            scheduleComments()
+                            if (!range) return
+                            setDraft("")
+                          })
+
+                          createEffect(() => {
+                            const focus = comments.focus()
+                            const p = path()
+                            if (!focus || !p) return
+                            if (focus.file !== p) return
+                            if (activeTab() !== tab) return
+
+                            const target = fileComments().find((comment) => comment.id === focus.id)
+                            if (!target) return
+
+                            setOpenedComment(target.id)
+                            setCommenting(null)
+                            file.setSelectedLines(p, target.selection)
+                            requestAnimationFrame(() => comments.clearFocus())
+                          })
+
+                          const renderCode = (source: string, wrapperClass: string) => (
+                            <div
+                              ref={(el) => {
+                                wrap = el
+                                scheduleComments()
+                              }}
+                              class={`relative overflow-hidden ${wrapperClass}`}
+                            >
+                              <Dynamic
+                                component={codeComponent}
+                                file={{
+                                  name: path() ?? "",
+                                  contents: source,
+                                  cacheKey: cacheKey(),
+                                }}
+                                enableLineSelection
+                                selectedLines={selectedLines()}
+                                commentedLines={commentedLines()}
+                                onRendered={() => {
+                                  requestAnimationFrame(restoreScroll)
+                                  requestAnimationFrame(scheduleComments)
+                                }}
+                                onLineSelected={(range: SelectedLineRange | null) => {
+                                  const p = path()
+                                  if (!p) return
+                                  file.setSelectedLines(p, range)
+                                  if (!range) setCommenting(null)
+                                }}
+                                onLineSelectionEnd={(range: SelectedLineRange | null) => {
+                                  if (!range) {
+                                    setCommenting(null)
+                                    return
+                                  }
+
+                                  setOpenedComment(null)
+                                  setCommenting(range)
+                                }}
+                                overflow="scroll"
+                                class="select-text"
+                              />
+                              <For each={fileComments()}>
+                                {(comment) => (
+                                  <LineCommentView
+                                    id={comment.id}
+                                    top={positions()[comment.id]}
+                                    open={openedComment() === comment.id}
+                                    comment={comment.comment}
+                                    selection={commentLabel(comment.selection)}
+                                    onMouseEnter={() => {
+                                      const p = path()
+                                      if (!p) return
+                                      file.setSelectedLines(p, comment.selection)
+                                    }}
+                                    onClick={() => {
+                                      const p = path()
+                                      if (!p) return
+                                      setCommenting(null)
+                                      setOpenedComment((current) => (current === comment.id ? null : comment.id))
+                                      file.setSelectedLines(p, comment.selection)
+                                    }}
+                                  />
+                                )}
+                              </For>
+                              <Show when={commenting()}>
+                                {(range) => (
+                                  <Show when={draftTop() !== undefined}>
+                                    <LineCommentEditor
+                                      top={draftTop()}
+                                      value={draft()}
+                                      selection={commentLabel(range())}
+                                      onInput={(value) => setDraft(value)}
+                                      onCancel={() => setCommenting(null)}
+                                      onSubmit={(value) => {
+                                        const p = path()
+                                        if (!p) return
+                                        addCommentToContext({
+                                          file: p,
+                                          selection: range(),
+                                          comment: value,
+                                          origin: "file",
+                                        })
+                                        setCommenting(null)
+                                      }}
+                                      onPopoverFocusOut={(e: FocusEvent) => {
+                                        const current = e.currentTarget as HTMLDivElement
+                                        const target = e.relatedTarget
+                                        if (target instanceof Node && current.contains(target)) return
+
+                                        setTimeout(() => {
+                                          if (!document.activeElement || !current.contains(document.activeElement)) {
+                                            setCommenting(null)
+                                          }
+                                        }, 0)
+                                      }}
+                                    />
+                                  </Show>
+                                )}
+                              </Show>
+                            </div>
+                          )
+
+                          const getCodeScroll = () => {
+                            const el = scroll
+                            if (!el) return []
+
+                            const host = el.querySelector("diffs-container")
+                            if (!(host instanceof HTMLElement)) return []
+
+                            const root = host.shadowRoot
+                            if (!root) return []
+
+                            return Array.from(root.querySelectorAll("[data-code]")).filter(
+                              (node): node is HTMLElement => node instanceof HTMLElement && node.clientWidth > 0,
+                            )
+                          }
+
+                          const queueScrollUpdate = (next: { x: number; y: number }) => {
+                            pending = next
+                            if (scrollFrame !== undefined) return
+
+                            scrollFrame = requestAnimationFrame(() => {
+                              scrollFrame = undefined
+
+                              const next = pending
+                              pending = undefined
+                              if (!next) return
+
+                              view().setScroll(tab, next)
+                            })
+                          }
+
+                          const handleCodeScroll = (event: Event) => {
+                            const el = scroll
+                            if (!el) return
+
+                            const target = event.currentTarget
+                            if (!(target instanceof HTMLElement)) return
+
+                            queueScrollUpdate({
+                              x: target.scrollLeft,
+                              y: el.scrollTop,
+                            })
+                          }
+
+                          const syncCodeScroll = () => {
+                            const next = getCodeScroll()
+                            if (next.length === codeScroll.length && next.every((el, i) => el === codeScroll[i])) return
+
+                            for (const item of codeScroll) {
+                              item.removeEventListener("scroll", handleCodeScroll)
+                            }
+
+                            codeScroll = next
+
+                            for (const item of codeScroll) {
+                              item.addEventListener("scroll", handleCodeScroll)
+                            }
+                          }
+
+                          const restoreScroll = () => {
+                            const el = scroll
+                            if (!el) return
+
+                            const s = view()?.scroll(tab)
+                            if (!s) return
+
+                            syncCodeScroll()
+
+                            if (codeScroll.length > 0) {
+                              for (const item of codeScroll) {
+                                if (item.scrollLeft !== s.x) item.scrollLeft = s.x
+                              }
+                            }
+
+                            if (el.scrollTop !== s.y) el.scrollTop = s.y
+
+                            if (codeScroll.length > 0) return
+
+                            if (el.scrollLeft !== s.x) el.scrollLeft = s.x
+                          }
+
+                          const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+                            if (codeScroll.length === 0) syncCodeScroll()
+
+                            queueScrollUpdate({
+                              x: codeScroll[0]?.scrollLeft ?? event.currentTarget.scrollLeft,
+                              y: event.currentTarget.scrollTop,
+                            })
+                          }
+
+                          createEffect(
+                            on(
+                              () => state()?.loaded,
+                              (loaded) => {
+                                if (!loaded) return
+                                requestAnimationFrame(restoreScroll)
+                              },
+                              { defer: true },
+                            ),
+                          )
+
+                          createEffect(
+                            on(
+                              () => file.ready(),
+                              (ready) => {
+                                if (!ready) return
+                                requestAnimationFrame(restoreScroll)
+                              },
+                              { defer: true },
+                            ),
+                          )
+
+                          createEffect(
+                            on(
+                              () => tabs().active() === tab,
+                              (active) => {
+                                if (!active) return
+                                if (!state()?.loaded) return
+                                requestAnimationFrame(restoreScroll)
+                              },
+                            ),
+                          )
+
+                          onCleanup(() => {
+                            for (const item of codeScroll) {
+                              item.removeEventListener("scroll", handleCodeScroll)
+                            }
+
+                            if (scrollFrame === undefined) return
+                            cancelAnimationFrame(scrollFrame)
+                          })
+
+                          return (
+                            <Tabs.Content
+                              value={tab}
+                              class="mt-3 relative"
+                              ref={(el: HTMLDivElement) => {
+                                scroll = el
+                                restoreScroll()
+                              }}
+                              onScroll={handleScroll}
+                            >
+                              <Switch>
+                                <Match when={state()?.loaded && isImage()}>
+                                  <div class="px-6 py-4 pb-40">
+                                    <img
+                                      src={imageDataUrl()}
+                                      alt={path()}
+                                      class="max-w-full"
+                                      onLoad={() => requestAnimationFrame(restoreScroll)}
+                                    />
+                                  </div>
+                                </Match>
+                                <Match when={state()?.loaded && isSvg()}>
+                                  <div class="flex flex-col gap-4 px-6 py-4">
+                                    {renderCode(svgContent() ?? "", "")}
+                                    <Show when={svgPreviewUrl()}>
+                                      <div class="flex justify-center pb-40">
+                                        <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
+                                      </div>
+                                    </Show>
+                                  </div>
+                                </Match>
+                                <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>
+                                <Match when={state()?.loading}>
+                                  <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+                                </Match>
+                                <Match when={state()?.error}>
+                                  {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
+                                </Match>
+                              </Switch>
+                            </Tabs.Content>
+                          )
+                        }}
+                      </For>
+                    </Tabs>
+                    <DragOverlay>
+                      <Show when={store.activeDraggable}>
+                        {(tab) => {
+                          const path = createMemo(() => file.pathFromTab(tab()))
+                          return (
+                            <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
+                              <Show when={path()}>{(p) => <FileVisual active path={p()} />}</Show>
+                            </div>
+                          )
+                        }}
+                      </Show>
+                    </DragOverlay>
+                  </DragDropProvider>
+                }
+              >
                 <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
                   <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                     <Switch>
@@ -1973,672 +2577,6 @@ export default function Page() {
                   </div>
                 </div>
               </Show>
-
-              <Show when={!layout.fileTree.opened() || fileTreeTab() === "all"}>
-                <DragDropProvider
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  onDragOver={handleDragOver}
-                  collisionDetector={closestCenter}
-                >
-                  <DragDropSensors />
-                  <ConstrainDragYAxis />
-                  <Tabs value={activeTab()} onChange={openTab}>
-                    <div class="sticky top-0 shrink-0 flex">
-                      <Tabs.List>
-                        <Show when={!layout.fileTree.opened()}>
-                          <Tabs.Trigger value="review">
-                            <div class="flex items-center gap-3">
-                              <Show when={diffs()}>
-                                <DiffChanges changes={diffs()} variant="bars" />
-                              </Show>
-                              <div class="flex items-center gap-1.5">
-                                <div>{language.t("session.tab.review")}</div>
-                                <Show when={info()?.summary?.files}>
-                                  <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
-                                    {info()?.summary?.files ?? 0}
-                                  </div>
-                                </Show>
-                              </div>
-                            </div>
-                          </Tabs.Trigger>
-                        </Show>
-                        <Show when={!layout.fileTree.opened() && contextOpen()}>
-                          <Tabs.Trigger
-                            value="context"
-                            closeButton={
-                              <Tooltip value={language.t("common.closeTab")} placement="bottom">
-                                <IconButton
-                                  icon="close"
-                                  variant="ghost"
-                                  onClick={() => tabs().close("context")}
-                                  aria-label={language.t("common.closeTab")}
-                                />
-                              </Tooltip>
-                            }
-                            hideCloseButton
-                            onMiddleClick={() => tabs().close("context")}
-                          >
-                            <div class="flex items-center gap-2">
-                              <SessionContextUsage variant="indicator" />
-                              <div>{language.t("session.tab.context")}</div>
-                            </div>
-                          </Tabs.Trigger>
-                        </Show>
-                        <SortableProvider ids={openedTabs()}>
-                          <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
-                        </SortableProvider>
-                        <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
-                          <TooltipKeybind
-                            title={language.t("command.file.open")}
-                            keybind={command.keybind("file.open")}
-                            class="flex items-center"
-                          >
-                            <IconButton
-                              icon="plus-small"
-                              variant="ghost"
-                              iconSize="large"
-                              onClick={() => dialog.show(() => <DialogSelectFile />)}
-                              aria-label={language.t("command.file.open")}
-                            />
-                          </TooltipKeybind>
-                        </div>
-                      </Tabs.List>
-                    </div>
-                    <Show when={!layout.fileTree.opened()}>
-                      <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                        <Show when={activeTab() === "review"}>
-                          <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                            <Switch>
-                              <Match when={hasReview()}>
-                                <Show
-                                  when={diffsReady()}
-                                  fallback={
-                                    <div class="px-6 py-4 text-text-weak">
-                                      {language.t("session.review.loadingChanges")}
-                                    </div>
-                                  }
-                                >
-                                  <SessionReviewTab
-                                    diffs={diffs}
-                                    view={view}
-                                    diffStyle={layout.review.diffStyle()}
-                                    onDiffStyleChange={layout.review.setDiffStyle}
-                                    onScrollRef={setReviewScroll}
-                                    onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-                                    comments={comments.all()}
-                                    focusedComment={comments.focus()}
-                                    onFocusedCommentChange={comments.setFocus}
-                                    onViewFile={(path) => {
-                                      const value = file.tab(path)
-                                      tabs().open(value)
-                                      file.load(path)
-                                    }}
-                                  />
-                                </Show>
-                              </Match>
-                              <Match when={true}>
-                                <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                                  <Mark class="w-14 opacity-10" />
-                                  <div class="text-13-regular text-text-weak max-w-56">
-                                    No changes in this session yet
-                                  </div>
-                                </div>
-                              </Match>
-                            </Switch>
-                          </div>
-                        </Show>
-                      </Tabs.Content>
-                    </Show>
-
-                    <Show when={layout.fileTree.opened() && fileTreeTab() === "all" && openedTabs().length === 0}>
-                      <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                        <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                          <Mark class="w-14 opacity-10" />
-                          <div class="text-13-regular text-text-weak max-w-56">Select a file to open</div>
-                        </div>
-                      </Tabs.Content>
-                    </Show>
-
-                    <Show when={!layout.fileTree.opened() && contextOpen()}>
-                      <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
-                        <Show when={activeTab() === "context"}>
-                          <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                            <SessionContextTab
-                              messages={messages}
-                              visibleUserMessages={visibleUserMessages}
-                              view={view}
-                              info={info}
-                            />
-                          </div>
-                        </Show>
-                      </Tabs.Content>
-                    </Show>
-                    <For each={openedTabs()}>
-                      {(tab) => {
-                        let scroll: HTMLDivElement | undefined
-                        let scrollFrame: number | undefined
-                        let pending: { x: number; y: number } | undefined
-                        let codeScroll: HTMLElement[] = []
-                        let focusToken = 0
-
-                        const path = createMemo(() => file.pathFromTab(tab))
-                        const state = createMemo(() => {
-                          const p = path()
-                          if (!p) return
-                          return file.get(p)
-                        })
-                        const contents = createMemo(() => state()?.content?.content ?? "")
-                        const cacheKey = createMemo(() => checksum(contents()))
-                        const isImage = createMemo(() => {
-                          const c = state()?.content
-                          return (
-                            c?.encoding === "base64" &&
-                            c?.mimeType?.startsWith("image/") &&
-                            c?.mimeType !== "image/svg+xml"
-                          )
-                        })
-                        const isSvg = createMemo(() => {
-                          const c = state()?.content
-                          return c?.mimeType === "image/svg+xml"
-                        })
-                        const svgContent = createMemo(() => {
-                          if (!isSvg()) return
-                          const c = state()?.content
-                          if (!c) return
-                          if (c.encoding === "base64") return base64Decode(c.content)
-                          return c.content
-                        })
-                        const svgPreviewUrl = createMemo(() => {
-                          if (!isSvg()) return
-                          const c = state()?.content
-                          if (!c) return
-                          if (c.encoding === "base64") return `data:image/svg+xml;base64,${c.content}`
-                          return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(c.content)}`
-                        })
-                        const imageDataUrl = createMemo(() => {
-                          if (!isImage()) return
-                          const c = state()?.content
-                          return `data:${c?.mimeType};base64,${c?.content}`
-                        })
-                        const selectedLines = createMemo(() => {
-                          const p = path()
-                          if (!p) return null
-                          if (file.ready()) return file.selectedLines(p) ?? null
-                          return handoff.files[p] ?? null
-                        })
-
-                        let wrap: HTMLDivElement | undefined
-
-                        const fileComments = createMemo(() => {
-                          const p = path()
-                          if (!p) return []
-                          return comments.list(p)
-                        })
-
-                        const commentedLines = createMemo(() => fileComments().map((comment) => comment.selection))
-
-                        const [openedComment, setOpenedComment] = createSignal<string | null>(null)
-                        const [commenting, setCommenting] = createSignal<SelectedLineRange | null>(null)
-                        const [draft, setDraft] = createSignal("")
-                        const [positions, setPositions] = createSignal<Record<string, number>>({})
-                        const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
-
-                        const empty = {} as Record<string, number>
-
-                        const commentLabel = (range: SelectedLineRange) => {
-                          const start = Math.min(range.start, range.end)
-                          const end = Math.max(range.start, range.end)
-                          if (start === end) return `line ${start}`
-                          return `lines ${start}-${end}`
-                        }
-
-                        const getRoot = () => {
-                          const el = wrap
-                          if (!el) return
-
-                          const host = el.querySelector("diffs-container")
-                          if (!(host instanceof HTMLElement)) return
-
-                          const root = host.shadowRoot
-                          if (!root) return
-
-                          return root
-                        }
-
-                        const findMarker = (root: ShadowRoot, range: SelectedLineRange) => {
-                          const line = Math.max(range.start, range.end)
-                          const node = root.querySelector(`[data-line="${line}"]`)
-                          if (!(node instanceof HTMLElement)) return
-                          return node
-                        }
-
-                        const markerTop = (wrapper: HTMLElement, marker: HTMLElement) => {
-                          const wrapperRect = wrapper.getBoundingClientRect()
-                          const rect = marker.getBoundingClientRect()
-                          return rect.top - wrapperRect.top + Math.max(0, (rect.height - 20) / 2)
-                        }
-
-                        const equal = (a: Record<string, number>, b: Record<string, number>) => {
-                          const aKeys = Object.keys(a)
-                          const bKeys = Object.keys(b)
-                          if (aKeys.length !== bKeys.length) return false
-                          for (const key of aKeys) {
-                            if (a[key] !== b[key]) return false
-                          }
-                          return true
-                        }
-
-                        const updateComments = () => {
-                          const el = wrap
-                          const root = getRoot()
-                          if (!el || !root) {
-                            setPositions((prev) => (Object.keys(prev).length === 0 ? prev : empty))
-                            setDraftTop((prev) => (prev === undefined ? prev : undefined))
-                            return
-                          }
-
-                          const next: Record<string, number> = {}
-                          for (const comment of fileComments()) {
-                            const marker = findMarker(root, comment.selection)
-                            if (!marker) continue
-                            next[comment.id] = markerTop(el, marker)
-                          }
-
-                          setPositions((prev) => (equal(prev, next) ? prev : next))
-
-                          const range = commenting()
-                          if (!range) {
-                            setDraftTop(undefined)
-                            return
-                          }
-
-                          const marker = findMarker(root, range)
-                          if (!marker) {
-                            setDraftTop(undefined)
-                            return
-                          }
-
-                          const nextTop = markerTop(el, marker)
-                          setDraftTop((prev) => (prev === nextTop ? prev : nextTop))
-                        }
-
-                        let commentFrame: number | undefined
-
-                        const scheduleComments = () => {
-                          if (commentFrame !== undefined) return
-                          commentFrame = requestAnimationFrame(() => {
-                            commentFrame = undefined
-                            updateComments()
-                          })
-                        }
-
-                        createEffect(() => {
-                          fileComments()
-                          scheduleComments()
-                        })
-
-                        createEffect(() => {
-                          commenting()
-                          scheduleComments()
-                        })
-
-                        createEffect(() => {
-                          const range = commenting()
-                          if (!range) return
-                          setDraft("")
-                        })
-
-                        createEffect(() => {
-                          const focus = comments.focus()
-                          const p = path()
-                          if (!focus || !p) return
-                          if (focus.file !== p) return
-                          if (activeTab() !== tab) return
-
-                          const target = fileComments().find((comment) => comment.id === focus.id)
-                          if (!target) return
-
-                          focusToken++
-                          const token = focusToken
-
-                          setOpenedComment(target.id)
-                          setCommenting(null)
-                          file.setSelectedLines(p, target.selection)
-
-                          const scrollTo = (attempt: number) => {
-                            if (token !== focusToken) return
-
-                            const root = scroll
-                            if (!root) {
-                              if (attempt >= 120) return
-                              requestAnimationFrame(() => scrollTo(attempt + 1))
-                              return
-                            }
-
-                            const anchor = root.querySelector(`[data-comment-id="${target.id}"]`)
-                            const ready =
-                              anchor instanceof HTMLElement &&
-                              anchor.style.pointerEvents !== "none" &&
-                              anchor.style.opacity !== "0"
-
-                            const shadow = getRoot()
-                            const marker = shadow ? findMarker(shadow, target.selection) : undefined
-                            const node = (ready ? anchor : (marker ?? wrap)) as HTMLElement | undefined
-                            if (!node) {
-                              if (attempt >= 120) return
-                              requestAnimationFrame(() => scrollTo(attempt + 1))
-                              return
-                            }
-
-                            const rootRect = root.getBoundingClientRect()
-                            const targetRect = node.getBoundingClientRect()
-                            const offset = targetRect.top - rootRect.top
-                            const next = root.scrollTop + offset - rootRect.height / 2 + targetRect.height / 2
-                            root.scrollTop = Math.max(0, next)
-
-                            if (ready || marker) return
-                            if (attempt >= 120) return
-                            requestAnimationFrame(() => scrollTo(attempt + 1))
-                          }
-
-                          requestAnimationFrame(() => scrollTo(0))
-                          requestAnimationFrame(() => comments.clearFocus())
-                        })
-
-                        const renderCode = (source: string, wrapperClass: string) => (
-                          <div
-                            ref={(el) => {
-                              wrap = el
-                              scheduleComments()
-                            }}
-                            class={`relative overflow-hidden ${wrapperClass}`}
-                          >
-                            <Dynamic
-                              component={codeComponent}
-                              file={{
-                                name: path() ?? "",
-                                contents: source,
-                                cacheKey: cacheKey(),
-                              }}
-                              enableLineSelection
-                              selectedLines={selectedLines()}
-                              commentedLines={commentedLines()}
-                              onRendered={() => {
-                                requestAnimationFrame(restoreScroll)
-                                requestAnimationFrame(scheduleComments)
-                              }}
-                              onLineSelected={(range: SelectedLineRange | null) => {
-                                const p = path()
-                                if (!p) return
-                                file.setSelectedLines(p, range)
-                                if (!range) setCommenting(null)
-                              }}
-                              onLineSelectionEnd={(range: SelectedLineRange | null) => {
-                                if (!range) {
-                                  setCommenting(null)
-                                  return
-                                }
-
-                                setOpenedComment(null)
-                                setCommenting(range)
-                              }}
-                              overflow="scroll"
-                              class="select-text"
-                            />
-                            <For each={fileComments()}>
-                              {(comment) => (
-                                <LineCommentView
-                                  id={comment.id}
-                                  top={positions()[comment.id]}
-                                  open={openedComment() === comment.id}
-                                  onMouseEnter={() => {
-                                    const p = path()
-                                    if (!p) return
-                                    file.setSelectedLines(p, comment.selection)
-                                  }}
-                                  onClick={() => {
-                                    const p = path()
-                                    if (!p) return
-                                    setCommenting(null)
-                                    setOpenedComment((current) => (current === comment.id ? null : comment.id))
-                                    file.setSelectedLines(p, comment.selection)
-                                  }}
-                                  comment={comment.comment}
-                                  selection={commentLabel(comment.selection)}
-                                />
-                              )}
-                            </For>
-                            <Show when={commenting()}>
-                              {(range) => (
-                                <Show when={draftTop() !== undefined}>
-                                  <LineCommentEditor
-                                    top={draftTop()}
-                                    value={draft()}
-                                    selection={commentLabel(range())}
-                                    onInput={setDraft}
-                                    onCancel={() => setCommenting(null)}
-                                    onSubmit={(comment) => {
-                                      const p = path()
-                                      if (!p) return
-                                      addCommentToContext({
-                                        file: p,
-                                        selection: range(),
-                                        comment,
-                                        origin: "file",
-                                      })
-                                      setCommenting(null)
-                                    }}
-                                    onPopoverFocusOut={(e) => {
-                                      const target = e.relatedTarget as Node | null
-                                      if (target && e.currentTarget.contains(target)) return
-                                      // Delay to allow click handlers to fire first
-                                      setTimeout(() => {
-                                        if (
-                                          !document.activeElement ||
-                                          !e.currentTarget.contains(document.activeElement)
-                                        ) {
-                                          setCommenting(null)
-                                        }
-                                      }, 0)
-                                    }}
-                                  />
-                                </Show>
-                              )}
-                            </Show>
-                          </div>
-                        )
-
-                        const getCodeScroll = () => {
-                          const el = scroll
-                          if (!el) return []
-
-                          const host = el.querySelector("diffs-container")
-                          if (!(host instanceof HTMLElement)) return []
-
-                          const root = host.shadowRoot
-                          if (!root) return []
-
-                          return Array.from(root.querySelectorAll("[data-code]")).filter(
-                            (node): node is HTMLElement => node instanceof HTMLElement && node.clientWidth > 0,
-                          )
-                        }
-
-                        const queueScrollUpdate = (next: { x: number; y: number }) => {
-                          pending = next
-                          if (scrollFrame !== undefined) return
-
-                          scrollFrame = requestAnimationFrame(() => {
-                            scrollFrame = undefined
-
-                            const next = pending
-                            pending = undefined
-                            if (!next) return
-
-                            view().setScroll(tab, next)
-                          })
-                        }
-
-                        const handleCodeScroll = (event: Event) => {
-                          const el = scroll
-                          if (!el) return
-
-                          const target = event.currentTarget
-                          if (!(target instanceof HTMLElement)) return
-
-                          queueScrollUpdate({
-                            x: target.scrollLeft,
-                            y: el.scrollTop,
-                          })
-                        }
-
-                        const syncCodeScroll = () => {
-                          const next = getCodeScroll()
-                          if (next.length === codeScroll.length && next.every((el, i) => el === codeScroll[i])) return
-
-                          for (const item of codeScroll) {
-                            item.removeEventListener("scroll", handleCodeScroll)
-                          }
-
-                          codeScroll = next
-
-                          for (const item of codeScroll) {
-                            item.addEventListener("scroll", handleCodeScroll)
-                          }
-                        }
-
-                        const restoreScroll = () => {
-                          const el = scroll
-                          if (!el) return
-
-                          const s = view()?.scroll(tab)
-                          if (!s) return
-
-                          syncCodeScroll()
-
-                          if (codeScroll.length > 0) {
-                            for (const item of codeScroll) {
-                              if (item.scrollLeft !== s.x) item.scrollLeft = s.x
-                            }
-                          }
-
-                          if (el.scrollTop !== s.y) el.scrollTop = s.y
-
-                          if (codeScroll.length > 0) return
-
-                          if (el.scrollLeft !== s.x) el.scrollLeft = s.x
-                        }
-
-                        const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-                          if (codeScroll.length === 0) syncCodeScroll()
-
-                          queueScrollUpdate({
-                            x: codeScroll[0]?.scrollLeft ?? event.currentTarget.scrollLeft,
-                            y: event.currentTarget.scrollTop,
-                          })
-                        }
-
-                        createEffect(
-                          on(
-                            () => state()?.loaded,
-                            (loaded) => {
-                              if (!loaded) return
-                              requestAnimationFrame(restoreScroll)
-                            },
-                            { defer: true },
-                          ),
-                        )
-
-                        createEffect(
-                          on(
-                            () => file.ready(),
-                            (ready) => {
-                              if (!ready) return
-                              requestAnimationFrame(restoreScroll)
-                            },
-                            { defer: true },
-                          ),
-                        )
-
-                        createEffect(
-                          on(
-                            () => tabs().active() === tab,
-                            (active) => {
-                              if (!active) return
-                              if (!state()?.loaded) return
-                              requestAnimationFrame(restoreScroll)
-                            },
-                          ),
-                        )
-
-                        onCleanup(() => {
-                          if (commentFrame !== undefined) cancelAnimationFrame(commentFrame)
-                          for (const item of codeScroll) {
-                            item.removeEventListener("scroll", handleCodeScroll)
-                          }
-
-                          if (scrollFrame === undefined) return
-                          cancelAnimationFrame(scrollFrame)
-                        })
-
-                        return (
-                          <Tabs.Content
-                            value={tab}
-                            class="mt-3 relative"
-                            ref={(el: HTMLDivElement) => {
-                              scroll = el
-                              restoreScroll()
-                            }}
-                            onScroll={handleScroll}
-                          >
-                            <Switch>
-                              <Match when={state()?.loaded && isImage()}>
-                                <div class="px-6 py-4 pb-40">
-                                  <img
-                                    src={imageDataUrl()}
-                                    alt={path()}
-                                    class="max-w-full"
-                                    onLoad={() => requestAnimationFrame(restoreScroll)}
-                                  />
-                                </div>
-                              </Match>
-                              <Match when={state()?.loaded && isSvg()}>
-                                <div class="flex flex-col gap-4 px-6 py-4">
-                                  {renderCode(svgContent() ?? "", "")}
-                                  <Show when={svgPreviewUrl()}>
-                                    <div class="flex justify-center pb-40">
-                                      <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
-                                    </div>
-                                  </Show>
-                                </div>
-                              </Match>
-                              <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>
-                              <Match when={state()?.loading}>
-                                <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
-                              </Match>
-                              <Match when={state()?.error}>
-                                {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
-                              </Match>
-                            </Switch>
-                          </Tabs.Content>
-                        )
-                      }}
-                    </For>
-                  </Tabs>
-                  <DragOverlay>
-                    <Show when={store.activeDraggable}>
-                      {(tab) => {
-                        const path = createMemo(() => file.pathFromTab(tab()))
-                        return (
-                          <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
-                            <Show when={path()}>{(p) => <FileVisual active path={p()} />}</Show>
-                          </div>
-                        )
-                      }}
-                    </Show>
-                  </DragOverlay>
-                </DragDropProvider>
-              </Show>
             </div>
 
             <Show when={layout.fileTree.opened()}>
@@ -2647,7 +2585,7 @@ export default function Page() {
                   <Tabs variant="pill" value={fileTreeTab()} onChange={setFileTreeTabValue} class="h-full">
                     <Tabs.List>
                       <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                        Changes
+                        {reviewCount()} {reviewCount() === 1 ? "Change" : "Changes"}
                       </Tabs.Trigger>
                       <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
                         All files
@@ -2662,7 +2600,7 @@ export default function Page() {
                           >
                             <FileTree
                               path=""
-                              allowed={diffs().map((d) => d.file)}
+                              allowed={diffFiles()}
                               draggable={false}
                               tooltip={false}
                               onFileClick={(node) => focusReviewDiff(node.path)}
@@ -2675,7 +2613,7 @@ export default function Page() {
                       </Switch>
                     </Tabs.Content>
                     <Tabs.Content value="all" class="bg-background-base p-2">
-                      <FileTree path="" onFileClick={(node) => openTab(file.tab(node.path))} />
+                      <FileTree path="" modified={diffFiles()} onFileClick={(node) => openTab(file.tab(node.path))} />
                     </Tabs.Content>
                   </Tabs>
                 </div>
