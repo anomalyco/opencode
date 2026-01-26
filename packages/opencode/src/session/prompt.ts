@@ -268,6 +268,10 @@ export namespace SessionPrompt {
 
     let step = 0
     const session = await Session.get(sessionID)
+    
+    // Set the working directory for this session (enables session-specific directories)
+    Session.directory.set(session.directory)
+    
     while (true) {
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
@@ -326,7 +330,7 @@ export namespace SessionPrompt {
           mode: task.agent,
           agent: task.agent,
           path: {
-            cwd: Instance.directory,
+            cwd: Session.directory.get(),
             root: Instance.worktree,
           },
           cost: 0,
@@ -528,7 +532,7 @@ export namespace SessionPrompt {
           mode: agent.name,
           agent: agent.name,
           path: {
-            cwd: Instance.directory,
+            cwd: Session.directory.get(),
             root: Instance.worktree,
           },
           cost: 0,
@@ -1348,6 +1352,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     using _ = defer(() => cancel(input.sessionID))
 
     const session = await Session.get(input.sessionID)
+    
+    // Set the working directory for this session (enables session-specific directories)
+    Session.directory.set(session.directory)
+    
     if (session.revert) {
       await SessionRevert.cleanup(session)
     }
@@ -1476,7 +1484,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const args = matchingInvocation?.args
 
     const proc = spawn(shell, args, {
-      cwd: Instance.directory,
+      cwd: Session.directory.get(),
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
       env: {

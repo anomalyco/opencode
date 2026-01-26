@@ -9,6 +9,7 @@ import { File } from "../file"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
+import { Session } from "../session"
 import { trimDiff } from "./edit"
 import { assertExternalDirectory } from "./external-directory"
 
@@ -22,7 +23,7 @@ export const WriteTool = Tool.define("write", {
     filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
   }),
   async execute(params, ctx) {
-    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Session.directory.get(), params.filePath)
     await assertExternalDirectory(ctx, filepath)
 
     const file = Bun.file(filepath)

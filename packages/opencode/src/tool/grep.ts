@@ -4,6 +4,7 @@ import { Ripgrep } from "../file/ripgrep"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
+import { Session } from "../session"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
 
@@ -32,8 +33,8 @@ export const GrepTool = Tool.define("grep", {
       },
     })
 
-    let searchPath = params.path ?? Instance.directory
-    searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
+    let searchPath = params.path ?? Session.directory.get()
+    searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Session.directory.get(), searchPath)
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     const rgPath = await Ripgrep.filepath()
