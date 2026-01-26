@@ -40,6 +40,59 @@ function formatDate(dateString: string) {
   })
 }
 
+type Highlight = {
+  source: string
+  title: string
+  description: string
+  shortDescription?: string
+  image?: {
+    src: string
+    width: string
+    height: string
+  }
+  video?: string
+}
+
+function parseHighlights(body: string): Highlight[] {
+  const highlights: Highlight[] = []
+  const regex = /<highlight\s+source="([^"]+)">([\s\S]*?)<\/highlight>/g
+  let match
+
+  while ((match = regex.exec(body)) !== null) {
+    const source = match[1]
+    const content = match[2]
+
+    const titleMatch = content.match(/<h2>([^<]+)<\/h2>/)
+    const pMatch = content.match(/<p(?:\s+short="([^"]*)")?>([^<]+)<\/p>/)
+    const imgMatch = content.match(/<img\s+width="([^"]+)"\s+height="([^"]+)"\s+alt="([^"]*)"\s+src="([^"]+)"/)
+    // Match standalone GitHub asset URLs (videos)
+    const videoMatch = content.match(/^\s*(https:\/\/github\.com\/user-attachments\/assets\/[a-f0-9-]+)\s*$/m)
+
+    if (titleMatch) {
+      highlights.push({
+        source,
+        title: titleMatch[1],
+        description: pMatch?.[2] || "",
+        shortDescription: pMatch?.[1],
+        image: imgMatch
+          ? {
+              width: imgMatch[1],
+              height: imgMatch[2],
+              src: imgMatch[4],
+            }
+          : undefined,
+        video: videoMatch?.[1],
+      })
+    }
+  }
+
+  return highlights
+}
+
+function toTitleCase(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
+}
+
 function parseMarkdown(body: string) {
   const lines = body.split("\n")
   const sections: { title: string; items: string[] }[] = []
@@ -60,7 +113,9 @@ function parseMarkdown(body: string) {
   }
   if (current) sections.push(current)
 
-  return { sections }
+  const highlights = parseHighlights(body)
+
+  return { sections, highlights }
 }
 
 function ReleaseItem(props: { item: string }) {
@@ -84,6 +139,27 @@ function ReleaseItem(props: { item: string }) {
         </a>
       </Show>
     </li>
+  )
+}
+
+function HighlightCard(props: { highlight: Highlight }) {
+  return (
+    <div data-component="highlight">
+      <h4>{props.highlight.source}</h4>
+      <p data-slot="title">{props.highlight.title}</p>
+      <p>{props.highlight.description}</p>
+      <Show when={props.highlight.video}>
+        <video src={props.highlight.video} controls autoplay loop muted playsinline />
+      </Show>
+      <Show when={props.highlight.image && !props.highlight.video}>
+        <img
+          src={props.highlight.image!.src}
+          alt={props.highlight.title}
+          width={props.highlight.image!.width}
+          height={props.highlight.image!.height}
+        />
+      </Show>
+    </div>
   )
 }
 
@@ -120,6 +196,11 @@ export default function Changelog() {
                       <time dateTime={release.published_at}>{formatDate(release.published_at)}</time>
                     </header>
                     <div data-slot="content">
+                      <Show when={parsed().highlights.length > 0}>
+                        <div data-component="highlights">
+                          <For each={parsed().highlights}>{(highlight) => <HighlightCard highlight={highlight} />}</For>
+                        </div>
+                      </Show>
                       <For each={parsed().sections}>
                         {(section) => (
                           <div data-component="section">
