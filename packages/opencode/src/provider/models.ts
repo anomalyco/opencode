@@ -85,7 +85,11 @@ export namespace ModelsDev {
   // If models-macro exports a function, call it to get embedded data
   if (typeof data === 'function') {
     const json = await data()
-    return JSON.parse(json)
+    try {
+      return JSON.parse(json)
+    } catch (e) {
+      // fallthrough
+    }
   }
 
   // If models-macro exports a string, parse it
@@ -94,6 +98,35 @@ export namespace ModelsDev {
       return JSON.parse(data)
     } catch (e) {
       // fallthrough
+    }
+  }
+
+  // Avoid network fetch in GitHub-only mode: return a minimal github-copilot manifest
+  if (process.env.OPENCODE_ONLY_GITHUB) {
+    return {
+      "github-copilot": {
+        id: "github-copilot",
+        name: "GitHub Copilot",
+        env: [],
+        npm: "@ai-sdk/github-copilot",
+        api: "https://api.github.com",
+        models: {
+          "gpt-5-mini": {
+            id: "gpt-5-mini",
+            name: "gpt-5-mini",
+            release_date: "2026-01-01",
+            attachment: false,
+            reasoning: true,
+            temperature: true,
+            tool_call: false,
+            interleaved: false,
+            cost: { input: 0, output: 0 },
+            limit: { context: 1000000, input: 10000, output: 10000 },
+            modalities: { input: ["text"], output: ["text"] },
+            options: {},
+          },
+        },
+      },
     }
   }
 
