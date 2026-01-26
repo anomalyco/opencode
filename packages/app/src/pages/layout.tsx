@@ -89,11 +89,6 @@ export default function Layout(props: ParentProps) {
   const pageReady = createMemo(() => ready())
 
   let scrollContainerRef: HTMLDivElement | undefined
-  const xlQuery = window.matchMedia("(min-width: 1280px)")
-  const [isLargeViewport, setIsLargeViewport] = createSignal(xlQuery.matches)
-  const handleViewportChange = (e: MediaQueryListEvent) => setIsLargeViewport(e.matches)
-  xlQuery.addEventListener("change", handleViewportChange)
-  onCleanup(() => xlQuery.removeEventListener("change", handleViewportChange))
 
   const params = useParams()
   const [autoselect, setAutoselect] = createSignal(!params.dir)
@@ -355,7 +350,7 @@ export default function Layout(props: ParentProps) {
       const props = e.details.properties
       if (e.details.type === "permission.asked" && permission.autoResponds(e.details.properties, directory)) return
 
-      const [store] = globalSync.child(directory)
+      const [store] = globalSync.child(directory, { bootstrap: false })
       const session = store.session.find((s) => s.id === props.sessionID)
       const sessionKey = `${directory}:${props.sessionID}`
 
@@ -424,7 +419,7 @@ export default function Layout(props: ParentProps) {
         toastBySession.delete(sessionKey)
         alertedAtBySession.delete(sessionKey)
       }
-      const [store] = globalSync.child(currentDir)
+      const [store] = globalSync.child(currentDir, { bootstrap: false })
       const childSessions = store.session.filter((s) => s.parentID === currentSession)
       for (const child of childSessions) {
         const childKey = `${currentDir}:${child.id}`
@@ -438,17 +433,18 @@ export default function Layout(props: ParentProps) {
     })
   })
 
-  function sortSessions(a: Session, b: Session) {
-    const now = Date.now()
+  function sortSessions(now: number) {
     const oneMinuteAgo = now - 60 * 1000
-    const aUpdated = a.time.updated ?? a.time.created
-    const bUpdated = b.time.updated ?? b.time.created
-    const aRecent = aUpdated > oneMinuteAgo
-    const bRecent = bUpdated > oneMinuteAgo
-    if (aRecent && bRecent) return a.id.localeCompare(b.id)
-    if (aRecent && !bRecent) return -1
-    if (!aRecent && bRecent) return 1
-    return bUpdated - aUpdated
+    return (a: Session, b: Session) => {
+      const aUpdated = a.time.updated ?? a.time.created
+      const bUpdated = b.time.updated ?? b.time.created
+      const aRecent = aUpdated > oneMinuteAgo
+      const bRecent = bUpdated > oneMinuteAgo
+      if (aRecent && bRecent) return a.id.localeCompare(b.id)
+      if (aRecent && !bRecent) return -1
+      if (!aRecent && bRecent) return 1
+      return bUpdated - aUpdated
+    }
   }
 
   const [scrollSessionKey, setScrollSessionKey] = createSignal<string | undefined>(undefined)
@@ -480,7 +476,7 @@ export default function Layout(props: ParentProps) {
     const direct = projects.find((p) => p.worktree === directory)
     if (direct) return direct
 
-    const [child] = globalSync.child(directory)
+    const [child] = globalSync.child(directory, { bootstrap: false })
     const id = child.project
     if (!id) return
 
@@ -550,11 +546,10 @@ export default function Layout(props: ParentProps) {
   const workspaceLabel = (directory: string, branch?: string, projectId?: string) =>
     workspaceName(directory, projectId, branch) ?? branch ?? getFilename(directory)
 
-  const isWorkspaceEditing = () => editor.active.startsWith("workspace:")
-
   const workspaceSetting = createMemo(() => {
     const project = currentProject()
     if (!project) return false
+    if (project.vcs !== "git") return false
     return layout.sidebar.workspaces(project.worktree)()
   })
 
@@ -594,7 +589,7 @@ export default function Layout(props: ParentProps) {
       if (!expanded) continue
       const project = projects.find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
       if (!project) continue
-      if (layout.sidebar.workspaces(project.worktree)()) continue
+      if (project.vcs === "git" && layout.sidebar.workspaces(project.worktree)()) continue
       setStore("workspaceExpanded", directory, false)
     }
   })
@@ -602,6 +597,7 @@ export default function Layout(props: ParentProps) {
   const currentSessions = createMemo(() => {
     const project = currentProject()
     if (!project) return [] as Session[]
+    const compare = sortSessions(Date.now())
     if (workspaceSetting()) {
       const dirs = workspaceIds(project)
       const activeDir = params.dir ? base64Decode(params.dir) : ""
@@ -614,7 +610,7 @@ export default function Layout(props: ParentProps) {
         const dirSessions = dirStore.session
           .filter((session) => session.directory === dirStore.path.directory)
           .filter((session) => !session.parentID && !session.time?.archived)
-          .toSorted(sortSessions)
+          .toSorted(compare)
         result.push(...dirSessions)
       }
       return result
@@ -623,7 +619,7 @@ export default function Layout(props: ParentProps) {
     return projectStore.session
       .filter((session) => session.directory === projectStore.path.directory)
       .filter((session) => !session.parentID && !session.time?.archived)
-      .toSorted(sortSessions)
+      .toSorted(compare)
   })
 
   type PrefetchQueue = {
@@ -665,7 +661,7 @@ export default function Layout(props: ParentProps) {
   }
 
   async function prefetchMessages(directory: string, sessionID: string, token: number) {
-    const [, setStore] = globalSync.child(directory)
+    const [, setStore] = globalSync.child(directory, { bootstrap: false })
 
     return retry(() => globalSDK.client.session.messages({ directory, sessionID, limit: prefetchChunk }))
       .then((messages) => {
@@ -723,7 +719,7 @@ export default function Layout(props: ParentProps) {
     const directory = session.directory
     if (!directory) return
 
-    const [store] = globalSync.child(directory)
+    const [store] = globalSync.child(directory, { bootstrap: false })
     const cached = untrack(() => store.message[session.id] !== undefined)
     if (cached) return
 
@@ -1823,7 +1819,7 @@ export default function Layout(props: ParentProps) {
       const directory = store.activeWorkspace
       if (!directory) return
 
-      const [workspaceStore] = globalSync.child(directory)
+      const [workspaceStore] = globalSync.child(directory, { bootstrap: false })
       const kind =
         directory === project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
       const name = workspaceLabel(directory, workspaceStore.vcs?.branch, project.id)
@@ -1849,7 +1845,7 @@ export default function Layout(props: ParentProps) {
       workspaceStore.session
         .filter((session) => session.directory === workspaceStore.path.directory)
         .filter((session) => !session.parentID && !session.time?.archived)
-        .toSorted(sortSessions),
+        .toSorted(sortSessions(Date.now())),
     )
     const local = createMemo(() => props.directory === props.project.worktree)
     const active = createMemo(() => {
@@ -2048,11 +2044,13 @@ export default function Layout(props: ParentProps) {
     })
 
     const workspaces = createMemo(() => workspaceIds(props.project).slice(0, 2))
-    const workspaceEnabled = createMemo(() => layout.sidebar.workspaces(props.project.worktree)())
+    const workspaceEnabled = createMemo(
+      () => props.project.vcs === "git" && layout.sidebar.workspaces(props.project.worktree)(),
+    )
     const [open, setOpen] = createSignal(false)
 
     const label = (directory: string) => {
-      const [data] = globalSync.child(directory)
+      const [data] = globalSync.child(directory, { bootstrap: false })
       const kind =
         directory === props.project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
       const name = workspaceLabel(directory, data.vcs?.branch, props.project.id)
@@ -2060,20 +2058,23 @@ export default function Layout(props: ParentProps) {
     }
 
     const sessions = (directory: string) => {
-      const [data] = globalSync.child(directory)
+      const [data] = globalSync.child(directory, { bootstrap: false })
+      const root = workspaceKey(directory)
       return data.session
-        .filter((session) => session.directory === data.path.directory)
+        .filter((session) => workspaceKey(session.directory) === root)
         .filter((session) => !session.parentID && !session.time?.archived)
-        .toSorted(sortSessions)
+        .toSorted(sortSessions(Date.now()))
         .slice(0, 2)
     }
 
     const projectSessions = () => {
-      const [data] = globalSync.child(props.project.worktree)
+      const directory = props.project.worktree
+      const [data] = globalSync.child(directory, { bootstrap: false })
+      const root = workspaceKey(directory)
       return data.session
-        .filter((session) => session.directory === data.path.directory)
+        .filter((session) => workspaceKey(session.directory) === root)
         .filter((session) => !session.parentID && !session.time?.archived)
-        .toSorted(sortSessions)
+        .toSorted(sortSessions(Date.now()))
         .slice(0, 2)
     }
 
@@ -2200,7 +2201,7 @@ export default function Layout(props: ParentProps) {
       workspaceStore.session
         .filter((session) => session.directory === workspaceStore.path.directory)
         .filter((session) => !session.parentID && !session.time?.archived)
-        .toSorted(sortSessions),
+        .toSorted(sortSessions(Date.now())),
     )
     const loading = createMemo(() => workspaceStore.status !== "complete" && sessions().length === 0)
     const hasMore = createMemo(() => workspaceStore.sessionTotal > workspaceStore.session.length)
@@ -2308,7 +2309,7 @@ export default function Layout(props: ParentProps) {
         title: language.t("workspace.new"),
         category: language.t("command.category.workspace"),
         keybind: "mod+shift+w",
-        disabled: !layout.sidebar.workspaces(project()?.worktree ?? "")(),
+        disabled: !workspaceSetting(),
         onSelect: createWorkspace,
       },
     ])
@@ -2436,7 +2437,18 @@ export default function Layout(props: ParentProps) {
                             <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
                               <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
-                            <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces(p.worktree)}>
+                            <DropdownMenu.Item
+                              disabled={p.vcs !== "git" && !layout.sidebar.workspaces(p.worktree)()}
+                              onSelect={() => {
+                                const enabled = layout.sidebar.workspaces(p.worktree)()
+                                if (enabled) {
+                                  layout.sidebar.toggleWorkspaces(p.worktree)
+                                  return
+                                }
+                                if (p.vcs !== "git") return
+                                layout.sidebar.toggleWorkspaces(p.worktree)
+                              }}
+                            >
                               <DropdownMenu.ItemLabel>
                                 {layout.sidebar.workspaces(p.worktree)()
                                   ? language.t("sidebar.workspaces.disable")
@@ -2454,7 +2466,7 @@ export default function Layout(props: ParentProps) {
                   </div>
 
                   <Show
-                    when={layout.sidebar.workspaces(p.worktree)()}
+                    when={workspaceSetting()}
                     fallback={
                       <>
                         <div class="py-4 px-3">

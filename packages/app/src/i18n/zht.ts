@@ -102,7 +102,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "OpenCode 提供的免費模型",
   "dialog.model.unpaid.addMore.title": "從熱門提供者新增更多模型",
 
-  "dialog.provider.viewAll": "查看全部提供者",
+  "dialog.provider.viewAll": "查看更多提供者",
 
   "provider.connect.title": "連線 {{provider}}",
   "provider.connect.title.anthropicProMax": "使用 Claude Pro/Max 登入",
@@ -287,14 +287,20 @@ export const dict = {
   "context.usage.clickToView": "點擊查看上下文",
   "context.usage.view": "檢視上下文用量",
 
-  "language.en": "英語",
-  "language.zh": "簡體中文",
+  "language.en": "English",
+  "language.zh": "简体中文",
   "language.zht": "繁體中文",
-  "language.ko": "韓語",
-  "language.ru": "俄語",
-  "language.ar": "阿拉伯語",
-  "language.no": "挪威語",
-  "language.br": "葡萄牙語（巴西）",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "語言",
   "toast.language.description": "已切換到 {{language}}",
@@ -400,6 +406,14 @@ export const dict = {
 
   "session.header.search.placeholder": "搜尋 {{project}}",
   "session.header.searchFiles": "搜尋檔案",
+
+  "status.popover.trigger": "狀態",
+  "status.popover.ariaLabel": "伺服器設定",
+  "status.popover.tab.servers": "伺服器",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "外掛程式",
+  "status.popover.action.manageServers": "管理伺服器",
 
   "session.share.popover.title": "發佈到網頁",
   "session.share.popover.description.shared": "此工作階段已在網頁上公開。任何擁有連結的人都可以存取。",
