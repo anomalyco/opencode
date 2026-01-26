@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenCode Dev",
-  "identifier": "ai.opencode.desktop.dev",
-  "mainBinaryName": "OpenCode",
+  "productName": "ZFlow",
+  "identifier": "ai.zflow.desktop",
+  "mainBinaryName": "ZFlow",
   "version": "../package.json",
   "build": {
     "beforeDevCommand": "bun run dev",
@@ -15,7 +15,7 @@
       {
         "label": "main",
         "create": false,
-        "title": "OpenCode",
+        "title": "ZFlow",
         "url": "/",
         "decorations": true,
         "dragDropEnabled": false,
@@ -33,11 +33,11 @@
   },
   "bundle": {
     "icon": [
-      "icons/dev/32x32.png",
-      "icons/dev/128x128.png",
-      "icons/dev/128x128@2x.png",
-      "icons/dev/icon.icns",
-      "icons/dev/icon.ico"
+      "icons/zflow/32x32.png",
+      "icons/zflow/128x128.png",
+      "icons/zflow/128x128@2x.png",
+      "icons/zflow/icon.icns",
+      "icons/zflow/icon.ico"
     ],
     "active": true,
     "targets": ["deb", "rpm", "dmg", "nsis", "app"],
@@ -47,7 +47,7 @@
     },
     "windows": {
       "nsis": {
-        "installerIcon": "icons/dev/icon.ico",
+        "installerIcon": "icons/zflow/icon.ico",
         "headerImage": "assets/nsis-header.bmp",
         "sidebarImage": "assets/nsis-sidebar.bmp"
       }
