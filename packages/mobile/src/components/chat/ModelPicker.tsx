@@ -30,7 +30,7 @@ export function ModelPicker({ providers, selected, isDark, onSelect, sheetRef }:
   const sections = useMemo(() => {
     const list = Array.isArray(providers) ? providers : []
     const q = search.toLowerCase()
-    return list
+    const result = list
       .map((p) => {
         const models = (p.models || [])
           .filter(
@@ -46,10 +46,27 @@ export function ModelPicker({ providers, selected, isDark, onSelect, sheetRef }:
             modelID: m.id,
             modelName: m.name || m.id,
           }))
+        // Sort selected model to top within its group
+        if (selected) {
+          models.sort((a, b) => {
+            const aActive = a.providerID === selected.providerID && a.modelID === selected.modelID
+            const bActive = b.providerID === selected.providerID && b.modelID === selected.modelID
+            return aActive === bActive ? 0 : aActive ? -1 : 1
+          })
+        }
         return { title: p.name || p.id, data: models }
       })
       .filter((s) => s.data.length > 0)
-  }, [providers, search])
+    // Sort the section containing the selected model to the top
+    if (selected) {
+      result.sort((a, b) => {
+        const aHas = a.data.some((m) => m.providerID === selected.providerID && m.modelID === selected.modelID)
+        const bHas = b.data.some((m) => m.providerID === selected.providerID && m.modelID === selected.modelID)
+        return aHas === bHas ? 0 : aHas ? -1 : 1
+      })
+    }
+    return result
+  }, [providers, search, selected])
 
   const handleSelect = useCallback(
     (providerID: string, modelID: string) => {
