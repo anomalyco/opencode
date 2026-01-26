@@ -131,6 +131,38 @@ export namespace Workspace {
   }
 
   /**
+   * List all workspaces across all repositories, grouped by repoID
+   */
+  export async function listAll(): Promise<Map<string, Info[]>> {
+    const result = new Map<string, Info[]>()
+    const keys = await Storage.list(["workspace"])
+
+    for (const key of keys) {
+      // key format: ["workspace", repoID, workspaceID]
+      if (key.length < 3) continue
+
+      try {
+        const workspace = await Storage.read<Info>(key)
+        const repoID = workspace.repoID
+
+        if (!result.has(repoID)) {
+          result.set(repoID, [])
+        }
+        result.get(repoID)!.push(workspace)
+      } catch {
+        continue
+      }
+    }
+
+    // Sort workspaces within each repo by last accessed time (most recent first)
+    for (const workspaces of result.values()) {
+      workspaces.sort((a, b) => b.time.accessed - a.time.accessed)
+    }
+
+    return result
+  }
+
+  /**
    * Check if a workspace exists by name
    */
   export async function exists(name: string, repoRoot: string): Promise<boolean> {

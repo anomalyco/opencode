@@ -22,6 +22,8 @@ import path from "path"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 import { parseAgentFlags, validateAgentFlags } from "./session-init"
+import { Workspace } from "@/workspace"
+import { Git } from "@/git"
 
 declare global {
   const FORGE_WORKER_PATH: string
@@ -132,6 +134,11 @@ export const AgentRunCommand = cmd({
         describe: "output format for print mode",
         hidden: true,
       })
+      .option("workspace", {
+        alias: ["w"],
+        type: "string",
+        describe: "workspace name (creates if not exists, random name if flag without value)",
+      })
   },
   handler: async (args) => {
     markCommandHandled()
@@ -221,6 +228,55 @@ export function resolvePrompt(args: { prompt?: unknown; _?: unknown; agent?: unk
   return undefined
 }
 
+/**
+ * Resolve workspace from CLI flag
+ * - If workspace is undefined, return null (no workspace)
+ * - If workspace is empty string, generate a random name
+ * - If workspace exists, reuse it and update accessed time
+ * - If workspace doesn't exist, create it
+ */
+export async function resolveWorkspace(
+  workspace: string | undefined,
+  cwd: string,
+): Promise<Workspace.Info | null> {
+  if (workspace === undefined) {
+    return null
+  }
+
+  const repoRoot = await Git.getRepoRoot(cwd)
+  if (!repoRoot) {
+    return null
+  }
+
+  // Generate random name if empty string
+  const name = workspace === "" ? undefined : workspace
+
+  // Check if workspace already exists
+  if (name) {
+    const existing = await Workspace.get(name, repoRoot)
+    if (existing) {
+      // Verify worktree exists
+      const worktrees = await Git.listWorktrees(repoRoot)
+      const worktreeExists = worktrees.some((w) => w.path === existing.worktreePath)
+
+      if (worktreeExists) {
+        // Update accessed time
+        await Workspace.touch(existing.id)
+        // Fetch updated workspace
+        return await Workspace.getByID(existing.id)
+      }
+      // Worktree doesn't exist, remove stale entry and recreate
+      await Workspace.remove(existing.id)
+    }
+  }
+
+  // Create new workspace (will generate name if undefined)
+  return await Workspace.create({
+    name,
+    repoRoot,
+  })
+}
+
 export async function runAgentManage(agentName: string | undefined, subcommand: string | undefined, verbose: boolean) {
   markCommandHandled()
 
@@ -265,13 +321,29 @@ export async function runAgentManage(agentName: string | undefined, subcommand: 
 export async function runWithAgent(args: any) {
   markCommandHandled()
   const baseCwd = process.env.PWD ?? process.cwd()
-  const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
+  let cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
 
   try {
     process.chdir(cwd)
   } catch (e) {
     UI.error("Failed to change directory to " + cwd)
     return
+  }
+
+  // Resolve workspace if flag provided
+  let workspaceInfo: Workspace.Info | null = null
+  if (args.workspace !== undefined) {
+    workspaceInfo = await resolveWorkspace(args.workspace, cwd)
+    if (workspaceInfo) {
+      // Change to workspace worktree directory
+      try {
+        process.chdir(workspaceInfo.worktreePath)
+        cwd = workspaceInfo.worktreePath
+      } catch (e) {
+        UI.error("Failed to change directory to workspace: " + workspaceInfo.worktreePath)
+        return
+      }
+    }
   }
 
   if (args.command && !args.print) {
@@ -395,6 +467,8 @@ export async function runWithAgent(args: any) {
       sessionID: args.session,
       agents: parsedAgents?.agents ?? [],
       prompt,
+      workspaceID: workspaceInfo?.id,
+      workspaceName: workspaceInfo?.name,
     },
     onExit: async () => {
       await client.call("shutdown", undefined)

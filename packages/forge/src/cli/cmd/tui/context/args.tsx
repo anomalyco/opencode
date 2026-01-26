@@ -7,6 +7,8 @@ export interface Args {
   continue?: boolean
   sessionID?: string
   installAgent?: string
+  workspaceID?: string
+  workspaceName?: string
 }
 
 export const { use: useArgs, provider: ArgsProvider } = createSimpleContext({

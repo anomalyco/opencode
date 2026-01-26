@@ -22,6 +22,7 @@ import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
+import { WorkspaceCommand } from "./cli/cmd/workspace"
 import { AgentRunCommand, commandHandled, runAgentManage, runDefaultTui, runWithAgent } from "./cli/cmd/agent-context"
 
 process.on("unhandledRejection", (e) => {
@@ -148,6 +149,7 @@ cli
   .command(TuiSpawnCommand)
   .command(StatsCommand)
   .command(WebCommand)
+  .command(WorkspaceCommand)
   // .command(ExportCommand)
   // .command(ImportCommand)
   // .command(GithubCommand)
@@ -231,6 +233,11 @@ async function renderAgentRunHelp() {
       type: "boolean",
       describe: "Run headless, print response and exit",
     })
+    .option("workspace", {
+      alias: ["w"],
+      type: "string",
+      describe: "workspace name (creates if not exists)",
+    })
     .option("project", {
       type: "string",
       describe: "path to start forge in",
@@ -277,6 +284,7 @@ function renderTopLevelHelp() {
     ["forge agents", "list all available agents"],
     ["forge <agent> <subcommand>", "manage agent <install|uninstall|check|modes|models>"],
     ["forge <agent> [prompt..]", "run agent with prompt"],
+    ["forge workspace <list|delete>", "manage workspaces"],
   ]
 
   const options: Array<[string, string]> = [
@@ -285,6 +293,7 @@ function renderTopLevelHelp() {
     ["    --print-logs", "print logs to stderr  [boolean]"],
     ["    --log-level", 'log level  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]'],
     ["    --project", "path to start forge in  [string]"],
+    ["-w, --workspace", "workspace name (creates if not exists)  [string]"],
     ["-c, --continue", "continue the last session  [boolean]"],
     ["-s, --session", "session id to continue  [string]"],
   ]
@@ -297,10 +306,7 @@ function renderTopLevelHelp() {
       'forge claude --model opus --mode bypassPermissions "Refactor the authentication module"',
       "Run with specific model/mode",
     ],
-    // [
-    //   'forge codex "Find all the TODO comments" --plan-agent claude --plan-model opus',
-    //   "Plan with claude, implement with codex",
-    // ],
+    ['forge claude -w feat/dark-mode "Add dark mode to my UI"', "Run claude in a new workspace"],
   ]
 
   const commandWidth = Math.max(...commands.map(([cmd]) => cmd.length))
@@ -376,6 +382,7 @@ try {
     "spawn",
     "stats",
     "web",
+    "workspace",
   ])
   const manageSubcommands = new Set(["install", "uninstall", "check", "modes", "models"])
 

@@ -65,6 +65,7 @@
     "@aws-sdk/client-s3": "3.933.0",
     "@forge/script": "workspace:*",
     "@forge/sdk": "workspace:*",
+    "baseline-browser-mapping": "2.9.18",
     "toml": "3.0.0"
   },
   "repository": {
@@ -89,6 +90,7 @@
   },
   "overrides": {
     "@types/bun": "catalog:",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "baseline-browser-mapping": "2.9.18"
   }
 }
