@@ -139,6 +139,38 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ---
 
+### Plugin exports
+
+By default, OpenCode treats all exported functions from a plugin module as plugin functions. For multi-purpose packages, you can explicitly mark opencode-specific exports by exporting an `opencodePlugins` object. If found, plugins will be loaded from here instead of the top level exports.
+
+```ts title="multi-purpose-package.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+// Main export for other purposes
+export const otherFunction = () => {
+  /* ... */
+}
+
+// Explicit opencode plugins as named exports
+export const opencodePlugins = {
+  myTool: async ({ client }) => {
+    return {
+      tool: {
+        myTool: tool({
+          description: "A custom tool",
+          args: { foo: tool.schema.string() },
+          async execute(args) {
+            return `Hello ${args.foo}!`
+          },
+        }),
+      },
+    }
+  },
+}
+```
+
+---
+
 ### Events
 
 Plugins can subscribe to events as seen below in the Examples section. Here is a list of the different events available.
