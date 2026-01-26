@@ -1,0 +1,122 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--background-base);
+  color: var(--foreground-base);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-base);
+  background: var(--background-elevated);
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.serverStatus {
+  font-size: 0.875rem;
+  color: var(--foreground-muted);
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.timelinePanel,
+.detailsPanel,
+.toolsPanel {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-base);
+  overflow: hidden;
+}
+
+.timelinePanel {
+  flex: 0 0 300px;
+}
+
+.detailsPanel {
+  flex: 1;
+  min-width: 0;
+}
+
+.toolsPanel {
+  flex: 0 0 350px;
+  border-right: none;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-base);
+  background: var(--background-subtle);
+}
+
+.panelHeader h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.stepInfo {
+  font-size: 0.875rem;
+  color: var(--foreground-muted);
+}
+
+.panelContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--foreground-muted);
+  text-align: center;
+  padding: 2rem;
+}
+
+.emptyIcon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.emptyText {
+  font-size: 0.875rem;
+  max-width: 300px;
+}
+
+.footer {
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid var(--border-base);
+  background: var(--background-subtle);
+}
+
+.footerNote {
+  font-size: 0.75rem;
+  color: var(--foreground-muted);
+  text-align: center;
+}

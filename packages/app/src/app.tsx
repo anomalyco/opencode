@@ -36,6 +36,9 @@ const Home = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
 const Loading = () => <div class="size-full" />
 
+// TaskView from desktop-viz package
+const TaskView = lazy(() => import("@opencode-ai/desktop-viz"))
+
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
   return <I18nProvider value={{ locale: language.locale, t: language.t }}>{props.children}</I18nProvider>
@@ -119,6 +122,14 @@ export function AppInterface(props: { defaultUrl?: string }) {
                 component={() => (
                   <Suspense fallback={<Loading />}>
                     <Home />
+                  </Suspense>
+                )}
+              />
+              <Route
+                path="/task"
+                component={() => (
+                  <Suspense fallback={<Loading />}>
+                    <TaskView />
                   </Suspense>
                 )}
               />
