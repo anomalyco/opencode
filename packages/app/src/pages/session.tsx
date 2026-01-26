@@ -1016,7 +1016,7 @@ export default function Page() {
 
   const activeTab = createMemo(() => {
     const active = tabs().active()
-    if (active) return active
+    if (active) return normalizeTab(active)
     if (hasReview()) return "review"
 
     const first = openedTabs()[0]
