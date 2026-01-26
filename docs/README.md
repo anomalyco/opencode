@@ -71,6 +71,15 @@ Common issues and solutions for authentication problems. Includes diagnostic flo
 - PAM debug logging
 - Platform-specific troubleshooting
 
+**[Docker Installation Guide](docker-install-fork.md)**
+How to install the opencode fork (with authentication) from source in Dockerfiles.
+
+**Topics covered:**
+- Building opencode from source in Docker
+- Installing from GitHub fork (pRizz/opencode)
+- Integration with opencode-cloud Dockerfile
+- Build optimization and caching strategies
+
 ### Configuration Reference
 
 **Example configurations:**
@@ -165,4 +174,4 @@ Found an error in the docs? Have a suggestion?
 
 ---
 
-**Navigation:** [Main README](../README.md) | [Reverse Proxy](reverse-proxy.md) | [PAM Config](pam-config.md) | [Troubleshooting](troubleshooting.md)
+**Navigation:** [Main README](../README.md) | [Reverse Proxy](reverse-proxy.md) | [PAM Config](pam-config.md) | [Troubleshooting](troubleshooting.md) | [Docker Install](docker-install-fork.md)
