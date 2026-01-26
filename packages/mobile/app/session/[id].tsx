@@ -36,6 +36,7 @@ import { useEvents, refreshPending } from "../../src/stores/events"
 import { useConnections } from "../../src/stores/connections"
 import { useAuth } from "../../src/stores/auth"
 import { useCatalog } from "../../src/stores/catalog"
+import { useSpeech } from "../../src/lib/speech"
 
 // --- Builtin slash commands ---
 const BUILTIN_COMMANDS: SlashCommand[] = [
@@ -125,6 +126,13 @@ export default function SessionScreen() {
 
   const shortDir = getShortDir(currentSession?.directory)
   const [showScrollButton, setShowScrollButton] = useState(false)
+
+  // Voice input — transcript appends to the text input on completion
+  const speech = useSpeech(
+    useCallback((text: string) => {
+      setInput((prev) => (prev ? prev + " " + text : text))
+    }, []),
+  )
 
   // Slash command state
   const slashActive = input.startsWith("/") && !input.includes(" ")
@@ -587,27 +595,36 @@ export default function SessionScreen() {
             </TouchableOpacity>
 
             <TextInput
-              style={[s.input, isDark && s.inputDark]}
-              placeholder={isSending ? "Send a follow-up..." : "Type a message..."}
-              placeholderTextColor={isDark ? "#666666" : "#999999"}
-              value={input}
-              onChangeText={setInput}
+              style={[s.input, isDark && s.inputDark, speech.listening && s.inputListening]}
+              placeholder={speech.listening ? "Listening..." : isSending ? "Send a follow-up..." : "Type a message..."}
+              placeholderTextColor={speech.listening ? "#ef4444" : isDark ? "#666666" : "#999999"}
+              value={speech.listening ? speech.transcript : input}
+              onChangeText={speech.listening ? undefined : setInput}
+              editable={!speech.listening}
               multiline
               maxLength={10000}
             />
             {/* Stop button: only when busy and no input */}
-            {isSending && !input.trim() && attachments.length === 0 && (
+            {isSending && !input.trim() && attachments.length === 0 && !speech.listening && (
               <TouchableOpacity style={s.stopBtn} onPress={abortSession}>
                 <Ionicons name="stop" size={20} color="#ffffff" />
               </TouchableOpacity>
             )}
-            {/* Send button: when there's input or not sending */}
-            {(!isSending || input.trim() || attachments.length > 0) && (
-              <TouchableOpacity
-                style={[s.sendBtn, !input.trim() && attachments.length === 0 && s.sendBtnDisabled]}
-                onPress={handleSend}
-                disabled={!input.trim() && attachments.length === 0}
-              >
+            {/* Mic button: when no input, not sending, and not listening */}
+            {!isSending && !input.trim() && attachments.length === 0 && !speech.listening && (
+              <TouchableOpacity style={s.micBtn} onPress={speech.start}>
+                <Ionicons name="mic" size={22} color={isDark ? "#888888" : "#666666"} />
+              </TouchableOpacity>
+            )}
+            {/* Listening indicator: tap to stop */}
+            {speech.listening && (
+              <TouchableOpacity style={s.micBtnActive} onPress={speech.stop}>
+                <Ionicons name="mic" size={22} color="#ffffff" />
+              </TouchableOpacity>
+            )}
+            {/* Send button: when there's input */}
+            {!speech.listening && (input.trim() || attachments.length > 0) && (
+              <TouchableOpacity style={s.sendBtn} onPress={handleSend}>
                 <Ionicons name="send" size={20} color="#ffffff" />
               </TouchableOpacity>
             )}
@@ -745,6 +762,7 @@ const s = StyleSheet.create({
     color: "#0a0a0a",
   },
   inputDark: { backgroundColor: "#1a1a1a", color: "#ffffff" },
+  inputListening: { borderWidth: 1, borderColor: "#ef4444" },
   sendBtn: {
     width: 40,
     height: 40,
@@ -755,6 +773,23 @@ const s = StyleSheet.create({
     marginLeft: 8,
   },
   sendBtnDisabled: { backgroundColor: "#cccccc" },
+  micBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
+  },
+  micBtnActive: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
+  },
   stopBtn: {
     width: 40,
     height: 40,

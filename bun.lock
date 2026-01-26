@@ -272,6 +272,7 @@
         "expo-notifications": "~0.32.16",
         "expo-router": "~6.0.22",
         "expo-secure-store": "~15.0.8",
+        "expo-speech-recognition": "3.0.1",
         "expo-status-bar": "~3.0.9",
         "react": "19.1.0",
         "react-native": "0.81.5",
@@ -2867,6 +2868,8 @@
     "expo-secure-store": ["expo-secure-store@15.0.8", "", { "peerDependencies": { "expo": "*" } }, "sha512-lHnzvRajBu4u+P99+0GEMijQMFCOYpWRO4dWsXSuMt77+THPIGjzNvVKrGSl6mMrLsfVaKL8BpwYZLGlgA+zAw=="],
 
     "expo-server": ["expo-server@1.0.5", "", {}, "sha512-IGR++flYH70rhLyeXF0Phle56/k4cee87WeQ4mamS+MkVAVP+dDlOHf2nN06Z9Y2KhU0Gp1k+y61KkghF7HdhA=="],
+
+    "expo-speech-recognition": ["expo-speech-recognition@3.0.1", "", { "peerDependencies": { "expo": "*", "react": "*", "react-native": "*" } }, "sha512-sMyOE1Vq1635B2oG0irgv6MZo0axIva3yNMmy86fwSqcFI+y9GhfOqZnYx3PFq7A0tNP2AlaNZLA9+tkgBcLhQ=="],
 
     "expo-status-bar": ["expo-status-bar@3.0.9", "", { "dependencies": { "react-native-is-edge-to-edge": "^1.2.1" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-xyYyVg6V1/SSOZWh4Ni3U129XHCnFHBTcUo0dhWtFDrZbNp/duw5AGsQfb2sVeU0gxWHXSY1+5F0jnKYC7WuOw=="],
 
