@@ -212,6 +212,59 @@
     /* } */
   }
 
+  &[data-variant="pill"][data-orientation="horizontal"] {
+    background-color: transparent;
+
+    [data-slot="tabs-list"] {
+      height: auto;
+      padding: 6px;
+      gap: 4px;
+      border-bottom: 1px solid var(--border-weak-base);
+      background-color: var(--background-base);
+
+      &::after {
+        display: none;
+      }
+    }
+
+    [data-slot="tabs-trigger-wrapper"] {
+      height: 32px;
+      border: none;
+      border-radius: 999px;
+      background-color: transparent;
+      gap: 0;
+
+      /* text-13-medium */
+      font-family: var(--font-family-sans);
+      font-size: var(--font-size-small);
+      font-style: normal;
+      font-weight: var(--font-weight-medium);
+      line-height: var(--line-height-large);
+      letter-spacing: var(--letter-spacing-normal);
+
+      [data-slot="tabs-trigger"] {
+        height: 100%;
+        width: 100%;
+        padding: 0 12px;
+        background-color: transparent;
+      }
+
+      &:hover:not(:disabled) {
+        background-color: var(--surface-raised-base-hover);
+        color: var(--text-strong);
+      }
+
+      &:has([data-selected]) {
+        background-color: var(--surface-raised-base-active);
+        color: var(--text-strong);
+
+        &:hover:not(:disabled) {
+          background-color: var(--surface-raised-base-active);
+        }
+      }
+    }
+  }
+
   &[data-orientation="vertical"] {
     flex-direction: row;
 

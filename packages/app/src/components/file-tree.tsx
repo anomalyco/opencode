@@ -9,6 +9,7 @@ import {
   Match,
   splitProps,
   Switch,
+  untrack,
   type ComponentProps,
   type ParentProps,
 } from "solid-js"
@@ -21,10 +22,14 @@ export default function FileTree(props: {
   nodeClass?: string
   level?: number
   allowed?: readonly string[]
+  draggable?: boolean
+  tooltip?: boolean
   onFileClick?: (file: FileNode) => void
 }) {
   const file = useFile()
   const level = props.level ?? 0
+  const draggable = () => props.draggable ?? true
+  const tooltip = () => props.tooltip ?? true
 
   const filter = createMemo(() => {
     const allowed = props.allowed
@@ -43,6 +48,18 @@ export default function FileTree(props: {
     }
 
     return { files, dirs }
+  })
+
+  createEffect(() => {
+    const current = filter()
+    if (!current) return
+    if (level !== 0) return
+
+    for (const dir of current.dirs) {
+      const expanded = untrack(() => file.tree.state(dir)?.expanded) ?? false
+      if (expanded) continue
+      file.tree.expand(dir)
+    }
   })
 
   createEffect(() => {
@@ -78,8 +95,9 @@ export default function FileTree(props: {
           [props.nodeClass ?? ""]: !!props.nodeClass,
         }}
         style={`padding-left: ${8 + level * 12}px`}
-        draggable={true}
+        draggable={draggable()}
         onDragStart={(e: DragEvent) => {
+          if (!draggable()) return
           e.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
           e.dataTransfer?.setData("text/uri-list", `file://${local.node.path}`)
           if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy"
@@ -123,41 +141,54 @@ export default function FileTree(props: {
       <For each={nodes()}>
         {(node) => {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
+          const Wrapper = (p: ParentProps) => {
+            if (!tooltip()) return p.children
+            return (
+              <Tooltip forceMount={false} openDelay={2000} value={node.path} placement="right" class="w-full">
+                {p.children}
+              </Tooltip>
+            )
+          }
+
           return (
-            <Tooltip forceMount={false} openDelay={2000} value={node.path} placement="right">
-              <Switch>
-                <Match when={node.type === "directory"}>
-                  <Collapsible
-                    variant="ghost"
-                    class="w-full"
-                    forceMount={false}
-                    open={expanded()}
-                    onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
-                  >
-                    <Collapsible.Trigger>
+            <Switch>
+              <Match when={node.type === "directory"}>
+                <Collapsible
+                  variant="ghost"
+                  class="w-full"
+                  forceMount={false}
+                  open={expanded()}
+                  onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
+                >
+                  <Collapsible.Trigger>
+                    <Wrapper>
                       <Node node={node}>
                         <Collapsible.Arrow class="text-icon-weak ml-1" />
                         <FileIcon node={node} expanded={expanded()} class="text-icon-weak -ml-1 size-4" />
                       </Node>
-                    </Collapsible.Trigger>
-                    <Collapsible.Content>
-                      <FileTree
-                        path={node.path}
-                        level={level + 1}
-                        allowed={props.allowed}
-                        onFileClick={props.onFileClick}
-                      />
-                    </Collapsible.Content>
-                  </Collapsible>
-                </Match>
-                <Match when={node.type === "file"}>
+                    </Wrapper>
+                  </Collapsible.Trigger>
+                  <Collapsible.Content>
+                    <FileTree
+                      path={node.path}
+                      level={level + 1}
+                      allowed={props.allowed}
+                      draggable={props.draggable}
+                      tooltip={props.tooltip}
+                      onFileClick={props.onFileClick}
+                    />
+                  </Collapsible.Content>
+                </Collapsible>
+              </Match>
+              <Match when={node.type === "file"}>
+                <Wrapper>
                   <Node node={node} as="button" type="button" onClick={() => props.onFileClick?.(node)}>
                     <div class="w-4 shrink-0" />
                     <FileIcon node={node} class="text-icon-weak size-4" />
                   </Node>
-                </Match>
-              </Switch>
-            </Tooltip>
+                </Wrapper>
+              </Match>
+            </Switch>
           )
         }}
       </For>

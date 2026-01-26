@@ -1037,7 +1037,7 @@ export default function Page() {
     return `session-review-diff-${sum}`
   }
 
-  const scrollToReviewDiff = (path: string, behavior: ScrollBehavior) => {
+  const reviewDiffTop = (path: string) => {
     const root = reviewScroll()
     if (!root) return
 
@@ -1050,15 +1050,25 @@ export default function Page() {
 
     const a = el.getBoundingClientRect()
     const b = root.getBoundingClientRect()
-    const top = a.top - b.top + root.scrollTop
-    root.scrollTo({ top, behavior })
+    return a.top - b.top + root.scrollTop
+  }
+
+  const scrollToReviewDiff = (path: string) => {
+    const root = reviewScroll()
+    if (!root) return false
+
+    const top = reviewDiffTop(path)
+    if (top === undefined) return false
+
+    view().setScroll("review", { x: root.scrollLeft, y: top })
+    root.scrollTo({ top, behavior: "auto" })
+    return true
   }
 
   const focusReviewDiff = (path: string) => {
     const current = view().review.open() ?? []
     if (!current.includes(path)) view().review.setOpen([...current, path])
     setPendingDiff(path)
-    requestAnimationFrame(() => scrollToReviewDiff(path, "smooth"))
   }
 
   createEffect(() => {
@@ -1067,10 +1077,39 @@ export default function Page() {
     if (!reviewScroll()) return
     if (!diffsReady()) return
 
-    requestAnimationFrame(() => {
-      scrollToReviewDiff(pending, "smooth")
-      setPendingDiff(undefined)
-    })
+    const attempt = (count: number) => {
+      if (pendingDiff() !== pending) return
+      if (count > 60) {
+        setPendingDiff(undefined)
+        return
+      }
+
+      const root = reviewScroll()
+      if (!root) {
+        requestAnimationFrame(() => attempt(count + 1))
+        return
+      }
+
+      if (!scrollToReviewDiff(pending)) {
+        requestAnimationFrame(() => attempt(count + 1))
+        return
+      }
+
+      const top = reviewDiffTop(pending)
+      if (top === undefined) {
+        requestAnimationFrame(() => attempt(count + 1))
+        return
+      }
+
+      if (Math.abs(root.scrollTop - top) <= 1) {
+        setPendingDiff(undefined)
+        return
+      }
+
+      requestAnimationFrame(() => attempt(count + 1))
+    }
+
+    requestAnimationFrame(() => attempt(0))
   })
 
   const activeTab = createMemo(() => {
@@ -2605,12 +2644,12 @@ export default function Page() {
             <Show when={layout.fileTree.opened()}>
               <div class="relative shrink-0 h-full" style={{ width: `${layout.fileTree.width()}px` }}>
                 <div class="h-full border-l border-border-weak-base flex flex-col overflow-hidden">
-                  <Tabs value={fileTreeTab()} onChange={setFileTreeTabValue} class="h-full">
-                    <Tabs.List class="h-auto">
-                      <Tabs.Trigger value="changes" class="w-1/2" classes={{ button: "w-full" }}>
+                  <Tabs variant="pill" value={fileTreeTab()} onChange={setFileTreeTabValue} class="h-full">
+                    <Tabs.List>
+                      <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
                         Changes
                       </Tabs.Trigger>
-                      <Tabs.Trigger value="all" class="w-1/2 !border-r-0" classes={{ button: "w-full" }}>
+                      <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
                         All files
                       </Tabs.Trigger>
                     </Tabs.List>
@@ -2624,6 +2663,8 @@ export default function Page() {
                             <FileTree
                               path=""
                               allowed={diffs().map((d) => d.file)}
+                              draggable={false}
+                              tooltip={false}
                               onFileClick={(node) => focusReviewDiff(node.path)}
                             />
                           </Show>
