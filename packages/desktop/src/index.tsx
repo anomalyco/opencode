@@ -343,8 +343,18 @@ render(() => {
     }
 
     document.addEventListener("click", handleClick, true)
+
+    // Disable WebView2 browser context menu on Windows (Back/Forward buttons)
+    const handleContextMenu = platform.os === "windows" ? (e: MouseEvent) => e.preventDefault() : null
+    if (handleContextMenu) {
+      document.addEventListener("contextmenu", handleContextMenu, true)
+    }
+
     onCleanup(() => {
       document.removeEventListener("click", handleClick, true)
+      if (handleContextMenu) {
+        document.removeEventListener("contextmenu", handleContextMenu, true)
+      }
     })
   })
 

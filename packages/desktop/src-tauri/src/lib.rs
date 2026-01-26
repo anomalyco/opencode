@@ -328,7 +328,39 @@ pub fn run() {
                 .hidden_title(true);
 
             #[cfg(windows)]
-            let window_builder = window_builder.decorations(false);
+            let window_builder = {
+                let app_handle = app.clone();
+                window_builder
+                    .decorations(false)
+                    .on_navigation(move |url| {
+                        let scheme = url.scheme();
+
+                        // Allow internal Tauri protocols
+                        if scheme == "tauri" || scheme == "app" || scheme == "file" {
+                            return true;
+                        }
+
+                        // Allow localhost (dev server & local sidecar)
+                        if scheme == "http" || scheme == "https" {
+                            if let Some(host) = url.host_str() {
+                                if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+                                    return true;
+                                }
+                            }
+                            // External URL - open in system browser
+                            let _ = app_handle.opener().open_url(url.as_str(), None::<&str>);
+                            return false;
+                        }
+
+                        // Handle special protocols (mailto, tel, etc.)
+                        if scheme == "mailto" || scheme == "tel" {
+                            let _ = app_handle.opener().open_url(url.as_str(), None::<&str>);
+                            return false;
+                        }
+
+                        true
+                    })
+            };
 
             let window = window_builder.build().expect("Failed to create window");
 
