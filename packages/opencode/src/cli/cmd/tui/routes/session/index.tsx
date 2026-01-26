@@ -1462,10 +1462,39 @@ type ToolProps<T extends Tool.Info> = {
   part: ToolPart
 }
 function GenericTool(props: ToolProps<any>) {
+  const { theme } = useTheme()
+  const output = createMemo(() => props.output?.trim() ?? "")
+  const [expanded, setExpanded] = createSignal(false)
+  const lines = createMemo(() => output().split("\n"))
+  const maxLines = 3
+  const overflow = createMemo(() => lines().length > maxLines)
+  const limited = createMemo(() => {
+    if (expanded() || !overflow()) return output()
+    return [...lines().slice(0, maxLines), "…"].join("\n")
+  })
+
   return (
-    <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
-      {props.tool} {input(props.input)}
-    </InlineTool>
+    <Show
+      when={props.output}
+      fallback={
+        <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
+          {props.tool} {input(props.input)}
+        </InlineTool>
+      }
+    >
+      <BlockTool
+        title={`# ${props.tool} ${input(props.input)}`}
+        part={props.part}
+        onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+      >
+        <box gap={1}>
+          <text fg={theme.text}>{limited()}</text>
+          <Show when={overflow()}>
+            <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+          </Show>
+        </box>
+      </BlockTool>
+    </Show>
   )
 }
 
