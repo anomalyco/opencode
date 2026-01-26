@@ -1,0 +1,23 @@
+[
+  { "service": "stripe", "files": [
+    "packages/console/app/src/routes/stripe/webhook.ts",
+    "packages/console/core/src/billing.ts",
+    "packages/console/app/src/routes/black/subscribe/[plan].tsx",
+    "sst.config.ts",
+    "sst-env.d.ts",
+    "infra/console.ts"
+  ]},
+  { "service": "cloudflare", "files": [
+    "packages/console/resource/resource.cloudflare.ts",
+    "packages/console/resource/package.json",
+    "packages/function/src/api.ts",
+    "packages/web/astro.config.mjs",
+    "infra/enterprise.ts"
+  ]},
+  { "service": "slack", "files": ["packages/slack/src/index.ts","packages/slack/package.json"] },
+  { "service": "vercel/netlify/hosting", "files": ["packages/web/package.json","packages/console/app/.gitignore","packages/web/README.md"] },
+  { "service": "analytics/segment", "files": ["packages/app/src/components/prompt-input.tsx","packages/app/src/components/session/session-context-tab.tsx","packages/app/src/utils/speech.ts","packages/ui/src/components/message-part.tsx"] },
+  { "service": "sentry/telemetry", "files": ["packages/ui/src/components/file-icons/sprite.svg","packages/ui/src/components/file-icons/types.ts"] },
+  { "service": "auth/providers", "files": ["packages/opencode/src/cli/cmd/auth.ts","packages/console/app/src/routes/auth/[...callback].ts","packages/console/app/src/routes/auth/status.ts"] },
+  { "service": "storage/db/cache", "files": ["packages/console/core/src/aws.ts","packages/console/core/src/billing.ts","packages/console/core/src/model.ts","packages/opencode/src/provider/provider.ts"] }
+]
