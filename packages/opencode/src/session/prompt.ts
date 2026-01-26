@@ -310,14 +310,40 @@ export namespace SessionPrompt {
           history: msgs,
         })
 
-      const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
+      let model: Provider.Model
+      try {
+        model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
+      } catch (e) {
+        if (Provider.ModelNotFoundError.isInstance(e)) {
+          const { providerID, modelID, suggestions } = e.data
+          const hint = suggestions?.length ? ` Did you mean: ${suggestions.join(", ")}?` : ""
+          Bus.publish(Session.Event.Error, {
+            sessionID,
+            error: new NamedError.Unknown({ message: `Model not found: ${providerID}/${modelID}.${hint}` }).toObject(),
+          })
+        }
+        throw e
+      }
       const task = tasks.pop()
 
       // pending subtask
       // TODO: centralize "invoke tool" logic
       if (task?.type === "subtask") {
         const taskTool = await TaskTool.init()
-        const taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
+        let taskModel: Provider.Model
+        try {
+          taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
+        } catch (e) {
+          if (Provider.ModelNotFoundError.isInstance(e)) {
+            const { providerID, modelID, suggestions } = e.data
+            const hint = suggestions?.length ? ` Did you mean: ${suggestions.join(", ")}?` : ""
+            Bus.publish(Session.Event.Error, {
+              sessionID,
+              error: new NamedError.Unknown({ message: `Model not found: ${providerID}/${modelID}.${hint}` }).toObject(),
+            })
+          }
+          throw e
+        }
         const assistantMessage = (await Session.updateMessage({
           id: Identifier.ascending("message"),
           role: "assistant",

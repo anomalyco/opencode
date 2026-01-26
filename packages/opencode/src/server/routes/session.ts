@@ -730,8 +730,14 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async (stream) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
-          stream.write(JSON.stringify(msg))
+          try {
+            const msg = await SessionPrompt.prompt({ ...body, sessionID })
+            stream.write(JSON.stringify(msg))
+          } catch (e) {
+            // Error event is already published in SessionPrompt.loop for ModelNotFoundError
+            // Log the error but don't re-throw to prevent unhandled exception stack traces
+            log.error("prompt failed", { sessionID, error: e })
+          }
         })
       },
     )
