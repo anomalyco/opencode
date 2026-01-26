@@ -1,4 +1,4 @@
-// Minimal egress policy wrapper to block external HTTP and package loads when OPENCODE_BLOCK_EXTERNAL_APIS=1
+// Minimal egress policy wrapper to block external HTTP and package loads when OPENCODE_BLOCK_EXTERNAL_APIS=1 or OPENCODE_ONLY_GITHUB=1
 
 const ALLOWED_DOMAINS = (() => {
   const allowed = new Set<string>();
@@ -7,12 +7,10 @@ const ALLOWED_DOMAINS = (() => {
   allowed.add('raw.githubusercontent.com');
   allowed.add('localhost');
   allowed.add('127.0.0.1');
-  // allow websearch MCP host
-  allowed.add('mcp.exa.ai');
   return allowed;
 })();
 
-export const isEgressBlocked = () => !!process.env.OPENCODE_BLOCK_EXTERNAL_APIS;
+export const isEgressBlocked = () => !!process.env.OPENCODE_BLOCK_EXTERNAL_APIS || !!process.env.OPENCODE_ONLY_GITHUB;
 
 export function hostAllowed(url: string) {
   try {
@@ -47,7 +45,7 @@ export async function fetchWithToolBypass(input: RequestInfo, init?: RequestInit
 }
 
 // Guard for package names (used by provider loader)
-const ALLOWED_PACKAGES = new Set<string>(['@ai-sdk/github-copilot', '@ai-sdk/openai-compatible']);
+const ALLOWED_PACKAGES = new Set<string>(['@ai-sdk/github-copilot']);
 export function packageAllowed(pkg: string) {
   if (!isEgressBlocked()) return true;
   return ALLOWED_PACKAGES.has(pkg);

@@ -43,8 +43,8 @@ export namespace Plugin {
       hooks.push(init)
     }
 
-    const plugins = [...(config.plugin ?? [])]
-    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
+    const plugins = process.env.OPENCODE_ONLY_GITHUB ? [] : [...(config.plugin ?? [])]
+    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS && !process.env.OPENCODE_ONLY_GITHUB) {
       plugins.push(...BUILTIN)
     }
 
