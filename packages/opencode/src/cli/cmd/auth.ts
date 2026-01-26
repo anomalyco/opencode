@@ -180,6 +180,9 @@ export const AuthListCommand = cmd({
     const results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
 
+    if (process.env.OPENCODE_ONLY_GITHUB) {
+      results = results.filter(([providerID]) => providerID in database)
+    }
     for (const [providerID, result] of results) {
       const name = database[providerID]?.name || providerID
       prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
@@ -379,7 +382,9 @@ export const AuthLogoutCommand = cmd({
   describe: "log out from a configured provider",
   async handler() {
     UI.empty()
-    const credentials = await Auth.all().then((x) => Object.entries(x))
+    const allCreds = Object.entries(await Auth.all())
+    const database = await ModelsDev.get()
+    const credentials = process.env.OPENCODE_ONLY_GITHUB ? allCreds.filter(([key]) => key in database) : allCreds
     prompts.intro("Remove credential")
     if (credentials.length === 0) {
       prompts.log.error("No credentials found")
