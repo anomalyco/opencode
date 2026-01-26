@@ -264,7 +264,7 @@ export namespace SystemPrompt {
       [
         ...instructions,
         "## Current status",
-        `${resolvedPaths.length} memory path(s) configured but no files exist yet. Use \`memory_write\` to create content in them, or \`memory_create\` for a new location.`,
+        `${resolvedPaths.length} memory path(s) configured but no files exist yet. Use \`memory_write\` to create content in them or to create a new location.`,
         "",
         "Configured paths:",
         ...resolvedPaths.map(p => `- ${p}`),
