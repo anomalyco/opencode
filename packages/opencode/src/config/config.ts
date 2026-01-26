@@ -810,6 +810,11 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    copy_as_rich_text: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Copy markdown responses as rich text (HTML) instead of plain text"),
   })
 
   export const Server = z
