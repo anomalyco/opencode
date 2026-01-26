@@ -20,7 +20,10 @@ export const SettingsProviders: Component = () => {
   const globalSDK = useGlobalSDK()
   const providers = useProviders()
 
-  const connected = createMemo(() => providers.connected())
+  const connected = createMemo(() => {
+    const paid = providers.paid().length > 0
+    return providers.connected().filter((p) => p.id !== "opencode" || paid)
+  })
   const popular = createMemo(() => {
     const connectedIDs = new Set(connected().map((p) => p.id))
     const items = providers
