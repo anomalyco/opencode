@@ -102,7 +102,7 @@ export default function FileTree(props: {
           [local.class ?? ""]: !!local.class,
           [props.nodeClass ?? ""]: !!props.nodeClass,
         }}
-        style={`padding-left: ${Math.max(0, 8 + level * 12 - (local.node.type === "file" ? 24 : 0))}px`}
+        style={`padding-left: ${Math.max(0, 8 + level * 12 - (local.node.type === "file" ? 24 : 4))}px`}
         draggable={draggable()}
         onDragStart={(e: DragEvent) => {
           if (!draggable()) return
