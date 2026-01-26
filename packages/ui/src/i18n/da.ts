@@ -33,12 +33,14 @@ export const dict = {
 
   "ui.list.loading": "Indlæser",
   "ui.list.empty": "Ingen resultater",
+  "ui.list.clearFilter": "Ryd filter",
   "ui.list.emptyWithFilter.prefix": "Ingen resultater for",
   "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Ny besked",
 
   "ui.textField.copyToClipboard": "Kopier til udklipsholder",
+  "ui.textField.copyLink": "Kopier link",
   "ui.textField.copied": "Kopieret",
 
   "ui.imagePreview.alt": "Billedforhåndsvisning",
@@ -64,6 +66,7 @@ export const dict = {
   "ui.common.cancel": "Annuller",
   "ui.common.confirm": "Bekræft",
   "ui.common.dismiss": "Afvis",
+  "ui.common.close": "Luk",
   "ui.common.next": "Næste",
   "ui.common.submit": "Indsend",
 

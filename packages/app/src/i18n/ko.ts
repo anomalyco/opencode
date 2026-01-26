@@ -90,6 +90,8 @@ export const dict = {
   "dialog.provider.group.other": "기타",
   "dialog.provider.tag.recommended": "추천",
   "dialog.provider.anthropic.note": "Claude Pro/Max 또는 API 키로 연결",
+  "dialog.provider.openai.note": "ChatGPT Pro/Plus 또는 API 키로 연결",
+  "dialog.provider.copilot.note": "Copilot 또는 API 키로 연결",
 
   "dialog.model.select.title": "모델 선택",
   "dialog.model.search.placeholder": "모델 검색",
@@ -100,7 +102,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "OpenCode에서 제공하는 무료 모델",
   "dialog.model.unpaid.addMore.title": "인기 공급자의 모델 추가",
 
-  "dialog.provider.viewAll": "모든 공급자 보기",
+  "dialog.provider.viewAll": "더 많은 공급자 보기",
 
   "provider.connect.title": "{{provider}} 연결",
   "provider.connect.title.anthropicProMax": "Claude Pro/Max로 로그인",
@@ -139,6 +141,7 @@ export const dict = {
   "model.tag.latest": "최신",
 
   "common.search.placeholder": "검색",
+  "common.goBack": "뒤로 가기",
   "common.loading": "로딩 중",
   "common.cancel": "취소",
   "common.submit": "제출",
@@ -184,7 +187,10 @@ export const dict = {
   "prompt.slash.badge.custom": "사용자 지정",
   "prompt.context.active": "활성",
   "prompt.context.includeActiveFile": "활성 파일 포함",
+  "prompt.context.removeActiveFile": "컨텍스트에서 활성 파일 제거",
+  "prompt.context.removeFile": "컨텍스트에서 파일 제거",
   "prompt.action.attachFile": "파일 첨부",
+  "prompt.attachment.remove": "첨부 파일 제거",
   "prompt.action.send": "전송",
   "prompt.action.stop": "중지",
 
@@ -201,6 +207,9 @@ export const dict = {
   "dialog.mcp.title": "MCP",
   "dialog.mcp.description": "{{total}}개 중 {{enabled}}개 활성화됨",
   "dialog.mcp.empty": "구성된 MCP 없음",
+
+  "dialog.lsp.empty": "파일 유형에서 자동 감지된 LSP",
+  "dialog.plugins.empty": "opencode.json에 구성된 플러그인",
 
   "mcp.status.connected": "연결됨",
   "mcp.status.failed": "실패",
@@ -221,13 +230,21 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "서버에 연결할 수 없습니다",
   "dialog.server.add.checking": "확인 중...",
-  "dialog.server.add.button": "추가",
+  "dialog.server.add.button": "서버 추가",
   "dialog.server.default.title": "기본 서버",
   "dialog.server.default.description":
     "로컬 서버를 시작하는 대신 앱 실행 시 이 서버에 연결합니다. 다시 시작해야 합니다.",
   "dialog.server.default.none": "선택된 서버 없음",
   "dialog.server.default.set": "현재 서버를 기본값으로 설정",
   "dialog.server.default.clear": "지우기",
+  "dialog.server.action.remove": "서버 제거",
+
+  "dialog.server.menu.edit": "편집",
+  "dialog.server.menu.default": "기본값으로 설정",
+  "dialog.server.menu.defaultRemove": "기본값 제거",
+  "dialog.server.menu.delete": "삭제",
+  "dialog.server.current": "현재 서버",
+  "dialog.server.status.default": "기본값",
 
   "dialog.project.edit.title": "프로젝트 편집",
   "dialog.project.edit.name": "이름",
@@ -236,6 +253,7 @@ export const dict = {
   "dialog.project.edit.icon.hint": "이미지를 클릭하거나 드래그하세요",
   "dialog.project.edit.icon.recommended": "권장: 128x128px",
   "dialog.project.edit.color": "색상",
+  "dialog.project.edit.color.select": "{{color}} 색상 선택",
 
   "context.breakdown.title": "컨텍스트 분석",
   "context.breakdown.note": '입력 토큰의 대략적인 분석입니다. "기타"에는 도구 정의 및 오버헤드가 포함됩니다.',
@@ -269,15 +287,22 @@ export const dict = {
   "context.usage.usage": "사용량",
   "context.usage.cost": "비용",
   "context.usage.clickToView": "컨텍스트를 보려면 클릭",
+  "context.usage.view": "컨텍스트 사용량 보기",
 
-  "language.en": "영어",
-  "language.zh": "중국어",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
   "language.ko": "한국어",
-  "language.de": "독일어",
-  "language.es": "스페인어",
-  "language.fr": "프랑스어",
-  "language.ja": "일본어",
-  "language.da": "덴마크어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "언어",
   "toast.language.description": "{{language}}(으)로 전환됨",
@@ -366,6 +391,7 @@ export const dict = {
   "session.tab.session": "세션",
   "session.tab.review": "검토",
   "session.tab.context": "컨텍스트",
+  "session.panel.reviewAndFiles": "검토 및 파일",
   "session.review.filesChanged": "{{count}}개 파일 변경됨",
   "session.review.loadingChanges": "변경 사항 로드 중...",
   "session.review.empty": "이 세션에 변경 사항이 아직 없습니다",
@@ -382,6 +408,15 @@ export const dict = {
   "session.new.lastModified": "최근 수정",
 
   "session.header.search.placeholder": "{{project}} 검색",
+  "session.header.searchFiles": "파일 검색",
+
+  "status.popover.trigger": "상태",
+  "status.popover.ariaLabel": "서버 구성",
+  "status.popover.tab.servers": "서버",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "플러그인",
+  "status.popover.action.manageServers": "서버 관리",
 
   "session.share.popover.title": "웹에 게시",
   "session.share.popover.description.shared": "이 세션은 웹에 공개되었습니다. 링크가 있는 누구나 액세스할 수 있습니다.",
@@ -403,6 +438,7 @@ export const dict = {
   "terminal.loading": "터미널 로드 중...",
   "terminal.title": "터미널",
   "terminal.title.numbered": "터미널 {{number}}",
+  "terminal.close": "터미널 닫기",
 
   "common.closeTab": "탭 닫기",
   "common.dismiss": "닫기",
@@ -411,11 +447,13 @@ export const dict = {
   "common.learnMore": "더 알아보기",
   "common.rename": "이름 바꾸기",
   "common.reset": "초기화",
+  "common.archive": "보관",
   "common.delete": "삭제",
   "common.close": "닫기",
   "common.edit": "편집",
   "common.loadMore": "더 불러오기",
 
+  "sidebar.nav.projectsAndSessions": "프로젝트 및 세션",
   "sidebar.settings": "설정",
   "sidebar.help": "도움말",
   "sidebar.workspaces.enable": "작업 공간 활성화",
@@ -527,6 +565,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "프로젝트 디렉터리 외부의 파일에 액세스",
   "settings.permissions.tool.doom_loop.title": "무한 반복",
   "settings.permissions.tool.doom_loop.description": "동일한 입력으로 반복되는 도구 호출 감지",
+
+  "session.delete.failed.title": "세션 삭제 실패",
+  "session.delete.title": "세션 삭제",
+  "session.delete.confirm": '"{{name}}" 세션을 삭제하시겠습니까?',
+  "session.delete.button": "세션 삭제",
 
   "workspace.new": "새 작업 공간",
   "workspace.type.local": "로컬",

@@ -33,12 +33,14 @@ export const dict = {
 
   "ui.list.loading": "Chargement",
   "ui.list.empty": "Aucun résultat",
+  "ui.list.clearFilter": "Effacer le filtre",
   "ui.list.emptyWithFilter.prefix": "Aucun résultat pour",
   "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Nouveau message",
 
   "ui.textField.copyToClipboard": "Copier dans le presse-papiers",
+  "ui.textField.copyLink": "Copier le lien",
   "ui.textField.copied": "Copié",
 
   "ui.imagePreview.alt": "Aperçu de l'image",
@@ -64,6 +66,7 @@ export const dict = {
   "ui.common.cancel": "Annuler",
   "ui.common.confirm": "Confirmer",
   "ui.common.dismiss": "Ignorer",
+  "ui.common.close": "Fermer",
   "ui.common.next": "Suivant",
   "ui.common.submit": "Soumettre",
 

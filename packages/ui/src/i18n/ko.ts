@@ -33,12 +33,14 @@ export const dict = {
 
   "ui.list.loading": "로딩 중",
   "ui.list.empty": "결과 없음",
+  "ui.list.clearFilter": "필터 지우기",
   "ui.list.emptyWithFilter.prefix": "다음에 대한 결과 없음: ",
   "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "새 메시지",
 
   "ui.textField.copyToClipboard": "클립보드에 복사",
+  "ui.textField.copyLink": "링크 복사",
   "ui.textField.copied": "복사됨",
 
   "ui.imagePreview.alt": "이미지 미리보기",
@@ -64,6 +66,7 @@ export const dict = {
   "ui.common.cancel": "취소",
   "ui.common.confirm": "확인",
   "ui.common.dismiss": "닫기",
+  "ui.common.close": "닫기",
   "ui.common.next": "다음",
   "ui.common.submit": "제출",
 

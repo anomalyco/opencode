@@ -90,6 +90,8 @@ export const dict = {
   "dialog.provider.group.other": "Andere",
   "dialog.provider.tag.recommended": "Empfohlen",
   "dialog.provider.anthropic.note": "Mit Claude Pro/Max oder API-Schlüssel verbinden",
+  "dialog.provider.openai.note": "Mit ChatGPT Pro/Plus oder API-Schlüssel verbinden",
+  "dialog.provider.copilot.note": "Mit Copilot oder API-Schlüssel verbinden",
 
   "dialog.model.select.title": "Modell auswählen",
   "dialog.model.search.placeholder": "Modelle durchsuchen",
@@ -100,7 +102,7 @@ export const dict = {
   "dialog.model.unpaid.freeModels.title": "Kostenlose Modelle von OpenCode",
   "dialog.model.unpaid.addMore.title": "Weitere Modelle von beliebten Anbietern hinzufügen",
 
-  "dialog.provider.viewAll": "Alle Anbieter anzeigen",
+  "dialog.provider.viewAll": "Mehr Anbieter anzeigen",
 
   "provider.connect.title": "{{provider}} verbinden",
   "provider.connect.title.anthropicProMax": "Mit Claude Pro/Max anmelden",
@@ -140,6 +142,7 @@ export const dict = {
   "model.tag.latest": "Neueste",
 
   "common.search.placeholder": "Suchen",
+  "common.goBack": "Zurück",
   "common.loading": "Laden",
   "common.cancel": "Abbrechen",
   "common.submit": "Absenden",
@@ -185,7 +188,10 @@ export const dict = {
   "prompt.slash.badge.custom": "benutzerdefiniert",
   "prompt.context.active": "aktiv",
   "prompt.context.includeActiveFile": "Aktive Datei einbeziehen",
+  "prompt.context.removeActiveFile": "Aktive Datei aus dem Kontext entfernen",
+  "prompt.context.removeFile": "Datei aus dem Kontext entfernen",
   "prompt.action.attachFile": "Datei anhängen",
+  "prompt.attachment.remove": "Anhang entfernen",
   "prompt.action.send": "Senden",
   "prompt.action.stop": "Stopp",
 
@@ -203,6 +209,9 @@ export const dict = {
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "{{enabled}} von {{total}} aktiviert",
   "dialog.mcp.empty": "Keine MCPs konfiguriert",
+
+  "dialog.lsp.empty": "LSPs automatisch nach Dateityp erkannt",
+  "dialog.plugins.empty": "In opencode.json konfigurierte Plugins",
 
   "mcp.status.connected": "verbunden",
   "mcp.status.failed": "fehlgeschlagen",
@@ -223,13 +232,21 @@ export const dict = {
   "dialog.server.add.placeholder": "http://localhost:4096",
   "dialog.server.add.error": "Verbindung zum Server fehlgeschlagen",
   "dialog.server.add.checking": "Prüfen...",
-  "dialog.server.add.button": "Hinzufügen",
+  "dialog.server.add.button": "Server hinzufügen",
   "dialog.server.default.title": "Standardserver",
   "dialog.server.default.description":
     "Beim App-Start mit diesem Server verbinden, anstatt einen lokalen Server zu starten. Erfordert Neustart.",
   "dialog.server.default.none": "Kein Server ausgewählt",
   "dialog.server.default.set": "Aktuellen Server als Standard setzen",
   "dialog.server.default.clear": "Löschen",
+  "dialog.server.action.remove": "Server entfernen",
+
+  "dialog.server.menu.edit": "Bearbeiten",
+  "dialog.server.menu.default": "Als Standard festlegen",
+  "dialog.server.menu.defaultRemove": "Standard entfernen",
+  "dialog.server.menu.delete": "Löschen",
+  "dialog.server.current": "Aktueller Server",
+  "dialog.server.status.default": "Standard",
 
   "dialog.project.edit.title": "Projekt bearbeiten",
   "dialog.project.edit.name": "Name",
@@ -238,6 +255,7 @@ export const dict = {
   "dialog.project.edit.icon.hint": "Klicken oder Bild ziehen",
   "dialog.project.edit.icon.recommended": "Empfohlen: 128x128px",
   "dialog.project.edit.color": "Farbe",
+  "dialog.project.edit.color.select": "{{color}}-Farbe auswählen",
 
   "context.breakdown.title": "Kontext-Aufschlüsselung",
   "context.breakdown.note":
@@ -272,15 +290,22 @@ export const dict = {
   "context.usage.usage": "Nutzung",
   "context.usage.cost": "Kosten",
   "context.usage.clickToView": "Klicken, um Kontext anzuzeigen",
+  "context.usage.view": "Kontextnutzung anzeigen",
 
-  "language.en": "Englisch",
-  "language.zh": "Chinesisch",
-  "language.ko": "Koreanisch",
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
   "language.de": "Deutsch",
-  "language.es": "Spanisch",
-  "language.fr": "Französisch",
-  "language.ja": "Japanisch",
-  "language.da": "Dänisch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
 
   "toast.language.title": "Sprache",
   "toast.language.description": "Zu {{language}} gewechselt",
@@ -372,6 +397,7 @@ export const dict = {
   "session.tab.session": "Sitzung",
   "session.tab.review": "Überprüfung",
   "session.tab.context": "Kontext",
+  "session.panel.reviewAndFiles": "Überprüfung und Dateien",
   "session.review.filesChanged": "{{count}} Dateien geändert",
   "session.review.loadingChanges": "Lade Änderungen...",
   "session.review.empty": "Noch keine Änderungen in dieser Sitzung",
@@ -388,6 +414,15 @@ export const dict = {
   "session.new.lastModified": "Zuletzt geändert",
 
   "session.header.search.placeholder": "{{project}} durchsuchen",
+  "session.header.searchFiles": "Dateien suchen",
+
+  "status.popover.trigger": "Status",
+  "status.popover.ariaLabel": "Serverkonfigurationen",
+  "status.popover.tab.servers": "Server",
+  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.lsp": "LSP",
+  "status.popover.tab.plugins": "Plugins",
+  "status.popover.action.manageServers": "Server verwalten",
 
   "session.share.popover.title": "Im Web veröffentlichen",
   "session.share.popover.description.shared":
@@ -410,6 +445,7 @@ export const dict = {
   "terminal.loading": "Lade Terminal...",
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
+  "terminal.close": "Terminal schließen",
 
   "common.closeTab": "Tab schließen",
   "common.dismiss": "Verwerfen",
@@ -418,11 +454,13 @@ export const dict = {
   "common.learnMore": "Mehr erfahren",
   "common.rename": "Umbenennen",
   "common.reset": "Zurücksetzen",
+  "common.archive": "Archivieren",
   "common.delete": "Löschen",
   "common.close": "Schließen",
   "common.edit": "Bearbeiten",
   "common.loadMore": "Mehr laden",
 
+  "sidebar.nav.projectsAndSessions": "Projekte und Sitzungen",
   "sidebar.settings": "Einstellungen",
   "sidebar.help": "Hilfe",
   "sidebar.workspaces.enable": "Arbeitsbereiche aktivieren",
@@ -538,6 +576,11 @@ export const dict = {
   "settings.permissions.tool.external_directory.description": "Zugriff auf Dateien außerhalb des Projektverzeichnisses",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
   "settings.permissions.tool.doom_loop.description": "Wiederholte Tool-Aufrufe mit identischer Eingabe erkennen",
+
+  "session.delete.failed.title": "Sitzung konnte nicht gelöscht werden",
+  "session.delete.title": "Sitzung löschen",
+  "session.delete.confirm": 'Sitzung "{{name}}" löschen?',
+  "session.delete.button": "Sitzung löschen",
 
   "workspace.new": "Neuer Arbeitsbereich",
   "workspace.type.local": "lokal",

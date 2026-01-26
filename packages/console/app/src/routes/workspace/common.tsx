@@ -110,7 +110,11 @@ export const queryBillingInfo = query(async (workspaceID: string) => {
       timeMonthlyUsageUpdated: billing.timeMonthlyUsageUpdated,
       reloadError: billing.reloadError,
       timeReloadError: billing.timeReloadError,
+      subscription: billing.subscription,
       subscriptionID: billing.subscriptionID,
+      subscriptionPlan: billing.subscriptionPlan,
+      timeSubscriptionBooked: billing.timeSubscriptionBooked,
+      timeSubscriptionSelected: billing.timeSubscriptionSelected,
     }
   }, workspaceID)
 }, "billing.get")
