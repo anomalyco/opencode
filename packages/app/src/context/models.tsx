@@ -1,7 +1,6 @@
 import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import { DateTime } from "luxon"
-import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
+import { uniqueBy } from "remeda"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
@@ -39,30 +38,6 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       ),
     )
 
-    const latest = createMemo(() =>
-      pipe(
-        available(),
-        filter((x) => Math.abs(DateTime.fromISO(x.release_date).diffNow().as("months")) < 6),
-        groupBy((x) => x.provider.id),
-        mapValues((models) =>
-          pipe(
-            models,
-            groupBy((x) => x.family),
-            values(),
-            (groups) =>
-              groups.flatMap((g) => {
-                const first = firstBy(g, [(x) => x.release_date, "desc"])
-                return first ? [{ modelID: first.id, providerID: first.provider.id }] : []
-              }),
-          ),
-        ),
-        values(),
-        flat(),
-      ),
-    )
-
-    const latestSet = createMemo(() => new Set(latest().map((x) => `${x.providerID}:${x.modelID}`)))
-
     const visibility = createMemo(() => {
       const map = new Map<string, Visibility>()
       for (const item of store.user) map.set(`${item.providerID}:${item.modelID}`, item.visibility)
@@ -93,10 +68,9 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       const state = visibility().get(key)
       if (state === "hide") return false
       if (state === "show") return true
-      if (latestSet().has(key)) return true
       const m = find(model)
-      if (!m?.release_date || !DateTime.fromISO(m.release_date).isValid) return true
-      return false
+      if (m?.status === "deprecated") return false
+      return true
     }
 
     const setVisibility = (model: ModelKey, state: boolean) => {
