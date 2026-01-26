@@ -84,10 +84,10 @@ export const SettingsProviders: Component = () => {
             >
               <For each={connected()}>
                 {(item) => (
-                  <div class="group flex items-center justify-between gap-4 h-14 border-b border-border-weak-base last:border-none">
+                  <div class="group flex items-center justify-between gap-4 h-16 border-b border-border-weak-base last:border-none">
                     <div class="flex items-center gap-3 min-w-0">
                       <ProviderIcon id={item.id as IconName} class="size-5 shrink-0 icon-strong-base" />
-                      <span class="text-14-regular text-text-strong truncate">{item.name}</span>
+                      <span class="text-14-medium text-text-strong truncate">{item.name}</span>
                       <Tag>{type(item)}</Tag>
                     </div>
                     <Show
@@ -114,21 +114,44 @@ export const SettingsProviders: Component = () => {
           <div class="bg-surface-raised-base px-4 rounded-lg">
             <For each={popular()}>
               {(item) => (
-                <div class="flex items-center justify-between gap-4 h-14 border-b border-border-weak-base last:border-none">
-                  <div class="flex items-center gap-x-3 min-w-0">
-                    <ProviderIcon id={item.id as IconName} class="size-5 shrink-0 icon-strong-base" />
-                    <span class="text-14-regular text-text-strong">{item.name}</span>
+                <div class="flex items-center justify-between gap-4 h-16 border-b border-border-weak-base last:border-none">
+                  <div class="flex flex-col min-w-0">
+                    <div class="flex items-center gap-x-3">
+                      <ProviderIcon id={item.id as IconName} class="size-5 shrink-0 icon-strong-base" />
+                      <span class="text-14-medium text-text-strong">{item.name}</span>
+                      <Show when={item.id === "opencode"}>
+                        <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+                      </Show>
+                    </div>
                     <Show when={item.id === "opencode"}>
-                      <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+                      <span class="text-12-regular text-text-weak pl-8">
+                        {language.t("dialog.provider.opencode.note")}
+                      </span>
                     </Show>
                     <Show when={item.id === "anthropic"}>
-                      <div class="text-14-regular text-text-weak">{language.t("dialog.provider.anthropic.note")}</div>
-                    </Show>
-                    <Show when={item.id === "openai"}>
-                      <div class="text-14-regular text-text-weak">{language.t("dialog.provider.openai.note")}</div>
+                      <span class="text-12-regular text-text-weak pl-8">
+                        {language.t("dialog.provider.anthropic.note")}
+                      </span>
                     </Show>
                     <Show when={item.id.startsWith("github-copilot")}>
-                      <div class="text-14-regular text-text-weak">{language.t("dialog.provider.copilot.note")}</div>
+                      <span class="text-12-regular text-text-weak pl-8">
+                        {language.t("dialog.provider.copilot.note")}
+                      </span>
+                    </Show>
+                    <Show when={item.id === "openai"}>
+                      <span class="text-12-regular text-text-weak pl-8">
+                        {language.t("dialog.provider.openai.note")}
+                      </span>
+                    </Show>
+                    <Show when={item.id === "google"}>
+                      <span class="text-12-regular text-text-weak pl-8">
+                        {language.t("dialog.provider.google.note")}
+                      </span>
+                    </Show>
+                    <Show when={item.id === "openrouter"}>
+                      <span class="text-12-regular text-text-weak pl-8">
+                        {language.t("dialog.provider.openrouter.note")}
+                      </span>
                     </Show>
                   </div>
                   <Button
