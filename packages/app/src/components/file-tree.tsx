@@ -96,7 +96,7 @@ export default function FileTree(props: {
       <Dynamic
         component={local.as ?? "div"}
         classList={{
-          "w-full min-w-0 flex items-center justify-start gap-x-2 rounded-md px-2 py-1 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
+          "w-full min-w-0 h-6 flex items-center justify-start gap-x-2 rounded-md px-2 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
           ...(local.classList ?? {}),
           [local.class ?? ""]: !!local.class,
           [props.nodeClass ?? ""]: !!props.nodeClass,
@@ -147,7 +147,7 @@ export default function FileTree(props: {
   }
 
   return (
-    <div class={`flex flex-col ${props.class ?? ""}`}>
+    <div class={`flex flex-col gap-0.5 ${props.class ?? ""}`}>
       <For each={nodes()}>
         {(node) => {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
@@ -166,6 +166,7 @@ export default function FileTree(props: {
                 <Collapsible
                   variant="ghost"
                   class="w-full"
+                  data-scope="filetree"
                   forceMount={false}
                   open={expanded()}
                   onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
@@ -178,7 +179,7 @@ export default function FileTree(props: {
                       </Node>
                     </Wrapper>
                   </Collapsible.Trigger>
-                  <Collapsible.Content>
+                  <Collapsible.Content class="mt-0.5">
                     <FileTree
                       path={node.path}
                       level={level + 1}
