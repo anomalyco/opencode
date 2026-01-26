@@ -478,8 +478,8 @@
     [data-component="highlights"] {
       display: flex;
       flex-direction: column;
-      gap: 2rem;
-      margin-bottom: 1.5rem;
+      gap: 3rem;
+      margin-bottom: 0.75rem;
     }
 
     [data-component="collapsible-sections"] {
@@ -563,7 +563,7 @@
       }
 
       [data-slot="highlight-item"] {
-        margin-bottom: 24px;
+        margin-bottom: 48px;
 
         &:last-child {
           margin-bottom: 0;
