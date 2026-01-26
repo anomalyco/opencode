@@ -10,6 +10,10 @@
     width: 240px;
     gap: 4px;
   }
+
+  &[data-size="compact"] {
+    width: 24px;
+  }
 }
 
 [data-slot="message-nav-item"] {
@@ -68,7 +72,7 @@
 
 [data-slot="message-nav-title-preview"] {
   font-size: 14px; /* text-14-regular */
-  color: var(--text-weak);
+  color: var(--text-base);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

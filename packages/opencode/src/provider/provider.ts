@@ -41,6 +41,18 @@ import { ProviderTransform } from "./transform"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
+  function isGpt5OrLater(modelID: string): boolean {
+    const match = /^gpt-(\d+)/.exec(modelID)
+    if (!match) {
+      return false
+    }
+    return Number(match[1]) >= 5
+  }
+
+  function shouldUseCopilotResponsesApi(modelID: string): boolean {
+    return isGpt5OrLater(modelID) && !modelID.startsWith("gpt-5-mini")
+  }
+
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,
@@ -174,10 +186,7 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (modelID.includes("codex")) {
-            return sdk.responses(modelID)
-          }
-          return sdk.chat(modelID)
+          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
         },
         options: {},
       }
@@ -186,10 +195,7 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (modelID.includes("codex")) {
-            return sdk.responses(modelID)
-          }
-          return sdk.chat(modelID)
+          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
         },
         options: {},
       }
@@ -617,7 +623,10 @@ export namespace Provider {
       api: {
         id: model.id,
         url: provider.api!,
-        npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
+        npm: iife(() => {
+          if (provider.id.startsWith("github-copilot")) return "@ai-sdk/github-copilot"
+          return model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible"
+        }),
       },
       status: model.status ?? "active",
       headers: model.headers ?? {},
@@ -867,10 +876,9 @@ export namespace Provider {
       // Load for the main provider if auth exists
       if (auth) {
         const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
-        mergeProvider(plugin.auth.provider, {
-          source: "custom",
-          options: options,
-        })
+        const opts = options ?? {}
+        const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
+        mergeProvider(providerID, patch)
       }
 
       // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
@@ -883,10 +891,11 @@ export namespace Provider {
               () => Auth.get(enterpriseProviderID) as any,
               database[enterpriseProviderID],
             )
-            mergeProvider(enterpriseProviderID, {
-              source: "custom",
-              options: enterpriseOptions,
-            })
+            const opts = enterpriseOptions ?? {}
+            const patch: Partial<Info> = providers[enterpriseProviderID]
+              ? { options: opts }
+              : { source: "custom", options: opts }
+            mergeProvider(enterpriseProviderID, patch)
           }
         }
       }
@@ -902,13 +911,16 @@ export namespace Provider {
       const result = await fn(data)
       if (result && (result.autoload || providers[providerID])) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
-        mergeProvider(providerID, {
-          source: "custom",
-          options: result.options,
-          // Pass key from custom loader if explicitly set (e.g., undefined for google-vertex)
-          // to override any key previously set from Auth storage
-          ...(result.key !== undefined ? { key: result.key } : "key" in result ? { key: undefined } : {}),
-        })
+        const opts = result.options ?? {}
+        const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
+        // Pass key from custom loader if explicitly set (e.g., undefined for google-vertex)
+        // to override any key previously set from Auth storage
+        if (result.key !== undefined) {
+          patch.key = result.key
+        } else if ("key" in result) {
+          patch.key = undefined
+        }
+        mergeProvider(providerID, patch)
       }
     }
 
@@ -925,16 +937,6 @@ export namespace Provider {
       if (!isProviderAllowed(providerID)) {
         delete providers[providerID]
         continue
-      }
-
-      if (providerID === "github-copilot" || providerID === "github-copilot-enterprise") {
-        provider.models = mapValues(provider.models, (model) => ({
-          ...model,
-          api: {
-            ...model.api,
-            npm: "@ai-sdk/github-copilot",
-          },
-        }))
       }
 
       const configProvider = config.provider?.[providerID]

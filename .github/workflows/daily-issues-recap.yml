@@ -1,0 +1,166 @@
+name: Daily Issues Recap
+
+on:
+  schedule:
+    # Run at 6 PM EST (23:00 UTC, or 22:00 UTC during daylight saving)
+    - cron: "0 23 * * *"
+  workflow_dispatch: # Allow manual trigger for testing
+
+jobs:
+  daily-recap:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Install opencode
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Generate daily issues recap
+        id: recap
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENCODE_PERMISSION: |
+            {
+              "bash": {
+                "*": "deny",
+                "gh issue*": "allow",
+                "gh search*": "allow"
+              },
+              "webfetch": "deny",
+              "edit": "deny",
+              "write": "deny"
+            }
+        run: |
+          # Get today's date range
+          TODAY=$(date -u +%Y-%m-%d)
+
+          opencode run -m opencode/claude-sonnet-4-5 "Generate a daily issues recap for the OpenCode repository.
+
+          TODAY'S DATE: ${TODAY}
+
+          STEP 1: Gather today's issues
+          Search for all issues created today (${TODAY}) using:
+          gh issue list --repo ${{ github.repository }} --state all --search \"created:${TODAY}\" --json number,title,body,labels,state,comments,createdAt,author --limit 500
+
+          STEP 2: Analyze and categorize
+          For each issue created today, categorize it:
+
+          **Severity Assessment:**
+          - CRITICAL: Crashes, data loss, security issues, blocks major functionality
+          - HIGH: Significant bugs affecting many users, important features broken
+          - MEDIUM: Bugs with workarounds, minor features broken
+          - LOW: Minor issues, cosmetic, nice-to-haves
+
+          **Activity Assessment:**
+          - Note issues with high comment counts or engagement
+          - Note issues from repeat reporters (check if author has filed before)
+
+          STEP 3: Cross-reference with existing issues
+          For issues that seem like feature requests or recurring bugs:
+          - Search for similar older issues to identify patterns
+          - Note if this is a frequently requested feature
+          - Identify any issues that are duplicates of long-standing requests
+
+          STEP 4: Generate the recap
+          Create a structured recap with these sections:
+
+          ===DISCORD_START===
+          **Daily Issues Recap - ${TODAY}**
+
+          **Summary Stats**
+          - Total issues opened today: [count]
+          - By category: [bugs/features/questions]
+
+          **Critical/High Priority Issues**
+          [List any CRITICAL or HIGH severity issues with brief descriptions and issue numbers]
+
+          **Most Active/Discussed**
+          [Issues with significant engagement or from active community members]
+
+          **Trending Topics**
+          [Patterns noticed - e.g., 'Multiple reports about X', 'Continued interest in Y feature']
+
+          **Duplicates & Related**
+          [Issues that relate to existing open issues]
+          ===DISCORD_END===
+
+          STEP 5: Format for Discord
+          Format the recap as a Discord-compatible message:
+          - Use Discord markdown (**, __, etc.)
+          - BE EXTREMELY CONCISE - this is an EOD summary, not a detailed report
+          - Use hyperlinked issue numbers with suppressed embeds: [#1234](<https://github.com/${{ github.repository }}/issues/1234>)
+          - Group related issues on single lines where possible
+          - Add emoji sparingly for critical items only
+          - HARD LIMIT: Keep under 1800 characters total
+          - Skip sections that have nothing notable (e.g., if no critical issues, omit that section)
+          - Prioritize signal over completeness - only surface what matters
+
+          OUTPUT: Output ONLY the content between ===DISCORD_START=== and ===DISCORD_END=== markers. Include the markers so I can extract it." > /tmp/recap_raw.txt
+
+          # Extract only the Discord message between markers
+          sed -n '/===DISCORD_START===/,/===DISCORD_END===/p' /tmp/recap_raw.txt | grep -v '===DISCORD' > /tmp/recap.txt
+
+          echo "recap_file=/tmp/recap.txt" >> $GITHUB_OUTPUT
+
+      - name: Post to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ISSUES_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "Warning: DISCORD_ISSUES_WEBHOOK_URL secret not set, skipping Discord post"
+            cat /tmp/recap.txt
+            exit 0
+          fi
+
+          # Read the recap
+          RECAP_RAW=$(cat /tmp/recap.txt)
+          RECAP_LENGTH=${#RECAP_RAW}
+
+          echo "Recap length: ${RECAP_LENGTH} chars"
+
+          # Function to post a message to Discord
+          post_to_discord() {
+            local msg="$1"
+            local content=$(echo "$msg" | jq -Rs '.')
+            curl -s -H "Content-Type: application/json" \
+                 -X POST \
+                 -d "{\"content\": ${content}}" \
+                 "$DISCORD_WEBHOOK_URL"
+            sleep 1
+          }
+
+          # If under limit, send as single message
+          if [ "$RECAP_LENGTH" -le 1950 ]; then
+            post_to_discord "$RECAP_RAW"
+          else
+            echo "Splitting into multiple messages..."
+            remaining="$RECAP_RAW"
+            while [ ${#remaining} -gt 0 ]; do
+              if [ ${#remaining} -le 1950 ]; then
+                post_to_discord "$remaining"
+                break
+              else
+                chunk="${remaining:0:1900}"
+                last_newline=$(echo "$chunk" | grep -bo $'\n' | tail -1 | cut -d: -f1)
+                if [ -n "$last_newline" ] && [ "$last_newline" -gt 500 ]; then
+                  chunk="${remaining:0:$last_newline}"
+                  remaining="${remaining:$((last_newline+1))}"
+                else
+                  chunk="${remaining:0:1900}"
+                  remaining="${remaining:1900}"
+                fi
+                post_to_discord "$chunk"
+              fi
+            done
+          fi
+
+          echo "Posted daily recap to Discord"
