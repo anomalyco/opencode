@@ -98,19 +98,23 @@ export async function GET() {
       cacheTtl: 60 * 5,
       cacheEverything: true,
     },
-  } as any)
+  } as any).catch(() => undefined)
 
-  if (!response.ok) {
-    return new Response(JSON.stringify({ releases: [] }), {
+  const fail = () =>
+    new Response(JSON.stringify({ releases: [] }), {
       status: 503,
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": error,
       },
     })
-  }
 
-  const releases = (await response.json()) as Release[]
+  if (!response?.ok) return fail()
+
+  const data = await response.json().catch(() => undefined)
+  if (!Array.isArray(data)) return fail()
+
+  const releases = data as Release[]
 
   return new Response(
     JSON.stringify({
