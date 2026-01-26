@@ -1,0 +1,277 @@
+import { create } from "zustand"
+import type { Session, Message, Part, Event, MessageWithParts } from "../lib/sdk"
+import { useConnections } from "./connections"
+
+// Helper to convert API response to our internal format
+function parseMessages(response: MessageWithParts[]): { messages: Message[]; parts: Record<string, Part[]> } {
+  const messages: Message[] = []
+  const parts: Record<string, Part[]> = {}
+
+  for (const item of response || []) {
+    messages.push(item.info)
+    parts[item.info.id] = item.parts || []
+  }
+
+  return { messages, parts }
+}
+
+interface SessionsState {
+  sessions: Session[]
+  currentSession: Session | null
+  messages: Message[]
+  parts: Record<string, Part[]>
+  isLoading: boolean
+  isSending: boolean
+  error: string | null
+
+  // Actions
+  loadSessions: () => Promise<void>
+  selectSession: (sessionID: string) => Promise<void>
+  createSession: (title?: string) => Promise<Session | null>
+  deleteSession: (sessionID: string) => Promise<void>
+  sendMessage: (text: string) => Promise<void>
+  abortSession: () => Promise<void>
+  refreshMessages: () => Promise<void>
+
+  // Event handling
+  handleEvent: (event: Event) => void
+}
+
+export const useSessions = create<SessionsState>((set, get) => ({
+  sessions: [],
+  currentSession: null,
+  messages: [],
+  parts: {},
+  isLoading: false,
+  isSending: false,
+  error: null,
+
+  loadSessions: async () => {
+    const client = useConnections.getState().client
+    if (!client) {
+      set({ error: "No active connection" })
+      return
+    }
+
+    try {
+      set({ isLoading: true, error: null })
+      const sessions = await client.session.list({ roots: true, limit: 50 })
+      set({ sessions, isLoading: false })
+    } catch (error) {
+      set({ error: "Failed to load sessions", isLoading: false })
+    }
+  },
+
+  selectSession: async (sessionID) => {
+    const client = useConnections.getState().client
+    if (!client) {
+      set({ error: "No active connection" })
+      return
+    }
+
+    try {
+      set({ isLoading: true, error: null })
+
+      const [session, messagesResponse] = await Promise.all([
+        client.session.get(sessionID),
+        client.session.messages(sessionID),
+      ])
+
+      // Parse the API response format: array of { info, parts }
+      const { messages, parts } = parseMessages(messagesResponse)
+
+      set({
+        currentSession: session,
+        messages,
+        parts,
+        isLoading: false,
+      })
+    } catch (error) {
+      console.error("Failed to load session:", error)
+      set({ error: "Failed to load session", isLoading: false })
+    }
+  },
+
+  createSession: async (title) => {
+    const client = useConnections.getState().client
+    if (!client) {
+      set({ error: "No active connection" })
+      return null
+    }
+
+    try {
+      const session = await client.session.create({ title })
+      set((state) => ({
+        sessions: [session, ...state.sessions],
+        currentSession: session,
+        messages: [],
+        parts: {},
+      }))
+      return session
+    } catch (error) {
+      set({ error: "Failed to create session" })
+      return null
+    }
+  },
+
+  deleteSession: async (sessionID) => {
+    const client = useConnections.getState().client
+    if (!client) {
+      set({ error: "No active connection" })
+      return
+    }
+
+    try {
+      await client.session.delete(sessionID)
+      set((state) => ({
+        sessions: state.sessions.filter((s) => s.id !== sessionID),
+        currentSession: state.currentSession?.id === sessionID ? null : state.currentSession,
+        messages: state.currentSession?.id === sessionID ? [] : state.messages,
+        parts: state.currentSession?.id === sessionID ? {} : state.parts,
+      }))
+    } catch (error) {
+      set({ error: "Failed to delete session" })
+    }
+  },
+
+  sendMessage: async (text) => {
+    const client = useConnections.getState().client
+    const session = get().currentSession
+    if (!client || !session) {
+      set({ error: "No active session" })
+      return
+    }
+
+    try {
+      set({ isSending: true, error: null })
+
+      // Add user message optimistically
+      const ts = Date.now()
+      const userMessage: Message = {
+        id: `temp-${ts}`,
+        sessionID: session.id,
+        role: "user",
+        time: { created: ts },
+      }
+      const userPart: Part = {
+        id: `temp-part-${ts}`,
+        messageID: userMessage.id,
+        type: "text",
+        text,
+      }
+
+      set((state) => ({
+        messages: [...state.messages, userMessage],
+        parts: { ...state.parts, [userMessage.id]: [userPart] },
+      }))
+
+      // Fire and forget - SSE events will update messages/parts/status in real-time
+      client.session
+        .prompt(session.id, {
+          parts: [{ type: "text", text }],
+        })
+        .catch((error) => {
+          console.error("Failed to send message:", error)
+          set({ error: "Failed to send message", isSending: false })
+          get().refreshMessages()
+        })
+    } catch (error) {
+      console.error("Failed to send message:", error)
+      set({ error: "Failed to send message", isSending: false })
+      get().refreshMessages()
+    }
+  },
+
+  abortSession: async () => {
+    const client = useConnections.getState().client
+    const session = get().currentSession
+    if (!client || !session) return
+
+    try {
+      await client.session.abort(session.id)
+      set({ isSending: false })
+    } catch (error) {
+      set({ error: "Failed to abort session" })
+    }
+  },
+
+  refreshMessages: async () => {
+    const client = useConnections.getState().client
+    const session = get().currentSession
+    if (!client || !session) return
+
+    try {
+      const response = await client.session.messages(session.id)
+      const { messages, parts } = parseMessages(response)
+      set({ messages, parts })
+    } catch (error) {
+      set({ error: "Failed to refresh messages" })
+    }
+  },
+
+  handleEvent: (event) => {
+    const { currentSession } = get()
+    if (!currentSession) return
+
+    const props = (event as any).properties || {}
+
+    switch (event.type) {
+      case "message.updated": {
+        const message = (props.info || props.message) as Message | undefined
+        if (!message || message.sessionID !== currentSession.id) return
+
+        set((state) => {
+          // Remove temp messages when real ones arrive
+          const filtered = state.messages.filter((m) => !m.id.startsWith("temp-") || m.id === message.id)
+          const exists = filtered.some((m) => m.id === message.id)
+          return {
+            messages: exists ? filtered.map((m) => (m.id === message.id ? message : m)) : [...filtered, message],
+          }
+        })
+        break
+      }
+
+      case "message.part.updated": {
+        const part = props.part as Part | undefined
+        if (!part) return
+        // Only handle parts for current session
+        if (part.sessionID && part.sessionID !== currentSession.id) return
+
+        set((state) => {
+          const messageParts = state.parts[part.messageID] || []
+          const exists = messageParts.some((p) => p.id === part.id)
+          return {
+            parts: {
+              ...state.parts,
+              [part.messageID]: exists
+                ? messageParts.map((p) => (p.id === part.id ? part : p))
+                : [...messageParts, part],
+            },
+          }
+        })
+        break
+      }
+
+      case "message.removed": {
+        const messageID = props.messageID as string
+        if (!messageID) return
+        set((state) => ({
+          messages: state.messages.filter((m) => m.id !== messageID),
+          parts: Object.fromEntries(Object.entries(state.parts).filter(([k]) => k !== messageID)),
+        }))
+        break
+      }
+
+      case "session.updated": {
+        const session = (props.info || props) as Session | undefined
+        if (!session?.id) return
+
+        set((state) => ({
+          sessions: state.sessions.map((s) => (s.id === session.id ? session : s)),
+          currentSession: state.currentSession?.id === session.id ? session : state.currentSession,
+        }))
+        break
+      }
+    }
+  },
+}))
