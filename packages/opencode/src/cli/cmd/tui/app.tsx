@@ -209,7 +209,7 @@ function App() {
       .catch(toast.error)
     renderer.clearSelection()
   }
-  const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+  const [terminalTitleEnabled, setTerminalTitleEnabled] = kv.signal("terminal_title_enabled", true)
   const [codeConceal, setCodeConceal] = kv.signal("conceal_code", true)
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
@@ -563,7 +563,6 @@ function App() {
       onSelect: (dialog) => {
         setTerminalTitleEnabled((prev) => {
           const next = !prev
-          kv.set("terminal_title_enabled", next)
           if (!next) renderer.setTerminalTitle("")
           return next
         })
