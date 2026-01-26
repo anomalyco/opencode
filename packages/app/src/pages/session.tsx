@@ -2672,7 +2672,12 @@ export default function Page() {
                       </Switch>
                     </Tabs.Content>
                     <Tabs.Content value="all" class="bg-background-base px-3 py-0">
-                      <FileTree path="" modified={diffFiles()} onFileClick={(node) => openTab(file.tab(node.path))} />
+                      <FileTree
+                        path=""
+                        modified={diffFiles()}
+                        tooltip={false}
+                        onFileClick={(node) => openTab(file.tab(node.path))}
+                      />
                     </Tabs.Content>
                   </Tabs>
                 </div>
