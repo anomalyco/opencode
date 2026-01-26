@@ -4,6 +4,12 @@
   "type": "module",
   "private": true,
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "solid-js": "catalog:",
     "@opencode-ai/ui": "workspace:*"
