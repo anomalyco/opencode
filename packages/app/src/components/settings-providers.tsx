@@ -141,7 +141,7 @@ export const SettingsProviders: Component = () => {
 
           <Button
             variant="ghost"
-            class="px-0 py-0 text-14-medium text-text-strong underline hover:bg-transparent active:bg-transparent"
+            class="px-0 py-0 text-14-medium text-text-strong text-left justify-start hover:bg-transparent active:bg-transparent"
             onClick={() => {
               dialog.show(() => <DialogSelectProvider />)
             }}
