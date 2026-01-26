@@ -11,7 +11,6 @@ import { Scheduler } from "../scheduler"
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
   const hour = 60 * 60 * 1000
-  const prune = "7.days"
 
   export function init() {
     Scheduler.register({
@@ -26,6 +25,7 @@ export namespace Snapshot {
     if (Instance.project.vcs !== "git") return
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
+    const prune = cfg.snapshot === true ? "7.days" : `${cfg.snapshot}.days`
     const git = gitdir()
     const exists = await fs
       .stat(git)

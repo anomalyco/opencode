@@ -1650,7 +1650,7 @@ export type Config = {
     ignore?: Array<string>
   }
   plugin?: Array<string>
-  snapshot?: boolean
+  snapshot?: boolean | number
   /**
    * Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing
    */

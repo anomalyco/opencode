@@ -2,6 +2,7 @@ import { test, expect } from "bun:test"
 import { $ } from "bun"
 import { Snapshot } from "../../src/snapshot"
 import { Instance } from "../../src/project/instance"
+import { Config } from "../../src/config/config"
 import { tmpdir } from "../fixture/fixture"
 
 async function bootstrap() {
@@ -989,6 +990,41 @@ test("diffFull with whitespace changes", async () => {
       const whitespaceDiff = diffs[0]
       expect(whitespaceDiff.file).toBe("whitespace.txt")
       expect(whitespaceDiff.additions).toBeGreaterThan(0)
+    },
+  })
+})
+
+test("snapshot config with boolean true uses default 7-day retention", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Config.update({ snapshot: true })
+      expect(await Snapshot.track()).toBeTruthy()
+    },
+  })
+})
+
+test("snapshot config with positive integer uses specified retention", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Config.update({ snapshot: 3 })
+      expect(await Snapshot.track()).toBeTruthy()
+    },
+  })
+})
+
+test("snapshot config with various positive integers", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      for (const days of [1, 3, 7, 14, 30, 90]) {
+        await Config.update({ snapshot: days })
+        expect(await Snapshot.track()).toBeTruthy()
+      }
     },
   })
 })
