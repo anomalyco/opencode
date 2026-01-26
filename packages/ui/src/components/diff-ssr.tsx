@@ -28,6 +28,16 @@ export function Diff<T>(props: SSRDiffProps<T>) {
 
   const getRoot = () => fileDiffRef?.shadowRoot ?? undefined
 
+  const applyScheme = () => {
+    const scheme = document.documentElement.dataset.colorScheme
+    if (scheme === "dark" || scheme === "light") {
+      fileDiffRef.dataset.colorScheme = scheme
+      return
+    }
+
+    fileDiffRef.removeAttribute("data-color-scheme")
+  }
+
   const findSide = (element: HTMLElement): "additions" | "deletions" => {
     const line = element.closest("[data-line], [data-alt-line]")
     if (line instanceof HTMLElement) {
@@ -121,6 +131,16 @@ export function Diff<T>(props: SSRDiffProps<T>) {
 
   onMount(() => {
     if (isServer || !props.preloadedDiff) return
+
+    applyScheme()
+
+    if (typeof MutationObserver !== "undefined") {
+      const root = document.documentElement
+      const monitor = new MutationObserver(() => applyScheme())
+      monitor.observe(root, { attributes: true, attributeFilter: ["data-color-scheme"] })
+      onCleanup(() => monitor.disconnect())
+    }
+
     fileDiffInstance = new FileDiff<T>(
       {
         ...createDefaultOptions(props.diffStyle),
