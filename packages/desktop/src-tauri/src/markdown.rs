@@ -9,6 +9,7 @@ pub fn parse_markdown(input: &str) -> String {
     options.render.r#unsafe = true;
 
     markdown_to_html(input, &options)
+        .replace("<a ", "<a class=\"external-link\" ")
 }
 
 #[tauri::command]
