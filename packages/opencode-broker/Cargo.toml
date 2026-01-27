@@ -26,6 +26,8 @@ base64 = "0.22"
 tempfile = "3"
 
 [features]
+# Feature-gated because it fails to build in Ubuntu Docker:
+# https://gist.github.com/pRizz/b663e8359b21a1723b41e17bc4950dcc
 test-spawn-bin = []
 
 [[bin]]
