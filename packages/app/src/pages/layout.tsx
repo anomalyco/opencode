@@ -332,6 +332,7 @@ export default function Layout(props: ParentProps) {
     if (!platform.checkUpdate || !platform.update || !platform.restart) return
 
     let toastId: number | undefined
+    let interval: ReturnType<typeof setInterval> | undefined
 
     async function pollUpdate() {
       const { updateAvailable, version } = await platform.checkUpdate!()
@@ -358,9 +359,25 @@ export default function Layout(props: ParentProps) {
       }
     }
 
-    pollUpdate()
-    const interval = setInterval(pollUpdate, 10 * 60 * 1000)
-    onCleanup(() => clearInterval(interval))
+    createEffect(() => {
+      if (!settings.ready()) return
+
+      if (!settings.updates.startup()) {
+        if (interval === undefined) return
+        clearInterval(interval)
+        interval = undefined
+        return
+      }
+
+      if (interval !== undefined) return
+      void pollUpdate()
+      interval = setInterval(pollUpdate, 10 * 60 * 1000)
+    })
+
+    onCleanup(() => {
+      if (interval === undefined) return
+      clearInterval(interval)
+    })
   })
 
   onMount(() => {
@@ -1563,7 +1580,6 @@ export default function Layout(props: ParentProps) {
     const notifications = createMemo(() => notification.project.unseen(props.project.worktree))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
     const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
-    const mask = "radial-gradient(circle 5px at calc(100% - 4px) 4px, transparent 5px, black 5.5px)"
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
@@ -1574,11 +1590,7 @@ export default function Layout(props: ParentProps) {
             src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.override}
             {...getAvatarColors(props.project.icon?.color)}
             class="size-full rounded"
-            style={
-              notifications().length > 0 && props.notify
-                ? { "-webkit-mask-image": mask, "mask-image": mask }
-                : undefined
-            }
+            classList={{ "badge-mask": notifications().length > 0 && props.notify }}
           />
         </div>
         <Show when={notifications().length > 0 && props.notify}>
@@ -1942,7 +1954,8 @@ export default function Layout(props: ParentProps) {
     })
     const open = createMemo(() => store.workspaceExpanded[props.directory] ?? local())
     const boot = createMemo(() => open() || active())
-    const loading = createMemo(() => open() && workspaceStore.status !== "complete" && sessions().length === 0)
+    const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
+    const loading = createMemo(() => open() && !booted() && sessions().length === 0)
     const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)
     const busy = createMemo(() => isBusy(props.directory))
     const loadMore = async () => {
@@ -2334,7 +2347,8 @@ export default function Layout(props: ParentProps) {
       }
       return map
     })
-    const loading = createMemo(() => workspaceStore.status !== "complete" && sessions().length === 0)
+    const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
+    const loading = createMemo(() => !booted() && sessions().length === 0)
     const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)
     const loadMore = async () => {
       setWorkspaceStore("limit", (limit) => limit + 5)
@@ -2346,8 +2360,7 @@ export default function Layout(props: ParentProps) {
         ref={(el) => {
           if (!props.mobile) scrollContainerRef = el
         }}
-        class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar"
-        style={{ "overflow-anchor": "none" }}
+        class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none]"
       >
         <nav class="flex flex-col gap-1 px-2">
           <Show when={loading()}>
@@ -2573,8 +2586,7 @@ export default function Layout(props: ParentProps) {
                         ref={(el) => {
                           if (!panelProps.mobile) scrollContainerRef = el
                         }}
-                        class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar"
-                        style={{ "overflow-anchor": "none" }}
+                        class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
                       >
                         <SortableProvider ids={workspaces()}>
                           <For each={workspaces()}>

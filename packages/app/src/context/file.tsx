@@ -295,6 +295,12 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const inflight = new Map<string, Promise<void>>()
     const treeInflight = new Map<string, Promise<void>>()
 
+    const search = (query: string, dirs: "true" | "false") =>
+      sdk.client.find.files({ query, dirs }).then(
+        (x) => (x.data ?? []).map(normalize),
+        () => [],
+      )
+
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
     }>({
@@ -645,10 +651,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       setScrollLeft,
       selectedLines,
       setSelectedLines,
-      searchFiles: (query: string) =>
-        sdk.client.find.files({ query, dirs: "false" }).then((x) => (x.data ?? []).map(normalize)),
-      searchFilesAndDirectories: (query: string) =>
-        sdk.client.find.files({ query, dirs: "true" }).then((x) => (x.data ?? []).map(normalize)),
+      searchFiles: (query: string) => search(query, "false"),
+      searchFilesAndDirectories: (query: string) => search(query, "true"),
     }
   },
 })
