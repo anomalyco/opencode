@@ -2,13 +2,17 @@ import { Component, For, Show, createSignal, onMount, createMemo } from "solid-j
 import { useSDK } from "@/context/sdk"
 import { useFile } from "@/context/file"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Icon } from "@opencode-ai/ui/icon"
+import { Collapsible } from "@opencode-ai/ui/collapsible"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 
 export const FilesPanel: Component = () => {
   const sdk = useSDK()
   const file = useFile()
   const [fileList, setFileList] = createSignal<FileNode[]>([])
+  const [childFiles, setChildFiles] = createSignal<Record<string, FileNode[]>>({})
   const [loading, setLoading] = createSignal(true)
+  const [expandedDirs, setExpandedDirs] = createSignal<Set<string>>(new Set())
 
   // Initialize file list on mount
   onMount(async () => {
@@ -24,6 +28,37 @@ export const FilesPanel: Component = () => {
       setLoading(false)
     }
   })
+
+  // Load child files for a directory
+  const loadChildFiles = async (path: string) => {
+    if (childFiles()[path]) return // Already loaded
+
+    try {
+      const response = await sdk.client.file.list({ path: path + "/" })
+      if (response.data) {
+        setChildFiles((prev) => ({ ...prev, [path]: response.data }))
+      }
+    } catch (error) {
+      console.error(`Failed to load files for ${path}:`, error)
+    }
+  }
+
+  // Toggle directory expansion
+  const toggleDirectory = (path: string) => {
+    const current = expandedDirs()
+    if (current.has(path)) {
+      // Collapse
+      const next = new Set(current)
+      next.delete(path)
+      setExpandedDirs(next)
+    } else {
+      // Expand
+      const next = new Set(current)
+      next.add(path)
+      setExpandedDirs(next)
+      loadChildFiles(path)
+    }
+  }
 
   // Filter and sort files
   const sortedFiles = createMemo(() => {
@@ -92,6 +127,61 @@ export const FilesPanel: Component = () => {
     )
   }
 
+  // Recursive component to render file tree
+  const FileTreeNode = (props: {
+    nodes: FileNode[];
+    level?: number;
+    parentPath?: string
+  }) => {
+    const level = props.level ?? 0
+    const paddingLeft = level * 16
+
+    return (
+      <For each={props.nodes}>
+        {(node) => (
+          <Show
+            when={node.type === "directory"}
+            fallback={
+              <div
+                class="flex items-center gap-2 px-2 py-1.5 hover:bg-background-element rounded cursor-pointer text-13-regular text-text-primary"
+                onClick={() => handleFileClick(node)}
+                style={{ "padding-left": `${paddingLeft + 8}px` }}
+              >
+                <div class="w-4 shrink-0" />
+                <FileIcon node={node} class="w-4 h-4 shrink-0" />
+                <span class="truncate">{node.name}</span>
+              </div>
+            }
+          >
+            <Collapsible
+              open={expandedDirs().has(node.path)}
+              onOpenChange={() => toggleDirectory(node.path)}
+            >
+              <Collapsible.Trigger
+                as="div"
+                class="flex items-center gap-2 px-2 py-1.5 hover:bg-background-element rounded cursor-pointer text-13-regular text-text-weak"
+                style={{ "padding-left": `${paddingLeft + 8}px` }}
+              >
+                <Collapsible.Arrow class="text-text-muted/60 shrink-0" />
+                <FileIcon node={node} class="w-4 h-4 shrink-0" />
+                <span class="truncate">{node.name}</span>
+              </Collapsible.Trigger>
+              <Collapsible.Content>
+                <Show when={childFiles()[node.path]}>
+                  <FileTreeNode
+                    nodes={childFiles()[node.path] ?? []}
+                    level={level + 1}
+                    parentPath={node.path}
+                  />
+                </Show>
+              </Collapsible.Content>
+            </Collapsible>
+          </Show>
+        )}
+      </For>
+    )
+  }
+
   return (
     <div class="flex flex-col h-full">
       <div class="flex-1 overflow-auto">
@@ -109,23 +199,7 @@ export const FilesPanel: Component = () => {
               when={sortedFiles().length > 0}
               fallback={<div class="text-text-weak text-13-regular">No files found</div>}
             >
-              <div class="flex flex-col">
-                <For each={sortedFiles()}>
-                  {(fileItem) => (
-                    <div
-                      class="flex items-center gap-2 px-2 py-1.5 hover:bg-background-element rounded cursor-pointer text-13-regular"
-                      onClick={() => handleFileClick(fileItem)}
-                      classList={{
-                        "text-text-weak": fileItem.type === "directory",
-                        "text-text-primary": fileItem.type === "file",
-                      }}
-                    >
-                      <FileIcon node={fileItem} class="w-4 h-4 shrink-0" />
-                      <span class="truncate">{fileItem.name}</span>
-                    </div>
-                  )}
-                </For>
-              </div>
+              <FileTreeNode nodes={sortedFiles()} />
             </Show>
           </div>
         </Show>
