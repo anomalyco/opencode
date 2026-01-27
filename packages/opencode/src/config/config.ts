@@ -1011,6 +1011,19 @@ export namespace Config {
         .array(z.string())
         .optional()
         .describe("Hosts or patterns to bypass proxy (e.g., localhost, *.internal.com)"),
+      tls: z
+        .object({
+          rejectUnauthorized: z
+            .boolean()
+            .optional()
+            .describe("Set to false to accept self-signed proxy certificates. Default is true."),
+          ca: z
+            .union([z.string(), z.array(z.string())])
+            .optional()
+            .describe("Path(s) to CA certificate file(s) to trust for proxy connections."),
+        })
+        .optional()
+        .describe("TLS configuration for proxy connections."),
     })
     .strict()
     .meta({

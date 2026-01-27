@@ -9,9 +9,15 @@
 
 import type { Config } from "../config/config"
 
-// Bun's fetch supports proxy option but TypeScript types don't include it
+// Bun's fetch supports proxy and tls options but TypeScript types don't include them
+type BunTlsConfig = {
+  rejectUnauthorized?: boolean
+  ca?: BlobPart | BlobPart[]
+}
+
 type BunFetchInit = RequestInit & {
   proxy?: string | { url: string; headers?: Record<string, string> }
+  tls?: BunTlsConfig
 }
 
 /**
@@ -105,6 +111,40 @@ export function getProxyForUrl(url: string | URL): string | undefined {
 }
 
 /**
+ * Get TLS configuration for proxy connections
+ * Returns undefined if no TLS config is set
+ */
+export function getTlsForProxy(): BunTlsConfig | undefined {
+  const tls = _configProxy?.tls
+  if (!tls) return undefined
+
+  const result: BunTlsConfig = {}
+
+  if (tls.rejectUnauthorized !== undefined) {
+    result.rejectUnauthorized = tls.rejectUnauthorized
+    // Security warning for insecure config
+    if (tls.rejectUnauthorized === false) {
+      console.warn(
+        "[opencode] WARNING: TLS certificate validation disabled for proxy - connection vulnerable to MITM attacks",
+      )
+    }
+  }
+
+  if (tls.ca) {
+    const files = Array.isArray(tls.ca) ? tls.ca : [tls.ca]
+    // Validate paths don't contain traversal
+    for (const p of files) {
+      if (p.includes("..")) {
+        throw new Error(`Invalid CA path (path traversal not allowed): ${p}`)
+      }
+    }
+    result.ca = files.map((p) => Bun.file(p))
+  }
+
+  return Object.keys(result).length ? result : undefined
+}
+
+/**
  * Proxy-aware fetch wrapper
  *
  * Usage:
@@ -144,9 +184,11 @@ export async function proxyFetch(
   const proxyUrl = getProxyForUrl(url)
 
   if (proxyUrl) {
+    const tls = getTlsForProxy()
     return fetch(input, {
       ...init,
       proxy: proxyUrl,
+      ...(tls && { tls }),
     } as RequestInit)
   }
 
