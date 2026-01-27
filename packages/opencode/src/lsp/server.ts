@@ -582,7 +582,7 @@ export namespace LSPServer {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
           log.info("downloading elixir-ls from GitHub releases")
 
-          const response = await fetch("https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip")
+          const response = await proxyFetch("https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip")
           if (!response.ok) return
           const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
           await Bun.file(zipPath).write(response)
@@ -1254,7 +1254,7 @@ export namespace LSPServer {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("Downloading Kotlin Language Server from GitHub.")
 
-        const releaseResponse = await fetch("https://api.github.com/repos/Kotlin/kotlin-lsp/releases/latest")
+        const releaseResponse = await proxyFetch("https://api.github.com/repos/Kotlin/kotlin-lsp/releases/latest")
         if (!releaseResponse.ok) {
           log.error("Failed to fetch kotlin-lsp release info")
           return
@@ -1389,7 +1389,7 @@ export namespace LSPServer {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading lua-language-server from GitHub releases")
 
-        const releaseResponse = await fetch("https://api.github.com/repos/LuaLS/lua-language-server/releases/latest")
+        const releaseResponse = await proxyFetch("https://api.github.com/repos/LuaLS/lua-language-server/releases/latest")
         if (!releaseResponse.ok) {
           log.error("Failed to fetch lua-language-server release info")
           return
@@ -1437,7 +1437,7 @@ export namespace LSPServer {
         }
 
         const downloadUrl = asset.browser_download_url
-        const downloadResponse = await fetch(downloadUrl)
+        const downloadResponse = await proxyFetch(downloadUrl)
         if (!downloadResponse.ok) {
           log.error("Failed to download lua-language-server")
           return
@@ -1657,7 +1657,7 @@ export namespace LSPServer {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading terraform-ls from GitHub releases")
 
-        const releaseResponse = await fetch("https://api.github.com/repos/hashicorp/terraform-ls/releases/latest")
+        const releaseResponse = await proxyFetch("https://api.github.com/repos/hashicorp/terraform-ls/releases/latest")
         if (!releaseResponse.ok) {
           log.error("Failed to fetch terraform-ls release info")
           return
@@ -1688,7 +1688,7 @@ export namespace LSPServer {
           return
         }
 
-        const downloadResponse = await fetch(asset.browser_download_url)
+        const downloadResponse = await proxyFetch(asset.browser_download_url)
         if (!downloadResponse.ok) {
           log.error("Failed to download terraform-ls")
           return
@@ -1747,7 +1747,7 @@ export namespace LSPServer {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading texlab from GitHub releases")
 
-        const response = await fetch("https://api.github.com/repos/latex-lsp/texlab/releases/latest")
+        const response = await proxyFetch("https://api.github.com/repos/latex-lsp/texlab/releases/latest")
         if (!response.ok) {
           log.error("Failed to fetch texlab release info")
           return
@@ -1778,7 +1778,7 @@ export namespace LSPServer {
           return
         }
 
-        const downloadResponse = await fetch(asset.browser_download_url)
+        const downloadResponse = await proxyFetch(asset.browser_download_url)
         if (!downloadResponse.ok) {
           log.error("Failed to download texlab")
           return
@@ -1946,7 +1946,7 @@ export namespace LSPServer {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading tinymist from GitHub releases")
 
-        const response = await fetch("https://api.github.com/repos/Myriad-Dreamin/tinymist/releases/latest")
+        const response = await proxyFetch("https://api.github.com/repos/Myriad-Dreamin/tinymist/releases/latest")
         if (!response.ok) {
           log.error("Failed to fetch tinymist release info")
           return
@@ -1984,7 +1984,7 @@ export namespace LSPServer {
           return
         }
 
-        const downloadResponse = await fetch(asset.browser_download_url)
+        const downloadResponse = await proxyFetch(asset.browser_download_url)
         if (!downloadResponse.ok) {
           log.error("Failed to download tinymist")
           return
