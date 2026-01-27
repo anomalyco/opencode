@@ -8,11 +8,11 @@ import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
 
-import { $ } from "bun"
 import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import { Shell } from "@/shell/shell"
+import fs from "fs/promises"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
@@ -27,6 +27,41 @@ const resolveWasm = (asset: string) => {
   if (asset.startsWith("/") || /^[a-z]:/i.test(asset)) return asset
   const url = new URL(asset, import.meta.url)
   return fileURLToPath(url)
+}
+
+const unquote = (input: string) => {
+  if (input.length < 2) return input
+  const head = input.at(0)
+  const tail = input.at(-1)
+  if (!head || !tail) return input
+  if (head === "'" && tail === "'") return input.slice(1, -1)
+  if (head === '"' && tail === '"') return input.slice(1, -1)
+  return input
+}
+
+const normalizeWindowsPath = (input: string) => {
+  if (process.platform !== "win32") return input
+  if (!input.match(/^\/[a-z]\//)) return input
+  return input.replace(/^\/([a-z])\//, (_, drive) => `${String(drive).toUpperCase()}:\\`).replace(/\//g, "\\")
+}
+
+const resolveArgPath = async (cwd: string, raw: string) => {
+  const arg = unquote(raw)
+  if (!arg) return
+  if (arg.startsWith("-")) return
+  if (arg.includes("*") || arg.includes("?") || arg.includes("$")) return
+
+  const initial = arg.startsWith("file://")
+    ? fileURLToPath(arg)
+    : path.isAbsolute(arg)
+      ? arg
+      : path.resolve(cwd, arg)
+
+  const normalized = normalizeWindowsPath(initial)
+  return fs
+    .realpath(normalized)
+    .then((real) => Filesystem.normalizePath(real))
+    .catch(() => Filesystem.normalizePath(normalized))
 }
 
 const parser = lazy(async () => {
@@ -111,21 +146,10 @@ export const BashTool = Tool.define("bash", async () => {
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-            const resolved = await $`realpath ${arg}`
-              .cwd(cwd)
-              .quiet()
-              .nothrow()
-              .text()
-              .then((x) => x.trim())
+            const resolved = await resolveArgPath(cwd, arg)
             log.info("resolved path", { arg, resolved })
-            if (resolved) {
-              // Git Bash on Windows returns Unix-style paths like /c/Users/...
-              const normalized =
-                process.platform === "win32" && resolved.match(/^\/[a-z]\//)
-                  ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
-                  : resolved
-              if (!Instance.containsPath(normalized)) directories.add(normalized)
-            }
+            if (!resolved) continue
+            if (!Instance.containsPath(resolved)) directories.add(resolved)
           }
         }
 

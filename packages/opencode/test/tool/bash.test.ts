@@ -121,6 +121,39 @@ describe("tool.bash permissions", () => {
     })
   })
 
+  test("asks for external_directory permission even when realpath is missing from PATH", async () => {
+    const before = process.env.PATH
+    process.env.PATH = process.platform === "win32" ? "Z:\\nope" : "/nope"
+
+    try {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const bash = await BashTool.init()
+          const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+          const testCtx = {
+            ...ctx,
+            ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+              requests.push(req)
+            },
+          }
+          await bash.execute(
+            {
+              command: "cd ../",
+              description: "Change to parent directory",
+            },
+            testCtx,
+          )
+          const extDirReq = requests.find((r) => r.permission === "external_directory")
+          expect(extDirReq).toBeDefined()
+        },
+      })
+    } finally {
+      process.env.PATH = before
+    }
+  })
+
   test("asks for external_directory permission when workdir is outside project", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
