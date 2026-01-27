@@ -214,6 +214,23 @@ export const SettingsGeneral: Component = () => {
           </div>
         </div>
 
+        {/* Updates Section */}
+        <div class="flex flex-col gap-1">
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.updates")}</h3>
+
+          <div class="bg-surface-raised-base px-4 rounded-lg">
+            <SettingsRow
+              title={language.t("settings.general.row.releaseNotes.title")}
+              description={language.t("settings.general.row.releaseNotes.description")}
+            >
+              <Switch
+                checked={settings.general.releaseNotes()}
+                onChange={(checked) => settings.general.setReleaseNotes(checked)}
+              />
+            </SettingsRow>
+          </div>
+        </div>
+
         {/* Sound effects Section */}
         <div class="flex flex-col gap-1">
           <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.sounds")}</h3>

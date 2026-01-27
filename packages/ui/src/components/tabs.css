@@ -54,6 +54,7 @@
 
     white-space: nowrap;
     flex-shrink: 0;
+    max-width: 280px;
     border-bottom: 1px solid var(--border-weak-base);
     border-right: 1px solid var(--border-weak-base);
     background-color: var(--background-base);
@@ -62,8 +63,11 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 14px 24px;
+      padding: 14px 24px 14px 12px;
       outline: none;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
 
       &:focus-visible {
         outline: none;
@@ -210,6 +214,81 @@
 
     /* [data-slot="tabs-content"] { */
     /* } */
+  }
+
+  &[data-variant="pill"][data-orientation="horizontal"] {
+    background-color: transparent;
+
+    [data-slot="tabs-list"] {
+      height: auto;
+      padding: 6px 0;
+      gap: 4px;
+      background-color: var(--background-base);
+
+      &::after {
+        display: none;
+      }
+    }
+
+    [data-slot="tabs-trigger-wrapper"] {
+      height: 32px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background-color: transparent;
+      gap: 0;
+
+      /* text-13-medium */
+      font-family: var(--font-family-sans);
+      font-size: var(--font-size-small);
+      font-style: normal;
+      font-weight: var(--font-weight-medium);
+      line-height: var(--line-height-large);
+      letter-spacing: var(--letter-spacing-normal);
+
+      [data-slot="tabs-trigger"] {
+        height: 100%;
+        width: 100%;
+        padding: 0 12px;
+        background-color: transparent;
+      }
+
+      &:hover:not(:disabled) {
+        background-color: var(--surface-raised-base-hover);
+        color: var(--text-strong);
+      }
+
+      &:has([data-selected]) {
+        background-color: var(--surface-raised-base-active);
+        color: var(--text-strong);
+
+        &:hover:not(:disabled) {
+          background-color: var(--surface-raised-base-active);
+        }
+      }
+    }
+  }
+
+  &[data-variant="pill"][data-orientation="horizontal"][data-scope="filetree"] {
+    [data-slot="tabs-list"] {
+      height: 48px;
+      padding-inline: 12px;
+      gap: 8px;
+      align-items: center;
+    }
+
+    [data-slot="tabs-trigger-wrapper"] {
+      height: 26px;
+      border-radius: 6px;
+      color: var(--text-weak);
+
+      &:not(:has([data-selected])):hover:not(:disabled) {
+        color: var(--text-base);
+      }
+
+      &:has([data-selected]) {
+        color: var(--text-strong);
+      }
+    }
   }
 
   &[data-orientation="vertical"] {
