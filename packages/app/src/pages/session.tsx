@@ -2686,7 +2686,7 @@ export default function Page() {
                           </Show>
                         </Match>
                         <Match when={true}>
-                          <div class="px-2 py-2 text-12-regular text-text-weak">
+                          <div class="mt-8 text-center text-12-regular text-text-weak">
                             {language.t("session.review.noChanges")}
                           </div>
                         </Match>
