@@ -1,0 +1,83 @@
+name: Close stale PRs
+
+on:
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: "Log actions without closing PRs"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  close-stale-prs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close inactive PRs
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const DAYS_INACTIVE = 60
+            const cutoff = new Date(Date.now() - DAYS_INACTIVE * 24 * 60 * 60 * 1000)
+            const { owner, repo } = context.repo
+            const dryRun = context.payload.inputs?.dryRun === "true"
+            const stalePrs = []
+
+            core.info(`Dry run mode: ${dryRun}`)
+
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: "open",
+              per_page: 100,
+              sort: "updated",
+              direction: "asc",
+            })
+
+            for (const pr of prs) {
+              const lastUpdated = new Date(pr.updated_at)
+              if (lastUpdated > cutoff) {
+                core.info(`PR ${pr.number} is fresh`)
+                continue
+              }
+
+              stalePrs.push(pr)
+            }
+
+            if (!stalePrs.length) {
+              core.info("No stale pull requests found.")
+              return
+            }
+
+            for (const pr of stalePrs) {
+              const issue_number = pr.number
+              const closeComment = `Closing this pull request because it has had no updates for more than ${DAYS_INACTIVE} days. If you plan to continue working on it, feel free to reopen or open a new PR.`
+
+              if (dryRun) {
+                core.info(`[dry-run] Would close PR #${issue_number} from ${pr.user.login}`)
+                continue
+              }
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body: closeComment,
+              })
+
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: issue_number,
+                state: "closed",
+              })
+
+              core.info(`Closed PR #${issue_number} from ${pr.user.login}`)
+            }

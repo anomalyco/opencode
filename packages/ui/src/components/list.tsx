@@ -38,6 +38,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
   loadingMessage?: string
   onKeyEvent?: (event: KeyboardEvent, item: T | undefined) => void
   onMove?: (item: T | undefined) => void
+  onFilter?: (value: string) => void
   activeIcon?: IconProps["name"]
   filter?: string
   search?: ListSearchProps | boolean
@@ -98,6 +99,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     const current = internalFilter()
     if (prev !== current) {
       onInput(current)
+      props.onFilter?.(current)
     }
     return current
   }, "")

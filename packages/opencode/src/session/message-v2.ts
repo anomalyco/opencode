@@ -631,7 +631,7 @@ export namespace MessageV2 {
       sessionID: Identifier.schema("session"),
       messageID: Identifier.schema("message"),
     }),
-    async (input) => {
+    async (input): Promise<WithParts> => {
       return {
         info: await Storage.read<MessageV2.Info>(["message", input.sessionID, input.messageID]),
         parts: await parts(input.messageID),
@@ -654,6 +654,13 @@ export namespace MessageV2 {
     }
     result.reverse()
     return result
+  }
+
+  const isOpenAiErrorRetryable = (e: APICallError) => {
+    const status = e.statusCode
+    if (!status) return e.isRetryable
+    // openai sometimes returns 404 for models that are actually available
+    return status === 404 || e.isRetryable
   }
 
   export function fromError(e: unknown, ctx: { providerID: string }) {
@@ -724,7 +731,7 @@ export namespace MessageV2 {
           {
             message,
             statusCode: e.statusCode,
-            isRetryable: e.isRetryable,
+            isRetryable: ctx.providerID.startsWith("openai") ? isOpenAiErrorRetryable(e) : e.isRetryable,
             responseHeaders: e.responseHeaders,
             responseBody: e.responseBody,
             metadata,
