@@ -12,7 +12,7 @@ import { lazy } from "../util/lazy"
 import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
-import { proxyFetch } from "../util/fetch"
+import { proxyFetch, setProxyConfig } from "../util/fetch"
 import {
   type ParseError as JsoncParseError,
   applyEdits,
@@ -235,6 +235,9 @@ export namespace Config {
     }
 
     result.plugin = deduplicatePlugins(result.plugin ?? [])
+
+    // Wire proxy config to fetch layer
+    setProxyConfig(result.proxy)
 
     return {
       config: result,
