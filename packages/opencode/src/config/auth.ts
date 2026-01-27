@@ -22,7 +22,7 @@ export type AuthPamConfig = z.infer<typeof AuthPamConfig>
  */
 export const AuthConfig = z
   .object({
-    enabled: z.boolean().optional().default(false).describe("Enable authentication"),
+    enabled: z.boolean().optional().default(true).describe("Enable authentication"),
     method: z.enum(["pam"]).optional().default("pam").describe("Authentication method"),
     pam: AuthPamConfig.optional().describe("PAM-specific configuration"),
     sessionTimeout: Duration.optional().default("7d").describe("Session timeout duration"),
@@ -48,7 +48,7 @@ export const AuthConfig = z
       .optional()
       .default([])
       .describe("Additional routes to exclude from CSRF validation"),
-    twoFactorEnabled: z.boolean().optional().default(false).describe("Enable two-factor authentication support"),
+    twoFactorEnabled: z.boolean().optional().default(true).describe("Enable two-factor authentication support"),
     twoFactorRequired: z
       .boolean()
       .optional()
