@@ -85,10 +85,14 @@ export namespace BunProc {
     )
 
     // Build command arguments
+    // Use copyfile backend to create real file copies instead of symlinks
+    // This fixes CommonJS module resolution on Windows where symlinks don't work correctly
+    // See: https://github.com/anomalyco/opencode/issues/9870
     const args = [
       "add",
       "--force",
       "--exact",
+      "--backend=copyfile",
       // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
       ...(proxied ? ["--no-cache"] : []),
       "--cwd",
