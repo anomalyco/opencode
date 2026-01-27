@@ -65,7 +65,7 @@ OpenCode ist auch als Desktop-Anwendung verfügbar. Lade sie direkt von der [Rel
 | macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
 | macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm` oder AppImage          |
+| Linux                 | `.deb` oder `.rpm`                    |
 
 ```bash
 # macOS (Homebrew)

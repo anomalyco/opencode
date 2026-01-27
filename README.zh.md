@@ -65,7 +65,7 @@ OpenCode 也提供桌面版应用。可直接从 [发布页 (releases page)](htt
 | macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
 | macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`、`.rpm` 或 AppImage            |
+| Linux                 | `.deb` 或 `.rpm`                      |
 
 ```bash
 # macOS (Homebrew Cask)

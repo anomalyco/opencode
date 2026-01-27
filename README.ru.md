@@ -65,7 +65,7 @@ OpenCode также доступен как десктопное приложе�
 | macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
 | macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm` или AppImage           |
+| Linux                 | `.deb` или `.rpm`                     |
 
 ```bash
 # macOS (Homebrew)

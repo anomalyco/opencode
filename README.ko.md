@@ -65,7 +65,7 @@ OpenCode 는 데스크톱 앱으로도 제공됩니다. [releases page](https://
 | macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
 | macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm`, 또는 AppImage         |
+| Linux                 | `.deb` 또는 `.rpm`                    |
 
 ```bash
 # macOS (Homebrew)
