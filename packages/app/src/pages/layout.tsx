@@ -332,6 +332,7 @@ export default function Layout(props: ParentProps) {
     if (!platform.checkUpdate || !platform.update || !platform.restart) return
 
     let toastId: number | undefined
+    let interval: ReturnType<typeof setInterval> | undefined
 
     async function pollUpdate() {
       const { updateAvailable, version } = await platform.checkUpdate!()
@@ -358,9 +359,25 @@ export default function Layout(props: ParentProps) {
       }
     }
 
-    pollUpdate()
-    const interval = setInterval(pollUpdate, 10 * 60 * 1000)
-    onCleanup(() => clearInterval(interval))
+    createEffect(() => {
+      if (!settings.ready()) return
+
+      if (!settings.updates.startup()) {
+        if (interval === undefined) return
+        clearInterval(interval)
+        interval = undefined
+        return
+      }
+
+      if (interval !== undefined) return
+      void pollUpdate()
+      interval = setInterval(pollUpdate, 10 * 60 * 1000)
+    })
+
+    onCleanup(() => {
+      if (interval === undefined) return
+      clearInterval(interval)
+    })
   })
 
   onMount(() => {

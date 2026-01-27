@@ -45,7 +45,6 @@ export function SessionHeader() {
   const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const showShare = createMemo(() => shareEnabled() && !!currentSession())
-  const showReview = createMemo(() => !!currentSession())
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey))
 
@@ -281,61 +280,37 @@ export function SessionHeader() {
                 </TooltipKeybind>
               </div>
               <div class="hidden md:block shrink-0">
-                <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
+                <TooltipKeybind
+                  title={language.t("command.fileTree.toggle")}
+                  keybind={command.keybind("fileTree.toggle")}
+                >
                   <Button
                     variant="ghost"
-                    class="group/review-toggle size-6 p-0"
-                    onClick={() => view().reviewPanel.toggle()}
-                    aria-label={language.t("command.review.toggle")}
-                    aria-expanded={view().reviewPanel.opened()}
-                    aria-controls="review-panel"
-                    tabIndex={showReview() ? 0 : -1}
+                    class="group/file-tree-toggle size-6 p-0"
+                    onClick={() => layout.fileTree.toggle()}
+                    aria-label={language.t("command.fileTree.toggle")}
+                    aria-expanded={layout.fileTree.opened()}
+                    aria-controls="file-tree-panel"
                   >
                     <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                       <Icon
                         size="small"
-                        name={view().reviewPanel.opened() ? "layout-right-full" : "layout-right"}
-                        class="group-hover/review-toggle:hidden"
+                        name={layout.fileTree.opened() ? "layout-right-full" : "layout-right"}
+                        class="group-hover/file-tree-toggle:hidden"
                       />
                       <Icon
                         size="small"
                         name="layout-right-partial"
-                        class="hidden group-hover/review-toggle:inline-block"
+                        class="hidden group-hover/file-tree-toggle:inline-block"
                       />
                       <Icon
                         size="small"
-                        name={view().reviewPanel.opened() ? "layout-right" : "layout-right-full"}
-                        class="hidden group-active/review-toggle:inline-block"
+                        name={layout.fileTree.opened() ? "layout-right" : "layout-right-full"}
+                        class="hidden group-active/file-tree-toggle:inline-block"
                       />
                     </div>
                   </Button>
                 </TooltipKeybind>
-              </div>
-              <div class="hidden md:block shrink-0">
-                <Tooltip value="Toggle file tree" placement="bottom">
-                  <Button
-                    variant="ghost"
-                    class="group/file-tree-toggle size-6 p-0"
-                    onClick={() => {
-                      const opening = !layout.fileTree.opened()
-                      if (opening && !view().reviewPanel.opened()) view().reviewPanel.open()
-                      layout.fileTree.toggle()
-                    }}
-                    aria-label="Toggle file tree"
-                    aria-expanded={layout.fileTree.opened()}
-                  >
-                    <div class="relative flex items-center justify-center size-4">
-                      <Icon
-                        size="small"
-                        name="bullet-list"
-                        classList={{
-                          "text-icon-strong": layout.fileTree.opened(),
-                          "text-icon-weak": !layout.fileTree.opened(),
-                        }}
-                      />
-                    </div>
-                  </Button>
-                </Tooltip>
               </div>
             </div>
           </Portal>
