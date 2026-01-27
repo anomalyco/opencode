@@ -33,9 +33,10 @@ process.on("uncaughtException", (e) => {
 })
 
 // Subscribe to global events and forward them via RPC
-GlobalBus.on("event", (event) => {
+const globalBusHandler = (event: any) => {
   Rpc.emit("global.event", event)
-})
+}
+GlobalBus.on("event", globalBusHandler)
 
 let server: Bun.Server<BunWebSocketData> | undefined
 
@@ -64,6 +65,10 @@ const startEventStream = (directory: string) => {
   })
 
   ;(async () => {
+    let consecutiveErrors = 0
+    const MAX_CONSECUTIVE_ERRORS = 10
+    const ERROR_BACKOFF_MS = 1000
+    
     while (!signal.aborted) {
       const events = await Promise.resolve(
         sdk.event.subscribe(
@@ -72,15 +77,37 @@ const startEventStream = (directory: string) => {
             signal,
           },
         ),
-      ).catch(() => undefined)
+      ).catch((error) => {
+        consecutiveErrors++
+        if (consecutiveErrors <= 3 || consecutiveErrors % 10 === 0) {
+          Log.Default.warn("event subscription failed", {
+            error: error instanceof Error ? error.message : error,
+            attempt: consecutiveErrors,
+          })
+        }
+        return undefined
+      })
 
       if (!events) {
-        await Bun.sleep(250)
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          Log.Default.error("event stream: too many consecutive errors, backing off")
+          await Bun.sleep(ERROR_BACKOFF_MS * Math.min(consecutiveErrors, 30))
+        } else {
+          await Bun.sleep(250)
+        }
         continue
       }
+      
+      consecutiveErrors = 0
 
-      for await (const event of events.stream) {
-        Rpc.emit("event", event as Event)
+      try {
+        for await (const event of events.stream) {
+          Rpc.emit("event", event as Event)
+        }
+      } catch (streamError) {
+        Log.Default.warn("event stream iteration error", {
+          error: streamError instanceof Error ? streamError.message : streamError,
+        })
       }
 
       if (!signal.aborted) {
@@ -88,7 +115,7 @@ const startEventStream = (directory: string) => {
       }
     }
   })().catch((error) => {
-    Log.Default.error("event stream error", {
+    Log.Default.error("event stream fatal error", {
       error: error instanceof Error ? error.message : error,
     })
   })
@@ -137,6 +164,8 @@ export const rpc = {
   async shutdown() {
     Log.Default.info("worker shutting down")
     if (eventStream.abort) eventStream.abort.abort()
+    GlobalBus.off("event", globalBusHandler)
+    Log.Default.debug("GlobalBus listener unsubscribed")
     await Instance.disposeAll()
     if (server) server.stop(true)
   },
