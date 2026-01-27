@@ -8,7 +8,6 @@ import {
   createMemo,
   For,
   Match,
-  onCleanup,
   Show,
   splitProps,
   Switch,
@@ -124,28 +123,7 @@ export default function FileTree(props: {
 
   createEffect(() => {
     const path = props.path
-    const state = { cancelled: false, timer: undefined as number | undefined }
-
-    const load = (attempt: number) => {
-      if (state.cancelled) return
-      if (file.tree.state(path)?.loaded) return
-
-      void untrack(() => file.tree.list(path)).finally(() => {
-        if (state.cancelled) return
-        if (file.tree.state(path)?.loaded) return
-        if (attempt >= 2) return
-
-        const wait = Math.min(2000, 250 * 2 ** attempt)
-        state.timer = window.setTimeout(() => load(attempt + 1), wait)
-      })
-    }
-
-    load(0)
-
-    onCleanup(() => {
-      state.cancelled = true
-      if (state.timer !== undefined) clearTimeout(state.timer)
-    })
+    untrack(() => void file.tree.list(path))
   })
 
   const nodes = createMemo(() => {

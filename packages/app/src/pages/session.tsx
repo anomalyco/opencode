@@ -1255,34 +1255,18 @@ export default function Page() {
     const wants = isDesktop() ? fileTreeTab() === "changes" : store.mobileTab === "changes"
     if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
+    if (sync.status === "loading") return
 
-    const state = {
-      cancelled: false,
-      attempt: 0,
-      timer: undefined as number | undefined,
-    }
+    void sync.session.diff(id)
+  })
 
-    const load = () => {
-      if (state.cancelled) return
-      const pending = sync.session.diff(id)
-      if (!pending) return
-      pending.catch(() => {
-        if (state.cancelled) return
-        const attempt = state.attempt + 1
-        state.attempt = attempt
-        if (attempt > 5) return
-        if (state.timer !== undefined) clearTimeout(state.timer)
-        const wait = Math.min(10000, 250 * 2 ** (attempt - 1))
-        state.timer = window.setTimeout(load, wait)
-      })
-    }
+  createEffect(() => {
+    if (!isDesktop()) return
+    if (!layout.fileTree.opened()) return
+    if (sync.status === "loading") return
 
-    load()
-
-    onCleanup(() => {
-      state.cancelled = true
-      if (state.timer !== undefined) clearTimeout(state.timer)
-    })
+    fileTreeTab()
+    void file.tree.list("")
   })
 
   const autoScroll = createAutoScroll({
