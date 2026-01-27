@@ -22,6 +22,7 @@ import { McpAuth } from "./auth"
 import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
+import { proxyFetch } from "@/util/fetch"
 import open from "open"
 
 export namespace MCP {
@@ -331,6 +332,7 @@ export namespace MCP {
           transport: new StreamableHTTPClientTransport(new URL(mcp.url), {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            fetch: proxyFetch,
           }),
         },
         {
@@ -338,6 +340,7 @@ export namespace MCP {
           transport: new SSEClientTransport(new URL(mcp.url), {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            fetch: proxyFetch,
           }),
         },
       ]
@@ -755,6 +758,7 @@ export namespace MCP {
     // Create transport with auth provider
     const transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), {
       authProvider,
+      fetch: proxyFetch,
     })
 
     // Try to connect - this will trigger the OAuth flow
