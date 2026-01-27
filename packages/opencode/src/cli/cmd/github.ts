@@ -18,6 +18,7 @@ import type {
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { ModelsDev } from "../../provider/models"
+import { proxyFetch } from "../../util/fetch"
 import { Instance } from "@/project/instance"
 import { bootstrap } from "../bootstrap"
 import { Session } from "../../session"
@@ -354,7 +355,7 @@ export const GithubInstallCommand = cmd({
             s.stop("Installed GitHub app")
 
             async function getInstallation() {
-              return await fetch(
+              return await proxyFetch(
                 `https://api.opencode.ai/get_github_app_installation?owner=${app.owner}&repo=${app.repo}`,
               )
                 .then((res) => res.json())
@@ -784,7 +785,7 @@ export const GithubRunCommand = cmd({
           const filename = path.basename(url)
 
           // Download image
-          const res = await fetch(url, {
+          const res = await proxyFetch(url, {
             headers: {
               Authorization: `Bearer ${appToken}`,
               Accept: "application/vnd.github.v3+json",
@@ -973,14 +974,14 @@ export const GithubRunCommand = cmd({
 
       async function exchangeForAppToken(token: string) {
         const response = token.startsWith("github_pat_")
-          ? await fetch(`${oidcBaseUrl}/exchange_github_app_token_with_pat`, {
+          ? await proxyFetch(`${oidcBaseUrl}/exchange_github_app_token_with_pat`, {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${token}`,
               },
               body: JSON.stringify({ owner, repo }),
             })
-          : await fetch(`${oidcBaseUrl}/exchange_github_app_token`, {
+          : await proxyFetch(`${oidcBaseUrl}/exchange_github_app_token`, {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${token}`,
@@ -1534,7 +1535,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       async function revokeAppToken() {
         if (!appToken) return
 
-        await fetch("https://api.github.com/installation/token", {
+        await proxyFetch("https://api.github.com/installation/token", {
           method: "DELETE",
           headers: {
             Authorization: `Bearer ${appToken}`,

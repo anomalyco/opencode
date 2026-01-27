@@ -10,6 +10,7 @@ import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "../../config/config"
 import { Instance } from "../../project/instance"
 import { Installation } from "../../installation"
+import { proxyFetch } from "../../util/fetch"
 import path from "path"
 import { Global } from "../../global"
 import { modify, applyEdits } from "jsonc-parser"
@@ -651,7 +652,7 @@ export const McpDebugCommand = cmd({
 
         // Test basic HTTP connectivity first
         try {
-          const response = await fetch(serverConfig.url, {
+          const response = await proxyFetch(serverConfig.url, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

@@ -4,6 +4,7 @@ import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { Storage } from "../../storage/storage"
 import { Instance } from "../../project/instance"
+import { proxyFetch } from "../../util/fetch"
 import { EOL } from "os"
 
 export const ImportCommand = cmd({
@@ -39,7 +40,7 @@ export const ImportCommand = cmd({
         }
 
         const slug = urlMatch[1]
-        const response = await fetch(`https://opncd.ai/api/share/${slug}`)
+        const response = await proxyFetch(`https://opncd.ai/api/share/${slug}`)
 
         if (!response.ok) {
           process.stdout.write(`Failed to fetch share data: ${response.statusText}`)
