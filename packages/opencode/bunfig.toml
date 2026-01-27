@@ -3,5 +3,3 @@ preload = ["@opentui/solid/preload"]
 [test]
 preload = ["./test/preload.ts"]
 timeout = 10000  # 10 seconds (default is 5000ms)
-# Enable code coverage
-coverage = true
