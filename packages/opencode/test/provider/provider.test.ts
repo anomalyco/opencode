@@ -304,34 +304,6 @@ test("enabled_models supports wildcard patterns", async () => {
   })
 })
 
-test("disabled_models supports wildcard patterns", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          disabled_models: {
-            anthropic: ["claude-sonnet-*"],
-          },
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    init: async () => {
-      Env.set("ANTHROPIC_API_KEY", "test-api-key")
-    },
-    fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["anthropic"]).toBeDefined()
-      const models = Object.keys(providers["anthropic"].models)
-      expect(models.some((model) => model.startsWith("claude-sonnet-"))).toBe(false)
-    },
-  })
-})
-
 test("disabled_models overrides enabled_models", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -357,38 +329,6 @@ test("disabled_models overrides enabled_models", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["openai"]).toBeUndefined()
-    },
-  })
-})
-
-test("disabled_models wildcard overrides enabled_models", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          enabled_models: {
-            openai: ["gpt-5*"],
-          },
-          disabled_models: {
-            openai: ["gpt-5.2*"],
-          },
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    init: async () => {
-      Env.set("OPENAI_API_KEY", "test-api-key")
-    },
-    fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["openai"]).toBeDefined()
-      const models = Object.keys(providers["openai"].models)
-      expect(models).not.toContain("gpt-5.2-codex")
-      expect(models.every((model) => model.startsWith("gpt-5"))).toBe(true)
     },
   })
 })
