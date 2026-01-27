@@ -17,6 +17,8 @@ import {
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 
+type Kind = "add" | "del" | "mix"
+
 type Filter = {
   files: Set<string>
   dirs: Set<string>
@@ -29,6 +31,7 @@ export default function FileTree(props: {
   level?: number
   allowed?: readonly string[]
   modified?: readonly string[]
+  kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
   tooltip?: boolean
   onFileClick?: (file: FileNode) => void
@@ -36,6 +39,7 @@ export default function FileTree(props: {
   _filter?: Filter
   _marks?: Set<string>
   _deeps?: Map<string, number>
+  _kinds?: ReadonlyMap<string, Kind>
 }) {
   const file = useFile()
   const level = props.level ?? 0
@@ -66,9 +70,14 @@ export default function FileTree(props: {
   const marks = createMemo(() => {
     if (props._marks) return props._marks
 
-    const modified = props.modified
+    const modified = props.modified ?? (props.kinds ? Array.from(props.kinds.keys()) : undefined)
     if (!modified || modified.length === 0) return
     return new Set(modified)
+  })
+
+  const kinds = createMemo(() => {
+    if (props._kinds) return props._kinds
+    return props.kinds
   })
 
   const deeps = createMemo(() => {
@@ -179,9 +188,27 @@ export default function FileTree(props: {
         >
           {local.node.name}
         </span>
-        {local.node.type === "file" && marks()?.has(local.node.path) ? (
-          <div class="shrink-0 size-1.5 rounded-full bg-surface-warning-strong" />
-        ) : null}
+        {(() => {
+          if (local.node.type !== "file") return null
+          if (!marks()?.has(local.node.path)) return null
+
+          const kind = kinds()?.get(local.node.path)
+          return (
+            <div
+              classList={{
+                "shrink-0 size-1.5 rounded-full": true,
+                "bg-surface-warning-strong": !kind || kind === "mix",
+              }}
+              style={
+                kind === "add"
+                  ? "background-color: var(--icon-diff-add-base)"
+                  : kind === "del"
+                    ? "background-color: var(--icon-diff-delete-base)"
+                    : undefined
+              }
+            />
+          )
+        })()}
       </Dynamic>
     )
   }
@@ -235,12 +262,14 @@ export default function FileTree(props: {
                       level={level + 1}
                       allowed={props.allowed}
                       modified={props.modified}
+                      kinds={props.kinds}
                       draggable={props.draggable}
                       tooltip={props.tooltip}
                       onFileClick={props.onFileClick}
                       _filter={filter()}
                       _marks={marks()}
                       _deeps={deeps()}
+                      _kinds={kinds()}
                     />
                   </Collapsible.Content>
                 </Collapsible>

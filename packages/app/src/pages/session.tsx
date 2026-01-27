@@ -479,6 +479,16 @@ export default function Page() {
     scrollToMessage(msgs[targetIndex], "auto")
   }
 
+  const kinds = createMemo(() => {
+    const out = new Map<string, "add" | "del" | "mix">()
+    for (const diff of diffs()) {
+      const add = diff.additions > 0
+      const del = diff.deletions > 0
+      const kind = add && del ? "mix" : add ? "add" : del ? "del" : "mix"
+      out.set(diff.file, kind)
+    }
+    return out
+  })
   const emptyDiffFiles: string[] = []
   const diffFiles = createMemo(() => diffs().map((d) => d.file), emptyDiffFiles, { equals: same })
   const diffsReady = createMemo(() => {
@@ -2652,6 +2662,7 @@ export default function Page() {
                             <FileTree
                               path=""
                               allowed={diffFiles()}
+                              kinds={kinds()}
                               draggable={false}
                               tooltip={false}
                               onFileClick={(node) => focusReviewDiff(node.path)}
@@ -2669,6 +2680,7 @@ export default function Page() {
                       <FileTree
                         path=""
                         modified={diffFiles()}
+                        kinds={kinds()}
                         tooltip={false}
                         onFileClick={(node) => openTab(file.tab(node.path))}
                       />
