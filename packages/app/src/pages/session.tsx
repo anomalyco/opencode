@@ -2014,7 +2014,7 @@ export default function Page() {
                       <div class="sticky top-0 shrink-0 flex">
                         <Tabs.List>
                           <Show when={!layout.fileTree.opened()}>
-                            <Tabs.Trigger value="review">
+                            <Tabs.Trigger value="review" classes={{ button: "!pl-6" }}>
                               <div class="flex items-center gap-3">
                                 <Show when={diffs()}>
                                   <DiffChanges changes={diffs()} variant="bars" />
