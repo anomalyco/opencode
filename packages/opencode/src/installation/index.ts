@@ -6,6 +6,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
 import { iife } from "@/util/iife"
 import { Flag } from "../flag/flag"
+import { proxyFetch } from "@/util/fetch"
 
 declare global {
   const OPENCODE_VERSION: string
@@ -189,7 +190,7 @@ export namespace Installation {
     if (detectedMethod === "brew") {
       const formula = await getBrewFormula()
       if (formula === "opencode") {
-        return fetch("https://formulae.brew.sh/api/formula/opencode.json")
+        return proxyFetch("https://formulae.brew.sh/api/formula/opencode.json")
           .then((res) => {
             if (!res.ok) throw new Error(res.statusText)
             return res.json()
@@ -205,7 +206,7 @@ export namespace Installation {
         return reg.endsWith("/") ? reg.slice(0, -1) : reg
       })
       const channel = CHANNEL
-      return fetch(`${registry}/opencode-ai/${channel}`)
+      return proxyFetch(`${registry}/opencode-ai/${channel}`)
         .then((res) => {
           if (!res.ok) throw new Error(res.statusText)
           return res.json()
@@ -214,7 +215,7 @@ export namespace Installation {
     }
 
     if (detectedMethod === "choco") {
-      return fetch(
+      return proxyFetch(
         "https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27opencode%27%20and%20IsLatestVersion&$select=Version",
         { headers: { Accept: "application/json;odata=verbose" } },
       )
@@ -226,7 +227,7 @@ export namespace Installation {
     }
 
     if (detectedMethod === "scoop") {
-      return fetch("https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/opencode.json", {
+      return proxyFetch("https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/opencode.json", {
         headers: { Accept: "application/json" },
       })
         .then((res) => {
@@ -236,7 +237,7 @@ export namespace Installation {
         .then((data: any) => data.version)
     }
 
-    return fetch("https://api.github.com/repos/anomalyco/opencode/releases/latest")
+    return proxyFetch("https://api.github.com/repos/anomalyco/opencode/releases/latest")
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText)
         return res.json()
