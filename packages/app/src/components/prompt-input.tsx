@@ -1557,13 +1557,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
 
       const timeoutMs = 5 * 60 * 1000
+      const timer = { id: undefined as number | undefined }
       const timeout = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
-        setTimeout(() => {
+        timer.id = window.setTimeout(() => {
           resolve({ status: "failed", message: language.t("workspace.error.stillPreparing") })
         }, timeoutMs)
       })
 
-      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abort, timeout])
+      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abort, timeout]).finally(() => {
+        if (timer.id === undefined) return
+        clearTimeout(timer.id)
+      })
       pending.delete(session.id)
       if (controller.signal.aborted) return false
       if (result.status === "failed") throw new Error(result.message)
