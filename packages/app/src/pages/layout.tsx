@@ -636,7 +636,7 @@ export default function Layout(props: ParentProps) {
   }
 
   createEffect(() => {
-    const sessions = currentSessions()
+    const sessions = currentSessions() ?? []
     const id = params.id
 
     if (!id) {
@@ -659,7 +659,7 @@ export default function Layout(props: ParentProps) {
   })
 
   function navigateSessionByOffset(offset: number) {
-    const sessions = currentSessions()
+    const sessions = currentSessions() ?? []
     if (sessions.length === 0) return
 
     const sessionIndex = params.id ? sessions.findIndex((s) => s.id === params.id) : -1
@@ -774,7 +774,8 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+shift+backspace",
         disabled: !params.dir || !params.id,
         onSelect: () => {
-          const session = currentSessions().find((s) => s.id === params.id)
+          const sessions = currentSessions() ?? []
+          const session = sessions.find((s) => s.id === params.id)
           if (session) archiveSession(session)
         },
       },
