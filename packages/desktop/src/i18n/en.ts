@@ -28,4 +28,4 @@ export const dict = {
   "desktop.error.serverStartFailed.title": "OpenCode failed to start",
   "desktop.error.serverStartFailed.description":
     "The local OpenCode server could not be started. Restart the app, or check your network settings (VPN/proxy) and try again.",
-} as const
+}

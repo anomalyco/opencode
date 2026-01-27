@@ -2,6 +2,19 @@ import * as i18n from "@solid-primitives/i18n"
 import { Store } from "@tauri-apps/plugin-store"
 
 import { dict as desktopEn } from "./en"
+import { dict as desktopZh } from "./zh"
+import { dict as desktopZht } from "./zht"
+import { dict as desktopKo } from "./ko"
+import { dict as desktopDe } from "./de"
+import { dict as desktopEs } from "./es"
+import { dict as desktopFr } from "./fr"
+import { dict as desktopDa } from "./da"
+import { dict as desktopJa } from "./ja"
+import { dict as desktopPl } from "./pl"
+import { dict as desktopRu } from "./ru"
+import { dict as desktopAr } from "./ar"
+import { dict as desktopNo } from "./no"
+import { dict as desktopBr } from "./br"
 
 import { dict as appEn } from "../../../app/src/i18n/en"
 import { dict as appZh } from "../../../app/src/i18n/zh"
@@ -83,19 +96,19 @@ const base = i18n.flatten({ ...appEn, ...desktopEn })
 
 function build(locale: Locale): Dictionary {
   if (locale === "en") return base
-  if (locale === "zh") return { ...base, ...i18n.flatten(appZh) }
-  if (locale === "zht") return { ...base, ...i18n.flatten(appZht) }
-  if (locale === "de") return { ...base, ...i18n.flatten(appDe) }
-  if (locale === "es") return { ...base, ...i18n.flatten(appEs) }
-  if (locale === "fr") return { ...base, ...i18n.flatten(appFr) }
-  if (locale === "da") return { ...base, ...i18n.flatten(appDa) }
-  if (locale === "ja") return { ...base, ...i18n.flatten(appJa) }
-  if (locale === "pl") return { ...base, ...i18n.flatten(appPl) }
-  if (locale === "ru") return { ...base, ...i18n.flatten(appRu) }
-  if (locale === "ar") return { ...base, ...i18n.flatten(appAr) }
-  if (locale === "no") return { ...base, ...i18n.flatten(appNo) }
-  if (locale === "br") return { ...base, ...i18n.flatten(appBr) }
-  return { ...base, ...i18n.flatten(appKo) }
+  if (locale === "zh") return { ...base, ...i18n.flatten(appZh), ...i18n.flatten(desktopZh) }
+  if (locale === "zht") return { ...base, ...i18n.flatten(appZht), ...i18n.flatten(desktopZht) }
+  if (locale === "de") return { ...base, ...i18n.flatten(appDe), ...i18n.flatten(desktopDe) }
+  if (locale === "es") return { ...base, ...i18n.flatten(appEs), ...i18n.flatten(desktopEs) }
+  if (locale === "fr") return { ...base, ...i18n.flatten(appFr), ...i18n.flatten(desktopFr) }
+  if (locale === "da") return { ...base, ...i18n.flatten(appDa), ...i18n.flatten(desktopDa) }
+  if (locale === "ja") return { ...base, ...i18n.flatten(appJa), ...i18n.flatten(desktopJa) }
+  if (locale === "pl") return { ...base, ...i18n.flatten(appPl), ...i18n.flatten(desktopPl) }
+  if (locale === "ru") return { ...base, ...i18n.flatten(appRu), ...i18n.flatten(desktopRu) }
+  if (locale === "ar") return { ...base, ...i18n.flatten(appAr), ...i18n.flatten(desktopAr) }
+  if (locale === "no") return { ...base, ...i18n.flatten(appNo), ...i18n.flatten(desktopNo) }
+  if (locale === "br") return { ...base, ...i18n.flatten(appBr), ...i18n.flatten(desktopBr) }
+  return { ...base, ...i18n.flatten(appKo), ...i18n.flatten(desktopKo) }
 }
 
 const state = {
