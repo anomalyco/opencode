@@ -105,7 +105,7 @@ For example, this allows access to everything under `~/projects/personal/`:
 }
 ```
 
-Any directory allowed here inherits the same defaults as the current workspace. Since `read` defaults to `allow`, reads are also allowed for entries under `external_directory` unless overridden. Add explicit rules when a tool should be restricted in these paths, such as blocking edits while keeping reads:
+Any directory allowed here inherits the same defaults as the current workspace. Since [`read` defaults to `allow`](#defaults), reads are also allowed for entries under `external_directory` unless overridden. Add explicit rules when a tool should be restricted in these paths, such as blocking edits while keeping reads:
 
 ```json title="opencode.json"
 {
