@@ -2016,7 +2016,7 @@ export default function Page() {
                                 icon="plus-small"
                                 variant="ghost"
                                 iconSize="large"
-                                onClick={() => dialog.show(() => <DialogSelectFile />)}
+                                onClick={() => dialog.show(() => <DialogSelectFile mode="files" />)}
                                 aria-label={language.t("command.file.open")}
                               />
                             </TooltipKeybind>
