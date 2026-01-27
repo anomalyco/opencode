@@ -266,8 +266,10 @@
 
   &[data-variant="pill"][data-orientation="horizontal"][data-scope="filetree"] {
     [data-slot="tabs-list"] {
-      padding: 12px;
+      height: 48px;
+      padding-inline: 12px;
       gap: 8px;
+      align-items: center;
     }
 
     [data-slot="tabs-trigger-wrapper"] {
