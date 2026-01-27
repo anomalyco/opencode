@@ -5,6 +5,7 @@ import z from "zod"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
+import { proxyFetch } from "@/util/fetch"
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
@@ -94,7 +95,7 @@ export namespace ModelsDev {
       .catch(() => undefined)
     if (snapshot) return snapshot
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
-    const json = await fetch(`${url()}/api.json`).then((x) => x.text())
+    const json = await proxyFetch(`${url()}/api.json`).then((x) => x.text())
     return JSON.parse(json)
   })
 
@@ -105,7 +106,7 @@ export namespace ModelsDev {
 
   export async function refresh() {
     const file = Bun.file(filepath)
-    const result = await fetch(`${url()}/api.json`, {
+    const result = await proxyFetch(`${url()}/api.json`, {
       headers: {
         "User-Agent": Installation.USER_AGENT,
       },
