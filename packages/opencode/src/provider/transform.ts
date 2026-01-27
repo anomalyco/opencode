@@ -283,6 +283,7 @@ export namespace ProviderTransform {
     if (id.includes("glm-4.6")) return 1.0
     if (id.includes("glm-4.7")) return 1.0
     if (id.includes("minimax-m2")) return 1.0
+    if (id.includes("kimi-k2.5")) return 1.0
     if (id.includes("kimi-k2")) {
       // kimi-k2-thinking & kimi-k2.5
       if (id.includes("thinking") || id.includes("k2.")) {
