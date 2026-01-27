@@ -166,6 +166,7 @@ export function tui(input: {
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
+        useMouse: !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT,
         useKittyKeyboard: {},
         consoleOptions: {
           keyBindings: [
