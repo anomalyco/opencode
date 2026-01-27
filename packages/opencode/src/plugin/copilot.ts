@@ -1,6 +1,7 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { Installation } from "@/installation"
 import { iife } from "@/util/iife"
+import { proxyFetch } from "@/util/fetch"
 
 const CLIENT_ID = "Ov23li8tweQw6odWQebz"
 // Add a small safety buffer when polling to avoid hitting the server
@@ -62,7 +63,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
           apiKey: "",
           async fetch(request: RequestInfo | URL, init?: RequestInit) {
             const info = await getAuth()
-            if (info.type !== "oauth") return fetch(request, init)
+            if (info.type !== "oauth") return proxyFetch(request, init)
 
             const url = request instanceof URL ? request.href : request.toString()
             const { isVision, isAgent } = iife(() => {
@@ -133,7 +134,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             delete headers["x-api-key"]
             delete headers["authorization"]
 
-            return fetch(request, {
+            return proxyFetch(request, {
               ...init,
               headers,
             })
@@ -194,7 +195,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
 
             const urls = getUrls(domain)
 
-            const deviceResponse = await fetch(urls.DEVICE_CODE_URL, {
+            const deviceResponse = await proxyFetch(urls.DEVICE_CODE_URL, {
               method: "POST",
               headers: {
                 Accept: "application/json",
@@ -224,7 +225,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
               method: "auto" as const,
               async callback() {
                 while (true) {
-                  const response = await fetch(urls.ACCESS_TOKEN_URL, {
+                  const response = await proxyFetch(urls.ACCESS_TOKEN_URL, {
                     method: "POST",
                     headers: {
                       Accept: "application/json",
