@@ -1,10 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
-import {
-  getProxyConfig,
-  shouldBypassProxy,
-  getProxyForUrl,
-  setProxyConfig,
-} from "../../src/util/fetch"
+import { getProxyConfig, shouldBypassProxy, getProxyForUrl, setProxyConfig, getTlsForProxy } from "../../src/util/fetch"
 
 describe("proxy-fetch", () => {
   // Save original env vars
@@ -195,6 +190,69 @@ describe("proxy-fetch", () => {
       process.env.OPENCODE_DISABLE_PROXY = "1"
 
       expect(getProxyForUrl("https://example.com")).toBeUndefined()
+    })
+  })
+
+  describe("getTlsForProxy", () => {
+    test("returns undefined when no TLS config", () => {
+      setProxyConfig({ https: "http://proxy:8080" })
+      expect(getTlsForProxy()).toBeUndefined()
+    })
+
+    test("returns undefined when TLS object is empty", () => {
+      setProxyConfig({
+        https: "http://proxy:8080",
+        tls: {},
+      })
+      expect(getTlsForProxy()).toBeUndefined()
+    })
+
+    test("returns rejectUnauthorized when set to false", () => {
+      setProxyConfig({
+        https: "http://proxy:8080",
+        tls: { rejectUnauthorized: false },
+      })
+      const tls = getTlsForProxy()
+      expect(tls).toBeDefined()
+      expect(tls?.rejectUnauthorized).toBe(false)
+    })
+
+    test("returns rejectUnauthorized when set to true", () => {
+      setProxyConfig({
+        https: "http://proxy:8080",
+        tls: { rejectUnauthorized: true },
+      })
+      const tls = getTlsForProxy()
+      expect(tls).toBeDefined()
+      expect(tls?.rejectUnauthorized).toBe(true)
+    })
+
+    test("returns ca as array when single path", () => {
+      setProxyConfig({
+        https: "http://proxy:8080",
+        tls: { ca: "/path/to/ca.pem" },
+      })
+      const tls = getTlsForProxy()
+      expect(tls).toBeDefined()
+      expect(Array.isArray(tls?.ca)).toBe(true)
+    })
+
+    test("returns ca as array when multiple paths", () => {
+      setProxyConfig({
+        https: "http://proxy:8080",
+        tls: { ca: ["/path/to/ca1.pem", "/path/to/ca2.pem"] },
+      })
+      const tls = getTlsForProxy()
+      expect(tls).toBeDefined()
+      expect(Array.isArray(tls?.ca)).toBe(true)
+    })
+
+    test("throws on path traversal attempt", () => {
+      setProxyConfig({
+        https: "http://proxy:8080",
+        tls: { ca: "../../../etc/passwd" },
+      })
+      expect(() => getTlsForProxy()).toThrow("path traversal")
     })
   })
 })
