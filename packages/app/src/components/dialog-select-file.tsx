@@ -26,7 +26,7 @@ type Entry = {
 
 type DialogSelectFileMode = "all" | "files"
 
-export function DialogSelectFile(props: { mode?: DialogSelectFileMode }) {
+export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFile?: (path: string) => void }) {
   const command = useCommand()
   const language = useLanguage()
   const layout = useLayout()
@@ -164,6 +164,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode }) {
     tabs().open(value)
     file.load(path)
     view().reviewPanel.open()
+    props.onOpenFile?.(path)
   }
 
   const handleSelect = (item: Entry | undefined) => {

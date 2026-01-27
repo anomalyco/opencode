@@ -650,7 +650,7 @@ export default function Page() {
       category: language.t("command.category.file"),
       keybind: "mod+p",
       slash: "open",
-      onSelect: () => dialog.show(() => <DialogSelectFile />),
+      onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={() => showAllFiles()} />),
     },
     {
       id: "context.addSelection",
@@ -1084,10 +1084,30 @@ export default function Page() {
   const pendingDiff = () => tree.pendingDiff
   const setPendingDiff = (value: string | undefined) => setTree("pendingDiff", value)
 
+  const showAllFiles = () => {
+    if (!layout.fileTree.opened()) return
+    if (fileTreeTab() !== "changes") return
+    setFileTreeTab("all")
+  }
+
   createEffect(() => {
     if (!layout.fileTree.opened()) return
     setFileTreeTab("changes")
   })
+
+  createEffect(
+    on(
+      () => tabs().active(),
+      (active) => {
+        if (!active) return
+        if (!layout.fileTree.opened()) return
+        if (fileTreeTab() !== "changes") return
+        if (!file.pathFromTab(active)) return
+        showAllFiles()
+      },
+      { defer: true },
+    ),
+  )
 
   const setFileTreeTabValue = (value: string) => {
     if (value !== "changes" && value !== "all") return
@@ -1702,6 +1722,7 @@ export default function Page() {
                                 focusedComment={comments.focus()}
                                 onFocusedCommentChange={comments.setFocus}
                                 onViewFile={(path) => {
+                                  showAllFiles()
                                   const value = file.tab(path)
                                   tabs().open(value)
                                   file.load(path)
@@ -2068,7 +2089,9 @@ export default function Page() {
                                 icon="plus-small"
                                 variant="ghost"
                                 iconSize="large"
-                                onClick={() => dialog.show(() => <DialogSelectFile mode="files" />)}
+                                onClick={() =>
+                                  dialog.show(() => <DialogSelectFile mode="files" onOpenFile={() => showAllFiles()} />)
+                                }
                                 aria-label={language.t("command.file.open")}
                               />
                             </TooltipKeybind>
@@ -2100,6 +2123,7 @@ export default function Page() {
                                       focusedComment={comments.focus()}
                                       onFocusedCommentChange={comments.setFocus}
                                       onViewFile={(path) => {
+                                        showAllFiles()
                                         const value = file.tab(path)
                                         tabs().open(value)
                                         file.load(path)
@@ -2679,6 +2703,7 @@ export default function Page() {
                             focusedComment={comments.focus()}
                             onFocusedCommentChange={comments.setFocus}
                             onViewFile={(path) => {
+                              showAllFiles()
                               const value = file.tab(path)
                               tabs().open(value)
                               file.load(path)
