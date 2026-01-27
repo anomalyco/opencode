@@ -537,7 +537,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                       code_verifier: string
                     }
 
-                    const tokens: TokenResponse = await fetch(`${ISSUER}/oauth/token`, {
+                    const tokenResponse = await fetch(`${ISSUER}/oauth/token`, {
                       method: "POST",
                       headers: { "Content-Type": "application/x-www-form-urlencoded" },
                       body: new URLSearchParams({
@@ -547,7 +547,13 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                         client_id: CLIENT_ID,
                         code_verifier: data.code_verifier,
                       }).toString(),
-                    }).then((r) => r.json())
+                    })
+
+                    if (!tokenResponse.ok) {
+                      throw new Error(`Token exchange failed: ${tokenResponse.status}`)
+                    }
+
+                    const tokens: TokenResponse = await tokenResponse.json()
 
                     return {
                       type: "success" as const,
