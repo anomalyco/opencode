@@ -50,13 +50,6 @@ export const DialogSettings: Component = () => {
                   {language.t("settings.tab.shortcuts")}
                 </Tabs.Trigger>
               </div>
-              <Tabs.SectionTitle>Server</Tabs.SectionTitle>
-              <div style={{ display: "flex", "flex-direction": "column", gap: "6px", width: "100%" }}>
-                <Tabs.Trigger value="providers">
-                  <Icon name="server" />
-                  Providers
-                </Tabs.Trigger>
-              </div>
             </div>
             <div class="flex flex-col gap-1 pl-1 py-1 text-12-medium text-text-weak">
               <span>OpenCode Desktop</span>
