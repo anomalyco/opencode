@@ -80,6 +80,14 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     void shellOpen(url).catch(() => undefined)
   },
 
+  back() {
+    window.history.back()
+  },
+
+  forward() {
+    window.history.forward()
+  },
+
   storage: (() => {
     type StoreLike = {
       get(key: string): Promise<string | null | undefined>

@@ -26,11 +26,10 @@ import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
 import { LanguageProvider, useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { Logo } from "@opencode-ai/ui/logo"
+import { HighlightsProvider } from "@/context/highlights"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
 import { ErrorPage } from "./pages/error"
-import { iife } from "@opencode-ai/util/iife"
 import { Suspense } from "solid-js"
 
 const Home = lazy(() => import("@/pages/home"))
@@ -119,7 +118,9 @@ export function AppInterface(props: { defaultUrl?: string }) {
                       <NotificationProvider>
                         <ModelsProvider>
                           <CommandProvider>
-                            <Layout>{props.children}</Layout>
+                            <HighlightsProvider>
+                              <Layout>{props.children}</Layout>
+                            </HighlightsProvider>
                           </CommandProvider>
                         </ModelsProvider>
                       </NotificationProvider>

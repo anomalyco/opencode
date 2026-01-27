@@ -6,6 +6,7 @@ on:
       - dev
   pull_request:
   workflow_dispatch:
+  workflow_call:
 jobs:
   test:
     name: test (${{ matrix.settings.name }})
