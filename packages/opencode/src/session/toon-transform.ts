@@ -1,6 +1,5 @@
 import type { ModelMessage } from "ai"
 import { TOON } from "@/format/toon"
-import { TOONData } from "@/format/toon-data"
 import { Config } from "@/config/config"
 import { Log } from "@/util/log"
 import { TOONMetadata } from "./toon-metadata"
@@ -107,21 +106,6 @@ export namespace TOONTransform {
             return {
               ...part,
               text: toonified,
-            }
-          }
-
-          // Optimize structured data in tool results
-          if (part.type === "tool-result" && part.content && typeof part.content === "object") {
-            const shouldOptimize = TOONData.shouldSerialize(part.content)
-            if (shouldOptimize) {
-              const savings = TOONData.estimateSavings(part.content)
-              totalSavings += savings
-              dataSavings += savings
-
-              return {
-                ...part,
-                content: TOONData.serialize(part.content).serialized,
-              }
             }
           }
 

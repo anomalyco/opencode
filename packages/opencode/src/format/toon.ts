@@ -103,30 +103,6 @@ export namespace TOON {
     { pattern: /\bless\s+than\b/gi, replacement: "<" },
   ]
 
-  // Phase 4: Verb Normalization (only for gerunds and participles not in abbreviations)
-  const verbForms = {
-    running: "run",
-    implementing: "impl",
-    executing: "exec",
-    processing: "proc",
-    validating: "val",
-    creating: "crt",
-    deleting: "del",
-    updating: "upd",
-    retrieving: "ret",
-    generating: "gen",
-    transforming: "xfm",
-    converting: "conv",
-    configuring: "cfg",
-    optimizing: "opt",
-    analyzing: "ana",
-    evaluating: "eval",
-    calculating: "calc",
-    determining: "det",
-    establishing: "est",
-    maintaining: "maint",
-  }
-
   /**
    * Transform natural language text to TOON format
    * Uses heuristic rules to create compact representations
@@ -207,14 +183,6 @@ export namespace TOON {
     return result
   }
 
-  function applyVerbNormalization(text: string): string {
-    let result = text
-    for (const [form, base] of Object.entries(verbForms)) {
-      result = result.replace(new RegExp(`\\b${form}\\b`, "gi"), base)
-    }
-    return result
-  }
-
   // Phase 5: Duplicate Detection
   interface DuplicateMap {
     phrases: Map<string, number>
@@ -230,8 +198,10 @@ export namespace TOON {
       const normalized = sentences[i].toLowerCase().trim()
 
       if (phrases.has(normalized)) {
-        const firstIndex = phrases.get(normalized)!
-        markers.set(i, `[dup:${firstIndex}]`)
+        const firstIndex = phrases.get(normalized)
+        if (firstIndex !== undefined) {
+          markers.set(i, `[dup:${firstIndex}]`)
+        }
       } else {
         phrases.set(normalized, i)
       }
@@ -251,8 +221,9 @@ export namespace TOON {
     const result: string[] = []
 
     for (let i = 0; i < sentences.length; i++) {
-      if (duplicates.markers.has(i)) {
-        result.push(duplicates.markers.get(i)!)
+      const marker = duplicates.markers.get(i)
+      if (marker) {
+        result.push(marker)
       } else {
         result.push(sentences[i])
       }

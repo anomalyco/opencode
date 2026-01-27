@@ -87,8 +87,6 @@ export namespace TOONData {
    */
   export function calculateSavingsPercentage(data: unknown): number {
     const json = JSON.stringify(data)
-    const toon = encode(data)
-
     const jsonTokens = Math.ceil(json.length / 4)
     const savedTokens = estimateSavings(data)
 
