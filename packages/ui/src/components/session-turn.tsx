@@ -1,62 +1,64 @@
 import {
   AssistantMessage,
+  FilePart,
   Message as MessageType,
   Part as PartType,
   type PermissionRequest,
   TextPart,
   ToolPart,
-  UserMessage,
 } from "@opencode-ai/sdk/v2/client"
+import { type FileDiff } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
+import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
+import { findLast } from "@opencode-ai/util/array"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 import { Binary } from "@opencode-ai/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
-import { Typewriter } from "./typewriter"
 import { Message, Part } from "./message-part"
 import { Markdown } from "./markdown"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
-import { ProviderIcon } from "./provider-icon"
-import type { IconName } from "./provider-icons/types"
 import { IconButton } from "./icon-button"
-import { Tooltip } from "./tooltip"
 import { Card } from "./card"
 import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
 import { Spinner } from "./spinner"
+import { Tooltip } from "./tooltip"
 import { createStore } from "solid-js/store"
 import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 
-function computeStatusFromPart(part: PartType | undefined): string | undefined {
+type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
+
+function computeStatusFromPart(part: PartType | undefined, t: Translator): string | undefined {
   if (!part) return undefined
 
   if (part.type === "tool") {
     switch (part.tool) {
       case "task":
-        return "Delegating work"
+        return t("ui.sessionTurn.status.delegating")
       case "todowrite":
       case "todoread":
-        return "Planning next steps"
+        return t("ui.sessionTurn.status.planning")
       case "read":
-        return "Gathering context"
+        return t("ui.sessionTurn.status.gatheringContext")
       case "list":
       case "grep":
       case "glob":
-        return "Searching the codebase"
+        return t("ui.sessionTurn.status.searchingCodebase")
       case "webfetch":
-        return "Searching the web"
+        return t("ui.sessionTurn.status.searchingWeb")
       case "edit":
       case "write":
-        return "Making edits"
+        return t("ui.sessionTurn.status.makingEdits")
       case "bash":
-        return "Running commands"
+        return t("ui.sessionTurn.status.runningCommands")
       default:
         return undefined
     }
@@ -64,11 +66,11 @@ function computeStatusFromPart(part: PartType | undefined): string | undefined {
   if (part.type === "reasoning") {
     const text = part.text ?? ""
     const match = text.trimStart().match(/^\*\*(.+?)\*\*/)
-    if (match) return `Thinking · ${match[1].trim()}`
-    return "Thinking"
+    if (match) return t("ui.sessionTurn.status.thinkingWithTopic", { topic: match[1].trim() })
+    return t("ui.sessionTurn.status.thinking")
   }
   if (part.type === "text") {
-    return "Gathering thoughts"
+    return t("ui.sessionTurn.status.gatheringThoughts")
   }
   return undefined
 }
@@ -77,6 +79,12 @@ function same<T>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
   if (a.length !== b.length) return false
   return a.every((x, i) => x === b[i])
+}
+
+function isAttachment(part: PartType | undefined) {
+  if (part?.type !== "file") return false
+  const mime = (part as FilePart).mime ?? ""
+  return mime.startsWith("image/") || mime === "application/pdf"
 }
 
 function AssistantMessageItem(props: {
@@ -119,6 +127,7 @@ function AssistantMessageItem(props: {
 export function SessionTurn(
   props: ParentProps<{
     sessionID: string
+    sessionTitle?: string
     messageID: string
     lastUserMessageID?: string
     stepsExpanded?: boolean
@@ -131,25 +140,28 @@ export function SessionTurn(
     }
   }>,
 ) {
+  const i18n = useI18n()
   const data = useData()
   const diffComponent = useDiffComponent()
 
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
+  const emptyFiles: FilePart[] = []
   const emptyAssistant: AssistantMessage[] = []
   const emptyPermissions: PermissionRequest[] = []
   const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
+  const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
   const allMessages = createMemo(() => data.store.message[props.sessionID] ?? emptyMessages)
 
   const messageIndex = createMemo(() => {
-    const messages = allMessages()
+    const messages = allMessages() ?? emptyMessages
     const result = Binary.search(messages, props.messageID, (m) => m.id)
     if (!result.found) return -1
 
     const msg = messages[result.index]
-    if (msg.role !== "user") return -1
+    if (!msg || msg.role !== "user") return -1
 
     return result.index
   })
@@ -158,7 +170,8 @@ export function SessionTurn(
     const index = messageIndex()
     if (index < 0) return undefined
 
-    const msg = allMessages()[index]
+    const messages = allMessages() ?? emptyMessages
+    const msg = messages[index]
     if (!msg || msg.role !== "user") return undefined
 
     return msg
@@ -167,7 +180,7 @@ export function SessionTurn(
   const lastUserMessageID = createMemo(() => {
     if (props.lastUserMessageID) return props.lastUserMessageID
 
-    const messages = allMessages()
+    const messages = allMessages() ?? emptyMessages
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i]
       if (msg?.role === "user") return msg.id
@@ -183,12 +196,25 @@ export function SessionTurn(
     return data.store.part[msg.id] ?? emptyParts
   })
 
+  const attachmentParts = createMemo(() => {
+    const msgParts = parts()
+    if (msgParts.length === 0) return emptyFiles
+    return msgParts.filter((part) => isAttachment(part)) as FilePart[]
+  })
+
+  const stickyParts = createMemo(() => {
+    const msgParts = parts()
+    if (msgParts.length === 0) return emptyParts
+    if (attachmentParts().length === 0) return msgParts
+    return msgParts.filter((part) => !isAttachment(part))
+  })
+
   const assistantMessages = createMemo(
     () => {
       const msg = message()
       if (!msg) return emptyAssistant
 
-      const messages = allMessages()
+      const messages = allMessages() ?? emptyMessages
       const index = messageIndex()
       if (index < 0) return emptyAssistant
 
@@ -242,7 +268,7 @@ export function SessionTurn(
     const next = nextPermission()
     if (!next || !next.tool) return emptyPermissionParts
 
-    const message = assistantMessages().findLast((m) => m.id === next.tool!.messageID)
+    const message = findLast(assistantMessages(), (m) => m.id === next.tool!.messageID)
     if (!message) return emptyPermissionParts
 
     const parts = data.store.part[message.id] ?? emptyParts
@@ -257,6 +283,7 @@ export function SessionTurn(
 
   const shellModePart = createMemo(() => {
     const p = parts()
+    if (p.length === 0) return
     if (!p.every((part) => part?.type === "text" && part?.synthetic)) return
 
     const msgs = assistantMessages()
@@ -312,12 +339,12 @@ export function SessionTurn(
         const msgParts = data.store.part[msg.id] ?? emptyParts
         for (let pi = msgParts.length - 1; pi >= 0; pi--) {
           const part = msgParts[pi]
-          if (part) return computeStatusFromPart(part)
+          if (part) return computeStatusFromPart(part, i18n.t)
         }
       }
     }
 
-    return computeStatusFromPart(last)
+    return computeStatusFromPart(last, i18n.t)
   })
 
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
@@ -330,16 +357,28 @@ export function SessionTurn(
 
   const response = createMemo(() => lastTextPart()?.text)
   const responsePartId = createMemo(() => lastTextPart()?.id)
-  const hasDiffs = createMemo(() => message()?.summary?.diffs?.length)
+  const messageDiffs = createMemo(() => message()?.summary?.diffs ?? emptyDiffs)
+  const hasDiffs = createMemo(() => messageDiffs().length > 0)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
-  const [responseCopied, setResponseCopied] = createSignal(false)
-  const handleCopyResponse = async () => {
-    const content = response()
+  const [copied, setCopied] = createSignal(false)
+
+  const handleCopy = async () => {
+    const content = response() ?? ""
     if (!content) return
     await navigator.clipboard.writeText(content)
-    setResponseCopied(true)
-    setTimeout(() => setResponseCopied(false), 2000)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const [rootRef, setRootRef] = createSignal<HTMLDivElement | undefined>()
+  const [stickyRef, setStickyRef] = createSignal<HTMLDivElement | undefined>()
+
+  const updateStickyHeight = (height: number) => {
+    const root = rootRef()
+    if (!root) return
+    const next = Math.ceil(height)
+    root.style.setProperty("--session-turn-sticky-height", `${next}px`)
   }
 
   function duration() {
@@ -351,7 +390,7 @@ export function SessionTurn(
     const interval = Interval.fromDateTimes(from, to)
     const unit: DurationUnit[] = interval.length("seconds") > 60 ? ["minutes", "seconds"] : ["seconds"]
 
-    return interval.toDuration(unit).normalize().toHuman({
+    return interval.toDuration(unit).normalize().reconfigure({ locale: i18n.locale() }).toHuman({
       notation: "compact",
       unitDisplay: "narrow",
       compactDisplay: "short",
@@ -362,15 +401,31 @@ export function SessionTurn(
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
+    overflowAnchor: "auto",
+  })
+
+  createResizeObserver(
+    () => stickyRef(),
+    ({ height }) => {
+      updateStickyHeight(height)
+    },
+  )
+
+  createEffect(() => {
+    const root = rootRef()
+    if (!root) return
+    const sticky = stickyRef()
+    if (!sticky) {
+      root.style.setProperty("--session-turn-sticky-height", "0px")
+      return
+    }
+    updateStickyHeight(sticky.getBoundingClientRect().height)
   })
 
   const diffInit = 20
   const diffBatch = 20
 
   const [store, setStore] = createStore({
-    stickyTitleRef: undefined as HTMLDivElement | undefined,
-    stickyTriggerRef: undefined as HTMLDivElement | undefined,
-    stickyHeaderHeight: 0,
     retrySeconds: 0,
     diffsOpen: [] as string[],
     diffLimit: diffInit,
@@ -404,26 +459,17 @@ export function SessionTurn(
     onCleanup(() => clearInterval(timer))
   })
 
-  createResizeObserver(
-    () => store.stickyTitleRef,
-    ({ height }) => {
-      const triggerHeight = store.stickyTriggerRef?.offsetHeight ?? 0
-      setStore("stickyHeaderHeight", height + triggerHeight + 8)
-    },
-  )
-
-  createResizeObserver(
-    () => store.stickyTriggerRef,
-    ({ height }) => {
-      const titleHeight = store.stickyTitleRef?.offsetHeight ?? 0
-      setStore("stickyHeaderHeight", titleHeight + height + 8)
-    },
-  )
-
   createEffect(() => {
-    const timer = setInterval(() => {
+    const update = () => {
       setStore("duration", duration())
-    }, 1000)
+    }
+
+    update()
+
+    // Only keep ticking while the active (in-progress) turn is running.
+    if (!working()) return
+
+    const timer = setInterval(update, 1000)
     onCleanup(() => clearInterval(timer))
   })
 
@@ -459,8 +505,13 @@ export function SessionTurn(
     }
   })
 
+  onCleanup(() => {
+    if (!statusTimeout) return
+    clearTimeout(statusTimeout)
+  })
+
   return (
-    <div data-component="session-turn" class={props.classes?.root}>
+    <div data-component="session-turn" class={props.classes?.root} ref={setRootRef}>
       <div
         ref={autoScroll.scrollRef}
         onScroll={autoScroll.handleScroll}
@@ -475,89 +526,94 @@ export function SessionTurn(
                 data-message={msg().id}
                 data-slot="session-turn-message-container"
                 class={props.classes?.container}
-                style={{ "--sticky-header-height": `${store.stickyHeaderHeight}px` }}
               >
                 <Switch>
                   <Match when={isShellMode()}>
                     <Part part={shellModePart()!} message={msg()} defaultOpen />
                   </Match>
                   <Match when={true}>
-                    {/* Title (sticky) */}
-                    <div ref={(el) => setStore("stickyTitleRef", el)} data-slot="session-turn-sticky-title">
-                      <div data-slot="session-turn-message-header">
-                        <div data-slot="session-turn-message-title">
-                          <Switch>
-                            <Match when={working()}>
-                              <Typewriter as="h1" text={msg().summary?.title} data-slot="session-turn-typewriter" />
-                            </Match>
-                            <Match when={true}>
-                              <h1>{msg().summary?.title}</h1>
-                            </Match>
-                          </Switch>
-                        </div>
-                        <div data-slot="session-turn-user-badges">
-                          <Show when={(msg() as UserMessage).agent}>
-                            <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
-                          </Show>
-                          <Show when={(msg() as UserMessage).model?.modelID}>
-                            <span data-slot="session-turn-badge" class="inline-flex items-center gap-1">
-                              <ProviderIcon
-                                id={(msg() as UserMessage).model!.providerID as IconName}
-                                class="size-3.5 shrink-0"
-                              />
-                              {(msg() as UserMessage).model?.modelID}
-                            </span>
-                          </Show>
-                          <span data-slot="session-turn-badge">{(msg() as UserMessage).variant || "default"}</span>
-                        </div>
-                      </div>
-                    </div>
-                    {/* User Message */}
-                    <div data-slot="session-turn-message-content">
-                      <Message message={msg()} parts={parts()} />
-                    </div>
-                    {/* Trigger (sticky) */}
-                    <Show when={working() || hasSteps()}>
-                      <div ref={(el) => setStore("stickyTriggerRef", el)} data-slot="session-turn-response-trigger">
-                        <Button
-                          data-expandable={assistantMessages().length > 0}
-                          data-slot="session-turn-collapsible-trigger-content"
-                          variant="ghost"
-                          size="small"
-                          onClick={props.onStepsExpandedToggle ?? (() => {})}
-                        >
-                          <Show when={working()}>
-                            <Spinner />
-                          </Show>
-                          <Switch>
-                            <Match when={retry()}>
-                              <span data-slot="session-turn-retry-message">
-                                {(() => {
-                                  const r = retry()
-                                  if (!r) return ""
-                                  return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
-                                })()}
-                              </span>
-                              <span data-slot="session-turn-retry-seconds">
-                                · retrying {store.retrySeconds > 0 ? `in ${store.retrySeconds}s ` : ""}
-                              </span>
-                              <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
-                            </Match>
-                            <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
-                            <Match when={props.stepsExpanded}>Hide steps</Match>
-                            <Match when={!props.stepsExpanded}>Show steps</Match>
-                          </Switch>
-                          <span>·</span>
-                          <span>{store.duration}</span>
-                          <Show when={assistantMessages().length > 0}>
-                            <Icon name="chevron-grabber-vertical" size="small" />
-                          </Show>
-                        </Button>
+                    <Show when={attachmentParts().length > 0}>
+                      <div data-slot="session-turn-attachments" aria-live="off">
+                        <Message message={msg()} parts={attachmentParts()} />
                       </div>
                     </Show>
+                    <div data-slot="session-turn-sticky" ref={setStickyRef}>
+                      {/* User Message */}
+                      <div data-slot="session-turn-message-content" aria-live="off">
+                        <Message message={msg()} parts={stickyParts()} />
+                      </div>
+
+                      {/* Trigger (sticky) */}
+                      <Show when={working() || hasSteps()}>
+                        <div data-slot="session-turn-response-trigger">
+                          <Button
+                            data-expandable={assistantMessages().length > 0}
+                            data-slot="session-turn-collapsible-trigger-content"
+                            variant="ghost"
+                            size="small"
+                            onClick={props.onStepsExpandedToggle ?? (() => {})}
+                            aria-expanded={props.stepsExpanded}
+                          >
+                            <Switch>
+                              <Match when={working()}>
+                                <Spinner />
+                              </Match>
+                              <Match when={true}>
+                                <svg
+                                  width="10"
+                                  height="10"
+                                  viewBox="0 0 10 10"
+                                  fill="none"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  data-slot="session-turn-trigger-icon"
+                                >
+                                  <path
+                                    d="M8.125 1.875H1.875L5 8.125L8.125 1.875Z"
+                                    fill="currentColor"
+                                    stroke="currentColor"
+                                    stroke-linejoin="round"
+                                  />
+                                </svg>
+                              </Match>
+                            </Switch>
+                            <Switch>
+                              <Match when={retry()}>
+                                <span data-slot="session-turn-retry-message">
+                                  {(() => {
+                                    const r = retry()
+                                    if (!r) return ""
+                                    return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
+                                  })()}
+                                </span>
+                                <span data-slot="session-turn-retry-seconds">
+                                  · {i18n.t("ui.sessionTurn.retry.retrying")}
+                                  {store.retrySeconds > 0
+                                    ? " " + i18n.t("ui.sessionTurn.retry.inSeconds", { seconds: store.retrySeconds })
+                                    : ""}
+                                </span>
+                                <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
+                              </Match>
+                              <Match when={working()}>
+                                <span data-slot="session-turn-status-text">
+                                  {store.status ?? i18n.t("ui.sessionTurn.status.consideringNextSteps")}
+                                </span>
+                              </Match>
+                              <Match when={props.stepsExpanded}>
+                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.hide")}</span>
+                              </Match>
+                              <Match when={!props.stepsExpanded}>
+                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.show")}</span>
+                              </Match>
+                            </Switch>
+                            <span aria-hidden="true">·</span>
+                            <span aria-live="off">{store.duration}</span>
+                          </Button>
+                        </div>
+                      </Show>
+                    </div>
                     {/* Response */}
                     <Show when={props.stepsExpanded && assistantMessages().length > 0}>
-                      <div data-slot="session-turn-collapsible-content-inner">
+                      <div data-slot="session-turn-collapsible-content-inner" aria-hidden={working()}>
                         <For each={assistantMessages()}>
                           {(assistantMessage) => (
                             <AssistantMessageItem
@@ -583,25 +639,41 @@ export function SessionTurn(
                       </div>
                     </Show>
                     {/* Response */}
+                    <div class="sr-only" aria-live="polite">
+                      {!working() && response() ? response() : ""}
+                    </div>
                     <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
-                        <div data-slot="session-turn-summary-copy">
-                          <Tooltip value={responseCopied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
-                            <IconButton
-                              icon={responseCopied() ? "check" : "copy"}
-                              variant="secondary"
-                              onClick={handleCopyResponse}
-                            />
-                          </Tooltip>
-                        </div>
                         <div data-slot="session-turn-summary-header">
-                          <h2 data-slot="session-turn-summary-title">Response</h2>
-                          <Markdown
-                            data-slot="session-turn-markdown"
-                            data-diffs={hasDiffs()}
-                            text={response() ?? ""}
-                            cacheKey={responsePartId()}
-                          />
+                          <h2 data-slot="session-turn-summary-title">{i18n.t("ui.sessionTurn.summary.response")}</h2>
+                          <div data-slot="session-turn-response">
+                            <Markdown
+                              data-slot="session-turn-markdown"
+                              data-diffs={hasDiffs()}
+                              text={response() ?? ""}
+                              cacheKey={responsePartId()}
+                            />
+                            <Show when={response()}>
+                              <div data-slot="session-turn-response-copy-wrapper">
+                                <Tooltip
+                                  value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                                  placement="top"
+                                  gutter={8}
+                                >
+                                  <IconButton
+                                    icon={copied() ? "check" : "copy"}
+                                    variant="secondary"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      handleCopy()
+                                    }}
+                                    aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                                  />
+                                </Tooltip>
+                              </div>
+                            </Show>
+                          </div>
                         </div>
                         <Accordion
                           data-slot="session-turn-accordion"
@@ -612,7 +684,7 @@ export function SessionTurn(
                             setStore("diffsOpen", value)
                           }}
                         >
-                          <For each={(msg().summary?.diffs ?? []).slice(0, store.diffLimit)}>
+                          <For each={messageDiffs().slice(0, store.diffLimit)}>
                             {(diff) => (
                               <Accordion.Item value={diff.file}>
                                 <StickyAccordionHeader>
@@ -626,7 +698,7 @@ export function SessionTurn(
                                         <div data-slot="session-turn-file-path">
                                           <Show when={diff.file.includes("/")}>
                                             <span data-slot="session-turn-directory">
-                                              {getDirectory(diff.file)}&lrm;
+                                              {`\u202A${getDirectory(diff.file)}\u202C`}
                                             </span>
                                           </Show>
                                           <span data-slot="session-turn-filename">{getFilename(diff.file)}</span>
@@ -658,13 +730,13 @@ export function SessionTurn(
                             )}
                           </For>
                         </Accordion>
-                        <Show when={(msg().summary?.diffs?.length ?? 0) > store.diffLimit}>
+                        <Show when={messageDiffs().length > store.diffLimit}>
                           <Button
                             data-slot="session-turn-accordion-more"
                             variant="ghost"
                             size="small"
                             onClick={() => {
-                              const total = msg().summary?.diffs?.length ?? 0
+                              const total = messageDiffs().length
                               setStore("diffLimit", (limit) => {
                                 const next = limit + diffBatch
                                 if (next > total) return total
@@ -672,7 +744,9 @@ export function SessionTurn(
                               })
                             }}
                           >
-                            Show more changes ({(msg().summary?.diffs?.length ?? 0) - store.diffLimit})
+                            {i18n.t("ui.sessionTurn.diff.showMore", {
+                              count: messageDiffs().length - store.diffLimit,
+                            })}
                           </Button>
                         </Show>
                       </div>

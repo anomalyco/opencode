@@ -5,13 +5,21 @@ import {
   type AuthenticateRequest,
   type AuthMethod,
   type CancelNotification,
+  type ForkSessionRequest,
+  type ForkSessionResponse,
   type InitializeRequest,
   type InitializeResponse,
+  type ListSessionsRequest,
+  type ListSessionsResponse,
   type LoadSessionRequest,
   type NewSessionRequest,
   type PermissionOption,
   type PlanEntry,
   type PromptRequest,
+  type ResumeSessionRequest,
+  type ResumeSessionResponse,
+  type Role,
+  type SessionInfo,
   type SetSessionModelRequest,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
@@ -429,6 +437,11 @@ export namespace ACP {
             embeddedContext: true,
             image: true,
           },
+          sessionCapabilities: {
+            fork: {},
+            list: {},
+            resume: {},
+          },
         },
         authMethods: [authMethod],
         agentInfo: {
@@ -512,8 +525,13 @@ export namespace ACP {
         const lastUser = messages?.findLast((m) => m.info.role === "user")?.info
         if (lastUser?.role === "user") {
           result.models.currentModelId = `${lastUser.model.providerID}/${lastUser.model.modelID}`
+          this.sessionManager.setModel(sessionId, {
+            providerID: lastUser.model.providerID,
+            modelID: lastUser.model.modelID,
+          })
           if (result.modes.availableModes.some((m) => m.id === lastUser.agent)) {
             result.modes.currentModeId = lastUser.agent
+            this.sessionManager.setMode(sessionId, lastUser.agent)
           }
         }
 
@@ -523,6 +541,141 @@ export namespace ACP {
         }
 
         return result
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+      try {
+        const cursor = params.cursor ? Number(params.cursor) : undefined
+        const limit = 100
+
+        const sessions = await this.sdk.session
+          .list(
+            {
+              directory: params.cwd ?? undefined,
+              roots: true,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data ?? [])
+
+        const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
+        const filtered = cursor ? sorted.filter((s) => s.time.updated < cursor) : sorted
+        const page = filtered.slice(0, limit)
+
+        const entries: SessionInfo[] = page.map((session) => ({
+          sessionId: session.id,
+          cwd: session.directory,
+          title: session.title,
+          updatedAt: new Date(session.time.updated).toISOString(),
+        }))
+
+        const last = page[page.length - 1]
+        const next = filtered.length > limit && last ? String(last.time.updated) : undefined
+
+        const response: ListSessionsResponse = {
+          sessions: entries,
+        }
+        if (next) response.nextCursor = next
+        return response
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
+      const directory = params.cwd
+      const mcpServers = params.mcpServers ?? []
+
+      try {
+        const model = await defaultModel(this.config, directory)
+
+        const forked = await this.sdk.session
+          .fork(
+            {
+              sessionID: params.sessionId,
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data)
+
+        if (!forked) {
+          throw new Error("Fork session returned no data")
+        }
+
+        const sessionId = forked.id
+        await this.sessionManager.load(sessionId, directory, mcpServers, model)
+
+        log.info("fork_session", { sessionId, mcpServers: mcpServers.length })
+
+        const mode = await this.loadSessionMode({
+          cwd: directory,
+          mcpServers,
+          sessionId,
+        })
+
+        const messages = await this.sdk.session
+          .messages(
+            {
+              sessionID: sessionId,
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data)
+          .catch((err) => {
+            log.error("unexpected error when fetching message", { error: err })
+            return undefined
+          })
+
+        for (const msg of messages ?? []) {
+          log.debug("replay message", msg)
+          await this.processMessage(msg)
+        }
+
+        return mode
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    async unstable_resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+      const directory = params.cwd
+      const sessionId = params.sessionId
+      const mcpServers = params.mcpServers ?? []
+
+      try {
+        const model = await defaultModel(this.config, directory)
+        await this.sessionManager.load(sessionId, directory, mcpServers, model)
+
+        log.info("resume_session", { sessionId, mcpServers: mcpServers.length })
+
+        return this.loadSessionMode({
+          cwd: directory,
+          mcpServers,
+          sessionId,
+        })
       } catch (e) {
         const error = MessageV2.fromError(e, {
           providerID: this.config.defaultModel?.providerID ?? "unknown",
@@ -687,7 +840,8 @@ export namespace ACP {
               break
           }
         } else if (part.type === "text") {
-          if (part.text && !part.ignored) {
+          if (part.text) {
+            const audience: Role[] | undefined = part.synthetic ? ["assistant"] : part.ignored ? ["user"] : undefined
             await this.connection
               .sessionUpdate({
                 sessionId,
@@ -696,6 +850,7 @@ export namespace ACP {
                   content: {
                     type: "text",
                     text: part.text,
+                    ...(audience && { annotations: { audience } }),
                   },
                 },
               })
@@ -929,7 +1084,7 @@ export namespace ACP {
       }
     }
 
-    async setSessionModel(params: SetSessionModelRequest) {
+    async unstable_setSessionModel(params: SetSessionModelRequest) {
       const session = this.sessionManager.get(params.sessionId)
 
       const model = Provider.parseModel(params.modelId)
@@ -968,14 +1123,20 @@ export namespace ACP {
       const agent = session.modeId ?? (await AgentModule.defaultAgent())
 
       const parts: Array<
-        { type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }
+        | { type: "text"; text: string; synthetic?: boolean; ignored?: boolean }
+        | { type: "file"; url: string; filename: string; mime: string }
       > = []
       for (const part of params.prompt) {
         switch (part.type) {
           case "text":
+            const audience = part.annotations?.audience
+            const forAssistant = audience?.length === 1 && audience[0] === "assistant"
+            const forUser = audience?.length === 1 && audience[0] === "user"
             parts.push({
               type: "text" as const,
               text: part.text,
+              ...(forAssistant && { synthetic: true }),
+              ...(forUser && { ignored: true }),
             })
             break
           case "image": {

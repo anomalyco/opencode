@@ -6,7 +6,8 @@ import { Persist, persisted } from "@/utils/persist"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { useParams } from "@solidjs/router"
-import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { decode64 } from "@/utils/base64"
 
 type PermissionRespondFn = (input: {
   sessionID: string
@@ -53,7 +54,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     const globalSync = useGlobalSync()
 
     const permissionsEnabled = createMemo(() => {
-      const directory = params.dir ? base64Decode(params.dir) : undefined
+      const directory = decode64(params.dir)
       if (!directory) return false
       const [store] = globalSync.child(directory)
       return hasAutoAcceptPermissionConfig(store.config.permission)
