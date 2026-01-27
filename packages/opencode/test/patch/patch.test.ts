@@ -162,6 +162,31 @@ describe("Patch namespace", () => {
       expect(hunk.path).toBe(adsPath)
     })
 
+    test("should parse Windows drive-letter add paths", () => {
+      const addPath = String.raw`D:\Root\new.txt`
+      const patchText = `*** Begin Patch
+*** Add File: ${addPath}
++new
+*** End Patch`
+
+      const result = Patch.parsePatch(patchText)
+      const hunk = result.hunks[0]
+      expect(hunk.type).toBe("add")
+      expect(hunk.path).toBe(addPath)
+    })
+
+    test("should parse Windows drive-letter delete paths", () => {
+      const deletePath = String.raw`D:\Root\old.txt`
+      const patchText = `*** Begin Patch
+*** Delete File: ${deletePath}
+*** End Patch`
+
+      const result = Patch.parsePatch(patchText)
+      const hunk = result.hunks[0]
+      expect(hunk.type).toBe("delete")
+      expect(hunk.path).toBe(deletePath)
+    })
+
     test("should throw error for invalid patch format", () => {
       const invalidPatch = `This is not a valid patch`
 
