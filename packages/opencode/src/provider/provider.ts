@@ -506,6 +506,18 @@ export namespace Provider {
         },
       }
     },
+    nous: async () => {
+      const apiKey = Env.get("NOUS_API_KEY")
+      const auth = await Auth.get("nous")
+      const hasKey = Boolean(apiKey || auth?.type === "api")
+      return {
+        autoload: hasKey,
+        options: {
+          baseURL: "https://inference-api.nousresearch.com/v1",
+          ...(hasKey && { apiKey: apiKey || (auth?.type === "api" ? auth.key : undefined) }),
+        },
+      }
+    },
   }
 
   export const Model = z
@@ -806,6 +818,124 @@ export namespace Provider {
         parsed.models[modelID] = parsedModel
       }
       database[providerID] = parsed
+    }
+
+    // Add Nous Research provider
+    if (!database["nous"]) {
+      database["nous"] = {
+        id: "nous",
+        name: "Nous Research",
+        env: ["NOUS_API_KEY"],
+        source: "custom",
+        options: {},
+        models: {
+          "Hermes-4.3-36B": fromModelsDevModel(
+            { id: "nous", name: "Nous Research", api: "https://inference-api.nousresearch.com/v1", env: ["NOUS_API_KEY"], models: {} },
+            {
+              id: "Hermes-4.3-36B",
+              name: "Hermes 4.3 36B",
+              release_date: "2025-01-01",
+              attachment: false,
+              reasoning: true,
+              temperature: true,
+              tool_call: true,
+              limit: { context: 128000, output: 128000 },
+              modalities: { input: ["text"], output: ["text"] },
+              options: {},
+            },
+          ),
+          "Hermes-4-405B": fromModelsDevModel(
+            { id: "nous", name: "Nous Research", api: "https://inference-api.nousresearch.com/v1", env: ["NOUS_API_KEY"], models: {} },
+            {
+              id: "Hermes-4-405B",
+              name: "Hermes 4 405B",
+              release_date: "2025-01-01",
+              attachment: false,
+              reasoning: true,
+              temperature: true,
+              tool_call: true,
+              limit: { context: 128000, output: 128000 },
+              modalities: { input: ["text"], output: ["text"] },
+              options: {},
+            },
+          ),
+          "Hermes-4-70B": fromModelsDevModel(
+            { id: "nous", name: "Nous Research", api: "https://inference-api.nousresearch.com/v1", env: ["NOUS_API_KEY"], models: {} },
+            {
+              id: "Hermes-4-70B",
+              name: "Hermes 4 70B",
+              release_date: "2025-01-01",
+              attachment: false,
+              reasoning: true,
+              temperature: true,
+              tool_call: true,
+              limit: { context: 128000, output: 128000 },
+              modalities: { input: ["text"], output: ["text"] },
+              options: {},
+            },
+          ),
+          "DeepHermes-3-Mistral-24B-Preview": fromModelsDevModel(
+            { id: "nous", name: "Nous Research", api: "https://inference-api.nousresearch.com/v1", env: ["NOUS_API_KEY"], models: {} },
+            {
+              id: "DeepHermes-3-Mistral-24B-Preview",
+              name: "DeepHermes 3 Mistral 24B (Preview)",
+              release_date: "2025-01-01",
+              attachment: false,
+              reasoning: true,
+              temperature: true,
+              tool_call: true,
+              limit: { context: 32000, output: 32000 },
+              modalities: { input: ["text"], output: ["text"] },
+              options: {},
+            },
+          ),
+          "DeepHermes-3-Llama-3-8B-Preview": fromModelsDevModel(
+            { id: "nous", name: "Nous Research", api: "https://inference-api.nousresearch.com/v1", env: ["NOUS_API_KEY"], models: {} },
+            {
+              id: "DeepHermes-3-Llama-3-8B-Preview",
+              name: "DeepHermes 3 Llama 3 8B (Preview)",
+              release_date: "2025-01-01",
+              attachment: false,
+              reasoning: true,
+              temperature: true,
+              tool_call: true,
+              limit: { context: 64000, output: 64000 },
+              modalities: { input: ["text"], output: ["text"] },
+              options: {},
+            },
+          ),
+          "Hermes-3-Llama-3.1-405B": fromModelsDevModel(
+            { id: "nous", name: "Nous Research", api: "https://inference-api.nousresearch.com/v1", env: ["NOUS_API_KEY"], models: {} },
+            {
+              id: "Hermes-3-Llama-3.1-405B",
+              name: "Hermes 3 Llama 3.1 405B",
+              release_date: "2024-01-01",
+              attachment: false,
+              reasoning: false,
+              temperature: true,
+              tool_call: true,
+              limit: { context: 32000, output: 32000 },
+              modalities: { input: ["text"], output: ["text"] },
+              options: {},
+            },
+          ),
+          "Hermes-3-Llama-3.1-70B": fromModelsDevModel(
+            { id: "nous", name: "Nous Research", api: "https://inference-api.nousresearch.com/v1", env: ["NOUS_API_KEY"], models: {} },
+            {
+              id: "Hermes-3-Llama-3.1-70B",
+              name: "Hermes 3 Llama 3.1 70B",
+              release_date: "2024-01-01",
+              attachment: false,
+              reasoning: false,
+              temperature: true,
+              tool_call: true,
+              limit: { context: 32000, output: 32000 },
+              modalities: { input: ["text"], output: ["text"] },
+              options: {},
+            },
+          ),
+        },
+      }
     }
 
     // load env
