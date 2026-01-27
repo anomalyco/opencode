@@ -1,12 +1,14 @@
 import { Component, For, Show, createResource } from 'solid-js'
 import { useServer } from '@/context/server'
-import styles from './McpDashboard.module.css'
+import { useLanguage } from '@/context/language'
+import { Icon } from '@opencode-ai/ui/icon'
+import { Button } from '@opencode-ai/ui/button'
+import { Tag } from '@opencode-ai/ui/tag'
 
 export interface McpServerStatus {
   name: string
   status: 'connected' | 'disabled' | 'failed' | 'needs_auth' | 'needs_client_registration'
   error?: string
-  toolCount?: number
 }
 
 const fetchMcpStatus = async (serverUrl: string): Promise<McpServerStatus[]> => {
@@ -14,7 +16,6 @@ const fetchMcpStatus = async (serverUrl: string): Promise<McpServerStatus[]> => 
     const mcpUrl = `${serverUrl}/mcp`
     const response = await fetch(mcpUrl)
     if (!response.ok) {
-      // Return empty array on 404 or other errors
       console.warn(`MCP endpoint returned ${response.status}: ${response.statusText}`)
       return []
     }
@@ -27,48 +28,23 @@ const fetchMcpStatus = async (serverUrl: string): Promise<McpServerStatus[]> => 
 
     const data: Record<string, { status: string; error?: string }> = await response.json()
 
-    // Fetch tools count for connected servers
-    const servers: McpServerStatus[] = await Promise.all(
-      Object.entries(data).map(async ([name, info]) => {
-        let toolCount: number | undefined = undefined
-
-        // Only fetch tool count for connected servers
-        if (info.status === 'connected') {
-          try {
-            const toolsResponse = await fetch(`${serverUrl}/mcp/tools`)
-            if (toolsResponse.ok) {
-              const toolsData: Record<string, unknown> = await toolsResponse.json()
-              // Count tools that belong to this server
-              // Tools are keyed by "server_name/tool_name"
-              toolCount = Object.keys(toolsData).filter((key) =>
-                key.startsWith(`${name}/`)
-              ).length
-            }
-          } catch (error) {
-            console.error(`Failed to fetch tools for ${name}:`, error)
-          }
-        }
-
-        return {
-          name,
-          status: info.status as McpServerStatus['status'],
-          error: info.error,
-          toolCount,
-        }
-      })
-    )
+    const servers: McpServerStatus[] = Object.entries(data).map(([name, info]) => ({
+      name,
+      status: info.status as McpServerStatus['status'],
+      error: info.error,
+    }))
 
     return servers
   } catch (error) {
     console.error('Failed to fetch MCP status:', error)
-    // Return empty array on any error
     return []
   }
 }
 
 export const McpDashboard: Component = () => {
   const server = useServer()
-  const [status] = createResource(async () => {
+  const language = useLanguage()
+  const [status, { refetch }] = createResource(async () => {
     if (!server.url) return []
     return fetchMcpStatus(server.url)
   }, {
@@ -80,7 +56,7 @@ export const McpDashboard: Component = () => {
     try {
       const response = await fetch(`${server.url}/mcp/${name}/connect`, { method: 'POST' })
       if (response.ok) {
-        status.refetch()
+        refetch()
       }
     } catch (error) {
       console.error(`Failed to connect ${name}:`, error)
@@ -92,7 +68,7 @@ export const McpDashboard: Component = () => {
     try {
       const response = await fetch(`${server.url}/mcp/${name}/disconnect`, { method: 'POST' })
       if (response.ok) {
-        status.refetch()
+        refetch()
       }
     } catch (error) {
       console.error(`Failed to disconnect ${name}:`, error)
@@ -104,145 +80,142 @@ export const McpDashboard: Component = () => {
     try {
       const response = await fetch(`${server.url}/mcp/${name}/auth/authenticate`, { method: 'POST' })
       if (response.ok) {
-        status.refetch()
+        refetch()
       }
     } catch (error) {
       console.error(`Failed to authenticate ${name}:`, error)
     }
   }
 
-  const getStatusIcon = (status: McpServerStatus['status']): string => {
+  const getStatusIcon = (status: McpServerStatus['status']): { name: string; class: string } => {
     switch (status) {
       case 'connected':
-        return '●'
+        return { name: 'circle-check', class: 'text-success' }
       case 'disabled':
-        return '○'
+        return { name: 'circle', class: 'text-text-weak' }
       case 'failed':
-        return '✗'
+        return { name: 'warning-circle', class: 'text-error' }
       case 'needs_auth':
-        return '🔒'
+        return { name: 'lock', class: 'text-warning' }
       case 'needs_client_registration':
-        return '⚠'
+        return { name: 'warning', class: 'text-warning' }
       default:
-        return '?'
+        return { name: 'question', class: 'text-text-weak' }
     }
   }
 
   const getStatusText = (status: McpServerStatus['status']): string => {
     switch (status) {
       case 'connected':
-        return 'Connected'
+        return language.t('settings.mcp.status.connected')
       case 'disabled':
-        return 'Disabled'
+        return language.t('settings.mcp.status.disabled')
       case 'failed':
-        return 'Failed'
+        return language.t('settings.mcp.status.failed')
       case 'needs_auth':
-        return 'Needs Authentication'
+        return language.t('settings.mcp.status.needs_auth')
       case 'needs_client_registration':
-        return 'Needs Registration'
+        return language.t('settings.mcp.status.needs_registration')
       default:
-        return 'Unknown'
+        return language.t('settings.mcp.status.unknown')
+    }
+  }
+
+  const getActionButton = (serverInfo: McpServerStatus) => {
+    switch (serverInfo.status) {
+      case 'disabled':
+        return (
+          <Button
+            size="small"
+            variant="secondary"
+            onClick={() => handleConnect(serverInfo.name)}
+          >
+            {language.t('common.connect')}
+          </Button>
+        )
+      case 'connected':
+        return (
+          <Button
+            size="small"
+            variant="ghost"
+            onClick={() => handleDisconnect(serverInfo.name)}
+          >
+            {language.t('common.disconnect')}
+          </Button>
+        )
+      case 'needs_auth':
+        return (
+          <Button
+            size="small"
+            variant="secondary"
+            onClick={() => handleAuthenticate(serverInfo.name)}
+          >
+            {language.t('settings.mcp.authenticate')}
+          </Button>
+        )
+      case 'failed':
+        return (
+          <Button
+            size="small"
+            variant="secondary"
+            onClick={() => handleConnect(serverInfo.name)}
+          >
+            {language.t('settings.mcp.retry')}
+          </Button>
+        )
+      case 'needs_client_registration':
+        return (
+          <Button size="small" variant="secondary" disabled>
+            {language.t('settings.mcp.register')}
+          </Button>
+        )
+      default:
+        return null
     }
   }
 
   return (
-    <div class={styles.dashboard}>
-      <div class={styles.header}>
-        <h2 class={styles.title}>MCP Servers</h2>
-        <Show when={status.loading}>
-          <span class={styles.loadingText}>Loading...</span>
-        </Show>
-      </div>
+    <div class="flex flex-col gap-8 max-w-[720px]">
+      <Show when={status.loading}>
+        <div class="py-8 text-center">
+          <div class="inline-block w-6 h-6 border-2 border-border-strong-subtle border-t-transparent rounded-full animate-spin mb-3" />
+          <div class="text-14-regular text-text-weak">{language.t('settings.mcp.loading')}</div>
+        </div>
+      </Show>
 
       <Show
         when={status().length > 0}
         fallback={
-          <div class={styles.emptyState}>
-            <p class={styles.emptyText}>No MCP servers configured</p>
-          </div>
+          <Show when={!status.loading}>
+            <div class="bg-surface-raised-base px-4 py-8 rounded-lg text-center">
+              <Icon name="cpu" class="w-12 h-12 mx-auto mb-3 text-icon-weak-subtle" />
+              <div class="text-14-regular text-text-weak">{language.t('settings.mcp.empty')}</div>
+            </div>
+          </Show>
         }
       >
-        <div class={styles.serverList}>
+        <div class="bg-surface-raised-base px-4 rounded-lg">
           <For each={status()}>
-            {(serverInfo) => (
-              <div
-                class={styles.serverCard}
-                classList={{
-                  [styles.connected]: serverInfo.status === 'connected',
-                  [styles.disabled]: serverInfo.status === 'disabled',
-                  [styles.failed]: serverInfo.status === 'failed',
-                  [styles.needsAuth]: serverInfo.status === 'needs_auth',
-                  [styles.needsRegistration]:
-                    serverInfo.status === 'needs_client_registration',
-                }}
-              >
-                <div class={styles.serverHeader}>
-                  <div class={styles.serverInfo}>
-                    <span class={styles.statusIcon}>{getStatusIcon(serverInfo.status)}</span>
-                    <span class={styles.serverName}>{serverInfo.name}</span>
-                  </div>
-                  <span class={styles.statusText}>{getStatusText(serverInfo.status)}</span>
-                </div>
-
-                <Show when={serverInfo.error}>
-                  <div class={styles.errorMessage}>{serverInfo.error}</div>
-                </Show>
-
-                <div class={styles.serverDetails}>
-                  <Show when={serverInfo.toolCount !== undefined}>
-                    <div class={styles.toolCount}>
-                      <span class={styles.toolCountLabel}>Tools:</span>
-                      <span class={styles.toolCountValue}>{serverInfo.toolCount}</span>
+            {(serverInfo) => {
+              const statusIcon = getStatusIcon(serverInfo.status)
+              return (
+                <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
+                  <div class="flex items-start gap-3 min-w-0 flex-1">
+                    <Icon name={statusIcon.name as any} class={`w-5 h-5 shrink-0 mt-0.5 ${statusIcon.class}`} />
+                    <div class="flex flex-col gap-1 min-w-0 flex-1">
+                      <div class="flex items-center gap-2">
+                        <span class="text-14-regular text-text-strong truncate">{serverInfo.name}</span>
+                        <Tag>{getStatusText(serverInfo.status)}</Tag>
+                      </div>
+                      <Show when={serverInfo.error}>
+                        <p class="text-13-regular text-text-warning line-clamp-1">{serverInfo.error}</p>
+                      </Show>
                     </div>
-                  </Show>
+                  </div>
+                  {getActionButton(serverInfo)}
                 </div>
-
-                <div class={styles.serverActions}>
-                  <Show when={serverInfo.status === 'disabled'}>
-                    <button
-                      class={styles.actionButton}
-                      onClick={() => handleConnect(serverInfo.name)}
-                    >
-                      Connect
-                    </button>
-                  </Show>
-
-                  <Show when={serverInfo.status === 'connected'}>
-                    <button
-                      class={styles.actionButton}
-                      classList={{ [styles.disconnectButton]: true }}
-                      onClick={() => handleDisconnect(serverInfo.name)}
-                    >
-                      Disconnect
-                    </button>
-                  </Show>
-
-                  <Show when={serverInfo.status === 'needs_auth'}>
-                    <button
-                      class={styles.actionButton}
-                      onClick={() => handleAuthenticate(serverInfo.name)}
-                    >
-                      Authenticate
-                    </button>
-                  </Show>
-
-                  <Show when={serverInfo.status === 'failed'}>
-                    <button
-                      class={styles.actionButton}
-                      onClick={() => handleConnect(serverInfo.name)}
-                    >
-                      Retry
-                    </button>
-                  </Show>
-
-                  <Show when={serverInfo.status === 'needs_client_registration'}>
-                    <button class={styles.actionButton} disabled>
-                      Register
-                    </button>
-                  </Show>
-                </div>
-              </div>
-            )}
+              )
+            }}
           </For>
         </div>
       </Show>

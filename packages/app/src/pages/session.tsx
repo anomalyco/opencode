@@ -984,12 +984,12 @@ export default function Page() {
   const activeTab = createMemo(() => {
     const active = tabs().active()
     if (active) return active
-    if (hasReview()) return "review"
 
     const first = openedTabs()[0]
     if (first) return first
+    if (hasReview()) return "review"
     if (contextOpen()) return "context"
-    return "review"
+    return "files"
   })
 
   createEffect(() => {
@@ -1757,6 +1757,14 @@ export default function Page() {
                 <div class="sticky top-0 shrink-0 flex">
                   <Tabs.List>
                     <Show when={true}>
+                      <Tabs.Trigger value="files">
+                        <div class="flex items-center gap-2">
+                          <Icon name="folder" />
+                          <div>Files</div>
+                        </div>
+                      </Tabs.Trigger>
+                    </Show>
+                    <Show when={true}>
                       <Tabs.Trigger value="review">
                         <div class="flex items-center gap-3">
                           <Show when={diffs()}>
@@ -1792,28 +1800,6 @@ export default function Page() {
                         <div class="flex items-center gap-2">
                           <SessionContextUsage variant="indicator" />
                           <div>{language.t("session.tab.context")}</div>
-                        </div>
-                      </Tabs.Trigger>
-                    </Show>
-                    <Show when={true}>
-                      <Tabs.Trigger
-                        value="files"
-                        closeButton={
-                          <Tooltip value={language.t("common.closeTab")} placement="bottom">
-                            <IconButton
-                              icon="close"
-                              variant="ghost"
-                              onClick={() => tabs().close("files")}
-                              aria-label={language.t("common.closeTab")}
-                            />
-                          </Tooltip>
-                        }
-                        hideCloseButton
-                        onMiddleClick={() => tabs().close("files")}
-                      >
-                        <div class="flex items-center gap-2">
-                          <Icon name="folder" />
-                          <div>Files</div>
                         </div>
                       </Tabs.Trigger>
                     </Show>

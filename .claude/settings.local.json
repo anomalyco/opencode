@@ -10,7 +10,10 @@
       "Bash(bun run dev:*)",
       "Bash(bun run:*)",
       "Bash(netstat:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(test:*)",
+      "Bash(del:*)",
+      "Bash(powershell:*)"
     ]
   }
 }

@@ -1,6 +1,7 @@
 import { Component } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { McpDashboard } from "@/components/task/McpDashboard"
+import { Icon } from "@opencode-ai/ui/icon"
 
 export const SettingsMcp: Component = () => {
   const language = useLanguage()
@@ -15,7 +16,10 @@ export const SettingsMcp: Component = () => {
         }}
       >
         <div class="flex flex-col gap-1 pt-6 pb-8">
-          <h2 class="text-16-medium text-text-strong">{language.t("settings.mcp.title")}</h2>
+          <div class="flex items-center gap-2">
+            <Icon name="mcp" size="normal" />
+            <h2 class="text-16-medium text-text-strong">{language.t("settings.mcp.title")}</h2>
+          </div>
           <p class="text-14-regular text-text-weak">{language.t("settings.mcp.description")}</p>
         </div>
       </div>
