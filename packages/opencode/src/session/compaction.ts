@@ -27,13 +27,15 @@ export namespace SessionCompaction {
     ),
   }
 
+  const OUTPUT_RESERVE_RATIO = 0.10
+
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
     if (config.compaction?.auto === false) return false
     const context = input.model.limit.context
     if (context === 0) return false
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
-    const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
+    const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || Math.min(Math.floor(context * OUTPUT_RESERVE_RATIO), SessionPrompt.OUTPUT_TOKEN_MAX)
     const usable = input.model.limit.input || context - output
     return count > usable
   }
