@@ -102,7 +102,7 @@ export namespace TOONTransform {
       }
 
       return msg
-    })
+    }) as ModelMessage[]
 
     const originalTokens = Math.ceil(totalOriginalChars / 4)
     const transformedTokens = Math.ceil(totalTransformedChars / 4)

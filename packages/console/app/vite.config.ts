@@ -5,13 +5,13 @@ import { nitro } from "nitro/vite"
 export default defineConfig({
   plugins: [
     solidStart() as PluginOption,
-    nitro({
+    ...(nitro({
       compatibilityDate: "2024-09-19",
       preset: "cloudflare_module",
       cloudflare: {
         nodeCompat: true,
       },
-    }),
+    }) as PluginOption[]),
   ],
   server: {
     allowedHosts: true,
