@@ -566,6 +566,7 @@ export function SessionTurn(
                                   fill="none"
                                   xmlns="http://www.w3.org/2000/svg"
                                   data-slot="session-turn-trigger-icon"
+                                  style={`transform: rotate(${props.stepsExpanded ? "0" : "-90"}deg)`}
                                 >
                                   <path
                                     d="M8.125 1.875H1.875L5 8.125L8.125 1.875Z"
