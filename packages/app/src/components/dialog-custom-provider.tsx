@@ -8,6 +8,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { For } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { DialogSelectProvider } from "./dialog-select-provider"
@@ -22,6 +23,7 @@ type Props = {
 export function DialogCustomProvider(props: Props) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
+  const globalSDK = useGlobalSDK()
   const language = useLanguage()
 
   const [form, setForm] = createStore({
@@ -118,6 +120,9 @@ export function DialogCustomProvider(props: Props) {
     const baseURL = form.baseURL.trim()
     const apiKey = form.apiKey.trim()
 
+    const env = apiKey.match(/^\{env:([^}]+)\}$/)?.[1]?.trim()
+    const key = apiKey && !env ? apiKey : undefined
+
     const idError = !providerID
       ? "Provider ID is required"
       : !PROVIDER_ID.test(providerID)
@@ -196,16 +201,17 @@ export function DialogCustomProvider(props: Props) {
 
     const options = {
       baseURL,
-      ...(apiKey ? { apiKey } : {}),
       ...(Object.keys(headers).length ? { headers } : {}),
     }
 
     return {
       providerID,
       name,
+      key,
       config: {
         npm: OPENAI_COMPATIBLE,
         name,
+        ...(env ? { env: [env] } : {}),
         options,
         models,
       },
@@ -224,8 +230,20 @@ export function DialogCustomProvider(props: Props) {
     const disabledProviders = globalSync.data.config.disabled_providers ?? []
     const nextDisabled = disabledProviders.filter((id) => id !== result.providerID)
 
-    globalSync
-      .updateConfig({ provider: { [result.providerID]: result.config }, disabled_providers: nextDisabled })
+    const auth = result.key
+      ? globalSDK.client.auth.set({
+          providerID: result.providerID,
+          auth: {
+            type: "api",
+            key: result.key,
+          },
+        })
+      : Promise.resolve()
+
+    auth
+      .then(() =>
+        globalSync.updateConfig({ provider: { [result.providerID]: result.config }, disabled_providers: nextDisabled }),
+      )
       .then(() => {
         dialog.close()
         showToast({
@@ -301,7 +319,7 @@ export function DialogCustomProvider(props: Props) {
             />
             <TextField
               label="API key"
-              placeholder="{env:MYPROVIDER_API_KEY}"
+              placeholder="API key"
               description="Optional. Leave empty if you manage auth via headers."
               value={form.apiKey}
               onChange={setForm.bind(null, "apiKey")}

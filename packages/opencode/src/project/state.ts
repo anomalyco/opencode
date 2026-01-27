@@ -1,4 +1,5 @@
 import { Log } from "@/util/log"
+import { withTimeout } from "@/util/timeout"
 
 export namespace State {
   interface Entry {
@@ -7,6 +8,7 @@ export namespace State {
   }
 
   const log = Log.create({ service: "state" })
+  const DISPOSE_TIMEOUT_MS = 10_000
   const recordsByKey = new Map<string, Map<any, Entry>>()
 
   export function create<S>(root: () => string, init: () => S, dispose?: (state: Awaited<S>) => Promise<void>) {
@@ -46,14 +48,21 @@ export namespace State {
     }, 10000).unref()
 
     const tasks: Promise<void>[] = []
-    for (const entry of entries.values()) {
+    for (const [init, entry] of entries) {
       if (!entry.dispose) continue
 
-      const task = Promise.resolve(entry.state)
-        .then((state) => entry.dispose!(state))
-        .catch((error) => {
-          log.error("Error while disposing state:", { error, key })
-        })
+      const label = typeof init === "function" ? init.name : String(init)
+
+      const task = withTimeout(
+        Promise.resolve(entry.state).then((state) => entry.dispose!(state)),
+        DISPOSE_TIMEOUT_MS,
+      ).catch((error) => {
+        if (error instanceof Error && error.message.includes("Operation timed out")) {
+          log.warn("state disposal timed out", { key, init: label })
+          return
+        }
+        log.error("Error while disposing state:", { error, key, init: label })
+      })
 
       tasks.push(task)
     }

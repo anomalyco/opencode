@@ -1341,24 +1341,35 @@ export namespace Config {
         throw new JsonError({ path: filepath }, { cause: err })
       })
 
-    if (!filepath.endsWith(".jsonc")) {
-      const existing = parseConfig(before, filepath)
-      await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
-    } else {
-      const next = patchJsonc(before, config)
-      parseConfig(next, filepath)
-      await Bun.write(filepath, next)
-    }
+    const next = await (async () => {
+      if (!filepath.endsWith(".jsonc")) {
+        const existing = parseConfig(before, filepath)
+        const merged = mergeDeep(existing, config)
+        await Bun.write(filepath, JSON.stringify(merged, null, 2))
+        return merged
+      }
+
+      const updated = patchJsonc(before, config)
+      const merged = parseConfig(updated, filepath)
+      await Bun.write(filepath, updated)
+      return merged
+    })()
 
     global.reset()
-    await Instance.disposeAll()
-    GlobalBus.emit("event", {
-      directory: "global",
-      payload: {
-        type: Event.Disposed.type,
-        properties: {},
-      },
-    })
+
+    void Instance.disposeAll()
+      .catch(() => undefined)
+      .finally(() => {
+        GlobalBus.emit("event", {
+          directory: "global",
+          payload: {
+            type: Event.Disposed.type,
+            properties: {},
+          },
+        })
+      })
+
+    return next
   }
 
   export async function directories() {

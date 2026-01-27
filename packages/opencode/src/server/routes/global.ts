@@ -147,8 +147,8 @@ export const GlobalRoutes = lazy(() =>
       validator("json", Config.Info),
       async (c) => {
         const config = c.req.valid("json")
-        await Config.updateGlobal(config)
-        return c.json(await Config.getGlobal())
+        const next = await Config.updateGlobal(config)
+        return c.json(next)
       },
     )
     .post(
