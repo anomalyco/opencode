@@ -195,7 +195,7 @@ export function Titlebar() {
             </Button>
           </TooltipKeybind>
           <div class="hidden xl:flex items-center gap-1 shrink-0">
-            <Tooltip placement="bottom" value={language.t("common.goBack")}>
+            <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
               <Button
                 variant="ghost"
                 icon="arrow-left"
@@ -205,7 +205,7 @@ export function Titlebar() {
                 aria-label={language.t("common.goBack")}
               />
             </Tooltip>
-            <Tooltip placement="bottom" value={language.t("common.goForward")}>
+            <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={2000}>
               <Button
                 variant="ghost"
                 icon="arrow-right"
