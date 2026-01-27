@@ -12,6 +12,7 @@ import { lazy } from "../util/lazy"
 import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
+import { proxyFetch } from "../util/fetch"
 import {
   type ParseError as JsoncParseError,
   applyEdits,
@@ -78,7 +79,7 @@ export namespace Config {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
         log.debug("fetching remote config", { url: `${key}/.well-known/opencode` })
-        const response = await fetch(`${key}/.well-known/opencode`)
+        const response = await proxyFetch(`${key}/.well-known/opencode`)
         if (!response.ok) {
           throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
         }
