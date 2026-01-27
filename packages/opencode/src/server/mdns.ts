@@ -6,6 +6,9 @@ const log = Log.create({ service: "mdns" })
 export namespace MDNS {
   let bonjour: Bonjour | undefined
   let currentPort: number | undefined
+  let currentService: any = undefined
+  let upHandler: (() => void) | undefined
+  let errorHandler: ((err: Error) => void) | undefined
 
   export function publish(port: number) {
     if (currentPort === port) return
@@ -22,14 +25,18 @@ export namespace MDNS {
         txt: { path: "/" },
       })
 
-      service.on("up", () => {
+      // Store handler references for cleanup
+      upHandler = () => {
         log.info("mDNS service published", { name, port })
-      })
-
-      service.on("error", (err) => {
+      }
+      errorHandler = (err: Error) => {
         log.error("mDNS service error", { error: err })
-      })
+      }
 
+      service.on("up", upHandler)
+      service.on("error", errorHandler)
+
+      currentService = service
       currentPort = port
     } catch (err) {
       log.error("mDNS publish failed", { error: err })
@@ -40,10 +47,25 @@ export namespace MDNS {
       }
       bonjour = undefined
       currentPort = undefined
+      currentService = undefined
+      upHandler = undefined
+      errorHandler = undefined
     }
   }
 
   export function unpublish() {
+    if (currentService && upHandler && errorHandler) {
+      try {
+        currentService.removeListener("up", upHandler)
+        currentService.removeListener("error", errorHandler)
+      } catch (err) {
+        log.error("mDNS listener cleanup failed", { error: err })
+      }
+      currentService = undefined
+      upHandler = undefined
+      errorHandler = undefined
+    }
+
     if (bonjour) {
       try {
         bonjour.unpublishAll()
