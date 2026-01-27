@@ -39,9 +39,10 @@ export function StatusPopover() {
   const language = useLanguage()
   const navigate = useNavigate()
 
-  const [loading, setLoading] = createSignal<string | null>(null)
   const [store, setStore] = createStore({
     status: {} as Record<string, ServerStatus | undefined>,
+    loading: null as string | null,
+    defaultServerUrl: undefined as string | undefined,
   })
 
   const servers = createMemo(() => {
@@ -97,8 +98,8 @@ export function StatusPopover() {
   const mcpConnected = createMemo(() => mcpItems().filter((i) => i.status === "connected").length)
 
   const toggleMcp = async (name: string) => {
-    if (loading()) return
-    setLoading(name)
+    if (store.loading) return
+    setStore("loading", name)
     const status = sync.data.mcp[name]
     if (status?.status === "connected") {
       await sdk.client.mcp.disconnect({ name })
@@ -107,7 +108,7 @@ export function StatusPopover() {
     }
     const result = await sdk.client.mcp.status()
     if (result.data) sync.set("mcp", result.data)
-    setLoading(null)
+    setStore("loading", null)
   }
 
   const lspItems = createMemo(() => sync.data.lsp ?? [])
@@ -123,19 +124,17 @@ export function StatusPopover() {
 
   const serverCount = createMemo(() => sortedServers().length)
 
-  const [defaultServerUrl, setDefaultServerUrl] = createSignal<string | undefined>()
-
   const refreshDefaultServerUrl = () => {
     const result = platform.getDefaultServerUrl?.()
     if (!result) {
-      setDefaultServerUrl(undefined)
+      setStore("defaultServerUrl", undefined)
       return
     }
     if (result instanceof Promise) {
-      result.then((url) => setDefaultServerUrl(url ? normalizeServerUrl(url) : undefined))
+      result.then((url) => setStore("defaultServerUrl", url ? normalizeServerUrl(url) : undefined))
       return
     }
-    setDefaultServerUrl(normalizeServerUrl(result))
+    setStore("defaultServerUrl", normalizeServerUrl(result))
   }
 
   createEffect(() => {
@@ -220,7 +219,7 @@ export function StatusPopover() {
                 <For each={sortedServers()}>
                   {(url) => {
                     const isActive = () => url === server.url
-                    const isDefault = () => url === defaultServerUrl()
+                    const isDefault = () => url === store.defaultServerUrl
                     const status = () => store.status[url]
                     const isBlocked = () => status()?.healthy === false
                     const [truncated, setTruncated] = createSignal(false)
@@ -329,7 +328,7 @@ export function StatusPopover() {
                           type="button"
                           class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
                           onClick={() => toggleMcp(item.name)}
-                          disabled={loading() === item.name}
+                          disabled={store.loading === item.name}
                         >
                           <div
                             classList={{
@@ -345,7 +344,7 @@ export function StatusPopover() {
                           <div onClick={(event) => event.stopPropagation()}>
                             <Switch
                               checked={enabled()}
-                              disabled={loading() === item.name}
+                              disabled={store.loading === item.name}
                               onChange={() => toggleMcp(item.name)}
                             />
                           </div>

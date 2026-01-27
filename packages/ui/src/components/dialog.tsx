@@ -11,12 +11,18 @@ export interface DialogProps extends ParentProps {
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   fit?: boolean
+  transition?: boolean
 }
 
 export function Dialog(props: DialogProps) {
   const i18n = useI18n()
   return (
-    <div data-component="dialog" data-fit={props.fit ? true : undefined} data-size={props.size || "normal"}>
+    <div
+      data-component="dialog"
+      data-fit={props.fit ? true : undefined}
+      data-size={props.size || "normal"}
+      data-transition={props.transition ? true : undefined}
+    >
       <div data-slot="dialog-container">
         <Kobalte.Content
           data-slot="dialog-content"
