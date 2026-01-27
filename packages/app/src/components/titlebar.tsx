@@ -196,18 +196,20 @@ export function Titlebar() {
           </TooltipKeybind>
           <div class="hidden xl:flex items-center gap-1 shrink-0">
             <Tooltip placement="bottom" value={language.t("common.goBack")}>
-              <IconButton
-                icon="arrow-left"
+              <Button
                 variant="ghost"
+                icon="arrow-left"
+                class="size-6 p-0"
                 disabled={!canBack()}
                 onClick={back}
                 aria-label={language.t("common.goBack")}
               />
             </Tooltip>
             <Tooltip placement="bottom" value={language.t("common.goForward")}>
-              <IconButton
-                icon="arrow-right"
+              <Button
                 variant="ghost"
+                icon="arrow-right"
+                class="size-6 p-0"
                 disabled={!canForward()}
                 onClick={forward}
                 aria-label={language.t("common.goForward")}
