@@ -20,7 +20,7 @@
         "last_updated": "2026-01-27",
         "modalities": { "input": ["text", "image", "video"], "output": ["text"] },
         "open_weights": true,
-        "cost": { "input": 0.6, "output": 2.5, "cache_read": 0.15 },
+        "cost": { "input": 0.6, "output": 3, "cache_read": 0.1 },
         "limit": { "context": 262144, "output": 262144 }
       },
       "kimi-k2-thinking-turbo": {
@@ -169,7 +169,7 @@
         "last_updated": "2026-01-27",
         "modalities": { "input": ["text", "image", "video"], "output": ["text"] },
         "open_weights": true,
-        "cost": { "input": 0.6, "output": 2.5, "cache_read": 0.15 },
+        "cost": { "input": 0.6, "output": 3, "cache_read": 0.1 },
         "limit": { "context": 262144, "output": 262144 }
       },
       "kimi-k2-thinking-turbo": {
