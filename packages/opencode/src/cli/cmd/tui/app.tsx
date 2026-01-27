@@ -168,7 +168,10 @@ export function tui(input: {
         exitOnCtrlC: false,
         useKittyKeyboard: {},
         consoleOptions: {
-          keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+          keyBindings: [
+            { name: "y", ctrl: true, action: "copy-selection" },
+            { name: "c", meta: true, action: "copy-selection" },
+          ],
           onCopySelection: (text) => {
             Clipboard.copy(text).catch((error) => {
               console.error(`Failed to copy console selection to clipboard: ${error}`)
