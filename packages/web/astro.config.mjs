@@ -113,7 +113,7 @@ export default defineConfig({
 
         {
           label: "Develop",
-          items: ["sdk", "server", "plugins", "ecosystem"],
+          items: ["sdk", "server", "server-architecture", "plugins", "ecosystem"],
         },
       ],
       components: {

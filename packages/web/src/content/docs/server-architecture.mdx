@@ -1,0 +1,283 @@
+---
+title: Server Architecture
+description: 深入解析 OpenCode Server 的运行机制、Multi-Agent、Skills 与 TUI 对接
+---
+
+本文基于仓库现有实现，系统性拆解 OpenCode 的 Server 设计、Multi-Agent 机制、Skills 支持与 TUI 对接方式。目标是让你从源码层面理解：请求如何流动、模型如何被调用、子代理如何协作、事件如何同步到 TUI。
+
+---
+
+## 1. 架构总览
+
+OpenCode 采用 **Client/Server** 架构：Server 提供 HTTP + SSE（事件流）与 OpenAPI；客户端可以是 TUI、Web、IDE 插件或其他 SDK 客户端。
+
+```text
+          ┌───────────────┐
+          │   TUI Client  │
+          │ (@opentui)    │
+          └───────┬───────┘
+                  │ HTTP + SSE
+                  ▼
+        ┌─────────────────────┐
+        │  OpenCode Server    │
+        │  (Bun + Hono)       │
+        ├─────────────────────┤
+        │  Session / Agent    │
+        │  Tool / Permission  │
+        │  LLM Orchestration  │
+        │  Bus / SSE Events   │
+        └─────────────────────┘
+                  │
+                  ▼
+        ┌─────────────────────┐
+        │  Model Providers    │
+        │  (OpenAI/Anthropic) │
+        └─────────────────────┘
+```
+
+关键点：
+- **Server 是唯一真实数据源**（Session、Message、Tool 结果、权限请求）。
+- **TUI 只是客户端**：所有状态都由 Server 通过 SSE 推送。
+- **OpenAPI 统一协议**：SDK 与 IDE 插件都基于 `/doc` 生成类型。
+
+---
+
+## 2. Server 如何运作
+
+### 2.1 启动方式
+
+- `opencode`：同时启动 **TUI + Server**。
+- `opencode serve`：只启动 **Server**，适合远程/自动化。
+- `opencode run --attach`：TUI 连接一个已有 Server。
+
+Server 启动的关键逻辑集中在：
+
+- `packages/opencode/src/server/server.ts`
+
+核心点：
+- 使用 **Bun.serve + Hono** 搭建 HTTP Server。
+- 自动选择端口（默认 4096，或随机）。
+- 支持 `CORS`、`Basic Auth`、`mDNS` 发布。
+
+### 2.2 Instance 作用域
+
+Server 通过 `Instance.provide` 为请求绑定工作目录：
+- `directory` 来源：query 或 `x-opencode-directory` header。
+- `Instance` 内部维护 project、worktree、storage 等上下文。
+- 这使得 **同一个 Server 可服务多个项目目录**。
+
+### 2.3 路由拆分
+
+Server 通过模块化路由聚合功能：
+- `/global/*`：全局健康检查、全局事件流。
+- `/session/*`：会话创建、消息、prompt、diff、summary。
+- `/provider/*`：模型与鉴权。
+- `/tui/*`：远程控制 TUI。
+- `/event`：实例级 SSE 事件流（TUI/SDK 主要订阅点）。
+
+这些路由统一由 Hono 组合，并通过 OpenAPI 描述自动生成 SDK。
+
+---
+
+## 3. 从输入到模型输出：完整工作流
+
+以下是一次典型对话的生命周期：
+
+1. **TUI 发送请求**
+   - TUI 调用 `/session/:id/message`，传入用户内容与消息 parts。
+2. **SessionPrompt 创建用户消息**
+   - `SessionPrompt.prompt` 记录 message & parts。
+   - 如果需要权限覆盖，会写入 session permission。
+3. **进入主循环**
+   - `SessionPrompt.loop` 处理当前 session，找到最后的 user/assistant。
+4. **模型流式调用**
+   - `LLM.stream` 拼装 system prompt + user prompt + tools，发起 `streamText`。
+5. **SessionProcessor 消费流**
+   - 监听 token、tool-call、tool-result。
+   - 更新 message parts（文本、思考、tool 状态）。
+6. **Bus 发布事件**
+   - 每次 message/part 更新都会通过 `Bus` 发出事件。
+7. **TUI 订阅 SSE**
+   - `SDKProvider` 订阅 `/event`，`SyncProvider` 将事件写入 store。
+8. **UI 实时刷新**
+   - TUI 根据状态更新聊天窗口、工具执行、权限弹窗。
+
+这个流程确保 **UI 与 Server 状态完全一致**，TUI 只需要消费事件流即可。
+
+---
+
+## 4. 大模型如何调用
+
+模型调用由 `SessionPrompt` + `LLM.stream` 共同驱动。
+
+### 4.1 System Prompt 拼装
+
+`LLM.stream` 会合并多层提示：
+- Agent 自定义 prompt（如 `build`、`plan`）。
+- Provider 系统提示（如模型特定指令）。
+- User 的 `system` 字段。
+- Plugin 注入的扩展提示（`experimental.chat.system.transform`）。
+
+### 4.2 参数与选项
+
+模型参数来源是层叠合并：
+- Provider 默认选项。
+- Model 默认配置。
+- Agent 级别选项（temperature / topP / options）。
+- variant 选择（如果 user 指定）。
+
+### 4.3 Tools 与权限
+
+- `ToolRegistry` 汇总内置 + 自定义工具。
+- `PermissionNext` 控制每个 tool 是否允许 / 需要确认。
+- 对 LiteLLM / 某些 Anthropic Proxy，必要时插入 `_noop` tool 以保证兼容性。
+
+### 4.4 流式处理
+
+`SessionProcessor` 接管 stream：
+- 将 reasoning/token/tool-call 分段落盘到 message parts。
+- 每个 tool 结果都会更新对应 part 的状态与 metadata。
+- 遇到权限拒绝时可中断 loop。
+
+---
+
+## 5. 多 Agent 机制（Primary + Subagent）
+
+### 5.1 Agent 定义与发现
+
+- Agent 定义集中在 `Agent.state`。
+- 内置 agents：`build`、`plan`、`general`、`explore`。
+- 可在 `opencode.json` 或 `.opencode/agents/*.md` 中扩展/覆盖。
+
+核心字段：
+- `mode`: `primary` / `subagent` / `all`
+- `permission`: 每个 agent 的工具权限规则
+- `model` / `prompt` / `temperature`
+
+### 5.2 Primary Agent
+
+- TUI 中用 `Tab` 在 primary agents 间切换。
+- `plan` agent 默认禁用编辑类工具，只做分析。
+- `build` agent 拥有完整工具权限。
+
+### 5.3 Subagent 机制
+
+Subagent 基于 **TaskTool + 子 Session** 运行：
+
+1. 用户输入 `@explore ...` 或命令触发 subtask。
+2. `@agent` 会生成 `AgentPart` + 一段“请调用 task tool”的合成提示，让主 agent 去调用 `task` 工具。
+3. 如果是命令触发的 subtask（`/command` 配置为 subagent），则直接生成 `SubtaskPart`。
+4. `SessionPrompt.loop` 遇到 `SubtaskPart` 会直接执行 `TaskTool`。
+5. `TaskTool` 创建子 Session（parentID = 当前 session）。
+6. 子 Session 在独立上下文运行模型调用。
+7. 子任务结果以 tool output 形式回传给主 session。
+
+这样做到 **上下文隔离** + **结果可溯源**。
+
+---
+
+## 6. Skills 支持机制
+
+### 6.1 Skill 发现与索引
+
+`Skill.state` 会扫描以下路径：
+- `.opencode/skills/<name>/SKILL.md`
+- `~/.config/opencode/skills/<name>/SKILL.md`
+- `.claude/skills/<name>/SKILL.md`
+- `~/.claude/skills/<name>/SKILL.md`
+
+每个 `SKILL.md` 必须包含 frontmatter（name/description）。
+
+### 6.2 Skill Tool 调用
+
+`SkillTool` 的行为：
+- 把所有可用 skills 列在 tool description 内。
+- 根据 agent 权限过滤显示。
+- 调用时读取 SKILL.md 内容并返回给模型。
+- 使用 PermissionNext 控制加载权限。
+
+这让 LLM 能按需加载“可复用流程”，同时保证权限隔离。
+
+---
+
+## 7. TUI 如何对接 Server
+
+### 7.1 SDK 层
+
+- `SDKProvider` 使用 `@opencode-ai/sdk/v2` 创建 client。
+- 默认通过 `/event` 建立 SSE 事件流。
+- 事件会批处理后派发给 UI，避免频繁重渲。
+
+### 7.2 同步层
+
+`SyncProvider` 在启动时会调用：
+- `/config/providers`、`/provider`、`/agent`、`/config` 作为阻塞初始化。
+- 非阻塞补全：`/session/status`、`/command`、`/lsp/status` 等。
+
+### 7.3 TUI 事件驱动
+
+TUI 订阅以下 Bus 事件：
+- `tui.command.execute`：触发命令（如 agent 切换）。
+- `tui.prompt.append`：追加文本到输入框。
+- `tui.toast.show`：显示 toast。
+- `tui.session.select`：跳转 session。
+
+这些事件均可通过 `/tui/*` HTTP API 触发，实现 **外部客户端驱动 TUI**。
+
+补充：`/tui/control/next` 与 `/tui/control/response` 提供一个请求/响应队列，用于需要“桥接式”控制 TUI 的场景。
+
+---
+
+## 8. 关键工作流示例
+
+### 8.1 普通 prompt
+
+```text
+用户输入 -> /session/:id/message
+-> SessionPrompt.loop
+-> LLM.stream
+-> SessionProcessor 更新消息
+-> SSE 推送
+-> TUI 渲染
+```
+
+### 8.2 Subagent 任务
+
+```text
+用户输入 @explore
+-> AgentPart + 合成提示
+-> 主 agent 调用 task tool
+-> TaskTool 创建子 Session
+-> 子 Session 运行模型
+-> Tool output 回写主会话
+```
+
+### 8.3 Skill 加载
+
+```text
+LLM 调用 skill({ name })
+-> SkillTool 读取 SKILL.md
+-> 输出 Skill 指令给模型
+```
+
+---
+
+## 9. 设计要点总结
+
+- **Server 统一状态**：所有会话与消息都由 Server 管理。
+- **Agent/Tool 权限是核心安全边界**：每个 agent 都有专属 ruleset。
+- **Subagent 通过子 Session 实现隔离**：既安全又可追踪。
+- **Skill 是轻量知识模块**：只在需要时加载，避免污染上下文。
+- **TUI 与 Server 解耦**：只需要 SSE + OpenAPI 即可实现多客户端。
+
+如果你想深入理解，可以从以下源码切入：
+- `packages/opencode/src/server/server.ts`
+- `packages/opencode/src/session/prompt.ts`
+- `packages/opencode/src/session/llm.ts`
+- `packages/opencode/src/tool/task.ts`
+- `packages/opencode/src/skill/skill.ts`
+- `packages/opencode/src/cli/cmd/tui/context/sdk.tsx`
+
+---
+
+如果你正在构建插件、IDE 集成或自定义工作流，这个架构使得 **OpenCode 可以作为“可编排的 Agent Server”** 进行扩展。
