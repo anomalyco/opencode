@@ -59,18 +59,16 @@ function AddRow(props: AddRowProps) {
       <div class="flex-1 min-w-0 [&_[data-slot=input-wrapper]]:relative">
         <div
           classList={{
-            "size-1.5 rounded-full absolute left-3 z-10 pointer-events-none": true,
+            "size-1.5 rounded-full absolute left-3 top-1/2 -translate-y-1/2 z-10 pointer-events-none": true,
             "bg-icon-success-base": props.status === true,
             "bg-icon-critical-base": props.status === false,
             "bg-border-weak-base": props.status === undefined,
           }}
-          style={{ top: "50%", transform: "translateY(-50%)" }}
           ref={(el) => {
             // Position relative to input-wrapper
             requestAnimationFrame(() => {
               const wrapper = el.parentElement?.querySelector('[data-slot="input-wrapper"]')
               if (wrapper instanceof HTMLElement) {
-                wrapper.style.position = "relative"
                 wrapper.appendChild(el)
               }
             })

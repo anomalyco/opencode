@@ -579,6 +579,41 @@ function createGlobalSync() {
     if (!existing) return
 
     const [store, setStore] = existing
+
+    const cleanupSessionCaches = (sessionID: string) => {
+      if (!sessionID) return
+
+      const hasAny =
+        store.message[sessionID] !== undefined ||
+        store.session_diff[sessionID] !== undefined ||
+        store.todo[sessionID] !== undefined ||
+        store.permission[sessionID] !== undefined ||
+        store.question[sessionID] !== undefined ||
+        store.session_status[sessionID] !== undefined
+
+      if (!hasAny) return
+
+      setStore(
+        produce((draft) => {
+          const messages = draft.message[sessionID]
+          if (messages) {
+            for (const message of messages) {
+              const id = message?.id
+              if (!id) continue
+              delete draft.part[id]
+            }
+          }
+
+          delete draft.message[sessionID]
+          delete draft.session_diff[sessionID]
+          delete draft.todo[sessionID]
+          delete draft.permission[sessionID]
+          delete draft.question[sessionID]
+          delete draft.session_status[sessionID]
+        }),
+      )
+    }
+
     switch (event.type) {
       case "server.instance.disposed": {
         if (globalStore.reload) {
@@ -616,6 +651,9 @@ function createGlobalSync() {
               }),
             )
           }
+
+          cleanupSessionCaches(info.id)
+
           if (info.parentID) break
           setStore("sessionTotal", (value) => Math.max(0, value - 1))
           break
@@ -631,7 +669,8 @@ function createGlobalSync() {
         break
       }
       case "session.deleted": {
-        const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+        const sessionID = event.properties.info.id
+        const result = Binary.search(store.session, sessionID, (s) => s.id)
         if (result.found) {
           setStore(
             "session",
@@ -640,6 +679,9 @@ function createGlobalSync() {
             }),
           )
         }
+
+        cleanupSessionCaches(sessionID)
+
         if (event.properties.info.parentID) break
         setStore("sessionTotal", (value) => Math.max(0, value - 1))
         break
@@ -675,18 +717,22 @@ function createGlobalSync() {
         break
       }
       case "message.removed": {
-        const messages = store.message[event.properties.sessionID]
-        if (!messages) break
-        const result = Binary.search(messages, event.properties.messageID, (m) => m.id)
-        if (result.found) {
-          setStore(
-            "message",
-            event.properties.sessionID,
-            produce((draft) => {
-              draft.splice(result.index, 1)
-            }),
-          )
-        }
+        const sessionID = event.properties.sessionID
+        const messageID = event.properties.messageID
+
+        setStore(
+          produce((draft) => {
+            const messages = draft.message[sessionID]
+            if (messages) {
+              const result = Binary.search(messages, messageID, (m) => m.id)
+              if (result.found) {
+                messages.splice(result.index, 1)
+              }
+            }
+
+            delete draft.part[messageID]
+          }),
+        )
         break
       }
       case "message.part.updated": {
