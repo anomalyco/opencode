@@ -1222,6 +1222,33 @@ To use Kimi K2 from Moonshot AI:
 
 You can configure opencode to use local models through Ollama.
 
+#### Automatic Setup
+
+The easiest way to configure Ollama with OpenCode is using the built-in launch command:
+
+```bash
+ollama launch opencode
+```
+
+This opens an interactive TUI where you can select Ollama models to be added to opencode. 
+
+```bash
+$ ollama launch opencode
+
+Select models for OpenCode:
+  >  [x] glm-4.7-flash:latest (default)
+     [ ] glm-4.7:cloud
+     [ ] gpt-oss:latest
+
+    [ Continue ] (1 selected) - press Tab
+```
+
+Once you confirm, the command automatically overwrites your `opencode.json` config with the selected models.
+
+#### Manual Configuration
+
+Alternatively, you can manually configure Ollama in your `opencode.json`:
+
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
