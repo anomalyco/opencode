@@ -71,9 +71,11 @@ export default function FileTree(props: {
   const marks = createMemo(() => {
     if (props._marks) return props._marks
 
-    const modified = props.modified ?? (props.kinds ? Array.from(props.kinds.keys()) : undefined)
-    if (!modified || modified.length === 0) return
-    return new Set(modified)
+    const out = new Set<string>()
+    for (const item of props.modified ?? []) out.add(item)
+    for (const item of props.kinds?.keys() ?? []) out.add(item)
+    if (out.size === 0) return
+    return out
   })
 
   const kinds = createMemo(() => {
@@ -146,7 +148,7 @@ export default function FileTree(props: {
       <Dynamic
         component={local.as ?? "div"}
         classList={{
-          "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-2 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
+          "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-[7px] py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
           ...(local.classList ?? {}),
           [local.class ?? ""]: !!local.class,
           [props.nodeClass ?? ""]: !!props.nodeClass,
@@ -180,35 +182,64 @@ export default function FileTree(props: {
         {...rest}
       >
         {local.children}
-        <span
-          classList={{
-            "flex-1 min-w-0 text-12-medium whitespace-nowrap truncate": true,
-            "text-text-weaker": local.node.ignored,
-            "text-text-weak": !local.node.ignored,
-          }}
-        >
-          {local.node.name}
-        </span>
         {(() => {
-          if (local.node.type !== "file") return null
+          const kind = kinds()?.get(local.node.path)
+          const marked = marks()?.has(local.node.path) ?? false
+          const active = !!kind && marked && !local.node.ignored
+          const color =
+            kind === "add"
+              ? "color: var(--icon-diff-add-base)"
+              : kind === "del"
+                ? "color: var(--icon-diff-delete-base)"
+                : kind === "mix"
+                  ? "color: var(--icon-diff-modified-base)"
+                  : undefined
+          return (
+            <span
+              classList={{
+                "flex-1 min-w-0 text-12-medium whitespace-nowrap truncate": true,
+                "text-text-weaker": local.node.ignored,
+                "text-text-weak": !local.node.ignored && !active,
+              }}
+              style={active ? color : undefined}
+            >
+              {local.node.name}
+            </span>
+          )
+        })()}
+        {(() => {
+          const kind = kinds()?.get(local.node.path)
+          if (!kind) return null
           if (!marks()?.has(local.node.path)) return null
 
-          const kind = kinds()?.get(local.node.path)
-          return (
-            <div
-              classList={{
-                "shrink-0 size-1.5 rounded-full": true,
-                "bg-surface-warning-strong": !kind || kind === "mix",
-              }}
-              style={
-                kind === "add"
-                  ? "background-color: var(--icon-diff-add-base)"
-                  : kind === "del"
-                    ? "background-color: var(--icon-diff-delete-base)"
-                    : undefined
-              }
-            />
-          )
+          if (local.node.type === "file") {
+            const text = kind === "add" ? "A" : kind === "del" ? "D" : "M"
+            const color =
+              kind === "add"
+                ? "color: var(--icon-diff-add-base)"
+                : kind === "del"
+                  ? "color: var(--icon-diff-delete-base)"
+                  : "color: var(--icon-diff-modified-base)"
+
+            return (
+              <span class="shrink-0 w-4 text-center text-12-medium" style={color}>
+                {text}
+              </span>
+            )
+          }
+
+          if (local.node.type === "directory") {
+            const color =
+              kind === "add"
+                ? "background-color: var(--icon-diff-add-base)"
+                : kind === "del"
+                  ? "background-color: var(--icon-diff-delete-base)"
+                  : "background-color: var(--icon-diff-modified-base)"
+
+            return <div class="shrink-0 size-1.5 mr-1.5 rounded-full" style={color} />
+          }
+
+          return null
         })()}
       </Dynamic>
     )
@@ -228,15 +259,16 @@ export default function FileTree(props: {
             const head = parts.slice(0, -1).join("/")
             const prefix = head ? `${head}/` : ""
 
-            const kind = () => (node.type === "file" ? kinds()?.get(node.path) : undefined)
+            const kind = () => kinds()?.get(node.path)
             const label = () => {
-              if (!marks()?.has(node.path)) return
               const k = kind()
               if (!k) return
               if (k === "add") return "Additions"
               if (k === "del") return "Deletions"
               return "Modifications"
             }
+
+            const ignored = () => node.type === "directory" && node.ignored
 
             return (
               <Tooltip
@@ -261,6 +293,12 @@ export default function FileTree(props: {
                           <span class="shrink-0 text-text-invert-strong">{t()}</span>
                         </>
                       )}
+                    </Show>
+                    <Show when={ignored()}>
+                      <>
+                        <span class="mx-1 font-bold text-text-invert-strong">•</span>
+                        <span class="shrink-0 text-text-invert-weak">Ignored</span>
+                      </>
                     </Show>
                   </div>
                 }
