@@ -22,29 +22,33 @@ export namespace Snapshot {
   }
 
   export async function cleanup() {
-    if (Instance.project.vcs !== "git") return
     const cfg = await Config.get()
-    if (cfg.snapshot === false || cfg.snapshot === 0) return
-    const prune = cfg.snapshot === true ? "7.days" : `${cfg.snapshot}.days`
-    const git = gitdir()
-    const exists = await fs
-      .stat(git)
-      .then(() => true)
-      .catch(() => false)
-    if (!exists) return
-    const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} gc --prune=${prune}`
-      .quiet()
-      .cwd(Instance.directory)
-      .nothrow()
-    if (result.exitCode !== 0) {
-      log.warn("cleanup failed", {
-        exitCode: result.exitCode,
-        stderr: result.stderr.toString(),
-        stdout: result.stdout.toString(),
-      })
-      return
+    if (cfg.snapshot === false || cfg.snapshot === 0 || cfg.snapshot === undefined) return
+    const retentionDays: number = cfg.snapshot === true ? 7 : cfg.snapshot!
+    const snapshotDir = gitdir()
+    const parentDir = path.dirname(snapshotDir)
+    try {
+      const entries = await fs.readdir(parentDir, { withFileTypes: true })
+      let deletedCount = 0
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue
+        const projectDir = path.join(parentDir, entry.name)
+        const stats = await fs.stat(projectDir)
+        const ageMs = Date.now() - stats.mtimeMs
+        const ageDays = ageMs / (24 * 60 * 60 * 1000)
+        if (ageDays > retentionDays) {
+          await fs.rm(projectDir, { recursive: true, force: true })
+          deletedCount++
+          log.info("deleted old snapshot directory", {
+            project: entry.name,
+            ageDays: Math.floor(ageDays),
+          })
+        }
+      }
+      log.info("cleanup", { retentionDays, deletedCount })
+    } catch (error) {
+      log.warn("cleanup failed", { error: (error as Error).message })
     }
-    log.info("cleanup", { prune })
   }
 
   export async function track() {
