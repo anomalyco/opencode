@@ -15,14 +15,16 @@ import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { DialogSelectServer } from "./dialog-select-server"
+import { showToast } from "@opencode-ai/ui/toast"
 
 type ServerStatus = { healthy: boolean; version?: string }
 
 async function checkHealth(url: string, platform: ReturnType<typeof usePlatform>): Promise<ServerStatus> {
+  const signal = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout?.(3000)
   const sdk = createOpencodeClient({
     baseUrl: url,
     fetch: platform.fetch,
-    signal: AbortSignal.timeout(3000),
+    signal,
   })
   return sdk.global
     .health()
@@ -100,15 +102,21 @@ export function StatusPopover() {
   const toggleMcp = async (name: string) => {
     if (store.loading) return
     setStore("loading", name)
-    const status = sync.data.mcp[name]
-    if (status?.status === "connected") {
-      await sdk.client.mcp.disconnect({ name })
-    } else {
-      await sdk.client.mcp.connect({ name })
+
+    try {
+      const status = sync.data.mcp[name]
+      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
+      const result = await sdk.client.mcp.status()
+      if (result.data) sync.set("mcp", result.data)
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setStore("loading", null)
     }
-    const result = await sdk.client.mcp.status()
-    if (result.data) sync.set("mcp", result.data)
-    setStore("loading", null)
   }
 
   const lspItems = createMemo(() => sync.data.lsp ?? [])

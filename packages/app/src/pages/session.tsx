@@ -1,4 +1,16 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import {
+  For,
+  onCleanup,
+  onMount,
+  Show,
+  Match,
+  Switch,
+  createMemo,
+  createEffect,
+  createSignal,
+  on,
+  type JSX,
+} from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -28,7 +40,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
-import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
+import { checksum, base64Encode } from "@opencode-ai/util/encode"
 import { findLast } from "@opencode-ai/util/array"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
@@ -47,6 +59,7 @@ import { useComments, type LineComment } from "@/context/comments"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
+import { decode64 } from "@/utils/base64"
 import { showToast } from "@opencode-ai/ui/toast"
 import {
   SessionHeader,
@@ -83,6 +96,44 @@ interface SessionReviewTabProps {
     header?: string
     container?: string
   }
+}
+
+function StickyAddButton(props: { children: JSX.Element }) {
+  const [stuck, setStuck] = createSignal(false)
+  let button: HTMLDivElement | undefined
+
+  createEffect(() => {
+    const node = button
+    if (!node) return
+
+    const scroll = node.parentElement
+    if (!scroll) return
+
+    const handler = () => {
+      const rect = node.getBoundingClientRect()
+      const scrollRect = scroll.getBoundingClientRect()
+      setStuck(rect.right >= scrollRect.right && scroll.scrollWidth > scroll.clientWidth)
+    }
+
+    scroll.addEventListener("scroll", handler, { passive: true })
+    const observer = new ResizeObserver(handler)
+    observer.observe(scroll)
+    handler()
+    onCleanup(() => {
+      scroll.removeEventListener("scroll", handler)
+      observer.disconnect()
+    })
+  })
+
+  return (
+    <div
+      ref={button}
+      class="bg-background-base h-full shrink-0 sticky right-0 z-10 flex items-center justify-center border-b border-border-weak-base px-3"
+      classList={{ "border-l": stuck() }}
+    >
+      {props.children}
+    </div>
+  )
 }
 
 function SessionReviewTab(props: SessionReviewTabProps) {
@@ -1666,7 +1717,7 @@ export default function Page() {
                           <Match when={true}>
                             <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
                               <Mark class="w-14 opacity-10" />
-                              <div class="text-13-regular text-text-weak max-w-56">
+                              <div class="text-14-regular text-text-weak max-w-56">
                                 {language.t("session.review.empty")}
                               </div>
                             </div>
@@ -1703,9 +1754,9 @@ export default function Page() {
                           markScrollGesture(e.target)
                         }}
                         onScroll={(e) => {
+                          autoScroll.handleScroll()
                           if (!hasScrollGesture()) return
                           markScrollGesture(e.target)
-                          autoScroll.handleScroll()
                           if (isDesktop()) scheduleScrollSpy(e.currentTarget)
                         }}
                         onClick={autoScroll.handleInteraction}
@@ -1963,7 +2014,7 @@ export default function Page() {
                       <div class="sticky top-0 shrink-0 flex">
                         <Tabs.List>
                           <Show when={!layout.fileTree.opened()}>
-                            <Tabs.Trigger value="review">
+                            <Tabs.Trigger value="review" classes={{ button: "!pl-6" }}>
                               <div class="flex items-center gap-3">
                                 <Show when={diffs()}>
                                   <DiffChanges changes={diffs()} variant="bars" />
@@ -1985,8 +2036,9 @@ export default function Page() {
                               closeButton={
                                 <Tooltip value={language.t("common.closeTab")} placement="bottom">
                                   <IconButton
-                                    icon="close"
+                                    icon="close-small"
                                     variant="ghost"
+                                    class="h-5 w-5"
                                     onClick={() => tabs().close("context")}
                                     aria-label={language.t("common.closeTab")}
                                   />
@@ -2006,7 +2058,7 @@ export default function Page() {
                               {(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}
                             </For>
                           </SortableProvider>
-                          <div class="bg-background-base h-full shrink-0 sticky right-0 z-10 flex items-center justify-center border-b border-l border-border-weak-base px-3">
+                          <StickyAddButton>
                             <TooltipKeybind
                               title={language.t("command.file.open")}
                               keybind={command.keybind("file.open")}
@@ -2020,7 +2072,7 @@ export default function Page() {
                                 aria-label={language.t("command.file.open")}
                               />
                             </TooltipKeybind>
-                          </div>
+                          </StickyAddButton>
                         </Tabs.List>
                       </div>
                       <Show when={!layout.fileTree.opened()}>
@@ -2058,7 +2110,7 @@ export default function Page() {
                                 <Match when={true}>
                                   <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
                                     <Mark class="w-14 opacity-10" />
-                                    <div class="text-13-regular text-text-weak max-w-56">
+                                    <div class="text-14-regular text-text-weak max-w-56">
                                       {language.t("session.review.empty")}
                                     </div>
                                   </div>
@@ -2071,12 +2123,16 @@ export default function Page() {
 
                       <Show when={layout.fileTree.opened() && fileTreeTab() === "all" && openedTabs().length === 0}>
                         <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                          <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                            <Mark class="w-14 opacity-10" />
-                            <div class="text-13-regular text-text-weak max-w-56">
-                              {language.t("session.files.selectToOpen")}
+                          <Show when={activeTab() === "review"}>
+                            <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                              <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
+                                <Mark class="w-14 opacity-10" />
+                                <div class="text-14-regular text-text-weak max-w-56">
+                                  {language.t("session.files.selectToOpen")}
+                                </div>
+                              </div>
                             </div>
-                          </div>
+                          </Show>
                         </Tabs.Content>
                       </Show>
 
@@ -2126,8 +2182,28 @@ export default function Page() {
                             if (!isSvg()) return
                             const c = state()?.content
                             if (!c) return
-                            if (c.encoding === "base64") return base64Decode(c.content)
-                            return c.content
+                            if (c.encoding !== "base64") return c.content
+                            return decode64(c.content)
+                          })
+
+                          const svgDecodeFailed = createMemo(() => {
+                            if (!isSvg()) return false
+                            const c = state()?.content
+                            if (!c) return false
+                            if (c.encoding !== "base64") return false
+                            return svgContent() === undefined
+                          })
+
+                          const svgToast = { shown: false }
+                          createEffect(() => {
+                            if (!svgDecodeFailed()) return
+                            if (svgToast.shown) return
+                            svgToast.shown = true
+                            showToast({
+                              variant: "error",
+                              title: language.t("toast.file.loadFailed.title"),
+                              description: "Invalid base64 content.",
+                            })
                           })
                           const svgPreviewUrl = createMemo(() => {
                             if (!isSvg()) return
@@ -2613,7 +2689,7 @@ export default function Page() {
                       <Match when={true}>
                         <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
                           <Mark class="w-14 opacity-10" />
-                          <div class="text-13-regular text-text-weak max-w-56">
+                          <div class="text-14-regular text-text-weak max-w-56">
                             {language.t("session.review.empty")}
                           </div>
                         </div>
@@ -2665,7 +2741,7 @@ export default function Page() {
                           </Show>
                         </Match>
                         <Match when={true}>
-                          <div class="px-2 py-2 text-12-regular text-text-weak">
+                          <div class="mt-8 text-center text-12-regular text-text-weak">
                             {language.t("session.review.noChanges")}
                           </div>
                         </Match>

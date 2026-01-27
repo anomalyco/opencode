@@ -23,7 +23,7 @@ import { createStore, produce, reconcile, type SetStoreFunction, type Store } fr
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { useGlobalSDK } from "./global-sdk"
-import { ErrorPage, type InitError } from "../pages/error"
+import type { InitError } from "../pages/error"
 import {
   batch,
   createContext,
@@ -823,11 +823,16 @@ function createGlobalSync() {
       .then((x) => x.data)
       .catch(() => undefined)
     if (!health?.healthy) {
-      setGlobalStore("error", new Error(language.t("error.globalSync.connectFailed", { url: globalSDK.url })))
+      showToast({
+        variant: "error",
+        title: language.t("dialog.server.add.error"),
+        description: language.t("error.globalSync.connectFailed", { url: globalSDK.url }),
+      })
+      setGlobalStore("ready", true)
       return
     }
 
-    return Promise.all([
+    const tasks = [
       retry(() =>
         globalSDK.client.path.get().then((x) => {
           setGlobalStore("path", x.data!)
@@ -858,9 +863,22 @@ function createGlobalSync() {
           setGlobalStore("provider_auth", x.data ?? {})
         }),
       ),
-    ])
-      .then(() => setGlobalStore("ready", true))
-      .catch((e) => setGlobalStore("error", e))
+    ]
+
+    const results = await Promise.allSettled(tasks)
+    const errors = results.filter((r): r is PromiseRejectedResult => r.status === "rejected").map((r) => r.reason)
+
+    if (errors.length) {
+      const message = errors[0] instanceof Error ? errors[0].message : String(errors[0])
+      const more = errors.length > 1 ? ` (+${errors.length - 1} more)` : ""
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: message + more,
+      })
+    }
+
+    setGlobalStore("ready", true)
   }
 
   onMount(() => {
@@ -926,9 +944,6 @@ export function GlobalSyncProvider(props: ParentProps) {
   const value = createGlobalSync()
   return (
     <Switch>
-      <Match when={value.error}>
-        <ErrorPage error={value.error} />
-      </Match>
       <Match when={value.ready}>
         <GlobalSyncContext.Provider value={value}>{props.children}</GlobalSyncContext.Provider>
       </Match>

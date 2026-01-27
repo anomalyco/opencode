@@ -5,6 +5,8 @@ import { monoFontFamily, useSettings } from "@/context/settings"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
 import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
+import { useLanguage } from "@/context/language"
+import { showToast } from "@opencode-ai/ui/toast"
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
@@ -40,6 +42,7 @@ export const Terminal = (props: TerminalProps) => {
   const sdk = useSDK()
   const settings = useSettings()
   const theme = useTheme()
+  const language = useLanguage()
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnect", "onConnectError"])
   let ws: WebSocket | undefined
@@ -107,173 +110,185 @@ export const Terminal = (props: TerminalProps) => {
     focusTerminal()
   }
 
-  onMount(async () => {
-    const mod = await import("ghostty-web")
-    ghostty = await mod.Ghostty.load()
+  onMount(() => {
+    const run = async () => {
+      const mod = await import("ghostty-web")
+      ghostty = await mod.Ghostty.load()
 
-    const once = { value: false }
+      const once = { value: false }
 
-    const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
-    if (window.__OPENCODE__?.serverPassword) {
-      url.username = "opencode"
-      url.password = window.__OPENCODE__?.serverPassword
-    }
-    const socket = new WebSocket(url)
-    ws = socket
-
-    const t = new mod.Terminal({
-      cursorBlink: true,
-      cursorStyle: "bar",
-      fontSize: 14,
-      fontFamily: monoFontFamily(settings.appearance.font()),
-      allowTransparency: true,
-      theme: terminalColors(),
-      scrollback: 10_000,
-      ghostty,
-    })
-    term = t
-
-    const copy = () => {
-      const selection = t.getSelection()
-      if (!selection) return false
-
-      const body = document.body
-      if (body) {
-        const textarea = document.createElement("textarea")
-        textarea.value = selection
-        textarea.setAttribute("readonly", "")
-        textarea.style.position = "fixed"
-        textarea.style.opacity = "0"
-        body.appendChild(textarea)
-        textarea.select()
-        const copied = document.execCommand("copy")
-        body.removeChild(textarea)
-        if (copied) return true
+      const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+      if (window.__OPENCODE__?.serverPassword) {
+        url.username = "opencode"
+        url.password = window.__OPENCODE__?.serverPassword
       }
+      const socket = new WebSocket(url)
+      ws = socket
 
-      const clipboard = navigator.clipboard
-      if (clipboard?.writeText) {
-        clipboard.writeText(selection).catch(() => {})
-        return true
-      }
-
-      return false
-    }
-
-    t.attachCustomKeyEventHandler((event) => {
-      const key = event.key.toLowerCase()
-
-      if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
-        copy()
-        return true
-      }
-
-      if (event.metaKey && !event.ctrlKey && !event.altKey && key === "c") {
-        if (!t.hasSelection()) return true
-        copy()
-        return true
-      }
-
-      // allow for ctrl-` to toggle terminal in parent
-      if (event.ctrlKey && key === "`") {
-        return true
-      }
-
-      return false
-    })
-
-    fitAddon = new mod.FitAddon()
-    serializeAddon = new SerializeAddon()
-    t.loadAddon(serializeAddon)
-    t.loadAddon(fitAddon)
-
-    t.open(container)
-    container.addEventListener("pointerdown", handlePointerDown)
-
-    handleTextareaFocus = () => {
-      t.options.cursorBlink = true
-    }
-    handleTextareaBlur = () => {
-      t.options.cursorBlink = false
-    }
-
-    t.textarea?.addEventListener("focus", handleTextareaFocus)
-    t.textarea?.addEventListener("blur", handleTextareaBlur)
-
-    focusTerminal()
-
-    if (local.pty.buffer) {
-      if (local.pty.rows && local.pty.cols) {
-        t.resize(local.pty.cols, local.pty.rows)
-      }
-      t.write(local.pty.buffer, () => {
-        if (local.pty.scrollY) {
-          t.scrollToLine(local.pty.scrollY)
-        }
-        fitAddon.fit()
+      const t = new mod.Terminal({
+        cursorBlink: true,
+        cursorStyle: "bar",
+        fontSize: 14,
+        fontFamily: monoFontFamily(settings.appearance.font()),
+        allowTransparency: true,
+        theme: terminalColors(),
+        scrollback: 10_000,
+        ghostty,
       })
-    }
+      term = t
 
-    fitAddon.observeResize()
-    handleResize = () => fitAddon.fit()
-    window.addEventListener("resize", handleResize)
-    t.onResize(async (size) => {
-      if (socket.readyState === WebSocket.OPEN) {
-        await sdk.client.pty
+      const copy = () => {
+        const selection = t.getSelection()
+        if (!selection) return false
+
+        const body = document.body
+        if (body) {
+          const textarea = document.createElement("textarea")
+          textarea.value = selection
+          textarea.setAttribute("readonly", "")
+          textarea.style.position = "fixed"
+          textarea.style.opacity = "0"
+          body.appendChild(textarea)
+          textarea.select()
+          const copied = document.execCommand("copy")
+          body.removeChild(textarea)
+          if (copied) return true
+        }
+
+        const clipboard = navigator.clipboard
+        if (clipboard?.writeText) {
+          clipboard.writeText(selection).catch(() => {})
+          return true
+        }
+
+        return false
+      }
+
+      t.attachCustomKeyEventHandler((event) => {
+        const key = event.key.toLowerCase()
+
+        if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
+          copy()
+          return true
+        }
+
+        if (event.metaKey && !event.ctrlKey && !event.altKey && key === "c") {
+          if (!t.hasSelection()) return true
+          copy()
+          return true
+        }
+
+        // allow for ctrl-` to toggle terminal in parent
+        if (event.ctrlKey && key === "`") {
+          return true
+        }
+
+        return false
+      })
+
+      fitAddon = new mod.FitAddon()
+      serializeAddon = new SerializeAddon()
+      t.loadAddon(serializeAddon)
+      t.loadAddon(fitAddon)
+
+      t.open(container)
+      container.addEventListener("pointerdown", handlePointerDown)
+
+      handleTextareaFocus = () => {
+        t.options.cursorBlink = true
+      }
+      handleTextareaBlur = () => {
+        t.options.cursorBlink = false
+      }
+
+      t.textarea?.addEventListener("focus", handleTextareaFocus)
+      t.textarea?.addEventListener("blur", handleTextareaBlur)
+
+      focusTerminal()
+
+      if (local.pty.buffer) {
+        if (local.pty.rows && local.pty.cols) {
+          t.resize(local.pty.cols, local.pty.rows)
+        }
+        t.write(local.pty.buffer, () => {
+          if (local.pty.scrollY) {
+            t.scrollToLine(local.pty.scrollY)
+          }
+          fitAddon.fit()
+        })
+      }
+
+      fitAddon.observeResize()
+      handleResize = () => fitAddon.fit()
+      window.addEventListener("resize", handleResize)
+      t.onResize(async (size) => {
+        if (socket.readyState === WebSocket.OPEN) {
+          await sdk.client.pty
+            .update({
+              ptyID: local.pty.id,
+              size: {
+                cols: size.cols,
+                rows: size.rows,
+              },
+            })
+            .catch(() => {})
+        }
+      })
+      t.onData((data) => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(data)
+        }
+      })
+      t.onKey((key) => {
+        if (key.key == "Enter") {
+          props.onSubmit?.()
+        }
+      })
+      // t.onScroll((ydisp) => {
+      // console.log("Scroll position:", ydisp)
+      // })
+      socket.addEventListener("open", () => {
+        local.onConnect?.()
+        sdk.client.pty
           .update({
             ptyID: local.pty.id,
             size: {
-              cols: size.cols,
-              rows: size.rows,
+              cols: t.cols,
+              rows: t.rows,
             },
           })
           .catch(() => {})
-      }
-    })
-    t.onData((data) => {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(data)
-      }
-    })
-    t.onKey((key) => {
-      if (key.key == "Enter") {
-        props.onSubmit?.()
-      }
-    })
-    // t.onScroll((ydisp) => {
-    // console.log("Scroll position:", ydisp)
-    // })
-    socket.addEventListener("open", () => {
-      local.onConnect?.()
-      sdk.client.pty
-        .update({
-          ptyID: local.pty.id,
-          size: {
-            cols: t.cols,
-            rows: t.rows,
-          },
-        })
-        .catch(() => {})
-    })
-    socket.addEventListener("message", (event) => {
-      t.write(event.data)
-    })
-    socket.addEventListener("error", (error) => {
-      if (disposed) return
-      if (once.value) return
-      once.value = true
-      console.error("WebSocket error:", error)
-      local.onConnectError?.(error)
-    })
-    socket.addEventListener("close", (event) => {
-      if (disposed) return
-      // Normal closure (code 1000) means PTY process exited - server event handles cleanup
-      // For other codes (network issues, server restart), trigger error handler
-      if (event.code !== 1000) {
+      })
+      socket.addEventListener("message", (event) => {
+        t.write(event.data)
+      })
+      socket.addEventListener("error", (error) => {
+        if (disposed) return
         if (once.value) return
         once.value = true
-        local.onConnectError?.(new Error(`WebSocket closed abnormally: ${event.code}`))
-      }
+        console.error("WebSocket error:", error)
+        local.onConnectError?.(error)
+      })
+      socket.addEventListener("close", (event) => {
+        if (disposed) return
+        // Normal closure (code 1000) means PTY process exited - server event handles cleanup
+        // For other codes (network issues, server restart), trigger error handler
+        if (event.code !== 1000) {
+          if (once.value) return
+          once.value = true
+          local.onConnectError?.(new Error(`WebSocket closed abnormally: ${event.code}`))
+        }
+      })
+    }
+
+    void run().catch((err) => {
+      if (disposed) return
+      showToast({
+        variant: "error",
+        title: language.t("terminal.connectionLost.title"),
+        description: err instanceof Error ? err.message : language.t("terminal.connectionLost.description"),
+      })
+      local.onConnectError?.(err)
     })
   })
 
@@ -288,7 +303,13 @@ export const Terminal = (props: TerminalProps) => {
 
     const t = term
     if (serializeAddon && props.onCleanup && t) {
-      const buffer = serializeAddon.serialize()
+      const buffer = (() => {
+        try {
+          return serializeAddon.serialize()
+        } catch {
+          return ""
+        }
+      })()
       props.onCleanup({
         ...local.pty,
         buffer,
