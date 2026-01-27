@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
+import { createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -165,8 +165,10 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const dialog = useDialog()
     const settings = useSettings()
     const language = useLanguage()
-    const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
-    const [suspendCount, setSuspendCount] = createSignal(0)
+    const [store, setStore] = createStore({
+      registrations: [] as Accessor<CommandOption[]>[],
+      suspendCount: 0,
+    })
 
     const [catalog, setCatalog, _, catalogReady] = persisted(
       Persist.global("command.catalog.v1"),
@@ -184,7 +186,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       const seen = new Set<string>()
       const all: CommandOption[] = []
 
-      for (const reg of registrations()) {
+      for (const reg of store.registrations) {
         for (const opt of reg()) {
           if (seen.has(opt.id)) continue
           seen.add(opt.id)
@@ -230,7 +232,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       ]
     })
 
-    const suspended = () => suspendCount() > 0
+    const suspended = () => store.suspendCount > 0
 
     const palette = createMemo(() => {
       const config = settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND
@@ -297,9 +299,9 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     return {
       register(cb: () => CommandOption[]) {
         const results = createMemo(cb)
-        setRegistrations((arr) => [results, ...arr])
+        setStore("registrations", (arr) => [results, ...arr])
         onCleanup(() => {
-          setRegistrations((arr) => arr.filter((x) => x !== results))
+          setStore("registrations", (arr) => arr.filter((x) => x !== results))
         })
       },
       trigger(id: string, source?: "palette" | "keybind" | "slash") {
@@ -321,7 +323,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       },
       show: showPalette,
       keybinds(enabled: boolean) {
-        setSuspendCount((count) => count + (enabled ? -1 : 1))
+        setStore("suspendCount", (count) => count + (enabled ? -1 : 1))
       },
       suspended,
       get catalog() {

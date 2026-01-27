@@ -185,7 +185,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     })
 
     // Apply the changes
-    const changedFiles: string[] = []
+    const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
 
     for (const change of fileChanges) {
       const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
@@ -194,12 +194,12 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           // Create parent directories (recursive: true is safe on existing/root dirs)
           await fs.mkdir(path.dirname(change.filePath), { recursive: true })
           await fs.writeFile(change.filePath, change.newContent, "utf-8")
-          changedFiles.push(change.filePath)
+          updates.push({ file: change.filePath, event: "add" })
           break
 
         case "update":
           await fs.writeFile(change.filePath, change.newContent, "utf-8")
-          changedFiles.push(change.filePath)
+          updates.push({ file: change.filePath, event: "change" })
           break
 
         case "move":
@@ -208,13 +208,14 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             await fs.mkdir(path.dirname(change.movePath), { recursive: true })
             await fs.writeFile(change.movePath, change.newContent, "utf-8")
             await fs.unlink(change.filePath)
-            changedFiles.push(change.movePath)
+            updates.push({ file: change.filePath, event: "unlink" })
+            updates.push({ file: change.movePath, event: "add" })
           }
           break
 
         case "delete":
           await fs.unlink(change.filePath)
-          changedFiles.push(change.filePath)
+          updates.push({ file: change.filePath, event: "unlink" })
           break
       }
 
@@ -226,8 +227,8 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     }
 
     // Publish file change events
-    for (const filePath of changedFiles) {
-      await Bus.publish(FileWatcher.Event.Updated, { file: filePath, event: "change" })
+    for (const update of updates) {
+      await Bus.publish(FileWatcher.Event.Updated, update)
     }
 
     // Notify LSP of file changes and collect diagnostics
