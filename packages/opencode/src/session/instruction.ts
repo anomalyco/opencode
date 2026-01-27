@@ -6,6 +6,7 @@ import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
 import { Log } from "../util/log"
+import { proxyFetch } from "../util/fetch"
 import type { MessageV2 } from "./message-v2"
 
 const log = Log.create({ service: "instruction" })
@@ -135,7 +136,7 @@ export namespace InstructionPrompt {
       }
     }
     const fetches = urls.map((url) =>
-      fetch(url, { signal: AbortSignal.timeout(5000) })
+      proxyFetch(url, { signal: AbortSignal.timeout(5000) })
         .then((res) => (res.ok ? res.text() : ""))
         .catch(() => "")
         .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
