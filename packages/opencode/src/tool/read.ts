@@ -24,7 +24,7 @@ export const ReadTool = Tool.define("read", {
   async execute(params, ctx) {
     let filepath = params.filePath
     if (!path.isAbsolute(filepath)) {
-      filepath = path.join(process.cwd(), filepath)
+      filepath = path.join(Instance.directory, filepath)
     }
     const title = path.relative(Instance.worktree, filepath)
 
