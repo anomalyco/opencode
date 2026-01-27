@@ -125,7 +125,7 @@ export function getProxyForUrl(url: string | URL): string | undefined {
  */
 export async function proxyFetch(
   input: RequestInfo | URL,
-  init?: BunFetchInit & { proxy?: string | false | { url: string; headers?: Record<string, string> } },
+  init?: Omit<BunFetchInit, "proxy"> & { proxy?: string | false | { url: string; headers?: Record<string, string> } },
 ): Promise<Response> {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
 
