@@ -999,6 +999,21 @@ export namespace Config {
     })
   export type Provider = z.infer<typeof Provider>
 
+  export const ProxyConfig = z
+    .object({
+      http: z.string().optional().describe("HTTP proxy URL (e.g., http://proxy:8080)"),
+      https: z.string().optional().describe("HTTPS proxy URL (e.g., http://proxy:8080)"),
+      no_proxy: z
+        .array(z.string())
+        .optional()
+        .describe("Hosts or patterns to bypass proxy (e.g., localhost, *.internal.com)"),
+    })
+    .strict()
+    .meta({
+      ref: "ProxyConfig",
+    })
+  export type ProxyConfig = z.infer<typeof ProxyConfig>
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
@@ -1097,6 +1112,9 @@ export namespace Config {
         )
         .optional()
         .describe("MCP (Model Context Protocol) server configurations"),
+      proxy: ProxyConfig.optional().describe(
+        "HTTP/HTTPS proxy configuration. Overrides HTTP_PROXY, HTTPS_PROXY, and NO_PROXY environment variables.",
+      ),
       formatter: z
         .union([
           z.literal(false),
