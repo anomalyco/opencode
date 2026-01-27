@@ -221,14 +221,8 @@ export function DialogCustomProvider(props: Props) {
 
     setForm("saving", true)
 
-    const beforeProvider = globalSync.data.config.provider
-    const beforeDisabled = globalSync.data.config.disabled_providers
-
-    const nextProvider = { ...(beforeProvider ?? {}), [result.providerID]: result.config }
-    const nextDisabled = (beforeDisabled ?? []).filter((id) => id !== result.providerID)
-
-    globalSync.set("config", "provider", nextProvider)
-    globalSync.set("config", "disabled_providers", nextDisabled)
+    const disabledProviders = globalSync.data.config.disabled_providers ?? []
+    const nextDisabled = disabledProviders.filter((id) => id !== result.providerID)
 
     globalSync
       .updateConfig({ provider: { [result.providerID]: result.config }, disabled_providers: nextDisabled })
@@ -242,8 +236,6 @@ export function DialogCustomProvider(props: Props) {
         })
       })
       .catch((err: unknown) => {
-        globalSync.set("config", "provider", beforeProvider)
-        globalSync.set("config", "disabled_providers", beforeDisabled)
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
       })
@@ -265,153 +257,149 @@ export function DialogCustomProvider(props: Props) {
       }
       transition
     >
-      <div class="flex flex-col gap-6 px-2.5 pb-3">
+      <div class="flex flex-col gap-6 px-2.5 pb-3 overflow-y-auto max-h-[60vh]">
         <div class="px-2.5 flex gap-4 items-center">
           <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
           <div class="text-16-medium text-text-strong">Custom provider</div>
         </div>
 
-        <div class="px-2.5 pb-10 flex flex-col gap-6">
-          <div class="text-14-regular text-text-base">
-            Configure an OpenAI-compatible provider. Fields map to the
+        <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
+          <p class="text-14-regular text-text-base">
+            Configure an OpenAI-compatible provider. See the{" "}
             <Link href="https://opencode.ai/docs/providers/#custom-provider" tabIndex={-1}>
               provider config docs
             </Link>
             .
+          </p>
+
+          <div class="flex flex-col gap-4">
+            <TextField
+              autofocus
+              label="Provider ID"
+              placeholder="myprovider"
+              description="Lowercase letters, numbers, hyphens, or underscores"
+              value={form.providerID}
+              onChange={setForm.bind(null, "providerID")}
+              validationState={errors.providerID ? "invalid" : undefined}
+              error={errors.providerID}
+            />
+            <TextField
+              label="Display name"
+              placeholder="My AI Provider"
+              value={form.name}
+              onChange={setForm.bind(null, "name")}
+              validationState={errors.name ? "invalid" : undefined}
+              error={errors.name}
+            />
+            <TextField
+              label="Base URL"
+              placeholder="https://api.myprovider.com/v1"
+              value={form.baseURL}
+              onChange={setForm.bind(null, "baseURL")}
+              validationState={errors.baseURL ? "invalid" : undefined}
+              error={errors.baseURL}
+            />
+            <TextField
+              label="API key"
+              placeholder="{env:MYPROVIDER_API_KEY}"
+              description="Optional. Leave empty if you manage auth via headers."
+              value={form.apiKey}
+              onChange={setForm.bind(null, "apiKey")}
+            />
           </div>
 
-          <form onSubmit={save} class="flex flex-col gap-6">
-            <div class="grid grid-cols-1 gap-4">
-              <TextField
-                autofocus
-                label="Provider ID"
-                placeholder="myprovider"
-                value={form.providerID}
-                onChange={setForm.bind(null, "providerID")}
-                validationState={errors.providerID ? "invalid" : undefined}
-                error={errors.providerID}
-              />
-              <TextField
-                label="Display name"
-                placeholder="My AI Provider"
-                value={form.name}
-                onChange={setForm.bind(null, "name")}
-                validationState={errors.name ? "invalid" : undefined}
-                error={errors.name}
-              />
-              <TextField
-                label="Base URL"
-                placeholder="https://api.myprovider.com/v1"
-                value={form.baseURL}
-                onChange={setForm.bind(null, "baseURL")}
-                validationState={errors.baseURL ? "invalid" : undefined}
-                error={errors.baseURL}
-              />
-              <TextField
-                label="API key (optional)"
-                placeholder="{env:MYPROVIDER_API_KEY}"
-                description="Leave empty if you manage auth elsewhere."
-                value={form.apiKey}
-                onChange={setForm.bind(null, "apiKey")}
-              />
-            </div>
-
-            <div class="flex flex-col gap-3">
-              <div class="text-14-medium text-text-strong">Models</div>
-              <For each={form.models}>
-                {(m, i) => (
-                  <div class="flex gap-3 items-start">
-                    <div class="flex-1 grid grid-cols-1 gap-3">
-                      <TextField
-                        label={i() === 0 ? "Model ID" : undefined}
-                        hideLabel={i() !== 0}
-                        placeholder="my-model-name"
-                        value={m.id}
-                        onChange={(v) => setForm("models", i(), "id", v)}
-                        validationState={errors.models[i()]?.id ? "invalid" : undefined}
-                        error={errors.models[i()]?.id}
-                      />
-                      <TextField
-                        label={i() === 0 ? "Model name" : undefined}
-                        hideLabel={i() !== 0}
-                        placeholder="My Model"
-                        value={m.name}
-                        onChange={(v) => setForm("models", i(), "name", v)}
-                        validationState={errors.models[i()]?.name ? "invalid" : undefined}
-                        error={errors.models[i()]?.name}
-                      />
-                    </div>
-                    <IconButton
-                      type="button"
-                      icon="trash"
-                      variant="ghost"
-                      onClick={() => removeModel(i())}
-                      aria-label="Remove model"
+          <div class="flex flex-col gap-3">
+            <label class="text-12-medium text-text-weak">Models</label>
+            <For each={form.models}>
+              {(m, i) => (
+                <div class="flex gap-2 items-start">
+                  <div class="flex-1">
+                    <TextField
+                      label="ID"
+                      hideLabel
+                      placeholder="model-id"
+                      value={m.id}
+                      onChange={(v) => setForm("models", i(), "id", v)}
+                      validationState={errors.models[i()]?.id ? "invalid" : undefined}
+                      error={errors.models[i()]?.id}
                     />
                   </div>
-                )}
-              </For>
-              <Button type="button" size="large" variant="secondary" icon="plus-small" onClick={addModel}>
-                Add model
-              </Button>
-            </div>
-
-            <div class="flex flex-col gap-3">
-              <div class="text-14-medium text-text-strong">Headers (optional)</div>
-              <For each={form.headers}>
-                {(h, i) => (
-                  <div class="flex gap-3 items-start">
-                    <div class="flex-1 grid grid-cols-1 gap-3">
-                      <TextField
-                        label={i() === 0 ? "Header" : undefined}
-                        hideLabel={i() !== 0}
-                        placeholder="Authorization"
-                        value={h.key}
-                        onChange={(v) => setForm("headers", i(), "key", v)}
-                        validationState={errors.headers[i()]?.key ? "invalid" : undefined}
-                        error={errors.headers[i()]?.key}
-                      />
-                      <TextField
-                        label={i() === 0 ? "Value" : undefined}
-                        hideLabel={i() !== 0}
-                        placeholder="Bearer ..."
-                        value={h.value}
-                        onChange={(v) => setForm("headers", i(), "value", v)}
-                        validationState={errors.headers[i()]?.value ? "invalid" : undefined}
-                        error={errors.headers[i()]?.value}
-                      />
-                    </div>
-                    <IconButton
-                      type="button"
-                      icon="trash"
-                      variant="ghost"
-                      onClick={() => removeHeader(i())}
-                      aria-label="Remove header"
+                  <div class="flex-1">
+                    <TextField
+                      label="Name"
+                      hideLabel
+                      placeholder="Display Name"
+                      value={m.name}
+                      onChange={(v) => setForm("models", i(), "name", v)}
+                      validationState={errors.models[i()]?.name ? "invalid" : undefined}
+                      error={errors.models[i()]?.name}
                     />
                   </div>
-                )}
-              </For>
-              <Button type="button" size="large" variant="secondary" icon="plus-small" onClick={addHeader}>
-                Add header
-              </Button>
-            </div>
+                  <IconButton
+                    type="button"
+                    icon="trash"
+                    variant="ghost"
+                    class="mt-1.5"
+                    onClick={() => removeModel(i())}
+                    disabled={form.models.length <= 1}
+                    aria-label="Remove model"
+                  />
+                </div>
+              )}
+            </For>
+            <Button type="button" size="small" variant="ghost" icon="plus-small" onClick={addModel} class="self-start">
+              Add model
+            </Button>
+          </div>
 
-            <div class="flex items-center gap-3">
-              <Button
-                type="button"
-                size="large"
-                variant="secondary"
-                onClick={() => dialog.close()}
-                disabled={form.saving}
-              >
-                {language.t("common.cancel")}
-              </Button>
-              <Button type="submit" size="large" variant="primary" disabled={form.saving}>
-                {form.saving ? language.t("common.saving") : language.t("common.save")}
-              </Button>
-            </div>
-          </form>
-        </div>
+          <div class="flex flex-col gap-3">
+            <label class="text-12-medium text-text-weak">Headers (optional)</label>
+            <For each={form.headers}>
+              {(h, i) => (
+                <div class="flex gap-2 items-start">
+                  <div class="flex-1">
+                    <TextField
+                      label="Header"
+                      hideLabel
+                      placeholder="Header-Name"
+                      value={h.key}
+                      onChange={(v) => setForm("headers", i(), "key", v)}
+                      validationState={errors.headers[i()]?.key ? "invalid" : undefined}
+                      error={errors.headers[i()]?.key}
+                    />
+                  </div>
+                  <div class="flex-1">
+                    <TextField
+                      label="Value"
+                      hideLabel
+                      placeholder="value"
+                      value={h.value}
+                      onChange={(v) => setForm("headers", i(), "value", v)}
+                      validationState={errors.headers[i()]?.value ? "invalid" : undefined}
+                      error={errors.headers[i()]?.value}
+                    />
+                  </div>
+                  <IconButton
+                    type="button"
+                    icon="trash"
+                    variant="ghost"
+                    class="mt-1.5"
+                    onClick={() => removeHeader(i())}
+                    disabled={form.headers.length <= 1}
+                    aria-label="Remove header"
+                  />
+                </div>
+              )}
+            </For>
+            <Button type="button" size="small" variant="ghost" icon="plus-small" onClick={addHeader} class="self-start">
+              Add header
+            </Button>
+          </div>
+
+          <Button class="w-auto self-start" type="submit" size="large" variant="primary" disabled={form.saving}>
+            {form.saving ? "Saving..." : language.t("common.submit")}
+          </Button>
+        </form>
       </div>
     </Dialog>
   )
