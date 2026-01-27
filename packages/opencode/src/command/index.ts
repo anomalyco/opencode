@@ -126,6 +126,14 @@ export namespace Command {
   }
 
   export async function list() {
-    return state().then((x) => Object.values(x))
+    return state().then((x) =>
+      Object.values(x).map((cmd) =>
+        Object.fromEntries(
+          Object.keys(cmd)
+            .filter((key) => key !== "template")
+            .map((key) => [key, cmd[key as keyof typeof cmd]]),
+        ),
+      ),
+    )
   }
 }
