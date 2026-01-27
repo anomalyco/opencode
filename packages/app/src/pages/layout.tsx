@@ -1942,7 +1942,8 @@ export default function Layout(props: ParentProps) {
     })
     const open = createMemo(() => store.workspaceExpanded[props.directory] ?? local())
     const boot = createMemo(() => open() || active())
-    const loading = createMemo(() => open() && workspaceStore.status !== "complete" && sessions().length === 0)
+    const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
+    const loading = createMemo(() => open() && !booted() && sessions().length === 0)
     const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)
     const busy = createMemo(() => isBusy(props.directory))
     const loadMore = async () => {
@@ -2334,7 +2335,8 @@ export default function Layout(props: ParentProps) {
       }
       return map
     })
-    const loading = createMemo(() => workspaceStore.status !== "complete" && sessions().length === 0)
+    const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
+    const loading = createMemo(() => !booted() && sessions().length === 0)
     const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)
     const loadMore = async () => {
       setWorkspaceStore("limit", (limit) => limit + 5)
