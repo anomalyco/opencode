@@ -419,9 +419,12 @@ export namespace MCP {
           ...mcp.environment,
         },
       })
-      transport.stderr?.on("data", (chunk: Buffer) => {
+      
+      // Store handler reference for cleanup
+      const stderrHandler = (chunk: Buffer) => {
         log.info(`mcp stderr: ${chunk.toString()}`, { key })
-      })
+      }
+      transport.stderr?.on("data", stderrHandler)
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       try {
@@ -446,6 +449,8 @@ export namespace MCP {
           status: "failed" as const,
           error: error instanceof Error ? error.message : String(error),
         }
+        // Clean up stderr listener on connection failure
+        transport.stderr?.removeListener("data", stderrHandler)
       }
     }
 
@@ -812,16 +817,28 @@ export namespace MCP {
       await new Promise<void>((resolve, reject) => {
         // Give the process a moment to fail if it's going to
         const timeout = setTimeout(() => resolve(), 500)
-        subprocess.on("error", (error) => {
+        
+        // Store handler references for cleanup
+        const errorHandler = (error: Error) => {
           clearTimeout(timeout)
+          cleanup()
           reject(error)
-        })
-        subprocess.on("exit", (code) => {
+        }
+        const exitHandler = (code: number | null) => {
           if (code !== null && code !== 0) {
             clearTimeout(timeout)
+            cleanup()
             reject(new Error(`Browser open failed with exit code ${code}`))
           }
-        })
+        }
+        
+        const cleanup = () => {
+          subprocess.removeListener("error", errorHandler)
+          subprocess.removeListener("exit", exitHandler)
+        }
+        
+        subprocess.on("error", errorHandler)
+        subprocess.on("exit", exitHandler)
       })
     } catch (error) {
       // Browser opening failed (e.g., in remote/headless sessions like SSH, devcontainers)
