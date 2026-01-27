@@ -137,6 +137,52 @@ Some corporate proxies perform SSL interception. You may need to:
 1. Configure the proxy's CA certificate in your system trust store
 2. Use `NODE_EXTRA_CA_CERTS=/path/to/ca.pem` to trust additional certificates
 3. Use `BUN_OPTIONS="--use-system-ca"` to use system certificate store
+4. Configure `proxy.tls` in opencode.json (see below)
+
+### Proxy TLS Configuration
+
+If your corporate proxy uses a self-signed certificate or custom CA, you can configure TLS settings directly in `opencode.json`.
+
+**Custom CA certificate for proxy (recommended):**
+
+```json
+{
+  "proxy": {
+    "https": "http://proxy:8080",
+    "tls": {
+      "ca": "/path/to/proxy-ca.pem"
+    }
+  }
+}
+```
+
+**Multiple CA certificates:**
+
+```json
+{
+  "proxy": {
+    "https": "http://proxy:8080",
+    "tls": {
+      "ca": ["/path/to/ca1.pem", "/path/to/ca2.pem"]
+    }
+  }
+}
+```
+
+**Accept self-signed proxy certificates (use with caution):**
+
+```json
+{
+  "proxy": {
+    "https": "http://proxy:8080",
+    "tls": {
+      "rejectUnauthorized": false
+    }
+  }
+}
+```
+
+> **Warning:** Setting `rejectUnauthorized: false` disables TLS certificate validation for proxy connections. This makes the connection vulnerable to man-in-the-middle attacks. Only use this for trusted internal proxies where you cannot install the CA certificate.
 
 ### Proxy authentication failing
 
