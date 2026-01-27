@@ -13,6 +13,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_ULTRAWORK from "../ultrawork/prompt.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -193,6 +194,112 @@ export namespace Agent {
           user,
         ),
         prompt: PROMPT_SUMMARY,
+      },
+
+      // ========================================
+      // ULTRAWORK AI Federation Agents
+      // ========================================
+
+      // ATLAS - Master Orchestrator (primary agent)
+      // The brain of the ULTRAWORK system. Takes plain-language ideas
+      // and autonomously delivers finished products by coordinating
+      // the entire AI federation.
+      atlas: {
+        name: "atlas",
+        description: `ULTRAWORK Master Orchestrator. Takes a plain-language idea and autonomously delivers a finished product by coordinating the AI federation (Claude, ChatGPT, Gemini, Grok, DeepSeek, Qwen). Handles the full Rise/Orbit/Verify lifecycle without requiring the user to be a coder. Use this agent when the user wants a complete autonomous workflow.`,
+        mode: "primary",
+        native: true,
+        color: "#9B59B6",
+        temperature: 0.2,
+        prompt: PROMPT_ULTRAWORK,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "allow",
+            question: "allow",
+            plan_enter: "allow",
+            plan_exit: "allow",
+          }),
+          user,
+        ),
+        options: {
+          ultrawork: true,
+          maxIterations: 100,
+          enableAutoModeSwitch: true,
+          enableMemory: true,
+          enableSelfCorrection: true,
+        },
+      },
+
+      // TITAN - Heavy Execution Agent (subagent)
+      // For large codebases, complex refactoring, massive tasks.
+      // Runs with extended context and higher token limits.
+      titan: {
+        name: "titan",
+        description: `Heavy-duty execution agent for large codebases and complex refactoring. Use this for massive tasks that require processing large amounts of code, extensive refactoring across many files, or complex multi-step implementations. Designed for the heavy lifting that requires deep context.`,
+        mode: "subagent",
+        native: true,
+        color: "#E67E22",
+        temperature: 0.1,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "allow",
+          }),
+          user,
+        ),
+        options: {
+          ultrawork: true,
+          executionMode: "heavy",
+        },
+      },
+
+      // PROMETHEUS - Deep Analysis Agent (subagent)
+      // For reasoning chains, architectural decisions, code review.
+      // Uses high-reasoning models with extended thinking.
+      prometheus: {
+        name: "prometheus",
+        description: `Deep analysis agent for reasoning chains, architectural decisions, and comprehensive code review. Use this when you need thorough analysis of complex problems, architectural planning, security audits, or when the task requires deep thinking before implementation.`,
+        mode: "subagent",
+        native: true,
+        color: "#FF6B6B",
+        temperature: 0.3,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "allow",
+            edit: "deny",
+            bash: "deny",
+          }),
+          user,
+        ),
+        options: {
+          ultrawork: true,
+          executionMode: "analysis",
+        },
+      },
+
+      // HYPERION - Speed Daemon (subagent)
+      // For fast operations: quick fixes, simple tasks, parallel execution.
+      // Routes to the fastest available model.
+      hyperion: {
+        name: "hyperion",
+        description: `Speed-optimized agent for fast operations. Use this for quick fixes, simple code changes, file lookups, and tasks that need to be done rapidly. Routes to the fastest available model for maximum throughput. Ideal for parallel task execution.`,
+        mode: "subagent",
+        native: true,
+        color: "#00D4AA",
+        temperature: 0.1,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "allow",
+          }),
+          user,
+        ),
+        options: {
+          ultrawork: true,
+          executionMode: "fast",
+        },
       },
     }
 

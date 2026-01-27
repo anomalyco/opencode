@@ -1,0 +1,155 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // ============================================
+  // ULTRAWORK Configuration Template
+  // ============================================
+  // Copy this file to your project root as opencode.jsonc
+  // to enable the full ULTRAWORK AI Federation.
+  //
+  // This configures Claude Opus 4.5 as the master brain
+  // with connections to your entire AI fleet.
+  // ============================================
+
+  // Default model: Claude Opus 4.5 (the brain)
+  "model": "anthropic/claude-opus-4-5-20251101",
+
+  // Fast model for quick tasks
+  "small_model": "anthropic/claude-haiku-4-5",
+
+  // Default to ATLAS orchestrator agent
+  "default_agent": "atlas",
+
+  // ============================================
+  // AI FEDERATION PROVIDERS
+  // ============================================
+  // Set your API keys as environment variables:
+  //   ANTHROPIC_API_KEY=sk-ant-...
+  //   OPENAI_API_KEY=sk-...
+  //   GOOGLE_API_KEY=...
+  //   XAI_API_KEY=...
+  //   DEEPSEEK_API_KEY=...
+  //   QWEN_API_KEY=...
+  // ============================================
+
+  "provider": {
+    // Claude (primary brain)
+    "anthropic": {
+      "env": ["ANTHROPIC_API_KEY"]
+    },
+
+    // OpenAI / ChatGPT Codex
+    "openai": {
+      "env": ["OPENAI_API_KEY"]
+    },
+
+    // Google Gemini
+    "google": {
+      "env": ["GOOGLE_API_KEY", "GEMINI_API_KEY"]
+    },
+
+    // xAI Grok
+    "xai": {
+      "env": ["XAI_API_KEY"]
+    }
+  },
+
+  // ============================================
+  // ULTRAWORK AGENTS
+  // ============================================
+
+  "agent": {
+    // ATLAS - Master Orchestrator (primary)
+    "atlas": {
+      "model": "anthropic/claude-opus-4-5-20251101",
+      "temperature": 0.2,
+      "mode": "primary",
+      "description": "ULTRAWORK Master Orchestrator - autonomous AI federation coordinator",
+      "permission": {
+        "*": "allow",
+        "question": "allow"
+      }
+    },
+
+    // TITAN - Heavy Execution
+    "titan": {
+      "model": "anthropic/claude-opus-4-5-20251101",
+      "temperature": 0.1,
+      "mode": "subagent",
+      "description": "Heavy-duty execution for large codebases"
+    },
+
+    // PROMETHEUS - Deep Analysis
+    "prometheus": {
+      "model": "anthropic/claude-opus-4-5-20251101",
+      "temperature": 0.3,
+      "mode": "subagent",
+      "description": "Deep analysis and architectural reasoning"
+    },
+
+    // HYPERION - Speed Daemon
+    "hyperion": {
+      "model": "anthropic/claude-haiku-4-5",
+      "temperature": 0.1,
+      "mode": "subagent",
+      "description": "Fast operations and quick fixes"
+    },
+
+    // Keep default agents
+    "build": {
+      "model": "anthropic/claude-opus-4-5-20251101"
+    },
+    "plan": {
+      "model": "anthropic/claude-opus-4-5-20251101"
+    }
+  },
+
+  // ============================================
+  // MCP SERVERS (External Tool Integration)
+  // ============================================
+  // Add MCP servers for extended capabilities.
+  // These give the AI access to external tools.
+  // ============================================
+
+  "mcp": {
+    // Example: Context7 for documentation
+    // "context7": {
+    //   "type": "remote",
+    //   "url": "https://mcp.context7.com/mcp"
+    // },
+
+    // Example: Browser automation MCP
+    // "browser": {
+    //   "type": "local",
+    //   "command": ["npx", "@anthropic/mcp-browser"]
+    // },
+
+    // Example: File system MCP
+    // "filesystem": {
+    //   "type": "local",
+    //   "command": ["npx", "@anthropic/mcp-filesystem", "/home/user"]
+    // }
+  },
+
+  // ============================================
+  // PERMISSIONS (ULTRAWORK needs full access)
+  // ============================================
+
+  "permission": {
+    "*": "allow",
+    "question": "allow",
+    "bash": "allow",
+    "edit": "allow",
+    "read": "allow",
+    "task": "allow"
+  },
+
+  // ============================================
+  // EXPERIMENTAL FEATURES
+  // ============================================
+
+  "experimental": {
+    "batch_tool": true,
+    "continue_loop_on_deny": false
+  }
+}
