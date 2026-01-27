@@ -821,7 +821,7 @@ export default function Page() {
         const sessionID = params.id
         if (!sessionID) return
         if (status()?.type !== "idle") {
-          await sdk.client.session.abort({ sessionID }).catch(() => { })
+          await sdk.client.session.abort({ sessionID }).catch(() => {})
         }
         const revert = info()?.revert?.messageID
         // Find the last user message that's not already reverted
@@ -904,69 +904,69 @@ export default function Page() {
     },
     ...(sync.data.config.share !== "disabled"
       ? [
-        {
-          id: "session.share",
-          title: language.t("command.session.share"),
-          description: language.t("command.session.share.description"),
-          category: language.t("command.category.session"),
-          slash: "share",
-          disabled: !params.id || !!info()?.share?.url,
-          onSelect: async () => {
-            if (!params.id) return
-            await sdk.client.session
-              .share({ sessionID: params.id })
-              .then((res) => {
-                navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
+          {
+            id: "session.share",
+            title: language.t("command.session.share"),
+            description: language.t("command.session.share.description"),
+            category: language.t("command.category.session"),
+            slash: "share",
+            disabled: !params.id || !!info()?.share?.url,
+            onSelect: async () => {
+              if (!params.id) return
+              await sdk.client.session
+                .share({ sessionID: params.id })
+                .then((res) => {
+                  navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
+                    showToast({
+                      title: language.t("toast.session.share.copyFailed.title"),
+                      variant: "error",
+                    }),
+                  )
+                })
+                .then(() =>
                   showToast({
-                    title: language.t("toast.session.share.copyFailed.title"),
+                    title: language.t("toast.session.share.success.title"),
+                    description: language.t("toast.session.share.success.description"),
+                    variant: "success",
+                  }),
+                )
+                .catch(() =>
+                  showToast({
+                    title: language.t("toast.session.share.failed.title"),
+                    description: language.t("toast.session.share.failed.description"),
                     variant: "error",
                   }),
                 )
-              })
-              .then(() =>
-                showToast({
-                  title: language.t("toast.session.share.success.title"),
-                  description: language.t("toast.session.share.success.description"),
-                  variant: "success",
-                }),
-              )
-              .catch(() =>
-                showToast({
-                  title: language.t("toast.session.share.failed.title"),
-                  description: language.t("toast.session.share.failed.description"),
-                  variant: "error",
-                }),
-              )
+            },
           },
-        },
-        {
-          id: "session.unshare",
-          title: language.t("command.session.unshare"),
-          description: language.t("command.session.unshare.description"),
-          category: language.t("command.category.session"),
-          slash: "unshare",
-          disabled: !params.id || !info()?.share?.url,
-          onSelect: async () => {
-            if (!params.id) return
-            await sdk.client.session
-              .unshare({ sessionID: params.id })
-              .then(() =>
-                showToast({
-                  title: language.t("toast.session.unshare.success.title"),
-                  description: language.t("toast.session.unshare.success.description"),
-                  variant: "success",
-                }),
-              )
-              .catch(() =>
-                showToast({
-                  title: language.t("toast.session.unshare.failed.title"),
-                  description: language.t("toast.session.unshare.failed.description"),
-                  variant: "error",
-                }),
-              )
+          {
+            id: "session.unshare",
+            title: language.t("command.session.unshare"),
+            description: language.t("command.session.unshare.description"),
+            category: language.t("command.category.session"),
+            slash: "unshare",
+            disabled: !params.id || !info()?.share?.url,
+            onSelect: async () => {
+              if (!params.id) return
+              await sdk.client.session
+                .unshare({ sessionID: params.id })
+                .then(() =>
+                  showToast({
+                    title: language.t("toast.session.unshare.success.title"),
+                    description: language.t("toast.session.unshare.success.description"),
+                    variant: "success",
+                  }),
+                )
+                .catch(() =>
+                  showToast({
+                    title: language.t("toast.session.unshare.failed.title"),
+                    description: language.t("toast.session.unshare.failed.description"),
+                    variant: "error",
+                  }),
+                )
+            },
           },
-        },
-      ]
+        ]
       : []),
   ])
 
