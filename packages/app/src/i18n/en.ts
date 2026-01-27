@@ -167,6 +167,7 @@ export const dict = {
 
   "common.search.placeholder": "Search",
   "common.goBack": "Go back",
+  "common.goForward": "Go forward",
   "common.loading": "Loading",
   "common.loading.ellipsis": "...",
   "common.cancel": "Cancel",

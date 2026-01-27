@@ -213,24 +213,26 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
             class="p-1"
             action={
               <div class="flex items-center gap-1">
-                <IconButton
-                  icon="plus-small"
-                  variant="ghost"
-                  iconSize="normal"
-                  class="size-6"
-                  aria-label={language.t("command.provider.connect")}
-                  title={language.t("command.provider.connect")}
-                  onClick={handleConnectProvider}
-                />
-                <IconButton
-                  icon="sliders"
-                  variant="ghost"
-                  iconSize="normal"
-                  class="size-6"
-                  aria-label={language.t("dialog.model.manage")}
-                  title={language.t("dialog.model.manage")}
-                  onClick={handleManage}
-                />
+                <Tooltip placement="top" value={language.t("command.provider.connect")}>
+                  <IconButton
+                    icon="plus-small"
+                    variant="ghost"
+                    iconSize="normal"
+                    class="size-6"
+                    aria-label={language.t("command.provider.connect")}
+                    onClick={handleConnectProvider}
+                  />
+                </Tooltip>
+                <Tooltip placement="top" value={language.t("dialog.model.manage")}>
+                  <IconButton
+                    icon="sliders"
+                    variant="ghost"
+                    iconSize="normal"
+                    class="size-6"
+                    aria-label={language.t("dialog.model.manage")}
+                    onClick={handleManage}
+                  />
+                </Tooltip>
               </div>
             }
           />
