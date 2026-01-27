@@ -1667,7 +1667,7 @@ export default function Page() {
                           <Match when={true}>
                             <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
                               <Mark class="w-14 opacity-10" />
-                              <div class="text-13-regular text-text-weak max-w-56">
+                              <div class="text-14-regular text-text-weak max-w-56">
                                 {language.t("session.review.empty")}
                               </div>
                             </div>
@@ -2059,7 +2059,7 @@ export default function Page() {
                                 <Match when={true}>
                                   <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
                                     <Mark class="w-14 opacity-10" />
-                                    <div class="text-13-regular text-text-weak max-w-56">
+                                    <div class="text-14-regular text-text-weak max-w-56">
                                       {language.t("session.review.empty")}
                                     </div>
                                   </div>
@@ -2072,12 +2072,16 @@ export default function Page() {
 
                       <Show when={layout.fileTree.opened() && fileTreeTab() === "all" && openedTabs().length === 0}>
                         <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                          <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                            <Mark class="w-14 opacity-10" />
-                            <div class="text-13-regular text-text-weak max-w-56">
-                              {language.t("session.files.selectToOpen")}
+                          <Show when={activeTab() === "review"}>
+                            <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                              <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
+                                <Mark class="w-14 opacity-10" />
+                                <div class="text-14-regular text-text-weak max-w-56">
+                                  {language.t("session.files.selectToOpen")}
+                                </div>
+                              </div>
                             </div>
-                          </div>
+                          </Show>
                         </Tabs.Content>
                       </Show>
 
@@ -2634,7 +2638,7 @@ export default function Page() {
                       <Match when={true}>
                         <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
                           <Mark class="w-14 opacity-10" />
-                          <div class="text-13-regular text-text-weak max-w-56">
+                          <div class="text-14-regular text-text-weak max-w-56">
                             {language.t("session.review.empty")}
                           </div>
                         </div>
