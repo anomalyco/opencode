@@ -376,7 +376,8 @@ export default function Page() {
   })
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
-  const reviewCount = createMemo(() => info()?.summary?.files ?? 0)
+  const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
+  const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasReview = createMemo(() => reviewCount() > 0)
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
@@ -479,7 +480,6 @@ export default function Page() {
     scrollToMessage(msgs[targetIndex], "auto")
   }
 
-  const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
   const emptyDiffFiles: string[] = []
   const diffFiles = createMemo(() => diffs().map((d) => d.file), emptyDiffFiles, { equals: same })
   const diffsReady = createMemo(() => {
@@ -1235,14 +1235,13 @@ export default function Page() {
   createEffect(() => {
     const id = params.id
     if (!id) return
-    if (!hasReview()) return
 
     const wants = isDesktop()
       ? view().reviewPanel.opened() &&
         (layout.fileTree.opened() ? fileTreeTab() === "changes" : activeTab() === "review")
-      : store.mobileTab === "review"
+      : view().reviewPanel.opened() && store.mobileTab === "review"
     if (!wants) return
-    if (diffsReady()) return
+    if (sync.data.session_diff[id] !== undefined) return
 
     sync.session.diff(id)
   })
