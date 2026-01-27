@@ -16,6 +16,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
+import { LocTelemetry } from "@/telemetry"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
@@ -110,6 +111,17 @@ export const EditTool = Tool.define("edit", {
       if (change.added) filediff.additions += change.count || 0
       if (change.removed) filediff.deletions += change.count || 0
     }
+
+    LocTelemetry.recordFileChange(
+      {
+        filePath: filediff.file,
+        additions: filediff.additions,
+        deletions: filediff.deletions,
+        toolName: "edit",
+        changeType: contentOld === "" ? "add" : "update",
+      },
+      ctx.sessionID,
+    )
 
     ctx.metadata({
       metadata: {

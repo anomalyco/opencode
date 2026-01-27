@@ -13,6 +13,7 @@ import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
+import { LocTelemetry } from "@/telemetry"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -229,6 +230,18 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     for (const filePath of changedFiles) {
       await Bus.publish(FileWatcher.Event.Updated, { file: filePath, event: "change" })
     }
+
+    LocTelemetry.recordBatchChanges(
+      fileChanges.map((change) => ({
+        filePath: change.movePath ?? change.filePath,
+        additions: change.additions,
+        deletions: change.deletions,
+        toolName: "apply_patch",
+        changeType: change.type,
+      })),
+      ctx.sessionID,
+      "apply_patch",
+    )
 
     // Notify LSP of file changes and collect diagnostics
     for (const change of fileChanges) {

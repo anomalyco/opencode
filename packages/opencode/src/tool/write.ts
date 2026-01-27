@@ -2,8 +2,9 @@ import z from "zod"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
-import { createTwoFilesPatch } from "diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./write.txt"
+import { LocTelemetry } from "@/telemetry"
 import { Bus } from "../bus"
 import { File } from "../file"
 import { FileTime } from "../file/time"
@@ -46,6 +47,24 @@ export const WriteTool = Tool.define("write", {
       file: filepath,
     })
     FileTime.read(ctx.sessionID, filepath)
+
+    let additions = 0
+    let deletions = 0
+    for (const change of diffLines(contentOld, params.content)) {
+      if (change.added) additions += change.count || 0
+      if (change.removed) deletions += change.count || 0
+    }
+
+    LocTelemetry.recordFileChange(
+      {
+        filePath: filepath,
+        additions,
+        deletions,
+        toolName: "write",
+        changeType: exists ? "update" : "add",
+      },
+      ctx.sessionID,
+    )
 
     let output = "Wrote file successfully."
     await LSP.touchFile(filepath, true)
