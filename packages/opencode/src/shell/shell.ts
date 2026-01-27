@@ -42,7 +42,7 @@ export namespace Shell {
       if (git) {
         // git.exe is typically at: C:\Program Files\Git\cmd\git.exe
         // bash.exe is at: C:\Program Files\Git\bin\bash.exe
-        const bash = path.join(git, "..", "..", "bin", "bash.exe")
+        const bash = path.join(path.dirname(git), "..", "..", "bin", "bash.exe")
         if (Bun.file(bash).size) return bash
       }
       return process.env.COMSPEC || "cmd.exe"
