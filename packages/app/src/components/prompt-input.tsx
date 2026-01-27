@@ -171,7 +171,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
 
   const commentInReview = (path: string) => {
     const sessionID = params.id
@@ -187,20 +186,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const focus = { file: item.path, id: item.commentID }
     comments.setActive(focus)
-    view().reviewPanel.open()
 
-    if (item.commentOrigin === "review") {
-      tabs().open("review")
+    const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
+    if (wantsReview) {
+      layout.fileTree.setTab("changes")
       requestAnimationFrame(() => comments.setFocus(focus))
       return
     }
 
-    if (item.commentOrigin !== "file" && commentInReview(item.path)) {
-      tabs().open("review")
-      requestAnimationFrame(() => comments.setFocus(focus))
-      return
-    }
-
+    layout.fileTree.setTab("all")
     const tab = files.tab(item.path)
     tabs().open(tab)
     files.load(item.path)
@@ -1746,10 +1740,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Tooltip
                     value={
                       <span class="flex max-w-[300px]">
-                        <span
-                          class="text-text-invert-base truncate min-w-0"
-                          style={{ direction: "rtl", "text-align": "left", "unicode-bidi": "plaintext" }}
-                        >
+                        <span class="text-text-invert-base truncate-start [unicode-bidi:plaintext] min-w-0">
                           {getDirectory(item.path)}
                         </span>
                         <span class="shrink-0">{getFilename(item.path)}</span>
@@ -1772,10 +1763,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     >
                       <div class="flex items-center gap-1.5">
                         <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
-                        <div
-                          class="flex items-center text-11-regular min-w-0"
-                          style={{ "font-weight": "var(--font-weight-medium)" }}
-                        >
+                        <div class="flex items-center text-11-regular min-w-0 font-medium">
                           <span class="text-text-strong whitespace-nowrap">{getFilenameTruncated(item.path, 14)}</span>
                           <Show when={item.selection}>
                             {(sel) => (
