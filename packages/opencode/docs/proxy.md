@@ -16,15 +16,15 @@ opencode
 
 ## Environment Variables
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `HTTPS_PROXY` | Proxy URL for HTTPS requests | `http://proxy:8080` |
-| `HTTP_PROXY` | Proxy URL for HTTP requests | `http://proxy:8080` |
-| `NO_PROXY` | Comma-separated list of hosts to bypass | `localhost,*.internal.com` |
-| `https_proxy` | Alternative (lowercase) | Same as above |
-| `http_proxy` | Alternative (lowercase) | Same as above |
-| `no_proxy` | Alternative (lowercase) | Same as above |
-| `OPENCODE_DISABLE_PROXY` | Emergency bypass flag | `1` to disable |
+| Variable                 | Description                             | Example                    |
+| ------------------------ | --------------------------------------- | -------------------------- |
+| `HTTPS_PROXY`            | Proxy URL for HTTPS requests            | `http://proxy:8080`        |
+| `HTTP_PROXY`             | Proxy URL for HTTP requests             | `http://proxy:8080`        |
+| `NO_PROXY`               | Comma-separated list of hosts to bypass | `localhost,*.internal.com` |
+| `https_proxy`            | Alternative (lowercase)                 | Same as above              |
+| `http_proxy`             | Alternative (lowercase)                 | Same as above              |
+| `no_proxy`               | Alternative (lowercase)                 | Same as above              |
+| `OPENCODE_DISABLE_PROXY` | Emergency bypass flag                   | `1` to disable             |
 
 ## Configuration File
 
@@ -41,6 +41,7 @@ You can also configure proxy settings in `opencode.json`:
 ```
 
 **Priority Order:**
+
 1. Configuration file (`opencode.json`) - highest priority
 2. Environment variables - fallback
 
@@ -48,13 +49,13 @@ You can also configure proxy settings in `opencode.json`:
 
 The `NO_PROXY` / `no_proxy` setting supports these patterns:
 
-| Pattern | Description | Example |
-|---------|-------------|---------|
-| `*` | Bypass all hosts (disable proxy) | `*` |
-| `hostname` | Exact match or suffix match | `localhost` |
-| `*.domain.com` | Wildcard subdomain match | `*.internal.com` |
-| `.domain.com` | Suffix match (subdomains only) | `.ft.intra` |
-| `192.168.1.100` | Exact IP match | - |
+| Pattern         | Description                      | Example          |
+| --------------- | -------------------------------- | ---------------- |
+| `*`             | Bypass all hosts (disable proxy) | `*`              |
+| `hostname`      | Exact match or suffix match      | `localhost`      |
+| `*.domain.com`  | Wildcard subdomain match         | `*.internal.com` |
+| `.domain.com`   | Suffix match (subdomains only)   | `.ft.intra`      |
+| `192.168.1.100` | Exact IP match                   | -                |
 
 ### Examples
 
@@ -75,6 +76,7 @@ http://[user:password@]host:port
 ```
 
 **Examples:**
+
 ```bash
 # Without authentication
 HTTPS_PROXY=http://proxy.example.com:8080
@@ -116,6 +118,7 @@ All HTTP/HTTPS requests made by OpenCode go through the proxy when configured:
 ### Proxy not being used
 
 1. Check if the environment variable is set:
+
    ```bash
    echo $HTTPS_PROXY
    ```
@@ -132,7 +135,8 @@ All HTTP/HTTPS requests made by OpenCode go through the proxy when configured:
 Some corporate proxies perform SSL interception. You may need to:
 
 1. Configure the proxy's CA certificate in your system trust store
-2. Set `NODE_TLS_REJECT_UNAUTHORIZED=0` (not recommended for production)
+2. Use `NODE_EXTRA_CA_CERTS=/path/to/ca.pem` to trust additional certificates
+3. Use `BUN_OPTIONS="--use-system-ca"` to use system certificate store
 
 ### Proxy authentication failing
 
