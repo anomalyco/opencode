@@ -10,6 +10,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { Archive } from "../util/archive"
+import { proxyFetch } from "../util/fetch"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -176,7 +177,7 @@ export namespace LSPServer {
       if (!(await Bun.file(serverPath).exists())) {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading and building VS Code ESLint server")
-        const response = await fetch("https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip")
+        const response = await proxyFetch("https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip")
         if (!response.ok) return
 
         const zipPath = path.join(Global.Path.bin, "vscode-eslint.zip")
