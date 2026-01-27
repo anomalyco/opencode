@@ -2,27 +2,6 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OpenCode",
   "identifier": "ai.opencode.desktop",
-  "app": {
-    "windows": [
-      {
-        "label": "main",
-        "create": false,
-        "title": "OpenCode",
-        "url": "/",
-        "decorations": true,
-        "dragDropEnabled": false,
-        "zoomHotkeysEnabled": true,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true,
-        "trafficLightPosition": { "x": 12.0, "y": 18.0 }
-      }
-    ],
-    "withGlobalTauri": true,
-    "security": {
-      "csp": null
-    },
-    "macOSPrivateApi": true
-  },
   "bundle": {
     "createUpdaterArtifacts": true,
     "icon": [

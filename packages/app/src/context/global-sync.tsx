@@ -28,6 +28,7 @@ import {
   batch,
   createContext,
   createEffect,
+  untrack,
   getOwner,
   runWithOwner,
   useContext,
@@ -44,11 +45,24 @@ import { usePlatform } from "./platform"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 
+type ProjectMeta = {
+  name?: string
+  icon?: {
+    override?: string
+    color?: string
+  }
+  commands?: {
+    start?: string
+  }
+}
+
 type State = {
   status: "loading" | "partial" | "complete"
   agent: Agent[]
   command: Command[]
   project: string
+  projectMeta: ProjectMeta | undefined
+  icon: string | undefined
   provider: ProviderListResponse
   config: Config
   path: Path
@@ -89,8 +103,30 @@ type VcsCache = {
   ready: Accessor<boolean>
 }
 
+type MetaCache = {
+  store: Store<{ value: ProjectMeta | undefined }>
+  setStore: SetStoreFunction<{ value: ProjectMeta | undefined }>
+  ready: Accessor<boolean>
+}
+
+type IconCache = {
+  store: Store<{ value: string | undefined }>
+  setStore: SetStoreFunction<{ value: string | undefined }>
+  ready: Accessor<boolean>
+}
+
 type ChildOptions = {
   bootstrap?: boolean
+}
+
+function normalizeProviderList(input: ProviderListResponse): ProviderListResponse {
+  return {
+    ...input,
+    all: input.all.map((provider) => ({
+      ...provider,
+      models: Object.fromEntries(Object.entries(provider.models).filter(([, info]) => info.status !== "deprecated")),
+    })),
+  }
 }
 
 function createGlobalSync() {
@@ -100,6 +136,40 @@ function createGlobalSync() {
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
   const vcsCache = new Map<string, VcsCache>()
+  const metaCache = new Map<string, MetaCache>()
+  const iconCache = new Map<string, IconCache>()
+
+  const sdkCache = new Map<string, ReturnType<typeof createOpencodeClient>>()
+  const sdkFor = (directory: string) => {
+    const cached = sdkCache.get(directory)
+    if (cached) return cached
+
+    const sdk = createOpencodeClient({
+      baseUrl: globalSDK.url,
+      fetch: platform.fetch,
+      directory,
+      throwOnError: true,
+    })
+    sdkCache.set(directory, sdk)
+    return sdk
+  }
+
+  const [projectCache, setProjectCache, , projectCacheReady] = persisted(
+    Persist.global("globalSync.project", ["globalSync.project.v1"]),
+    createStore({ value: [] as Project[] }),
+  )
+
+  const sanitizeProject = (project: Project) => {
+    if (!project.icon?.url && !project.icon?.override) return project
+    return {
+      ...project,
+      icon: {
+        ...project.icon,
+        url: undefined,
+        override: undefined,
+      },
+    }
+  }
   const [globalStore, setGlobalStore] = createStore<{
     ready: boolean
     error?: InitError
@@ -112,7 +182,7 @@ function createGlobalSync() {
   }>({
     ready: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
-    project: [],
+    project: projectCache.value,
     provider: { all: [], connected: [], default: {} },
     provider_auth: {},
     config: {},
@@ -120,7 +190,25 @@ function createGlobalSync() {
   })
   let bootstrapQueue: string[] = []
 
-  createEffect(async () => {
+  createEffect(() => {
+    if (!projectCacheReady()) return
+    if (globalStore.project.length !== 0) return
+    const cached = projectCache.value
+    if (cached.length === 0) return
+    setGlobalStore("project", cached)
+  })
+
+  createEffect(() => {
+    if (!projectCacheReady()) return
+    const projects = globalStore.project
+    if (projects.length === 0) {
+      const cachedLength = untrack(() => projectCache.value.length)
+      if (cachedLength !== 0) return
+    }
+    setProjectCache("value", projects.map(sanitizeProject))
+  })
+
+  createEffect(() => {
     if (globalStore.reload !== "complete") return
     if (bootstrapQueue.length) {
       for (const directory of bootstrapQueue) {
@@ -137,21 +225,102 @@ function createGlobalSync() {
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
 
+  const sessionRecentWindow = 4 * 60 * 60 * 1000
+  const sessionRecentLimit = 50
+
+  function sessionUpdatedAt(session: Session) {
+    return session.time.updated ?? session.time.created
+  }
+
+  function compareSessionRecent(a: Session, b: Session) {
+    const aUpdated = sessionUpdatedAt(a)
+    const bUpdated = sessionUpdatedAt(b)
+    if (aUpdated !== bUpdated) return bUpdated - aUpdated
+    return a.id.localeCompare(b.id)
+  }
+
+  function takeRecentSessions(sessions: Session[], limit: number, cutoff: number) {
+    if (limit <= 0) return [] as Session[]
+    const selected: Session[] = []
+    const seen = new Set<string>()
+    for (const session of sessions) {
+      if (!session?.id) continue
+      if (seen.has(session.id)) continue
+      seen.add(session.id)
+
+      if (sessionUpdatedAt(session) <= cutoff) continue
+
+      const index = selected.findIndex((x) => compareSessionRecent(session, x) < 0)
+      if (index === -1) selected.push(session)
+      if (index !== -1) selected.splice(index, 0, session)
+      if (selected.length > limit) selected.pop()
+    }
+    return selected
+  }
+
+  function trimSessions(input: Session[], options: { limit: number; permission: Record<string, PermissionRequest[]> }) {
+    const limit = Math.max(0, options.limit)
+    const cutoff = Date.now() - sessionRecentWindow
+    const all = input
+      .filter((s) => !!s?.id)
+      .filter((s) => !s.time?.archived)
+      .sort((a, b) => a.id.localeCompare(b.id))
+
+    const roots = all.filter((s) => !s.parentID)
+    const children = all.filter((s) => !!s.parentID)
+
+    const base = roots.slice(0, limit)
+    const recent = takeRecentSessions(roots.slice(limit), sessionRecentLimit, cutoff)
+    const keepRoots = [...base, ...recent]
+
+    const keepRootIds = new Set(keepRoots.map((s) => s.id))
+    const keepChildren = children.filter((s) => {
+      if (s.parentID && keepRootIds.has(s.parentID)) return true
+      const perms = options.permission[s.id] ?? []
+      if (perms.length > 0) return true
+      return sessionUpdatedAt(s) > cutoff
+    })
+
+    return [...keepRoots, ...keepChildren].sort((a, b) => a.id.localeCompare(b.id))
+  }
+
   function ensureChild(directory: string) {
     if (!directory) console.error("No directory provided")
     if (!children[directory]) {
-      const cache = runWithOwner(owner, () =>
+      const vcs = runWithOwner(owner, () =>
         persisted(
           Persist.workspace(directory, "vcs", ["vcs.v1"]),
           createStore({ value: undefined as VcsInfo | undefined }),
         ),
       )
-      if (!cache) throw new Error("Failed to create persisted cache")
-      vcsCache.set(directory, { store: cache[0], setStore: cache[1], ready: cache[3] })
+      if (!vcs) throw new Error("Failed to create persisted cache")
+      const vcsStore = vcs[0]
+      const vcsReady = vcs[3]
+      vcsCache.set(directory, { store: vcsStore, setStore: vcs[1], ready: vcsReady })
+
+      const meta = runWithOwner(owner, () =>
+        persisted(
+          Persist.workspace(directory, "project", ["project.v1"]),
+          createStore({ value: undefined as ProjectMeta | undefined }),
+        ),
+      )
+      if (!meta) throw new Error("Failed to create persisted project metadata")
+      metaCache.set(directory, { store: meta[0], setStore: meta[1], ready: meta[3] })
+
+      const icon = runWithOwner(owner, () =>
+        persisted(
+          Persist.workspace(directory, "icon", ["icon.v1"]),
+          createStore({ value: undefined as string | undefined }),
+        ),
+      )
+      if (!icon) throw new Error("Failed to create persisted project icon")
+      iconCache.set(directory, { store: icon[0], setStore: icon[1], ready: icon[3] })
 
       const init = () => {
-        children[directory] = createStore<State>({
+        const child = createStore<State>({
           project: "",
+          projectMeta: meta[0].value,
+          icon: icon[0].value,
           provider: { all: [], connected: [], default: {} },
           config: {},
           path: { state: "", config: "", worktree: "", directory: "", home: "" },
@@ -167,10 +336,27 @@ function createGlobalSync() {
           question: {},
           mcp: {},
           lsp: [],
-          vcs: cache[0].value,
+          vcs: vcsStore.value,
           limit: 5,
           message: {},
           part: {},
+        })
+
+        children[directory] = child
+
+        createEffect(() => {
+          if (!vcsReady()) return
+          const cached = vcsStore.value
+          if (!cached?.branch) return
+          child[1]("vcs", (value) => value ?? cached)
+        })
+
+        createEffect(() => {
+          child[1]("projectMeta", meta[0].value)
+        })
+
+        createEffect(() => {
+          child[1]("icon", icon[0].value)
         })
       }
 
@@ -196,7 +382,13 @@ function createGlobalSync() {
 
     const [store, setStore] = child(directory, { bootstrap: false })
     const meta = sessionMeta.get(directory)
-    if (meta && meta.limit >= store.limit) return
+    if (meta && meta.limit >= store.limit) {
+      const next = trimSessions(store.session, { limit: store.limit, permission: store.permission })
+      if (next.length !== store.session.length) {
+        setStore("session", reconcile(next, { key: "id" }))
+      }
+      return
+    }
 
     const promise = globalSDK.client.session
       .list({ directory, roots: true })
@@ -204,28 +396,15 @@ function createGlobalSync() {
         const nonArchived = (x.data ?? [])
           .filter((s) => !!s?.id)
           .filter((s) => !s.time?.archived)
-          .slice()
           .sort((a, b) => a.id.localeCompare(b.id))
 
         // Read the current limit at resolve-time so callers that bump the limit while
         // a request is in-flight still get the expanded result.
         const limit = store.limit
 
-        const sandboxWorkspace = globalStore.project.some((p) => (p.sandboxes ?? []).includes(directory))
-        if (sandboxWorkspace) {
-          setStore("sessionTotal", nonArchived.length)
-          setStore("session", reconcile(nonArchived, { key: "id" }))
-          sessionMeta.set(directory, { limit })
-          return
-        }
+        const children = store.session.filter((s) => !!s.parentID)
+        const sessions = trimSessions([...nonArchived, ...children], { limit, permission: store.permission })
 
-        const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000
-        // Include up to the limit, plus any updated in the last 4 hours
-        const sessions = nonArchived.filter((s, i) => {
-          if (i < limit) return true
-          const updated = new Date(s.time?.updated ?? s.time?.created).getTime()
-          return updated > fourHoursAgo
-        })
         // Store total session count (used for "load more" pagination)
         setStore("sessionTotal", nonArchived.length)
         setStore("session", reconcile(sessions, { key: "id" }))
@@ -253,36 +432,20 @@ function createGlobalSync() {
       const [store, setStore] = ensureChild(directory)
       const cache = vcsCache.get(directory)
       if (!cache) return
-      const sdk = createOpencodeClient({
-        baseUrl: globalSDK.url,
-        fetch: platform.fetch,
-        directory,
-        throwOnError: true,
-      })
+      const meta = metaCache.get(directory)
+      if (!meta) return
+      const sdk = sdkFor(directory)
 
       setStore("status", "loading")
 
-      createEffect(() => {
-        if (!cache.ready()) return
-        const cached = cache.store.value
-        if (!cached?.branch) return
-        setStore("vcs", (value) => value ?? cached)
-      })
+      // projectMeta is synced from persisted storage in ensureChild.
+      // vcs is seeded from persisted storage in ensureChild.
 
       const blockingRequests = {
         project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
         provider: () =>
           sdk.provider.list().then((x) => {
-            const data = x.data!
-            setStore("provider", {
-              ...data,
-              all: data.all.map((provider) => ({
-                ...provider,
-                models: Object.fromEntries(
-                  Object.entries(provider.models).filter(([, info]) => info.status !== "deprecated"),
-                ),
-              })),
-            })
+            setStore("provider", normalizeProviderList(x.data!))
           }),
         agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
         config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
@@ -335,10 +498,7 @@ function createGlobalSync() {
                 "permission",
                 sessionID,
                 reconcile(
-                  permissions
-                    .filter((p) => !!p?.id)
-                    .slice()
-                    .sort((a, b) => a.id.localeCompare(b.id)),
+                  permissions.filter((p) => !!p?.id).sort((a, b) => a.id.localeCompare(b.id)),
                   { key: "id" },
                 ),
               )
@@ -367,10 +527,7 @@ function createGlobalSync() {
                 "question",
                 sessionID,
                 reconcile(
-                  questions
-                    .filter((q) => !!q?.id)
-                    .slice()
-                    .sort((a, b) => a.id.localeCompare(b.id)),
+                  questions.filter((q) => !!q?.id).sort((a, b) => a.id.localeCompare(b.id)),
                   { key: "id" },
                 ),
               )
@@ -432,25 +589,25 @@ function createGlobalSync() {
         break
       }
       case "session.created": {
-        const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+        const info = event.properties.info
+        const result = Binary.search(store.session, info.id, (s) => s.id)
         if (result.found) {
-          setStore("session", result.index, reconcile(event.properties.info))
+          setStore("session", result.index, reconcile(info))
           break
         }
-        setStore(
-          "session",
-          produce((draft) => {
-            draft.splice(result.index, 0, event.properties.info)
-          }),
-        )
-        if (!event.properties.info.parentID) {
-          setStore("sessionTotal", store.sessionTotal + 1)
+        const next = store.session.slice()
+        next.splice(result.index, 0, info)
+        const trimmed = trimSessions(next, { limit: store.limit, permission: store.permission })
+        setStore("session", reconcile(trimmed, { key: "id" }))
+        if (!info.parentID) {
+          setStore("sessionTotal", (value) => value + 1)
         }
         break
       }
       case "session.updated": {
-        const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
-        if (event.properties.info.time.archived) {
+        const info = event.properties.info
+        const result = Binary.search(store.session, info.id, (s) => s.id)
+        if (info.time.archived) {
           if (result.found) {
             setStore(
               "session",
@@ -459,20 +616,32 @@ function createGlobalSync() {
               }),
             )
           }
-          if (event.properties.info.parentID) break
+          if (info.parentID) break
           setStore("sessionTotal", (value) => Math.max(0, value - 1))
           break
         }
         if (result.found) {
-          setStore("session", result.index, reconcile(event.properties.info))
+          setStore("session", result.index, reconcile(info))
           break
         }
-        setStore(
-          "session",
-          produce((draft) => {
-            draft.splice(result.index, 0, event.properties.info)
-          }),
-        )
+        const next = store.session.slice()
+        next.splice(result.index, 0, info)
+        const trimmed = trimSessions(next, { limit: store.limit, permission: store.permission })
+        setStore("session", reconcile(trimmed, { key: "id" }))
+        break
+      }
+      case "session.deleted": {
+        const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+        if (result.found) {
+          setStore(
+            "session",
+            produce((draft) => {
+              draft.splice(result.index, 1)
+            }),
+          )
+        }
+        if (event.properties.info.parentID) break
+        setStore("sessionTotal", (value) => Math.max(0, value - 1))
         break
       }
       case "session.diff":
@@ -639,13 +808,9 @@ function createGlobalSync() {
         break
       }
       case "lsp.updated": {
-        const sdk = createOpencodeClient({
-          baseUrl: globalSDK.url,
-          fetch: platform.fetch,
-          directory,
-          throwOnError: true,
-        })
-        sdk.lsp.status().then((x) => setStore("lsp", x.data ?? []))
+        sdkFor(directory)
+          .lsp.status()
+          .then((x) => setStore("lsp", x.data ?? []))
         break
       }
     }
@@ -685,16 +850,7 @@ function createGlobalSync() {
       ),
       retry(() =>
         globalSDK.client.provider.list().then((x) => {
-          const data = x.data!
-          setGlobalStore("provider", {
-            ...data,
-            all: data.all.map((provider) => ({
-              ...provider,
-              models: Object.fromEntries(
-                Object.entries(provider.models).filter(([, info]) => info.status !== "deprecated"),
-              ),
-            })),
-          })
+          setGlobalStore("provider", normalizeProviderList(x.data!))
         }),
       ),
       retry(() =>
@@ -710,6 +866,32 @@ function createGlobalSync() {
   onMount(() => {
     bootstrap()
   })
+
+  function projectMeta(directory: string, patch: ProjectMeta) {
+    const [store, setStore] = ensureChild(directory)
+    const cached = metaCache.get(directory)
+    if (!cached) return
+    const previous = store.projectMeta ?? {}
+    const icon = patch.icon ? { ...(previous.icon ?? {}), ...patch.icon } : previous.icon
+    const commands = patch.commands ? { ...(previous.commands ?? {}), ...patch.commands } : previous.commands
+    const next = {
+      ...previous,
+      ...patch,
+      icon,
+      commands,
+    }
+    cached.setStore("value", next)
+    setStore("projectMeta", next)
+  }
+
+  function projectIcon(directory: string, value: string | undefined) {
+    const [store, setStore] = ensureChild(directory)
+    const cached = iconCache.get(directory)
+    if (!cached) return
+    if (store.icon === value) return
+    cached.setStore("value", value)
+    setStore("icon", value)
+  }
 
   return {
     data: globalStore,
@@ -732,6 +914,8 @@ function createGlobalSync() {
     },
     project: {
       loadSessions,
+      meta: projectMeta,
+      icon: projectIcon,
     },
   }
 }
