@@ -119,10 +119,12 @@ export namespace Fd {
 
   export async function* list(input: {
     cwd: string
+    follow?: boolean
     hidden?: boolean
   }) {
 
     const args = [await fdExcutablePath(), "--exclude", ".git"]
+    if (input.follow !== false) args.push("--follow")
     if (input.hidden !== false) args.push("--hidden")
 
 
