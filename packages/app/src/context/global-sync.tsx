@@ -225,6 +225,65 @@ function createGlobalSync() {
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
 
+  const sessionRecentWindow = 4 * 60 * 60 * 1000
+  const sessionRecentLimit = 50
+
+  function sessionUpdatedAt(session: Session) {
+    return session.time.updated ?? session.time.created
+  }
+
+  function compareSessionRecent(a: Session, b: Session) {
+    const aUpdated = sessionUpdatedAt(a)
+    const bUpdated = sessionUpdatedAt(b)
+    if (aUpdated !== bUpdated) return bUpdated - aUpdated
+    return a.id.localeCompare(b.id)
+  }
+
+  function takeRecentSessions(sessions: Session[], limit: number, cutoff: number) {
+    if (limit <= 0) return [] as Session[]
+    const selected: Session[] = []
+    const seen = new Set<string>()
+    for (const session of sessions) {
+      if (!session?.id) continue
+      if (seen.has(session.id)) continue
+      seen.add(session.id)
+
+      if (sessionUpdatedAt(session) <= cutoff) continue
+
+      const index = selected.findIndex((x) => compareSessionRecent(session, x) < 0)
+      if (index === -1) selected.push(session)
+      if (index !== -1) selected.splice(index, 0, session)
+      if (selected.length > limit) selected.pop()
+    }
+    return selected
+  }
+
+  function trimSessions(input: Session[], options: { limit: number; permission: Record<string, PermissionRequest[]> }) {
+    const limit = Math.max(0, options.limit)
+    const cutoff = Date.now() - sessionRecentWindow
+    const all = input
+      .filter((s) => !!s?.id)
+      .filter((s) => !s.time?.archived)
+      .sort((a, b) => a.id.localeCompare(b.id))
+
+    const roots = all.filter((s) => !s.parentID)
+    const children = all.filter((s) => !!s.parentID)
+
+    const base = roots.slice(0, limit)
+    const recent = takeRecentSessions(roots.slice(limit), sessionRecentLimit, cutoff)
+    const keepRoots = [...base, ...recent]
+
+    const keepRootIds = new Set(keepRoots.map((s) => s.id))
+    const keepChildren = children.filter((s) => {
+      if (s.parentID && keepRootIds.has(s.parentID)) return true
+      const perms = options.permission[s.id] ?? []
+      if (perms.length > 0) return true
+      return sessionUpdatedAt(s) > cutoff
+    })
+
+    return [...keepRoots, ...keepChildren].sort((a, b) => a.id.localeCompare(b.id))
+  }
+
   function ensureChild(directory: string) {
     if (!directory) console.error("No directory provided")
     if (!children[directory]) {
@@ -323,7 +382,13 @@ function createGlobalSync() {
 
     const [store, setStore] = child(directory, { bootstrap: false })
     const meta = sessionMeta.get(directory)
-    if (meta && meta.limit >= store.limit) return
+    if (meta && meta.limit >= store.limit) {
+      const next = trimSessions(store.session, { limit: store.limit, permission: store.permission })
+      if (next.length !== store.session.length) {
+        setStore("session", reconcile(next, { key: "id" }))
+      }
+      return
+    }
 
     const promise = globalSDK.client.session
       .list({ directory, roots: true })
@@ -337,21 +402,9 @@ function createGlobalSync() {
         // a request is in-flight still get the expanded result.
         const limit = store.limit
 
-        const sandboxWorkspace = globalStore.project.some((p) => (p.sandboxes ?? []).includes(directory))
-        if (sandboxWorkspace) {
-          setStore("sessionTotal", nonArchived.length)
-          setStore("session", reconcile(nonArchived, { key: "id" }))
-          sessionMeta.set(directory, { limit })
-          return
-        }
+        const children = store.session.filter((s) => !!s.parentID)
+        const sessions = trimSessions([...nonArchived, ...children], { limit, permission: store.permission })
 
-        const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000
-        // Include up to the limit, plus any updated in the last 4 hours
-        const sessions = nonArchived.filter((s, i) => {
-          if (i < limit) return true
-          const updated = new Date(s.time?.updated ?? s.time?.created).getTime()
-          return updated > fourHoursAgo
-        })
         // Store total session count (used for "load more" pagination)
         setStore("sessionTotal", nonArchived.length)
         setStore("session", reconcile(sessions, { key: "id" }))
@@ -536,25 +589,25 @@ function createGlobalSync() {
         break
       }
       case "session.created": {
-        const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+        const info = event.properties.info
+        const result = Binary.search(store.session, info.id, (s) => s.id)
         if (result.found) {
-          setStore("session", result.index, reconcile(event.properties.info))
+          setStore("session", result.index, reconcile(info))
           break
         }
-        setStore(
-          "session",
-          produce((draft) => {
-            draft.splice(result.index, 0, event.properties.info)
-          }),
-        )
-        if (!event.properties.info.parentID) {
-          setStore("sessionTotal", store.sessionTotal + 1)
+        const next = store.session.slice()
+        next.splice(result.index, 0, info)
+        const trimmed = trimSessions(next, { limit: store.limit, permission: store.permission })
+        setStore("session", reconcile(trimmed, { key: "id" }))
+        if (!info.parentID) {
+          setStore("sessionTotal", (value) => value + 1)
         }
         break
       }
       case "session.updated": {
-        const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
-        if (event.properties.info.time.archived) {
+        const info = event.properties.info
+        const result = Binary.search(store.session, info.id, (s) => s.id)
+        if (info.time.archived) {
           if (result.found) {
             setStore(
               "session",
@@ -563,20 +616,18 @@ function createGlobalSync() {
               }),
             )
           }
-          if (event.properties.info.parentID) break
+          if (info.parentID) break
           setStore("sessionTotal", (value) => Math.max(0, value - 1))
           break
         }
         if (result.found) {
-          setStore("session", result.index, reconcile(event.properties.info))
+          setStore("session", result.index, reconcile(info))
           break
         }
-        setStore(
-          "session",
-          produce((draft) => {
-            draft.splice(result.index, 0, event.properties.info)
-          }),
-        )
+        const next = store.session.slice()
+        next.splice(result.index, 0, info)
+        const trimmed = trimSessions(next, { limit: store.limit, permission: store.permission })
+        setStore("session", reconcile(trimmed, { key: "id" }))
         break
       }
       case "session.deleted": {

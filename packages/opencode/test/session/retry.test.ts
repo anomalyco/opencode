@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { NamedError } from "@opencode-ai/util/error"
 import { APICallError } from "ai"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -9,6 +10,10 @@ function apiError(headers?: Record<string, string>): MessageV2.APIError {
     isRetryable: true,
     responseHeaders: headers,
   }).toObject() as MessageV2.APIError
+}
+
+function wrap(message: unknown): ReturnType<NamedError["toObject"]> {
+  return { data: { message } } as ReturnType<NamedError["toObject"]>
 }
 
 describe("session.retry.delay", () => {
@@ -78,6 +83,28 @@ describe("session.retry.delay", () => {
 
     process.emitWarning = originalWarn
     expect(warnings.some((w) => w.includes("TimeoutOverflowWarning"))).toBe(false)
+  })
+})
+
+describe("session.retry.retryable", () => {
+  test("maps too_many_requests json messages", () => {
+    const error = wrap(JSON.stringify({ type: "error", error: { type: "too_many_requests" } }))
+    expect(SessionRetry.retryable(error)).toBe("Too Many Requests")
+  })
+
+  test("maps overloaded provider codes", () => {
+    const error = wrap(JSON.stringify({ code: "resource_exhausted" }))
+    expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")
+  })
+
+  test("handles json messages without code", () => {
+    const error = wrap(JSON.stringify({ error: { message: "no_kv_space" } }))
+    expect(SessionRetry.retryable(error)).toBe("Provider Server Error")
+  })
+
+  test("returns undefined for non-json message", () => {
+    const error = wrap("not-json")
+    expect(SessionRetry.retryable(error)).toBeUndefined()
   })
 })
 
