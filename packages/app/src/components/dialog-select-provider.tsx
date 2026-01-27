@@ -18,7 +18,7 @@ export const DialogSelectProvider: Component = () => {
   const otherGroup = () => language.t("dialog.provider.group.other")
 
   return (
-    <Dialog title={language.t("command.provider.connect")}>
+    <Dialog title={language.t("command.provider.connect")} transition>
       <List
         search={{ placeholder: language.t("dialog.provider.search.placeholder"), autofocus: true }}
         emptyMessage={language.t("dialog.provider.empty")}

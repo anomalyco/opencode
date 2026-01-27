@@ -5,12 +5,6 @@
   inset: 0;
   z-index: 50;
   background-color: hsl(from var(--background-base) h s l / 0.2);
-
-  /* animation: overlayHide 250ms ease 100ms forwards; */
-  /**/
-  /* &[data-expanded] { */
-  /*   animation: overlayShow 250ms ease; */
-  /* } */
 }
 
 [data-component="dialog"] {
@@ -57,12 +51,6 @@
       background: var(--surface-raised-stronger-non-alpha);
       background-clip: padding-box;
       box-shadow: var(--shadow-lg-border-base);
-
-      /* animation: contentHide 300ms ease-in forwards; */
-      /**/
-      /* &[data-expanded] { */
-      /*   animation: contentShow 300ms ease-out; */
-      /* } */
 
       [data-slot="dialog-header"] {
         display: flex;
@@ -147,6 +135,14 @@
   }
 }
 
+[data-component="dialog"][data-transition] [data-slot="dialog-content"] {
+  animation: contentHide 100ms ease-in forwards;
+
+  &[data-expanded] {
+    animation: contentShow 150ms ease-out;
+  }
+}
+
 @keyframes overlayShow {
   from {
     opacity: 0;
@@ -166,7 +162,7 @@
 @keyframes contentShow {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.98);
   }
   to {
     opacity: 1;
@@ -180,6 +176,6 @@
   }
   to {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.98);
   }
 }
