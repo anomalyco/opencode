@@ -638,7 +638,7 @@ export namespace LSPServer {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading zls from GitHub releases")
 
-        const releaseResponse = await fetch("https://api.github.com/repos/zigtools/zls/releases/latest")
+        const releaseResponse = await proxyFetch("https://api.github.com/repos/zigtools/zls/releases/latest")
         if (!releaseResponse.ok) {
           log.error("Failed to fetch zls release info")
           return
@@ -686,7 +686,7 @@ export namespace LSPServer {
         }
 
         const downloadUrl = asset.browser_download_url
-        const downloadResponse = await fetch(downloadUrl)
+        const downloadResponse = await proxyFetch(downloadUrl)
         if (!downloadResponse.ok) {
           log.error("Failed to download zls")
           return
@@ -933,7 +933,7 @@ export namespace LSPServer {
       if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
       log.info("downloading clangd from GitHub releases")
 
-      const releaseResponse = await fetch("https://api.github.com/repos/clangd/clangd/releases/latest")
+      const releaseResponse = await proxyFetch("https://api.github.com/repos/clangd/clangd/releases/latest")
       if (!releaseResponse.ok) {
         log.error("Failed to fetch clangd release info")
         return
@@ -979,7 +979,7 @@ export namespace LSPServer {
       }
 
       const name = asset.name
-      const downloadResponse = await fetch(asset.browser_download_url)
+      const downloadResponse = await proxyFetch(asset.browser_download_url)
       if (!downloadResponse.ok) {
         log.error("Failed to download clangd")
         return
