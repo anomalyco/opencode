@@ -1,5 +1,6 @@
 import type { ModelMessage } from "ai"
 import { TOON } from "@/format/toon"
+import { TOONData } from "@/format/toon-data"
 import { Config } from "@/config/config"
 import { Log } from "@/util/log"
 import { TOONMetadata } from "./toon-metadata"
@@ -14,16 +15,21 @@ export namespace TOONTransform {
       originalTokens: number
       transformedTokens: number
       savingsPercentage: number
+      textSavings: {
+        tokensSaved: number
+        savingsPercentage: number
+      }
+      dataSavings: {
+        tokensSaved: number
+        savingsPercentage: number
+      }
     }
   }
 
   /**
    * Transform ModelMessages to use TOON format for text content
    */
-  export async function transform(
-    messages: ModelMessage[],
-    sessionID?: string,
-  ): Promise<TransformResult> {
+  export async function transform(messages: ModelMessage[], sessionID?: string): Promise<TransformResult> {
     const config = await Config.get()
     const toonConfig = config.experimental?.toon_format
 
@@ -36,6 +42,14 @@ export namespace TOONTransform {
           originalTokens: 0,
           transformedTokens: 0,
           savingsPercentage: 0,
+          textSavings: {
+            tokensSaved: 0,
+            savingsPercentage: 0,
+          },
+          dataSavings: {
+            tokensSaved: 0,
+            savingsPercentage: 0,
+          },
         },
       }
     }
@@ -53,6 +67,8 @@ export namespace TOONTransform {
     let totalOriginalChars = 0
     let totalTransformedChars = 0
     let totalSavings = 0
+    let textSavings = 0
+    let dataSavings = 0
 
     const transformed = messages.map((msg) => {
       // Only transform user and assistant messages
@@ -84,13 +100,31 @@ export namespace TOONTransform {
 
             totalOriginalChars += original.length
             totalTransformedChars += toonified.length
-            totalSavings += TOON.estimateSavings(original, toonified)
+            const savings = TOON.estimateSavings(original, toonified)
+            totalSavings += savings
+            textSavings += savings
 
             return {
               ...part,
               text: toonified,
             }
           }
+
+          // Optimize structured data in tool results
+          if (part.type === "tool-result" && part.content && typeof part.content === "object") {
+            const shouldOptimize = TOONData.shouldSerialize(part.content)
+            if (shouldOptimize) {
+              const savings = TOONData.estimateSavings(part.content)
+              totalSavings += savings
+              dataSavings += savings
+
+              return {
+                ...part,
+                content: TOONData.serialize(part.content).serialized,
+              }
+            }
+          }
+
           // Preserve non-text parts (images, tool calls, etc.)
           return part
         })
@@ -113,11 +147,21 @@ export namespace TOONTransform {
       originalTokens,
       transformedTokens,
       savingsPercentage,
+      textSavings: {
+        tokensSaved: textSavings,
+        savingsPercentage: originalTokens > 0 ? (textSavings / originalTokens) * 100 : 0,
+      },
+      dataSavings: {
+        tokensSaved: dataSavings,
+        savingsPercentage: originalTokens > 0 ? (dataSavings / originalTokens) * 100 : 0,
+      },
     }
 
     log.info("toon.transform.complete", {
       estimatedTokensSaved: totalSavings,
       savingsPercentage: savingsPercentage.toFixed(2) + "%",
+      textSavings: textSavings,
+      dataSavings: dataSavings,
     })
 
     // Record savings if sessionID provided
