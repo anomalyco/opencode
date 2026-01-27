@@ -105,6 +105,24 @@
         color: var(--icon-active);
       }
     }
+
+    > [data-component="icon-button"] {
+      background-color: transparent;
+
+      &:hover:not(:disabled),
+      &:focus:not(:disabled),
+      &:active:not(:disabled) {
+        background-color: transparent;
+      }
+
+      &:hover:not(:disabled) [data-slot="icon-svg"] {
+        color: var(--icon-hover);
+      }
+
+      &:active:not(:disabled) [data-slot="icon-svg"] {
+        color: var(--icon-active);
+      }
+    }
   }
 
   [data-slot="list-scroll"] {

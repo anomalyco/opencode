@@ -264,6 +264,27 @@
     }
   }
 
+  &[data-variant="pill"][data-orientation="horizontal"][data-scope="filetree"] {
+    [data-slot="tabs-list"] {
+      padding: 12px;
+      gap: 8px;
+    }
+
+    [data-slot="tabs-trigger-wrapper"] {
+      height: 26px;
+      border-radius: 6px;
+      color: var(--text-weak);
+
+      &:not(:has([data-selected])):hover:not(:disabled) {
+        color: var(--text-base);
+      }
+
+      &:has([data-selected]) {
+        color: var(--text-strong);
+      }
+    }
+  }
+
   &[data-orientation="vertical"] {
     flex-direction: row;
 
