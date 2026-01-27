@@ -1703,9 +1703,9 @@ export default function Page() {
                           markScrollGesture(e.target)
                         }}
                         onScroll={(e) => {
+                          autoScroll.handleScroll()
                           if (!hasScrollGesture()) return
                           markScrollGesture(e.target)
-                          autoScroll.handleScroll()
                           if (isDesktop()) scheduleScrollSpy(e.currentTarget)
                         }}
                         onClick={autoScroll.handleInteraction}
