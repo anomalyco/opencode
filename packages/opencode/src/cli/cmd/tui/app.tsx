@@ -171,6 +171,7 @@ export function tui(input: {
         consoleOptions: {
           keyBindings: [
             { name: "y", ctrl: true, action: "copy-selection" },
+            { name: "c", ctrl: true, action: "copy-selection" },
             { name: "c", meta: true, action: "copy-selection" },
           ],
           onCopySelection: (text) => {
@@ -709,7 +710,13 @@ function ErrorComponent(props: {
 
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
-      handleExit()
+      if (process.platform === "darwin") {
+        handleExit()
+        return
+      }
+      if (!renderer.getSelection()?.getSelectedText()) {
+        handleExit()
+      }
     }
   })
   const [copied, setCopied] = createSignal(false)
