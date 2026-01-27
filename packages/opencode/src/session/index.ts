@@ -427,14 +427,12 @@ export namespace Session {
     }),
     (input) => {
       const cacheReadInputTokens = input.usage.cachedInputTokens ?? 0
-      const cacheWriteInputTokens = (
-        input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+      const cacheWriteInputTokens = (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
         // @ts-expect-error
         input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
         // @ts-expect-error
         input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
-        0
-      ) as number
+        0) as number
 
       const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
       const adjustedInputTokens = excludesCachedTokens
