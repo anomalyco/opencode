@@ -779,13 +779,10 @@ export namespace Config {
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
       review_toggle: z.string().optional().default("<leader>d").describe("Toggle review panel for changes"),
-      review_approve: z.string().optional().default("a").describe("Approve current file in review"),
-      review_reject: z.string().optional().default("r").describe("Reject current file in review"),
-      review_reset: z.string().optional().default("u").describe("Reset current file to pending in review"),
-      review_approve_all: z.string().optional().default("shift+a").describe("Approve all files in review"),
+      review_next_change: z.string().optional().default("j").describe("Next change in review"),
+      review_prev_change: z.string().optional().default("k").describe("Previous change in review"),
+      review_comment: z.string().optional().default("c").describe("Add comment to selected change"),
       review_submit: z.string().optional().default("shift+s").describe("Submit review feedback"),
-      review_next: z.string().optional().default("j").describe("Next file in review"),
-      review_prev: z.string().optional().default("k").describe("Previous file in review"),
     })
     .strict()
     .meta({

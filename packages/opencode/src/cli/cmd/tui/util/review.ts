@@ -1,59 +1,71 @@
 import type { Snapshot } from "@/snapshot"
+import { createTwoFilesPatch, parsePatch, type StructuredPatchHunk } from "diff"
 
-export type ReviewStatus = "pending" | "approved" | "rejected"
+export interface ReviewComment {
+  id: string
+  text: string
+  createdAt: number
+}
 
-export interface FileReview {
+export interface Change {
+  id: string
   file: string
-  status: ReviewStatus
-  feedback?: string
-}
-
-export interface ReviewItem {
-  diff: Snapshot.FileDiff
-  review: FileReview
+  index: number
+  hunk: StructuredPatchHunk
 }
 
 /**
- * Get the count of pending reviews from a list of review items.
+ * Parse a file diff into individual changes (hunks).
+ * Each hunk represents a discrete change that can be commented on.
  */
-export function getPendingCount(reviews: ReviewItem[]): number {
-  return reviews.filter((r) => r.review.status === "pending").length
+export function getChanges(diff: Snapshot.FileDiff): Change[] {
+  const patch = createTwoFilesPatch(diff.file, diff.file, diff.before, diff.after, "before", "after")
+  const parsed = parsePatch(patch)[0]
+  if (!parsed) return []
+  return parsed.hunks.map((hunk, index) => ({
+    id: `${diff.file}:${index}:${hunk.oldStart}-${hunk.oldLines}:${hunk.newStart}-${hunk.newLines}`,
+    file: diff.file,
+    index,
+    hunk,
+  }))
 }
 
 /**
- * Check if all reviews have been processed (non-pending).
+ * Clamp an index to a valid range for the given length.
  */
-export function allReviewed(reviews: ReviewItem[]): boolean {
-  return reviews.length > 0 && reviews.every((r) => r.review.status !== "pending")
-}
-
-/**
- * Clamp an index to a valid range for the given diffs array.
- */
-export function clampIndex(index: number, diffsLength: number): number {
-  const maxIdx = Math.max(0, diffsLength - 1)
+export function clampIndex(index: number, length: number): number {
+  const maxIdx = Math.max(0, length - 1)
   return Math.min(Math.max(0, index), maxIdx)
 }
 
 /**
- * Generate feedback message to send to the agent based on review statuses.
- * Only includes rejected changes with their reasons - approved changes are silently dismissed.
- * Returns null if there are no rejections.
+ * Generate feedback message from comments to send to the agent.
+ * Returns null if there are no comments.
  */
-export function generateFeedbackMessage(reviews: ReviewItem[]): string | null {
-  const rejected = reviews.filter((r) => r.review.status === "rejected")
+export function generateFeedbackMessage(
+  diffs: Snapshot.FileDiff[],
+  comments: Record<string, Record<string, ReviewComment[]>>,
+): string | null {
+  const lines: string[] = []
 
-  if (rejected.length === 0) return null
+  for (const diff of diffs) {
+    const fileComments = comments[diff.file]
+    if (!fileComments) continue
 
-  const lines: string[] = ["## Review Feedback\n"]
-  lines.push("Please revert or reconsider the following changes:\n")
+    const changes = getChanges(diff)
+    for (const change of changes) {
+      const changeComments = fileComments[change.id]
+      if (!changeComments || changeComments.length === 0) continue
 
-  for (const r of rejected) {
-    lines.push(`- \`${r.diff.file}\``)
-    if (r.review.feedback) {
-      lines.push(`  - Reason: ${r.review.feedback}`)
+      lines.push(`### ${diff.file} (lines ${change.hunk.newStart}-${change.hunk.newStart + change.hunk.newLines - 1})`)
+      for (const comment of changeComments) {
+        lines.push(`- ${comment.text}`)
+      }
+      lines.push("")
     }
   }
 
-  return lines.join("\n")
+  if (lines.length === 0) return null
+
+  return ["## Review Feedback\n", ...lines].join("\n")
 }

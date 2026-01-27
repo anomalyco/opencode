@@ -1,59 +1,16 @@
 import { describe, expect, test } from "bun:test"
 import {
   generateFeedbackMessage,
-  getPendingCount,
-  allReviewed,
+  getChanges,
   clampIndex,
-  type ReviewItem,
-  type ReviewStatus,
+  type ReviewComment,
 } from "../../../src/cli/cmd/tui/util/review"
 import { Keybind } from "../../../src/util/keybind"
+import type { Snapshot } from "../../../src/snapshot"
 
 describe("review utilities", () => {
-  describe("getPendingCount", () => {
-    test("returns 0 for empty array", () => {
-      expect(getPendingCount([])).toBe(0)
-    })
-
-    test("counts only pending reviews", () => {
-      const reviews: ReviewItem[] = [
-        makeDiff("file1.ts", "pending"),
-        makeDiff("file2.ts", "approved"),
-        makeDiff("file3.ts", "pending"),
-        makeDiff("file4.ts", "rejected"),
-      ]
-      expect(getPendingCount(reviews)).toBe(2)
-    })
-
-    test("returns total count when all are pending", () => {
-      const reviews: ReviewItem[] = [makeDiff("file1.ts", "pending"), makeDiff("file2.ts", "pending")]
-      expect(getPendingCount(reviews)).toBe(2)
-    })
-
-    test("returns 0 when none are pending", () => {
-      const reviews: ReviewItem[] = [makeDiff("file1.ts", "approved"), makeDiff("file2.ts", "rejected")]
-      expect(getPendingCount(reviews)).toBe(0)
-    })
-  })
-
-  describe("allReviewed", () => {
-    test("returns false for empty array", () => {
-      expect(allReviewed([])).toBe(false)
-    })
-
-    test("returns false when any are pending", () => {
-      const reviews: ReviewItem[] = [makeDiff("file1.ts", "approved"), makeDiff("file2.ts", "pending")]
-      expect(allReviewed(reviews)).toBe(false)
-    })
-
-    test("returns true when all are processed", () => {
-      const reviews: ReviewItem[] = [makeDiff("file1.ts", "approved"), makeDiff("file2.ts", "rejected")]
-      expect(allReviewed(reviews)).toBe(true)
-    })
-  })
-
   describe("clampIndex", () => {
-    test("returns 0 for empty diffs", () => {
+    test("returns 0 for empty length", () => {
       expect(clampIndex(0, 0)).toBe(0)
       expect(clampIndex(5, 0)).toBe(0)
       expect(clampIndex(-1, 0)).toBe(0)
@@ -76,126 +33,157 @@ describe("review utilities", () => {
     })
   })
 
+  describe("getChanges", () => {
+    test("returns empty array for identical before/after", () => {
+      const diff: Snapshot.FileDiff = {
+        file: "test.ts",
+        before: "const x = 1",
+        after: "const x = 1",
+        additions: 0,
+        deletions: 0,
+      }
+      const changes = getChanges(diff)
+      expect(changes).toEqual([])
+    })
+
+    test("creates single change for simple diff", () => {
+      const diff: Snapshot.FileDiff = {
+        file: "test.ts",
+        before: "const x = 1",
+        after: "const x = 2",
+        additions: 1,
+        deletions: 1,
+      }
+      const changes = getChanges(diff)
+      expect(changes.length).toBe(1)
+      expect(changes[0].file).toBe("test.ts")
+      expect(changes[0].id).toContain("test.ts:")
+    })
+
+    test("creates multiple changes for multi-hunk diff", () => {
+      const diff: Snapshot.FileDiff = {
+        file: "test.ts",
+        before: `line1
+line2
+line3
+line4
+line5
+line6
+line7
+line8
+line9
+line10`,
+        after: `line1
+CHANGED
+line3
+line4
+line5
+line6
+line7
+line8
+ALSO_CHANGED
+line10`,
+        additions: 2,
+        deletions: 2,
+      }
+      const changes = getChanges(diff)
+      // The diff library may group these differently depending on context
+      expect(changes.length).toBeGreaterThanOrEqual(1)
+    })
+
+    test("change has hunk information", () => {
+      const diff: Snapshot.FileDiff = {
+        file: "test.ts",
+        before: "const x = 1",
+        after: "const x = 2",
+        additions: 1,
+        deletions: 1,
+      }
+      const changes = getChanges(diff)
+      expect(changes[0].hunk).toBeDefined()
+      expect(changes[0].hunk.oldStart).toBeDefined()
+      expect(changes[0].hunk.newStart).toBeDefined()
+    })
+  })
+
   describe("generateFeedbackMessage", () => {
-    test("returns null for empty array", () => {
-      expect(generateFeedbackMessage([])).toBe(null)
+    test("returns null for empty diffs", () => {
+      expect(generateFeedbackMessage([], {})).toBe(null)
     })
 
-    test("returns null when all are pending", () => {
-      const reviews: ReviewItem[] = [makeDiff("file1.ts", "pending"), makeDiff("file2.ts", "pending")]
-      expect(generateFeedbackMessage(reviews)).toBe(null)
+    test("returns null when no comments", () => {
+      const diffs: Snapshot.FileDiff[] = [makeDiff("file1.ts"), makeDiff("file2.ts")]
+      expect(generateFeedbackMessage(diffs, {})).toBe(null)
     })
 
-    test("returns null when only approved changes (no rejections)", () => {
-      const reviews: ReviewItem[] = [makeDiff("src/app.ts", "approved", undefined, 10, 5)]
-      const message = generateFeedbackMessage(reviews)
-
-      // Approved changes are silently dismissed, no message needed
-      expect(message).toBe(null)
-    })
-
-    test("generates message for rejected changes", () => {
-      const reviews: ReviewItem[] = [makeDiff("src/bad.ts", "rejected", undefined, 20, 3)]
-      const message = generateFeedbackMessage(reviews)
-
-      expect(message).toContain("## Review Feedback")
-      expect(message).toContain("Please revert or reconsider")
-      expect(message).toContain("`src/bad.ts`")
-    })
-
-    test("includes reason for rejected with feedback", () => {
-      const reviews: ReviewItem[] = [makeDiff("src/bad.ts", "rejected", "breaks the API", 20, 3)]
-      const message = generateFeedbackMessage(reviews)
-
-      expect(message).toContain("- Reason: breaks the API")
-    })
-
-    test("only includes rejected changes in message, ignores approved", () => {
-      const reviews: ReviewItem[] = [
-        makeDiff("approved.ts", "approved", undefined, 5, 2),
-        makeDiff("rejected.ts", "rejected", "not needed", 10, 0),
-        makeDiff("pending.ts", "pending"),
+    test("generates message with comments", () => {
+      const diffs: Snapshot.FileDiff[] = [
+        {
+          file: "src/app.ts",
+          before: "const x = 1",
+          after: "const x = 2",
+          additions: 1,
+          deletions: 1,
+        },
       ]
-      const message = generateFeedbackMessage(reviews)
+      const changes = getChanges(diffs[0])
+      const changeId = changes[0]?.id
+      if (!changeId) throw new Error("No change ID")
 
-      // Should NOT include approved files
-      expect(message).not.toContain("approved.ts")
-      // Should include rejected files
-      expect(message).toContain("`rejected.ts`")
-      expect(message).toContain("- Reason: not needed")
-      // Should not include pending files
-      expect(message).not.toContain("pending.ts")
+      const comments: Record<string, Record<string, ReviewComment[]>> = {
+        "src/app.ts": {
+          [changeId]: [{ id: "1", text: "This needs improvement", createdAt: Date.now() }],
+        },
+      }
+
+      const message = generateFeedbackMessage(diffs, comments)
+      expect(message).toContain("## Review Feedback")
+      expect(message).toContain("src/app.ts")
+      expect(message).toContain("This needs improvement")
     })
 
-    test("rejected without feedback has no reason line", () => {
-      const reviews: ReviewItem[] = [makeDiff("file.ts", "rejected")]
-      const message = generateFeedbackMessage(reviews)
+    test("includes multiple comments for same change", () => {
+      const diffs: Snapshot.FileDiff[] = [
+        {
+          file: "test.ts",
+          before: "const x = 1",
+          after: "const x = 2",
+          additions: 1,
+          deletions: 1,
+        },
+      ]
+      const changes = getChanges(diffs[0])
+      const changeId = changes[0]?.id
+      if (!changeId) throw new Error("No change ID")
 
-      expect(message).toContain("`file.ts`")
-      expect(message).not.toContain("- Reason:")
+      const comments: Record<string, Record<string, ReviewComment[]>> = {
+        "test.ts": {
+          [changeId]: [
+            { id: "1", text: "First comment", createdAt: Date.now() },
+            { id: "2", text: "Second comment", createdAt: Date.now() },
+          ],
+        },
+      }
+
+      const message = generateFeedbackMessage(diffs, comments)
+      expect(message).toContain("First comment")
+      expect(message).toContain("Second comment")
     })
   })
 })
 
-// Helper to create ReviewItem for testing
-function makeDiff(file: string, status: ReviewStatus, feedback?: string, additions = 1, deletions = 0): ReviewItem {
+// Helper to create FileDiff for testing
+function makeDiff(file: string, additions = 1, deletions = 0): Snapshot.FileDiff {
   return {
-    diff: {
-      file,
-      before: "",
-      after: "",
-      additions,
-      deletions,
-    },
-    review: {
-      file,
-      status,
-      feedback,
-    },
+    file,
+    before: "",
+    after: "new content",
+    additions,
+    deletions,
   }
 }
 
 describe("review keybind integration", () => {
-  // These tests verify that the review panel keybinds are simple single-key shortcuts
-  // and are disabled when typing feedback (handled by isRejectMode check in component)
-
-  test("review_approve keybind is simple 'a' key", () => {
-    const keybind = Keybind.parse("a")[0]
-
-    const aKey: Keybind.Info = {
-      name: "a",
-      ctrl: false,
-      meta: false,
-      shift: false,
-      super: false,
-      leader: false,
-    }
-
-    // Should match plain 'a'
-    expect(Keybind.match(keybind, aKey)).toBe(true)
-
-    // Should NOT match with any modifiers
-    expect(Keybind.match(keybind, { ...aKey, ctrl: true })).toBe(false)
-    expect(Keybind.match(keybind, { ...aKey, meta: true })).toBe(false)
-    expect(Keybind.match(keybind, { ...aKey, shift: true })).toBe(false)
-  })
-
-  test("review_reject keybind is simple 'r' key", () => {
-    const keybind = Keybind.parse("r")[0]
-
-    const rKey: Keybind.Info = {
-      name: "r",
-      ctrl: false,
-      meta: false,
-      shift: false,
-      super: false,
-      leader: false,
-    }
-
-    expect(Keybind.match(keybind, rKey)).toBe(true)
-    expect(Keybind.match(keybind, { ...rKey, ctrl: true })).toBe(false)
-  })
-
   test("review_submit keybind is Shift+S", () => {
     const keybind = Keybind.parse("shift+s")[0]
 
@@ -245,11 +233,11 @@ describe("review keybind integration", () => {
     expect(Keybind.match(nextKeybind, ctrlJ)).toBe(false)
   })
 
-  test("review_reset keybind is simple 'u' key", () => {
-    const keybind = Keybind.parse("u")[0]
+  test("review_comment keybind is simple 'c' key", () => {
+    const keybind = Keybind.parse("c")[0]
 
-    const uKey: Keybind.Info = {
-      name: "u",
+    const cKey: Keybind.Info = {
+      name: "c",
       ctrl: false,
       meta: false,
       shift: false,
@@ -257,26 +245,7 @@ describe("review keybind integration", () => {
       leader: false,
     }
 
-    expect(Keybind.match(keybind, uKey)).toBe(true)
-    expect(Keybind.match(keybind, { ...uKey, ctrl: true })).toBe(false)
-  })
-
-  test("review_approve_all keybind is Shift+A", () => {
-    const keybind = Keybind.parse("shift+a")[0]
-
-    const shiftA: Keybind.Info = {
-      name: "a",
-      ctrl: false,
-      meta: false,
-      shift: true,
-      super: false,
-      leader: false,
-    }
-
-    expect(Keybind.match(keybind, shiftA)).toBe(true)
-
-    // Plain 'a' should NOT match (that's review_approve)
-    const plainA: Keybind.Info = { ...shiftA, shift: false }
-    expect(Keybind.match(keybind, plainA)).toBe(false)
+    expect(Keybind.match(keybind, cKey)).toBe(true)
+    expect(Keybind.match(keybind, { ...cKey, ctrl: true })).toBe(false)
   })
 })

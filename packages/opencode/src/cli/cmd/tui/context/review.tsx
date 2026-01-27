@@ -5,46 +5,47 @@ import { useSync } from "./sync"
 import type { Snapshot } from "@/snapshot"
 import {
   generateFeedbackMessage as generateMessage,
-  allReviewed as checkAllReviewed,
-  getPendingCount as countPending,
+  getChanges as parseChanges,
   clampIndex,
-  type ReviewStatus,
-  type FileReview,
-  type ReviewItem,
+  type ReviewComment,
+  type Change,
 } from "../util/review"
 
-export type { ReviewStatus, FileReview, ReviewItem }
+export type { ReviewComment, Change }
 
 export interface ReviewState {
-  // Map of sessionID -> Map of filePath -> FileReview
-  reviews: Record<string, Record<string, FileReview>>
-  // Current view mode (hidden or visible - always fullscreen when visible)
+  // Map of sessionID -> file -> changeId -> comments[]
+  comments: Record<string, Record<string, Record<string, ReviewComment[]>>>
+  // Current view mode (hidden or visible)
   viewMode: "hidden" | "visible"
-  // Currently selected file index per session for keyboard navigation
-  selectedIndices: Record<string, number>
+  // Expanded files per session
+  openFiles: Record<string, string[]>
+  // Selected change per session for keyboard navigation
+  selectedChange: Record<string, { file: string; changeId: string } | null>
 }
 
-const KV_KEY = "review_state"
+const KV_KEY = "review_comments"
 
 function init() {
   const sync = useSync()
   const kv = useKV()
 
-  // Load persisted reviews from KV store
-  const persistedReviews = kv.get(KV_KEY, {}) as Record<string, Record<string, FileReview>>
+  // Load persisted comments from KV store
+  const persisted = kv.get(KV_KEY, {}) as Record<string, Record<string, Record<string, ReviewComment[]>>>
 
   const [store, setStore] = createStore<ReviewState>({
-    reviews: persistedReviews,
+    comments: persisted,
     viewMode: "hidden",
-    selectedIndices: {},
+    openFiles: {},
+    selectedChange: {},
   })
 
-  // Persist reviews to KV store whenever they change
+  // Persist comments to KV store whenever they change
   createEffect(
     on(
-      () => JSON.stringify(store.reviews),
+      () => JSON.stringify(store.comments),
       () => {
-        kv.set(KV_KEY, store.reviews)
+        kv.set(KV_KEY, store.comments)
       },
       { defer: true },
     ),
@@ -55,42 +56,53 @@ function init() {
     return sync.data.session_diff[sessionID] ?? []
   }
 
-  // Get review status for a file
-  const getReview = (sessionID: string, file: string): FileReview | undefined => {
-    return store.reviews[sessionID]?.[file]
+  // Get changes (hunks) for a file
+  const getChanges = (diff: Snapshot.FileDiff): Change[] => {
+    return parseChanges(diff)
   }
 
-  // Get all file reviews for a session, combining diffs with review status
-  const getSessionReviews = (sessionID: string) => {
+  // Get all changes for a session
+  const getAllChanges = (sessionID: string): Change[] => {
     const diffs = getDiffs(sessionID)
-    return diffs.map((diff) => ({
-      diff,
-      review: getReview(sessionID, diff.file) ?? {
-        file: diff.file,
-        status: "pending" as ReviewStatus,
-      },
-    }))
+    return diffs.flatMap((diff) => getChanges(diff))
   }
 
-  // Count of pending reviews
-  const getPendingCount = (sessionID: string): number => {
-    return countPending(getSessionReviews(sessionID))
+  // Get comments for a specific change
+  const getComments = (sessionID: string, file: string, changeId: string): ReviewComment[] => {
+    return store.comments[sessionID]?.[file]?.[changeId] ?? []
   }
 
-  // Check if there are any reviews to process
+  // Get all comments for a file
+  const getFileComments = (sessionID: string, file: string): Record<string, ReviewComment[]> => {
+    return store.comments[sessionID]?.[file] ?? {}
+  }
+
+  // Get comment count for a session
+  const getCommentCount = (sessionID: string): number => {
+    const sessionComments = store.comments[sessionID]
+    if (!sessionComments) return 0
+    let count = 0
+    for (const file of Object.keys(sessionComments)) {
+      for (const changeId of Object.keys(sessionComments[file])) {
+        count += sessionComments[file][changeId].length
+      }
+    }
+    return count
+  }
+
+  // Check if there are diffs to review
   const hasReviews = (sessionID: string): boolean => {
     return getDiffs(sessionID).length > 0
   }
 
-  // Check if all reviews have been processed (non-pending)
-  const allReviewed = (sessionID: string): boolean => {
-    return checkAllReviewed(getSessionReviews(sessionID))
+  // Get open files for a session
+  const getOpenFiles = (sessionID: string): string[] => {
+    return store.openFiles[sessionID] ?? []
   }
 
-  // Get selected index for a session, bounded to valid range
-  const getSelectedIndex = (sessionID: string): number => {
-    const idx = store.selectedIndices[sessionID] ?? 0
-    return clampIndex(idx, getDiffs(sessionID).length)
+  // Get selected change for a session
+  const getSelectedChange = (sessionID: string): { file: string; changeId: string } | null => {
+    return store.selectedChange[sessionID] ?? null
   }
 
   const result = {
@@ -103,62 +115,43 @@ function init() {
     },
 
     getDiffs,
-    getReview,
-    getSessionReviews,
-    getPendingCount,
+    getChanges,
+    getAllChanges,
+    getComments,
+    getFileComments,
+    getCommentCount,
     hasReviews,
-    allReviewed,
-    getSelectedIndex,
+    getOpenFiles,
+    getSelectedChange,
 
-    // Set review status for a file
-    setStatus(sessionID: string, file: string, status: ReviewStatus) {
-      if (!store.reviews[sessionID]) {
-        setStore("reviews", sessionID, {})
+    // Add a comment to a change
+    addComment(sessionID: string, file: string, changeId: string, text: string) {
+      if (!store.comments[sessionID]) {
+        setStore("comments", sessionID, {})
       }
-      setStore("reviews", sessionID, file, {
-        file,
-        status,
-        feedback: store.reviews[sessionID]?.[file]?.feedback,
-      })
+      if (!store.comments[sessionID][file]) {
+        setStore("comments", sessionID, file, {})
+      }
+      if (!store.comments[sessionID][file][changeId]) {
+        setStore("comments", sessionID, file, changeId, [])
+      }
+      const comment: ReviewComment = {
+        id: crypto.randomUUID(),
+        text,
+        createdAt: Date.now(),
+      }
+      setStore("comments", sessionID, file, changeId, (prev) => [...prev, comment])
     },
 
-    // Set feedback for a file (keeps current status)
-    setFeedback(sessionID: string, file: string, feedback: string) {
-      if (!store.reviews[sessionID]) {
-        setStore("reviews", sessionID, {})
-      }
-      const currentStatus = store.reviews[sessionID]?.[file]?.status ?? "pending"
-      setStore("reviews", sessionID, file, {
-        file,
-        status: currentStatus,
-        feedback,
-      })
+    // Remove a comment
+    removeComment(sessionID: string, file: string, changeId: string, commentId: string) {
+      if (!store.comments[sessionID]?.[file]?.[changeId]) return
+      setStore("comments", sessionID, file, changeId, (prev) => prev.filter((c) => c.id !== commentId))
     },
 
-    // Reject with optional feedback
-    rejectWithFeedback(sessionID: string, file: string, feedback?: string) {
-      if (!store.reviews[sessionID]) {
-        setStore("reviews", sessionID, {})
-      }
-      setStore("reviews", sessionID, file, {
-        file,
-        status: "rejected",
-        feedback,
-      })
-    },
-
-    // Toggle view mode (binary: hidden ↔ visible)
+    // Toggle view mode (hidden ↔ visible)
     toggleView() {
-      if (store.viewMode === "hidden") {
-        setStore("viewMode", "visible")
-      } else {
-        setStore("viewMode", "hidden")
-      }
-    },
-
-    // Set view mode directly
-    setViewMode(mode: ReviewState["viewMode"]) {
-      setStore("viewMode", mode)
+      setStore("viewMode", store.viewMode === "hidden" ? "visible" : "hidden")
     },
 
     // Show review panel
@@ -173,112 +166,98 @@ function init() {
       setStore("viewMode", "hidden")
     },
 
-    // Select file by index for a session
-    selectIndex(sessionID: string, index: number) {
-      setStore("selectedIndices", sessionID, index)
-    },
-
-    // Navigate to next file
-    selectNext(sessionID: string) {
-      const diffs = getDiffs(sessionID)
-      if (diffs.length === 0) return
-      const currentIdx = getSelectedIndex(sessionID)
-      setStore("selectedIndices", sessionID, Math.min(currentIdx + 1, diffs.length - 1))
-    },
-
-    // Navigate to previous file
-    selectPrev(sessionID: string) {
-      const diffs = getDiffs(sessionID)
-      if (diffs.length === 0) return
-      const currentIdx = getSelectedIndex(sessionID)
-      setStore("selectedIndices", sessionID, Math.max(currentIdx - 1, 0))
-    },
-
-    // Approve current selection
-    approveCurrent(sessionID: string) {
-      const diffs = getDiffs(sessionID)
-      if (diffs.length === 0) return
-      const idx = getSelectedIndex(sessionID)
-      const file = diffs[idx]?.file
-      if (file) {
-        result.setStatus(sessionID, file, "approved")
+    // Toggle file open/close in accordion
+    toggleFile(sessionID: string, file: string) {
+      const current = store.openFiles[sessionID] ?? []
+      if (current.includes(file)) {
+        setStore(
+          "openFiles",
+          sessionID,
+          current.filter((f) => f !== file),
+        )
+      } else {
+        setStore("openFiles", sessionID, [...current, file])
       }
     },
 
-    // Reset current selection to pending
-    resetCurrent(sessionID: string) {
-      const diffs = getDiffs(sessionID)
-      if (diffs.length === 0) return
-      const idx = getSelectedIndex(sessionID)
-      const file = diffs[idx]?.file
-      if (file) {
-        result.setStatus(sessionID, file, "pending")
-        // Clear any feedback when resetting
-        if (store.reviews[sessionID]?.[file]) {
-          setStore("reviews", sessionID, file, "feedback", undefined)
-        }
-      }
+    // Set open files for a session
+    setOpenFiles(sessionID: string, files: string[]) {
+      setStore("openFiles", sessionID, files)
     },
 
-    // Approve all files
-    approveAll(sessionID: string) {
+    // Expand all files
+    expandAll(sessionID: string) {
       const diffs = getDiffs(sessionID)
-      for (const diff of diffs) {
-        result.setStatus(sessionID, diff.file, "approved")
-      }
+      setStore(
+        "openFiles",
+        sessionID,
+        diffs.map((d) => d.file),
+      )
     },
 
-    // Reject current and advance to next pending file
-    rejectAndAdvance(sessionID: string, feedback?: string) {
-      const diffs = getDiffs(sessionID)
-      if (diffs.length === 0) return
-      const idx = getSelectedIndex(sessionID)
-      const file = diffs[idx]?.file
-      if (file) {
-        result.rejectWithFeedback(sessionID, file, feedback)
-        result.advanceToNextPending(sessionID)
-      }
+    // Collapse all files
+    collapseAll(sessionID: string) {
+      setStore("openFiles", sessionID, [])
     },
 
-    // Advance to next pending file (or stay if none)
-    advanceToNextPending(sessionID: string) {
-      const diffs = getDiffs(sessionID)
-      if (diffs.length === 0) return
-      const currentIdx = getSelectedIndex(sessionID)
-
-      // Look for next pending file after current
-      for (let i = currentIdx + 1; i < diffs.length; i++) {
-        const file = diffs[i]?.file
-        if (file && (store.reviews[sessionID]?.[file]?.status ?? "pending") === "pending") {
-          setStore("selectedIndices", sessionID, i)
-          return
-        }
-      }
-
-      // Look for pending file before current
-      for (let i = 0; i < currentIdx; i++) {
-        const file = diffs[i]?.file
-        if (file && (store.reviews[sessionID]?.[file]?.status ?? "pending") === "pending") {
-          setStore("selectedIndices", sessionID, i)
-          return
-        }
-      }
-
-      // No pending files, just advance to next if possible
-      if (currentIdx < diffs.length - 1) {
-        setStore("selectedIndices", sessionID, currentIdx + 1)
-      }
+    // Select a change for keyboard navigation
+    selectChange(sessionID: string, file: string, changeId: string) {
+      setStore("selectedChange", sessionID, { file, changeId })
     },
 
-    // Clear all reviews for a session
+    // Clear selection
+    clearSelection(sessionID: string) {
+      setStore("selectedChange", sessionID, null)
+    },
+
+    // Navigate to next change
+    selectNextChange(sessionID: string) {
+      const changes = getAllChanges(sessionID)
+      if (changes.length === 0) return
+
+      const current = getSelectedChange(sessionID)
+      if (!current) {
+        const first = changes[0]
+        setStore("selectedChange", sessionID, { file: first.file, changeId: first.id })
+        return
+      }
+
+      const idx = changes.findIndex((c) => c.id === current.changeId)
+      const nextIdx = clampIndex(idx + 1, changes.length)
+      const next = changes[nextIdx]
+      setStore("selectedChange", sessionID, { file: next.file, changeId: next.id })
+    },
+
+    // Navigate to previous change
+    selectPrevChange(sessionID: string) {
+      const changes = getAllChanges(sessionID)
+      if (changes.length === 0) return
+
+      const current = getSelectedChange(sessionID)
+      if (!current) {
+        const last = changes[changes.length - 1]
+        setStore("selectedChange", sessionID, { file: last.file, changeId: last.id })
+        return
+      }
+
+      const idx = changes.findIndex((c) => c.id === current.changeId)
+      const prevIdx = clampIndex(idx - 1, changes.length)
+      const prev = changes[prevIdx]
+      setStore("selectedChange", sessionID, { file: prev.file, changeId: prev.id })
+    },
+
+    // Clear all comments for a session
     clearSession(sessionID: string) {
-      setStore("reviews", sessionID, {})
-      setStore("selectedIndices", sessionID, 0)
+      setStore("comments", sessionID, {})
+      setStore("openFiles", sessionID, [])
+      setStore("selectedChange", sessionID, null)
     },
 
-    // Generate feedback message to send to agent
+    // Generate feedback message from comments
     generateFeedbackMessage(sessionID: string): string | null {
-      return generateMessage(getSessionReviews(sessionID))
+      const diffs = getDiffs(sessionID)
+      const sessionComments = store.comments[sessionID] ?? {}
+      return generateMessage(diffs, sessionComments)
     },
   }
 

@@ -1326,32 +1326,19 @@ test("project config overrides remote well-known config", async () => {
 })
 
 describe("keybind defaults", () => {
-  test("review keybinds use simple single-key shortcuts", async () => {
+  test("review keybinds use expected defaults", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
 
-        // Simple single-key shortcuts for review actions
-        expect(config.keybinds?.review_approve).toBe("a")
-        expect(config.keybinds?.review_reject).toBe("r")
-        expect(config.keybinds?.review_reset).toBe("u")
-        expect(config.keybinds?.review_approve_all).toBe("shift+a")
+        // Review keybinds
+        expect(config.keybinds?.review_toggle).toBe("<leader>d")
+        expect(config.keybinds?.review_next_change).toBe("j")
+        expect(config.keybinds?.review_prev_change).toBe("k")
+        expect(config.keybinds?.review_comment).toBe("c")
         expect(config.keybinds?.review_submit).toBe("shift+s")
-      },
-    })
-  })
-
-  test("review navigation keybinds use j/k", async () => {
-    await using tmp = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const config = await Config.get()
-
-        expect(config.keybinds?.review_next).toBe("j")
-        expect(config.keybinds?.review_prev).toBe("k")
       },
     })
   })
@@ -1364,8 +1351,8 @@ describe("keybind defaults", () => {
           JSON.stringify({
             $schema: "https://opencode.ai/config.json",
             keybinds: {
-              review_approve: "ctrl+a",
-              review_reject: "ctrl+r",
+              review_comment: "ctrl+c",
+              review_next_change: "n",
             },
           }),
         )
@@ -1376,8 +1363,8 @@ describe("keybind defaults", () => {
       fn: async () => {
         const config = await Config.get()
 
-        expect(config.keybinds?.review_approve).toBe("ctrl+a")
-        expect(config.keybinds?.review_reject).toBe("ctrl+r")
+        expect(config.keybinds?.review_comment).toBe("ctrl+c")
+        expect(config.keybinds?.review_next_change).toBe("n")
         // Non-overridden keybinds should still use defaults
         expect(config.keybinds?.review_submit).toBe("shift+s")
       },

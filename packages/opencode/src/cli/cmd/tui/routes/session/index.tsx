@@ -74,7 +74,7 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
-import { ReviewPanel } from "../../component/review-panel"
+import { ReviewView } from "../../component/review-view"
 import { useReview } from "../../context/review"
 
 addDefaultParsers(parsers.parsers)
@@ -917,10 +917,11 @@ export function Session() {
     {
       title: "Submit review feedback",
       value: "session.review.send",
+      keybind: "review_submit",
       category: "Review",
-      // Show when review panel is open and there are changes to review
+      // Show when review panel is open and there are comments to submit
       hidden: review.viewMode === "hidden",
-      enabled: review.hasReviews(route.sessionID),
+      enabled: review.getCommentCount(route.sessionID) > 0,
       onSelect: (dialog) => {
         const message = review.generateFeedbackMessage(route.sessionID)
         if (message) {
@@ -1148,13 +1149,9 @@ export function Session() {
           </Show>
           <Toast />
         </box>
-        {/* Review Panel - fullscreen when visible */}
+        {/* Review View - fullscreen when visible */}
         <Show when={review.viewMode === "visible"}>
-          <ReviewPanel
-            sessionID={route.sessionID}
-            onSendFeedback={handleReviewFeedback}
-            onClose={() => review.hide()}
-          />
+          <ReviewView sessionID={route.sessionID} onSendFeedback={handleReviewFeedback} onClose={() => review.hide()} />
         </Show>
         {/* Sidebar - hidden when review panel is visible */}
         <Show when={sidebarVisible() && review.viewMode === "hidden"}>
