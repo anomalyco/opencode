@@ -46,7 +46,6 @@ fn get_slave_path(master_fd: &OwnedFd) -> Result<String, nix::Error> {
 /// Linux implementation using thread-safe ptsname_r.
 #[cfg(target_os = "linux")]
 fn get_slave_path_linux(master_fd: &OwnedFd) -> Result<String, nix::Error> {
-    use std::ffi::CString;
     use std::os::raw::c_char;
 
     // ptsname_r buffer size (PATH_MAX is typically 4096 on Linux)

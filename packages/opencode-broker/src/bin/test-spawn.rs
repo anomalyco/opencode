@@ -26,10 +26,33 @@ fn main() {
     );
     println!("Target: uid={}, gid={}, user={}\n", uid, gid, username);
 
+    #[cfg(target_os = "macos")]
+    let base_gid: libc::c_int = match gid.try_into() {
+        Ok(value) => value,
+        Err(_) => {
+            eprintln!("gid out of range: {}", gid);
+            return;
+        }
+    };
+    #[cfg(not(target_os = "macos"))]
+    let base_gid: libc::gid_t = match gid.try_into() {
+        Ok(value) => value,
+        Err(_) => {
+            eprintln!("gid out of range: {}", gid);
+            return;
+        }
+    };
+    let c_username = match CString::new(username) {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("invalid username: {}", error);
+            return;
+        }
+    };
+
     // Test 1: Can we call initgroups?
     println!("Test 1: initgroups...");
-    let c_username = CString::new(username).unwrap();
-    let ret = unsafe { libc::initgroups(c_username.as_ptr(), gid as libc::c_int) };
+    let ret = unsafe { libc::initgroups(c_username.as_ptr(), base_gid) };
     if ret == 0 {
         println!("  initgroups: OK");
     } else {
@@ -66,14 +89,14 @@ fn main() {
 
     // Test 4: Spawn with pre_exec (initgroups + setsid)
     println!("\nTest 4: Spawn with pre_exec (initgroups + setsid)...");
-    let username_clone = CString::new(username).unwrap();
+    let username_clone = c_username.clone();
     let mut cmd = Command::new("id");
     cmd.uid(uid);
     cmd.gid(gid);
     unsafe {
         cmd.pre_exec(move || {
             // initgroups
-            if libc::initgroups(username_clone.as_ptr(), gid as libc::c_int) != 0 {
+            if libc::initgroups(username_clone.as_ptr(), base_gid) != 0 {
                 return Err(std::io::Error::last_os_error());
             }
             // setsid
@@ -96,13 +119,13 @@ fn main() {
 
     // Test 5: Spawn with pre_exec (initgroups ONLY - no setsid)
     println!("\nTest 5: Spawn with pre_exec (initgroups only)...");
-    let username_clone2 = CString::new(username).unwrap();
+    let username_clone2 = c_username.clone();
     let mut cmd5 = Command::new("id");
     cmd5.uid(uid);
     cmd5.gid(gid);
     unsafe {
         cmd5.pre_exec(move || {
-            if libc::initgroups(username_clone2.as_ptr(), gid as libc::c_int) != 0 {
+            if libc::initgroups(username_clone2.as_ptr(), base_gid) != 0 {
                 return Err(std::io::Error::last_os_error());
             }
             Ok(())
@@ -145,7 +168,7 @@ fn main() {
 
     // Test 7: Spawn with pre_exec (setsid first, then initgroups)
     println!("\nTest 7: Spawn with pre_exec (setsid first, then initgroups)...");
-    let username_clone3 = CString::new(username).unwrap();
+    let username_clone3 = c_username.clone();
     let mut cmd7 = Command::new("id");
     cmd7.uid(uid);
     cmd7.gid(gid);
@@ -156,7 +179,7 @@ fn main() {
                 return Err(std::io::Error::last_os_error());
             }
             // then initgroups
-            if libc::initgroups(username_clone3.as_ptr(), gid as libc::c_int) != 0 {
+            if libc::initgroups(username_clone3.as_ptr(), base_gid) != 0 {
                 return Err(std::io::Error::last_os_error());
             }
             Ok(())
