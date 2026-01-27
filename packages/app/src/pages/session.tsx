@@ -54,7 +54,9 @@ import {
   SortableTerminalTab,
   NewSessionView,
   FilesPanel,
+  BrowserPanel,
 } from "@/components/session"
+import { HTMLPreview } from "@/components/HTMLPreview"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
 
@@ -251,6 +253,14 @@ export default function Page() {
 
   const openTab = (value: string) => {
     const next = normalizeTab(value)
+
+    // For fixed tabs (browser, files, review, context), just set active without opening
+    const fixedTabs = ["browser", "files", "review", "context"]
+    if (fixedTabs.includes(next)) {
+      tabs().setActive(next)
+      return
+    }
+
     tabs().open(next)
 
     const path = file.pathFromTab(next)
@@ -971,10 +981,11 @@ export default function Page() {
 
   const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
   const filesOpen = createMemo(() => tabs().active() === "files" || tabs().all().includes("files"))
+  const browserOpen = createMemo(() => tabs().active() === "browser" || tabs().all().includes("browser"))
   const openedTabs = createMemo(() =>
     tabs()
       .all()
-      .filter((tab) => tab !== "context" && tab !== "files"),
+      .filter((tab) => tab !== "context" && tab !== "files" && tab !== "browser"),
   )
 
   const mobileReview = createMemo(() => !isDesktop() && view().reviewPanel.opened() && store.mobileTab === "review")
@@ -1765,6 +1776,14 @@ export default function Page() {
                       </Tabs.Trigger>
                     </Show>
                     <Show when={true}>
+                      <Tabs.Trigger value="browser">
+                        <div class="flex items-center gap-2">
+                          <Icon name="server" />
+                          <div>Browser</div>
+                        </div>
+                      </Tabs.Trigger>
+                    </Show>
+                    <Show when={true}>
                       <Tabs.Trigger value="review">
                         <div class="flex items-center gap-3">
                           <Show when={diffs()}>
@@ -1888,6 +1907,15 @@ export default function Page() {
                     </Show>
                   </Tabs.Content>
                 </Show>
+                <Show when={true}>
+                  <Tabs.Content value="browser" class="flex flex-col h-full overflow-hidden contain-strict">
+                    <Show when={activeTab() === "browser"}>
+                      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                        <BrowserPanel />
+                      </div>
+                    </Show>
+                  </Tabs.Content>
+                </Show>
                 <For each={openedTabs()}>
                   {(tab) => {
                     let scroll: HTMLDivElement | undefined
@@ -1913,6 +1941,18 @@ export default function Page() {
                     const isSvg = createMemo(() => {
                       const c = state()?.content
                       return c?.mimeType === "image/svg+xml"
+                    })
+                    const isHtml = createMemo(() => {
+                      const p = path()
+                      if (!p) return false
+                      return p.toLowerCase().endsWith(".html") || p.toLowerCase().endsWith(".htm")
+                    })
+                    const htmlContent = createMemo(() => {
+                      if (!isHtml()) return ""
+                      const c = state()?.content
+                      if (!c) return ""
+                      if (c.encoding === "base64") return base64Decode(c.content)
+                      return c.content
                     })
                     const svgContent = createMemo(() => {
                       if (!isSvg()) return
@@ -2361,6 +2401,11 @@ export default function Page() {
                         onScroll={handleScroll}
                       >
                         <Switch>
+                          <Match when={state()?.loaded && isHtml()}>
+                            <div class="h-full">
+                              <HTMLPreview content={htmlContent()} filePath={path()} />
+                            </div>
+                          </Match>
                           <Match when={state()?.loaded && isImage()}>
                             <div class="px-6 py-4 pb-40">
                               <img

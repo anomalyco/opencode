@@ -13,7 +13,14 @@
       "Bash(taskkill:*)",
       "Bash(test:*)",
       "Bash(del:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(bun add:*)",
+      "Bash(bunx:*)",
+      "Bash(bun test)",
+      "Bash(bun list:*)",
+      "Bash(npx playwright install:*)",
+      "Bash(bun x:*)",
+      "Bash(powershell.exe:*)"
     ]
   }
 }
