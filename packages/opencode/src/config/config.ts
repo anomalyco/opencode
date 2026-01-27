@@ -1080,6 +1080,24 @@ export namespace Config {
             .optional()
             .describe("Tools that should only be available to primary agents."),
           continue_loop_on_deny: z.boolean().optional().describe("Continue the agent loop when a tool call is denied"),
+          toon_format: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable TOON wire format for LLM prompts"),
+              mode: z
+                .enum(["compact", "balanced", "verbose"])
+                .optional()
+                .default("balanced")
+                .describe(
+                  "TOON compaction level: compact (max tokens saved), balanced (readability + efficiency), verbose (minimal transformation)",
+                ),
+              preserve_code: z
+                .boolean()
+                .optional()
+                .default(true)
+                .describe("Preserve code blocks without TOON transformation"),
+            })
+            .optional()
+            .describe("TOON (Token-Oriented Object Notation) wire format configuration"),
           mcp_timeout: z
             .number()
             .int()

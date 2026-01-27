@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.dev/schema.json",
+  "experimental": {
+    "toon_format": {
+      "enabled": true,
+      "mode": "balanced",
+      "preserve_code": true
+    }
+  }
+}

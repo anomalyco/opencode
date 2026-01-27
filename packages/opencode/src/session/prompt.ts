@@ -46,6 +46,8 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { Config } from "@/config/config"
+import { TOONTransform } from "./toon-transform"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -596,6 +598,26 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
+      // Apply TOON transformation if enabled
+      const modelMessages = MessageV2.toModelMessages(sessionMessages, model)
+      const toonConfig = (await Config.get()).experimental?.toon_format
+      let finalMessages = modelMessages
+
+      if (toonConfig?.enabled) {
+        const toonResult = await TOONTransform.transform(modelMessages, sessionID)
+        finalMessages = toonResult.messages
+
+        // Log savings percentage
+        if (toonResult.savings.tokensSaved > 0) {
+          log.info("toon.savings", {
+            sessionID,
+            tokensSaved: toonResult.savings.tokensSaved,
+            percentage: toonResult.savings.savingsPercentage.toFixed(2) + "%",
+            mode: toonConfig.mode ?? "balanced",
+          })
+        }
+      }
+
       const result = await processor.process({
         user: lastUser,
         agent,
@@ -603,7 +625,7 @@ export namespace SessionPrompt {
         sessionID,
         system: [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())],
         messages: [
-          ...MessageV2.toModelMessages(sessionMessages, model),
+          ...finalMessages,
           ...(isLastStep
             ? [
                 {
