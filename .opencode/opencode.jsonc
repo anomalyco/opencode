@@ -27,6 +27,7 @@
     },
     "requireHttps": "warn",      // default is "warn", use "block" for test 8
     "rateLimiting": true,         // default is true                                                                               
+    "twoFactorRequired": true,                                                                          
     "twoFactorEnabled": true,
     "twoFactorTokenTimeout": "5m",
     "deviceTrustDuration": "30d",
