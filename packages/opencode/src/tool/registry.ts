@@ -16,7 +16,7 @@ import { Tool } from "./tool"
 import { Instance } from "../project/instance"
 import { Config } from "../config/config"
 import path from "path"
-import { type ToolDefinition } from "@opencode-ai/plugin"
+import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
 import { WebSearchTool } from "./websearch"
@@ -67,7 +67,8 @@ export namespace ToolRegistry {
         parameters: z.object(def.args),
         description: def.description,
         execute: async (args, ctx) => {
-          const result = await def.execute(args as any, ctx)
+          const pluginCtx = { ...ctx, directory: Instance.directory } as unknown as PluginToolContext
+          const result = await def.execute(args as any, pluginCtx)
           const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
             title: "",
