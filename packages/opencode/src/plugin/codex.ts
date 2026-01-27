@@ -10,10 +10,6 @@ const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
-const DEVICE_CODE_URL = `${ISSUER}/api/accounts/deviceauth/usercode`
-const DEVICE_TOKEN_URL = `${ISSUER}/api/accounts/deviceauth/token`
-const DEVICE_REDIRECT_URI = `${ISSUER}/deviceauth/callback`
-const DEVICE_VERIFICATION_URL = `${ISSUER}/codex/device`
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
 
 interface PkceCodes {
@@ -499,7 +495,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
           label: "ChatGPT Pro/Plus (headless)",
           type: "oauth",
           authorize: async () => {
-            const deviceResponse = await fetch(DEVICE_CODE_URL, {
+            const deviceResponse = await fetch(`${ISSUER}/api/accounts/deviceauth/usercode`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -518,12 +514,12 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             const interval = Math.max(parseInt(deviceData.interval) || 5, 1) * 1000
 
             return {
-              url: DEVICE_VERIFICATION_URL,
+              url: `${ISSUER}/codex/device`,
               instructions: `Enter code: ${deviceData.user_code}`,
               method: "auto" as const,
               async callback() {
                 while (true) {
-                  const response = await fetch(DEVICE_TOKEN_URL, {
+                  const response = await fetch(`${ISSUER}/api/accounts/deviceauth/token`, {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
@@ -547,7 +543,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                       body: new URLSearchParams({
                         grant_type: "authorization_code",
                         code: data.authorization_code,
-                        redirect_uri: DEVICE_REDIRECT_URI,
+                        redirect_uri: `${ISSUER}/deviceauth/callback`,
                         client_id: CLIENT_ID,
                         code_verifier: data.code_verifier,
                       }).toString(),
