@@ -74,6 +74,12 @@ describe("proxy-fetch", () => {
       expect(config.noProxy).toEqual(["localhost", "127.0.0.1", "*.internal.com"])
     })
 
+    test("handles NO_PROXY with trailing comma (#6953)", () => {
+      process.env.NO_PROXY = "localhost,127.0.0.1,"
+      const config = getProxyConfig()
+      expect(config.noProxy).toEqual(["localhost", "127.0.0.1"])
+    })
+
     test("config overrides environment variables", () => {
       process.env.HTTP_PROXY = "http://env-proxy:8080"
       process.env.HTTPS_PROXY = "http://env-proxy:8443"
@@ -125,6 +131,12 @@ describe("proxy-fetch", () => {
       expect(shouldBypassProxy("deep.sub.example.com", ["*.example.com"])).toBe(true)
       expect(shouldBypassProxy("example.com", ["*.example.com"])).toBe(false)
       expect(shouldBypassProxy("notexample.com", ["*.example.com"])).toBe(false)
+    })
+
+    test("matches deep subdomain wildcards (#10710)", () => {
+      // Issue #10710: *.example.com should match foo.bar.example.com
+      expect(shouldBypassProxy("foo.bar.example.com", ["*.example.com"])).toBe(true)
+      expect(shouldBypassProxy("a.b.c.d.example.com", ["*.example.com"])).toBe(true)
     })
 
     test("matches suffix pattern .domain.com", () => {
