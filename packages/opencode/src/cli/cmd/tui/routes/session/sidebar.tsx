@@ -54,8 +54,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     const total =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
+    const input = last.tokens.input + last.tokens.cache.read + last.tokens.cache.write
+    const output = last.tokens.output + last.tokens.reasoning
     return {
       tokens: total.toLocaleString(),
+      input: input.toLocaleString(),
+      output: output.toLocaleString(),
       percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
     }
   })
@@ -94,7 +98,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.text}>
                 <b>Context</b>
               </text>
-              <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
+              <text fg={theme.textMuted}>↓ {context()?.input ?? 0} input</text>
+              <text fg={theme.textMuted}>↑ {context()?.output ?? 0} output</text>
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
