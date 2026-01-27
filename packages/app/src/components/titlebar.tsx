@@ -165,7 +165,7 @@ export function Titlebar() {
             />
           </div>
         </Show>
-        <div class="flex items-center gap-1 shrink-0">
+        <div class="flex items-center gap-3 shrink-0">
           <TooltipKeybind
             class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0 ml-2"}
             placement="bottom"
