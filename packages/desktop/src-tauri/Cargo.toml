@@ -47,6 +47,10 @@ comrak = { version = "0.50", default-features = false }
 gtk = "0.18.2"
 webkit2gtk = "=2.0.1"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-web-kit = "0.3"
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
     "Win32_Foundation",

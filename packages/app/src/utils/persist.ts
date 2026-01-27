@@ -151,7 +151,14 @@ function localStorageWithPrefix(prefix: string): SyncStorage {
       const cached = cache.get(name)
       if (fallback.disabled && cached !== undefined) return cached
 
-      const stored = localStorage.getItem(name)
+      const stored = (() => {
+        try {
+          return localStorage.getItem(name)
+        } catch {
+          fallback.disabled = true
+          return null
+        }
+      })()
       if (stored === null) return cached ?? null
       cache.set(name, stored)
       return stored
@@ -172,7 +179,11 @@ function localStorageWithPrefix(prefix: string): SyncStorage {
       const name = item(key)
       cache.delete(name)
       if (fallback.disabled) return
-      localStorage.removeItem(name)
+      try {
+        localStorage.removeItem(name)
+      } catch {
+        fallback.disabled = true
+      }
     },
   }
 }
@@ -183,7 +194,14 @@ function localStorageDirect(): SyncStorage {
       const cached = cache.get(key)
       if (fallback.disabled && cached !== undefined) return cached
 
-      const stored = localStorage.getItem(key)
+      const stored = (() => {
+        try {
+          return localStorage.getItem(key)
+        } catch {
+          fallback.disabled = true
+          return null
+        }
+      })()
       if (stored === null) return cached ?? null
       cache.set(key, stored)
       return stored
@@ -202,7 +220,11 @@ function localStorageDirect(): SyncStorage {
     removeItem: (key) => {
       cache.delete(key)
       if (fallback.disabled) return
-      localStorage.removeItem(key)
+      try {
+        localStorage.removeItem(key)
+      } catch {
+        fallback.disabled = true
+      }
     },
   }
 }

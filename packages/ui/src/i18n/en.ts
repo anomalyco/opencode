@@ -4,6 +4,15 @@ export const dict = {
   "ui.sessionReview.diffStyle.split": "Split",
   "ui.sessionReview.expandAll": "Expand all",
   "ui.sessionReview.collapseAll": "Collapse all",
+  "ui.sessionReview.change.added": "Added",
+  "ui.sessionReview.change.removed": "Removed",
+
+  "ui.lineComment.label.prefix": "Comment on ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "Commenting on ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "Add comment",
+  "ui.lineComment.submit": "Comment",
 
   "ui.sessionTurn.steps.show": "Show steps",
   "ui.sessionTurn.steps.hide": "Hide steps",
