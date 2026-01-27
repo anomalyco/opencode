@@ -16,6 +16,19 @@ export interface TerminalProps extends ComponentProps<"div"> {
   onConnectError?: (error: unknown) => void
 }
 
+let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty }> | undefined
+
+const loadGhostty = () => {
+  if (shared) return shared
+  shared = import("ghostty-web")
+    .then(async (mod) => ({ mod, ghostty: await mod.Ghostty.load() }))
+    .catch((err) => {
+      shared = undefined
+      throw err
+    })
+  return shared
+}
+
 type TerminalColors = {
   background: string
   foreground: string
@@ -53,7 +66,6 @@ export const Terminal = (props: TerminalProps) => {
   let handleResize: () => void
   let handleTextareaFocus: () => void
   let handleTextareaBlur: () => void
-  let reconnect: number | undefined
   let disposed = false
 
   const getTerminalColors = (): TerminalColors => {
@@ -112,8 +124,11 @@ export const Terminal = (props: TerminalProps) => {
 
   onMount(() => {
     const run = async () => {
-      const mod = await import("ghostty-web")
-      ghostty = await mod.Ghostty.load()
+      const loaded = await loadGhostty()
+      if (disposed) return
+
+      const mod = loaded.mod
+      ghostty = loaded.ghostty
 
       const once = { value: false }
 
