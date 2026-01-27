@@ -62,8 +62,8 @@ export const dict = {
   "command.message.next.description": "跳转到下一条用户消息",
   "command.model.choose": "选择模型",
   "command.model.choose.description": "选择不同的模型",
-  "command.mcp.toggle": "切换 MCPs",
-  "command.mcp.toggle.description": "切换 MCPs",
+  "command.mcp.toggle": "切换 MCP",
+  "command.mcp.toggle.description": "切换 MCP",
   "command.agent.cycle": "切换智能体",
   "command.agent.cycle.description": "切换到下一个智能体",
   "command.agent.cycle.reverse": "反向切换智能体",
@@ -159,7 +159,7 @@ export const dict = {
   "model.input.image": "图像",
   "model.input.audio": "音频",
   "model.input.video": "视频",
-  "model.input.pdf": "pdf",
+  "model.input.pdf": "PDF",
   "model.tooltip.allows": "支持：{{inputs}}",
   "model.tooltip.reasoning.allowed": "支持推理",
   "model.tooltip.reasoning.none": "不支持推理",
@@ -182,7 +182,7 @@ export const dict = {
   "prompt.placeholder.summarizeComments": "总结评论…",
   "prompt.placeholder.summarizeComment": "总结该评论…",
   "prompt.mode.shell": "Shell",
-  "prompt.mode.shell.exit": "按 esc 退出",
+  "prompt.mode.shell.exit": "按 Esc 退出",
 
   "prompt.example.1": "修复代码库中的一个 TODO",
   "prompt.example.2": "这个项目的技术栈是什么？",
@@ -233,11 +233,11 @@ export const dict = {
   "prompt.toast.commandSendFailed.title": "发送命令失败",
   "prompt.toast.promptSendFailed.title": "发送提示失败",
 
-  "dialog.mcp.title": "MCPs",
+  "dialog.mcp.title": "MCP",
   "dialog.mcp.description": "已启用 {{enabled}} / {{total}}",
-  "dialog.mcp.empty": "未配置 MCPs",
+  "dialog.mcp.empty": "未配置 MCP",
 
-  "dialog.lsp.empty": "已从文件类型自动检测到 LSPs",
+  "dialog.lsp.empty": "已从文件类型自动检测到 LSP",
   "dialog.plugins.empty": "在 opencode.json 中配置的插件",
 
   "mcp.status.connected": "已连接",

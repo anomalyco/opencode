@@ -23,7 +23,7 @@ export const dict = {
   "ui.sessionTurn.diff.showMore": "显示更多更改（{{count}}）",
 
   "ui.sessionTurn.retry.retrying": "重试中",
-  "ui.sessionTurn.retry.inSeconds": "{{seconds}} 秒后",
+  "ui.sessionTurn.retry.inSeconds": "{{seconds}}秒后",
 
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在规划下一步",
