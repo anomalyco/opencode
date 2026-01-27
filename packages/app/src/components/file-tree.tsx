@@ -1,6 +1,7 @@
 import { useFile } from "@/context/file"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import {
   createEffect,
@@ -16,6 +17,11 @@ import {
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 
+type Filter = {
+  files: Set<string>
+  dirs: Set<string>
+}
+
 export default function FileTree(props: {
   path: string
   class?: string
@@ -26,6 +32,10 @@ export default function FileTree(props: {
   draggable?: boolean
   tooltip?: boolean
   onFileClick?: (file: FileNode) => void
+
+  _filter?: Filter
+  _marks?: Set<string>
+  _deeps?: Map<string, number>
 }) {
   const file = useFile()
   const level = props.level ?? 0
@@ -33,6 +43,8 @@ export default function FileTree(props: {
   const tooltip = () => props.tooltip ?? true
 
   const filter = createMemo(() => {
+    if (props._filter) return props._filter
+
     const allowed = props.allowed
     if (!allowed) return
 
@@ -52,9 +64,36 @@ export default function FileTree(props: {
   })
 
   const marks = createMemo(() => {
+    if (props._marks) return props._marks
+
     const modified = props.modified
     if (!modified || modified.length === 0) return
     return new Set(modified)
+  })
+
+  const deeps = createMemo(() => {
+    if (props._deeps) return props._deeps
+
+    const out = new Map<string, number>()
+
+    const visit = (dir: string, lvl: number): number => {
+      const expanded = file.tree.state(dir)?.expanded ?? false
+      if (!expanded) return -1
+
+      const nodes = file.tree.children(dir)
+      const max = nodes.reduce((max, node) => {
+        if (node.type !== "directory") return max
+        const open = file.tree.state(node.path)?.expanded ?? false
+        if (!open) return max
+        return Math.max(max, visit(node.path, lvl + 1))
+      }, lvl)
+
+      out.set(dir, max)
+      return max
+    }
+
+    visit(props.path, level - 1)
+    return out
   })
 
   createEffect(() => {
@@ -70,7 +109,8 @@ export default function FileTree(props: {
   })
 
   createEffect(() => {
-    void file.tree.list(props.path)
+    const path = props.path
+    untrack(() => void file.tree.list(path))
   })
 
   const nodes = createMemo(() => {
@@ -96,12 +136,12 @@ export default function FileTree(props: {
       <Dynamic
         component={local.as ?? "div"}
         classList={{
-          "w-full min-w-0 flex items-center justify-start gap-x-2 rounded-md px-2 py-1 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
+          "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-2 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
           ...(local.classList ?? {}),
           [local.class ?? ""]: !!local.class,
           [props.nodeClass ?? ""]: !!props.nodeClass,
         }}
-        style={`padding-left: ${8 + level * 12}px`}
+        style={`padding-left: ${Math.max(0, 8 + level * 12 - (local.node.type === "file" ? 24 : 4))}px`}
         draggable={draggable()}
         onDragStart={(e: DragEvent) => {
           if (!draggable()) return
@@ -132,7 +172,7 @@ export default function FileTree(props: {
         {local.children}
         <span
           classList={{
-            "flex-1 min-w-0 text-12-regular whitespace-nowrap truncate": true,
+            "flex-1 min-w-0 text-12-medium whitespace-nowrap truncate": true,
             "text-text-weaker": local.node.ignored,
             "text-text-weak": !local.node.ignored,
           }}
@@ -147,10 +187,11 @@ export default function FileTree(props: {
   }
 
   return (
-    <div class={`flex flex-col ${props.class ?? ""}`}>
+    <div class={`flex flex-col gap-0.5 ${props.class ?? ""}`}>
       <For each={nodes()}>
         {(node) => {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
+          const deep = () => deeps().get(node.path) ?? -1
           const Wrapper = (p: ParentProps) => {
             if (!tooltip()) return p.children
             return (
@@ -166,6 +207,7 @@ export default function FileTree(props: {
                 <Collapsible
                   variant="ghost"
                   class="w-full"
+                  data-scope="filetree"
                   forceMount={false}
                   open={expanded()}
                   onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
@@ -173,12 +215,21 @@ export default function FileTree(props: {
                   <Collapsible.Trigger>
                     <Wrapper>
                       <Node node={node}>
-                        <Collapsible.Arrow class="text-icon-weak ml-1" />
-                        <FileIcon node={node} expanded={expanded()} class="text-icon-weak -ml-1 size-4" />
+                        <div class="size-4 flex items-center justify-center text-icon-weak">
+                          <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
+                        </div>
                       </Node>
                     </Wrapper>
                   </Collapsible.Trigger>
-                  <Collapsible.Content>
+                  <Collapsible.Content class="relative pt-0.5">
+                    <div
+                      classList={{
+                        "absolute top-0 bottom-0 w-px pointer-events-none bg-border-weak-base opacity-0 transition-opacity duration-150 ease-out motion-reduce:transition-none": true,
+                        "group-hover/filetree:opacity-100": expanded() && deep() === level,
+                        "group-hover/filetree:opacity-50": !(expanded() && deep() === level),
+                      }}
+                      style={`left: ${Math.max(0, 8 + level * 12 - 4) + 8}px`}
+                    />
                     <FileTree
                       path={node.path}
                       level={level + 1}
@@ -187,6 +238,9 @@ export default function FileTree(props: {
                       draggable={props.draggable}
                       tooltip={props.tooltip}
                       onFileClick={props.onFileClick}
+                      _filter={filter()}
+                      _marks={marks()}
+                      _deeps={deeps()}
                     />
                   </Collapsible.Content>
                 </Collapsible>
