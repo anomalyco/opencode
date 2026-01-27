@@ -1,0 +1,339 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: var(--background-primary);
+  border-radius: 8px;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--background-secondary);
+  border: 2px solid var(--border-primary);
+  transition: all 0.2s ease;
+}
+
+.header.pending {
+  opacity: 0.6;
+  border-color: var(--border-secondary);
+}
+
+.header.running {
+  border-color: var(--accent-primary);
+  background: var(--background-tertiary);
+  animation: pulse-border 2s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(var(--accent-primary-rgb), 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(var(--accent-primary-rgb), 0);
+  }
+}
+
+.header.completed {
+  border-color: var(--success-primary);
+  background: rgba(var(--success-primary-rgb), 0.05);
+}
+
+.header.failed {
+  border-color: var(--error-primary);
+  background: rgba(var(--error-primary-rgb), 0.1);
+}
+
+.statusIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  font-size: 20px;
+  border-radius: 50%;
+  background: var(--background-tertiary);
+}
+
+.header.running .statusIcon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.headerContent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.header.running .title {
+  color: var(--accent-primary);
+}
+
+.header.completed .title {
+  color: var(--success-primary);
+}
+
+.header.failed .title {
+  color: var(--error-primary);
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.time,
+.duration {
+  font-family: var(--font-mono);
+}
+
+/* Sections */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+/* Tool Calls */
+.toolCall {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--background-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.toolCall:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.toolCallHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.toolName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+}
+
+.toolDuration {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.toolSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toolSectionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.codeBlock {
+  margin: 0;
+  padding: 12px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.codeBlock code {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  white-space: pre;
+}
+
+.errorBlock {
+  padding: 12px;
+  background: rgba(var(--error-primary-rgb), 0.1);
+  border: 1px solid var(--error-primary);
+  border-radius: 4px;
+  color: var(--error-primary);
+  font-size: 13px;
+  line-height: 1.6;
+  font-family: var(--font-mono);
+}
+
+/* File Changes */
+.fileChange {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--background-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.fileChange:hover {
+  border-color: var(--border-hover);
+}
+
+.fileChange.create {
+  border-left: 3px solid var(--success-primary);
+}
+
+.fileChange.update {
+  border-left: 3px solid var(--accent-primary);
+}
+
+.fileChange.delete {
+  border-left: 3px solid var(--error-primary);
+}
+
+.fileChangeHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fileOp {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  font-weight: bold;
+  font-size: 14px;
+  border-radius: 4px;
+}
+
+.fileChange.create .fileOp {
+  color: var(--success-primary);
+  background: rgba(var(--success-primary-rgb), 0.1);
+}
+
+.fileChange.update .fileOp {
+  color: var(--accent-primary);
+  background: rgba(var(--accent-primary-rgb), 0.1);
+}
+
+.fileChange.delete .fileOp {
+  color: var(--error-primary);
+  background: rgba(var(--error-primary-rgb), 0.1);
+}
+
+.filePath {
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diffBlock {
+  margin: 0;
+  padding: 12px;
+  background: var(--background-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.diffBlock code {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  white-space: pre;
+}
+
+/* Stack Trace */
+.stackTrace {
+  margin: 0;
+  padding: 16px;
+  background: rgba(var(--error-primary-rgb), 0.05);
+  border: 1px solid var(--error-primary);
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.stackTrace code {
+  font-family: var(--font-mono);
+  color: var(--error-primary);
+  white-space: pre;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    padding: 16px;
+  }
+
+  .header {
+    padding: 12px;
+  }
+
+  .toolCall {
+    padding: 12px;
+  }
+
+  .codeBlock,
+  .diffBlock,
+  .stackTrace {
+    font-size: 12px;
+    padding: 8px;
+  }
+}

@@ -7,6 +7,52 @@
 
 ---
 
+## 🎉 2025-01-27 更新 - TypeScript 类型错误已修复！
+
+### ✅ 今日完成任务
+
+#### 1. 修复 TypeScript 类型错误 ✓
+- ✅ 将 desktop-viz 组件移动到 app 包（方案 C）
+- ✅ 更新所有导入路径（从包引用改为本地引用）
+- ✅ 修复 `@opencode-ai/sdk/v2/gen/types` 导入（改为 `@opencode-ai/sdk/v2/client`）
+- ✅ 组件位置：`packages/app/src/components/task/`
+- ✅ 页面位置：`packages/app/src/pages/task/`
+- ✅ Hook 位置：`packages/app/src/hooks/task/`
+
+#### 2. 集成 TaskView 到主应用路由 ✓
+- ✅ 在 `packages/app/src/app.tsx` 中启用 TaskView 路由（`/task`）
+- ✅ 更新导入语句指向新位置
+- ✅ 路由现在可以正常访问
+
+#### 3. 创建项目规划文件 ✓
+- ✅ `task_plan.md` - 任务计划和阶段划分
+- ✅ `findings.md` - 研究发现和技术决策
+- ✅ `progress.md` - 进度日志和测试结果
+
+### 📁 文件结构变更
+
+**新增文件**:
+```
+packages/app/src/
+├── components/task/          # 从 desktop-viz 移动过来
+│   ├── TaskTimeline.tsx
+│   ├── StepVisualization.tsx
+│   ├── ToolCallMonitor.tsx
+│   ├── SkillsPanel.tsx
+│   ├── McpDashboard.tsx
+│   └── *.module.css (5个)
+├── pages/task/
+│   ├── TaskView.tsx
+│   └── TaskView.module.css
+└── hooks/task/
+    └── useTaskProgress.ts
+```
+
+**修改文件**:
+- `packages/app/src/app.tsx` - 启用 TaskView 路由
+
+---
+
 ## 📊 当前完成状态
 
 ### ✅ 已完成 (100%)
@@ -39,9 +85,40 @@
 - [x] 开发启动脚本（Windows .bat, Linux .sh）
 - [x] 推送到 GitHub
 
+#### 2025-01-27 新增
+- [x] **修复 TypeScript 类型错误**（移动组件到 app 包）
+- [x] **集成 TaskView 路由到主应用**
+
 ---
 
 ## 🔴 高优先级（核心功能完善）
+
+### ~~1. 修复 TypeScript 类型错误~~ ✅ 已完成
+**状态**: 完成 ✓
+
+**解决方案**: 采用方案 C - 将组件移到 app 包
+
+**完成内容**:
+- 所有 desktop-viz 组件已移动到 `packages/app/src/components/task/`
+- TaskView 页面已移动到 `packages/app/src/pages/task/`
+- 所有导入路径已更新
+- TaskView 路由已启用
+
+**访问方式**: 应用启动后导航到 `/task` 路由
+
+---
+
+### ~~2. 集成 TaskView 到主应用路由~~ ✅ 已完成
+**状态**: 完成 ✓
+
+**完成内容**:
+- TaskView 路由已在 `packages/app/src/app.tsx` 中启用
+- 路径：`/task`
+- 导航：通过 URL 直接访问或后续添加导航按钮
+
+**待改进**: 可以在 Session 页面添加"打开任务视图"按钮（可选）
+
+---
 
 ### 1. 修复 TypeScript 类型错误
 **文件**: `packages/desktop-viz/src/components/*.tsx`

@@ -1,0 +1,43 @@
+.monitor {
+  padding: 16px;
+  background: var(--background-base);
+  border-radius: 8px;
+}
+
+.monitor h3 {
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-weak);
+  padding: 24px;
+}
+
+.call {
+  padding: 12px;
+  background: var(--background-elevated);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.name {
+  font-weight: 500;
+  color: var(--primary);
+}
+
+.status {
+  font-size: 12px;
+  color: var(--text-weak);
+  margin-top: 4px;
+}
+
+.params {
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--background-base);
+  border-radius: 4px;
+  font-size: 11px;
+  overflow-x: auto;
+}

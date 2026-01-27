@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout:*)",
+      "Bash(bun run typecheck)",
+      "Bash(npx tsc:*)",
+      "Skill(planning-with-files)",
+      "Skill(planning-with-files:*)"
+    ]
+  }
+}
