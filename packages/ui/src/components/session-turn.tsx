@@ -283,6 +283,7 @@ export function SessionTurn(
 
   const shellModePart = createMemo(() => {
     const p = parts()
+    if (p.length === 0) return
     if (!p.every((part) => part?.type === "text" && part?.synthetic)) return
 
     const msgs = assistantMessages()
