@@ -1643,6 +1643,34 @@ export namespace LSPServer {
     },
   }
 
+  export const Nushell: Info = {
+    id: "nushell",
+    extensions: [".nu"],
+    root: async (file) => {
+      const search = Filesystem.up({
+        targets: [".git"],
+        start: path.dirname(file),
+        stop: Instance.directory,
+      })
+      const first = await search.next()
+      await search.return()
+      if (first.value) return path.dirname(first.value)
+      return path.dirname(file)
+    },
+    async spawn(root) {
+      const nu = Bun.which("nu")
+      if (!nu) {
+        log.info("nu not found, please install nushell first")
+        return
+      }
+      return {
+        process: spawn(nu, ["--lsp"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
   export const TerraformLS: Info = {
     id: "terraform",
     extensions: [".tf", ".tfvars"],
