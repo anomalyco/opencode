@@ -117,6 +117,51 @@ describe("Patch namespace", () => {
       }
     })
 
+    test("should parse Windows UNC paths", () => {
+      const uncPath = String.raw`\\server\share\path\file.txt`
+      const patchText = `*** Begin Patch
+*** Update File: ${uncPath}
+@@
+-old
++new
+*** End Patch`
+
+      const result = Patch.parsePatch(patchText)
+      const hunk = result.hunks[0]
+      expect(hunk.type).toBe("update")
+      expect(hunk.path).toBe(uncPath)
+    })
+
+    test("should parse Windows long paths", () => {
+      const longPath = String.raw`\\?\C:\long\path\file.txt`
+      const patchText = `*** Begin Patch
+*** Update File: ${longPath}
+@@
+-old
++new
+*** End Patch`
+
+      const result = Patch.parsePatch(patchText)
+      const hunk = result.hunks[0]
+      expect(hunk.type).toBe("update")
+      expect(hunk.path).toBe(longPath)
+    })
+
+    test("should parse Windows ADS paths", () => {
+      const adsPath = String.raw`C:\path\file.txt:stream`
+      const patchText = `*** Begin Patch
+*** Update File: ${adsPath}
+@@
+-old
++new
+*** End Patch`
+
+      const result = Patch.parsePatch(patchText)
+      const hunk = result.hunks[0]
+      expect(hunk.type).toBe("update")
+      expect(hunk.path).toBe(adsPath)
+    })
+
     test("should throw error for invalid patch format", () => {
       const invalidPatch = `This is not a valid patch`
 
