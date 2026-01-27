@@ -5,42 +5,9 @@ import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { config } from "~/config"
+import { changelog } from "~/lib/changelog"
+import type { HighlightGroup } from "~/lib/changelog"
 import { For, Show, createSignal } from "solid-js"
-import { getRequestEvent } from "solid-js/web"
-
-type HighlightMedia = { type: "video"; src: string } | { type: "image"; src: string; width: string; height: string }
-
-type HighlightItem = {
-  title: string
-  description: string
-  shortDescription?: string
-  media: HighlightMedia
-}
-
-type HighlightGroup = {
-  source: string
-  items: HighlightItem[]
-}
-
-type ChangelogRelease = {
-  tag: string
-  name: string
-  date: string
-  url: string
-  highlights: HighlightGroup[]
-  sections: { title: string; items: string[] }[]
-}
-
-async function getReleases() {
-  const event = getRequestEvent()
-  const url = event ? new URL("/changelog.json", event.request.url).toString() : "/changelog.json"
-
-  const response = await fetch(url).catch(() => undefined)
-  if (!response?.ok) return []
-
-  const json = await response.json().catch(() => undefined)
-  return Array.isArray(json?.releases) ? (json.releases as ChangelogRelease[]) : []
-}
 
 function formatDate(dateString: string) {
   const date = new Date(dateString)
@@ -130,7 +97,8 @@ function CollapsibleSections(props: { sections: { title: string; items: string[]
 }
 
 export default function Changelog() {
-  const releases = createAsync(() => getReleases())
+  const data = createAsync(() => changelog())
+  const releases = () => data() ?? []
 
   return (
     <main data-page="changelog">
@@ -148,6 +116,11 @@ export default function Changelog() {
           </section>
 
           <section data-component="releases">
+            <Show when={releases().length === 0}>
+              <p>
+                No changelog entries found. <a href="/changelog.json">View JSON</a>
+              </p>
+            </Show>
             <For each={releases()}>
               {(release) => {
                 return (

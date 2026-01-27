@@ -110,6 +110,11 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
     setStore("open", false)
     dialog.show(() => <DialogManageModels />)
   }
+
+  const handleConnectProvider = () => {
+    setStore("open", false)
+    dialog.show(() => <DialogSelectProvider />)
+  }
   const language = useLanguage()
 
   createEffect(() => {
@@ -207,15 +212,26 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
             onSelect={() => setStore("open", false)}
             class="p-1"
             action={
-              <IconButton
-                icon="sliders"
-                variant="ghost"
-                iconSize="normal"
-                class="size-6"
-                aria-label={language.t("dialog.model.manage")}
-                title={language.t("dialog.model.manage")}
-                onClick={handleManage}
-              />
+              <div class="flex items-center gap-1">
+                <IconButton
+                  icon="plus-small"
+                  variant="ghost"
+                  iconSize="normal"
+                  class="size-6"
+                  aria-label={language.t("command.provider.connect")}
+                  title={language.t("command.provider.connect")}
+                  onClick={handleConnectProvider}
+                />
+                <IconButton
+                  icon="sliders"
+                  variant="ghost"
+                  iconSize="normal"
+                  class="size-6"
+                  aria-label={language.t("dialog.model.manage")}
+                  title={language.t("dialog.model.manage")}
+                  onClick={handleManage}
+                />
+              </div>
             }
           />
         </Kobalte.Content>
