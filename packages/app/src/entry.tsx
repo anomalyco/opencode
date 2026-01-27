@@ -16,23 +16,32 @@ function getCsrfToken(): string | undefined {
   return match ? match[1] : undefined
 }
 
-const csrfFetch: typeof fetch = (input, init) => {
-  const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase()
-  if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
-    return fetch(input, init)
-  }
+const csrfFetch: typeof fetch = Object.assign(
+  (input: RequestInfo | URL, init?: RequestInit) => {
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase()
+    if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
+      return fetch(input, init)
+    }
 
-  const headers = new Headers(input instanceof Request ? input.headers : undefined)
-  if (init?.headers) {
-    const initHeaders = new Headers(init.headers)
-    initHeaders.forEach((value, key) => headers.set(key, value))
-  }
+    const headers = new Headers(input instanceof Request ? input.headers : undefined)
+    if (init?.headers) {
+      const initHeaders = new Headers(init.headers)
+      initHeaders.forEach((value, key) => headers.set(key, value))
+    }
 
-  const csrfToken = getCsrfToken()
-  if (csrfToken) headers.set("X-CSRF-Token", csrfToken)
+    const csrfToken = getCsrfToken()
+    if (csrfToken) headers.set("X-CSRF-Token", csrfToken)
 
-  return fetch(input, { ...init, headers })
-}
+    return fetch(input, { ...init, headers })
+  },
+  {
+    preconnect: (url: string | URL) => {
+      if ("preconnect" in fetch) {
+        fetch.preconnect(url)
+      }
+    },
+  },
+)
 
 const platform: Platform = {
   platform: "web",
