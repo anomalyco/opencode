@@ -3,7 +3,7 @@ import "./webview-zoom"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
-import { open as shellOpen } from "@tauri-apps/plugin-shell"
+import { openUrl } from "@tauri-apps/plugin-opener"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { invoke } from "@tauri-apps/api/core"
@@ -77,7 +77,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   },
 
   openLink(url: string) {
-    void shellOpen(url).catch(() => undefined)
+    void openUrl(url).catch(() => undefined)
   },
 
   back() {
@@ -337,11 +337,31 @@ render(() => {
   const platform = createPlatform(() => serverPassword())
 
   function handleClick(e: MouseEvent) {
-    const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
-    if (link?.href) {
-      e.preventDefault()
-      platform.openLink(link.href)
-    }
+    if (e.defaultPrevented) return
+    if (e.button !== 0) return
+    if (!(e.target instanceof Element)) return
+
+    const link = e.target.closest("a[href]")
+    if (!(link instanceof HTMLAnchorElement)) return
+
+    const href = link.getAttribute("href")
+    if (!href) return
+
+    const url = (() => {
+      try {
+        return new URL(href, window.location.href)
+      } catch {
+        return
+      }
+    })()
+    if (!url) return
+
+    const http = url.protocol === "http:" || url.protocol === "https:"
+    if (!http) return
+    if (url.origin === window.location.origin) return
+
+    e.preventDefault()
+    platform.openLink(url.toString())
   }
 
   onMount(() => {
