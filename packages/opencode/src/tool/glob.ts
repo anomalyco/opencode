@@ -2,7 +2,7 @@ import z from "zod"
 import path from "path"
 import { Tool } from "./tool"
 import DESCRIPTION from "./glob.txt"
-import { Ripgrep } from "../file/ripgrep"
+import { Fd } from "../file/fd"
 import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
 
@@ -35,9 +35,9 @@ export const GlobTool = Tool.define("glob", {
     const limit = 100
     const files = []
     let truncated = false
-    for await (const file of Ripgrep.files({
+    for await (const file of Fd.glob({
       cwd: search,
-      glob: [params.pattern],
+      pattern: params.pattern,
     })) {
       if (files.length >= limit) {
         truncated = true
