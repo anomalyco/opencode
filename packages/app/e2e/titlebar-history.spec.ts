@@ -29,8 +29,8 @@ test("titlebar back/forward navigates between sessions", async ({ page, slug, sd
     await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:\\?|#|$)`))
     await expect(page.locator(promptSelector)).toBeVisible()
 
-    const back = page.getByRole("button", { name: "Go back" })
-    const forward = page.getByRole("button", { name: "Go forward" })
+    const back = page.getByRole("button", { name: "Back" })
+    const forward = page.getByRole("button", { name: "Forward" })
 
     await expect(back).toBeVisible()
     await expect(back).toBeEnabled()
