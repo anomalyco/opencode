@@ -371,7 +371,7 @@
       top: 80px;
       align-self: start;
       background: var(--color-background);
-      padding: 8px 0;
+      padding: 44px 0 8px;
 
       @media (max-width: 50rem) {
         position: static;

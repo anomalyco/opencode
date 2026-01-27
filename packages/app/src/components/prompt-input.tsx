@@ -1565,7 +1565,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const timeoutMs = 5 * 60 * 1000
       const timeout = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
         setTimeout(() => {
-          resolve({ status: "failed", message: "Workspace is still preparing" })
+          resolve({ status: "failed", message: language.t("workspace.error.stillPreparing") })
         }, timeoutMs)
       })
 
@@ -1746,10 +1746,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Tooltip
                     value={
                       <span class="flex max-w-[300px]">
-                        <span
-                          class="text-text-invert-base truncate min-w-0"
-                          style={{ direction: "rtl", "text-align": "left", "unicode-bidi": "plaintext" }}
-                        >
+                        <span class="text-text-invert-base truncate-start [unicode-bidi:plaintext] min-w-0">
                           {getDirectory(item.path)}
                         </span>
                         <span class="shrink-0">{getFilename(item.path)}</span>
@@ -1772,10 +1769,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     >
                       <div class="flex items-center gap-1.5">
                         <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
-                        <div
-                          class="flex items-center text-11-regular min-w-0"
-                          style={{ "font-weight": "var(--font-weight-medium)" }}
-                        >
+                        <div class="flex items-center text-11-regular min-w-0 font-medium">
                           <span class="text-text-strong whitespace-nowrap">{getFilenameTruncated(item.path, 14)}</span>
                           <Show when={item.selection}>
                             {(sel) => (
@@ -1863,9 +1857,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
                 : commentCount() > 1
-                  ? "Summarize comments…"
+                  ? language.t("prompt.placeholder.summarizeComments")
                   : commentCount() === 1
-                    ? "Summarize comment…"
+                    ? language.t("prompt.placeholder.summarizeComment")
                     : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })
             }
             contenteditable="true"
@@ -1887,9 +1881,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               {store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
                 : commentCount() > 1
-                  ? "Summarize comments…"
+                  ? language.t("prompt.placeholder.summarizeComments")
                   : commentCount() === 1
-                    ? "Summarize comment…"
+                    ? language.t("prompt.placeholder.summarizeComment")
                     : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })}
             </div>
           </Show>

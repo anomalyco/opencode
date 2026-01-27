@@ -477,20 +477,7 @@ function HighlightedText(props: { text: string; references: FilePart[]; agents: 
     return result
   })
 
-  return (
-    <For each={segments()}>
-      {(segment) => (
-        <span
-          classList={{
-            "text-syntax-property": segment.type === "file",
-            "text-syntax-type": segment.type === "agent",
-          }}
-        >
-          {segment.text}
-        </span>
-      )}
-    </For>
-  )
+  return <For each={segments()}>{(segment) => <span data-highlight={segment.type}>{segment.text}</span>}</For>
 }
 
 export function Part(props: MessagePartProps) {
