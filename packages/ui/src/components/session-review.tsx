@@ -530,12 +530,12 @@ export const SessionReview = (props: SessionReviewProps) => {
                           <Switch>
                             <Match when={isAdded()}>
                               <span data-slot="session-review-change" data-type="added">
-                                Added
+                                {i18n.t("ui.sessionReview.change.added")}
                               </span>
                             </Match>
                             <Match when={isDeleted()}>
                               <span data-slot="session-review-change" data-type="removed">
-                                Removed
+                                {i18n.t("ui.sessionReview.change.removed")}
                               </span>
                             </Match>
                             <Match when={true}>

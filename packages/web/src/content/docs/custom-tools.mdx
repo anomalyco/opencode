@@ -120,8 +120,8 @@ export default tool({
   args: {},
   async execute(args, context) {
     // Access context information
-    const { agent, sessionID, messageID } = context
-    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}`
+    const { agent, sessionID, messageID, directory } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}`
   },
 })
 ```
@@ -148,6 +148,7 @@ Then create the tool definition that invokes it:
 
 ```ts title=".opencode/tools/python-add.ts" {10}
 import { tool } from "@opencode-ai/plugin"
+import path from "path"
 
 export default tool({
   description: "Add two numbers using Python",
@@ -155,8 +156,9 @@ export default tool({
     a: tool.schema.number().describe("First number"),
     b: tool.schema.number().describe("Second number"),
   },
-  async execute(args) {
-    const result = await Bun.$`python3 .opencode/tools/add.py ${args.a} ${args.b}`.text()
+  async execute(args, context) {
+    const script = path.join(context.directory, ".opencode/tools/add.py")
+    const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },
 })
