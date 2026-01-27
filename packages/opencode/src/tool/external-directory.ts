@@ -1,6 +1,5 @@
 import path from "path"
 import type { Tool } from "./tool"
-import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 
 type Kind = "file" | "directory"
@@ -15,7 +14,7 @@ export async function assertExternalDirectory(ctx: Tool.Context, target?: string
 
   if (options?.bypass) return
 
-  if (Filesystem.contains(Instance.directory, target)) return
+  if (Instance.containsPath(target)) return
 
   const kind = options?.kind ?? "file"
   const parentDir = kind === "directory" ? target : path.dirname(target)

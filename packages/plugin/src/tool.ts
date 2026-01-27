@@ -4,7 +4,21 @@ export type ToolContext = {
   sessionID: string
   messageID: string
   agent: string
+  /**
+   * Current project directory for this session.
+   * Prefer this over process.cwd() when resolving relative paths.
+   */
+  directory: string
   abort: AbortSignal
+  metadata(input: { title?: string; metadata?: { [key: string]: any } }): void
+  ask(input: AskInput): Promise<void>
+}
+
+type AskInput = {
+  permission: string
+  patterns: string[]
+  always: string[]
+  metadata: { [key: string]: any }
 }
 
 export function tool<Args extends z.ZodRawShape>(input: {

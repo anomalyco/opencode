@@ -37,7 +37,15 @@ export const GrepTool = Tool.define("grep", {
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     const rgPath = await Ripgrep.filepath()
-    const args = ["-nH", "--hidden", "--follow", "--field-match-separator=|", "--regexp", params.pattern]
+    const args = [
+      "-nH",
+      "--hidden",
+      "--follow",
+      "--no-messages",
+      "--field-match-separator=|",
+      "--regexp",
+      params.pattern,
+    ]
     if (params.include) {
       args.push("--glob", params.include)
     }
@@ -52,7 +60,10 @@ export const GrepTool = Tool.define("grep", {
     const errorOutput = await new Response(proc.stderr).text()
     const exitCode = await proc.exited
 
-    if (exitCode === 1) {
+    // Exit codes: 0 = matches found, 1 = no matches, 2 = errors (but may still have matches)
+    // With --no-messages, we suppress error output but still get exit code 2 for broken symlinks etc.
+    // Only fail if exit code is 2 AND no output was produced
+    if (exitCode === 1 || (exitCode === 2 && !output.trim())) {
       return {
         title: params.pattern,
         metadata: { matches: 0, truncated: false },
@@ -60,9 +71,11 @@ export const GrepTool = Tool.define("grep", {
       }
     }
 
-    if (exitCode !== 0) {
+    if (exitCode !== 0 && exitCode !== 2) {
       throw new Error(`ripgrep failed: ${errorOutput}`)
     }
+
+    const hasErrors = exitCode === 2
 
     // Handle both Unix (\n) and Windows (\r\n) line endings
     const lines = output.trim().split(/\r?\n/)
@@ -122,6 +135,11 @@ export const GrepTool = Tool.define("grep", {
     if (truncated) {
       outputLines.push("")
       outputLines.push("(Results are truncated. Consider using a more specific path or pattern.)")
+    }
+
+    if (hasErrors) {
+      outputLines.push("")
+      outputLines.push("(Some paths were inaccessible and skipped)")
     }
 
     return {

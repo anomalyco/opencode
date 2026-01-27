@@ -7,6 +7,7 @@ import { LocalProvider } from "@/context/local"
 import { base64Decode } from "@opencode-ai/util/encode"
 import { DataProvider } from "@opencode-ai/ui/context"
 import { iife } from "@opencode-ai/util/iife"
+import type { QuestionAnswer } from "@opencode-ai/sdk/v2"
 
 export default function Layout(props: ParentProps) {
   const params = useParams()
@@ -15,7 +16,7 @@ export default function Layout(props: ParentProps) {
     return base64Decode(params.dir!)
   })
   return (
-    <Show when={params.dir} keyed>
+    <Show when={params.dir}>
       <SDKProvider directory={directory()}>
         <SyncProvider>
           {iife(() => {
@@ -27,6 +28,11 @@ export default function Layout(props: ParentProps) {
               response: "once" | "always" | "reject"
             }) => sdk.client.permission.respond(input)
 
+            const replyToQuestion = (input: { requestID: string; answers: QuestionAnswer[] }) =>
+              sdk.client.question.reply(input)
+
+            const rejectQuestion = (input: { requestID: string }) => sdk.client.question.reject(input)
+
             const navigateToSession = (sessionID: string) => {
               navigate(`/${params.dir}/session/${sessionID}`)
             }
@@ -36,6 +42,8 @@ export default function Layout(props: ParentProps) {
                 data={sync.data}
                 directory={directory()}
                 onPermissionRespond={respond}
+                onQuestionReply={replyToQuestion}
+                onQuestionReject={rejectQuestion}
                 onNavigateToSession={navigateToSession}
               >
                 <LocalProvider>{props.children}</LocalProvider>

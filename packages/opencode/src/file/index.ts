@@ -206,7 +206,11 @@ export namespace File {
     const project = Instance.project
     if (project.vcs !== "git") return []
 
-    const diffOutput = await $`git diff --numstat HEAD`.cwd(Instance.directory).quiet().nothrow().text()
+    const diffOutput = await $`git -c core.quotepath=false diff --numstat HEAD`
+      .cwd(Instance.directory)
+      .quiet()
+      .nothrow()
+      .text()
 
     const changedFiles: Info[] = []
 
@@ -223,7 +227,7 @@ export namespace File {
       }
     }
 
-    const untrackedOutput = await $`git ls-files --others --exclude-standard`
+    const untrackedOutput = await $`git -c core.quotepath=false ls-files --others --exclude-standard`
       .cwd(Instance.directory)
       .quiet()
       .nothrow()
@@ -248,7 +252,7 @@ export namespace File {
     }
 
     // Get deleted files
-    const deletedOutput = await $`git diff --name-only --diff-filter=D HEAD`
+    const deletedOutput = await $`git -c core.quotepath=false diff --name-only --diff-filter=D HEAD`
       .cwd(Instance.directory)
       .quiet()
       .nothrow()
@@ -279,7 +283,7 @@ export namespace File {
 
     // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
     // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
-    if (!Filesystem.contains(Instance.directory, full)) {
+    if (!Instance.containsPath(full)) {
       throw new Error(`Access denied: path escapes project directory`)
     }
 
@@ -339,7 +343,7 @@ export namespace File {
 
     // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
     // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
-    if (!Filesystem.contains(Instance.directory, resolved)) {
+    if (!Instance.containsPath(resolved)) {
       throw new Error(`Access denied: path escapes project directory`)
     }
 
