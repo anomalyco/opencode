@@ -2664,7 +2664,6 @@ export default function Page() {
                               allowed={diffFiles()}
                               kinds={kinds()}
                               draggable={false}
-                              tooltip={false}
                               onFileClick={(node) => focusReviewDiff(node.path)}
                             />
                           </Show>
@@ -2681,7 +2680,6 @@ export default function Page() {
                         path=""
                         modified={diffFiles()}
                         kinds={kinds()}
-                        tooltip={false}
                         onFileClick={(node) => openTab(file.tab(node.path))}
                       />
                     </Tabs.Content>

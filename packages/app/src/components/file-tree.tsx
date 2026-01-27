@@ -8,6 +8,7 @@ import {
   createMemo,
   For,
   Match,
+  Show,
   splitProps,
   Switch,
   untrack,
@@ -221,8 +222,49 @@ export default function FileTree(props: {
           const deep = () => deeps().get(node.path) ?? -1
           const Wrapper = (p: ParentProps) => {
             if (!tooltip()) return p.children
+
+            const parts = node.path.split("/")
+            const leaf = parts[parts.length - 1] ?? node.path
+            const head = parts.slice(0, -1).join("/")
+            const prefix = head ? `${head}/` : ""
+
+            const kind = () => (node.type === "file" ? kinds()?.get(node.path) : undefined)
+            const label = () => {
+              if (!marks()?.has(node.path)) return
+              const k = kind()
+              if (!k) return
+              if (k === "add") return "Additions"
+              if (k === "del") return "Deletions"
+              return "Modifications"
+            }
+
             return (
-              <Tooltip forceMount={false} openDelay={2000} value={node.path} placement="right" class="w-full">
+              <Tooltip
+                forceMount={false}
+                openDelay={2000}
+                placement="bottom-start"
+                class="w-full"
+                contentStyle={{ "max-width": "480px", width: "fit-content" }}
+                value={
+                  <div class="flex items-center min-w-0 whitespace-nowrap text-12-regular">
+                    <span
+                      class="min-w-0 truncate text-text-invert-base"
+                      style={{ direction: "rtl", "unicode-bidi": "plaintext" }}
+                    >
+                      {prefix}
+                    </span>
+                    <span class="shrink-0 text-text-invert-strong">{leaf}</span>
+                    <Show when={label()}>
+                      {(t: () => string) => (
+                        <>
+                          <span class="mx-1 font-bold text-text-invert-strong">•</span>
+                          <span class="shrink-0 text-text-invert-strong">{t()}</span>
+                        </>
+                      )}
+                    </Show>
+                  </div>
+                }
+              >
                 {p.children}
               </Tooltip>
             )
