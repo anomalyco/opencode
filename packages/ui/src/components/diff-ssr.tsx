@@ -38,6 +38,77 @@ export function Diff<T>(props: SSRDiffProps<T>) {
     fileDiffRef.removeAttribute("data-color-scheme")
   }
 
+  const lineIndex = (split: boolean, element: HTMLElement) => {
+    const raw = element.dataset.lineIndex
+    if (!raw) return
+    const values = raw
+      .split(",")
+      .map((value) => parseInt(value, 10))
+      .filter((value) => !Number.isNaN(value))
+    if (values.length === 0) return
+    if (!split) return values[0]
+    if (values.length === 2) return values[1]
+    return values[0]
+  }
+
+  const rowIndex = (root: ShadowRoot, split: boolean, line: number, side: "additions" | "deletions" | undefined) => {
+    const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"], [data-alt-line="${line}"]`)).filter(
+      (node): node is HTMLElement => node instanceof HTMLElement,
+    )
+    if (nodes.length === 0) return
+
+    const targetSide = side ?? "additions"
+
+    for (const node of nodes) {
+      if (findSide(node) === targetSide) return lineIndex(split, node)
+      if (parseInt(node.dataset.altLine ?? "", 10) === line) return lineIndex(split, node)
+    }
+  }
+
+  const fixSelection = (range: SelectedLineRange | null) => {
+    if (!range) return range
+    const root = getRoot()
+    if (!root) return
+
+    const diffs = root.querySelector("[data-diffs]")
+    if (!(diffs instanceof HTMLElement)) return
+
+    const split = diffs.dataset.type === "split"
+
+    const start = rowIndex(root, split, range.start, range.side)
+    const end = rowIndex(root, split, range.end, range.endSide ?? range.side)
+
+    if (start === undefined || end === undefined) {
+      if (root.querySelector("[data-line], [data-alt-line]") == null) return
+      return null
+    }
+    if (start <= end) return range
+
+    const side = range.endSide ?? range.side
+    const swapped: SelectedLineRange = {
+      start: range.end,
+      end: range.start,
+    }
+    if (side) swapped.side = side
+    if (range.endSide && range.side) swapped.endSide = range.side
+
+    return swapped
+  }
+
+  const setSelectedLines = (range: SelectedLineRange | null, attempt = 0) => {
+    const diff = fileDiffInstance
+    if (!diff) return
+
+    const fixed = fixSelection(range)
+    if (fixed === undefined) {
+      if (attempt >= 120) return
+      requestAnimationFrame(() => setSelectedLines(range, attempt + 1))
+      return
+    }
+
+    diff.setSelectedLines(fixed)
+  }
+
   const findSide = (element: HTMLElement): "additions" | "deletions" => {
     const line = element.closest("[data-line], [data-alt-line]")
     if (line instanceof HTMLElement) {
@@ -159,14 +230,14 @@ export function Diff<T>(props: SSRDiffProps<T>) {
       containerWrapper: container,
     })
 
-    fileDiffInstance.setSelectedLines(local.selectedLines ?? null)
+    setSelectedLines(local.selectedLines ?? null)
 
     createEffect(() => {
       fileDiffInstance?.setLineAnnotations(local.annotations ?? [])
     })
 
     createEffect(() => {
-      fileDiffInstance?.setSelectedLines(local.selectedLines ?? null)
+      setSelectedLines(local.selectedLines ?? null)
     })
 
     createEffect(() => {

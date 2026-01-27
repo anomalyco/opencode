@@ -131,7 +131,7 @@ export function SessionHeader() {
           <Portal mount={mount()}>
             <button
               type="button"
-              class="hidden md:flex w-[320px] p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
+              class="hidden md:flex w-[320px] p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
               onClick={() => command.trigger("file.open")}
               aria-label={language.t("session.header.searchFiles")}
             >
@@ -310,6 +310,32 @@ export function SessionHeader() {
                     </div>
                   </Button>
                 </TooltipKeybind>
+              </div>
+              <div class="hidden md:block shrink-0">
+                <Tooltip value="Toggle file tree" placement="bottom">
+                  <Button
+                    variant="ghost"
+                    class="group/file-tree-toggle size-6 p-0"
+                    onClick={() => {
+                      const opening = !layout.fileTree.opened()
+                      if (opening && !view().reviewPanel.opened()) view().reviewPanel.open()
+                      layout.fileTree.toggle()
+                    }}
+                    aria-label="Toggle file tree"
+                    aria-expanded={layout.fileTree.opened()}
+                  >
+                    <div class="relative flex items-center justify-center size-4">
+                      <Icon
+                        size="small"
+                        name="bullet-list"
+                        classList={{
+                          "text-icon-strong": layout.fileTree.opened(),
+                          "text-icon-weak": !layout.fileTree.opened(),
+                        }}
+                      />
+                    </div>
+                  </Button>
+                </Tooltip>
               </div>
             </div>
           </Portal>

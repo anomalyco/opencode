@@ -41,11 +41,11 @@ export type Platform = {
   /** Fetch override */
   fetch?: typeof fetch
 
-  /** Get the configured default server URL (desktop only) */
-  getDefaultServerUrl?(): Promise<string | null>
+  /** Get the configured default server URL (platform-specific) */
+  getDefaultServerUrl?(): Promise<string | null> | string | null
 
-  /** Set the default server URL to use on app startup (desktop only) */
-  setDefaultServerUrl?(url: string | null): Promise<void>
+  /** Set the default server URL to use on app startup (platform-specific) */
+  setDefaultServerUrl?(url: string | null): Promise<void> | void
 
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>

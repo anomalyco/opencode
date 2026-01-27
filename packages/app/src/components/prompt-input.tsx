@@ -1567,7 +1567,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const timeoutMs = 5 * 60 * 1000
       const timeout = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
         setTimeout(() => {
-          resolve({ status: "failed", message: "Workspace is still preparing" })
+          resolve({ status: "failed", message: language.t("workspace.error.stillPreparing") })
         }, timeoutMs)
       })
 
@@ -1865,9 +1865,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
                 : commentCount() > 1
-                  ? "Summarize comments…"
+                  ? language.t("prompt.placeholder.summarizeComments")
                   : commentCount() === 1
-                    ? "Summarize comment…"
+                    ? language.t("prompt.placeholder.summarizeComment")
                     : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })
             }
             contenteditable="true"
@@ -1889,9 +1889,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               {store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
                 : commentCount() > 1
-                  ? "Summarize comments…"
+                  ? language.t("prompt.placeholder.summarizeComments")
                   : commentCount() === 1
-                    ? "Summarize comment…"
+                    ? language.t("prompt.placeholder.summarizeComment")
                     : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })}
             </div>
           </Show>
