@@ -284,7 +284,7 @@ export namespace ProviderTransform {
     if (id.includes("glm-4.7")) return 1.0
     if (id.includes("minimax-m2")) return 1.0
     if (id.includes("kimi-k2")) {
-      if (id.includes("thinking")) return 1.0
+      if (id.includes("thinking") || id.includes("k2.5")) return 1.0
       return 0.6
     }
     return undefined
