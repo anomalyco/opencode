@@ -666,18 +666,19 @@ function App() {
       width={dimensions().width}
       height={dimensions().height}
       backgroundColor={theme.background}
-      onMouseUp={async () => {
-        if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
-          return
-        }
-        const text = renderer.getSelection()?.getSelectedText()
-        if (text && text.length > 0) {
-          await Clipboard.copy(text)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-            .catch(toast.error)
-          renderer.clearSelection()
-        }
-      }}
+      onMouseUp={
+        !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
+          ? async () => {
+              const text = renderer.getSelection()?.getSelectedText()
+              if (text && text.length > 0) {
+                await Clipboard.copy(text)
+                  .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+                  .catch(toast.error)
+                renderer.clearSelection()
+              }
+            }
+          : undefined
+      }
     >
       <Switch>
         <Match when={route.data.type === "home"}>
