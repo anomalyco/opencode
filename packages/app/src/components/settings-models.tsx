@@ -39,7 +39,7 @@ export const SettingsModels: Component = () => {
   })
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar" style={{ padding: "0 40px 40px 40px" }}>
+    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div
         class="sticky top-0 z-10"
         style={{
@@ -105,7 +105,7 @@ export const SettingsModels: Component = () => {
                       {(item) => {
                         const key = { providerID: item.provider.id, modelID: item.id }
                         return (
-                          <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
+                          <div class="flex flex-wrap items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
                             <div class="min-w-0">
                               <span class="text-14-regular text-text-strong truncate block">{item.name}</span>
                             </div>
