@@ -41,6 +41,41 @@ import { ProviderTransform } from "./transform"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
+  const DEFAULT_OLLAMA_CONTEXT = 4096
+
+  async function isOllamaServer(baseURL: string): Promise<boolean> {
+    try {
+      const ollamaBase = baseURL.replace(/\/v1\/?$/, "")
+      const response = await fetch(ollamaBase, {
+        signal: AbortSignal.timeout(2000),
+      })
+      if (!response.ok) return false
+      const text = await response.text()
+      return text === "Ollama is running"
+    } catch {
+      return false
+    }
+  }
+
+  async function fetchOllamaModelContext(baseURL: string, modelName: string): Promise<number> {
+    try {
+      const ollamaBase = baseURL.replace(/\/v1\/?$/, "")
+      const response = await fetch(`${ollamaBase}/api/show`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: modelName }),
+        signal: AbortSignal.timeout(2000),
+      })
+      if (!response.ok) return DEFAULT_OLLAMA_CONTEXT
+      const data = (await response.json()) as { parameters?: string }
+      const match = data.parameters?.match(/num_ctx\s+(\d+)/)
+      if (match) return parseInt(match[1], 10)
+    } catch {
+      // Error querying Ollama - use default
+    }
+    return DEFAULT_OLLAMA_CONTEXT
+  }
+
   function isGpt5OrLater(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
     if (!match) {
@@ -806,6 +841,18 @@ export namespace Provider {
         parsed.models[modelID] = parsedModel
       }
       database[providerID] = parsed
+
+      // Fetch context limits from Ollama API if this is an Ollama server
+      // Only query Ollama if no limit was configured (config takes priority)
+      if (parsed.options.baseURL && (await isOllamaServer(parsed.options.baseURL))) {
+        const contextFetches = Object.entries(parsed.models).map(async ([modelID, model]) => {
+          if (model.limit.context === 0) {
+            const context = await fetchOllamaModelContext(parsed.options.baseURL, modelID)
+            model.limit.context = context
+          }
+        })
+        await Promise.all(contextFetches)
+      }
     }
 
     // load env
