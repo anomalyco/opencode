@@ -25,5 +25,13 @@ base64 = "0.22"
 [dev-dependencies]
 tempfile = "3"
 
+[features]
+test-spawn-bin = []
+
+[[bin]]
+name = "test-spawn"
+path = "src/bin/test-spawn.rs"
+required-features = ["test-spawn-bin"]
+
 [target.'cfg(target_os = "linux")'.dependencies]
 sd-notify = "0.4"

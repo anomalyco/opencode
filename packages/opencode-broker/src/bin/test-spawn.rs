@@ -1,6 +1,9 @@
 //! Minimal test for user process spawning.
 //!
-//! Run with: sudo cargo run --bin test-spawn
+//! Run with: sudo cargo run --features test-spawn-bin --bin test-spawn
+//!
+//! Note: This binary fails to compile in an Ubuntu Docker image. Sample log:
+//! https://gist.github.com/pRizz/b663e8359b21a1723b41e17bc4950dcc
 //!
 //! This tests each step of the spawn process to identify where it fails.
 
