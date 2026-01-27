@@ -206,6 +206,10 @@ mod tests {
                 eprintln!("Skipping: chown requires root privileges");
                 return None;
             }
+            Err(crate::pty::allocator::AllocateError::OpenPty(nix::Error::ENXIO)) => {
+                eprintln!("Skipping: PTY allocation unavailable on this system");
+                return None;
+            }
             Err(e) => panic!("Unexpected error: {e}"),
         };
 
