@@ -1016,11 +1016,44 @@ export namespace Provider {
           }
         }
 
-        return fetchFn(input, {
+        const res = await fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
         })
+
+        if (
+          res.status === 400 &&
+          typeof input === "string" &&
+          input.includes("/responses") &&
+          opts.method === "POST" &&
+          typeof opts.body === "string"
+        ) {
+          try {
+            const text = await res.clone().text()
+            if (text.includes("include") && (text.includes("not supported") || text.includes("is not"))) {
+              const body = JSON.parse(opts.body)
+              if (body && typeof body === "object" && "include" in body) {
+                delete body.include
+                log.info("retrying request without include", {
+                  url: input,
+                  providerID: model.providerID,
+                  modelID: model.id,
+                })
+                return fetchFn(input, {
+                  ...opts,
+                  body: JSON.stringify(body),
+                  // @ts-ignore
+                  timeout: false,
+                })
+              }
+            }
+          } catch {
+            return res
+          }
+        }
+
+        return res
       }
 
       // Special case: google-vertex-anthropic uses a subpath import

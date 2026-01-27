@@ -31,9 +31,21 @@ mock.module("@aws-sdk/credential-providers", () => ({
 }))
 
 const mockPlugin = () => ({})
+mock.module("../../src/plugin", () => ({
+  Plugin: {
+    trigger: async (_name: string, _input: unknown, output: unknown) => output,
+    list: async () => [],
+    init: async () => {},
+  },
+}))
 mock.module("opencode-copilot-auth", () => ({ default: mockPlugin }))
 mock.module("opencode-anthropic-auth", () => ({ default: mockPlugin }))
 mock.module("@gitlab/opencode-gitlab-auth", () => ({ default: mockPlugin }))
+mock.module("opencode-antigravity-auth", () => ({ default: mockPlugin }))
+mock.module("opencode-pty", () => ({ default: mockPlugin }))
+mock.module("opencode-scheduler", () => ({ default: mockPlugin }))
+mock.module("opencode-wakatime", () => ({ default: mockPlugin }))
+mock.module("opencode-devcontainers", () => ({ default: mockPlugin }))
 
 // Import after mocks are set up
 const { tmpdir } = await import("../fixture/fixture")
