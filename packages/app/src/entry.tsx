@@ -11,9 +11,33 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   )
 }
 
+function getCsrfToken(): string | undefined {
+  const match = document.cookie.match(/opencode_csrf=([^;]+)/)
+  return match ? match[1] : undefined
+}
+
+const csrfFetch: typeof fetch = (input, init) => {
+  const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase()
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
+    return fetch(input, init)
+  }
+
+  const headers = new Headers(input instanceof Request ? input.headers : undefined)
+  if (init?.headers) {
+    const initHeaders = new Headers(init.headers)
+    initHeaders.forEach((value, key) => headers.set(key, value))
+  }
+
+  const csrfToken = getCsrfToken()
+  if (csrfToken) headers.set("X-CSRF-Token", csrfToken)
+
+  return fetch(input, { ...init, headers })
+}
+
 const platform: Platform = {
   platform: "web",
   version: pkg.version,
+  fetch: csrfFetch,
   openLink(url: string) {
     window.open(url, "_blank")
   },

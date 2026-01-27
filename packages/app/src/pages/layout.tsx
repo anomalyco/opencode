@@ -563,7 +563,7 @@ export default function Layout(props: ParentProps) {
       .then((messages) => {
         if (prefetchToken.value !== token) return
 
-        const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
+        const items = (Array.isArray(messages.data) ? messages.data : []).filter((x) => !!x?.info?.id)
         const next = items
           .map((x) => x.info)
           .filter((m) => !!m?.id)

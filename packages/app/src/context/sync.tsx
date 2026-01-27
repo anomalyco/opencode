@@ -52,7 +52,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       setMeta("loading", sessionID, true)
       await retry(() => sdk.client.session.messages({ sessionID, limit }))
         .then((messages) => {
-          const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
+          const items = (Array.isArray(messages.data) ? messages.data : []).filter((x) => !!x?.info?.id)
           const next = items
             .map((x) => x.info)
             .filter((m) => !!m?.id)
