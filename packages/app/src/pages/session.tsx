@@ -1,4 +1,16 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import {
+  For,
+  onCleanup,
+  onMount,
+  Show,
+  Match,
+  Switch,
+  createMemo,
+  createEffect,
+  createSignal,
+  on,
+  type JSX,
+} from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -84,6 +96,44 @@ interface SessionReviewTabProps {
     header?: string
     container?: string
   }
+}
+
+function StickyAddButton(props: { children: JSX.Element }) {
+  const [stuck, setStuck] = createSignal(false)
+  let button: HTMLDivElement | undefined
+
+  createEffect(() => {
+    const node = button
+    if (!node) return
+
+    const scroll = node.parentElement
+    if (!scroll) return
+
+    const handler = () => {
+      const rect = node.getBoundingClientRect()
+      const scrollRect = scroll.getBoundingClientRect()
+      setStuck(rect.right >= scrollRect.right && scroll.scrollWidth > scroll.clientWidth)
+    }
+
+    scroll.addEventListener("scroll", handler, { passive: true })
+    const observer = new ResizeObserver(handler)
+    observer.observe(scroll)
+    handler()
+    onCleanup(() => {
+      scroll.removeEventListener("scroll", handler)
+      observer.disconnect()
+    })
+  })
+
+  return (
+    <div
+      ref={button}
+      class="bg-background-base h-full shrink-0 sticky right-0 z-10 flex items-center justify-center border-b border-border-weak-base px-3"
+      classList={{ "border-l": stuck() }}
+    >
+      {props.children}
+    </div>
+  )
 }
 
 function SessionReviewTab(props: SessionReviewTabProps) {
@@ -2007,7 +2057,7 @@ export default function Page() {
                               {(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}
                             </For>
                           </SortableProvider>
-                          <div class="bg-background-base h-full shrink-0 sticky right-0 z-10 flex items-center justify-center border-b border-l border-border-weak-base px-3">
+                          <StickyAddButton>
                             <TooltipKeybind
                               title={language.t("command.file.open")}
                               keybind={command.keybind("file.open")}
@@ -2021,7 +2071,7 @@ export default function Page() {
                                 aria-label={language.t("command.file.open")}
                               />
                             </TooltipKeybind>
-                          </div>
+                          </StickyAddButton>
                         </Tabs.List>
                       </div>
                       <Show when={!layout.fileTree.opened()}>
