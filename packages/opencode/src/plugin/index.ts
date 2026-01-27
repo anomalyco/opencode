@@ -11,6 +11,9 @@ import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
+import { SkillRegistry } from "../skill/registry"
+import path from "path"
+import { fileURLToPath } from "bun"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -76,6 +79,8 @@ export namespace Plugin {
         })
         if (!plugin) continue
       }
+      const pluginPath = plugin.startsWith("file://") ? fileURLToPath(plugin) : plugin
+      const pluginDir = path.dirname(pluginPath)
       const mod = await import(plugin)
       // Prevent duplicate initialization when plugins export the same function
       // as both a named export and default export (e.g., `export const X` and `export default X`).
@@ -86,6 +91,16 @@ export namespace Plugin {
         seen.add(fn)
         const init = await fn(input)
         hooks.push(init)
+        if (init.skill && Array.isArray(init.skill)) {
+          for (const pattern of init.skill) {
+            const absolutePattern = path.resolve(pluginDir, pattern)
+            const glob = new Bun.Glob(path.join(absolutePattern, "SKILL.md"))
+            const matches = await Array.fromAsync(glob.scan({ absolute: true, onlyFiles: true })).catch(() => [])
+            for (const match of matches) {
+              SkillRegistry.register(path.dirname(match))
+            }
+          }
+        }
       }
     }
 
@@ -96,7 +111,7 @@ export namespace Plugin {
   })
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool" | "skill">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {

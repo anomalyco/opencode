@@ -359,3 +359,19 @@ Format as a structured prompt that a new agent can use to resume work.
 ```
 
 When `output.prompt` is set, it completely replaces the default compaction prompt. The `output.context` array is ignored in this case.
+
+---
+
+### Package skills
+
+Plugins can bundle and expose [skills](/docs/skills) for agents to use. This lets you distribute reusable instructions alongside your plugin.
+
+```ts title=".opencode/plugin/my-plugin.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async () => ({
+  skill: ["./skills/pdf", "./skills/docs/*"],
+})
+```
+
+Paths are relative to the plugin file and support glob patterns. Skills from plugins have lower precedence than project skills but higher than global skills.

@@ -151,6 +151,17 @@ export interface Hooks {
   tool?: {
     [key: string]: ToolDefinition
   }
+  /**
+   * Paths to skill directories, relative to the plugin file.
+   * Each path can be a direct folder path or a glob pattern.
+   * Skills must contain a SKILL.md file with frontmatter.
+   *
+   * @example
+   * ```ts
+   * skill: ["./skills/pdf", "./skills/docs/*"]
+   * ```
+   */
+  skill?: string[]
   auth?: AuthHook
   /**
    * Called when a new message is received
