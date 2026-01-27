@@ -25,16 +25,18 @@ export namespace Bus {
     },
     async (entry) => {
       const wildcard = entry.subscriptions.get("*")
-      if (!wildcard) return
-      const event = {
-        type: InstanceDisposed.type,
-        properties: {
-          directory: Instance.directory,
-        },
+      if (wildcard) {
+        const event = {
+          type: InstanceDisposed.type,
+          properties: {
+            directory: Instance.directory,
+          },
+        }
+        for (const sub of [...wildcard]) {
+          sub(event)
+        }
       }
-      for (const sub of [...wildcard]) {
-        sub(event)
-      }
+      entry.subscriptions.clear()
     },
   )
 
