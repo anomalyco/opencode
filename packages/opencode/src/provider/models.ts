@@ -122,7 +122,11 @@ export namespace ModelsDev {
   }
 }
 
-if (!Flag.OPENCODE_DISABLE_MODELS_FETCH) {
+// Skip models.dev refresh when running as attach client.
+// The server already has models cached, so the client doesn't need to fetch them.
+const isAttachMode = process.argv.some((arg) => arg === "attach")
+
+if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !isAttachMode) {
   ModelsDev.refresh()
   setInterval(
     async () => {
