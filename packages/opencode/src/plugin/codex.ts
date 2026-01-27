@@ -3,7 +3,6 @@ import { Log } from "../util/log"
 import { Installation } from "../installation"
 import { Auth, OAUTH_DUMMY_KEY } from "../auth"
 import os from "os"
-import { iife } from "@/util/iife"
 
 const log = Log.create({ service: "plugin.codex" })
 
@@ -349,27 +348,6 @@ function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResp
 }
 
 export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
-  const useDeviceAuth = iife(() => {
-    // Returns true when likely running in an environment without a usable GUI.
-    // Intentionally conservative: frontends can use this to avoid flows that try to open a browser.
-    const isSet = (name: string): boolean => {
-      const v = process.env[name]
-      return v !== undefined && v !== ""
-    }
-
-    if (isSet("CI") || isSet("SSH_CONNECTION") || isSet("SSH_CLIENT") || isSet("SSH_TTY")) {
-      return true
-    }
-
-    if (process.platform === "linux") {
-      if (!isSet("DISPLAY") && !isSet("WAYLAND_DISPLAY")) {
-        return true
-      }
-    }
-
-    return false
-  })
-
   return {
     auth: {
       provider: "openai",
@@ -483,120 +461,113 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
         }
       },
       methods: [
-        useDeviceAuth
-          ? {
-              label: "ChatGPT Pro/Plus",
-              type: "oauth",
-              authorize: async () => {
-                const deviceResponse = await fetch(`${ISSUER}/api/accounts/deviceauth/usercode`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "User-Agent": `opencode/${Installation.VERSION}`,
-                  },
-                  body: JSON.stringify({ client_id: CLIENT_ID }),
-                })
+        {
+          label: "ChatGPT Pro/Plus (browser)",
+          type: "oauth",
+          authorize: async () => {
+            const { redirectUri } = await startOAuthServer()
+            const pkce = await generatePKCE()
+            const state = generateState()
+            const authUrl = buildAuthorizeUrl(redirectUri, pkce, state)
 
-                if (!deviceResponse.ok) throw new Error("Failed to initiate device authorization")
+            const callbackPromise = waitForOAuthCallback(pkce, state)
 
-                const deviceData = (await deviceResponse.json()) as {
-                  device_auth_id: string
-                  user_code: string
-                  interval: string
-                }
-                const interval = Math.max(parseInt(deviceData.interval) || 5, 1) * 1000
-
+            return {
+              url: authUrl,
+              instructions: "Complete authorization in your browser. This window will close automatically.",
+              method: "auto" as const,
+              callback: async () => {
+                const tokens = await callbackPromise
+                stopOAuthServer()
+                const accountId = extractAccountId(tokens)
                 return {
-                  url: `${ISSUER}/codex/device`,
-                  instructions: `Enter code: ${deviceData.user_code}`,
-                  method: "auto" as const,
-                  async callback() {
-                    while (true) {
-                      const response = await fetch(`${ISSUER}/api/accounts/deviceauth/token`, {
-                        method: "POST",
-                        headers: {
-                          "Content-Type": "application/json",
-                          "User-Agent": `opencode/${Installation.VERSION}`,
-                        },
-                        body: JSON.stringify({
-                          device_auth_id: deviceData.device_auth_id,
-                          user_code: deviceData.user_code,
-                        }),
-                      })
-
-                      if (response.ok) {
-                        const data = (await response.json()) as {
-                          authorization_code: string
-                          code_verifier: string
-                        }
-
-                        const tokenResponse = await fetch(`${ISSUER}/oauth/token`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                          body: new URLSearchParams({
-                            grant_type: "authorization_code",
-                            code: data.authorization_code,
-                            redirect_uri: `${ISSUER}/deviceauth/callback`,
-                            client_id: CLIENT_ID,
-                            code_verifier: data.code_verifier,
-                          }).toString(),
-                        })
-
-                        if (!tokenResponse.ok) {
-                          throw new Error(`Token exchange failed: ${tokenResponse.status}`)
-                        }
-
-                        const tokens = (await tokenResponse.json()) as TokenResponse
-
-                        return {
-                          type: "success" as const,
-                          refresh: tokens.refresh_token,
-                          access: tokens.access_token,
-                          expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-                          accountId: extractAccountId(tokens),
-                        }
-                      }
-
-                      if (response.status !== 403 && response.status !== 404) {
-                        return { type: "failed" as const }
-                      }
-
-                      await Bun.sleep(interval + OAUTH_POLLING_SAFETY_MARGIN_MS)
-                    }
-                  },
+                  type: "success" as const,
+                  refresh: tokens.refresh_token,
+                  access: tokens.access_token,
+                  expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                  accountId,
                 }
               },
             }
-          : {
-              label: "ChatGPT Pro/Plus",
-              type: "oauth",
-              authorize: async () => {
-                const { redirectUri } = await startOAuthServer()
-                const pkce = await generatePKCE()
-                const state = generateState()
-                const authUrl = buildAuthorizeUrl(redirectUri, pkce, state)
+          },
+        },
+        {
+          label: "ChatGPT Pro/Plus (headless)",
+          type: "oauth",
+          authorize: async () => {
+            const deviceResponse = await fetch(`${ISSUER}/api/accounts/deviceauth/usercode`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "User-Agent": `opencode/${Installation.VERSION}`,
+              },
+              body: JSON.stringify({ client_id: CLIENT_ID }),
+            })
 
-                const callbackPromise = waitForOAuthCallback(pkce, state)
+            if (!deviceResponse.ok) throw new Error("Failed to initiate device authorization")
 
-                return {
-                  url: authUrl,
-                  instructions: "Complete authorization in your browser. This window will close automatically.",
-                  method: "auto" as const,
-                  callback: async () => {
-                    const tokens = await callbackPromise
-                    stopOAuthServer()
-                    const accountId = extractAccountId(tokens)
+            const deviceData = (await deviceResponse.json()) as {
+              device_auth_id: string
+              user_code: string
+              interval: string
+            }
+            const interval = Math.max(parseInt(deviceData.interval) || 5, 1) * 1000
+
+            return {
+              url: `${ISSUER}/codex/device`,
+              instructions: `Enter code: ${deviceData.user_code}`,
+              method: "auto" as const,
+              async callback() {
+                while (true) {
+                  const response = await fetch(`${ISSUER}/api/accounts/deviceauth/token`, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "User-Agent": `opencode/${Installation.VERSION}`,
+                    },
+                    body: JSON.stringify({
+                      device_auth_id: deviceData.device_auth_id,
+                      user_code: deviceData.user_code,
+                    }),
+                  })
+
+                  if (response.ok) {
+                    const data = (await response.json()) as {
+                      authorization_code: string
+                      code_verifier: string
+                    }
+
+                    const tokens: TokenResponse = await fetch(`${ISSUER}/oauth/token`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                      body: new URLSearchParams({
+                        grant_type: "authorization_code",
+                        code: data.authorization_code,
+                        redirect_uri: `${ISSUER}/deviceauth/callback`,
+                        client_id: CLIENT_ID,
+                        code_verifier: data.code_verifier,
+                      }).toString(),
+                    }).then((r) => r.json())
+
                     return {
                       type: "success" as const,
                       refresh: tokens.refresh_token,
                       access: tokens.access_token,
                       expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-                      accountId,
+                      accountId: extractAccountId(tokens),
                     }
-                  },
+                  }
+
+                  if (response.status !== 403 && response.status !== 404) {
+                    return { type: "failed" as const }
+                  }
+
+                  await Bun.sleep(interval + OAUTH_POLLING_SAFETY_MARGIN_MS)
                 }
               },
-            },
+            }
+          },
+        },
         {
           label: "Manually enter API Key",
           type: "api",
