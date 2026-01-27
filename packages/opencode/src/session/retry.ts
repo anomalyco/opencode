@@ -60,6 +60,8 @@ export namespace SessionRetry {
 
   export function retryable(error: ReturnType<NamedError["toObject"]>) {
     if (MessageV2.APIError.isInstance(error)) {
+      if (error.data.message.includes("rate_limit") || (error.data.responseBody ?? "").includes("rate_limit"))
+        return "Rate Limited"
       if (!error.data.isRetryable) return undefined
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
     }
