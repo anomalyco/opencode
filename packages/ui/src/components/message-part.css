@@ -81,6 +81,14 @@
     padding: 8px 12px;
     border-radius: 4px;
 
+    [data-highlight="file"] {
+      color: var(--syntax-property);
+    }
+
+    [data-highlight="agent"] {
+      color: var(--syntax-type);
+    }
+
     [data-slot="user-message-copy-wrapper"] {
       position: absolute;
       top: 7px;

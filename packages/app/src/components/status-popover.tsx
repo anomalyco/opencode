@@ -176,33 +176,16 @@ export function StatusPopover() {
       placement="bottom-end"
       shift={-136}
     >
-      <div
-        class="flex items-center gap-1 w-[360px] rounded-xl"
-        style={{ "box-shadow": "var(--shadow-lg-border-base)" }}
-      >
+      <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
         <Tabs
           aria-label={language.t("status.popover.ariaLabel")}
-          class="tabs"
+          class="tabs bg-background-strong rounded-xl overflow-hidden"
           data-component="tabs"
           data-active="servers"
           defaultValue="servers"
           variant="alt"
-          style={{
-            "background-color": "var(--background-strong)",
-            "border-radius": "12px",
-            overflow: "hidden",
-          }}
         >
-          <Tabs.List
-            data-slot="tablist"
-            style={{
-              "background-color": "transparent",
-              "border-bottom": "none",
-              padding: "8px 16px 0",
-              gap: "16px",
-              height: "40px",
-            }}
-          >
+          <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
             <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
               {serverCount() > 0 ? `${serverCount()} ` : ""}
               {language.t("status.popover.tab.servers")}

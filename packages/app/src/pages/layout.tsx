@@ -1563,7 +1563,6 @@ export default function Layout(props: ParentProps) {
     const notifications = createMemo(() => notification.project.unseen(props.project.worktree))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
     const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
-    const mask = "radial-gradient(circle 5px at calc(100% - 4px) 4px, transparent 5px, black 5.5px)"
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
@@ -1574,11 +1573,7 @@ export default function Layout(props: ParentProps) {
             src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.override}
             {...getAvatarColors(props.project.icon?.color)}
             class="size-full rounded"
-            style={
-              notifications().length > 0 && props.notify
-                ? { "-webkit-mask-image": mask, "mask-image": mask }
-                : undefined
-            }
+            classList={{ "badge-mask": notifications().length > 0 && props.notify }}
           />
         </div>
         <Show when={notifications().length > 0 && props.notify}>
@@ -2348,8 +2343,7 @@ export default function Layout(props: ParentProps) {
         ref={(el) => {
           if (!props.mobile) scrollContainerRef = el
         }}
-        class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar"
-        style={{ "overflow-anchor": "none" }}
+        class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none]"
       >
         <nav class="flex flex-col gap-1 px-2">
           <Show when={loading()}>
@@ -2575,8 +2569,7 @@ export default function Layout(props: ParentProps) {
                         ref={(el) => {
                           if (!panelProps.mobile) scrollContainerRef = el
                         }}
-                        class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar"
-                        style={{ "overflow-anchor": "none" }}
+                        class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
                       >
                         <SortableProvider ids={workspaces()}>
                           <For each={workspaces()}>
