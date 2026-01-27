@@ -95,10 +95,24 @@ export const TuiThreadCommand = cmd({
         Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
       ),
     })
-    worker.onerror = (e) => {
-      Log.Default.error(e)
-    }
+    
     const client = Rpc.client<typeof rpc>(worker)
+    
+    const handleWorkerCrash = (reason: string) => {
+      Log.Default.error(`Worker crashed: ${reason}`)
+      client.rejectAll(new Error(`Worker crashed: ${reason}`))
+      process.exit(1)
+    }
+    
+    worker.onerror = (e) => {
+      handleWorkerCrash(e.message || "unknown error")
+    }
+    
+    ;(worker as any).on?.("exit", (code: number) => {
+      if (code !== 0) {
+        handleWorkerCrash(`exit code ${code}`)
+      }
+    })
     process.on("uncaughtException", (e) => {
       Log.Default.error(e)
     })
@@ -108,6 +122,15 @@ export const TuiThreadCommand = cmd({
     process.on("SIGUSR2", async () => {
       await client.call("reload", undefined)
     })
+
+    // Handle graceful shutdown on SIGINT (Ctrl+C) and SIGTERM (kill)
+    const handleShutdown = async () => {
+      await client.call("shutdown", undefined)
+      process.exit(0)
+    }
+
+    process.on("SIGINT", handleShutdown)
+    process.on("SIGTERM", handleShutdown)
 
     const prompt = await iife(async () => {
       const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
