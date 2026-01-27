@@ -1,5 +1,5 @@
 import type { APICallError, ModelMessage } from "ai"
-import { unique } from "remeda"
+import { mergeDeep, unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
@@ -26,6 +26,7 @@ export namespace ProviderTransform {
       case "@ai-sdk/amazon-bedrock":
         return "bedrock"
       case "@ai-sdk/anthropic":
+      case "@ai-sdk/google-vertex/anthropic":
         return "anthropic"
       case "@ai-sdk/google-vertex":
       case "@ai-sdk/google":
@@ -186,18 +187,12 @@ export namespace ProviderTransform {
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
         if (lastContent && typeof lastContent === "object") {
-          lastContent.providerOptions = {
-            ...lastContent.providerOptions,
-            ...providerOptions,
-          }
+          lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
           continue
         }
       }
 
-      msg.providerOptions = {
-        ...msg.providerOptions,
-        ...providerOptions,
-      }
+      msg.providerOptions = mergeDeep(msg.providerOptions ?? {}, providerOptions)
     }
 
     return msgs
@@ -248,6 +243,8 @@ export namespace ProviderTransform {
       model.providerID === "anthropic" ||
       model.api.id.includes("anthropic") ||
       model.api.id.includes("claude") ||
+      model.id.includes("anthropic") ||
+      model.id.includes("claude") ||
       model.api.npm === "@ai-sdk/anthropic"
     ) {
       msgs = applyCaching(msgs, model.providerID)
@@ -287,7 +284,10 @@ export namespace ProviderTransform {
     if (id.includes("glm-4.7")) return 1.0
     if (id.includes("minimax-m2")) return 1.0
     if (id.includes("kimi-k2")) {
-      if (id.includes("thinking")) return 1.0
+      // kimi-k2-thinking & kimi-k2.5
+      if (id.includes("thinking") || id.includes("k2.")) {
+        return 1.0
+      }
       return 0.6
     }
     return undefined
@@ -296,10 +296,9 @@ export namespace ProviderTransform {
   export function topP(model: Provider.Model) {
     const id = model.id.toLowerCase()
     if (id.includes("qwen")) return 1
-    if (id.includes("minimax-m2")) {
+    if (id.includes("minimax-m2") || id.includes("kimi-k2.5") || id.includes("gemini")) {
       return 0.95
     }
-    if (id.includes("gemini")) return 0.95
     return undefined
   }
 
@@ -347,8 +346,12 @@ export namespace ProviderTransform {
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
       case "@ai-sdk/github-copilot":
+        const copilotEfforts = iife(() => {
+          if (id.includes("5.1-codex-max") || id.includes("5.2")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+          return WIDELY_SUPPORTED_EFFORTS
+        })
         return Object.fromEntries(
-          WIDELY_SUPPORTED_EFFORTS.map((effort) => [
+          copilotEfforts.map((effort) => [
             effort,
             {
               reasoningEffort: effort,
@@ -418,7 +421,9 @@ export namespace ProviderTransform {
         )
 
       case "@ai-sdk/anthropic":
-        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
+      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
+      case "@ai-sdk/google-vertex/anthropic":
+        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
         return {
           high: {
             thinking: {
@@ -578,15 +583,15 @@ export namespace ProviderTransform {
     }
 
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
-      if (input.model.providerID.includes("codex")) {
-        result["store"] = false
-      }
-
-      if (!input.model.api.id.includes("codex") && !input.model.api.id.includes("gpt-5-pro")) {
+      if (!input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
       }
 
-      if (input.model.api.id.endsWith("gpt-5.") && input.model.providerID !== "azure") {
+      if (
+        input.model.api.id.includes("gpt-5.") &&
+        !input.model.api.id.includes("codex") &&
+        input.model.providerID !== "azure"
+      ) {
         result["textVerbosity"] = "low"
       }
 
@@ -596,6 +601,11 @@ export namespace ProviderTransform {
         result["reasoningSummary"] = "auto"
       }
     }
+
+    if (input.model.providerID === "venice") {
+      result["promptCacheKey"] = input.sessionID
+    }
+
     return result
   }
 
@@ -636,7 +646,7 @@ export namespace ProviderTransform {
     const modelCap = modelLimit || globalLimit
     const standardLimit = Math.min(modelCap, globalLimit)
 
-    if (npm === "@ai-sdk/anthropic") {
+    if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
       const thinking = options?.["thinking"]
       const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
       const enabled = thinking?.["type"] === "enabled"

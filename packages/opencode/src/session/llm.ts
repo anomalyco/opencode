@@ -53,6 +53,7 @@ export namespace LLM {
       .tag("sessionID", input.sessionID)
       .tag("small", (input.small ?? false).toString())
       .tag("agent", input.agent.name)
+      .tag("mode", input.agent.mode)
     l.info("stream", {
       modelID: input.model.id,
       providerID: input.model.providerID,
@@ -65,7 +66,7 @@ export namespace LLM {
     ])
     const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
-    const system = SystemPrompt.header(input.model.providerID)
+    const system = []
     system.push(
       [
         // use agent prompt otherwise provider prompt
@@ -82,7 +83,11 @@ export namespace LLM {
 
     const header = system[0]
     const original = clone(system)
-    await Plugin.trigger("experimental.chat.system.transform", { sessionID: input.sessionID }, { system })
+    await Plugin.trigger(
+      "experimental.chat.system.transform",
+      { sessionID: input.sessionID, model: input.model },
+      { system },
+    )
     if (system.length === 0) {
       system.push(...original)
     }
@@ -131,14 +136,34 @@ export namespace LLM {
       },
     )
 
-    const maxOutputTokens = isCodex
-      ? undefined
-      : ProviderTransform.maxOutputTokens(
-          input.model.api.npm,
-          params.options,
-          input.model.limit.output,
-          OUTPUT_TOKEN_MAX,
-        )
+    const { headers } = await Plugin.trigger(
+      "chat.headers",
+      {
+        sessionID: input.sessionID,
+        agent: input.agent,
+        model: input.model,
+        provider,
+        message: input.user,
+      },
+      {
+        headers: {},
+      },
+    )
+
+    const maxOutputTokens = isCodex ? undefined : undefined
+    log.info("max_output_tokens", {
+      tokens: ProviderTransform.maxOutputTokens(
+        input.model.api.npm,
+        params.options,
+        input.model.limit.output,
+        OUTPUT_TOKEN_MAX,
+      ),
+      modelOptions: params.options,
+      outputLimit: input.model.limit.output,
+    })
+    // tokens = 32000
+    // outputLimit = 64000
+    // modelOptions={"reasoningEffort":"minimal"}
 
     const tools = await resolveTools(input)
 
@@ -193,18 +218,11 @@ export namespace LLM {
       topP: params.topP,
       topK: params.topK,
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid" && x !== "_noop"),
+      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       tools,
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {
-        ...(isCodex
-          ? {
-              originator: "opencode",
-              "User-Agent": `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
-              session_id: input.sessionID,
-            }
-          : undefined),
         ...(input.model.providerID.startsWith("opencode")
           ? {
               "x-opencode-project": Instance.project.id,
@@ -218,6 +236,7 @@ export namespace LLM {
               }
             : undefined),
         ...input.model.headers,
+        ...headers,
       },
       maxRetries: input.retries ?? 0,
       messages: [

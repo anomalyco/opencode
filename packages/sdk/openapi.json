@@ -183,7 +183,7 @@
           }
         ],
         "summary": "Update project",
-        "description": "Update project properties such as name, icon and color.",
+        "description": "Update project properties such as name, icon, and commands.",
         "responses": {
           "200": {
             "description": "Updated project information",
@@ -235,6 +235,15 @@
                         "type": "string"
                       },
                       "color": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "commands": {
+                    "type": "object",
+                    "properties": {
+                      "start": {
+                        "description": "Startup script to run when creating a new workspace (worktree)",
                         "type": "string"
                       }
                     }
@@ -850,7 +859,7 @@
           }
         ],
         "summary": "Create worktree",
-        "description": "Create a new git worktree for the current project.",
+        "description": "Create a new git worktree for the current project and run any configured startup scripts.",
         "responses": {
           "200": {
             "description": "Worktree created",
@@ -5700,6 +5709,56 @@
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.set({\n  ...\n})"
           }
         ]
+      },
+      "delete": {
+        "operationId": "auth.remove",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "providerID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Remove auth credentials",
+        "description": "Remove authentication credentials",
+        "responses": {
+          "200": {
+            "description": "Successfully removed authentication credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.remove({\n  ...\n})"
+          }
+        ]
       }
     },
     "/event": {
@@ -5807,6 +5866,15 @@
               }
             }
           },
+          "commands": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "description": "Startup script to run when creating a new workspace (worktree)",
+                "type": "string"
+              }
+            }
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -5859,6 +5927,34 @@
               }
             },
             "required": ["directory"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.server.connected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "server.connected"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.global.disposed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "global.disposed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
           }
         },
         "required": ["type", "properties"]
@@ -7273,8 +7369,7 @@
         "properties": {
           "label": {
             "description": "Display text (1-5 words, concise)",
-            "type": "string",
-            "maxLength": 30
+            "type": "string"
           },
           "description": {
             "description": "Explanation of choice",
@@ -7292,8 +7387,7 @@
           },
           "header": {
             "description": "Very short label (max 30 chars)",
-            "type": "string",
-            "maxLength": 30
+            "type": "string"
           },
           "options": {
             "description": "Available choices",
@@ -7434,6 +7528,41 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.file.watcher.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "file.watcher.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "event": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "add"
+                  },
+                  {
+                    "type": "string",
+                    "const": "change"
+                  },
+                  {
+                    "type": "string",
+                    "const": "unlink"
+                  }
+                ]
+              }
+            },
+            "required": ["file", "event"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Todo": {
         "type": "object",
         "properties": {
@@ -7477,41 +7606,6 @@
               }
             },
             "required": ["sessionID", "todos"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.file.watcher.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "file.watcher.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string"
-              },
-              "event": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "const": "add"
-                  },
-                  {
-                    "type": "string",
-                    "const": "change"
-                  },
-                  {
-                    "type": "string",
-                    "const": "unlink"
-                  }
-                ]
-              }
-            },
-            "required": ["file", "event"]
           }
         },
         "required": ["type", "properties"]
@@ -8075,30 +8169,43 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.global.disposed": {
+      "Event.worktree.ready": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "global.disposed"
+            "const": "worktree.ready"
           },
           "properties": {
             "type": "object",
-            "properties": {}
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "branch"]
           }
         },
         "required": ["type", "properties"]
       },
-      "Event.server.connected": {
+      "Event.worktree.failed": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "server.connected"
+            "const": "worktree.failed"
           },
           "properties": {
             "type": "object",
-            "properties": {}
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"]
           }
         },
         "required": ["type", "properties"]
@@ -8116,6 +8223,12 @@
           },
           {
             "$ref": "#/components/schemas/Event.server.instance.disposed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.server.connected"
+          },
+          {
+            "$ref": "#/components/schemas/Event.global.disposed"
           },
           {
             "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
@@ -8163,10 +8276,10 @@
             "$ref": "#/components/schemas/Event.session.compacted"
           },
           {
-            "$ref": "#/components/schemas/Event.todo.updated"
+            "$ref": "#/components/schemas/Event.file.watcher.updated"
           },
           {
-            "$ref": "#/components/schemas/Event.file.watcher.updated"
+            "$ref": "#/components/schemas/Event.todo.updated"
           },
           {
             "$ref": "#/components/schemas/Event.tui.prompt.append"
@@ -8220,10 +8333,10 @@
             "$ref": "#/components/schemas/Event.pty.deleted"
           },
           {
-            "$ref": "#/components/schemas/Event.global.disposed"
+            "$ref": "#/components/schemas/Event.worktree.ready"
           },
           {
-            "$ref": "#/components/schemas/Event.server.connected"
+            "$ref": "#/components/schemas/Event.worktree.failed"
           }
         ]
       },
@@ -10094,6 +10207,7 @@
             "type": "string"
           },
           "startCommand": {
+            "description": "Additional startup script to run after the project's start command",
             "type": "string"
           }
         }
