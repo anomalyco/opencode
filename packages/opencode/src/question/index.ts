@@ -13,9 +13,7 @@ export namespace Question {
       label: z.string().describe("Display text (1-5 words, concise)"),
       description: z.string().describe("Explanation of choice"),
     })
-    .meta({
-      ref: "QuestionOption",
-    })
+
   export type Option = z.infer<typeof Option>
 
   export const Info = z
@@ -26,9 +24,7 @@ export namespace Question {
       multiple: z.boolean().optional().describe("Allow selecting multiple choices"),
       custom: z.boolean().optional().describe("Allow typing a custom answer (default: true)"),
     })
-    .meta({
-      ref: "QuestionInfo",
-    })
+
   export type Info = z.infer<typeof Info>
 
   export const Request = z
