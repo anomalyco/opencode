@@ -26,6 +26,7 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
+import { ModelsDev } from "./provider/models"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -39,7 +40,12 @@ process.on("uncaughtException", (e) => {
   })
 })
 
-const cli = yargs(hideBin(process.argv))
+const argv = hideBin(process.argv)
+const passthroughIndex = argv.indexOf("--")
+const visibleArgs = passthroughIndex === -1 ? argv : argv.slice(0, passthroughIndex)
+const version = visibleArgs.includes("--version") || visibleArgs.includes("-v")
+
+const cli = yargs(argv)
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
   .wrap(100)
@@ -69,6 +75,7 @@ const cli = yargs(hideBin(process.argv))
 
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
+    if (!version) ModelsDev.start()
 
     Log.Default.info("opencode", {
       version: Installation.VERSION,

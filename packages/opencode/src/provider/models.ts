@@ -13,6 +13,7 @@ import { lazy } from "@/util/lazy"
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
+  const state = { started: false }
 
   export const Model = z.object({
     id: z.string(),
@@ -120,14 +121,17 @@ export namespace ModelsDev {
       ModelsDev.Data.reset()
     }
   }
-}
 
-if (!Flag.OPENCODE_DISABLE_MODELS_FETCH) {
-  ModelsDev.refresh()
-  setInterval(
-    async () => {
-      await ModelsDev.refresh()
-    },
-    60 * 1000 * 60,
-  ).unref()
+  export function start() {
+    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return
+    if (state.started) return
+    state.started = true
+    ModelsDev.refresh()
+    setInterval(
+      async () => {
+        await ModelsDev.refresh()
+      },
+      60 * 1000 * 60,
+    ).unref()
+  }
 }
