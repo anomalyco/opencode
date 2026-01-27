@@ -108,7 +108,6 @@ export namespace Pty {
     const cwd = input.cwd || Instance.directory
     const env = { ...process.env, ...input.env, TERM: "xterm-256color" } as Record<string, string>
 
-    let envExports = ""
     try {
       const statePath = `${Global.Path.state}/model.json`
       let recent: { providerID: string; modelID: string } | undefined
@@ -142,26 +141,17 @@ export namespace Pty {
       const model = await Provider.getModel(providerID, modelID)
 
       const canonicalModelID = model.id.split("/").pop() || model.id
-      const escapedName = model.name.replace(/'/g, "'\\''")
       env["OPENCODE_MODEL_ID"] = model.id
       env["OPENCODE_CANONICAL_MODEL_ID"] = canonicalModelID
       env["OPENCODE_PROVIDER_ID"] = model.providerID
       env["OPENCODE_MODEL_FULL_ID"] = `${model.providerID}/${model.id}`
       env["OPENCODE_MODEL_NAME"] = model.name
-      envExports = `export OPENCODE_MODEL_ID='${model.id}' OPENCODE_CANONICAL_MODEL_ID='${canonicalModelID}' OPENCODE_PROVIDER_ID='${model.providerID}' OPENCODE_MODEL_FULL_ID='${model.providerID}/${model.id}' OPENCODE_MODEL_NAME='${escapedName}'; `
     } catch (error) {}
 
     log.info("creating session", { id, cmd: command, args, cwd })
 
     const spawn = await pty()
-    const spawnArgs = [...args]
-
-    if (command.endsWith("sh") && spawnArgs.length > 0) {
-      const cmdStr = spawnArgs[spawnArgs.length - 1]
-      spawnArgs[spawnArgs.length - 1] = envExports + cmdStr
-    }
-
-    const ptyProcess = spawn(command, spawnArgs, {
+    const ptyProcess = spawn(command, args, {
       name: "xterm-256color",
       cwd,
       env,
