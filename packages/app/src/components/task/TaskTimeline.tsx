@@ -1,5 +1,5 @@
 import { Component, For, Show } from 'solid-js'
-import { useServer } from '@opencode-ai/app/context/server'
+import { useServer } from '@/context/server'
 import styles from './TaskTimeline.module.css'
 
 export interface TaskStep {

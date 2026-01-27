@@ -53,6 +53,7 @@ import {
   FileVisual,
   SortableTerminalTab,
   NewSessionView,
+  FilesPanel,
 } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
@@ -969,10 +970,11 @@ export default function Page() {
   }
 
   const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
+  const filesOpen = createMemo(() => tabs().active() === "files" || tabs().all().includes("files"))
   const openedTabs = createMemo(() =>
     tabs()
       .all()
-      .filter((tab) => tab !== "context"),
+      .filter((tab) => tab !== "context" && tab !== "files"),
   )
 
   const mobileReview = createMemo(() => !isDesktop() && view().reviewPanel.opened() && store.mobileTab === "review")
@@ -1413,6 +1415,21 @@ export default function Page() {
     if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
   })
 
+  // Handle file open events from FilesPanel
+  createEffect(() => {
+    const handleOpenFileTab = (e: Event) => {
+      const customEvent = e as CustomEvent<{ path: string; tabValue: string }>
+      const { path, tabValue } = customEvent.detail
+      tabs().open(tabValue)
+      file.load(path)
+    }
+
+    window.addEventListener("open-file-tab", handleOpenFileTab)
+    onCleanup(() => {
+      window.removeEventListener("open-file-tab", handleOpenFileTab)
+    })
+  })
+
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
@@ -1778,6 +1795,28 @@ export default function Page() {
                         </div>
                       </Tabs.Trigger>
                     </Show>
+                    <Show when={true}>
+                      <Tabs.Trigger
+                        value="files"
+                        closeButton={
+                          <Tooltip value={language.t("common.closeTab")} placement="bottom">
+                            <IconButton
+                              icon="close"
+                              variant="ghost"
+                              onClick={() => tabs().close("files")}
+                              aria-label={language.t("common.closeTab")}
+                            />
+                          </Tooltip>
+                        }
+                        hideCloseButton
+                        onMiddleClick={() => tabs().close("files")}
+                      >
+                        <div class="flex items-center gap-2">
+                          <Icon name="folder" />
+                          <div>Files</div>
+                        </div>
+                      </Tabs.Trigger>
+                    </Show>
                     <SortableProvider ids={openedTabs()}>
                       <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
                     </SortableProvider>
@@ -1850,6 +1889,15 @@ export default function Page() {
                           view={view}
                           info={info}
                         />
+                      </div>
+                    </Show>
+                  </Tabs.Content>
+                </Show>
+                <Show when={true}>
+                  <Tabs.Content value="files" class="flex flex-col h-full overflow-hidden contain-strict">
+                    <Show when={activeTab() === "files"}>
+                      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                        <FilesPanel />
                       </div>
                     </Show>
                   </Tabs.Content>

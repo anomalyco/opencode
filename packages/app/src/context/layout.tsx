@@ -82,6 +82,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           diffStyle: "split" as ReviewDiffStyle,
           panelOpened: true,
         },
+        filePanel: {
+          opened: false,
+        },
         session: {
           width: 600,
         },
@@ -491,6 +494,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
+        const filePanelOpened = createMemo(() => store.filePanel?.opened ?? false)
 
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
@@ -514,6 +518,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const value = current.panelOpened ?? true
           if (value === next) return
           setStore("review", "panelOpened", next)
+        }
+
+        function setFilePanelOpened(next: boolean) {
+          const current = store.filePanel
+          if (!current) {
+            setStore("filePanel", { opened: next })
+            return
+          }
+
+          const value = current.opened ?? false
+          if (value === next) return
+          setStore("filePanel", "opened", next)
         }
 
         return {
@@ -545,6 +561,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
             toggle() {
               setReviewPanelOpened(!reviewPanelOpened())
+            },
+          },
+          filePanel: {
+            opened: filePanelOpened,
+            open() {
+              setFilePanelOpened(true)
+            },
+            close() {
+              setFilePanelOpened(false)
+            },
+            toggle() {
+              setFilePanelOpened(!filePanelOpened())
             },
           },
           review: {

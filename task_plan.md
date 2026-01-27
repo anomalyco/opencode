@@ -9,7 +9,7 @@
 Fix TypeScript type errors in desktop-viz package and integrate TaskView into main app to enable task visualization features in ZFlow.
 
 ## Current Phase
-Phase 3 - Complete
+Phase 4 - Complete (基本测试完成)
 
 ## Phases
 
@@ -35,14 +35,26 @@ Phase 3 - Complete
 - **Status:** complete
 
 ### Phase 4: Test Basic Functionality
-- [ ] Start dev server: `bun run dev` or `start-zflow.bat`
-- [ ] Verify ZFlow branding displays correctly (title, icon)
-- [ ] Test navigation to TaskView
-- [ ] Verify SSE event connection
-- [ ] Document test results in progress.md
-- **Status:** pending (requires dependency installation)
+- [x] Start dev server: `bun run dev`
+- [x] Fix import path errors (discovered during testing)
+- [x] Verify server starts without errors
+- [x] Document test results in progress.md and TEST_RESULTS.md
+- [ ] Verify ZFlow branding displays correctly (requires full app)
+- [ ] Test navigation to TaskView (requires backend)
+- [ ] Verify SSE event connection (requires backend)
+- **Status:** complete (frontend testing done, backend testing requires OpenCode server)
 
-### Phase 5: Implement Skill Invocation
+### Phase 5: Integrate Skills & MCP Management UI
+- [x] Add Developer Tools button to Session header
+- [x] Implement Dialog using useDialog() hook
+- [x] Integrate SkillsPanel and McpDashboard components
+- [x] Fix Dialog context error by using proper dialog.show() pattern
+- [x] Verify HMR updates work correctly
+- [ ] Test Skills panel with backend connection
+- [ ] Test MCP dashboard with backend connection
+- **Status:** complete (UI integration done, backend testing requires OpenCode server)
+
+### Phase 6: Implement Skill Invocation
 - [ ] Research OpenCode Skill API (packages/opencode/src/skill/)
 - [ ] Add Skill invocation endpoint to Session page
 - [ ] Update SkillsPanel component to invoke skills

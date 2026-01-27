@@ -1,5 +1,5 @@
 import { Component, For, Show, createResource } from 'solid-js'
-import { useServer } from '@opencode-ai/app/context/server'
+import { useServer } from '@/context/server'
 import styles from './McpDashboard.module.css'
 
 export interface McpServerStatus {
@@ -9,56 +9,76 @@ export interface McpServerStatus {
   toolCount?: number
 }
 
-const fetchMcpStatus = async (): Promise<McpServerStatus[]> => {
-  const response = await fetch('/mcp')
-  if (!response.ok) {
-    throw new Error(`Failed to fetch MCP status: ${response.statusText}`)
-  }
-  const data: Record<string, { status: string; error?: string }> = await response.json()
+const fetchMcpStatus = async (serverUrl: string): Promise<McpServerStatus[]> => {
+  try {
+    const mcpUrl = `${serverUrl}/mcp`
+    const response = await fetch(mcpUrl)
+    if (!response.ok) {
+      // Return empty array on 404 or other errors
+      console.warn(`MCP endpoint returned ${response.status}: ${response.statusText}`)
+      return []
+    }
 
-  // Fetch tools count for connected servers
-  const servers: McpServerStatus[] = await Promise.all(
-    Object.entries(data).map(async ([name, info]) => {
-      let toolCount: number | undefined = undefined
+    const contentType = response.headers.get('content-type')
+    if (!contentType || !contentType.includes('application/json')) {
+      console.warn('MCP endpoint did not return JSON')
+      return []
+    }
 
-      // Only fetch tool count for connected servers
-      if (info.status === 'connected') {
-        try {
-          const toolsResponse = await fetch('/mcp/tools')
-          if (toolsResponse.ok) {
-            const toolsData: Record<string, unknown> = await toolsResponse.json()
-            // Count tools that belong to this server
-            // Tools are keyed by "server_name/tool_name"
-            toolCount = Object.keys(toolsData).filter((key) =>
-              key.startsWith(`${name}/`)
-            ).length
+    const data: Record<string, { status: string; error?: string }> = await response.json()
+
+    // Fetch tools count for connected servers
+    const servers: McpServerStatus[] = await Promise.all(
+      Object.entries(data).map(async ([name, info]) => {
+        let toolCount: number | undefined = undefined
+
+        // Only fetch tool count for connected servers
+        if (info.status === 'connected') {
+          try {
+            const toolsResponse = await fetch(`${serverUrl}/mcp/tools`)
+            if (toolsResponse.ok) {
+              const toolsData: Record<string, unknown> = await toolsResponse.json()
+              // Count tools that belong to this server
+              // Tools are keyed by "server_name/tool_name"
+              toolCount = Object.keys(toolsData).filter((key) =>
+                key.startsWith(`${name}/`)
+              ).length
+            }
+          } catch (error) {
+            console.error(`Failed to fetch tools for ${name}:`, error)
           }
-        } catch (error) {
-          console.error(`Failed to fetch tools for ${name}:`, error)
         }
-      }
 
-      return {
-        name,
-        status: info.status as McpServerStatus['status'],
-        error: info.error,
-        toolCount,
-      }
-    })
-  )
+        return {
+          name,
+          status: info.status as McpServerStatus['status'],
+          error: info.error,
+          toolCount,
+        }
+      })
+    )
 
-  return servers
+    return servers
+  } catch (error) {
+    console.error('Failed to fetch MCP status:', error)
+    // Return empty array on any error
+    return []
+  }
 }
 
 export const McpDashboard: Component = () => {
   const server = useServer()
-  const [status] = createResource(fetchMcpStatus, {
+  const [status] = createResource(async () => {
+    if (!server.url) return []
+    return fetchMcpStatus(server.url)
+  }, {
     initialValue: [],
   })
 
   const handleConnect = async (name: string) => {
+    if (!server.url) return
     try {
-      const response = await fetch(`/mcp/${name}/connect`, { method: 'POST' })
+      const response = await fetch(`${server.url}/mcp/${name}/connect`, { method: 'POST' })
       if (response.ok) {
         status.refetch()
       }
@@ -68,8 +88,9 @@ export const McpDashboard: Component = () => {
   }
 
   const handleDisconnect = async (name: string) => {
+    if (!server.url) return
     try {
-      const response = await fetch(`/mcp/${name}/disconnect`, { method: 'POST' })
+      const response = await fetch(`${server.url}/mcp/${name}/disconnect`, { method: 'POST' })
       if (response.ok) {
         status.refetch()
       }
@@ -79,8 +100,9 @@ export const McpDashboard: Component = () => {
   }
 
   const handleAuthenticate = async (name: string) => {
+    if (!server.url) return
     try {
-      const response = await fetch(`/mcp/${name}/auth/authenticate`, { method: 'POST' })
+      const response = await fetch(`${server.url}/mcp/${name}/auth/authenticate`, { method: 'POST' })
       if (response.ok) {
         status.refetch()
       }

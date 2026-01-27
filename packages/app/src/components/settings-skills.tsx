@@ -1,8 +1,8 @@
 import { Component } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { McpDashboard } from "@/components/task/McpDashboard"
+import { SkillsPanel } from "@/components/task/SkillsPanel"
 
-export const SettingsMcp: Component = () => {
+export const SettingsSkills: Component = () => {
   const language = useLanguage()
 
   return (
@@ -15,13 +15,15 @@ export const SettingsMcp: Component = () => {
         }}
       >
         <div class="flex flex-col gap-1 pt-6 pb-8">
-          <h2 class="text-16-medium text-text-strong">{language.t("settings.mcp.title")}</h2>
-          <p class="text-14-regular text-text-weak">{language.t("settings.mcp.description")}</p>
+          <h2 class="text-16-medium text-text-strong">Skills</h2>
+          <p class="text-14-regular text-text-weak">
+            Manage and invoke available skills for AI assistants.
+          </p>
         </div>
       </div>
 
       <div class="flex flex-col">
-        <McpDashboard />
+        <SkillsPanel />
       </div>
     </div>
   )

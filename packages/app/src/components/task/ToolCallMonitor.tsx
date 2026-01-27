@@ -1,5 +1,5 @@
 import { Component, For, createSignal, Show } from 'solid-js'
-import { useServer } from '@opencode-ai/app/context/server'
+import { useServer } from '@/context/server'
 import styles from './ToolCallMonitor.module.css'
 import type { ToolCall } from './TaskTimeline'
 

@@ -1,10 +1,7 @@
 .panel {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  background: var(--background-primary);
-  border-radius: 8px;
-  overflow: hidden;
+  gap: 16px;
 }
 
 .header {

@@ -1,5 +1,5 @@
 import { createSignal, onCleanup } from 'solid-js'
-import { useSDK } from '@opencode-ai/app/context/sdk'
+import { useSDK } from '@/context/sdk'
 import type { Event, Message, AssistantMessage } from '@opencode-ai/sdk/v2/client'
 import type { TaskStep } from '../../components/task/TaskTimeline'
 

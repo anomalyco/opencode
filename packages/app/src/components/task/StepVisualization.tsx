@@ -1,5 +1,5 @@
 import { Component, For, Show, Switch, Match } from 'solid-js'
-import { useServer } from '@opencode-ai/app/context/server'
+import { useServer } from '@/context/server'
 import styles from './StepVisualization.module.css'
 
 export interface FileChange {

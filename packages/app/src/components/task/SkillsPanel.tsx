@@ -1,7 +1,7 @@
 import { Component, For, Show, createSignal, onMount } from 'solid-js'
-import { useServer } from '@opencode-ai/app/context/server'
+import { useServer } from '@/context/server'
 import { createOpencodeClient } from '@opencode-ai/sdk/v2/client'
-import { usePlatform } from '@opencode-ai/app/context/platform'
+import { usePlatform } from '@/context/platform'
 import styles from './SkillsPanel.module.css'
 
 export interface SkillInfo {
@@ -23,7 +23,10 @@ export const SkillsPanel: Component = () => {
   })
 
   const fetchSkills = async () => {
-    if (!server.url) return
+    if (!server.url) {
+      setError('No backend server configured')
+      return
+    }
 
     setIsLoading(true)
     setError(null)
@@ -37,7 +40,16 @@ export const SkillsPanel: Component = () => {
       const response = await sdk.app.skills()
       setSkills(response as SkillInfo[])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch skills')
+      // Check if it's a network/404 error (backend not available)
+      if (err instanceof Error) {
+        if (err.message.includes('fetch') || err.message.includes('404')) {
+          setError('Backend server not available. Please start the OpenCode server to view skills.')
+        } else {
+          setError(`Failed to fetch skills: ${err.message}`)
+        }
+      } else {
+        setError('Failed to fetch skills')
+      }
       console.error('Error fetching skills:', err)
     } finally {
       setIsLoading(false)

@@ -5,7 +5,12 @@
       "Bash(bun run typecheck)",
       "Bash(npx tsc:*)",
       "Skill(planning-with-files)",
-      "Skill(planning-with-files:*)"
+      "Skill(planning-with-files:*)",
+      "Bash(ls:*)",
+      "Bash(bun run dev:*)",
+      "Bash(bun run:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)"
     ]
   }
 }

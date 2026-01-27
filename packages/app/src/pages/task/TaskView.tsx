@@ -1,5 +1,5 @@
 import { Component, createSignal, For, Show } from 'solid-js'
-import { useServer } from '@opencode-ai/app/context/server'
+import { useServer } from '@/context/server'
 import { TaskTimeline, type TaskStep } from '../../components/task/TaskTimeline'
 import { StepVisualization } from '../../components/task/StepVisualization'
 import { ToolCallMonitor } from '../../components/task/ToolCallMonitor'

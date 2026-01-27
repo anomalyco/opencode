@@ -1,0 +1,135 @@
+import { Component, For, Show, createSignal, onMount, createMemo } from "solid-js"
+import { useSDK } from "@/context/sdk"
+import { useFile } from "@/context/file"
+import { FileIcon } from "@opencode-ai/ui/file-icon"
+import type { FileNode } from "@opencode-ai/sdk/v2"
+
+export const FilesPanel: Component = () => {
+  const sdk = useSDK()
+  const file = useFile()
+  const [fileList, setFileList] = createSignal<FileNode[]>([])
+  const [loading, setLoading] = createSignal(true)
+
+  // Initialize file list on mount
+  onMount(async () => {
+    try {
+      setLoading(true)
+      const response = await sdk.client.file.list({ path: "" })
+      if (response.data) {
+        setFileList(response.data)
+      }
+    } catch (error) {
+      console.error("Failed to load file list:", error)
+    } finally {
+      setLoading(false)
+    }
+  })
+
+  // Filter and sort files
+  const sortedFiles = createMemo(() => {
+    const files = fileList()
+    return files.sort((a, b) => {
+      // Directories first
+      if (a.type === "directory" && b.type !== "directory") return -1
+      if (a.type !== "directory" && b.type === "directory") return 1
+      // Then by name
+      return a.name.localeCompare(b.name)
+    })
+  })
+
+  // Handle file click - open in new tab using original project's mechanism
+  const handleFileClick = (clickedFile: FileNode) => {
+    if (clickedFile.type !== "file") return
+
+    // Check if file is a text or code file
+    const textExtensions = [
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+      ".json",
+      ".md",
+      ".txt",
+      ".py",
+      ".rs",
+      ".go",
+      ".java",
+      ".c",
+      ".cpp",
+      ".h",
+      ".css",
+      ".scss",
+      ".html",
+      ".xml",
+      ".yaml",
+      ".yml",
+      ".toml",
+      ".ini",
+      ".sh",
+      ".bash",
+      ".zsh",
+      ".fish",
+      ".ps1",
+      ".sql",
+      ".graphql",
+      ".vue",
+      ".svelte",
+    ]
+
+    const isTextFile =
+      textExtensions.some((ext) => clickedFile.name.endsWith(ext)) || clickedFile.name.indexOf(".") === -1
+
+    if (!isTextFile) return
+
+    // Use the original project's file opening mechanism
+    const tabValue = file.tab(clickedFile.path)
+
+    // Emit custom event to open tab (session.tsx will handle this)
+    window.dispatchEvent(
+      new CustomEvent("open-file-tab", {
+        detail: { path: clickedFile.path, tabValue },
+      })
+    )
+  }
+
+  return (
+    <div class="flex flex-col h-full">
+      <div class="flex-1 overflow-auto">
+        <Show
+          when={!loading()}
+          fallback={
+            <div class="px-4 py-8 text-center text-text-weak text-13-regular">
+              Loading files...
+            </div>
+          }
+        >
+          <div class="px-4 py-2">
+            <h3 class="text-14-medium text-text-strong mb-2">Project Files</h3>
+            <Show
+              when={sortedFiles().length > 0}
+              fallback={<div class="text-text-weak text-13-regular">No files found</div>}
+            >
+              <div class="flex flex-col">
+                <For each={sortedFiles()}>
+                  {(fileItem) => (
+                    <div
+                      class="flex items-center gap-2 px-2 py-1.5 hover:bg-background-element rounded cursor-pointer text-13-regular"
+                      onClick={() => handleFileClick(fileItem)}
+                      classList={{
+                        "text-text-weak": fileItem.type === "directory",
+                        "text-text-primary": fileItem.type === "file",
+                      }}
+                    >
+                      <FileIcon node={fileItem} class="w-4 h-4 shrink-0" />
+                      <span class="truncate">{fileItem.name}</span>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+        </Show>
+      </div>
+    </div>
+  )
+}
