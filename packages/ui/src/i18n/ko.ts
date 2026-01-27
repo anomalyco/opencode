@@ -54,6 +54,7 @@ export const dict = {
   "ui.imagePreview.alt": "이미지 미리보기",
 
   "ui.tool.read": "읽기",
+  "ui.tool.loaded": "로드됨",
   "ui.tool.list": "목록",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
