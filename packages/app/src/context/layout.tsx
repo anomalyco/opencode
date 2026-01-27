@@ -82,6 +82,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           diffStyle: "split" as ReviewDiffStyle,
           panelOpened: true,
         },
+        fileTree: {
+          opened: false,
+          width: 260,
+        },
         session: {
           width: 600,
         },
@@ -209,6 +213,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     })
 
     const [colors, setColors] = createStore<Record<string, AvatarColorKey>>({})
+    const colorRequested = new Map<string, AvatarColorKey>()
 
     function pickAvailableColor(used: Set<string>): AvatarColorKey {
       const available = AVATAR_COLOR_KEYS.filter((c) => !used.has(c))
@@ -217,7 +222,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
-      const [childStore] = globalSync.child(project.worktree)
+      const [childStore] = globalSync.child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
       const metadata = projectID
         ? globalSync.data.project.find((x) => x.id === projectID)
@@ -267,17 +272,36 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return map
     })
 
-    createEffect(() => {
+    const rootFor = (directory: string) => {
       const map = roots()
-      if (map.size === 0) return
+      if (map.size === 0) return directory
 
+      const visited = new Set<string>()
+      const chain = [directory]
+
+      while (chain.length) {
+        const current = chain[chain.length - 1]
+        if (!current) return directory
+
+        const next = map.get(current)
+        if (!next) return current
+
+        if (visited.has(next)) return directory
+        visited.add(next)
+        chain.push(next)
+      }
+
+      return directory
+    }
+
+    createEffect(() => {
       const projects = server.projects.list()
       const seen = new Set(projects.map((project) => project.worktree))
 
       batch(() => {
         for (const project of projects) {
-          const root = map.get(project.worktree)
-          if (!root) continue
+          const root = rootFor(project.worktree)
+          if (root === project.worktree) continue
 
           server.projects.close(project.worktree)
 
@@ -305,13 +329,21 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     createEffect(() => {
       const projects = enriched()
       if (projects.length === 0) return
+      if (!globalSync.ready) return
 
-      if (globalSync.ready) {
-        for (const project of projects) {
-          if (!project.id) continue
-          if (project.id === "global") continue
-          globalSync.project.icon(project.worktree, project.icon?.override)
-        }
+      for (const project of projects) {
+        if (!project.id) continue
+        if (project.id === "global") continue
+        globalSync.project.icon(project.worktree, project.icon?.override)
+      }
+    })
+
+    createEffect(() => {
+      const projects = enriched()
+      if (projects.length === 0) return
+
+      for (const project of projects) {
+        if (project.icon?.color) colorRequested.delete(project.worktree)
       }
 
       const used = new Set<string>()
@@ -322,18 +354,29 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
       for (const project of projects) {
         if (project.icon?.color) continue
-        const existing = colors[project.worktree]
+        const worktree = project.worktree
+        const existing = colors[worktree]
         const color = existing ?? pickAvailableColor(used)
         if (!existing) {
           used.add(color)
-          setColors(project.worktree, color)
+          setColors(worktree, color)
         }
         if (!project.id) continue
+
+        const requested = colorRequested.get(worktree)
+        if (requested === color) continue
+        colorRequested.set(worktree, color)
+
         if (project.id === "global") {
-          globalSync.project.meta(project.worktree, { icon: { color } })
+          globalSync.project.meta(worktree, { icon: { color } })
           continue
         }
-        void globalSdk.client.project.update({ projectID: project.id, directory: project.worktree, icon: { color } })
+
+        void globalSdk.client.project
+          .update({ projectID: project.id, directory: worktree, icon: { color } })
+          .catch(() => {
+            if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
+          })
       }
     })
 
@@ -350,7 +393,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       projects: {
         list,
         open(directory: string) {
-          const root = roots().get(directory) ?? directory
+          const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
           globalSync.project.loadSessions(root)
           server.projects.open(root)
@@ -384,7 +427,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("sidebar", "width", width)
         },
         workspaces(directory: string) {
-          return createMemo(() => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false)
+          return () => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
         },
         setWorkspaces(directory: string, value: boolean) {
           setStore("sidebar", "workspaces", directory, value)
@@ -408,6 +451,38 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
           setStore("review", "diffStyle", diffStyle)
+        },
+      },
+      fileTree: {
+        opened: createMemo(() => store.fileTree?.opened ?? false),
+        width: createMemo(() => store.fileTree?.width ?? 260),
+        open() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width: 260 })
+            return
+          }
+          setStore("fileTree", "opened", true)
+        },
+        close() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: false, width: 260 })
+            return
+          }
+          setStore("fileTree", "opened", false)
+        },
+        toggle() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width: 260 })
+            return
+          }
+          setStore("fileTree", "opened", (x) => !x)
+        },
+        resize(width: number) {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width })
+            return
+          }
+          setStore("fileTree", "width", width)
         },
       },
       session: {

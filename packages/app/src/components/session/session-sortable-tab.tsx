@@ -11,7 +11,7 @@ import { useLanguage } from "@/context/language"
 
 export function FileVisual(props: { path: string; active?: boolean }): JSX.Element {
   return (
-    <div class="flex items-center gap-x-1.5">
+    <div class="flex items-center gap-x-1.5 min-w-0">
       <FileIcon
         node={{ path: props.path, type: "file" }}
         classList={{
@@ -19,7 +19,7 @@ export function FileVisual(props: { path: string; active?: boolean }): JSX.Eleme
           "grayscale-0": props.active,
         }}
       />
-      <span class="text-14-medium">{getFilename(props.path)}</span>
+      <span class="text-14-medium truncate">{getFilename(props.path)}</span>
     </div>
   )
 }
@@ -38,8 +38,9 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
           closeButton={
             <Tooltip value={language.t("common.closeTab")} placement="bottom">
               <IconButton
-                icon="close"
+                icon="close-small"
                 variant="ghost"
+                class="h-5 w-5"
                 onClick={() => props.onTabClose(props.tab)}
                 aria-label={language.t("common.closeTab")}
               />
