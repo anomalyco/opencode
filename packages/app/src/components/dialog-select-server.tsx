@@ -14,6 +14,7 @@ import { useLanguage } from "@/context/language"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { showToast } from "@opencode-ai/ui/toast"
 
 type ServerStatus = { healthy: boolean; version?: string }
 
@@ -40,10 +41,11 @@ interface EditRowProps {
 }
 
 async function checkHealth(url: string, platform: ReturnType<typeof usePlatform>): Promise<ServerStatus> {
+  const signal = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout?.(3000)
   const sdk = createOpencodeClient({
     baseUrl: url,
     fetch: platform.fetch,
-    signal: AbortSignal.timeout(3000),
+    signal,
   })
   return sdk.global
     .health()
@@ -149,9 +151,18 @@ export function DialogSelectServer() {
   })
   const [defaultUrl, defaultUrlActions] = createResource(
     async () => {
-      const url = await platform.getDefaultServerUrl?.()
-      if (!url) return null
-      return normalizeServerUrl(url) ?? null
+      try {
+        const url = await platform.getDefaultServerUrl?.()
+        if (!url) return null
+        return normalizeServerUrl(url) ?? null
+      } catch (err) {
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+        return null
+      }
     },
     { initialValue: null },
   )
@@ -508,8 +519,16 @@ export function DialogSelectServer() {
                           <Show when={canDefault() && defaultUrl() !== i}>
                             <DropdownMenu.Item
                               onSelect={async () => {
-                                await platform.setDefaultServerUrl?.(i)
-                                defaultUrlActions.mutate(i)
+                                try {
+                                  await platform.setDefaultServerUrl?.(i)
+                                  defaultUrlActions.mutate(i)
+                                } catch (err) {
+                                  showToast({
+                                    variant: "error",
+                                    title: language.t("common.requestFailed"),
+                                    description: err instanceof Error ? err.message : String(err),
+                                  })
+                                }
                               }}
                             >
                               <DropdownMenu.ItemLabel>
@@ -520,8 +539,16 @@ export function DialogSelectServer() {
                           <Show when={canDefault() && defaultUrl() === i}>
                             <DropdownMenu.Item
                               onSelect={async () => {
-                                await platform.setDefaultServerUrl?.(null)
-                                defaultUrlActions.mutate(null)
+                                try {
+                                  await platform.setDefaultServerUrl?.(null)
+                                  defaultUrlActions.mutate(null)
+                                } catch (err) {
+                                  showToast({
+                                    variant: "error",
+                                    title: language.t("common.requestFailed"),
+                                    description: err instanceof Error ? err.message : String(err),
+                                  })
+                                }
                               }}
                             >
                               <DropdownMenu.ItemLabel>

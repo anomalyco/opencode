@@ -9,7 +9,7 @@ import { usePlatform } from "@/context/platform"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getFilename } from "@opencode-ai/util/path"
-import { base64Decode } from "@opencode-ai/util/encode"
+import { decode64 } from "@/utils/base64"
 
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -29,7 +29,7 @@ export function SessionHeader() {
   const platform = usePlatform()
   const language = useLanguage()
 
-  const projectDirectory = createMemo(() => base64Decode(params.dir ?? ""))
+  const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
     const directory = projectDirectory()
     if (!directory) return

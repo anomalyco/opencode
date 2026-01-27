@@ -28,7 +28,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
-import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
+import { checksum, base64Encode } from "@opencode-ai/util/encode"
 import { findLast } from "@opencode-ai/util/array"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
@@ -47,6 +47,7 @@ import { useComments, type LineComment } from "@/context/comments"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
+import { decode64 } from "@/utils/base64"
 import { showToast } from "@opencode-ai/ui/toast"
 import {
   SessionHeader,
@@ -2126,8 +2127,28 @@ export default function Page() {
                             if (!isSvg()) return
                             const c = state()?.content
                             if (!c) return
-                            if (c.encoding === "base64") return base64Decode(c.content)
-                            return c.content
+                            if (c.encoding !== "base64") return c.content
+                            return decode64(c.content)
+                          })
+
+                          const svgDecodeFailed = createMemo(() => {
+                            if (!isSvg()) return false
+                            const c = state()?.content
+                            if (!c) return false
+                            if (c.encoding !== "base64") return false
+                            return svgContent() === undefined
+                          })
+
+                          const svgToast = { shown: false }
+                          createEffect(() => {
+                            if (!svgDecodeFailed()) return
+                            if (svgToast.shown) return
+                            svgToast.shown = true
+                            showToast({
+                              variant: "error",
+                              title: language.t("toast.file.loadFailed.title"),
+                              description: "Invalid base64 content.",
+                            })
                           })
                           const svgPreviewUrl = createMemo(() => {
                             if (!isSvg()) return

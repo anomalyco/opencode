@@ -19,7 +19,8 @@ import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
-import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { decode64 } from "@/utils/base64"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
@@ -420,7 +421,7 @@ export default function Layout(props: ParentProps) {
         }
       }
 
-      const currentDir = params.dir ? base64Decode(params.dir) : undefined
+      const currentDir = decode64(params.dir)
       const currentSession = params.id
       if (directory === currentDir && props.sessionID === currentSession) return
       if (directory === currentDir && session?.parentID === currentSession) return
@@ -449,7 +450,7 @@ export default function Layout(props: ParentProps) {
     onCleanup(unsub)
 
     createEffect(() => {
-      const currentDir = params.dir ? base64Decode(params.dir) : undefined
+      const currentDir = decode64(params.dir)
       const currentSession = params.id
       if (!currentDir || !currentSession) return
       const sessionKey = `${currentDir}:${currentSession}`
@@ -503,7 +504,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const currentProject = createMemo(() => {
-    const directory = params.dir ? base64Decode(params.dir) : undefined
+    const directory = decode64(params.dir)
     if (!directory) return
 
     const projects = layout.projects.list()
@@ -638,7 +639,7 @@ export default function Layout(props: ParentProps) {
     const compare = sortSessions(Date.now())
     if (workspaceSetting()) {
       const dirs = workspaceIds(project)
-      const activeDir = params.dir ? base64Decode(params.dir) : ""
+      const activeDir = decode64(params.dir) ?? ""
       const result: Session[] = []
       for (const dir of dirs) {
         const expanded = store.workspaceExpanded[dir] ?? dir === project.worktree
@@ -1188,7 +1189,7 @@ export default function Layout(props: ParentProps) {
     layout.projects.close(directory)
     layout.projects.open(root)
 
-    if (params.dir && base64Decode(params.dir) === directory) {
+    if (params.dir && decode64(params.dir) === directory) {
       navigateToProject(root)
     }
   }
@@ -1431,7 +1432,8 @@ export default function Layout(props: ParentProps) {
         const dir = value.dir
         const id = value.id
         if (!dir || !id) return
-        const directory = base64Decode(dir)
+        const directory = decode64(dir)
+        if (!directory) return
         setStore("lastSession", directory, id)
         notification.session.markViewed(id)
         const expanded = untrack(() => store.workspaceExpanded[directory])
@@ -1454,7 +1456,7 @@ export default function Layout(props: ParentProps) {
     if (!project) return
 
     if (workspaceSetting()) {
-      const activeDir = params.dir ? base64Decode(params.dir) : ""
+      const activeDir = decode64(params.dir) ?? ""
       const dirs = [project.worktree, ...(project.sandboxes ?? [])]
       for (const directory of dirs) {
         const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
@@ -1504,7 +1506,7 @@ export default function Layout(props: ParentProps) {
     const local = project.worktree
     const dirs = [local, ...(project.sandboxes ?? [])]
     const active = currentProject()
-    const directory = active?.worktree === project.worktree && params.dir ? base64Decode(params.dir) : undefined
+    const directory = active?.worktree === project.worktree ? decode64(params.dir) : undefined
     const extra = directory && directory !== local && !dirs.includes(directory) ? directory : undefined
     const pending = extra ? WorktreeState.get(extra)?.status === "pending" : false
 
@@ -1930,7 +1932,7 @@ export default function Layout(props: ParentProps) {
     })
     const local = createMemo(() => props.directory === props.project.worktree)
     const active = createMemo(() => {
-      const current = params.dir ? base64Decode(params.dir) : ""
+      const current = decode64(params.dir) ?? ""
       return current === props.directory
     })
     const workspaceValue = createMemo(() => {
@@ -2131,7 +2133,7 @@ export default function Layout(props: ParentProps) {
   const SortableProject = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
     const sortable = createSortable(props.project.worktree)
     const selected = createMemo(() => {
-      const current = params.dir ? base64Decode(params.dir) : ""
+      const current = decode64(params.dir) ?? ""
       return props.project.worktree === current || props.project.sandboxes?.includes(current)
     })
 
