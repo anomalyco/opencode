@@ -714,6 +714,9 @@ function ErrorComponent(props: {
         handleExit()
         return
       }
+      if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
+        return
+      }
       if (!renderer.getSelection()?.getSelectedText()) {
         handleExit()
       }
