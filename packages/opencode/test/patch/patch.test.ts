@@ -80,6 +80,43 @@ describe("Patch namespace", () => {
       }
     })
 
+    test("should parse Windows drive-letter paths", () => {
+      const winPath = String.raw`D:\Root\twinUpgrade\simulationPython\frontend\src\views\ScenarioView.vue`
+      const patchText = `*** Begin Patch
+*** Update File: ${winPath}
+@@
+-old
++new
+*** End Patch`
+
+      const result = Patch.parsePatch(patchText)
+      expect(result.hunks).toHaveLength(1)
+      const hunk = result.hunks[0]
+      expect(hunk.type).toBe("update")
+      expect(hunk.path).toBe(winPath)
+    })
+
+    test("should parse Windows drive-letter move paths", () => {
+      const src = String.raw`D:\Root\from.txt`
+      const dst = String.raw`D:\Root\to.txt`
+      const patchText = `*** Begin Patch
+*** Update File: ${src}
+*** Move to: ${dst}
+@@
+-old
++new
+*** End Patch`
+
+      const result = Patch.parsePatch(patchText)
+      expect(result.hunks).toHaveLength(1)
+      const hunk = result.hunks[0]
+      expect(hunk.type).toBe("update")
+      expect(hunk.path).toBe(src)
+      if (hunk.type === "update") {
+        expect(hunk.move_path).toBe(dst)
+      }
+    })
+
     test("should throw error for invalid patch format", () => {
       const invalidPatch = `This is not a valid patch`
 

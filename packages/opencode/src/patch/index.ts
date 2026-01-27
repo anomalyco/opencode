@@ -78,28 +78,26 @@ export namespace Patch {
   ): { filePath: string; movePath?: string; nextIdx: number } | null {
     const line = lines[startIdx]
 
-    if (line.startsWith("*** Add File:")) {
-      const filePath = line.split(":", 2)[1]?.trim()
-      return filePath ? { filePath, nextIdx: startIdx + 1 } : null
-    }
+    const valueAfter = (prefix: string) => (line.startsWith(prefix) ? line.slice(prefix.length).trim() : undefined)
 
-    if (line.startsWith("*** Delete File:")) {
-      const filePath = line.split(":", 2)[1]?.trim()
-      return filePath ? { filePath, nextIdx: startIdx + 1 } : null
-    }
+    const addPath = valueAfter("*** Add File:")
+    if (addPath !== undefined) return addPath ? { filePath: addPath, nextIdx: startIdx + 1 } : null
 
-    if (line.startsWith("*** Update File:")) {
-      const filePath = line.split(":", 2)[1]?.trim()
+    const deletePath = valueAfter("*** Delete File:")
+    if (deletePath !== undefined) return deletePath ? { filePath: deletePath, nextIdx: startIdx + 1 } : null
+
+    const updatePath = valueAfter("*** Update File:")
+    if (updatePath !== undefined) {
       let movePath: string | undefined
       let nextIdx = startIdx + 1
 
       // Check for move directive
       if (nextIdx < lines.length && lines[nextIdx].startsWith("*** Move to:")) {
-        movePath = lines[nextIdx].split(":", 2)[1]?.trim()
+        movePath = lines[nextIdx].slice("*** Move to:".length).trim() || undefined
         nextIdx++
       }
 
-      return filePath ? { filePath, movePath, nextIdx } : null
+      return updatePath ? { filePath: updatePath, movePath, nextIdx } : null
     }
 
     return null
