@@ -14,7 +14,12 @@ import { proxyFetch, setProxyConfig, getProxyForUrl } from "../../src/util/fetch
  */
 
 // Skip integration tests in CI or when no proxy is configured
-const hasProxy = !!(process.env.HTTP_PROXY || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.https_proxy)
+const hasProxy = !!(
+  process.env.HTTP_PROXY ||
+  process.env.HTTPS_PROXY ||
+  process.env.http_proxy ||
+  process.env.https_proxy
+)
 const isCI = !!(process.env.CI || process.env.GITHUB_ACTIONS || process.env.GITLAB_CI)
 const shouldSkip = isCI || !hasProxy
 
@@ -23,6 +28,12 @@ describe("proxy-fetch integration", () => {
   const originalEnv = { ...process.env }
 
   afterEach(() => {
+    // Remove env vars introduced during tests
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) {
+        delete process.env[key]
+      }
+    }
     // Restore original env vars
     Object.assign(process.env, originalEnv)
     // Clear config
@@ -42,7 +53,7 @@ describe("proxy-fetch integration", () => {
       })
 
       expect(response.ok).toBe(true)
-      const data = await response.json() as { headers: Record<string, string> }
+      const data = (await response.json()) as { headers: Record<string, string> }
       expect(data.headers).toBeDefined()
     })
 
@@ -57,7 +68,7 @@ describe("proxy-fetch integration", () => {
       })
 
       expect(response.ok).toBe(true)
-      const data = await response.json() as { json: { test: string } }
+      const data = (await response.json()) as { json: { test: string } }
       expect(data.json).toEqual({ test: "data" })
     })
 
@@ -135,11 +146,11 @@ describe("proxy-fetch integration", () => {
       expect(getProxyForUrl("https://example.com")).toBeUndefined()
     })
 
-    test("respects falsy disable values", () => {
+    test("disables proxy when flag is any non-empty string", () => {
       process.env.HTTPS_PROXY = "http://proxy:8080"
       process.env.OPENCODE_DISABLE_PROXY = "0"
 
-      // "0" is truthy as a string, so proxy should be disabled
+      // Any non-empty string (including "0") disables the proxy
       expect(getProxyForUrl("https://example.com")).toBeUndefined()
     })
 
