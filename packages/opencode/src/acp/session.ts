@@ -1,6 +1,9 @@
 import { RequestError, type McpServer } from "@agentclientprotocol/sdk"
 import type { ACPSessionState } from "./types"
 import { Log } from "@/util/log"
+import { withTimeout } from "@/util/timeout"
+
+const SDK_TIMEOUT_MS = 60_000
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 
 const log = Log.create({ service: "acp-session-manager" })
@@ -18,15 +21,18 @@ export class ACPSessionManager {
   }
 
   async create(cwd: string, mcpServers: McpServer[], model?: ACPSessionState["model"]): Promise<ACPSessionState> {
-    const session = await this.sdk.session
-      .create(
-        {
-          title: `ACP Session ${crypto.randomUUID()}`,
-          directory: cwd,
-        },
-        { throwOnError: true },
-      )
-      .then((x) => x.data!)
+    const session = await withTimeout(
+      this.sdk.session
+        .create(
+          {
+            title: `ACP Session ${crypto.randomUUID()}`,
+            directory: cwd,
+          },
+          { throwOnError: true },
+        )
+        .then((x) => x.data!),
+      SDK_TIMEOUT_MS
+    )
 
     const sessionId = session.id
     const resolvedModel = model
@@ -50,15 +56,18 @@ export class ACPSessionManager {
     mcpServers: McpServer[],
     model?: ACPSessionState["model"],
   ): Promise<ACPSessionState> {
-    const session = await this.sdk.session
-      .get(
-        {
-          sessionID: sessionId,
-          directory: cwd,
-        },
-        { throwOnError: true },
-      )
-      .then((x) => x.data!)
+    const session = await withTimeout(
+      this.sdk.session
+        .get(
+          {
+            sessionID: sessionId,
+            directory: cwd,
+          },
+          { throwOnError: true },
+        )
+        .then((x) => x.data!),
+      SDK_TIMEOUT_MS
+    )
 
     const resolvedModel = model
 

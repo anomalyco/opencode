@@ -27,6 +27,7 @@ import {
   type ToolKind,
 } from "@agentclientprotocol/sdk"
 import { Log } from "../util/log"
+import { withTimeout } from "../util/timeout"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
@@ -42,6 +43,7 @@ import { applyPatch } from "diff"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
+  const SDK_TIMEOUT_MS = 60_000
 
   export async function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
     return {
@@ -130,21 +132,21 @@ export namespace ACP {
                     permissionID: permission.id,
                     sessionID: permission.sessionID,
                   })
-                  await this.sdk.permission.reply({
+                  await withTimeout(this.sdk.permission.reply({
                     requestID: permission.id,
                     reply: "reject",
                     directory,
-                  })
+                  }), SDK_TIMEOUT_MS).catch(() => {})
                   return undefined
                 })
 
               if (!res) return
               if (res.outcome.outcome !== "selected") {
-                await this.sdk.permission.reply({
+                await withTimeout(this.sdk.permission.reply({
                   requestID: permission.id,
                   reply: "reject",
                   directory,
-                })
+                }), SDK_TIMEOUT_MS).catch(() => {})
                 return
               }
 
@@ -165,11 +167,11 @@ export namespace ACP {
                 }
               }
 
-              await this.sdk.permission.reply({
+              await withTimeout(this.sdk.permission.reply({
                 requestID: permission.id,
                 reply: res.outcome.optionId as "once" | "always" | "reject",
                 directory,
-              })
+              }), SDK_TIMEOUT_MS)
             })
             .catch((error) => {
               log.error("failed to handle permission", { error, permissionID: permission.id })
@@ -192,20 +194,22 @@ export namespace ACP {
           const sessionId = session.id
           const directory = session.cwd
 
-          const message = await this.sdk.session
-            .message(
-              {
-                sessionID: part.sessionID,
-                messageID: part.messageID,
-                directory,
-              },
-              { throwOnError: true },
-            )
-            .then((x) => x.data)
-            .catch((error) => {
-              log.error("unexpected error when fetching message", { error })
-              return undefined
-            })
+          const message = await withTimeout(
+            this.sdk.session
+              .message(
+                {
+                  sessionID: part.sessionID,
+                  messageID: part.messageID,
+                  directory,
+                },
+                { throwOnError: true },
+              )
+              .then((x) => x.data),
+            SDK_TIMEOUT_MS
+          ).catch((error) => {
+            log.error("unexpected error when fetching message", { error })
+            return undefined
+          })
 
           if (!message || message.info.role !== "assistant") return
 
@@ -508,19 +512,21 @@ export namespace ACP {
         })
 
         // Replay session history
-        const messages = await this.sdk.session
-          .messages(
-            {
-              sessionID: sessionId,
-              directory,
-            },
-            { throwOnError: true },
-          )
-          .then((x) => x.data)
-          .catch((err) => {
-            log.error("unexpected error when fetching message", { error: err })
-            return undefined
-          })
+        const messages = await withTimeout(
+          this.sdk.session
+            .messages(
+              {
+                sessionID: sessionId,
+                directory,
+              },
+              { throwOnError: true },
+            )
+            .then((x) => x.data),
+          SDK_TIMEOUT_MS
+        ).catch((err) => {
+          log.error("unexpected error when fetching message", { error: err })
+          return undefined
+        })
 
         const lastUser = messages?.findLast((m) => m.info.role === "user")?.info
         if (lastUser?.role === "user") {
@@ -557,15 +563,18 @@ export namespace ACP {
         const cursor = params.cursor ? Number(params.cursor) : undefined
         const limit = 100
 
-        const sessions = await this.sdk.session
-          .list(
-            {
-              directory: params.cwd ?? undefined,
-              roots: true,
-            },
-            { throwOnError: true },
-          )
-          .then((x) => x.data ?? [])
+        const sessions = await withTimeout(
+          this.sdk.session
+            .list(
+              {
+                directory: params.cwd ?? undefined,
+                roots: true,
+              },
+              { throwOnError: true },
+            )
+            .then((x) => x.data ?? []),
+          SDK_TIMEOUT_MS
+        )
 
         const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
         const filtered = cursor ? sorted.filter((s) => s.time.updated < cursor) : sorted
@@ -604,15 +613,18 @@ export namespace ACP {
       try {
         const model = await defaultModel(this.config, directory)
 
-        const forked = await this.sdk.session
-          .fork(
-            {
-              sessionID: params.sessionId,
-              directory,
-            },
-            { throwOnError: true },
-          )
-          .then((x) => x.data)
+        const forked = await withTimeout(
+          this.sdk.session
+            .fork(
+              {
+                sessionID: params.sessionId,
+                directory,
+              },
+              { throwOnError: true },
+            )
+            .then((x) => x.data),
+          SDK_TIMEOUT_MS
+        )
 
         if (!forked) {
           throw new Error("Fork session returned no data")
@@ -629,19 +641,21 @@ export namespace ACP {
           sessionId,
         })
 
-        const messages = await this.sdk.session
-          .messages(
-            {
-              sessionID: sessionId,
-              directory,
-            },
-            { throwOnError: true },
-          )
-          .then((x) => x.data)
-          .catch((err) => {
-            log.error("unexpected error when fetching message", { error: err })
-            return undefined
-          })
+        const messages = await withTimeout(
+          this.sdk.session
+            .messages(
+              {
+                sessionID: sessionId,
+                directory,
+              },
+              { throwOnError: true },
+            )
+            .then((x) => x.data),
+          SDK_TIMEOUT_MS
+        ).catch((err) => {
+          log.error("unexpected error when fetching message", { error: err })
+          return undefined
+        })
 
         for (const msg of messages ?? []) {
           log.debug("replay message", msg)
@@ -961,7 +975,10 @@ export namespace ACP {
       const model = await defaultModel(this.config, directory)
       const sessionId = params.sessionId
 
-      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
+      const providers = await withTimeout(
+        this.sdk.config.providers({ directory }).then((x) => x.data!.providers),
+        SDK_TIMEOUT_MS
+      )
       const entries = providers.sort((a, b) => {
         const nameA = a.name.toLowerCase()
         const nameB = b.name.toLowerCase()
@@ -977,23 +994,29 @@ export namespace ACP {
         }))
       })
 
-      const agents = await this.config.sdk.app
-        .agents(
-          {
-            directory,
-          },
-          { throwOnError: true },
-        )
-        .then((resp) => resp.data!)
+      const agents = await withTimeout(
+        this.config.sdk.app
+          .agents(
+            {
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((resp) => resp.data!),
+        SDK_TIMEOUT_MS
+      )
 
-      const commands = await this.config.sdk.command
-        .list(
-          {
-            directory,
-          },
-          { throwOnError: true },
-        )
-        .then((resp) => resp.data!)
+      const commands = await withTimeout(
+        this.config.sdk.command
+          .list(
+            {
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((resp) => resp.data!),
+        SDK_TIMEOUT_MS
+      )
 
       const availableCommands = commands.map((command) => ({
         name: command.name,
@@ -1045,18 +1068,19 @@ export namespace ACP {
 
       await Promise.all(
         Object.entries(mcpServers).map(async ([key, mcp]) => {
-          await this.sdk.mcp
-            .add(
+          await withTimeout(
+            this.sdk.mcp.add(
               {
                 directory,
                 name: key,
                 config: mcp,
               },
               { throwOnError: true },
-            )
-            .catch((error) => {
-              log.error("failed to add mcp server", { name: key, error })
-            })
+            ),
+            SDK_TIMEOUT_MS
+          ).catch((error) => {
+            log.error("failed to add mcp server", { name: key, error })
+          })
         }),
       )
 
@@ -1101,12 +1125,15 @@ export namespace ACP {
 
     async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {
       this.sessionManager.get(params.sessionId)
-      await this.config.sdk.app
-        .agents({}, { throwOnError: true })
-        .then((x) => x.data)
-        .then((agent) => {
-          if (!agent) throw new Error(`Agent not found: ${params.modeId}`)
-        })
+      await withTimeout(
+        this.config.sdk.app
+          .agents({}, { throwOnError: true })
+          .then((x) => x.data)
+          .then((agent) => {
+            if (!agent) throw new Error(`Agent not found: ${params.modeId}`)
+          }),
+        SDK_TIMEOUT_MS
+      )
       this.sessionManager.setMode(params.sessionId, params.modeId)
     }
 
@@ -1217,44 +1244,56 @@ export namespace ACP {
       }
 
       if (!cmd) {
-        await this.sdk.session.prompt({
-          sessionID,
-          model: {
-            providerID: model.providerID,
-            modelID: model.modelID,
-          },
-          parts,
-          agent,
-          directory,
-        })
+        await withTimeout(
+          this.sdk.session.prompt({
+            sessionID,
+            model: {
+              providerID: model.providerID,
+              modelID: model.modelID,
+            },
+            parts,
+            agent,
+            directory,
+          }),
+          SDK_TIMEOUT_MS
+        )
         return done
       }
 
-      const command = await this.config.sdk.command
-        .list({ directory }, { throwOnError: true })
-        .then((x) => x.data!.find((c) => c.name === cmd.name))
+      const command = await withTimeout(
+        this.config.sdk.command
+          .list({ directory }, { throwOnError: true })
+          .then((x) => x.data!.find((c) => c.name === cmd.name)),
+        SDK_TIMEOUT_MS
+      )
       if (command) {
-        await this.sdk.session.command({
-          sessionID,
-          command: command.name,
-          arguments: cmd.args,
-          model: model.providerID + "/" + model.modelID,
-          agent,
-          directory,
-        })
+        await withTimeout(
+          this.sdk.session.command({
+            sessionID,
+            command: command.name,
+            arguments: cmd.args,
+            model: model.providerID + "/" + model.modelID,
+            agent,
+            directory,
+          }),
+          SDK_TIMEOUT_MS
+        )
         return done
       }
 
       switch (cmd.name) {
         case "compact":
-          await this.config.sdk.session.summarize(
-            {
-              sessionID,
-              directory,
-              providerID: model.providerID,
-              modelID: model.modelID,
-            },
-            { throwOnError: true },
+          await withTimeout(
+            this.config.sdk.session.summarize(
+              {
+                sessionID,
+                directory,
+                providerID: model.providerID,
+                modelID: model.modelID,
+              },
+              { throwOnError: true },
+            ),
+            SDK_TIMEOUT_MS
           )
           break
       }
@@ -1264,12 +1303,15 @@ export namespace ACP {
 
     async cancel(params: CancelNotification) {
       const session = this.sessionManager.get(params.sessionId)
-      await this.config.sdk.session.abort(
-        {
-          sessionID: params.sessionId,
-          directory: session.cwd,
-        },
-        { throwOnError: true },
+      await withTimeout(
+        this.config.sdk.session.abort(
+          {
+            sessionID: params.sessionId,
+            directory: session.cwd,
+          },
+          { throwOnError: true },
+        ),
+        SDK_TIMEOUT_MS
       )
     }
   }
@@ -1328,29 +1370,33 @@ export namespace ACP {
 
     const directory = cwd ?? process.cwd()
 
-    const specified = await sdk.config
-      .get({ directory }, { throwOnError: true })
-      .then((resp) => {
-        const cfg = resp.data
-        if (!cfg || !cfg.model) return undefined
-        const parsed = Provider.parseModel(cfg.model)
-        return {
-          providerID: parsed.providerID,
-          modelID: parsed.modelID,
-        }
-      })
-      .catch((error) => {
-        log.error("failed to load user config for default model", { error })
-        return undefined
-      })
+    const specified = await withTimeout(
+      sdk.config
+        .get({ directory }, { throwOnError: true })
+        .then((resp) => {
+          const cfg = resp.data
+          if (!cfg || !cfg.model) return undefined
+          const parsed = Provider.parseModel(cfg.model)
+          return {
+            providerID: parsed.providerID,
+            modelID: parsed.modelID,
+          }
+        }),
+      SDK_TIMEOUT_MS
+    ).catch((error) => {
+      log.error("failed to load user config for default model", { error })
+      return undefined
+    })
 
-    const providers = await sdk.config
-      .providers({ directory }, { throwOnError: true })
-      .then((x) => x.data?.providers ?? [])
-      .catch((error) => {
-        log.error("failed to list providers for default model", { error })
-        return []
-      })
+    const providers = await withTimeout(
+      sdk.config
+        .providers({ directory }, { throwOnError: true })
+        .then((x) => x.data?.providers ?? []),
+      SDK_TIMEOUT_MS
+    ).catch((error) => {
+      log.error("failed to list providers for default model", { error })
+      return []
+    })
 
     if (specified && providers.length) {
       const provider = providers.find((p) => p.id === specified.providerID)

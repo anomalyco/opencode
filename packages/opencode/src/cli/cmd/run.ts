@@ -11,6 +11,9 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
+import { withTimeout } from "../../util/timeout"
+
+const SDK_TIMEOUT_MS = 60_000
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -151,7 +154,7 @@ export const RunCommand = cmd({
         return false
       }
 
-      const events = await sdk.event.subscribe()
+      const events = await withTimeout(sdk.event.subscribe(), SDK_TIMEOUT_MS)
       let errorMsg: string | undefined
 
       const eventProcessor = (async () => {
@@ -219,11 +222,11 @@ export const RunCommand = cmd({
               initialValue: "once",
             }).catch(() => "reject")
             const response = (result.toString().includes("cancel") ? "reject" : result) as "once" | "always" | "reject"
-            await sdk.permission.respond({
+            await withTimeout(sdk.permission.respond({
               sessionID,
               permissionID: permission.id,
               response,
-            })
+            }), SDK_TIMEOUT_MS)
           }
         }
       })()
@@ -252,23 +255,23 @@ export const RunCommand = cmd({
       })()
 
       if (args.command) {
-        await sdk.session.command({
+        await withTimeout(sdk.session.command({
           sessionID,
           agent: resolvedAgent,
           model: args.model,
           command: args.command,
           arguments: message,
           variant: args.variant,
-        })
+        }), SDK_TIMEOUT_MS)
       } else {
         const modelParam = args.model ? Provider.parseModel(args.model) : undefined
-        await sdk.session.prompt({
+        await withTimeout(sdk.session.prompt({
           sessionID,
           agent: resolvedAgent,
           model: modelParam,
           variant: args.variant,
           parts: [...fileParts, { type: "text", text: message }],
-        })
+        }), SDK_TIMEOUT_MS)
       }
 
       await eventProcessor
@@ -280,7 +283,7 @@ export const RunCommand = cmd({
 
       const sessionID = await (async () => {
         if (args.continue) {
-          const result = await sdk.session.list()
+          const result = await withTimeout(sdk.session.list(), SDK_TIMEOUT_MS)
           return result.data?.find((s) => !s.parentID)?.id
         }
         if (args.session) return args.session
@@ -292,7 +295,7 @@ export const RunCommand = cmd({
               : args.title
             : undefined
 
-        const result = await sdk.session.create(
+        const result = await withTimeout(sdk.session.create(
           title
             ? {
                 title,
@@ -313,7 +316,7 @@ export const RunCommand = cmd({
                   },
                 ],
               },
-        )
+        ), SDK_TIMEOUT_MS)
         return result.data?.id
       })()
 
@@ -322,9 +325,9 @@ export const RunCommand = cmd({
         process.exit(1)
       }
 
-      const cfgResult = await sdk.config.get()
+      const cfgResult = await withTimeout(sdk.config.get(), SDK_TIMEOUT_MS)
       if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)) {
-        const shareResult = await sdk.session.share({ sessionID }).catch((error) => {
+        const shareResult = await withTimeout(sdk.session.share({ sessionID }), SDK_TIMEOUT_MS).catch((error) => {
           if (error instanceof Error && error.message.includes("disabled")) {
             UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
           }
@@ -355,7 +358,7 @@ export const RunCommand = cmd({
 
       const sessionID = await (async () => {
         if (args.continue) {
-          const result = await sdk.session.list()
+          const result = await withTimeout(sdk.session.list(), SDK_TIMEOUT_MS)
           return result.data?.find((s) => !s.parentID)?.id
         }
         if (args.session) return args.session
@@ -367,7 +370,7 @@ export const RunCommand = cmd({
               : args.title
             : undefined
 
-        const result = await sdk.session.create(title ? { title } : {})
+        const result = await withTimeout(sdk.session.create(title ? { title } : {}), SDK_TIMEOUT_MS)
         return result.data?.id
       })()
 
@@ -376,9 +379,9 @@ export const RunCommand = cmd({
         process.exit(1)
       }
 
-      const cfgResult = await sdk.config.get()
+      const cfgResult = await withTimeout(sdk.config.get(), SDK_TIMEOUT_MS)
       if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)) {
-        const shareResult = await sdk.session.share({ sessionID }).catch((error) => {
+        const shareResult = await withTimeout(sdk.session.share({ sessionID }), SDK_TIMEOUT_MS).catch((error) => {
           if (error instanceof Error && error.message.includes("disabled")) {
             UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
           }
