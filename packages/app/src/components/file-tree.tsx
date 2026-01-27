@@ -29,6 +29,7 @@ export default function FileTree(props: {
   path: string
   class?: string
   nodeClass?: string
+  active?: string
   level?: number
   allowed?: readonly string[]
   modified?: readonly string[]
@@ -149,6 +150,7 @@ export default function FileTree(props: {
         component={local.as ?? "div"}
         classList={{
           "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
+          "bg-surface-base-active": local.node.path === props.active,
           ...(local.classList ?? {}),
           [local.class ?? ""]: !!local.class,
           [props.nodeClass ?? ""]: !!props.nodeClass,
@@ -297,7 +299,7 @@ export default function FileTree(props: {
                     <Show when={ignored()}>
                       <>
                         <span class="mx-1 font-bold text-text-invert-strong">•</span>
-                        <span class="shrink-0 text-text-invert-weak">Ignored</span>
+                        <span class="shrink-0 text-text-invert-strong">Ignored</span>
                       </>
                     </Show>
                   </div>
@@ -343,6 +345,7 @@ export default function FileTree(props: {
                       allowed={props.allowed}
                       modified={props.modified}
                       kinds={props.kinds}
+                      active={props.active}
                       draggable={props.draggable}
                       tooltip={props.tooltip}
                       onFileClick={props.onFileClick}

@@ -89,6 +89,7 @@ interface SessionReviewTabProps {
   comments?: LineComment[]
   focusedComment?: { file: string; id: string } | null
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
+  focusedFile?: string
   onScrollRef?: (el: HTMLDivElement) => void
   classes?: {
     root?: string
@@ -213,6 +214,7 @@ function SessionReviewTab(props: SessionReviewTabProps) {
       diffStyle={props.diffStyle}
       onDiffStyleChange={props.onDiffStyleChange}
       onViewFile={props.onViewFile}
+      focusedFile={props.focusedFile}
       readFile={readFile}
       onLineComment={props.onLineComment}
       comments={props.comments}
@@ -480,12 +482,29 @@ export default function Page() {
   }
 
   const kinds = createMemo(() => {
+    const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {
+      if (!a) return b
+      if (a === b) return a
+      return "mix" as const
+    }
+
+    const normalize = (p: string) => p.replaceAll("\\\\", "/").replace(/\/+$/, "")
+
     const out = new Map<string, "add" | "del" | "mix">()
     for (const diff of diffs()) {
+      const file = normalize(diff.file)
       const add = diff.additions > 0
       const del = diff.deletions > 0
       const kind = add && del ? "mix" : add ? "add" : del ? "del" : "mix"
-      out.set(diff.file, kind)
+
+      out.set(file, kind)
+
+      const parts = file.split("/")
+      for (const [idx] of parts.slice(0, -1).entries()) {
+        const dir = parts.slice(0, idx + 1).join("/")
+        if (!dir) continue
+        out.set(dir, merge(out.get(dir), kind))
+      }
     }
     return out
   })
@@ -1084,12 +1103,15 @@ export default function Page() {
   const [tree, setTree] = createStore({
     reviewScroll: undefined as HTMLDivElement | undefined,
     pendingDiff: undefined as string | undefined,
+    activeDiff: undefined as string | undefined,
   })
 
   const reviewScroll = () => tree.reviewScroll
   const setReviewScroll = (value: HTMLDivElement | undefined) => setTree("reviewScroll", value)
   const pendingDiff = () => tree.pendingDiff
   const setPendingDiff = (value: string | undefined) => setTree("pendingDiff", value)
+  const activeDiff = () => tree.activeDiff
+  const setActiveDiff = (value: string | undefined) => setTree("activeDiff", value)
 
   const showAllFiles = () => {
     if (fileTreeTab() !== "changes") return
@@ -1151,6 +1173,7 @@ export default function Page() {
   const focusReviewDiff = (path: string) => {
     const current = view().review.open() ?? []
     if (!current.includes(path)) view().review.setOpen([...current, path])
+    setActiveDiff(path)
     setPendingDiff(path)
   }
 
@@ -1697,6 +1720,7 @@ export default function Page() {
                                 diffs={diffs}
                                 view={view}
                                 diffStyle="unified"
+                                focusedFile={activeDiff()}
                                 onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
                                 comments={comments.all()}
                                 focusedComment={comments.focus()}
@@ -2046,6 +2070,7 @@ export default function Page() {
                           </StickyAddButton>
                         </Tabs.List>
                       </div>
+
                       <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
                         <Show when={activeTab() === "empty"}>
                           <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
@@ -2597,6 +2622,7 @@ export default function Page() {
                             diffStyle={layout.review.diffStyle()}
                             onDiffStyleChange={layout.review.setDiffStyle}
                             onScrollRef={setReviewScroll}
+                            focusedFile={activeDiff()}
                             onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
                             comments={comments.all()}
                             focusedComment={comments.focus()}
@@ -2664,6 +2690,7 @@ export default function Page() {
                               allowed={diffFiles()}
                               kinds={kinds()}
                               draggable={false}
+                              active={activeDiff()}
                               onFileClick={(node) => focusReviewDiff(node.path)}
                             />
                           </Show>
