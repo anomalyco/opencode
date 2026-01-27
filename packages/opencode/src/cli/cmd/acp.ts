@@ -43,11 +43,20 @@ export const AcpCommand = cmd({
       })
       const output = new ReadableStream<Uint8Array>({
         start(controller) {
-          process.stdin.on("data", (chunk: Buffer) => {
+          const onData = (chunk: Buffer) => {
             controller.enqueue(new Uint8Array(chunk))
-          })
-          process.stdin.on("end", () => controller.close())
-          process.stdin.on("error", (err) => controller.error(err))
+          }
+          const onEnd = () => controller.close()
+          const onError = (err: Error) => controller.error(err)
+
+          process.stdin.on("data", onData)
+          process.stdin.on("end", onEnd)
+          process.stdin.on("error", onError)
+
+          // Store references for cleanup
+          ;(controller as any)._onData = onData
+          ;(controller as any)._onEnd = onEnd
+          ;(controller as any)._onError = onError
         },
       })
 
@@ -61,8 +70,22 @@ export const AcpCommand = cmd({
       log.info("setup connection")
       process.stdin.resume()
       await new Promise((resolve, reject) => {
-        process.stdin.on("end", resolve)
-        process.stdin.on("error", reject)
+        const onEnd = () => {
+          cleanup()
+          resolve(undefined)
+        }
+        const onError = (err: Error) => {
+          cleanup()
+          reject(err)
+        }
+
+        const cleanup = () => {
+          process.stdin.removeListener("end", onEnd)
+          process.stdin.removeListener("error", onError)
+        }
+
+        process.stdin.once("end", onEnd)
+        process.stdin.once("error", onError)
       })
     })
   },
