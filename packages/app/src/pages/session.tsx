@@ -2036,8 +2036,9 @@ export default function Page() {
                               closeButton={
                                 <Tooltip value={language.t("common.closeTab")} placement="bottom">
                                   <IconButton
-                                    icon="close"
+                                    icon="close-small"
                                     variant="ghost"
+                                    class="h-5 w-5"
                                     onClick={() => tabs().close("context")}
                                     aria-label={language.t("common.closeTab")}
                                   />
