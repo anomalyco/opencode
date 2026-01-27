@@ -6,6 +6,7 @@ import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
 import { Storage } from "@/storage/storage"
 import { Log } from "@/util/log"
+import { proxyFetch } from "@/util/fetch"
 import type * as SDK from "@opencode-ai/sdk/v2"
 
 export namespace ShareNext {
@@ -68,7 +69,7 @@ export namespace ShareNext {
   export async function create(sessionID: string) {
     if (disabled) return { id: "", url: "", secret: "" }
     log.info("creating share", { sessionID })
-    const result = await fetch(`${await url()}/api/share`, {
+    const result = await proxyFetch(`${await url()}/api/share`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -135,7 +136,7 @@ export namespace ShareNext {
       const share = await get(sessionID).catch(() => undefined)
       if (!share) return
 
-      await fetch(`${await url()}/api/share/${share.id}/sync`, {
+      await proxyFetch(`${await url()}/api/share/${share.id}/sync`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -154,7 +155,7 @@ export namespace ShareNext {
     log.info("removing share", { sessionID })
     const share = await get(sessionID)
     if (!share) return
-    await fetch(`${await url()}/api/share/${share.id}`, {
+    await proxyFetch(`${await url()}/api/share/${share.id}`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",

@@ -3,6 +3,7 @@ import { Installation } from "../installation"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
 import { Log } from "../util/log"
+import { proxyFetch } from "../util/fetch"
 
 export namespace Share {
   const log = Log.create({ service: "share" })
@@ -26,7 +27,7 @@ export namespace Share {
         if (content === undefined) return
         pending.delete(key)
 
-        return fetch(`${URL}/share_sync`, {
+        return proxyFetch(`${URL}/share_sync`, {
           method: "POST",
           body: JSON.stringify({
             sessionID: sessionID,
@@ -74,7 +75,7 @@ export namespace Share {
 
   export async function create(sessionID: string) {
     if (disabled) return { url: "", secret: "" }
-    return fetch(`${URL}/share_create`, {
+    return proxyFetch(`${URL}/share_create`, {
       method: "POST",
       body: JSON.stringify({ sessionID: sessionID }),
     })
@@ -84,7 +85,7 @@ export namespace Share {
 
   export async function remove(sessionID: string, secret: string) {
     if (disabled) return {}
-    return fetch(`${URL}/share_delete`, {
+    return proxyFetch(`${URL}/share_delete`, {
       method: "POST",
       body: JSON.stringify({ sessionID, secret }),
     }).then((x) => x.json())
