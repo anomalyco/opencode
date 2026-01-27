@@ -176,11 +176,13 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
       placement="top-start"
       gutter={8}
     >
-      <Kobalte.Anchor ref={(el) => setStore("trigger", el)} as="div" class="inline-flex">
-        <Kobalte.Trigger as={props.triggerAs ?? "div"} {...(props.triggerProps as any)}>
-          {props.children}
-        </Kobalte.Trigger>
-      </Kobalte.Anchor>
+      <Kobalte.Trigger
+        ref={(el) => setStore("trigger", el)}
+        as={props.triggerAs ?? "div"}
+        {...(props.triggerProps as any)}
+      >
+        {props.children}
+      </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
           ref={(el) => setStore("content", el)}
