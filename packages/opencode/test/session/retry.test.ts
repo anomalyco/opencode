@@ -106,6 +106,15 @@ describe("session.retry.retryable", () => {
     const error = wrap("not-json")
     expect(SessionRetry.retryable(error)).toBeUndefined()
   })
+
+  test("maps api error rate_limit bodies", () => {
+    const error = new MessageV2.APIError({
+      message: "boom",
+      isRetryable: false,
+      responseBody: JSON.stringify({ error: { code: "rate_limit_exceeded" } }),
+    }).toObject() as MessageV2.APIError
+    expect(SessionRetry.retryable(error)).toBe("Rate Limited")
+  })
 })
 
 describe("session.message-v2.fromError", () => {
