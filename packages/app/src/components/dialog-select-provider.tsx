@@ -5,9 +5,17 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Tag } from "@opencode-ai/ui/tag"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { IconName } from "@opencode-ai/ui/icons/provider"
+import { iconNames, type IconName } from "@opencode-ai/ui/icons/provider"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { useLanguage } from "@/context/language"
+import { DialogCustomProvider } from "./dialog-custom-provider"
+
+const CUSTOM_ID = "_custom"
+
+function icon(id: string): IconName {
+  if (iconNames.includes(id as IconName)) return id as IconName
+  return "synthetic"
+}
 
 export const DialogSelectProvider: Component = () => {
   const dialog = useDialog()
@@ -26,11 +34,13 @@ export const DialogSelectProvider: Component = () => {
         key={(x) => x?.id}
         items={() => {
           language.locale()
-          return providers.all()
+          return [{ id: CUSTOM_ID, name: "Custom provider" }, ...providers.all()]
         }}
         filterKeys={["id", "name"]}
         groupBy={(x) => (popularProviders.includes(x.id) ? popularGroup() : otherGroup())}
         sortBy={(a, b) => {
+          if (a.id === CUSTOM_ID) return -1
+          if (b.id === CUSTOM_ID) return 1
           if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
             return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
           return a.name.localeCompare(b.name)
@@ -43,13 +53,20 @@ export const DialogSelectProvider: Component = () => {
         }}
         onSelect={(x) => {
           if (!x) return
+          if (x.id === CUSTOM_ID) {
+            dialog.show(() => <DialogCustomProvider back="providers" />)
+            return
+          }
           dialog.show(() => <DialogConnectProvider provider={x.id} />)
         }}
       >
         {(i) => (
           <div class="px-1.25 w-full flex items-center gap-x-3">
-            <ProviderIcon data-slot="list-item-extra-icon" id={i.id as IconName} />
+            <ProviderIcon data-slot="list-item-extra-icon" id={icon(i.id)} />
             <span>{i.name}</span>
+            <Show when={i.id === CUSTOM_ID}>
+              <Tag>{language.t("settings.providers.tag.custom")}</Tag>
+            </Show>
             <Show when={i.id === "opencode"}>
               <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
             </Show>
