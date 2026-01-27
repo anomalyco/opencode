@@ -95,7 +95,6 @@ OpenCode include due agenti integrati tra cui puoi passare usando il tasto `Tab`
 
 - **build** – Predefinito, agente con accesso completo per il lavoro di sviluppo
 - **plan** – Agente in sola lettura per analisi ed esplorazione del codice
-
   - Nega le modifiche ai file per impostazione predefinita
   - Chiede il permesso prima di eseguire comandi bash
   - Ideale per esplorare codebase sconosciute o pianificare modifiche
