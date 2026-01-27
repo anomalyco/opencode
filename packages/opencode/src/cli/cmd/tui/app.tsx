@@ -664,7 +664,6 @@ function App() {
       backgroundColor={theme.background}
       onMouseUp={async () => {
         if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
-          renderer.clearSelection()
           return
         }
         const text = renderer.getSelection()?.getSelectedText()
