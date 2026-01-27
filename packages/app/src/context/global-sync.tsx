@@ -546,6 +546,37 @@ function createGlobalSync() {
     return promise
   }
 
+  function purgeMessageParts(setStore: SetStoreFunction<State>, messageID: string | undefined) {
+    if (!messageID) return
+    setStore(
+      produce((draft) => {
+        delete draft.part[messageID]
+      }),
+    )
+  }
+
+  function purgeSessionData(store: Store<State>, setStore: SetStoreFunction<State>, sessionID: string | undefined) {
+    if (!sessionID) return
+
+    const messages = store.message[sessionID]
+    const messageIDs = (messages ?? []).map((m) => m.id).filter((id): id is string => !!id)
+
+    setStore(
+      produce((draft) => {
+        delete draft.message[sessionID]
+        delete draft.session_diff[sessionID]
+        delete draft.todo[sessionID]
+        delete draft.permission[sessionID]
+        delete draft.question[sessionID]
+        delete draft.session_status[sessionID]
+
+        for (const messageID of messageIDs) {
+          delete draft.part[messageID]
+        }
+      }),
+    )
+  }
+
   const unsub = globalSDK.event.listen((e) => {
     const directory = e.name
     const event = e.details
@@ -651,9 +682,7 @@ function createGlobalSync() {
               }),
             )
           }
-
           cleanupSessionCaches(info.id)
-
           if (info.parentID) break
           setStore("sessionTotal", (value) => Math.max(0, value - 1))
           break
@@ -679,9 +708,7 @@ function createGlobalSync() {
             }),
           )
         }
-
         cleanupSessionCaches(sessionID)
-
         if (event.properties.info.parentID) break
         setStore("sessionTotal", (value) => Math.max(0, value - 1))
         break
@@ -757,15 +784,19 @@ function createGlobalSync() {
         break
       }
       case "message.part.removed": {
-        const parts = store.part[event.properties.messageID]
+        const messageID = event.properties.messageID
+        const parts = store.part[messageID]
         if (!parts) break
         const result = Binary.search(parts, event.properties.partID, (p) => p.id)
         if (result.found) {
           setStore(
-            "part",
-            event.properties.messageID,
             produce((draft) => {
-              draft.splice(result.index, 1)
+              const list = draft.part[messageID]
+              if (!list) return
+              const next = Binary.search(list, event.properties.partID, (p) => p.id)
+              if (!next.found) return
+              list.splice(next.index, 1)
+              if (list.length === 0) delete draft.part[messageID]
             }),
           )
         }

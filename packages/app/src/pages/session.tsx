@@ -524,6 +524,15 @@ export default function Page() {
 
   const scrollGestureWindowMs = 250
 
+  const scrollIgnoreWindowMs = 250
+  let scrollIgnore = 0
+
+  const markScrollIgnore = () => {
+    scrollIgnore = Date.now()
+  }
+
+  const hasScrollIgnore = () => Date.now() - scrollIgnore < scrollIgnoreWindowMs
+
   const markScrollGesture = (target?: EventTarget | null) => {
     const root = scroller
     if (!root) return
@@ -1341,7 +1350,9 @@ export default function Page() {
 
     requestAnimationFrame(() => {
       const delta = el.scrollHeight - beforeHeight
-      if (delta) el.scrollTop = beforeTop + delta
+      if (!delta) return
+      markScrollIgnore()
+      el.scrollTop = beforeTop + delta
     })
 
     scheduleTurnBackfill()
@@ -1378,6 +1389,7 @@ export default function Page() {
 
       if (stick && el) {
         requestAnimationFrame(() => {
+          markScrollIgnore()
           el.scrollTo({ top: el.scrollHeight, behavior: "auto" })
         })
       }
@@ -1779,8 +1791,9 @@ export default function Page() {
                           markScrollGesture(e.target)
                         }}
                         onScroll={(e) => {
-                          autoScroll.handleScroll()
-                          if (!hasScrollGesture()) return
+                          const gesture = hasScrollGesture()
+                          if (!hasScrollIgnore() || gesture) autoScroll.handleScroll()
+                          if (!gesture) return
                           markScrollGesture(e.target)
                           if (isDesktop()) scheduleScrollSpy(e.currentTarget)
                         }}
