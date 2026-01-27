@@ -11,6 +11,7 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Milestone 1:** Complete (Phases 1-11)
 **Phase:** 11 of 11 (Documentation) - Complete
+**Next Phase:** 16 - Allow the user to download git repos so that they can work on them with their opencode sessions
 **Plan:** 4 of 4 - Complete
 **Status:** Milestone complete, UAT verified
 **Last activity:** 2026-01-26 - Completed UAT verification
@@ -169,6 +170,7 @@ Recent decisions affecting current work:
 - Phase 13 added: Passkeys Investigation - investigate adding passkeys and passkey management to opencode auth
 - Phase 14 added: Persistent Session Storage - add persistent session storage for multi-instance deployments
 - Phase 15 added: Update docs to use opencode fork (pRizz) - point documentation to https://github.com/pRizz/opencode which has the auth implementation
+- Phase 16 added: Allow the user to download git repos so that they can work on them with their opencode sessions
 
 ### Pending Todos
 
