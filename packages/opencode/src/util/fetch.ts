@@ -8,6 +8,9 @@
  */
 
 import type { Config } from "../config/config"
+import { Log } from "./log"
+
+const log = Log.create({ service: "fetch" })
 
 // Bun's fetch supports proxy and tls options but TypeScript types don't include them
 type BunTlsConfig = {
@@ -25,6 +28,7 @@ type BunFetchInit = RequestInit & {
  * Set via setProxyConfig() from opencode.json config
  */
 let _configProxy: Config.ProxyConfig | undefined
+let _tlsWarningEmitted = false
 
 /**
  * Set proxy configuration from opencode.json
@@ -123,10 +127,9 @@ export function getTlsForProxy(): BunTlsConfig | undefined {
   if (tls.rejectUnauthorized !== undefined) {
     result.rejectUnauthorized = tls.rejectUnauthorized
     // Security warning for insecure config
-    if (tls.rejectUnauthorized === false) {
-      console.warn(
-        "[opencode] WARNING: TLS certificate validation disabled for proxy - connection vulnerable to MITM attacks",
-      )
+    if (tls.rejectUnauthorized === false && !_tlsWarningEmitted) {
+      log.warn("TLS certificate validation disabled for proxy - connection vulnerable to MITM attacks")
+      _tlsWarningEmitted = true
     }
   }
 

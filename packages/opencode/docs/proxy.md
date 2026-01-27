@@ -16,15 +16,15 @@ opencode
 
 ## Environment Variables
 
-| Variable                 | Description                             | Example                    |
-| ------------------------ | --------------------------------------- | -------------------------- |
-| `HTTPS_PROXY`            | Proxy URL for HTTPS requests            | `http://proxy:8080`        |
-| `HTTP_PROXY`             | Proxy URL for HTTP requests             | `http://proxy:8080`        |
-| `NO_PROXY`               | Comma-separated list of hosts to bypass | `localhost,*.internal.com` |
-| `https_proxy`            | Alternative (lowercase)                 | Same as above              |
-| `http_proxy`             | Alternative (lowercase)                 | Same as above              |
-| `no_proxy`               | Alternative (lowercase)                 | Same as above              |
-| `OPENCODE_DISABLE_PROXY` | Emergency bypass flag                   | `1` to disable             |
+| Variable                 | Description                                 | Example                    |
+| ------------------------ | ------------------------------------------- | -------------------------- |
+| `HTTPS_PROXY`            | Proxy URL for HTTPS requests                | `http://proxy:8080`        |
+| `HTTP_PROXY`             | Proxy URL for HTTP requests                 | `http://proxy:8080`        |
+| `NO_PROXY`               | Comma-separated list of hosts to bypass     | `localhost,*.internal.com` |
+| `https_proxy`            | Alternative (lowercase)                     | Same as above              |
+| `http_proxy`             | Alternative (lowercase)                     | Same as above              |
+| `no_proxy`               | Alternative (lowercase)                     | Same as above              |
+| `OPENCODE_DISABLE_PROXY` | Emergency bypass flag (any non-empty value) | `1`                        |
 
 ## Configuration File
 

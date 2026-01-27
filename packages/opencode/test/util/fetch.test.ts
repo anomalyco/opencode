@@ -20,6 +20,12 @@ describe("proxy-fetch", () => {
   })
 
   afterEach(() => {
+    // Remove env vars introduced during tests
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) {
+        delete process.env[key]
+      }
+    }
     // Restore original env vars
     Object.assign(process.env, originalEnv)
   })
