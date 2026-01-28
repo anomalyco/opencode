@@ -264,8 +264,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
               />
             </Show>
           </div>
-            {searchAction()}
-          </div>
+          {searchAction()}
+        </div>
       </Show>
       <div ref={setScrollRef} data-slot="list-scroll">
         <Show
