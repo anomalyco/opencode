@@ -9,9 +9,6 @@ import { lazy } from "@/util/lazy"
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
 /* @ts-ignore */
-const SNAPSHOT = await import("./models-snapshot")
-  .then((m) => m.snapshot as Record<string, unknown>)
-  .catch(() => undefined)
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
@@ -91,24 +88,23 @@ export namespace ModelsDev {
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
     if (result) return result
-    if (SNAPSHOT) return SNAPSHOT
+    // @ts-ignore
+    const snapshot = await import("./models-snapshot")
+      .then((m) => m.snapshot as Record<string, unknown>)
+      .catch(() => undefined)
+    if (snapshot) return snapshot
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
     const json = await fetch(`${url()}/api.json`).then((x) => x.text())
     return JSON.parse(json)
   })
 
   export async function get() {
-    refresh()
     const result = await Data()
     return result as Record<string, Provider>
   }
 
   export async function refresh() {
-    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return
     const file = Bun.file(filepath)
-    log.info("refreshing", {
-      file,
-    })
     const result = await fetch(`${url()}/api.json`, {
       headers: {
         "User-Agent": Installation.USER_AGENT,
@@ -127,6 +123,7 @@ export namespace ModelsDev {
 }
 
 if (!Flag.OPENCODE_DISABLE_MODELS_FETCH) {
+  ModelsDev.refresh()
   setInterval(
     async () => {
       await ModelsDev.refresh()

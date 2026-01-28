@@ -4,7 +4,6 @@ import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { Select } from "@opencode-ai/ui/select"
 
 const MAIN_WORKTREE = "main"
 const CREATE_WORKTREE = "create"
@@ -46,10 +45,7 @@ export function NewSessionView(props: NewSessionViewProps) {
   }
 
   return (
-    <div
-      class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6"
-      style={{ "padding-bottom": "calc(var(--prompt-height, 11.25rem) + 64px)" }}
-    >
+    <div class="size-full flex flex-col justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6 pb-[calc(var(--prompt-height,11.25rem)+64px)]">
       <div class="text-20-medium text-text-weaker">{language.t("command.session.new")}</div>
       <div class="flex justify-center items-center gap-3">
         <Icon name="folder" size="small" />
@@ -60,18 +56,7 @@ export function NewSessionView(props: NewSessionViewProps) {
       </div>
       <div class="flex justify-center items-center gap-1">
         <Icon name="branch" size="small" />
-        <Select
-          options={options()}
-          current={current()}
-          value={(x) => x}
-          label={label}
-          onSelect={(value) => {
-            props.onWorktreeChange(value ?? MAIN_WORKTREE)
-          }}
-          size="normal"
-          variant="ghost"
-          class="text-12-medium"
-        />
+        <div class="text-12-medium text-text-weak select-text ml-2">{label(current())}</div>
       </div>
       <Show when={sync.project}>
         {(project) => (
