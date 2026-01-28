@@ -14,8 +14,15 @@ jobs:
       - name: Enable Git long paths
         run: git config --global core.longpaths true
 
+      # Disable symbolic links on Windows
+      - name: Disable Git symbolic links
+        run: git config --global core.symlinks false
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Don't use sparse checkout to avoid symlink issues
+          sparse-checkout: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
