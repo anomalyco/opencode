@@ -10,6 +10,10 @@ jobs:
   test-windows:
     runs-on: windows-latest
     steps:
+      # Enable Git long paths on Windows
+      - name: Enable Git long paths
+        run: git config --global core.longpaths true
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -28,14 +32,21 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
 
-      - name: Build Tauri
+      - name: Build Tauri (debug)
         run: |
           cd packages/desktop
-          bun run tauri build --debug
+          bun run tauri build --debug --verbose
+        env:
+          TAURI_PRIVATE_KEY: ''
+          TAURI_KEY_PASSWORD: ''
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: windows-test
           path: packages/desktop/src-tauri/target/debug/bundle/*/*
+          if-no-files-found: warn
