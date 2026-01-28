@@ -63,7 +63,7 @@ jobs:
           cd packages/desktop
           echo "Current directory: $(pwd)"
           echo "Starting Tauri build..."
-          cargo tauri build --debug
+          cargo tauri build --debug --config ./src-tauri/tauri.prod.conf.json
         env:
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''

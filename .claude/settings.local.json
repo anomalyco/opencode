@@ -31,7 +31,10 @@
       "Bash(cmd.exe:*)",
       "Bash(.build-desktop.bat)",
       "Bash(cmd:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git config:*)"
     ]
   }
 }
