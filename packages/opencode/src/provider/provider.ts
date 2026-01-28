@@ -132,8 +132,9 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
-          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
+          if (shouldUseCopilotResponsesApi(modelID)) return sdk.responses(modelID)
+          if (sdk.copilotChat) return sdk.copilotChat(modelID)
+          return sdk.languageModel(modelID)
         },
         options: {},
       }
@@ -142,8 +143,9 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
-          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
+          if (shouldUseCopilotResponsesApi(modelID)) return sdk.responses(modelID)
+          if (sdk.copilotChat) return sdk.copilotChat(modelID)
+          return sdk.languageModel(modelID)
         },
         options: {},
       }

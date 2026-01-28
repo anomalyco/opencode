@@ -2,6 +2,7 @@ import type { LanguageModelV2 } from "@ai-sdk/provider"
 import { OpenAICompatibleChatLanguageModel } from "@ai-sdk/openai-compatible"
 import { type FetchFunction, withoutTrailingSlash, withUserAgentSuffix } from "@ai-sdk/provider-utils"
 import { OpenAIResponsesLanguageModel } from "./responses/openai-responses-language-model"
+import { CopilotChatLanguageModel } from "./chat"
 
 // Import the version or define it
 const VERSION = "0.1.0"
@@ -38,6 +39,7 @@ export interface OpenaiCompatibleProviderSettings {
 export interface OpenaiCompatibleProvider {
   (modelId: OpenaiCompatibleModelId): LanguageModelV2
   chat(modelId: OpenaiCompatibleModelId): LanguageModelV2
+  copilotChat(modelId: OpenaiCompatibleModelId): LanguageModelV2
   responses(modelId: OpenaiCompatibleModelId): LanguageModelV2
   languageModel(modelId: OpenaiCompatibleModelId): LanguageModelV2
 
@@ -83,6 +85,15 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
     })
   }
 
+  const createCopilotChatModel = (modelId: OpenaiCompatibleModelId) => {
+    return new CopilotChatLanguageModel(modelId, {
+      provider: `${options.name ?? "openai-compatible"}.copilotChat`,
+      headers: getHeaders,
+      url: ({ path }) => `${baseURL}${path}`,
+      fetch: options.fetch,
+    })
+  }
+
   const createLanguageModel = (modelId: OpenaiCompatibleModelId) => createChatModel(modelId)
 
   const provider = function (modelId: OpenaiCompatibleModelId) {
@@ -91,6 +102,7 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
 
   provider.languageModel = createLanguageModel
   provider.chat = createChatModel
+  provider.copilotChat = createCopilotChatModel
   provider.responses = createResponsesModel
 
   return provider as OpenaiCompatibleProvider
