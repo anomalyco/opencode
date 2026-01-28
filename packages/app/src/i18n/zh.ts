@@ -330,6 +330,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "语言",
   "toast.language.description": "已切换到{{language}}",
@@ -510,6 +511,7 @@ export const dict = {
 
   "settings.general.section.appearance": "外观",
   "settings.general.section.notifications": "系统通知",
+  "settings.general.section.updates": "更新",
   "settings.general.section.sounds": "音效",
 
   "settings.general.row.language.title": "语言",
@@ -520,6 +522,18 @@ export const dict = {
   "settings.general.row.theme.description": "自定义 OpenCode 的主题。",
   "settings.general.row.font.title": "字体",
   "settings.general.row.font.description": "自定义代码块使用的等宽字体",
+
+  "settings.general.row.releaseNotes.title": "发行说明",
+  "settings.general.row.releaseNotes.description": "更新后显示“新功能”弹窗",
+
+  "settings.updates.row.startup.title": "启动时检查更新",
+  "settings.updates.row.startup.description": "在 OpenCode 启动时自动检查更新",
+  "settings.updates.row.check.title": "检查更新",
+  "settings.updates.row.check.description": "手动检查更新并在有更新时安装",
+  "settings.updates.action.checkNow": "立即检查",
+  "settings.updates.action.checking": "正在检查...",
+  "settings.updates.toast.latest.title": "已是最新版本",
+  "settings.updates.toast.latest.description": "你正在使用最新版本的 OpenCode。",
 
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",

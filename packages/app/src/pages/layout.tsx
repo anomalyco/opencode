@@ -332,6 +332,7 @@ export default function Layout(props: ParentProps) {
     if (!platform.checkUpdate || !platform.update || !platform.restart) return
 
     let toastId: number | undefined
+    let interval: ReturnType<typeof setInterval> | undefined
 
     async function pollUpdate() {
       const { updateAvailable, version } = await platform.checkUpdate!()
@@ -358,9 +359,25 @@ export default function Layout(props: ParentProps) {
       }
     }
 
-    pollUpdate()
-    const interval = setInterval(pollUpdate, 10 * 60 * 1000)
-    onCleanup(() => clearInterval(interval))
+    createEffect(() => {
+      if (!settings.ready()) return
+
+      if (!settings.updates.startup()) {
+        if (interval === undefined) return
+        clearInterval(interval)
+        interval = undefined
+        return
+      }
+
+      if (interval !== undefined) return
+      void pollUpdate()
+      interval = setInterval(pollUpdate, 10 * 60 * 1000)
+    })
+
+    onCleanup(() => {
+      if (interval === undefined) return
+      clearInterval(interval)
+    })
   })
 
   onMount(() => {
@@ -559,7 +576,6 @@ export default function Layout(props: ParentProps) {
         openProject(next.worktree, false)
         navigateToProject(next.worktree)
       },
-      { defer: true },
     ),
   )
 
@@ -668,11 +684,33 @@ export default function Layout(props: ParentProps) {
     running: number
   }
 
-  const prefetchChunk = 600
+  const prefetchChunk = 200
   const prefetchConcurrency = 1
   const prefetchPendingLimit = 6
   const prefetchToken = { value: 0 }
   const prefetchQueues = new Map<string, PrefetchQueue>()
+
+  const PREFETCH_MAX_SESSIONS_PER_DIR = 10
+  const prefetchedByDir = new Map<string, Map<string, true>>()
+
+  const lruFor = (directory: string) => {
+    const existing = prefetchedByDir.get(directory)
+    if (existing) return existing
+    const created = new Map<string, true>()
+    prefetchedByDir.set(directory, created)
+    return created
+  }
+
+  const markPrefetched = (directory: string, sessionID: string) => {
+    const lru = lruFor(directory)
+    if (lru.has(sessionID)) lru.delete(sessionID)
+    lru.set(sessionID, true)
+    while (lru.size > PREFETCH_MAX_SESSIONS_PER_DIR) {
+      const oldest = lru.keys().next().value as string | undefined
+      if (!oldest) return
+      lru.delete(oldest)
+    }
+  }
 
   createEffect(() => {
     params.dir
@@ -765,6 +803,11 @@ export default function Layout(props: ParentProps) {
     const q = queueFor(directory)
     if (q.inflight.has(session.id)) return
     if (q.pendingSet.has(session.id)) return
+
+    const lru = lruFor(directory)
+    const known = lru.has(session.id)
+    if (!known && lru.size >= PREFETCH_MAX_SESSIONS_PER_DIR && priority !== "high") return
+    markPrefetched(directory, session.id)
 
     if (priority === "high") q.pending.unshift(session.id)
     if (priority !== "high") q.pending.push(session.id)
@@ -1652,6 +1695,22 @@ export default function Layout(props: ParentProps) {
       pendingRename: false,
     })
 
+    const hoverPrefetch = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+    const cancelHoverPrefetch = () => {
+      if (hoverPrefetch.current === undefined) return
+      clearTimeout(hoverPrefetch.current)
+      hoverPrefetch.current = undefined
+    }
+    const scheduleHoverPrefetch = () => {
+      if (hoverPrefetch.current !== undefined) return
+      hoverPrefetch.current = setTimeout(() => {
+        hoverPrefetch.current = undefined
+        prefetchSession(props.session)
+      }, 200)
+    }
+
+    onCleanup(cancelHoverPrefetch)
+
     const messageLabel = (message: Message) => {
       const parts = sessionStore.part[message.id] ?? []
       const text = parts.find((part): part is TextPart => part?.type === "text" && !part.synthetic && !part.ignored)
@@ -1662,7 +1721,10 @@ export default function Layout(props: ParentProps) {
       <A
         href={`${props.slug}/session/${props.session.id}`}
         class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${menu.open ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
-        onMouseEnter={() => prefetchSession(props.session, "high")}
+        onPointerEnter={scheduleHoverPrefetch}
+        onPointerLeave={cancelHoverPrefetch}
+        onMouseEnter={scheduleHoverPrefetch}
+        onMouseLeave={cancelHoverPrefetch}
         onFocus={() => prefetchSession(props.session, "high")}
         onClick={() => {
           setState("hoverSession", undefined)

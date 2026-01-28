@@ -23,7 +23,6 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
@@ -90,6 +89,7 @@ interface SessionReviewTabProps {
   comments?: LineComment[]
   focusedComment?: { file: string; id: string } | null
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
+  focusedFile?: string
   onScrollRef?: (el: HTMLDivElement) => void
   classes?: {
     root?: string
@@ -214,6 +214,7 @@ function SessionReviewTab(props: SessionReviewTabProps) {
       diffStyle={props.diffStyle}
       onDiffStyleChange={props.onDiffStyleChange}
       onViewFile={props.onViewFile}
+      focusedFile={props.focusedFile}
       readFile={readFile}
       onLineComment={props.onLineComment}
       comments={props.comments}
@@ -323,6 +324,7 @@ export default function Page() {
   }
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
+  const centered = createMemo(() => isDesktop() && !layout.fileTree.opened())
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -376,7 +378,8 @@ export default function Page() {
   })
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
-  const reviewCount = createMemo(() => info()?.summary?.files ?? 0)
+  const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
+  const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasReview = createMemo(() => reviewCount() > 0)
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
@@ -432,7 +435,7 @@ export default function Page() {
     expanded: {} as Record<string, boolean>,
     messageId: undefined as string | undefined,
     turnStart: 0,
-    mobileTab: "session" as "session" | "review",
+    mobileTab: "session" as "session" | "changes",
     newSessionWorktree: "main",
     promptHeight: 0,
   })
@@ -476,10 +479,42 @@ export default function Page() {
     const targetIndex = currentIndex === -1 ? (offset > 0 ? 0 : msgs.length - 1) : currentIndex + offset
     if (targetIndex < 0 || targetIndex >= msgs.length) return
 
+    if (targetIndex === msgs.length - 1) {
+      resumeScroll()
+      return
+    }
+
+    autoScroll.pause()
     scrollToMessage(msgs[targetIndex], "auto")
   }
 
-  const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
+  const kinds = createMemo(() => {
+    const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {
+      if (!a) return b
+      if (a === b) return a
+      return "mix" as const
+    }
+
+    const normalize = (p: string) => p.replaceAll("\\\\", "/").replace(/\/+$/, "")
+
+    const out = new Map<string, "add" | "del" | "mix">()
+    for (const diff of diffs()) {
+      const file = normalize(diff.file)
+      const add = diff.additions > 0
+      const del = diff.deletions > 0
+      const kind = add && del ? "mix" : add ? "add" : del ? "del" : "mix"
+
+      out.set(file, kind)
+
+      const parts = file.split("/")
+      for (const [idx] of parts.slice(0, -1).entries()) {
+        const dir = parts.slice(0, idx + 1).join("/")
+        if (!dir) continue
+        out.set(dir, merge(out.get(dir), kind))
+      }
+    }
+    return out
+  })
   const emptyDiffFiles: string[] = []
   const diffFiles = createMemo(() => diffs().map((d) => d.file), emptyDiffFiles, { equals: same })
   const diffsReady = createMemo(() => {
@@ -495,6 +530,8 @@ export default function Page() {
   let scroller: HTMLDivElement | undefined
 
   const scrollGestureWindowMs = 250
+
+  let touchGesture: number | undefined
 
   const markScrollGesture = (target?: EventTarget | null) => {
     const root = scroller
@@ -698,7 +735,7 @@ export default function Page() {
       description: "",
       category: language.t("command.category.view"),
       keybind: "mod+shift+r",
-      onSelect: () => view().reviewPanel.toggle(),
+      onSelect: () => layout.fileTree.toggle(),
     },
     {
       id: "terminal.new",
@@ -1067,40 +1104,74 @@ export default function Page() {
       .filter((tab) => tab !== "context"),
   )
 
-  const mobileReview = createMemo(() => !isDesktop() && view().reviewPanel.opened() && store.mobileTab === "review")
+  const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
 
-  const showTabs = createMemo(() => view().reviewPanel.opened())
+  const fileTreeTab = () => layout.fileTree.tab()
+  const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
 
   const [tree, setTree] = createStore({
-    fileTreeTab: "changes" as "changes" | "all",
     reviewScroll: undefined as HTMLDivElement | undefined,
     pendingDiff: undefined as string | undefined,
+    activeDiff: undefined as string | undefined,
   })
 
-  const fileTreeTab = () => tree.fileTreeTab
-  const setFileTreeTab = (value: "changes" | "all") => setTree("fileTreeTab", value)
   const reviewScroll = () => tree.reviewScroll
   const setReviewScroll = (value: HTMLDivElement | undefined) => setTree("reviewScroll", value)
   const pendingDiff = () => tree.pendingDiff
   const setPendingDiff = (value: string | undefined) => setTree("pendingDiff", value)
+  const activeDiff = () => tree.activeDiff
+  const setActiveDiff = (value: string | undefined) => setTree("activeDiff", value)
 
   const showAllFiles = () => {
-    if (!layout.fileTree.opened()) return
     if (fileTreeTab() !== "changes") return
     setFileTreeTab("all")
   }
 
-  createEffect(() => {
-    if (!layout.fileTree.opened()) return
-    setFileTreeTab("changes")
-  })
+  const reviewPanel = () => (
+    <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
+      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+        <Switch>
+          <Match when={hasReview()}>
+            <Show
+              when={diffsReady()}
+              fallback={<div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>}
+            >
+              <SessionReviewTab
+                diffs={diffs}
+                view={view}
+                diffStyle={layout.review.diffStyle()}
+                onDiffStyleChange={layout.review.setDiffStyle}
+                onScrollRef={setReviewScroll}
+                focusedFile={activeDiff()}
+                onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+                comments={comments.all()}
+                focusedComment={comments.focus()}
+                onFocusedCommentChange={comments.setFocus}
+                onViewFile={(path) => {
+                  showAllFiles()
+                  const value = file.tab(path)
+                  tabs().open(value)
+                  file.load(path)
+                }}
+              />
+            </Show>
+          </Match>
+          <Match when={true}>
+            <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
+              <Mark class="w-14 opacity-10" />
+              <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+            </div>
+          </Match>
+        </Switch>
+      </div>
+    </div>
+  )
 
   createEffect(
     on(
       () => tabs().active(),
       (active) => {
         if (!active) return
-        if (!layout.fileTree.opened()) return
         if (fileTreeTab() !== "changes") return
         if (!file.pathFromTab(active)) return
         showAllFiles()
@@ -1151,6 +1222,7 @@ export default function Page() {
   const focusReviewDiff = (path: string) => {
     const current = view().review.open() ?? []
     if (!current.includes(path)) view().review.setOpen([...current, path])
+    setActiveDiff(path)
     setPendingDiff(path)
   }
 
@@ -1197,54 +1269,44 @@ export default function Page() {
 
   const activeTab = createMemo(() => {
     const active = tabs().active()
-    if (layout.fileTree.opened() && fileTreeTab() === "all") {
-      if (active && active !== "review" && active !== "context") return normalizeTab(active)
-
-      const first = openedTabs()[0]
-      if (first) return first
-      return "review"
-    }
-    if (active) return normalizeTab(active)
-    if (hasReview()) return "review"
+    if (active === "context") return "context"
+    if (active && file.pathFromTab(active)) return normalizeTab(active)
 
     const first = openedTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
-    return "review"
+    return "empty"
   })
 
   createEffect(() => {
     if (!layout.ready()) return
     if (tabs().active()) return
-    if (!hasReview() && openedTabs().length === 0 && !contextOpen()) return
-    tabs().setActive(activeTab())
-  })
+    if (openedTabs().length === 0 && !contextOpen()) return
 
-  createEffect(() => {
-    if (!layout.fileTree.opened()) return
-    if (fileTreeTab() !== "all") return
-
-    const first = openedTabs()[0]
-    if (!first) return
-
-    const active = tabs().active()
-    if (active && active !== "review" && active !== "context") return
-    tabs().setActive(first)
+    const next = activeTab()
+    if (next === "empty") return
+    tabs().setActive(next)
   })
 
   createEffect(() => {
     const id = params.id
     if (!id) return
-    if (!hasReview()) return
 
-    const wants = isDesktop()
-      ? view().reviewPanel.opened() &&
-        (layout.fileTree.opened() ? fileTreeTab() === "changes" : activeTab() === "review")
-      : store.mobileTab === "review"
+    const wants = isDesktop() ? layout.fileTree.opened() && fileTreeTab() === "changes" : store.mobileTab === "changes"
     if (!wants) return
-    if (diffsReady()) return
+    if (sync.data.session_diff[id] !== undefined) return
+    if (sync.status === "loading") return
 
-    sync.session.diff(id)
+    void sync.session.diff(id)
+  })
+
+  createEffect(() => {
+    if (!isDesktop()) return
+    if (!layout.fileTree.opened()) return
+    if (sync.status === "loading") return
+
+    fileTreeTab()
+    void file.tree.list("")
   })
 
   const autoScroll = createAutoScroll({
@@ -1252,9 +1314,15 @@ export default function Page() {
     overflowAnchor: "dynamic",
   })
 
+  const clearMessageHash = () => {
+    if (!window.location.hash) return
+    window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
+  }
+
   const resumeScroll = () => {
     setStore("messageId", undefined)
     autoScroll.forceScrollToBottom()
+    clearMessageHash()
   }
 
   // When the user returns to the bottom, treat the active message as "latest".
@@ -1264,6 +1332,7 @@ export default function Page() {
       (scrolled) => {
         if (scrolled) return
         setStore("messageId", undefined)
+        clearMessageHash()
       },
       { defer: true },
     ),
@@ -1338,7 +1407,8 @@ export default function Page() {
 
     requestAnimationFrame(() => {
       const delta = el.scrollHeight - beforeHeight
-      if (delta) el.scrollTop = beforeTop + delta
+      if (!delta) return
+      el.scrollTop = beforeTop + delta
     })
 
     scheduleTurnBackfill()
@@ -1469,6 +1539,7 @@ export default function Page() {
 
     const match = hash.match(/^message-(.+)$/)
     if (match) {
+      autoScroll.pause()
       const msg = visibleUserMessages().find((m) => m.id === match[1])
       if (msg) {
         scrollToMessage(msg, behavior)
@@ -1482,6 +1553,7 @@ export default function Page() {
 
     const target = document.getElementById(hash)
     if (target) {
+      autoScroll.pause()
       scrollToElement(target, behavior)
       return
     }
@@ -1578,6 +1650,7 @@ export default function Page() {
     const msg = visibleUserMessages().find((m) => m.id === targetId)
     if (!msg) return
     if (ui.pendingMessage === targetId) setUi("pendingMessage", undefined)
+    autoScroll.pause()
     requestAnimationFrame(() => scrollToMessage(msg, "auto"))
   })
 
@@ -1655,8 +1728,8 @@ export default function Page() {
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
-        {/* Mobile tab bar - only shown on mobile when user opened review */}
-        <Show when={!isDesktop() && view().reviewPanel.opened()}>
+        {/* Mobile tab bar */}
+        <Show when={!isDesktop() && params.id}>
           <Tabs class="h-auto">
             <Tabs.List>
               <Tabs.Trigger
@@ -1668,16 +1741,16 @@ export default function Page() {
                 {language.t("session.tab.session")}
               </Tabs.Trigger>
               <Tabs.Trigger
-                value="review"
+                value="changes"
                 class="w-1/2 !border-r-0"
                 classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "review")}
+                onClick={() => setStore("mobileTab", "changes")}
               >
                 <Switch>
                   <Match when={hasReview()}>
                     {language.t("session.review.filesChanged", { count: reviewCount() })}
                   </Match>
-                  <Match when={true}>{language.t("session.tab.review")}</Match>
+                  <Match when={true}>{language.t("session.review.change.other")}</Match>
                 </Switch>
               </Tabs.Trigger>
             </Tabs.List>
@@ -1688,10 +1761,11 @@ export default function Page() {
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
-            "flex-1 md:flex-none pt-6 md:pt-3": true,
+            "flex-1 pt-6 md:pt-3": true,
+            "md:flex-none": layout.fileTree.opened(),
           }}
           style={{
-            width: isDesktop() && showTabs() ? `${layout.session.width()}px` : "100%",
+            width: isDesktop() && layout.fileTree.opened() ? `${layout.session.width()}px` : "100%",
             "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
           }}
         >
@@ -1700,7 +1774,7 @@ export default function Page() {
               <Match when={params.id}>
                 <Show when={activeMessage()}>
                   <Show
-                    when={!mobileReview()}
+                    when={!mobileChanges()}
                     fallback={
                       <div class="relative h-full overflow-hidden">
                         <Switch>
@@ -1717,6 +1791,7 @@ export default function Page() {
                                 diffs={diffs}
                                 view={view}
                                 diffStyle="unified"
+                                focusedFile={activeDiff()}
                                 onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
                                 comments={comments.all()}
                                 focusedComment={comments.focus()}
@@ -1757,27 +1832,102 @@ export default function Page() {
                       >
                         <button
                           class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
-                          onClick={() => {
-                            setStore("messageId", undefined)
-                            autoScroll.forceScrollToBottom()
-                            window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
-                          }}
+                          onClick={resumeScroll}
                         >
                           <Icon name="arrow-down-to-line" />
                         </button>
                       </div>
                       <div
                         ref={setScrollRef}
-                        onWheel={(e) => markScrollGesture(e.target)}
-                        onTouchMove={(e) => markScrollGesture(e.target)}
+                        onWheel={(e) => {
+                          const root = e.currentTarget
+                          const target = e.target instanceof Element ? e.target : undefined
+                          const nested = target?.closest("[data-scrollable]")
+                          if (!nested || nested === root) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          if (!(nested instanceof HTMLElement)) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          const max = nested.scrollHeight - nested.clientHeight
+                          if (max <= 1) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          const delta =
+                            e.deltaMode === 1
+                              ? e.deltaY * 40
+                              : e.deltaMode === 2
+                                ? e.deltaY * root.clientHeight
+                                : e.deltaY
+                          if (!delta) return
+
+                          if (delta < 0) {
+                            if (nested.scrollTop + delta <= 0) markScrollGesture(root)
+                            return
+                          }
+
+                          const remaining = max - nested.scrollTop
+                          if (delta > remaining) markScrollGesture(root)
+                        }}
+                        onTouchStart={(e) => {
+                          touchGesture = e.touches[0]?.clientY
+                        }}
+                        onTouchMove={(e) => {
+                          const next = e.touches[0]?.clientY
+                          const prev = touchGesture
+                          touchGesture = next
+                          if (next === undefined || prev === undefined) return
+
+                          const delta = prev - next
+                          if (!delta) return
+
+                          const root = e.currentTarget
+                          const target = e.target instanceof Element ? e.target : undefined
+                          const nested = target?.closest("[data-scrollable]")
+                          if (!nested || nested === root) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          if (!(nested instanceof HTMLElement)) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          const max = nested.scrollHeight - nested.clientHeight
+                          if (max <= 1) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          if (delta < 0) {
+                            if (nested.scrollTop + delta <= 0) markScrollGesture(root)
+                            return
+                          }
+
+                          const remaining = max - nested.scrollTop
+                          if (delta > remaining) markScrollGesture(root)
+                        }}
+                        onTouchEnd={() => {
+                          touchGesture = undefined
+                        }}
+                        onTouchCancel={() => {
+                          touchGesture = undefined
+                        }}
                         onPointerDown={(e) => {
                           if (e.target !== e.currentTarget) return
-                          markScrollGesture(e.target)
+                          markScrollGesture(e.currentTarget)
                         }}
                         onScroll={(e) => {
-                          autoScroll.handleScroll()
                           if (!hasScrollGesture()) return
-                          markScrollGesture(e.target)
+                          autoScroll.handleScroll()
+                          markScrollGesture(e.currentTarget)
                           if (isDesktop()) scheduleScrollSpy(e.currentTarget)
                         }}
                         onClick={autoScroll.handleInteraction}
@@ -1790,7 +1940,7 @@ export default function Page() {
                               "sticky top-0 z-30 bg-background-stronger": true,
                               "w-full": true,
                               "px-4 md:px-6": true,
-                              "md:max-w-200 md:mx-auto": !showTabs(),
+                              "md:max-w-200 md:mx-auto": centered(),
                             }}
                           >
                             <div class="h-10 flex items-center gap-1">
@@ -1818,9 +1968,9 @@ export default function Page() {
                           class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
                             "w-full": true,
-                            "md:max-w-200 md:mx-auto": !showTabs(),
-                            "mt-0.5": !showTabs(),
-                            "mt-0": showTabs(),
+                            "md:max-w-200 md:mx-auto": centered(),
+                            "mt-0.5": centered(),
+                            "mt-0": !centered(),
                           }}
                         >
                           <Show when={store.turnStart > 0}>
@@ -1871,7 +2021,7 @@ export default function Page() {
                                   data-message-id={message.id}
                                   classList={{
                                     "min-w-0 w-full max-w-full": true,
-                                    "md:max-w-200": !showTabs(),
+                                    "md:max-w-200": centered(),
                                   }}
                                 >
                                   <SessionTurn
@@ -1928,7 +2078,7 @@ export default function Page() {
             <div
               classList={{
                 "w-full px-4 pointer-events-auto": true,
-                "md:max-w-200": !showTabs(),
+                "md:max-w-200 md:mx-auto": centered(),
               }}
             >
               <Show when={request()} keyed>
@@ -2001,7 +2151,7 @@ export default function Page() {
             </div>
           </div>
 
-          <Show when={isDesktop() && showTabs()}>
+          <Show when={isDesktop() && layout.fileTree.opened()}>
             <ResizeHandle
               direction="horizontal"
               size={layout.session.width()}
@@ -2012,8 +2162,8 @@ export default function Page() {
           </Show>
         </div>
 
-        {/* Desktop tabs panel (Review + Context + Files) - hidden on mobile */}
-        <Show when={isDesktop() && showTabs()}>
+        {/* Desktop side panel - hidden on mobile */}
+        <Show when={isDesktop() && layout.fileTree.opened()}>
           <aside
             id="review-panel"
             aria-label={language.t("session.panel.reviewAndFiles")}
@@ -2021,7 +2171,7 @@ export default function Page() {
           >
             <div class="flex-1 min-w-0 h-full">
               <Show
-                when={layout.fileTree.opened() && fileTreeTab() === "changes"}
+                when={fileTreeTab() === "changes"}
                 fallback={
                   <DragDropProvider
                     onDragStart={handleDragStart}
@@ -2034,24 +2184,7 @@ export default function Page() {
                     <Tabs value={activeTab()} onChange={openTab}>
                       <div class="sticky top-0 shrink-0 flex">
                         <Tabs.List>
-                          <Show when={!layout.fileTree.opened()}>
-                            <Tabs.Trigger value="review" classes={{ button: "!pl-6" }}>
-                              <div class="flex items-center gap-3">
-                                <Show when={diffs()}>
-                                  <DiffChanges changes={diffs()} variant="bars" />
-                                </Show>
-                                <div class="flex items-center gap-1.5">
-                                  <div>{language.t("session.tab.review")}</div>
-                                  <Show when={info()?.summary?.files}>
-                                    <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
-                                      {info()?.summary?.files ?? 0}
-                                    </div>
-                                  </Show>
-                                </div>
-                              </div>
-                            </Tabs.Trigger>
-                          </Show>
-                          <Show when={!layout.fileTree.opened() && contextOpen()}>
+                          <Show when={contextOpen()}>
                             <Tabs.Trigger
                               value="context"
                               closeButton={
@@ -2098,69 +2231,21 @@ export default function Page() {
                           </StickyAddButton>
                         </Tabs.List>
                       </div>
-                      <Show when={!layout.fileTree.opened()}>
-                        <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                          <Show when={activeTab() === "review"}>
-                            <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                              <Switch>
-                                <Match when={hasReview()}>
-                                  <Show
-                                    when={diffsReady()}
-                                    fallback={
-                                      <div class="px-6 py-4 text-text-weak">
-                                        {language.t("session.review.loadingChanges")}
-                                      </div>
-                                    }
-                                  >
-                                    <SessionReviewTab
-                                      diffs={diffs}
-                                      view={view}
-                                      diffStyle={layout.review.diffStyle()}
-                                      onDiffStyleChange={layout.review.setDiffStyle}
-                                      onScrollRef={setReviewScroll}
-                                      onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-                                      comments={comments.all()}
-                                      focusedComment={comments.focus()}
-                                      onFocusedCommentChange={comments.setFocus}
-                                      onViewFile={(path) => {
-                                        showAllFiles()
-                                        const value = file.tab(path)
-                                        tabs().open(value)
-                                        file.load(path)
-                                      }}
-                                    />
-                                  </Show>
-                                </Match>
-                                <Match when={true}>
-                                  <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                                    <Mark class="w-14 opacity-10" />
-                                    <div class="text-14-regular text-text-weak max-w-56">
-                                      {language.t("session.review.empty")}
-                                    </div>
-                                  </div>
-                                </Match>
-                              </Switch>
-                            </div>
-                          </Show>
-                        </Tabs.Content>
-                      </Show>
 
-                      <Show when={layout.fileTree.opened() && fileTreeTab() === "all" && openedTabs().length === 0}>
-                        <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                          <Show when={activeTab() === "review"}>
-                            <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                              <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
-                                <Mark class="w-14 opacity-10" />
-                                <div class="text-14-regular text-text-weak max-w-56">
-                                  {language.t("session.files.selectToOpen")}
-                                </div>
+                      <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
+                        <Show when={activeTab() === "empty"}>
+                          <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                            <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
+                              <Mark class="w-14 opacity-10" />
+                              <div class="text-14-regular text-text-weak max-w-56">
+                                {language.t("session.files.selectToOpen")}
                               </div>
                             </div>
-                          </Show>
-                        </Tabs.Content>
-                      </Show>
+                          </div>
+                        </Show>
+                      </Tabs.Content>
 
-                      <Show when={!layout.fileTree.opened() && contextOpen()}>
+                      <Show when={contextOpen()}>
                         <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
                           <Show when={activeTab() === "context"}>
                             <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
@@ -2682,51 +2767,16 @@ export default function Page() {
                   </DragDropProvider>
                 }
               >
-                <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
-                  <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                    <Switch>
-                      <Match when={hasReview()}>
-                        <Show
-                          when={diffsReady()}
-                          fallback={
-                            <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
-                          }
-                        >
-                          <SessionReviewTab
-                            diffs={diffs}
-                            view={view}
-                            diffStyle={layout.review.diffStyle()}
-                            onDiffStyleChange={layout.review.setDiffStyle}
-                            onScrollRef={setReviewScroll}
-                            onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-                            comments={comments.all()}
-                            focusedComment={comments.focus()}
-                            onFocusedCommentChange={comments.setFocus}
-                            onViewFile={(path) => {
-                              showAllFiles()
-                              const value = file.tab(path)
-                              tabs().open(value)
-                              file.load(path)
-                            }}
-                          />
-                        </Show>
-                      </Match>
-                      <Match when={true}>
-                        <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                          <Mark class="w-14 opacity-10" />
-                          <div class="text-14-regular text-text-weak max-w-56">
-                            {language.t("session.review.empty")}
-                          </div>
-                        </div>
-                      </Match>
-                    </Switch>
-                  </div>
-                </div>
+                {reviewPanel()}
               </Show>
             </div>
 
             <Show when={layout.fileTree.opened()}>
-              <div class="relative shrink-0 h-full" style={{ width: `${layout.fileTree.width()}px` }}>
+              <div
+                id="file-tree-panel"
+                class="relative shrink-0 h-full"
+                style={{ width: `${layout.fileTree.width()}px` }}
+              >
                 <div class="h-full border-l border-border-weak-base flex flex-col overflow-hidden group/filetree">
                   <Tabs
                     variant="pill"
@@ -2759,8 +2809,9 @@ export default function Page() {
                             <FileTree
                               path=""
                               allowed={diffFiles()}
+                              kinds={kinds()}
                               draggable={false}
-                              tooltip={false}
+                              active={activeDiff()}
                               onFileClick={(node) => focusReviewDiff(node.path)}
                             />
                           </Show>
@@ -2776,7 +2827,7 @@ export default function Page() {
                       <FileTree
                         path=""
                         modified={diffFiles()}
-                        tooltip={false}
+                        kinds={kinds()}
                         onFileClick={(node) => openTab(file.tab(node.path))}
                       />
                     </Tabs.Content>
