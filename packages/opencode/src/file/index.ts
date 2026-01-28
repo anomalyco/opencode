@@ -335,7 +335,11 @@ export namespace File {
       }
       ignored = ig.ignores.bind(ig)
     }
-    const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
+    const resolved = dir
+      ? path.isAbsolute(dir)
+        ? dir
+        : path.join(Instance.directory, dir)
+      : Instance.directory
 
     // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
     // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
@@ -354,11 +358,17 @@ export namespace File {
     for (const entry of entries) {
       if (exclude.includes(entry.name)) continue
       const fullPath = path.join(resolved, entry.name)
-      const relativePath = path.relative(Instance.directory, fullPath)
       const type = entry.isDirectory() ? "directory" : "file"
-      const isInProject =
-        Filesystem.contains(Instance.directory, fullPath) || Filesystem.contains(Instance.worktree, fullPath)
-      const isIgnored = isInProject ? ignored(type === "directory" ? relativePath + "/" : relativePath) : false
+      const isInProject = Instance.containsPath(fullPath)
+      let isIgnored = false
+      let relativePath = fullPath
+      if (isInProject) {
+        const base = Filesystem.contains(Instance.directory, fullPath) ? Instance.directory : Instance.worktree
+        relativePath = path.relative(base, fullPath)
+        if (relativePath && relativePath !== "/") {
+          isIgnored = ignored(type === "directory" ? relativePath + "/" : relativePath)
+        }
+      }
       nodes.push({
         name: entry.name,
         path: relativePath,

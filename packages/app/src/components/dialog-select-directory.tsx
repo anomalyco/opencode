@@ -3,6 +3,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { Button } from "@opencode-ai/ui/button"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
+import { TextField } from "@opencode-ai/ui/text-field"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createResource, createSignal, Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -20,6 +21,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const sdk = useGlobalSDK()
   const dialog = useDialog()
   const [state, setState] = createStore({ error: "" })
+  const [filter, setFilter] = createSignal("")
 
   const isSingleSelect = createMemo(() => !props.multiple)
   const home = createMemo(() => sync.data.path.home)
@@ -113,6 +115,16 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return { results: [], error: "Unable to load folders. Check the server connection." }
   }
 
+  function errorMessage(err: unknown) {
+    if (err && typeof err === "object" && "data" in err) {
+      const data = (err as { data?: { message?: string; error?: { message?: string } } }).data
+      if (data?.message) return data.message
+      if (data?.error?.message) return data.error.message
+    }
+    if (err instanceof Error) return err.message
+    return "Unable to load folders. Check the server connection or dev proxy."
+  }
+
   async function fetchDirs(query: string) {
     const directory = root()
     if (!directory) return [] as string[]
@@ -160,8 +172,8 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         const { results, error } = normalizeFileListResponse(response)
         if (error) setState({ error })
         return results
-      } catch {
-        setState({ error: "Unable to load folders. Check the server connection or dev proxy." })
+      } catch (err) {
+        setState({ error: errorMessage(err) })
         return []
       }
     },
@@ -241,34 +253,45 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
           </List>
         }
       >
-        <div class="flex flex-col gap-3">
-          <div class="flex items-center justify-between gap-3">
-            <div class="text-12-regular text-text-weak">
-              Current folder: <span class="text-text-strong">{display(currentPath())}</span>
+        <div class="directory-picker flex flex-col gap-3 max-h-[70vh]">
+          <div class="sticky top-0 z-20 bg-surface-base/95 backdrop-blur px-3 pt-3">
+            <div class="flex items-center justify-between gap-3">
+              <div class="text-12-regular text-text-weak pl-1">
+                Current folder: <span class="text-text-strong">{display(currentPath())}</span>
+              </div>
+              <Button
+                size="large"
+                variant="ghost"
+                disabled={!parentPath()}
+                onClick={() => {
+                  const next = parentPath()
+                  if (!next && next !== "") return
+                  setCurrentPath(next)
+                }}
+              >
+                Up one level
+              </Button>
             </div>
-            <Button
-              size="large"
-              variant="ghost"
-              disabled={!parentPath()}
-              onClick={() => {
-                const next = parentPath()
-                if (!next && next !== "") return
-                setCurrentPath(next)
-              }}
-            >
-              Up one level
-            </Button>
+            <div class="pt-2 pb-2">
+              <TextField
+                value={filter()}
+                onChange={setFilter}
+                placeholder="Filter folders"
+                variant="ghost"
+              />
+            </div>
           </div>
           <List
-            search={{ placeholder: "Search folders", autofocus: true }}
             emptyMessage={state.error || "No folders found"}
             items={directoryItems()}
             key={(item) => item.path}
             filterKeys={["name"]}
+            filter={filter()}
             onSelect={(item) => {
               if (!item) return
               setCurrentPath(item.path)
             }}
+            class="flex-1 min-h-0"
           >
             {(item) => {
               const path = display(item.path)
@@ -289,12 +312,12 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
               )
             }}
           </List>
-          <div class="flex justify-end gap-2">
-            <Button size="normal" variant="ghost" onClick={() => dialog.close()}>
+          <div class="sticky bottom-0 z-20 bg-surface-base/95 backdrop-blur px-3 pb-3 pt-2 flex justify-end gap-3">
+            <Button size="large" variant="ghost" onClick={() => dialog.close()}>
               Cancel
             </Button>
             <Button
-              size="normal"
+              size="large"
               onClick={() => {
                 const selected = currentPath()
                 if (!selected) return
