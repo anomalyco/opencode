@@ -11,6 +11,7 @@ import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
+import { Skill } from "../skill"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -119,6 +120,16 @@ export namespace Plugin {
   export async function init() {
     const hooks = await state().then((x) => x.hooks)
     const config = await Config.get()
+
+    for (const hook of hooks) {
+      if (hook["skill.list"] || hook["skill.load"]) {
+        Skill.registerProvider({
+          list: hook["skill.list"] ?? (async () => []),
+          load: hook["skill.load"] ?? (async () => undefined),
+        })
+      }
+    }
+
     for (const hook of hooks) {
       // @ts-expect-error this is because we haven't moved plugin to sdk v2
       await hook.config?.(config)

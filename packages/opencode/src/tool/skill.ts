@@ -2,8 +2,8 @@ import path from "path"
 import z from "zod"
 import { Tool } from "./tool"
 import { Skill } from "../skill"
-import { ConfigMarkdown } from "../config/markdown"
 import { PermissionNext } from "../permission/next"
+import { Instance } from "../project/instance"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
   const skills = await Skill.all()
@@ -62,12 +62,11 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         always: [params.name],
         metadata: {},
       })
-      // Load and parse skill content
-      const parsed = await ConfigMarkdown.parse(skill.location)
-      const dir = path.dirname(skill.location)
 
-      // Format output similar to plugin pattern
-      const output = [`## Skill: ${skill.name}`, "", `**Base directory**: ${dir}`, "", parsed.content.trim()].join("\n")
+      const content = await Skill.loadContent(skill)
+      const dir = path.isAbsolute(skill.location) ? path.dirname(skill.location) : Instance.directory
+
+      const output = [`## Skill: ${skill.name}`, "", `**Base directory**: ${dir}`, "", content].join("\n")
 
       return {
         title: `Loaded skill: ${skill.name}`,

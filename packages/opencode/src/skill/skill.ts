@@ -20,6 +20,22 @@ export namespace Skill {
   })
   export type Info = z.infer<typeof Info>
 
+  export type SkillProvider = {
+    list: () => Promise<Info[]>
+    load: (location: string) => Promise<string | undefined>
+  }
+
+  const providers: SkillProvider[] = []
+
+  export function registerProvider(provider: SkillProvider) {
+    providers.push(provider)
+  }
+
+  export function unregisterProvider(provider: SkillProvider) {
+    const idx = providers.indexOf(provider)
+    if (idx >= 0) providers.splice(idx, 1)
+  }
+
   export const InvalidError = NamedError.create(
     "SkillInvalidError",
     z.object({
@@ -126,10 +142,50 @@ export namespace Skill {
   })
 
   export async function get(name: string) {
+    for (const provider of providers) {
+      try {
+        const skills = await provider.list()
+        const match = skills.find((s) => s.name === name)
+        if (match) return match
+      } catch (e) {
+        log.error("skill provider get failed", { error: e })
+      }
+    }
+
     return state().then((x) => x[name])
   }
 
   export async function all() {
-    return state().then((x) => Object.values(x))
+    const staticSkills = await state()
+    const dynamicSkills: Info[] = []
+
+    for (const provider of providers) {
+      try {
+        const skills = await provider.list()
+        dynamicSkills.push(...skills)
+      } catch (e) {
+        log.error("skill provider list failed", { error: e })
+      }
+    }
+
+    const merged = { ...staticSkills }
+    for (const skill of dynamicSkills) {
+      merged[skill.name] = skill
+    }
+    return Object.values(merged)
+  }
+
+  export async function loadContent(info: Info): Promise<string> {
+    for (const provider of providers) {
+      try {
+        const content = await provider.load(info.location)
+        if (content) return content
+      } catch (e) {
+        log.error("skill provider load failed", { error: e })
+      }
+    }
+
+    const parsed = await ConfigMarkdown.parse(info.location)
+    return parsed.content.trim()
   }
 }

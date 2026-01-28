@@ -223,4 +223,22 @@ export interface Hooks {
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
   ) => Promise<void>
+
+  /**
+   * Provide additional skills dynamically.
+   * Called when the skill list is requested.
+   */
+  "skill.list"?: () => Promise<
+    Array<{
+      name: string
+      description: string
+      location: string
+    }>
+  >
+
+  /**
+   * Load skill content by location.
+   * Called when a plugin-provided skill is invoked.
+   */
+  "skill.load"?: (location: string) => Promise<string | undefined>
 }
