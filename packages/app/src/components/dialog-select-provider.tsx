@@ -18,7 +18,7 @@ export const DialogSelectProvider: Component = () => {
   const otherGroup = () => language.t("dialog.provider.group.other")
 
   return (
-    <Dialog title={language.t("command.provider.connect")}>
+    <Dialog title={language.t("command.provider.connect")} transition>
       <List
         search={{ placeholder: language.t("dialog.provider.search.placeholder"), autofocus: true }}
         emptyMessage={language.t("dialog.provider.empty")}
@@ -55,6 +55,12 @@ export const DialogSelectProvider: Component = () => {
             </Show>
             <Show when={i.id === "anthropic"}>
               <div class="text-14-regular text-text-weak">{language.t("dialog.provider.anthropic.note")}</div>
+            </Show>
+            <Show when={i.id === "openai"}>
+              <div class="text-14-regular text-text-weak">{language.t("dialog.provider.openai.note")}</div>
+            </Show>
+            <Show when={i.id.startsWith("github-copilot")}>
+              <div class="text-14-regular text-text-weak">{language.t("dialog.provider.copilot.note")}</div>
             </Show>
           </div>
         )}
