@@ -506,6 +506,25 @@ export namespace Provider {
         },
       }
     },
+    nova: async (input) => {
+      const auth = await Auth.get("nova")
+      const apiKey = await (async () => {
+        const envKey = Env.get("NOVA_API_KEY")
+        if (envKey) return envKey
+        if (auth?.type === "api") return auth.key
+        return undefined
+      })()
+
+      if (!apiKey) return { autoload: false }
+
+      return {
+        autoload: true,
+        options: {
+          baseURL: "https://api.nova.amazon.com/v1",
+          apiKey,
+        },
+      }
+    },
   }
 
   export const Model = z
@@ -709,6 +728,53 @@ export namespace Provider {
           ...model,
           providerID: "github-copilot-enterprise",
         })),
+      }
+    }
+
+    // Add Amazon Nova provider (standalone, not Bedrock)
+    if (!database["nova"]) {
+      database["nova"] = {
+        id: "nova",
+        name: "Amazon Nova",
+        source: "custom",
+        env: ["NOVA_API_KEY"],
+        options: {},
+        models: {
+          "nova-2-lite-v1": {
+            id: "nova-2-lite-v1",
+            providerID: "nova",
+            name: "Nova 2 Lite",
+            family: "nova",
+            api: {
+              id: "nova-2-lite-v1",
+              url: "https://api.nova.amazon.com/v1",
+              npm: "@ai-sdk/openai-compatible",
+            },
+            status: "active",
+            headers: {},
+            options: {},
+            cost: {
+              input: 0,
+              output: 0,
+              cache: { read: 0, write: 0 },
+            },
+            limit: {
+              context: 64000,
+              output: 10000,
+            },
+            capabilities: {
+              temperature: true,
+              reasoning: false,
+              attachment: true,
+              toolcall: true,
+              input: { text: true, audio: false, image: true, video: false, pdf: false },
+              output: { text: true, audio: false, image: false, video: false, pdf: false },
+              interleaved: false,
+            },
+            release_date: "2025-01-01",
+            variants: {},
+          },
+        },
       }
     }
 
