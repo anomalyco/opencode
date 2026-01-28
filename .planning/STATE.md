@@ -11,10 +11,10 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Milestone 1:** Complete (Phases 1-11)
 **Phase:** 16 of 17 (Repo downloads) - In progress
-**Next Phase:** 16 - Plan 05 (Repo manager entry)
-**Plan:** 04 of 05 - Complete (gap closures; plans 02-03 pending)
+**Next Phase:** 16 - Plans 02-03 (SDK + UI integration)
+**Plan:** 05 of 05 - Complete (gap closures; plans 02-03 pending)
 **Status:** Phase in progress
-**Last activity:** 2026-01-28 - Completed 16-04 plan
+**Last activity:** 2026-01-28 - Completed 16-05 plan
 
 Progress: [█████████░] 96% (48/50 plans complete)
 
@@ -195,9 +195,9 @@ From research summary (Phase 2, 3 flags):
 ## Session Continuity
 
 Last session: 2026-01-28
-Stopped at: Completed 16-04-PLAN.md
+Stopped at: Completed 16-05-PLAN.md
 Resume file: None
-Next: Complete 16-05, then finish Phase 16 plans 02-03
+Next: Finish Phase 16 plans 02-03, then proceed to Phase 17
 
 ## Phase 6 Progress
 

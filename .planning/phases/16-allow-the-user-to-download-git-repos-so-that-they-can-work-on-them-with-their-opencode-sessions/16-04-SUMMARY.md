@@ -61,7 +61,7 @@ Each task was committed atomically:
 1. **Task 1: Proxy /repo and /find to backend in dev** - `1c16422de` (fix)
 2. **Task 2: Surface repo list and directory picker failures** - `ed208eb0f` (fix)
 
-**Plan metadata:** (docs commit)
+**Plan metadata:** `4771ef792` (docs)
 
 ## Files Created/Modified
 - `packages/app/vite.config.ts` - Added dev proxy routes for repo and find endpoints
