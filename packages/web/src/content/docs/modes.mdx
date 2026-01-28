@@ -34,11 +34,19 @@ Build is the **default** mode with all tools enabled. This is the standard mode 
 A restricted mode designed for planning and analysis. In plan mode, the following tools are disabled by default:
 
 - `write` - Cannot create new files
-- `edit` - Cannot modify existing files, except for files located at `.opencode/plans/*.md` to detail the plan itself
+- `edit` - Cannot modify existing files, except for files located at the plan directory (default: `.opencode/plans/*.md`) to detail the plan itself
 - `patch` - Cannot apply patches
 - `bash` - Cannot execute shell commands
 
 This mode is useful when you want the AI to analyze code, suggest changes, or create plans without making any actual modifications to your codebase.
+
+#### Plan File Location
+
+By default, plan files are saved to:
+- **With VCS (git)**: `.opencode/plans/{timestamp}-{slug}.md` (relative to project root)
+- **Without VCS**: `~/.local/share/opencode/plans/{timestamp}-{slug}.md` (global data directory)
+
+You can customize the plan file location using the `plan.path` configuration option (see [Plan Path Configuration](#plan-path-configuration) below).
 
 ---
 
@@ -174,6 +182,36 @@ Temperature values typically range from 0.0 to 1.0:
 ```
 
 If no temperature is specified, opencode uses model-specific defaults (typically 0 for most models, 0.55 for Qwen models).
+
+---
+
+### Plan Path Configuration
+
+You can customize where plan files are saved using the `plan.path` configuration option. This is useful when working with multiple LLMs where one makes the plan, another iterates on it, and another executes it.
+
+```json title="opencode.json"
+{
+  "plan": {
+    "path": "plans"  // Relative to project root
+  }
+}
+```
+
+For an absolute path:
+
+```json title="opencode.json"
+{
+  "plan": {
+    "path": "/path/to/shared/plans"
+  }
+}
+```
+
+**Default locations:**
+- **With VCS (git)**: `.opencode/plans/`
+- **Without VCS**: `~/.local/share/opencode/plans/`
+
+The plan file is named with the format `{timestamp}-{slug}.md`.
 
 ---
 
