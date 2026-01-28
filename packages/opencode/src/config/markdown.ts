@@ -51,9 +51,9 @@ export namespace ConfigMarkdown {
         continue
       }
 
-      // if value contains a colon, convert to block scalar
+      // if value contains a colon, convert to block scalar (strip trailing newline)
       if (value.includes(":")) {
-        result.push(`${key}: |`)
+        result.push(`${key}: |-`)
         result.push(`  ${value}`)
         continue
       }

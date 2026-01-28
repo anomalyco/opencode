@@ -1194,9 +1194,28 @@ export namespace Provider {
   }
 
   export function parseModel(model: string) {
+    // Supported separators (in order of priority):
+    // 1. Pipe "|" - unambiguous, no model IDs use it (e.g. "openrouter|anthropic/claude-3-opus")
+    // 2. Colon ":" - if it appears before any slash (e.g. "openrouter:anthropic/claude-3-opus")
+    // 3. Slash "/" - default fallback (e.g. "openrouter/anthropic/claude-3-opus")
+    const pipeIdx = model.indexOf("|")
+    if (pipeIdx !== -1) {
+      return {
+        providerID: model.slice(0, pipeIdx),
+        modelID: model.slice(pipeIdx + 1),
+      }
+    }
+    const colonIdx = model.indexOf(":")
+    const slashIdx = model.indexOf("/")
+    if (colonIdx !== -1 && (slashIdx === -1 || colonIdx < slashIdx)) {
+      return {
+        providerID: model.slice(0, colonIdx),
+        modelID: model.slice(colonIdx + 1),
+      }
+    }
     const [providerID, ...rest] = model.split("/")
     return {
-      providerID: providerID,
+      providerID,
       modelID: rest.join("/"),
     }
   }

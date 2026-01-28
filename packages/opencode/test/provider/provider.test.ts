@@ -382,6 +382,57 @@ test("parseModel handles model IDs with slashes", () => {
   expect(result.modelID).toBe("anthropic/claude-3-opus")
 })
 
+test("parseModel handles colon before slash as provider separator", () => {
+  // colon comes before any slash, so colon is the separator
+  const result = Provider.parseModel("openrouter:anthropic/claude-3-opus")
+  expect(result.providerID).toBe("openrouter")
+  expect(result.modelID).toBe("anthropic/claude-3-opus")
+})
+
+test("parseModel handles colon in model ID when it comes after slash", () => {
+  // colon comes after slash, so it's part of the model ID
+  const result = Provider.parseModel("synthetic/hf:zai-org/GLM-4.7")
+  expect(result.providerID).toBe("synthetic")
+  expect(result.modelID).toBe("hf:zai-org/GLM-4.7")
+})
+
+test("parseModel handles colon suffix in model ID", () => {
+  // colon at end of model ID (e.g. :free, :exacto variants)
+  const result = Provider.parseModel("openrouter/z-ai/glm-4.6:exacto")
+  expect(result.providerID).toBe("openrouter")
+  expect(result.modelID).toBe("z-ai/glm-4.6:exacto")
+})
+
+test("parseModel handles multiple slashes in model ID", () => {
+  const result = Provider.parseModel("siliconflow-cn/Pro/deepseek-ai/DeepSeek-R1")
+  expect(result.providerID).toBe("siliconflow-cn")
+  expect(result.modelID).toBe("Pro/deepseek-ai/DeepSeek-R1")
+})
+
+test("parseModel handles multiple colons in model ID", () => {
+  const result = Provider.parseModel("amazon-bedrock/amazon.titan-text-express-v1:0:8k")
+  expect(result.providerID).toBe("amazon-bedrock")
+  expect(result.modelID).toBe("amazon.titan-text-express-v1:0:8k")
+})
+
+test("parseModel handles cloudflare @ prefix in model ID", () => {
+  const result = Provider.parseModel("cloudflare-ai-gateway/workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast")
+  expect(result.providerID).toBe("cloudflare-ai-gateway")
+  expect(result.modelID).toBe("workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast")
+})
+
+test("parseModel handles pipe separator", () => {
+  const result = Provider.parseModel("openrouter|anthropic/claude-3-opus")
+  expect(result.providerID).toBe("openrouter")
+  expect(result.modelID).toBe("anthropic/claude-3-opus")
+})
+
+test("parseModel handles pipe separator with colons in model ID", () => {
+  const result = Provider.parseModel("synthetic|hf:zai-org/GLM-4.7")
+  expect(result.providerID).toBe("synthetic")
+  expect(result.modelID).toBe("hf:zai-org/GLM-4.7")
+})
+
 test("defaultModel returns first available model when no config set", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

@@ -104,7 +104,7 @@ describe("ConfigMarkdown: frontmatter parsing", async () => {
   })
 
   test("should extract occupation field with colon in value", () => {
-    expect(parsed.data.occupation).toBe("This man has the following occupation: Software Engineer\n")
+    expect(parsed.data.occupation).toBe("This man has the following occupation: Software Engineer")
   })
 
   test("should extract title field with single quotes", () => {
@@ -128,15 +128,15 @@ describe("ConfigMarkdown: frontmatter parsing", async () => {
   })
 
   test("should extract URL with port", () => {
-    expect(parsed.data.url).toBe("https://example.com:8080/path?query=value\n")
+    expect(parsed.data.url).toBe("https://example.com:8080/path?query=value")
   })
 
   test("should extract time with colons", () => {
-    expect(parsed.data.time).toBe("The time is 12:30:00 PM\n")
+    expect(parsed.data.time).toBe("The time is 12:30:00 PM")
   })
 
   test("should extract value with multiple colons", () => {
-    expect(parsed.data.nested).toBe("First: Second: Third: Fourth\n")
+    expect(parsed.data.nested).toBe("First: Second: Third: Fourth")
   })
 
   test("should preserve already double-quoted values with colons", () => {
@@ -148,7 +148,7 @@ describe("ConfigMarkdown: frontmatter parsing", async () => {
   })
 
   test("should extract value with quotes and colons mixed", () => {
-    expect(parsed.data.mixed).toBe('He said "hello: world" and then left\n')
+    expect(parsed.data.mixed).toBe('He said "hello: world" and then left')
   })
 
   test("should handle empty values", () => {
