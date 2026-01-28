@@ -9,6 +9,7 @@
 Phase 6 requires building a standalone login page at `/login` using the existing opencode console infrastructure. The codebase uses **SolidJS** with **@solidjs/start** for routing, **Kobalte** for accessible components, and custom CSS with CSS variables for theming.
 
 Key findings:
+
 - Existing UI component library (`@opencode-ai/ui`) provides reusable components (TextField, Button, Card, Checkbox, Logo)
 - Backend auth endpoint (`POST /auth/login`) expects JSON with username/password and `X-Requested-With: XMLHttpRequest` header for CSRF protection
 - CSS uses CSS variables with automatic dark/light mode support via `prefers-color-scheme`
@@ -21,25 +22,28 @@ Key findings:
 The established libraries/tools for this domain:
 
 ### Core
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| SolidJS | catalog | Reactive UI framework | Project's frontend framework |
-| @solidjs/start | catalog | SSR and routing | Project's meta-framework |
-| @solidjs/router | catalog | Client-side routing | Official SolidJS router |
-| @solidjs/meta | catalog | Head management | Official SolidJS meta tags |
+
+| Library         | Version | Purpose               | Why Standard                 |
+| --------------- | ------- | --------------------- | ---------------------------- |
+| SolidJS         | catalog | Reactive UI framework | Project's frontend framework |
+| @solidjs/start  | catalog | SSR and routing       | Project's meta-framework     |
+| @solidjs/router | catalog | Client-side routing   | Official SolidJS router      |
+| @solidjs/meta   | catalog | Head management       | Official SolidJS meta tags   |
 
 ### Supporting
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| @kobalte/core | catalog | Accessible primitives | Base for all UI components |
-| TypeScript | catalog | Type safety | All project code is TypeScript |
-| Vite | catalog | Build tool | Used by SolidJS Start |
+
+| Library       | Version | Purpose               | When to Use                    |
+| ------------- | ------- | --------------------- | ------------------------------ |
+| @kobalte/core | catalog | Accessible primitives | Base for all UI components     |
+| TypeScript    | catalog | Type safety           | All project code is TypeScript |
+| Vite          | catalog | Build tool            | Used by SolidJS Start          |
 
 ### Alternatives Considered
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| Native forms | solid-forms library | Forms library adds validation abstractions but native validation simpler for single login form |
-| @kobalte/core TextField | HTML input | Kobalte provides accessibility out-of-box, consistent with existing components |
+
+| Instead of              | Could Use           | Tradeoff                                                                                       |
+| ----------------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
+| Native forms            | solid-forms library | Forms library adds validation abstractions but native validation simpler for single login form |
+| @kobalte/core TextField | HTML input          | Kobalte provides accessibility out-of-box, consistent with existing components                 |
 
 **Installation:**
 Not needed - all dependencies already in workspace
@@ -47,6 +51,7 @@ Not needed - all dependencies already in workspace
 ## Architecture Patterns
 
 ### Recommended Project Structure
+
 ```
 packages/console/app/src/routes/
 ├── login.tsx            # Login page component
@@ -54,9 +59,11 @@ packages/console/app/src/routes/
 ```
 
 ### Pattern 1: SolidJS Start File-Based Routing
+
 **What:** Routes are created by adding `.tsx` files to `src/routes/` directory
 **When to use:** All new pages in the console app
 **Example:**
+
 ```typescript
 // packages/console/app/src/routes/login.tsx
 import { Title, Meta } from "@solidjs/meta"
@@ -73,9 +80,11 @@ export default function Login() {
 ```
 
 ### Pattern 2: Kobalte Component Usage
+
 **What:** Import and compose accessible components from @kobalte/core or @opencode-ai/ui
 **When to use:** All form inputs, buttons, interactive elements
 **Example:**
+
 ```typescript
 // From existing codebase: packages/ui/src/components/text-field.tsx
 import { TextField } from "@opencode-ai/ui/text-field"
@@ -90,9 +99,11 @@ import { TextField } from "@opencode-ai/ui/text-field"
 ```
 
 ### Pattern 3: CSS Variable Theming
+
 **What:** Use predefined CSS variables from `packages/ui/src/styles/theme.css` for colors, spacing
 **When to use:** All styling to ensure dark/light mode compatibility
 **Example:**
+
 ```css
 /* From theme.css - automatic dark mode with prefers-color-scheme */
 .login-card {
@@ -103,31 +114,34 @@ import { TextField } from "@opencode-ai/ui/text-field"
 ```
 
 ### Pattern 4: Form Submission with Fetch
+
 **What:** Use native fetch with async/await for API calls
 **When to use:** Form submissions to backend
 **Example:**
+
 ```typescript
 // From auth route tests: expects X-Requested-With header
 const handleSubmit = async (e: Event) => {
   e.preventDefault()
-  const res = await fetch('/auth/login', {
-    method: 'POST',
+  const res = await fetch("/auth/login", {
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      'X-Requested-With': 'XMLHttpRequest'
+      "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
     },
-    body: JSON.stringify({ username, password })
+    body: JSON.stringify({ username, password }),
   })
   if (res.ok) {
-    window.location.href = '/'
+    window.location.href = "/"
   } else {
     const data = await res.json()
-    setError(data.message || 'Authentication failed')
+    setError(data.message || "Authentication failed")
   }
 }
 ```
 
 ### Anti-Patterns to Avoid
+
 - **Using div/span for buttons:** Screen readers won't recognize interactive elements. Always use semantic `<button>` elements
 - **Hardcoded colors:** Use CSS variables instead to ensure dark/light mode works
 - **Inline event handlers in JSX:** Define handlers as functions for better readability and type safety
@@ -137,44 +151,49 @@ const handleSubmit = async (e: Event) => {
 
 Problems that look simple but have existing solutions:
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| Text input with label | Raw HTML input | @opencode-ai/ui TextField | Handles accessibility, error states, label positioning automatically |
-| Password visibility toggle | Custom show/hide | TextField with button in wrapper | Needs proper aria-pressed, keyboard support, proper sizing |
-| Dark/light mode | JavaScript theme switching | CSS variables + prefers-color-scheme | Already configured, automatic detection |
-| Card container | Custom styled div | @opencode-ai/ui Card | Consistent styling with rest of app |
-| Logo display | Inline SVG | @opencode-ai/ui Logo | Branded, maintained, matches other pages |
-| Button styling | Custom CSS | @opencode-ai/ui Button | Consistent hover states, sizing, variants |
+| Problem                    | Don't Build                | Use Instead                          | Why                                                                  |
+| -------------------------- | -------------------------- | ------------------------------------ | -------------------------------------------------------------------- |
+| Text input with label      | Raw HTML input             | @opencode-ai/ui TextField            | Handles accessibility, error states, label positioning automatically |
+| Password visibility toggle | Custom show/hide           | TextField with button in wrapper     | Needs proper aria-pressed, keyboard support, proper sizing           |
+| Dark/light mode            | JavaScript theme switching | CSS variables + prefers-color-scheme | Already configured, automatic detection                              |
+| Card container             | Custom styled div          | @opencode-ai/ui Card                 | Consistent styling with rest of app                                  |
+| Logo display               | Inline SVG                 | @opencode-ai/ui Logo                 | Branded, maintained, matches other pages                             |
+| Button styling             | Custom CSS                 | @opencode-ai/ui Button               | Consistent hover states, sizing, variants                            |
 
 **Key insight:** The existing UI component library already provides accessible, themed components. Building custom equivalents would duplicate work and risk accessibility issues.
 
 ## Common Pitfalls
 
 ### Pitfall 1: Missing CSRF Header
+
 **What goes wrong:** Requests to `/auth/login` fail with 400 error "csrf_missing"
 **Why it happens:** Backend expects `X-Requested-With: XMLHttpRequest` header for basic CSRF protection
 **How to avoid:** Always include header in fetch requests
 **Warning signs:** Console shows 400 errors, response body has `error: "csrf_missing"`
 
 ### Pitfall 2: Password Toggle Not Accessible
+
 **What goes wrong:** Screen reader users can't tell if password is visible, keyboard users can't toggle
 **Why it happens:** Using `<div>` with onClick instead of `<button>`, missing aria-pressed attribute
 **How to avoid:** Use semantic `<button>` with `role="switch"` or `aria-pressed` attribute
 **Warning signs:** Can't tab to toggle button, screen reader doesn't announce state
 
 ### Pitfall 3: Hardcoded Colors Break Dark Mode
+
 **What goes wrong:** Login form looks wrong in dark mode or doesn't respect system preference
 **Why it happens:** Using hardcoded hex colors instead of CSS variables
 **How to avoid:** Only use CSS variables from `theme.css` (e.g., `var(--text-base)`)
 **Warning signs:** Text invisible in dark mode, colors don't match rest of app
 
 ### Pitfall 4: Form Not Keyboard Accessible
+
 **What goes wrong:** Users can't submit form with Enter key from password field
 **Why it happens:** Using click handlers on buttons instead of form onSubmit
 **How to avoid:** Wrap inputs in `<form>` with `onSubmit` handler, use `type="submit"` button
 **Warning signs:** Pressing Enter doesn't submit form
 
 ### Pitfall 5: Missing Autofocus and Autocomplete
+
 **What goes wrong:** Poor UX - users must manually click username field, password managers don't work
 **Why it happens:** Forgetting HTML attributes for native browser features
 **How to avoid:** Add `autofocus` to username field, `autoComplete="username"` and `autoComplete="current-password"` to respective fields
@@ -185,6 +204,7 @@ Problems that look simple but have existing solutions:
 Verified patterns from official sources:
 
 ### Login Page Structure
+
 ```typescript
 // packages/console/app/src/routes/login.tsx
 import { Title, Meta } from "@solidjs/meta"
@@ -289,6 +309,7 @@ export default function Login() {
 ```
 
 ### Password Visibility Toggle (If Not Using TextField)
+
 ```typescript
 // Accessible password toggle button
 import { createSignal } from "solid-js"
@@ -317,6 +338,7 @@ function PasswordField() {
 ```
 
 ### CSS Styling with Theme Variables
+
 ```css
 /* login.css or inline styles */
 .login-container {
@@ -366,14 +388,15 @@ function PasswordField() {
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| React | SolidJS | Project inception | Finer-grained reactivity, better performance |
-| Custom CSS classes | CSS variables + data attributes | Current codebase | Automatic dark mode, consistent theming |
-| Tailwind CSS | Custom CSS with utility patterns | Current codebase | Smaller bundle, design system control |
-| Manual accessibility | Kobalte primitives | Current codebase | WCAG AA compliance built-in |
+| Old Approach         | Current Approach                 | When Changed      | Impact                                       |
+| -------------------- | -------------------------------- | ----------------- | -------------------------------------------- |
+| React                | SolidJS                          | Project inception | Finer-grained reactivity, better performance |
+| Custom CSS classes   | CSS variables + data attributes  | Current codebase  | Automatic dark mode, consistent theming      |
+| Tailwind CSS         | Custom CSS with utility patterns | Current codebase  | Smaller bundle, design system control        |
+| Manual accessibility | Kobalte primitives               | Current codebase  | WCAG AA compliance built-in                  |
 
 **Deprecated/outdated:**
+
 - Manual theme switching: Now automatic via `prefers-color-scheme` media query
 - Separate dark mode stylesheets: CSS variables handle both modes in one file
 
@@ -399,6 +422,7 @@ Things that couldn't be fully resolved:
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - Existing codebase inspection:
   - `packages/ui/src/components/` - Component implementations
   - `packages/console/app/src/routes/` - Routing patterns
@@ -407,11 +431,13 @@ Things that couldn't be fully resolved:
   - `packages/ui/src/styles/theme.css` - CSS variables and theming
 
 ### Secondary (MEDIUM confidence)
+
 - [W3C WAI Forms Tutorial](https://www.w3.org/WAI/tutorials/forms/) - Official WCAG form guidelines
 - [Accessible Form Validation Guide - Smashing Magazine](https://www.smashingmagazine.com/2023/02/guide-accessible-form-validation/) - Validation patterns
 - [Accessible Password Reveal Input - Make Things Accessible](https://www.makethingsaccessible.com/guides/make-an-accessible-password-reveal-input/) - Toggle button implementation
 
 ### Tertiary (LOW confidence)
+
 - [SolidJS Form Examples](https://www.solidjs.com/examples/forms) - Official examples
 - [solid-forms library](https://github.com/jorroll/solid-forms) - Alternative validation approach
 - [Dos and don'ts of accessible show password buttons - Medium](https://medium.com/@web-accessibility-education/dos-and-donts-of-accessible-show-password-buttons-9a5fbc2c566b) - Toggle accessibility
@@ -419,6 +445,7 @@ Things that couldn't be fully resolved:
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH - Direct inspection of package.json and imports
 - Architecture: HIGH - Verified patterns from existing routes and components
 - Pitfalls: HIGH - Derived from auth tests and WCAG documentation

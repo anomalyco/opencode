@@ -77,16 +77,8 @@ function AuthGate(props: ParentProps) {
   // Wait for initial session check
   // If auth is required but not authenticated, redirect to login
   return (
-    <Show
-      when={session.ready()}
-      fallback={<Loading />}
-    >
-      <Show
-        when={!session.authRequired()}
-        fallback={
-          <AuthRedirect url={server.url} />
-        }
-      >
+    <Show when={session.ready()} fallback={<Loading />}>
+      <Show when={!session.authRequired()} fallback={<AuthRedirect url={server.url} />}>
         {props.children}
       </Show>
     </Show>
@@ -124,45 +116,45 @@ export function AppInterface(props: { defaultUrl?: string }) {
           <AuthGate>
             <GlobalSDKProvider>
               <GlobalSyncProvider>
-              <Router
-                root={(props) => (
-                  <PermissionProvider>
-                    <LayoutProvider>
-                      <NotificationProvider>
-                        <CommandProvider>
-                          <Layout>{props.children}</Layout>
-                        </CommandProvider>
-                      </NotificationProvider>
-                    </LayoutProvider>
-                  </PermissionProvider>
-                )}
-              >
-              <Route
-                path="/"
-                component={() => (
-                  <Suspense fallback={<Loading />}>
-                    <Home />
-                  </Suspense>
-                )}
-              />
-              <Route path="/:dir" component={DirectoryLayout}>
-                <Route path="/" component={() => <Navigate href="session" />} />
-                <Route
-                  path="/session/:id?"
-                  component={() => (
-                    <TerminalProvider>
-                      <FileProvider>
-                        <PromptProvider>
-                          <Suspense fallback={<Loading />}>
-                            <Session />
-                          </Suspense>
-                        </PromptProvider>
-                      </FileProvider>
-                    </TerminalProvider>
+                <Router
+                  root={(props) => (
+                    <PermissionProvider>
+                      <LayoutProvider>
+                        <NotificationProvider>
+                          <CommandProvider>
+                            <Layout>{props.children}</Layout>
+                          </CommandProvider>
+                        </NotificationProvider>
+                      </LayoutProvider>
+                    </PermissionProvider>
                   )}
-                />
-              </Route>
-            </Router>
+                >
+                  <Route
+                    path="/"
+                    component={() => (
+                      <Suspense fallback={<Loading />}>
+                        <Home />
+                      </Suspense>
+                    )}
+                  />
+                  <Route path="/:dir" component={DirectoryLayout}>
+                    <Route path="/" component={() => <Navigate href="session" />} />
+                    <Route
+                      path="/session/:id?"
+                      component={() => (
+                        <TerminalProvider>
+                          <FileProvider>
+                            <PromptProvider>
+                              <Suspense fallback={<Loading />}>
+                                <Session />
+                              </Suspense>
+                            </PromptProvider>
+                          </FileProvider>
+                        </TerminalProvider>
+                      )}
+                    />
+                  </Route>
+                </Router>
               </GlobalSyncProvider>
             </GlobalSDKProvider>
           </AuthGate>

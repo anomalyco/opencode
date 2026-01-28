@@ -58,7 +58,7 @@ completed: 2026-01-22
 
 5. **Security event logging**
    - `logSecurityEvent()`: Logs with privacy masking
-   - `maskUsername()`: Masks to "pe***r" format
+   - `maskUsername()`: Masks to "pe\*\*\*r" format
    - Events logged:
      - `login_failed`: Invalid credentials, user not found
      - `login_success`: Successful authentication
@@ -90,6 +90,7 @@ completed: 2026-01-22
 **Rationale:** User explicitly chose simpler approach in CONTEXT.md: "Track by IP address only — simpler approach, blocks single-source brute force"
 
 **Impact:**
+
 - Blocks single-source attacks effectively
 - Simpler implementation (no per-username state)
 - Username-based rate limiting deferred for future if needed
@@ -99,6 +100,7 @@ completed: 2026-01-22
 **Decision:** Apply rate limiter before PAM authentication
 
 **Rationale:**
+
 - Protects PAM from brute force load
 - Fails fast on rate limit without hitting system auth
 - Consistent with existing architecture decision from 03-03
@@ -108,6 +110,7 @@ completed: 2026-01-22
 **Decision:** 5 attempts per 15 minutes
 
 **Rationale:**
+
 - Balances security vs. usability
 - Allows multiple typos without lockout
 - 15 minutes reasonable for legitimate retries
@@ -115,9 +118,10 @@ completed: 2026-01-22
 
 ### Privacy-Preserving Logging
 
-**Decision:** Mask usernames in security logs (pe***r format)
+**Decision:** Mask usernames in security logs (pe\*\*\*r format)
 
 **Rationale:**
+
 - Reduces exposure of valid usernames
 - Maintains debugging capability
 - Follows security best practices
@@ -133,6 +137,7 @@ None - plan executed exactly as written.
 **Issue:** Rate limiter lazy initialization persists across test cases, causing tests to interfere
 
 **Solution:**
+
 - Set `rateLimiting: false` in default test config
 - Enable explicitly in rate limiting tests
 - Use unique IPs per test to avoid cross-test rate limiting
@@ -144,6 +149,7 @@ None - plan executed exactly as written.
 ✅ **Ready:** Rate limiting established, security logging in place
 
 **What Phase 8 needs:**
+
 - Session timeout enforcement (uses existing session infrastructure)
 - Session persistence (config already in AuthConfig)
 - "Remember me" functionality (config already in AuthConfig)
@@ -153,6 +159,7 @@ None - plan executed exactly as written.
 ✅ **Ready for Plan 03:** HTTPS enforcement
 
 **Foundation established:**
+
 - Security event logging pattern
 - Config-driven security features
 - Middleware-based protection layers
@@ -162,13 +169,14 @@ None - plan executed exactly as written.
 ### hono-rate-limiter Integration
 
 - Uses `rateLimiter()` middleware from hono-rate-limiter
-- Standard headers: "draft-7" (RateLimit-* headers)
+- Standard headers: "draft-7" (RateLimit-\* headers)
 - Custom key generator for IP extraction
 - Custom handler for 429 response format
 
 ### IP Address Extraction
 
 Order of precedence:
+
 1. X-Forwarded-For (first IP if comma-separated)
 2. X-Real-IP
 3. "unknown" (fallback)
@@ -222,6 +230,7 @@ Coverage:
 **Memory:** Negligible (rate limiter stores IP → count mapping in-memory)
 
 **Latency:**
+
 - Rate limiter adds ~0.1ms per request (hash lookup)
 - Applied before PAM, so doesn't add to successful auth latency
 

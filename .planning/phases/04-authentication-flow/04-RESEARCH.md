@@ -9,6 +9,7 @@
 Phase 4 implements the login endpoint (`POST /auth/login`) that validates credentials via the auth broker (from Phase 3) and creates user sessions (from Phase 2). The implementation extends existing patterns in the codebase.
 
 Research confirms:
+
 1. **BrokerClient exists and is tested** - Located at `src/auth/broker-client.ts`, provides `authenticate(username, password)` returning `{success, error?}`
 2. **UserSession infrastructure exists** - Located at `src/session/user-session.ts`, provides `create(username, userAgent?)` returning session with id, username, createdAt, lastAccessTime
 3. **Route patterns are established** - Hono routes with `describeRoute`, `validator`, `resolver` from hono-openapi
@@ -22,30 +23,34 @@ Research confirms:
 The established libraries/tools for this domain:
 
 ### Core (Already in Codebase)
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| hono | catalog | HTTP framework | Already used for all routes |
+
+| Library      | Version | Purpose            | Why Standard                                        |
+| ------------ | ------- | ------------------ | --------------------------------------------------- |
+| hono         | catalog | HTTP framework     | Already used for all routes                         |
 | hono-openapi | catalog | OpenAPI decorators | Already used for describeRoute, validator, resolver |
-| zod | catalog | Schema validation | Already used for all schemas |
-| BrokerClient | (local) | PAM authentication | Built in Phase 3, tested |
-| UserSession | (local) | Session storage | Built in Phase 2, tested |
+| zod          | catalog | Schema validation  | Already used for all schemas                        |
+| BrokerClient | (local) | PAM authentication | Built in Phase 3, tested                            |
+| UserSession  | (local) | Session storage    | Built in Phase 2, tested                            |
 
 ### Supporting (Already in Codebase)
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| hono/cookie | (bundled) | Cookie management | getCookie, setCookie, deleteCookie |
-| @opencode-ai/util/error | workspace | Named errors | Error response formatting |
+
+| Library                 | Version   | Purpose           | When to Use                        |
+| ----------------------- | --------- | ----------------- | ---------------------------------- |
+| hono/cookie             | (bundled) | Cookie management | getCookie, setCookie, deleteCookie |
+| @opencode-ai/util/error | workspace | Named errors      | Error response formatting          |
 
 ### New Requirements
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| (none) | - | User info lookup | Use Bun shell to call `getent passwd` |
+
+| Library | Version | Purpose          | When to Use                           |
+| ------- | ------- | ---------------- | ------------------------------------- |
+| (none)  | -       | User info lookup | Use Bun shell to call `getent passwd` |
 
 **No new dependencies required.** All functionality can be built with existing libraries plus shell commands.
 
 ## Architecture Patterns
 
 ### Recommended Project Structure (Modifications)
+
 ```
 packages/opencode/src/
 ├── auth/
@@ -62,6 +67,7 @@ packages/opencode/src/
 ```
 
 ### Pattern 1: Login Endpoint Flow
+
 **What:** POST /auth/login validates credentials and creates session
 **When to use:** User login requests
 **Why:** Separates concerns - broker validates, TypeScript creates session
@@ -141,6 +147,7 @@ app.post(
 ```
 
 ### Pattern 2: User Info Lookup via getent
+
 **What:** Look up UNIX user info by username using system command
 **When to use:** After successful broker authentication
 **Why:** No native Node.js API; getent works with PAM/NSS (LDAP/Kerberos transparent)
@@ -183,6 +190,7 @@ export async function getUserInfo(username: string): Promise<UnixUserInfo | null
 ```
 
 ### Pattern 3: Extended UserSession Schema
+
 **What:** Add UNIX user fields to UserSession.Info
 **When to use:** Always - sessions now include full user info
 **Why:** Phase 5 needs UID/GID for process execution
@@ -193,10 +201,10 @@ export const Info = z
   .object({
     id: z.string(),
     username: z.string(),
-    uid: z.number().optional(),     // UNIX user ID
-    gid: z.number().optional(),     // UNIX primary group ID
-    home: z.string().optional(),    // Home directory
-    shell: z.string().optional(),   // Login shell
+    uid: z.number().optional(), // UNIX user ID
+    gid: z.number().optional(), // UNIX primary group ID
+    home: z.string().optional(), // Home directory
+    shell: z.string().optional(), // Login shell
     createdAt: z.number(),
     lastAccessTime: z.number(),
     userAgent: z.string().optional(),
@@ -205,6 +213,7 @@ export const Info = z
 ```
 
 ### Pattern 4: returnUrl Validation
+
 **What:** Validate post-login redirect URL is same-origin
 **When to use:** When returnUrl parameter is provided
 **Why:** Prevent open redirect attacks
@@ -226,6 +235,7 @@ function isValidReturnUrl(url: string): boolean {
 ```
 
 ### Pattern 5: Content-Type Detection
+
 **What:** Accept both JSON and form POST
 **When to use:** Login endpoint
 **Why:** CONTEXT.md decision - support both for flexibility
@@ -253,6 +263,7 @@ async function parseLoginBody(c: Context): Promise<{ username: string; password:
 ```
 
 ### Anti-Patterns to Avoid
+
 - **Detailed error messages:** Return generic "Authentication failed" for all auth errors
 - **Logging passwords:** Never log the password, even in debug mode
 - **Different timing for user-not-found vs wrong-password:** Same code path for both (broker handles this)
@@ -263,42 +274,47 @@ async function parseLoginBody(c: Context): Promise<{ username: string; password:
 
 Problems that look simple but have existing solutions:
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| User info lookup | Parse /etc/passwd manually | `getent passwd` command | Works with LDAP/Kerberos via NSS |
-| Session creation | Custom Map management | Existing UserSession namespace | Already tested, has user-based indexing |
-| Cookie security | Manual Set-Cookie header | hono/cookie setCookie | Handles all security attributes |
-| CSRF protection | Custom token system | X-Requested-With header check | Sufficient for Phase 4; full CSRF in Phase 7 |
+| Problem          | Don't Build                | Use Instead                    | Why                                          |
+| ---------------- | -------------------------- | ------------------------------ | -------------------------------------------- |
+| User info lookup | Parse /etc/passwd manually | `getent passwd` command        | Works with LDAP/Kerberos via NSS             |
+| Session creation | Custom Map management      | Existing UserSession namespace | Already tested, has user-based indexing      |
+| Cookie security  | Manual Set-Cookie header   | hono/cookie setCookie          | Handles all security attributes              |
+| CSRF protection  | Custom token system        | X-Requested-With header check  | Sufficient for Phase 4; full CSRF in Phase 7 |
 
 **Key insight:** The codebase already has most infrastructure. Phase 4 connects existing pieces with minimal new code.
 
 ## Common Pitfalls
 
 ### Pitfall 1: Leaking Auth Failure Details
+
 **What goes wrong:** Different error messages for "user not found" vs "wrong password"
 **Why it happens:** Natural to return broker error details
 **How to avoid:** Always return generic `{"error": "auth_failed", "message": "Authentication failed"}` regardless of failure reason
 **Warning signs:** Different HTTP status codes or error messages for different failure types
 
 ### Pitfall 2: Open Redirect via returnUrl
+
 **What goes wrong:** Attacker crafts link with returnUrl=//evil.com
 **Why it happens:** Insufficient URL validation
 **How to avoid:** Only allow relative paths starting with `/`, reject `//`, reject newlines
 **Warning signs:** returnUrl can be any URL, not just paths
 
 ### Pitfall 3: Session Created Before Auth Succeeds
+
 **What goes wrong:** Session exists even if auth fails, leaking timing info
 **Why it happens:** Creating session before checking broker result
 **How to avoid:** Check broker result first, only then create session
 **Warning signs:** Session created in try block before auth check
 
 ### Pitfall 4: getent Failure Treated as Auth Failure
+
 **What goes wrong:** System command fails but user is valid
 **Why it happens:** Conflating "user doesn't exist" with "getent failed"
 **How to avoid:** Log getent failures separately; consider fallback to `id` command
 **Warning signs:** Valid users intermittently fail to log in
 
 ### Pitfall 5: Missing Content-Type Handling
+
 **What goes wrong:** Form POSTs fail with 400 Bad Request
 **Why it happens:** Only handling application/json
 **How to avoid:** Check Content-Type and parse appropriately
@@ -309,77 +325,80 @@ Problems that look simple but have existing solutions:
 Verified patterns from existing codebase:
 
 ### Route Registration Pattern
+
 ```typescript
 // Source: src/server/routes/auth.ts (existing pattern)
-export const AuthRoutes = lazy(() =>
-  new Hono<AuthEnv>()
-    .post(
-      "/login",
-      describeRoute({
-        summary: "Login with username and password",
-        description: "Authenticate user and create session.",
-        operationId: "auth.login",
-        responses: {
-          200: {
-            description: "Login successful",
-            content: {
-              "application/json": {
-                schema: resolver(
-                  z.object({
-                    success: z.literal(true),
-                    user: z.object({
-                      username: z.string(),
-                      uid: z.number(),
-                      gid: z.number(),
-                      home: z.string(),
-                      shell: z.string(),
+export const AuthRoutes = lazy(
+  () =>
+    new Hono<AuthEnv>()
+      .post(
+        "/login",
+        describeRoute({
+          summary: "Login with username and password",
+          description: "Authenticate user and create session.",
+          operationId: "auth.login",
+          responses: {
+            200: {
+              description: "Login successful",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      success: z.literal(true),
+                      user: z.object({
+                        username: z.string(),
+                        uid: z.number(),
+                        gid: z.number(),
+                        home: z.string(),
+                        shell: z.string(),
+                      }),
                     }),
-                  }),
-                ),
+                  ),
+                },
+              },
+            },
+            400: { description: "Bad request" },
+            401: { description: "Authentication failed" },
+          },
+        }),
+        // ... handler
+      )
+      .get(
+        "/status",
+        describeRoute({
+          summary: "Get auth status",
+          description: "Check if authentication is enabled.",
+          operationId: "auth.status",
+          responses: {
+            200: {
+              description: "Auth status",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      enabled: z.boolean(),
+                      method: z.string().optional(),
+                    }),
+                  ),
+                },
               },
             },
           },
-          400: { description: "Bad request" },
-          401: { description: "Authentication failed" },
+        }),
+        async (c) => {
+          const config = await Config.get()
+          return c.json({
+            enabled: config.auth?.enabled ?? false,
+            method: config.auth?.enabled ? (config.auth?.method ?? "pam") : undefined,
+          })
         },
-      }),
-      // ... handler
-    )
-    .get(
-      "/status",
-      describeRoute({
-        summary: "Get auth status",
-        description: "Check if authentication is enabled.",
-        operationId: "auth.status",
-        responses: {
-          200: {
-            description: "Auth status",
-            content: {
-              "application/json": {
-                schema: resolver(
-                  z.object({
-                    enabled: z.boolean(),
-                    method: z.string().optional(),
-                  }),
-                ),
-              },
-            },
-          },
-        },
-      }),
-      async (c) => {
-        const config = await Config.get()
-        return c.json({
-          enabled: config.auth?.enabled ?? false,
-          method: config.auth?.enabled ? (config.auth?.method ?? "pam") : undefined,
-        })
-      },
-    )
-    // ... existing /logout, /logout/all, /session
+      ),
+  // ... existing /logout, /logout/all, /session
 )
 ```
 
 ### Error Response Pattern
+
 ```typescript
 // Source: src/server/error.ts, NamedError patterns
 // Match existing error format
@@ -393,6 +412,7 @@ return c.json(
 ```
 
 ### Session Cookie Pattern
+
 ```typescript
 // Source: src/server/middleware/auth.ts (existing)
 import { setSessionCookie } from "../middleware/auth"
@@ -433,13 +453,14 @@ setSessionCookie(c, session.id)
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| Native userid/pwuid npm packages | Shell out to getent | Current | No native deps, works with NSS/LDAP |
-| Separate AuthenticatedSession type | Extend UserSession with optional fields | Design decision | Simpler, backwards compatible |
-| Custom CSRF tokens | X-Requested-With header | Phase 4 decision | Sufficient for XHR; full CSRF in Phase 7 |
+| Old Approach                       | Current Approach                        | When Changed     | Impact                                   |
+| ---------------------------------- | --------------------------------------- | ---------------- | ---------------------------------------- |
+| Native userid/pwuid npm packages   | Shell out to getent                     | Current          | No native deps, works with NSS/LDAP      |
+| Separate AuthenticatedSession type | Extend UserSession with optional fields | Design decision  | Simpler, backwards compatible            |
+| Custom CSRF tokens                 | X-Requested-With header                 | Phase 4 decision | Sufficient for XHR; full CSRF in Phase 7 |
 
 **Deprecated/outdated:**
+
 - **Native getpwnam bindings:** Complex to build, not worth the complexity for this use case
 - **Parsing /etc/passwd directly:** Doesn't work with LDAP/Kerberos/NIS
 
@@ -465,6 +486,7 @@ Things that couldn't be fully resolved:
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - `src/auth/broker-client.ts` - BrokerClient implementation
 - `src/session/user-session.ts` - UserSession implementation
 - `src/server/routes/auth.ts` - Existing AuthRoutes
@@ -473,16 +495,19 @@ Things that couldn't be fully resolved:
 - [getent(1) man page](https://man7.org/linux/man-pages/man1/getent.1.html) - passwd database lookup
 
 ### Secondary (MEDIUM confidence)
+
 - [Bun shell documentation](https://bun.com/docs/runtime/shell) - $ template literal
 - [OWASP Unvalidated Redirects](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) - returnUrl validation
 - [node-userid npm](https://github.com/cinderblock/node-userid) - Alternative approach (not used)
 
 ### Tertiary (LOW confidence)
+
 - macOS dscl approach - Needs testing
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH - All libraries already in codebase
 - Architecture: HIGH - Extends existing patterns directly
 - Integration points: HIGH - Analyzed actual source files
@@ -494,5 +519,5 @@ Things that couldn't be fully resolved:
 
 ---
 
-*Phase: 04-authentication-flow*
-*Research complete: 2026-01-20*
+_Phase: 04-authentication-flow_
+_Research complete: 2026-01-20_

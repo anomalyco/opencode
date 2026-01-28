@@ -19,8 +19,7 @@ import { existsSync } from "fs"
  * those features will be skipped with an informational message.
  */
 
-const SOCKET_PATH =
-  process.platform === "darwin" ? "/var/run/opencode/auth.sock" : "/run/opencode/auth.sock"
+const SOCKET_PATH = process.platform === "darwin" ? "/var/run/opencode/auth.sock" : "/run/opencode/auth.sock"
 
 /**
  * Check if broker is actually running by attempting a ping.
@@ -89,7 +88,7 @@ describe("User Process Execution (Integration)", () => {
     if (!sessionRegistrationSupported) {
       console.log(
         "NOTE: Session registration not supported by running broker.",
-        "Some tests will be skipped. Update broker to enable full testing."
+        "Some tests will be skipped. Update broker to enable full testing.",
       )
     }
   })

@@ -91,6 +91,342 @@
         ]
       }
     },
+    "/auth/login": {
+      "post": {
+        "operationId": "auth.login",
+        "summary": "Login with username and password",
+        "description": "Authenticate user credentials via PAM and create session. Returns 2fa_required if user has 2FA enabled.",
+        "responses": {
+          "200": {
+            "description": "Login successful or 2FA required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "username": {
+                              "type": "string"
+                            },
+                            "uid": {
+                              "type": "number"
+                            },
+                            "gid": {
+                              "type": "number"
+                            },
+                            "home": {
+                              "type": "string"
+                            },
+                            "shell": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["username", "uid", "gid", "home", "shell"]
+                        }
+                      },
+                      "required": ["success", "user"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean",
+                          "const": false
+                        },
+                        "error": {
+                          "type": "string",
+                          "const": "2fa_required"
+                        },
+                        "twoFactorToken": {
+                          "type": "string"
+                        },
+                        "username": {
+                          "type": "string"
+                        },
+                        "timeoutSeconds": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["success", "error", "twoFactorToken", "username", "timeoutSeconds"]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request (missing fields or invalid returnUrl)"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Authentication disabled"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.login({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/auth/login/2fa": {
+      "post": {
+        "operationId": "auth.login2fa",
+        "summary": "Complete 2FA login",
+        "description": "Validate OTP code and complete authentication.",
+        "responses": {
+          "200": {
+            "description": "2FA successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "username": {
+                          "type": "string"
+                        },
+                        "uid": {
+                          "type": "number"
+                        },
+                        "gid": {
+                          "type": "number"
+                        },
+                        "home": {
+                          "type": "string"
+                        },
+                        "shell": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["username", "uid", "gid", "home", "shell"]
+                    }
+                  },
+                  "required": ["success", "user"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request (missing fields)"
+          },
+          "401": {
+            "description": "OTP validation failed or token expired"
+          },
+          "403": {
+            "description": "2FA not enabled"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.login2fa({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/auth/status": {
+      "get": {
+        "operationId": "auth.status",
+        "summary": "Get auth status",
+        "description": "Check if authentication is enabled and get configuration.",
+        "responses": {
+          "200": {
+            "description": "Auth status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "method": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["enabled"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/auth/device-trust/status": {
+      "get": {
+        "operationId": "auth.deviceTrustStatus",
+        "summary": "Get device trust status",
+        "description": "Check if 2FA is enabled and if the current device is trusted.",
+        "responses": {
+          "200": {
+            "description": "Device trust status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "twoFactorEnabled": {
+                      "type": "boolean"
+                    },
+                    "deviceTrusted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["twoFactorEnabled", "deviceTrusted"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.deviceTrustStatus({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/auth/device-trust/revoke": {
+      "post": {
+        "operationId": "auth.deviceTrustRevoke",
+        "summary": "Revoke device trust",
+        "description": "Clear the device trust cookie to require 2FA on next login.",
+        "responses": {
+          "200": {
+            "description": "Device trust revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": ["success"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.deviceTrustRevoke({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "auth.logout",
+        "summary": "Logout current session",
+        "description": "Clear the current session and redirect to login page.",
+        "responses": {
+          "302": {
+            "description": "Redirect to login page"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.logout({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/auth/logout/all": {
+      "post": {
+        "operationId": "auth.logoutAll",
+        "summary": "Logout all sessions",
+        "description": "Clear all sessions for the current user and redirect to login page.",
+        "responses": {
+          "302": {
+            "description": "Redirect to login page"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.logoutAll({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/auth/session": {
+      "get": {
+        "operationId": "auth.session",
+        "summary": "Get current session",
+        "description": "Retrieve information about the current authenticated session.",
+        "responses": {
+          "200": {
+            "description": "Current session info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "username": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "lastAccessTime": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["id", "username", "createdAt", "lastAccessTime"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.session({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project": {
       "get": {
         "operationId": "project.list",
@@ -3756,6 +4092,418 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.provider.oauth.callback({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/repo": {
+      "get": {
+        "operationId": "repo.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List repos",
+        "description": "Get a list of tracked repositories.",
+        "responses": {
+          "200": {
+            "description": "List of repositories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Repo"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.repo.list({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "repo.add",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Add repo",
+        "description": "Add an existing local git repository by path.",
+        "responses": {
+          "200": {
+            "description": "Repository added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Repo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid repository path",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": ["path"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.repo.add({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/repo/clone": {
+      "post": {
+        "operationId": "repo.clone",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Clone repo",
+        "description": "Clone a repository into the configured workspace root.",
+        "responses": {
+          "200": {
+            "description": "Repository cloned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoCloneResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Clone failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  },
+                  "branch": {
+                    "type": "string"
+                  },
+                  "credentials": {
+                    "$ref": "#/components/schemas/RepoCloneCredentials"
+                  },
+                  "workspaceRoot": {
+                    "type": "string"
+                  }
+                },
+                "required": ["url"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.repo.clone({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/repo/clone-progress": {
+      "get": {
+        "operationId": "repo.cloneProgress",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "url",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "branch",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Clone repo (progress)",
+        "description": "Clone a repository and stream progress events.",
+        "responses": {
+          "200": {
+            "description": "Clone progress stream",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoCloneProgress"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.repo.cloneProgress({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "repo.cloneProgressWithCredentials",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Clone repo (progress via POST)",
+        "description": "Clone a repository with credentials and stream progress events.",
+        "responses": {
+          "200": {
+            "description": "Clone progress stream",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoCloneProgressEvent"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  },
+                  "branch": {
+                    "type": "string"
+                  },
+                  "credentials": {
+                    "$ref": "#/components/schemas/RepoCloneCredentials"
+                  },
+                  "workspaceRoot": {
+                    "type": "string"
+                  }
+                },
+                "required": ["url"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.repo.cloneProgressWithCredentials({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/repo/{repoID}/branches": {
+      "get": {
+        "operationId": "repo.branches",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repoID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "List repo branches",
+        "description": "List branches for a tracked repository.",
+        "responses": {
+          "200": {
+            "description": "Branch list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoBranchList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.repo.branches({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/repo/{repoID}/checkout": {
+      "post": {
+        "operationId": "repo.checkout",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repoID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Checkout repo branch",
+        "description": "Switch branches for a tracked repository.",
+        "responses": {
+          "200": {
+            "description": "Branch switched",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoCheckoutResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Working tree dirty",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "branch": {
+                    "type": "string"
+                  },
+                  "force": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["branch"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.repo.checkout({\n  ...\n})"
           }
         ]
       }
@@ -8670,6 +9418,11 @@
             "items": {
               "type": "string"
             }
+          },
+          "uiUrl": {
+            "description": "Base URL for the web UI proxy (defaults to https://app.opencode.ai)",
+            "type": "string",
+            "format": "uri"
           }
         },
         "additionalProperties": false
@@ -9192,6 +9945,123 @@
         "type": "string",
         "enum": ["auto", "stretch"]
       },
+      "AuthPamConfig": {
+        "description": "PAM-specific configuration",
+        "type": "object",
+        "properties": {
+          "service": {
+            "description": "PAM service name",
+            "default": "opencode",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DurationString": {
+        "description": "OTP rate limit window duration",
+        "default": "15m",
+        "type": "string"
+      },
+      "AuthConfig": {
+        "description": "Authentication configuration for multi-user access",
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "description": "Enable authentication",
+            "default": true,
+            "type": "boolean"
+          },
+          "method": {
+            "description": "Authentication method",
+            "default": "pam",
+            "type": "string",
+            "enum": ["pam"]
+          },
+          "pam": {
+            "$ref": "#/components/schemas/AuthPamConfig"
+          },
+          "sessionTimeout": {
+            "$ref": "#/components/schemas/DurationString"
+          },
+          "rememberMeDuration": {
+            "$ref": "#/components/schemas/DurationString"
+          },
+          "requireHttps": {
+            "description": "HTTPS requirement mode: 'off' allows HTTP, 'warn' logs warnings, 'block' rejects HTTP",
+            "default": "warn",
+            "type": "string",
+            "enum": ["off", "warn", "block"]
+          },
+          "rateLimiting": {
+            "description": "Enable rate limiting for login attempts",
+            "default": true,
+            "type": "boolean"
+          },
+          "rateLimitWindow": {
+            "$ref": "#/components/schemas/DurationString"
+          },
+          "rateLimitMax": {
+            "description": "Maximum login attempts per window",
+            "default": 5,
+            "type": "number"
+          },
+          "allowedUsers": {
+            "description": "Users allowed to authenticate. Empty array allows any system user",
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sessionPersistence": {
+            "description": "Persist sessions to disk across restarts",
+            "default": true,
+            "type": "boolean"
+          },
+          "trustProxy": {
+            "description": "Trust X-Forwarded-Proto header for reverse proxy detection",
+            "type": "boolean"
+          },
+          "csrfVerboseErrors": {
+            "description": "Enable verbose CSRF error messages for debugging",
+            "default": false,
+            "type": "boolean"
+          },
+          "csrfAllowlist": {
+            "description": "Additional routes to exclude from CSRF validation",
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "twoFactorEnabled": {
+            "description": "Enable two-factor authentication support",
+            "default": true,
+            "type": "boolean"
+          },
+          "twoFactorRequired": {
+            "description": "Require users to set up 2FA before accessing the app (implies twoFactorEnabled)",
+            "default": false,
+            "type": "boolean"
+          },
+          "twoFactorTokenTimeout": {
+            "$ref": "#/components/schemas/DurationString"
+          },
+          "deviceTrustDuration": {
+            "$ref": "#/components/schemas/DurationString"
+          },
+          "otpRateLimitMax": {
+            "description": "Maximum OTP attempts per rate limit window",
+            "default": 5,
+            "type": "number"
+          },
+          "otpRateLimitWindow": {
+            "$ref": "#/components/schemas/DurationString"
+          }
+        },
+        "additionalProperties": false
+      },
       "Config": {
         "type": "object",
         "properties": {
@@ -9238,6 +10108,15 @@
           },
           "server": {
             "$ref": "#/components/schemas/ServerConfig"
+          },
+          "workspace": {
+            "type": "object",
+            "properties": {
+              "root": {
+                "description": "Workspace root for cloning repositories",
+                "type": "string"
+              }
+            }
           },
           "command": {
             "description": "Command configuration, see https://opencode.ai/docs/commands",
@@ -9671,6 +10550,9 @@
                 "maximum": 9007199254740991
               }
             }
+          },
+          "auth": {
+            "$ref": "#/components/schemas/AuthConfig"
           }
         },
         "additionalProperties": false
@@ -10191,6 +11073,248 @@
           }
         },
         "required": ["url", "method", "instructions"]
+      },
+      "Repo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "updated": {
+                "type": "number"
+              }
+            },
+            "required": ["created", "updated"]
+          }
+        },
+        "required": ["id", "path", "name", "time"]
+      },
+      "RepoError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "help_steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "auth_type": {
+            "type": "string",
+            "enum": ["ssh", "github_pat", "https_basic"]
+          },
+          "can_retry_with_credentials": {
+            "type": "boolean"
+          },
+          "code": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["message"]
+      },
+      "RepoErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/RepoError"
+          }
+        },
+        "required": ["error"]
+      },
+      "RepoCloneResult": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "$ref": "#/components/schemas/Repo"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["repo", "message"]
+      },
+      "RepoCloneCredentials": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ssh_passphrase"
+              },
+              "passphrase": {
+                "type": "string"
+              },
+              "key_path": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "passphrase"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "github_pat"
+              },
+              "token": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "token"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "https_basic"
+              },
+              "username": {
+                "type": "string"
+              },
+              "password": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "username", "password"]
+          }
+        ]
+      },
+      "RepoCloneProgress": {
+        "type": "object",
+        "properties": {
+          "received_objects": {
+            "type": "number"
+          },
+          "total_objects": {
+            "type": "number"
+          },
+          "received_bytes": {
+            "type": "number"
+          },
+          "indexed_objects": {
+            "type": "number"
+          },
+          "total_deltas": {
+            "type": "number"
+          },
+          "indexed_deltas": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "received_objects",
+          "total_objects",
+          "received_bytes",
+          "indexed_objects",
+          "total_deltas",
+          "indexed_deltas"
+        ]
+      },
+      "RepoCloneProgressEvent": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "progress"
+              },
+              "data": {
+                "$ref": "#/components/schemas/RepoCloneProgress"
+              }
+            },
+            "required": ["type", "data"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "complete"
+              },
+              "data": {
+                "$ref": "#/components/schemas/RepoCloneResult"
+              }
+            },
+            "required": ["type", "data"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "error"
+              },
+              "data": {
+                "$ref": "#/components/schemas/RepoError"
+              }
+            },
+            "required": ["type", "data"]
+          }
+        ]
+      },
+      "RepoBranch": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "remote": {
+            "type": "boolean"
+          }
+        },
+        "required": ["name", "current", "remote"]
+      },
+      "RepoBranchList": {
+        "type": "object",
+        "properties": {
+          "current": {
+            "type": "string"
+          },
+          "branches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RepoBranch"
+            }
+          }
+        },
+        "required": ["branches"]
+      },
+      "RepoCheckoutResult": {
+        "type": "object",
+        "properties": {
+          "dirty": {
+            "type": "boolean",
+            "const": false
+          }
+        },
+        "required": ["dirty"]
       },
       "Symbol": {
         "type": "object",

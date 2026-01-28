@@ -55,6 +55,7 @@ completed: 2026-01-24
 - **Files modified:** 2
 
 ## Accomplishments
+
 - Created HttpWarningBanner component with security detection and dismissal
 - Integrated SecurityBadge into titlebar using Portal pattern before SessionIndicator
 - Positioned HttpWarningBanner below titlebar for high visibility
@@ -68,20 +69,24 @@ Each task was committed atomically:
 2. **Task 2: Integrate security components into layout** - `fec3369e9` (feat)
 
 ## Files Created/Modified
+
 - `packages/app/src/components/http-warning-banner.tsx` - Dismissible HTTP warning banner with localStorage persistence and security detection
 - `packages/app/src/pages/layout.tsx` - Added SecurityBadge to titlebar-right Portal and HttpWarningBanner below Titlebar
 
 ## Decisions Made
 
 **1. localStorage for banner dismissal persistence**
+
 - Rationale: Session-scoped storage would re-show warning every session; persistent dismissal provides better UX while still showing on first visit
 - Implementation: `opencode:security-warning-dismissed` key set to "true" on dismiss
 
 **2. SecurityBadge positioned before SessionIndicator**
+
 - Rationale: Connection security status is more fundamental than session information; should appear first in visual hierarchy
 - Implementation: Wrapped both in flex container with gap-2 inside Portal
 
 **3. Banner positioned immediately below Titlebar**
+
 - Rationale: High visibility for security warnings without blocking critical UI; naturally pushes content down when visible, reclaims space when dismissed
 - Implementation: Inserted `<HttpWarningBanner />` between Titlebar and main content area
 
@@ -100,16 +105,19 @@ None - no external service configuration required. Components are self-contained
 ## Next Phase Readiness
 
 Connection Security UI phase complete. Both SecurityBadge and HttpWarningBanner working together:
+
 - SecurityBadge visible at all times in titlebar for quick security status check
 - HttpWarningBanner appears for HTTP non-localhost connections with clear warning message
 - User can dismiss banner; dismissal persists via localStorage
 - Both components use same security detection logic (localhost/HTTPS checks)
 
 Ready for user acceptance testing across different connection scenarios:
+
 - HTTP localhost (no banner, blue badge)
 - HTTPS remote (no banner, green badge)
 - HTTP remote (banner on first visit, red badge)
 
 ---
-*Phase: 09-connection-security-ui*
-*Completed: 2026-01-24*
+
+_Phase: 09-connection-security-ui_
+_Completed: 2026-01-24_

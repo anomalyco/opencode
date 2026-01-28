@@ -62,6 +62,7 @@ Core detection functions:
 - **`getConnectionSecurityInfo(c: Context, config)`** - Comprehensive security context for UI
 
 **Key behaviors:**
+
 - Localhost always allowed over HTTP (developer-friendly)
 - X-Forwarded-Proto respected when trustProxy enabled (reverse proxy support)
 - Three modes: off (no checks), warn (show banner), block (disable login)
@@ -73,17 +74,20 @@ Core detection functions:
 Dynamic login page generation with security context:
 
 **Warning mode (`requireHttps: "warn"`):**
+
 - Yellow/amber banner: "You are connecting over HTTP. Your credentials may be visible to attackers on this network."
 - "I understand the risks" dismissal button
 - sessionStorage persistence (warning hidden for session after dismissal)
 
 **Block mode (`requireHttps: "block"`):**
+
 - All form inputs disabled (`<input disabled>`)
 - Submit button hidden
 - Prominent red error: "HTTPS is required to log in. Please access this page over a secure connection."
 - Grayed-out disabled styling
 
 **POST /login enforcement:**
+
 - Check `shouldBlockInsecureLogin` before processing login
 - Return 403 with `https_required` error when blocked
 - Log security event for audit trail
@@ -91,10 +95,12 @@ Dynamic login page generation with security context:
 ### 3. Comprehensive Test Coverage
 
 **Files:**
+
 - `packages/opencode/test/server/security/https-detection.test.ts` (21 tests)
 - `packages/opencode/test/server/routes/auth.test.ts` (8 new integration tests)
 
 **Test categories:**
+
 - Localhost detection (all variations)
 - HTTPS detection (protocol + X-Forwarded-Proto)
 - Blocking logic (all requireHttps modes)
@@ -107,6 +113,7 @@ Dynamic login page generation with security context:
 ### Connection Security Detection
 
 Three-layer check:
+
 1. **Localhost check** - If localhost, always allow
 2. **Proxy header check** - If trustProxy, honor X-Forwarded-Proto
 3. **Direct protocol check** - Parse URL protocol
@@ -126,6 +133,7 @@ function generateLoginPageHtml(securityContext: {
 ```
 
 Conditional rendering via template literals:
+
 - `${shouldBlock ? '<div class="blocked-message">...' : ''}`
 - `${shouldWarn ? '<div id="httpWarning">...' : ''}`
 - `${shouldBlock ? 'disabled' : ''}`
@@ -136,12 +144,12 @@ JavaScript manages warning dismissal:
 
 ```javascript
 // Check on page load
-if (httpWarning && sessionStorage.getItem('http-warning-dismissed')) {
-  httpWarning.classList.add('hidden');
+if (httpWarning && sessionStorage.getItem("http-warning-dismissed")) {
+  httpWarning.classList.add("hidden")
 }
 
 // Set on dismiss
-sessionStorage.setItem('http-warning-dismissed', 'true');
+sessionStorage.setItem("http-warning-dismissed", "true")
 ```
 
 This persists during the login flow but resets on new browser session - appropriate security warning UX.
@@ -153,6 +161,7 @@ This persists during the login flow but resets on new browser session - appropri
 **Decision:** Always allow localhost over HTTP regardless of `requireHttps` setting.
 
 **Rationale:**
+
 - Developer experience - local HTTPS setup is cumbersome and unnecessary
 - Security acceptable - localhost traffic doesn't traverse network
 - Aligns with web development best practices
@@ -164,6 +173,7 @@ This persists during the login flow but resets on new browser session - appropri
 **Decision:** Only honor X-Forwarded-Proto header when `trustProxy: true` in config.
 
 **Rationale:**
+
 - Security risk - untrusted proxy headers can be spoofed by attackers
 - Explicit opt-in required for reverse proxy deployments
 - Follows express.js trust proxy pattern
@@ -175,6 +185,7 @@ This persists during the login flow but resets on new browser session - appropri
 **Decision:** Store warning dismissal in sessionStorage, not localStorage or cookies.
 
 **Rationale:**
+
 - Session-scoped persistence appropriate for security warnings
 - User must re-acknowledge on new browser session
 - Doesn't clutter localStorage with persistent flags
@@ -187,6 +198,7 @@ This persists during the login flow but resets on new browser session - appropri
 **Decision:** When `requireHttps: "block"`, disable all inputs and hide submit button.
 
 **Rationale:**
+
 - Clear UX - form is visibly non-functional
 - Prevents user confusion (typing in disabled form)
 - Error message provides clear action (use HTTPS)
@@ -199,22 +211,26 @@ This persists during the login flow but resets on new browser session - appropri
 ### From Previous Plans
 
 **07-01 (CSRF Protection):**
+
 - HTTPS detection checks run after CSRF validation in login flow
 - Both security layers complement each other
 
 **06-01 (Login Page):**
+
 - Extended existing login page with security context
 - Maintained visual design and UX patterns
 
 ### Configuration System
 
 **01-01-03 (Auth Config):**
+
 - Uses existing `requireHttps` and `trustProxy` config fields
 - Config already validated at startup
 
 ### For Future Plans
 
 **Any HTTPS-aware features:**
+
 - Reusable `https-detection.ts` utilities
 - Pattern established for security context checking
 - Can extend for other endpoints beyond login
@@ -228,6 +244,7 @@ None - plan executed exactly as written.
 ### Unit Tests (https-detection.test.ts)
 
 **Mock context pattern:**
+
 ```typescript
 function mockContext(url: string, headers: Record<string, string>): Context
 ```
@@ -235,6 +252,7 @@ function mockContext(url: string, headers: Record<string, string>): Context
 Allows precise control of URL and headers for deterministic testing.
 
 **Coverage:**
+
 - All localhost variations (localhost, 127.0.0.1, ::1, [::1], with/without ports)
 - HTTPS detection with protocol and X-Forwarded-Proto
 - All requireHttps modes (off, warn, block)
@@ -243,11 +261,13 @@ Allows precise control of URL and headers for deterministic testing.
 ### Integration Tests (auth.test.ts)
 
 **Full request/response cycle:**
+
 - GET /login HTML generation with security context
 - POST /login enforcement of requireHttps
 - trustProxy configuration respected end-to-end
 
 **Test assertions:**
+
 - HTML contains `id="httpWarning"` when warning shown
 - HTML contains "HTTPS is required" when blocked
 - POST returns 403 `https_required` when blocked
@@ -256,6 +276,7 @@ Allows precise control of URL and headers for deterministic testing.
 ## Performance Characteristics
 
 **Runtime overhead:** Negligible
+
 - Simple string comparisons for localhost detection
 - Single URL parse for protocol check
 - Header lookup when trustProxy enabled
@@ -267,11 +288,13 @@ Allows precise control of URL and headers for deterministic testing.
 ### Protection Provided
 
 **User awareness:**
+
 - Visible warning when credentials sent over HTTP
 - Cannot proceed without explicit acknowledgment (warn mode)
 - Completely blocked in strict mode
 
 **Admin control:**
+
 - Three enforcement levels (off/warn/block)
 - Per-deployment configuration
 - Localhost exemption for development
@@ -279,17 +302,20 @@ Allows precise control of URL and headers for deterministic testing.
 ### Limitations
 
 **Not a complete solution:**
+
 - Relies on client-side enforcement (can be bypassed with direct API calls)
 - POST /login does enforce server-side, but warning is UI-only
 - No protection for other endpoints (scope limited to login)
 
 **Proxy header trust:**
+
 - X-Forwarded-Proto can be spoofed if trustProxy misconfigured
 - Admin must ensure proxy sets headers correctly
 
 ### Future Hardening
 
 **Potential improvements:**
+
 - HSTS header enforcement (Strict-Transport-Security)
 - Redirect HTTP to HTTPS automatically
 - Rate limit HTTP login attempts more aggressively
@@ -300,6 +326,7 @@ Allows precise control of URL and headers for deterministic testing.
 **Phase complete - no blockers identified.**
 
 All security hardening features implemented:
+
 - CSRF protection (07-01)
 - Rate limiting (07-02)
 - HTTPS detection and enforcement (07-03)
@@ -311,6 +338,7 @@ Ready to proceed to subsequent phases.
 ### sessionStorage Pattern
 
 sessionStorage proved ideal for dismissible security warnings:
+
 - Persists during multi-step flows (login attempt)
 - Resets on new session (forces re-acknowledgment)
 - No server-side state management needed
@@ -320,6 +348,7 @@ This pattern applicable to other transient UI warnings.
 ### Localhost Exemption Necessity
 
 Always-allow localhost critical for developer experience:
+
 - Local HTTPS certificate setup is significant friction
 - No security benefit for loopback traffic
 - Industry standard practice (browsers, frameworks)
@@ -327,6 +356,7 @@ Always-allow localhost critical for developer experience:
 ### trustProxy Configuration
 
 Explicit proxy trust configuration prevents security misconfiguration:
+
 - Default (false) is secure-by-default
 - Requires admin to understand deployment topology
 - Clear in config what headers are trusted

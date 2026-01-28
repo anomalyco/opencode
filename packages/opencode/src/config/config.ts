@@ -89,6 +89,10 @@ export namespace Config {
     result.agent = result.agent || {}
     result.mode = result.mode || {}
     result.plugin = result.plugin || []
+    result.workspace = result.workspace || {}
+    if (!result.workspace.root) {
+      result.workspace.root = path.join(Global.Path.home, "opencode")
+    }
 
     const directories = [
       Global.Path.config,
@@ -819,6 +823,11 @@ export namespace Config {
       hostname: z.string().optional().describe("Hostname to listen on"),
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
       cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
+      uiUrl: z
+        .string()
+        .url()
+        .optional()
+        .describe("Base URL for the web UI proxy (defaults to https://app.opencode.ai)"),
     })
     .strict()
     .meta({
@@ -891,6 +900,11 @@ export namespace Config {
       logLevel: Log.Level.optional().describe("Log level"),
       tui: TUI.optional().describe("TUI specific settings"),
       server: Server.optional().describe("Server configuration for opencode serve and web commands"),
+      workspace: z
+        .object({
+          root: z.string().optional().describe("Workspace root for cloning repositories"),
+        })
+        .optional(),
       command: z
         .record(z.string(), Command)
         .optional()

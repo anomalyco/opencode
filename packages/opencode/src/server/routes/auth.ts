@@ -336,32 +336,40 @@ function generateLoginPageHtml(securityContext: {
 
   <div class="card">
     <form id="loginForm">
-      ${shouldBlock ? `<div class="blocked-message">
+      ${
+        shouldBlock
+          ? `<div class="blocked-message">
         <strong>HTTPS is required to log in.</strong><br>
         Please access this page over a secure connection.
-      </div>` : ''}
-      ${shouldWarn ? `<div id="httpWarning" class="http-warning">
+      </div>`
+          : ""
+      }
+      ${
+        shouldWarn
+          ? `<div id="httpWarning" class="http-warning">
         <div class="http-warning-text">
           ⚠️ You are connecting over HTTP. Your credentials may be visible to attackers on this network.
         </div>
         <button type="button" id="dismissWarning" class="http-warning-dismiss">
           I understand the risks
         </button>
-      </div>` : ''}
+      </div>`
+          : ""
+      }
       <div id="error" class="error"></div>
 
       <div class="field">
         <label for="username">Username</label>
         <div class="input-wrapper">
-          <input type="text" id="username" name="username" required autocomplete="username" autofocus ${shouldBlock ? 'disabled' : ''}>
+          <input type="text" id="username" name="username" required autocomplete="username" autofocus ${shouldBlock ? "disabled" : ""}>
         </div>
       </div>
 
       <div class="field">
         <label for="password">Password</label>
         <div class="input-wrapper">
-          <input type="password" id="password" name="password" required autocomplete="current-password" class="password-input" ${shouldBlock ? 'disabled' : ''}>
-          <button type="button" class="password-toggle" id="passwordToggle" aria-label="Show password" aria-pressed="false" ${shouldBlock ? 'disabled' : ''}>
+          <input type="password" id="password" name="password" required autocomplete="current-password" class="password-input" ${shouldBlock ? "disabled" : ""}>
+          <button type="button" class="password-toggle" id="passwordToggle" aria-label="Show password" aria-pressed="false" ${shouldBlock ? "disabled" : ""}>
             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
               <path d="M10 4.58325C5.83333 4.58325 2.5 9.99992 2.5 9.99992C2.5 9.99992 5.83333 15.4166 10 15.4166C14.1667 15.4166 17.5 9.99992 17.5 9.99992C17.5 9.99992 14.1667 4.58325 10 4.58325Z"/>
               <circle cx="10" cy="10" r="2.5"/>
@@ -371,11 +379,11 @@ function generateLoginPageHtml(securityContext: {
       </div>
 
       <div class="checkbox-wrapper">
-        <input type="checkbox" id="rememberMe" name="rememberMe" checked ${shouldBlock ? 'disabled' : ''}>
+        <input type="checkbox" id="rememberMe" name="rememberMe" checked ${shouldBlock ? "disabled" : ""}>
         <label for="rememberMe" class="checkbox-label">Remember me</label>
       </div>
 
-      ${shouldBlock ? '' : '<button type="submit" id="submitBtn">Sign In</button>'}
+      ${shouldBlock ? "" : '<button type="submit" id="submitBtn">Sign In</button>'}
     </form>
   </div>
 
@@ -496,15 +504,10 @@ function generateLoginPageHtml(securityContext: {
 </html>`
 }
 
-
 /**
  * Generate 2FA verification page HTML.
  */
-function generate2FAPageHtml(params: {
-  token: string
-  username: string
-  timeoutSeconds: number
-}): string {
+function generate2FAPageHtml(params: { token: string; username: string; timeoutSeconds: number }): string {
   const { token, username, timeoutSeconds } = params
 
   return `<!DOCTYPE html>
@@ -827,11 +830,11 @@ function generate2FAPageHtml(params: {
  */
 function escapeHtml(str: string): string {
   return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
 }
 
 /**
@@ -1151,17 +1154,25 @@ function generate2FASetupPageHtml(params: {
     <h1>Set Up Two-Factor Authentication</h1>
     <p class="subtitle">for ${escapeHtml(username)}</p>
 
-    ${required ? `
+    ${
+      required
+        ? `
     <div class="required-banner">
       Two-factor authentication is required. Please complete setup to continue.
     </div>
-    ` : ""}
+    `
+        : ""
+    }
 
-    ${alreadyConfigured ? `
+    ${
+      alreadyConfigured
+        ? `
     <div class="warning">
       You already have 2FA configured. Setting up again will replace your existing configuration.
     </div>
-    ` : ""}
+    `
+        : ""
+    }
 
     <div class="step">
       <div class="step-title">Step 1: Scan QR Code</div>
@@ -1240,14 +1251,18 @@ function generate2FASetupPageHtml(params: {
       </form>
     </div>
 
-    ${required ? '' : `
+    ${
+      required
+        ? ""
+        : `
     <div class="skip-section">
       <p class="skip-note">You can set up 2FA later from your session menu.</p>
       <button type="button" id="skipBtn" class="skip-btn">Skip for now</button>
     </div>
-    `}
+    `
+    }
 
-    <a href="/" class="back-link">${required ? 'Back to login' : 'Back to opencode'}</a>
+    <a href="/" class="back-link">${required ? "Back to login" : "Back to opencode"}</a>
   </div>
 
   <script>
@@ -1455,7 +1470,8 @@ export const AuthRoutes = lazy(() =>
       "/login",
       describeRoute({
         summary: "Login with username and password",
-        description: "Authenticate user credentials via PAM and create session. Returns 2fa_required if user has 2FA enabled.",
+        description:
+          "Authenticate user credentials via PAM and create session. Returns 2fa_required if user has 2FA enabled.",
         operationId: "auth.login",
         responses: {
           200: {
@@ -1500,10 +1516,12 @@ export const AuthRoutes = lazy(() =>
         }
 
         // 1a. Check HTTPS requirement
-        if (shouldBlockInsecureLogin(c, {
-          requireHttps: authConfig.requireHttps,
-          trustProxy: authConfig.trustProxy,
-        })) {
+        if (
+          shouldBlockInsecureLogin(c, {
+            requireHttps: authConfig.requireHttps,
+            trustProxy: authConfig.trustProxy,
+          })
+        ) {
           const ip = getClientIP(c)
           logSecurityEvent({
             type: "login_failed",
@@ -1553,7 +1571,10 @@ export const AuthRoutes = lazy(() =>
           }
         } else {
           return c.json(
-            { error: "invalid_content_type", message: "Content-Type must be application/json or application/x-www-form-urlencoded" },
+            {
+              error: "invalid_content_type",
+              message: "Content-Type must be application/json or application/x-www-form-urlencoded",
+            },
             400,
           )
         }
@@ -1622,11 +1643,7 @@ export const AuthRoutes = lazy(() =>
 
             if (deviceTrustCookie) {
               const fingerprint = createDeviceFingerprint(userAgent ?? "")
-              const trustedUser = await verifyDeviceTrustToken(
-                deviceTrustCookie,
-                fingerprint,
-                getTokenSecret(),
-              )
+              const trustedUser = await verifyDeviceTrustToken(deviceTrustCookie, fingerprint, getTokenSecret())
               if (trustedUser === username) {
                 // Device is trusted - skip 2FA, continue to session creation
                 deviceTrusted = true
@@ -1653,13 +1670,16 @@ export const AuthRoutes = lazy(() =>
                 ip, // Bind to requesting IP
               )
 
-              return c.json({
-                success: false as const,
-                error: "2fa_required" as const,
-                twoFactorToken,
-                username,
-                timeoutSeconds: timeoutSec,
-              }, 200) // 200 because password was valid, just need 2FA
+              return c.json(
+                {
+                  success: false as const,
+                  error: "2fa_required" as const,
+                  twoFactorToken,
+                  username,
+                  timeoutSeconds: timeoutSec,
+                },
+                200,
+              ) // 200 because password was valid, just need 2FA
             }
           } else {
             // User doesn't have 2FA configured - redirect to setup
@@ -1680,14 +1700,17 @@ export const AuthRoutes = lazy(() =>
             setSessionCookie(c, tempSession.id, false)
             setCSRFCookie(c, tempSession.id)
 
-            return c.json({
-              success: false as const,
-              error: "2fa_setup_required" as const,
-              message: authConfig.twoFactorRequired
-                ? "Two-factor authentication setup is required"
-                : "Two-factor authentication is recommended",
-              canSkip: !authConfig.twoFactorRequired,
-            }, 200)
+            return c.json(
+              {
+                success: false as const,
+                error: "2fa_setup_required" as const,
+                message: authConfig.twoFactorRequired
+                  ? "Two-factor authentication setup is required"
+                  : "Two-factor authentication is recommended",
+                canSkip: !authConfig.twoFactorRequired,
+              },
+              200,
+            )
           }
         }
 
@@ -1830,25 +1853,37 @@ export const AuthRoutes = lazy(() =>
         if (!otpConfig.configured) {
           // Return specific error based on what's misconfigured
           if (otpConfig.errorCode === "pam_module_not_installed") {
-            return c.json({
-              error: "server_misconfigured",
-              message: "Server configuration error: libpam-google-authenticator is not installed.",
-            }, 500)
+            return c.json(
+              {
+                error: "server_misconfigured",
+                message: "Server configuration error: libpam-google-authenticator is not installed.",
+              },
+              500,
+            )
           } else if (otpConfig.errorCode === "pam_service_not_configured") {
-            return c.json({
-              error: "server_misconfigured",
-              message: `Server configuration error: PAM service file missing at ${otpConfig.pamServicePath}`,
-            }, 500)
+            return c.json(
+              {
+                error: "server_misconfigured",
+                message: `Server configuration error: PAM service file missing at ${otpConfig.pamServicePath}`,
+              },
+              500,
+            )
           } else if (otpConfig.errorCode === "broker_unavailable") {
-            return c.json({
-              error: "server_error",
-              message: "Authentication service unavailable. Please try again later.",
-            }, 503)
+            return c.json(
+              {
+                error: "server_error",
+                message: "Authentication service unavailable. Please try again later.",
+              },
+              503,
+            )
           } else {
-            return c.json({
-              error: "server_misconfigured",
-              message: "Server configuration error: OTP validation is not properly configured.",
-            }, 500)
+            return c.json(
+              {
+                error: "server_misconfigured",
+                message: "Server configuration error: OTP validation is not properly configured.",
+              },
+              500,
+            )
           }
         }
 
@@ -2013,11 +2048,7 @@ export const AuthRoutes = lazy(() =>
             // Verify the cookie is valid
             const userAgent = c.req.header("User-Agent") ?? ""
             const fingerprint = createDeviceFingerprint(userAgent)
-            const trustedUser = await verifyDeviceTrustToken(
-              deviceTrustCookie,
-              fingerprint,
-              getTokenSecret(),
-            )
+            const trustedUser = await verifyDeviceTrustToken(deviceTrustCookie, fingerprint, getTokenSecret())
             deviceTrusted = trustedUser !== null
           }
         }
@@ -2082,14 +2113,16 @@ export const AuthRoutes = lazy(() =>
       // Generate setup data
       const setupData = await generateTotpSetup(session.username)
 
-      return c.html(generate2FASetupPageHtml({
-        username: session.username,
-        secret: setupData.secret,
-        qrCodeSvg: setupData.qrCodeSvg,
-        setupCommand: getGoogleAuthenticatorSetupCommand(setupData.secret),
-        alreadyConfigured: has2fa,
-        required,
-      }))
+      return c.html(
+        generate2FASetupPageHtml({
+          username: session.username,
+          secret: setupData.secret,
+          qrCodeSvg: setupData.qrCodeSvg,
+          setupCommand: getGoogleAuthenticatorSetupCommand(setupData.secret),
+          alreadyConfigured: has2fa,
+          required,
+        }),
+      )
     })
     .post("/2fa/verify", async (c) => {
       // Require authenticated session
@@ -2122,32 +2155,46 @@ export const AuthRoutes = lazy(() =>
       if (!otpConfig.configured) {
         // Return specific error based on what's misconfigured
         if (otpConfig.errorCode === "pam_module_not_installed") {
-          return c.json({
-            error: "server_misconfigured",
-            message: "Server configuration error: libpam-google-authenticator is not installed. " +
-              "Install it with: Ubuntu/Debian: sudo apt install libpam-google-authenticator, " +
-              "macOS: brew install google-authenticator-libpam",
-            details: otpConfig,
-          }, 500)
+          return c.json(
+            {
+              error: "server_misconfigured",
+              message:
+                "Server configuration error: libpam-google-authenticator is not installed. " +
+                "Install it with: Ubuntu/Debian: sudo apt install libpam-google-authenticator, " +
+                "macOS: brew install google-authenticator-libpam",
+              details: otpConfig,
+            },
+            500,
+          )
         } else if (otpConfig.errorCode === "pam_service_not_configured") {
-          return c.json({
-            error: "server_misconfigured",
-            message: `Server configuration error: PAM service file missing at ${otpConfig.pamServicePath}. ` +
-              "Create it with: echo \"auth required pam_google_authenticator.so nullok\" | sudo tee " +
-              otpConfig.pamServicePath,
-            details: otpConfig,
-          }, 500)
+          return c.json(
+            {
+              error: "server_misconfigured",
+              message:
+                `Server configuration error: PAM service file missing at ${otpConfig.pamServicePath}. ` +
+                'Create it with: echo "auth required pam_google_authenticator.so nullok" | sudo tee ' +
+                otpConfig.pamServicePath,
+              details: otpConfig,
+            },
+            500,
+          )
         } else if (otpConfig.errorCode === "broker_unavailable") {
-          return c.json({
-            error: "server_error",
-            message: "Authentication service unavailable. Please try again later.",
-          }, 503)
+          return c.json(
+            {
+              error: "server_error",
+              message: "Authentication service unavailable. Please try again later.",
+            },
+            503,
+          )
         } else {
-          return c.json({
-            error: "server_misconfigured",
-            message: "Server configuration error: OTP validation is not properly configured.",
-            details: otpConfig,
-          }, 500)
+          return c.json(
+            {
+              error: "server_misconfigured",
+              message: "Server configuration error: OTP validation is not properly configured.",
+              details: otpConfig,
+            },
+            500,
+          )
         }
       }
 
@@ -2160,10 +2207,14 @@ export const AuthRoutes = lazy(() =>
       const result = await broker.authenticateOtp(session.username, code)
 
       if (!result.success) {
-        return c.json({
-          error: "invalid_code",
-          message: "Invalid verification code. Make sure: 1) You ran the setup command on the server to create ~/.google_authenticator, 2) The code from your authenticator matches the QR code you scanned"
-        }, 401)
+        return c.json(
+          {
+            error: "invalid_code",
+            message:
+              "Invalid verification code. Make sure: 1) You ran the setup command on the server to create ~/.google_authenticator, 2) The code from your authenticator matches the QR code you scanned",
+          },
+          401,
+        )
       }
 
       // Clear twoFactorPending flag now that 2FA is configured
@@ -2191,7 +2242,10 @@ export const AuthRoutes = lazy(() =>
       // Check if 2FA is required - if so, cannot skip
       const authConfig = ServerAuth.get()
       if (authConfig.twoFactorRequired) {
-        return c.json({ error: "2fa_required", message: "Two-factor authentication is required and cannot be skipped" }, 403)
+        return c.json(
+          { error: "2fa_required", message: "Two-factor authentication is required and cannot be skipped" },
+          403,
+        )
       }
 
       // Clear twoFactorPending flag so user can access the app

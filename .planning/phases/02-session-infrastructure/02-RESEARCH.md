@@ -9,6 +9,7 @@
 This research examines how to implement session infrastructure for the opencode authentication system. The codebase already uses Hono as its HTTP framework with established patterns for middleware, routes, and cookie handling. Phase 1 established the auth configuration schema including `sessionTimeout` (default 7d) as a duration string.
 
 Key findings:
+
 - Hono provides built-in `setCookie`, `getCookie`, `deleteCookie` helpers with full security option support
 - Session IDs should be generated via `crypto.randomUUID()` (Bun-native, cryptographically secure)
 - In-memory session storage using a `Map` is appropriate for the MVP (per CONTEXT.md decisions)
@@ -22,24 +23,27 @@ Key findings:
 The established libraries/tools for this domain:
 
 ### Core
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| hono | 4.10.7 | HTTP framework with cookie helpers | Already used in codebase |
-| hono/cookie | (bundled) | setCookie, getCookie, deleteCookie | Built-in, type-safe |
-| hono/factory | (bundled) | createMiddleware for type-safe middleware | Built-in, enables typed context |
-| crypto | (Bun native) | randomUUID() for session IDs | Cryptographically secure, no dependencies |
+
+| Library      | Version      | Purpose                                   | Why Standard                              |
+| ------------ | ------------ | ----------------------------------------- | ----------------------------------------- |
+| hono         | 4.10.7       | HTTP framework with cookie helpers        | Already used in codebase                  |
+| hono/cookie  | (bundled)    | setCookie, getCookie, deleteCookie        | Built-in, type-safe                       |
+| hono/factory | (bundled)    | createMiddleware for type-safe middleware | Built-in, enables typed context           |
+| crypto       | (Bun native) | randomUUID() for session IDs              | Cryptographically secure, no dependencies |
 
 ### Supporting
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| ms | 2.1.3 | Parse duration strings to milliseconds | Already installed, used by Duration utility |
-| hono/csrf | (bundled) | CSRF protection middleware | For logout POST endpoint |
+
+| Library   | Version   | Purpose                                | When to Use                                 |
+| --------- | --------- | -------------------------------------- | ------------------------------------------- |
+| ms        | 2.1.3     | Parse duration strings to milliseconds | Already installed, used by Duration utility |
+| hono/csrf | (bundled) | CSRF protection middleware             | For logout POST endpoint                    |
 
 ### Alternatives Considered
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| In-memory Map | @hono/session | More features but adds complexity; Map is simpler per CONTEXT.md |
-| crypto.randomUUID | nanoid | nanoid shorter but UUID standard and sufficient |
+
+| Instead of           | Could Use       | Tradeoff                                                         |
+| -------------------- | --------------- | ---------------------------------------------------------------- |
+| In-memory Map        | @hono/session   | More features but adds complexity; Map is simpler per CONTEXT.md |
+| crypto.randomUUID    | nanoid          | nanoid shorter but UUID standard and sufficient                  |
 | Custom session store | hono-kv-session | KV-based is more scalable but in-memory acceptable per decisions |
 
 **Installation:**
@@ -48,6 +52,7 @@ No new dependencies required - all functionality available in existing stack.
 ## Architecture Patterns
 
 ### Recommended Project Structure
+
 ```
 packages/opencode/src/
 ├── session/
@@ -66,19 +71,23 @@ packages/opencode/src/
 Note: The codebase already has a `session/` directory for AI conversation sessions. The user authentication session should be named distinctly to avoid confusion (e.g., `UserSession` or placed in a different location like `server/session.ts`).
 
 ### Pattern 1: Session Store as Namespace with Map
+
 **What:** Namespace containing session storage Map and CRUD operations
 **When to use:** Any in-memory state management
 **Example:**
+
 ```typescript
 // Source: Follows auth/index.ts pattern
 export namespace UserSession {
-  export const Info = z.object({
-    id: z.string(),
-    username: z.string(),
-    createdAt: z.number(),
-    lastAccessTime: z.number(),
-    userAgent: z.string().optional(),
-  }).meta({ ref: "UserSessionInfo" })
+  export const Info = z
+    .object({
+      id: z.string(),
+      username: z.string(),
+      createdAt: z.number(),
+      lastAccessTime: z.number(),
+      userAgent: z.string().optional(),
+    })
+    .meta({ ref: "UserSessionInfo" })
 
   export type Info = z.infer<typeof Info>
 
@@ -126,9 +135,11 @@ export namespace UserSession {
 ```
 
 ### Pattern 2: Authentication Middleware with createMiddleware
+
 **What:** Type-safe middleware that validates session and sets context
 **When to use:** Routes requiring authentication
 **Example:**
+
 ```typescript
 // Source: https://hono.dev/docs/helpers/factory
 import { createMiddleware } from "hono/factory"
@@ -181,9 +192,11 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
 ```
 
 ### Pattern 3: Secure Cookie Configuration
+
 **What:** Cookie options following security best practices
 **When to use:** Setting session cookies
 **Example:**
+
 ```typescript
 // Source: https://hono.dev/docs/helpers/cookie
 import { setCookie, deleteCookie } from "hono/cookie"
@@ -211,9 +224,11 @@ function clearSessionCookie(c: Context) {
 ```
 
 ### Pattern 4: Auth Routes with POST-only Logout
+
 **What:** Routes following existing pattern with CSRF-safe logout
 **When to use:** Authentication endpoints
 **Example:**
+
 ```typescript
 // Source: Follows server/routes/config.ts pattern
 import { Hono } from "hono"
@@ -261,11 +276,12 @@ export const AuthRoutes = lazy(() =>
         clearSessionCookie(c)
         return c.redirect("/login")
       },
-    )
+    ),
 )
 ```
 
 ### Anti-Patterns to Avoid
+
 - **GET for logout:** Use POST only to prevent CSRF logout attacks via image tags
 - **Storing sensitive data in cookies:** Only store session ID; user data stays server-side
 - **Checking session only at login:** Validate on every authenticated request
@@ -276,49 +292,55 @@ export const AuthRoutes = lazy(() =>
 
 Problems that look simple but have existing solutions:
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| Cookie parsing/setting | Manual header manipulation | hono/cookie helpers | Handles encoding, security attributes properly |
-| Session ID generation | Math.random or timestamp | crypto.randomUUID() | Cryptographically secure, collision-resistant |
-| Duration parsing | Regex/custom parser | ms package + Duration utility | Already in codebase, battle-tested |
-| Middleware typing | Manual context casting | createMiddleware from hono/factory | Type-safe context access |
-| CSRF for forms | Custom token system | SameSite=Strict cookie + POST-only | Browser handles most CSRF with strict cookies |
+| Problem                | Don't Build                | Use Instead                        | Why                                            |
+| ---------------------- | -------------------------- | ---------------------------------- | ---------------------------------------------- |
+| Cookie parsing/setting | Manual header manipulation | hono/cookie helpers                | Handles encoding, security attributes properly |
+| Session ID generation  | Math.random or timestamp   | crypto.randomUUID()                | Cryptographically secure, collision-resistant  |
+| Duration parsing       | Regex/custom parser        | ms package + Duration utility      | Already in codebase, battle-tested             |
+| Middleware typing      | Manual context casting     | createMiddleware from hono/factory | Type-safe context access                       |
+| CSRF for forms         | Custom token system        | SameSite=Strict cookie + POST-only | Browser handles most CSRF with strict cookies  |
 
 **Key insight:** Hono's cookie helpers handle all the edge cases (encoding, RFC compliance, security validation). The built-in CSRF middleware is available if needed, but SameSite=Strict cookies plus POST-only logout provides sufficient protection for this use case.
 
 ## Common Pitfalls
 
 ### Pitfall 1: Session Cookie Not Deleted on Invalid Session
+
 **What goes wrong:** User sees "session expired" but cookie remains, causing redirect loops
 **Why it happens:** Forget to delete cookie when session is invalid
 **How to avoid:** Always call deleteCookie when session validation fails
 **Warning signs:** Users stuck in redirect loops or seeing stale session data
 
 ### Pitfall 2: Timeout Calculated Against Creation Time Instead of Last Access
+
 **What goes wrong:** Sessions expire based on when created, not when last used
 **Why it happens:** Confusing "idle timeout" with "absolute timeout"
 **How to avoid:** Update `lastAccessTime` on every authenticated request; compare against that
 **Warning signs:** Active users getting logged out; timeout doesn't "reset" on activity
 
 ### Pitfall 3: Secure Cookie on HTTP Development
+
 **What goes wrong:** Cookies not set in local development (http://localhost)
 **Why it happens:** Setting `secure: true` unconditionally
 **How to avoid:** Only set `secure: true` when URL starts with https://
 **Warning signs:** Sessions work in production but not locally; cookie never appears
 
 ### Pitfall 4: Multiple Sessions Not Tracked Properly
+
 **What goes wrong:** "Logout everywhere" misses some sessions
 **Why it happens:** Not indexing sessions by username
 **How to avoid:** Either maintain a secondary index or iterate all sessions
 **Warning signs:** User logs out everywhere but other tabs still work
 
 ### Pitfall 5: Race Condition in Session Touch
+
 **What goes wrong:** Concurrent requests cause inconsistent lastAccessTime
 **Why it happens:** Read-modify-write without synchronization
 **How to avoid:** For in-memory Map, JavaScript is single-threaded so direct assignment is safe
 **Warning signs:** Not applicable to this implementation (Map operations are atomic)
 
 ### Pitfall 6: Cookie Path Mismatch on Delete
+
 **What goes wrong:** deleteCookie doesn't actually delete the cookie
 **Why it happens:** Must specify same path used when setting cookie
 **How to avoid:** Always use `path: "/"` consistently for both set and delete
@@ -329,21 +351,23 @@ Problems that look simple but have existing solutions:
 Verified patterns from official sources:
 
 ### Cookie Security Configuration
+
 ```typescript
 // Source: https://hono.dev/docs/helpers/cookie
 import { setCookie } from "hono/cookie"
 
 // Full security configuration per CONTEXT.md decisions
 setCookie(c, "opencode_session", sessionId, {
-  path: "/",           // Root path (CONTEXT.md decision)
-  httpOnly: true,      // Prevent JavaScript access (SESS-01)
-  sameSite: "Strict",  // CSRF protection (SESS-01)
-  secure: true,        // HTTPS only - omit for localhost (CONTEXT.md)
+  path: "/", // Root path (CONTEXT.md decision)
+  httpOnly: true, // Prevent JavaScript access (SESS-01)
+  sameSite: "Strict", // CSRF protection (SESS-01)
+  secure: true, // HTTPS only - omit for localhost (CONTEXT.md)
   // domain: not set   // Browser default - exact host (CONTEXT.md)
 })
 ```
 
 ### Session Expiry Check with Sliding Window
+
 ```typescript
 // Source: ms package + Config pattern
 import ms from "ms"
@@ -361,6 +385,7 @@ function touchSession(session: UserSession.Info): void {
 ```
 
 ### Integration with Existing Server Middleware Chain
+
 ```typescript
 // Source: packages/opencode/src/server/server.ts pattern
 // The existing server has middleware in this order:
@@ -379,6 +404,7 @@ app
 ```
 
 ### Logout Everywhere Implementation
+
 ```typescript
 // Source: Pattern from CONTEXT.md requirements
 export namespace UserSession {
@@ -386,7 +412,9 @@ export namespace UserSession {
   const sessionsByUser = new Map<string, Set<string>>()
 
   export function create(username: string, userAgent?: string): Info {
-    const session = { /* ... */ }
+    const session = {
+      /* ... */
+    }
     sessions.set(session.id, session)
 
     // Track sessions per user
@@ -414,14 +442,15 @@ export namespace UserSession {
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| JWT for sessions | Opaque session IDs with server storage | 2023+ trend | Simpler revocation, smaller cookies |
-| SameSite=Lax default | SameSite=Strict for auth | 2024-2025 | Better CSRF protection |
-| Custom CSRF tokens | SameSite cookies + POST-only | 2024+ | Less complexity, browser-native protection |
-| express-session | Built-in cookie helpers | Hono ecosystem | No additional dependencies |
+| Old Approach         | Current Approach                       | When Changed   | Impact                                     |
+| -------------------- | -------------------------------------- | -------------- | ------------------------------------------ |
+| JWT for sessions     | Opaque session IDs with server storage | 2023+ trend    | Simpler revocation, smaller cookies        |
+| SameSite=Lax default | SameSite=Strict for auth               | 2024-2025      | Better CSRF protection                     |
+| Custom CSRF tokens   | SameSite cookies + POST-only           | 2024+          | Less complexity, browser-native protection |
+| express-session      | Built-in cookie helpers                | Hono ecosystem | No additional dependencies                 |
 
 **Deprecated/outdated:**
+
 - Cookie prefixes (`__Secure-`, `__Host-`) require HTTPS; useful but not required for localhost dev
 - GET logout endpoints - browsers pre-fetch links, causing unexpected logouts
 
@@ -447,6 +476,7 @@ Things that couldn't be fully resolved:
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - [Hono Cookie Helper](https://hono.dev/docs/helpers/cookie) - setCookie, getCookie, deleteCookie signatures and options
 - [Hono Factory Helper](https://hono.dev/docs/helpers/factory) - createMiddleware for typed context
 - [Hono CSRF Middleware](https://hono.dev/docs/middleware/builtin/csrf) - CSRF protection patterns
@@ -456,15 +486,18 @@ Things that couldn't be fully resolved:
 - packages/opencode/src/auth/index.ts - Existing Auth namespace pattern
 
 ### Secondary (MEDIUM confidence)
+
 - [MDN Secure Cookie Configuration](https://developer.mozilla.org/en-US/docs/Web/Security/Practical_implementation_guides/Cookies) - Cookie security attributes
 - [Lucia Auth Hono Guide](https://v3.lucia-auth.com/guides/validate-session-cookies/hono) - Session cookie validation pattern
 
 ### Tertiary (LOW confidence)
+
 - WebSearch results on session timeout patterns - Verified against MDN and Hono docs
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH - all libraries already in codebase or built-in to Hono
 - Architecture: HIGH - patterns directly match existing codebase conventions
 - Pitfalls: HIGH - verified against official documentation

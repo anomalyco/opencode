@@ -147,9 +147,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
   }
 
   // Check idle timeout - use rememberMeDuration for remember-me sessions
-  const timeoutStr = session.rememberMe
-    ? (authConfig.rememberMeDuration ?? "90d")
-    : (authConfig.sessionTimeout ?? "7d")
+  const timeoutStr = session.rememberMe ? (authConfig.rememberMeDuration ?? "90d") : (authConfig.sessionTimeout ?? "7d")
   const timeout = parseDuration(timeoutStr) ?? DEFAULT_TIMEOUT_MS
   const elapsed = Date.now() - session.lastAccessTime
 

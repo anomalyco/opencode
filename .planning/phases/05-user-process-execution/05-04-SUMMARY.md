@@ -115,5 +115,6 @@ None - no external service configuration required.
 - Server exposes user_sessions() and pty_sessions() for external access
 
 ---
-*Phase: 05-user-process-execution*
-*Completed: 2026-01-22*
+
+_Phase: 05-user-process-execution_
+_Completed: 2026-01-22_

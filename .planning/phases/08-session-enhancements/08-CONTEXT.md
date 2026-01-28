@@ -14,17 +14,20 @@
 ## Implementation Decisions
 
 ### Remember me behavior
+
 - Extended session lasts 30 days (vs default idle timeout)
 - Checkbox on login form, checked by default
 - Persistent cookie (survives browser restart)
 - Timeout configurable in opencode.json (e.g., `rememberMeTimeout: "30d"`)
 
 ### Session indicator display
+
 - No expiration countdown displayed (confusing UX)
 - Show logged-in username in header/status bar
 - Username dropdown with logout option
 
 ### Activity refresh behavior
+
 - Any interaction refreshes session (within reason - not excessive server calls)
 - Piggyback on existing API requests (no dedicated refresh endpoint)
 - Silent extension when user becomes active again (before expiration)
@@ -32,12 +35,14 @@
 - Document this behavior in README
 
 ### Expiration warning
+
 - 15 minutes before expiration
 - Toast/banner notification (non-blocking)
 - "Extend session" button (single action)
 - If ignored and expires: "Session expired" overlay on current page with login prompt
 
 ### Claude's Discretion
+
 - Exact toast/banner styling and position
 - Throttle interval for activity-based refresh
 - Session expired overlay design
@@ -64,5 +69,5 @@ None - discussion stayed within phase scope
 
 ---
 
-*Phase: 08-session-enhancements*
-*Context gathered: 2026-01-23*
+_Phase: 08-session-enhancements_
+_Context gathered: 2026-01-23_

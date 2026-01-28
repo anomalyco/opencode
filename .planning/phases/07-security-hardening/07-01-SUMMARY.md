@@ -94,11 +94,13 @@ Implemented comprehensive CSRF protection using HMAC-signed double-submit cookie
 **Decision:** Use double-submit cookie pattern instead of server-side token storage.
 
 **Rationale:**
+
 - Stateless approach aligns with existing in-memory session design
 - No additional storage overhead
 - Token validation requires only crypto operations, no database lookup
 
 **Implementation:**
+
 - Cookie stores the HMAC-signed token (readable by client, SameSite=Lax)
 - Client sends same token in X-CSRF-Token header
 - Server validates they match AND HMAC signature is valid
@@ -108,11 +110,13 @@ Implemented comprehensive CSRF protection using HMAC-signed double-submit cookie
 **Decision:** Bind CSRF tokens to session ID using HMAC signature.
 
 **Rationale:**
+
 - Prevents token fixation attacks where attacker tries to use their token on victim's session
 - Even if attacker can set cookie, they cannot forge valid signature without secret
 - Signature computed as: HMAC-SHA256(sessionId:randomValue, secret)
 
 **Security benefit:**
+
 ```
 Attacker scenario:
 1. Attacker generates token for their sessionId: token_a
@@ -127,6 +131,7 @@ Attacker scenario:
 **Decision:** Use `crypto.timingSafeEqual` for signature validation.
 
 **Rationale:**
+
 - Prevents timing attacks that could leak signature information
 - Standard practice for cryptographic comparisons
 - Node.js built-in provides secure implementation
@@ -136,12 +141,14 @@ Attacker scenario:
 **Decision:** CSRF cookie is NOT HttpOnly (unlike session cookie).
 
 **Rationale:**
+
 - Double-submit pattern requires client to read cookie value
 - Client must send same value in header for validation
 - Cookie is still protected by SameSite=Lax and Secure flags
 - HMAC signature prevents tampering
 
 **Trade-off:**
+
 - XSS vulnerability could read CSRF token
 - BUT: XSS can already make authenticated requests directly
 - CSRF protects against cross-origin attacks, not XSS
@@ -180,10 +187,12 @@ X-CSRF-Token: <token>
 ### Allowlist Routes
 
 Default allowlist (cannot be changed):
+
 - `/auth/login` - Sets initial CSRF cookie, cannot validate one
 - `/auth/status` - Read-only endpoint
 
 Custom allowlist (via config):
+
 ```typescript
 auth: {
   csrfAllowlist: ["/api/webhook", "/api/public"]
@@ -234,6 +243,7 @@ OPENCODE_CSRF_SECRET=your-secret-here-32-bytes-hex
 ## Testing Strategy
 
 ### Token Utilities Tests (15 tests)
+
 - Format validation (signature.randomValue)
 - Different tokens on each call
 - Different signatures for different sessions
@@ -246,6 +256,7 @@ OPENCODE_CSRF_SECRET=your-secret-here-32-bytes-hex
 - Secret consistency
 
 ### Middleware Tests (17 tests)
+
 - Safe methods bypass (GET, HEAD, OPTIONS)
 - Auth disabled bypass
 - Default allowlist (/auth/login, /auth/status)
@@ -255,7 +266,7 @@ OPENCODE_CSRF_SECRET=your-secret-here-32-bytes-hex
 - Token mismatch (403)
 - Invalid HMAC signature (403)
 - Valid token from header (200)
-- Valid token from body._csrf (200)
+- Valid token from body.\_csrf (200)
 - Missing sessionId context (403)
 - Cookie attributes (SameSite, Secure, non-HttpOnly)
 
@@ -282,6 +293,7 @@ None - plan executed exactly as written.
 ## Next Phase Readiness
 
 **Dependencies satisfied:**
+
 - ✓ Session management available for token binding
 - ✓ Login flow exists to set CSRF cookies
 - ✓ Auth middleware provides sessionId context
@@ -291,6 +303,7 @@ None - plan executed exactly as written.
 **Concerns:** None
 
 **Recommendations for Phase 08:**
+
 - Consider CSP headers for additional XSS protection
 - Consider CSRF token rotation on sensitive operations
 - Monitor CSRF violation logs for attack attempts
@@ -298,12 +311,14 @@ None - plan executed exactly as written.
 ## Files Changed
 
 **Created:**
+
 - `packages/opencode/src/server/security/csrf.ts` (110 lines)
 - `packages/opencode/src/server/middleware/csrf.ts` (149 lines)
 - `packages/opencode/test/server/security/csrf.test.ts` (153 lines)
 - `packages/opencode/test/server/middleware/csrf.test.ts` (384 lines)
 
 **Modified:**
+
 - `packages/opencode/src/config/auth.ts` - Added csrfVerboseErrors, csrfAllowlist
 - `packages/opencode/src/server/server.ts` - Added csrfMiddleware to chain
 - `packages/opencode/src/server/routes/auth.ts` - Added setCSRFCookie, clearCSRFCookie calls

@@ -21,24 +21,25 @@ Polished login page for opencode web authentication, served inline by the openco
 
 ### Files Modified
 
-| File | Change |
-|------|--------|
+| File                                          | Change                                     |
+| --------------------------------------------- | ------------------------------------------ |
 | `packages/opencode/src/server/routes/auth.ts` | Replaced basic login HTML with polished UI |
 
 ### Architecture Correction
 
 Initial implementation placed login page in `packages/console` (SaaS dashboard). Corrected to serve from opencode server's auth routes since:
+
 - Console app (port 3001) is separate hosted service with OAuth
 - Opencode server (port 4096) handles self-hosted PAM auth
 - `/auth/login` endpoint only exists on opencode server
 
 ### Commits
 
-| Hash | Description |
-|------|-------------|
-| 5dc4a60 | Initial login page in console app |
-| 067f782 | Fix autofocus and password toggle positioning |
-| 909889b | Import UI styles and fix autofocus |
+| Hash    | Description                                                      |
+| ------- | ---------------------------------------------------------------- |
+| 5dc4a60 | Initial login page in console app                                |
+| 067f782 | Fix autofocus and password toggle positioning                    |
+| 909889b | Import UI styles and fix autofocus                               |
 | 1f4650c | Move polished login to opencode server, remove console app files |
 
 ## Verification

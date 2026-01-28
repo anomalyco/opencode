@@ -6,12 +6,7 @@ const STORAGE_KEY = "opencode:security-warning-dismissed"
 
 function isLocal(): boolean {
   const hostname = window.location.hostname
-  return (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "::1" ||
-    hostname.endsWith(".localhost")
-  )
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname.endsWith(".localhost")
 }
 
 function isSecure(): boolean {

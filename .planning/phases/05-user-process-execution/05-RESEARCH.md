@@ -17,29 +17,33 @@ The recommended architecture uses the `nix` crate for PTY allocation via `openpt
 The established libraries/tools for this domain:
 
 ### Core
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| nix | 0.29+ | PTY allocation, user impersonation, sendmsg/recvmsg | Already in Cargo.toml, comprehensive Unix bindings |
-| tokio | 1.x | Async runtime | Already used in broker |
-| passfd | 0.1.6 | Simple fd passing over Unix stream | Clean API, avoids nightly features |
-| pam-client | latest | PAM session management | Has open_session/close_session support |
-| libc | 0.2+ | Low-level syscalls (pututxline) | Standard for FFI |
+
+| Library    | Version | Purpose                                             | Why Standard                                       |
+| ---------- | ------- | --------------------------------------------------- | -------------------------------------------------- |
+| nix        | 0.29+   | PTY allocation, user impersonation, sendmsg/recvmsg | Already in Cargo.toml, comprehensive Unix bindings |
+| tokio      | 1.x     | Async runtime                                       | Already used in broker                             |
+| passfd     | 0.1.6   | Simple fd passing over Unix stream                  | Clean API, avoids nightly features                 |
+| pam-client | latest  | PAM session management                              | Has open_session/close_session support             |
+| libc       | 0.2+    | Low-level syscalls (pututxline)                     | Standard for FFI                                   |
 
 ### Supporting
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| pty-process | 0.5.3 | High-level PTY spawn wrapper | Alternative if nix is too low-level |
-| tokio-seqpacket | latest | Seqpacket sockets with fd passing | If reliable message boundaries needed |
-| utmp-rs | latest | Parsing utmp/wtmp (read-only) | For testing/verification |
+
+| Library         | Version | Purpose                           | When to Use                           |
+| --------------- | ------- | --------------------------------- | ------------------------------------- |
+| pty-process     | 0.5.3   | High-level PTY spawn wrapper      | Alternative if nix is too low-level   |
+| tokio-seqpacket | latest  | Seqpacket sockets with fd passing | If reliable message boundaries needed |
+| utmp-rs         | latest  | Parsing utmp/wtmp (read-only)     | For testing/verification              |
 
 ### Alternatives Considered
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| nix::pty::openpty | pty-process crate | pty-process is higher-level but less control over chown timing |
-| passfd | nix sendmsg/recvmsg | passfd is simpler API, nix gives more control |
-| pam-client | nonstick | nonstick doesn't have session management yet |
+
+| Instead of        | Could Use           | Tradeoff                                                       |
+| ----------------- | ------------------- | -------------------------------------------------------------- |
+| nix::pty::openpty | pty-process crate   | pty-process is higher-level but less control over chown timing |
+| passfd            | nix sendmsg/recvmsg | passfd is simpler API, nix gives more control                  |
+| pam-client        | nonstick            | nonstick doesn't have session management yet                   |
 
 **Installation:**
+
 ```bash
 # Add to Cargo.toml
 cargo add pam-client passfd
@@ -81,6 +85,7 @@ Web Server (TS)                    Broker (Rust, root)
 ```
 
 ### Recommended Project Structure (Broker Extension)
+
 ```
 packages/opencode-broker/src/
 ├── auth/              # Existing: PAM, rate limiting
@@ -104,9 +109,11 @@ packages/opencode-broker/src/
 ```
 
 ### Pattern 1: PTY Allocation with nix
+
 **What:** Allocate PTY pair, chown slave to user
 **When to use:** Before spawning user process
 **Example:**
+
 ```rust
 // Source: https://docs.rs/nix/latest/nix/pty/fn.openpty.html
 use nix::pty::{openpty, OpenptyResult};
@@ -127,9 +134,11 @@ fn allocate_pty(uid: u32, gid: u32) -> Result<OpenptyResult, Error> {
 ```
 
 ### Pattern 2: User Impersonation with pre_exec
+
 **What:** Drop privileges to authenticated user in child process
 **When to use:** When spawning shell as user
 **Example:**
+
 ```rust
 // Source: https://doc.rust-lang.org/std/os/unix/process/trait.CommandExt.html
 use std::process::Command;
@@ -198,9 +207,11 @@ fn spawn_as_user(
 ```
 
 ### Pattern 3: File Descriptor Passing with passfd
+
 **What:** Send PTY master fd from broker to web server
 **When to use:** After PTY allocated, before I/O begins
 **Example:**
+
 ```rust
 // Source: https://docs.rs/passfd/latest/passfd/
 use passfd::FdPassingExt;
@@ -220,6 +231,7 @@ fn recv_pty_fd(stream: &UnixStream) -> Result<RawFd, Error> {
 ```
 
 ### Anti-Patterns to Avoid
+
 - **Using forkpty in async context:** forkpty does fork+exec atomically which doesn't work with Tokio's async model. Use openpty + manual fork instead.
 - **Calling setuid before setgid/initgroups:** Must call initgroups, then setgid, then setuid. Wrong order leaves supplementary groups incorrect.
 - **Forgetting setsid:** Without setsid, the child won't be a session leader and TIOCSCTTY fails.
@@ -229,52 +241,59 @@ fn recv_pty_fd(stream: &UnixStream) -> Result<RawFd, Error> {
 
 Problems that look simple but have existing solutions:
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| PTY allocation | Custom /dev/ptmx handling | nix::pty::openpty | Handles grantpt/unlockpt correctly |
-| User credential switch | Manual setuid calls | CommandExt::uid/gid + pre_exec | Gets supplementary groups right |
-| FD passing | Raw sendmsg/recvmsg | passfd crate | Handles SCM_RIGHTS correctly |
-| PAM session management | Direct PAM FFI | pam-client crate | Safe wrappers, auto-cleanup |
-| utmp/wtmp parsing | Manual struct reading | utmp-rs (read) | Cross-platform struct handling |
+| Problem                | Don't Build               | Use Instead                    | Why                                |
+| ---------------------- | ------------------------- | ------------------------------ | ---------------------------------- |
+| PTY allocation         | Custom /dev/ptmx handling | nix::pty::openpty              | Handles grantpt/unlockpt correctly |
+| User credential switch | Manual setuid calls       | CommandExt::uid/gid + pre_exec | Gets supplementary groups right    |
+| FD passing             | Raw sendmsg/recvmsg       | passfd crate                   | Handles SCM_RIGHTS correctly       |
+| PAM session management | Direct PAM FFI            | pam-client crate               | Safe wrappers, auto-cleanup        |
+| utmp/wtmp parsing      | Manual struct reading     | utmp-rs (read)                 | Cross-platform struct handling     |
 
 **Key insight:** Unix process/session management has many subtle requirements (correct syscall order, platform differences, signal-safety in pre_exec). Libraries handle these edge cases.
 
 ## Common Pitfalls
 
 ### Pitfall 1: Wrong Order of Privilege Dropping
+
 **What goes wrong:** Supplementary groups not set correctly, user can access files they shouldn't
 **Why it happens:** Calling setuid before initgroups/setgroups
 **How to avoid:** Always call in order: initgroups -> setgid -> setuid
 **Warning signs:** User missing expected group memberships (can't access docker socket, etc.)
 
 ### Pitfall 2: Async-Signal-Safety in pre_exec
+
 **What goes wrong:** Deadlock or undefined behavior in child after fork
 **Why it happens:** Calling non-async-signal-safe functions (malloc, mutex, logging) in pre_exec
 **How to avoid:** Only use async-signal-safe syscalls in pre_exec. No heap allocation, no locks.
 **Warning signs:** Intermittent hangs, zombie processes
 
 ### Pitfall 3: File Descriptor Leaks
+
 **What goes wrong:** FDs accumulate, hit ulimit, security issue (fd accessible to wrong process)
 **Why it happens:** Not closing fds in parent after fork, not setting CLOEXEC
 **How to avoid:**
+
 - Close slave fd in parent immediately after fork
 - Set CLOEXEC on master fd
 - Use OwnedFd to auto-close on drop
-**Warning signs:** `lsof` shows many open fds, "too many open files" errors
+  **Warning signs:** `lsof` shows many open fds, "too many open files" errors
 
 ### Pitfall 4: SIGCHLD Handling Conflicts
+
 **What goes wrong:** Child process exit not detected, zombies accumulate
 **Why it happens:** Tokio's signal handling conflicts with manual SIGCHLD handling
 **How to avoid:** Use tokio::process::Child which integrates with Tokio's signal handling
 **Warning signs:** `ps aux | grep defunct` shows zombie processes
 
 ### Pitfall 5: Platform-Specific TIOCSCTTY
+
 **What goes wrong:** Controlling terminal not set on macOS
 **Why it happens:** TIOCSCTTY constant differs between Linux (0x540E) and macOS (0x20007461)
 **How to avoid:** Use cfg(target_os) for correct constant, or use nix crate's abstraction
 **Warning signs:** Job control (Ctrl+C, Ctrl+Z) doesn't work in spawned shell
 
 ### Pitfall 6: Missing PATH in Environment
+
 **What goes wrong:** Commands not found in spawned shell
 **Why it happens:** env_clear() removes PATH, manual PATH doesn't include expected dirs
 **How to avoid:** Source login profile or set sensible default PATH including /usr/local/bin:/usr/bin:/bin
@@ -285,6 +304,7 @@ Problems that look simple but have existing solutions:
 Verified patterns from official sources:
 
 ### SCM_RIGHTS with nix crate
+
 ```rust
 // Source: https://docs.rs/nix/latest/nix/sys/socket/enum.ControlMessage.html
 use nix::sys::socket::{sendmsg, ControlMessage, MsgFlags};
@@ -301,6 +321,7 @@ fn send_fd_with_nix(socket_fd: RawFd, fd_to_send: RawFd) -> nix::Result<()> {
 ```
 
 ### Receiving FD with nix crate
+
 ```rust
 // Source: https://docs.rs/nix/latest/nix/sys/socket/fn.recvmsg.html
 use nix::sys::socket::{recvmsg, ControlMessageOwned, MsgFlags};
@@ -326,6 +347,7 @@ fn recv_fd_with_nix(socket_fd: RawFd) -> nix::Result<RawFd> {
 ```
 
 ### Writing utmp entry with libc
+
 ```rust
 // Source: https://docs.rs/libc/latest/libc/struct.utmpx.html
 use libc::{utmpx, pututxline, setutxent, endutxent, USER_PROCESS, DEAD_PROCESS};
@@ -367,6 +389,7 @@ unsafe fn write_utmp_login(
 ```
 
 ### Protocol Extension (IPC messages)
+
 ```rust
 // Extend existing protocol.rs
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -408,14 +431,15 @@ pub struct ResizePtyParams {
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| forkpty() for async | openpty() + manual fork | Always (async incompatible) | Use openpty in async contexts |
-| Rust std SocketAncillary | passfd/nix crates | Ongoing (std unstable) | Use external crates for SCM_RIGHTS |
-| bun-pty package | Bun.Terminal built-in | Bun v1.3.5 (Dec 2025) | Can use native Bun.spawn terminal option |
-| Manual PAM FFI | pam-client crate | 2024+ | Safe session management |
+| Old Approach             | Current Approach        | When Changed                | Impact                                   |
+| ------------------------ | ----------------------- | --------------------------- | ---------------------------------------- |
+| forkpty() for async      | openpty() + manual fork | Always (async incompatible) | Use openpty in async contexts            |
+| Rust std SocketAncillary | passfd/nix crates       | Ongoing (std unstable)      | Use external crates for SCM_RIGHTS       |
+| bun-pty package          | Bun.Terminal built-in   | Bun v1.3.5 (Dec 2025)       | Can use native Bun.spawn terminal option |
+| Manual PAM FFI           | pam-client crate        | 2024+                       | Safe session management                  |
 
 **Deprecated/outdated:**
+
 - `CommandExt::before_exec()`: Deprecated, use `pre_exec()` instead
 - Rust std `unix_socket_ancillary_data`: Still nightly/unstable, use passfd or nix
 
@@ -446,6 +470,7 @@ Things that couldn't be fully resolved:
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - [nix crate pty module](https://docs.rs/nix/latest/nix/pty/index.html) - openpty, forkpty documentation
 - [nix crate unistd module](https://docs.rs/nix/latest/nix/unistd/index.html) - setuid, setgid, initgroups
 - [CommandExt trait](https://doc.rust-lang.org/std/os/unix/process/trait.CommandExt.html) - uid(), gid(), groups(), pre_exec()
@@ -454,6 +479,7 @@ Things that couldn't be fully resolved:
 - [Bun v1.3.5 release](https://bun.com/blog/bun-v1.3.5) - Built-in PTY support
 
 ### Secondary (MEDIUM confidence)
+
 - [pty-process crate](https://docs.rs/pty-process/latest/pty_process/) - High-level PTY spawn wrapper
 - [pam-client crate](https://docs.rs/pam-client/latest/pam_client/) - PAM session management
 - [tokio-seqpacket](https://docs.rs/tokio-seqpacket/latest/tokio_seqpacket/) - Seqpacket with fd passing
@@ -461,12 +487,14 @@ Things that couldn't be fully resolved:
 - [utmp-rs](https://docs.rs/utmp-rs) - utmp parsing
 
 ### Tertiary (LOW confidence)
+
 - WebSearch results on SSH session setup, login shell environment
 - WebSearch results on Bun FFI file descriptor handling
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: MEDIUM - nix crate well-documented, but fd passing to Bun needs validation
 - Architecture: HIGH - Pattern follows established Cockpit/SSH models
 - Pitfalls: HIGH - Well-documented Unix process management gotchas

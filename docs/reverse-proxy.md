@@ -35,6 +35,7 @@ graph LR
 ```
 
 The reverse proxy:
+
 1. Accepts incoming HTTPS connections from clients
 2. Terminates TLS encryption
 3. Forwards requests to opencode over HTTP (localhost only)
@@ -83,6 +84,7 @@ server {
 ```
 
 Replace:
+
 - `<YOUR_DOMAIN>` with your domain (e.g., `opencode.example.com`)
 - `<OPENCODE_PORT>` with your opencode port (default: `3000`)
 
@@ -148,6 +150,7 @@ sudo certbot --nginx -d <YOUR_DOMAIN>
 ```
 
 Certbot will:
+
 1. Request a certificate from Let's Encrypt
 2. Modify your nginx config to enable HTTPS
 3. Set up automatic renewal via cron/systemd timer
@@ -252,12 +255,14 @@ caddy version
 ```
 
 That's it! Caddy automatically:
+
 - Obtains TLS certificates from Let's Encrypt
 - Redirects HTTP to HTTPS
 - Configures WebSocket support
 - Renews certificates automatically
 
 Replace:
+
 - `<YOUR_DOMAIN>` with your domain (e.g., `opencode.example.com`)
 - `<OPENCODE_PORT>` with your opencode port (default: `3000`)
 
@@ -363,6 +368,7 @@ AWS ALB supports WebSocket natively. Configuration:
    ```
 
 AWS ALB automatically:
+
 - Terminates TLS
 - Forwards `X-Forwarded-Proto`, `X-Forwarded-For` headers
 - Handles WebSocket upgrade
@@ -417,6 +423,7 @@ Cloudflare provides TLS termination and DDoS protection. Configuration:
 4. **Configure opencode**: Set `trustProxy: true`
 
 **Important**: Cloudflare's free plan has WebSocket timeouts. Consider using:
+
 - Cloudflare Workers for WebSocket proxying
 - Cloudflare for HTTP + direct connection for WebSocket (requires DNS split)
 
@@ -520,8 +527,8 @@ server {
 ```json
 {
   "auth": {
-    "requireHttps": "off",  // Disable HTTPS requirement for LAN
-    "trustProxy": false     // Not behind a real proxy
+    "requireHttps": "off", // Disable HTTPS requirement for LAN
+    "trustProxy": false // Not behind a real proxy
   }
 }
 ```
@@ -537,11 +544,13 @@ The `trustProxy` option tells opencode whether to trust the `X-Forwarded-Proto` 
 ### What trustProxy Does
 
 When `trustProxy` is enabled, opencode:
+
 1. Reads the `X-Forwarded-Proto` header from requests
 2. Treats requests with `X-Forwarded-Proto: https` as secure (HTTPS)
 3. Allows authentication over HTTP if the header indicates HTTPS
 
 Without `trustProxy`, opencode:
+
 1. Ignores `X-Forwarded-Proto` header
 2. Only treats direct TLS connections as secure
 3. Blocks/warns about authentication over HTTP
@@ -549,11 +558,13 @@ Without `trustProxy`, opencode:
 ### When to Enable trustProxy
 
 **Enable `trustProxy: true` when:**
+
 - opencode is behind a reverse proxy (nginx, Caddy, ALB, etc.)
 - The reverse proxy terminates TLS
 - The proxy sets `X-Forwarded-Proto` header correctly
 
 **Keep `trustProxy: false` (default) when:**
+
 - opencode is directly exposed to the internet
 - opencode terminates TLS itself
 - Developing locally without a proxy
@@ -572,6 +583,7 @@ curl -H "X-Forwarded-Proto: https" http://your-server.com/
 If `trustProxy: true` without a real proxy, opencode will treat this as HTTPS, allowing authentication over plain HTTP.
 
 **With a reverse proxy**, the proxy:
+
 1. Strips attacker-supplied headers
 2. Sets its own `X-Forwarded-Proto` based on the actual connection
 3. Ensures header integrity
@@ -584,8 +596,18 @@ If `trustProxy: true` without a real proxy, opencode will treat this as HTTPS, a
 {
   "auth": {
     "enabled": true,
-    "requireHttps": "block",      // Require HTTPS for authentication
-    "trustProxy": true            // Trust X-Forwarded-Proto from reverse proxy
+    "requireHttps": "block", // Require HTTPS for authentication
+    "trustProxy": true // Trust X-Forwarded-Proto from reverse proxy
+  }
+}
+```
+
+**Optional UI proxy (for local UI development):**
+
+```json
+{
+  "server": {
+    "uiUrl": "http://localhost:3000"
   }
 }
 ```
@@ -601,12 +623,15 @@ OPENCODE_AUTH_TRUST_PROXY=true opencode
 Test that `trustProxy` works correctly:
 
 1. **With trustProxy enabled**, access opencode through reverse proxy:
+
    ```bash
    curl -i https://<YOUR_DOMAIN>/
    ```
+
    Should work without HTTPS warnings.
 
 2. **Without reverse proxy**, test header spoofing protection:
+
    ```bash
    # This should be rejected/warned if trustProxy is false
    curl -H "X-Forwarded-Proto: https" http://localhost:3000/
@@ -645,22 +670,26 @@ For production deployments with systemd service management, see the [opencode-cl
 ### Troubleshooting
 
 **WebSocket connection fails:**
+
 - Check `proxy_http_version 1.1` is set (nginx)
 - Check `Upgrade` and `Connection` headers are forwarded
 - Increase `proxy_read_timeout` (nginx) or check Caddy timeout settings
 - Verify firewall allows WebSocket traffic
 
 **HTTPS warnings in browser:**
+
 - Verify `trustProxy: true` is set in opencode config
 - Check reverse proxy sets `X-Forwarded-Proto: https`
 - Verify TLS certificate is valid and trusted
 
 **Authentication fails:**
+
 - Check `requireHttps` setting matches your deployment
 - Verify `trustProxy` setting matches proxy configuration
 - Check browser console for CSRF or cookie issues
 
 **502 Bad Gateway:**
+
 - Verify opencode is running: `curl http://localhost:<OPENCODE_PORT>/`
 - Check proxy `proxy_pass` / `reverse_proxy` URL is correct
 - Review nginx/Caddy error logs
@@ -668,6 +697,7 @@ For production deployments with systemd service management, see the [opencode-cl
 ---
 
 **Next Steps:**
+
 - Set up reverse proxy using one of the configurations above
 - Configure opencode with `trustProxy: true`
 - Test HTTPS access and WebSocket connections

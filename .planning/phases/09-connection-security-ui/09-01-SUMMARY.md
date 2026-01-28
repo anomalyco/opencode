@@ -55,6 +55,7 @@ completed: 2026-01-24
 - **Files modified:** 2
 
 ## Accomplishments
+
 - Added security icons (lock, lock-open, home) to UI icon library
 - Created SecurityBadge component with connection security detection
 - Implemented three visual states with appropriate icons and color coding
@@ -69,20 +70,24 @@ Each task was committed atomically:
 2. **Task 2: Create SecurityBadge component** - `d2c110d49` (feat)
 
 ## Files Created/Modified
+
 - `packages/ui/src/components/icon.tsx` - Added lock, lock-open, and home icons
 - `packages/app/src/components/security-badge.tsx` - SecurityBadge component with status detection and popover
 
 ## Decisions Made
 
 **1. Three-state security model**
+
 - Rationale: Distinguish between insecure connections and local development (localhost doesn't need HTTPS)
 - Implementation: secure (HTTPS), insecure (HTTP), local (localhost/127.0.0.1/::1)
 
 **2. Visibility change listener**
+
 - Rationale: Detect when user switches from HTTP to HTTPS in same tab or returns after proxy configuration
 - Implementation: Re-check status when document.visibilityState becomes "visible"
 
 **3. Color coding scheme**
+
 - Green for secure: Positive reinforcement for HTTPS
 - Red for insecure: Warning for unencrypted connections
 - Blue for local: Neutral indicator for local development
@@ -102,6 +107,7 @@ None - no external service configuration required. Component is self-contained a
 ## Next Phase Readiness
 
 SecurityBadge component is complete and ready for:
+
 - Integration into application header/titlebar
 - Testing across different connection types (HTTP, HTTPS, localhost)
 - User acceptance testing to verify visual clarity and messaging
@@ -109,5 +115,6 @@ SecurityBadge component is complete and ready for:
 The component is fully self-contained with no external dependencies beyond existing UI component library patterns.
 
 ---
-*Phase: 09-connection-security-ui*
-*Completed: 2026-01-24*
+
+_Phase: 09-connection-security-ui_
+_Completed: 2026-01-24_

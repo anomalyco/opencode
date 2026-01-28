@@ -4,6 +4,12 @@ import { useSync } from "@/context/sync"
 import { Icon } from "@opencode-ai/ui/icon"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { Select } from "@opencode-ai/ui/select"
+import { useLayout } from "@/context/layout"
+import { useNavigate } from "@solidjs/router"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { RepoSelector } from "@/components/repo/repo-selector"
+import { useServer } from "@/context/server"
+import type { Repo } from "@opencode-ai/sdk/v2/client"
 
 const MAIN_WORKTREE = "main"
 const CREATE_WORKTREE = "create"
@@ -15,6 +21,9 @@ interface NewSessionViewProps {
 
 export function NewSessionView(props: NewSessionViewProps) {
   const sync = useSync()
+  const layout = useLayout()
+  const server = useServer()
+  const navigate = useNavigate()
 
   const sandboxes = createMemo(() => sync.project?.sandboxes ?? [])
   const options = createMemo(() => [MAIN_WORKTREE, ...sandboxes(), CREATE_WORKTREE])
@@ -29,6 +38,14 @@ export function NewSessionView(props: NewSessionViewProps) {
     if (!project) return false
     return sync.data.path.directory !== project.worktree
   })
+
+  const currentRepoPath = createMemo(() => sync.project?.worktree)
+
+  const openRepo = (repo: Repo) => {
+    layout.projects.open(repo.path)
+    server.projects.touch(repo.path)
+    navigate(`/${base64Encode(repo.path)}/session`)
+  }
 
   const label = (value: string) => {
     if (value === MAIN_WORKTREE) {
@@ -56,6 +73,7 @@ export function NewSessionView(props: NewSessionViewProps) {
           <span class="text-text-strong">{getFilename(projectRoot())}</span>
         </div>
       </div>
+      <RepoSelector currentPath={currentRepoPath()} onOpenRepo={openRepo} />
       <div class="flex justify-center items-center gap-1">
         <Icon name="branch" size="small" />
         <Select

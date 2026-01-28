@@ -66,51 +66,53 @@ Deferred to future release. Tracked but not in current roadmap.
 
 Explicitly excluded. Documented to prevent scope creep.
 
-| Feature | Reason |
-|---------|--------|
-| Custom user database | Duplicates OS user management; PAM delegates to passwd/LDAP/Kerberos |
-| Built-in TLS termination | Complex, error-prone; better handled by nginx/Caddy reverse proxy |
-| OAuth/SSO for self-hosted | PAM already supports enterprise SSO via LDAP/Kerberos integration |
-| Account registration | Self-hosted instances use existing system accounts; admins manage via OS tools |
-| Password reset via email | No email infrastructure assumed; users reset via admin/sudo |
-| Fine-grained app permissions | Use existing UNIX permission model and sudo/polkit |
-| Anonymous/guest access | Defeats purpose of system authentication |
+| Feature                      | Reason                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------ |
+| Custom user database         | Duplicates OS user management; PAM delegates to passwd/LDAP/Kerberos           |
+| Built-in TLS termination     | Complex, error-prone; better handled by nginx/Caddy reverse proxy              |
+| OAuth/SSO for self-hosted    | PAM already supports enterprise SSO via LDAP/Kerberos integration              |
+| Account registration         | Self-hosted instances use existing system accounts; admins manage via OS tools |
+| Password reset via email     | No email infrastructure assumed; users reset via admin/sudo                    |
+| Fine-grained app permissions | Use existing UNIX permission model and sudo/polkit                             |
+| Anonymous/guest access       | Defeats purpose of system authentication                                       |
 
 ## Traceability
 
 Which phases cover which requirements. Updated during roadmap creation.
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| AUTH-01 | Phase 4 | Complete |
-| AUTH-02 | Phase 4 | Complete |
-| AUTH-03 | Phase 4 | Complete |
-| AUTH-04 | Phase 5 | Complete |
-| AUTH-05 | Phase 10 | Complete |
-| SESS-01 | Phase 2 | Complete |
-| SESS-02 | Phase 2 | Complete |
-| SESS-03 | Phase 2 | Complete |
-| SESS-04 | Phase 8 | Complete |
-| SEC-01 | Phase 7 | Complete |
-| SEC-02 | Phase 7 | Complete |
-| SEC-03 | Phase 7 | Complete |
-| SEC-04 | Phase 7 | Complete |
-| INFRA-01 | Phase 3 | Complete |
-| INFRA-02 | Phase 3 | Complete |
-| INFRA-03 | Phase 1 | Complete |
-| INFRA-04 | Phase 1 | Complete |
-| UI-01 | Phase 6 | Complete |
-| UI-02 | Phase 6 | Complete |
-| UI-03 | Phase 8 | Complete |
-| UI-04 | Phase 9 | Complete |
-| DOC-01 | Phase 11 | Complete |
-| DOC-02 | Phase 11 | Complete |
+| Requirement | Phase    | Status   |
+| ----------- | -------- | -------- |
+| AUTH-01     | Phase 4  | Complete |
+| AUTH-02     | Phase 4  | Complete |
+| AUTH-03     | Phase 4  | Complete |
+| AUTH-04     | Phase 5  | Complete |
+| AUTH-05     | Phase 10 | Complete |
+| SESS-01     | Phase 2  | Complete |
+| SESS-02     | Phase 2  | Complete |
+| SESS-03     | Phase 2  | Complete |
+| SESS-04     | Phase 8  | Complete |
+| SEC-01      | Phase 7  | Complete |
+| SEC-02      | Phase 7  | Complete |
+| SEC-03      | Phase 7  | Complete |
+| SEC-04      | Phase 7  | Complete |
+| INFRA-01    | Phase 3  | Complete |
+| INFRA-02    | Phase 3  | Complete |
+| INFRA-03    | Phase 1  | Complete |
+| INFRA-04    | Phase 1  | Complete |
+| UI-01       | Phase 6  | Complete |
+| UI-02       | Phase 6  | Complete |
+| UI-03       | Phase 8  | Complete |
+| UI-04       | Phase 9  | Complete |
+| DOC-01      | Phase 11 | Complete |
+| DOC-02      | Phase 11 | Complete |
 
 **Coverage:**
+
 - v1 requirements: 23 total
 - Mapped to phases: 23
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-01-19*
-*Last updated: 2026-01-25 after Phase 11 completion*
+
+_Requirements defined: 2026-01-19_
+_Last updated: 2026-01-25 after Phase 11 completion_

@@ -74,12 +74,12 @@ Each task was committed atomically:
 
 ## Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
+| Decision                         | Rationale                                                          |
+| -------------------------------- | ------------------------------------------------------------------ |
 | X-Requested-With header required | Basic CSRF protection - browser won't add this header cross-origin |
-| Support JSON and form POST | Flexibility for different client implementations |
-| Generic auth_failed error | Security - prevents user enumeration attacks |
-| returnUrl validation | Prevents open redirect vulnerabilities |
+| Support JSON and form POST       | Flexibility for different client implementations                   |
+| Generic auth_failed error        | Security - prevents user enumeration attacks                       |
+| returnUrl validation             | Prevents open redirect vulnerabilities                             |
 
 ## Deviations from Plan
 
@@ -100,5 +100,6 @@ None - no external service configuration required.
 - No blockers for Phase 4 Plan 3
 
 ---
-*Phase: 04-authentication-flow*
-*Completed: 2026-01-20*
+
+_Phase: 04-authentication-flow_
+_Completed: 2026-01-20_

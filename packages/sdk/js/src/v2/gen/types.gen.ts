@@ -1324,6 +1324,10 @@ export type ServerConfig = {
    * Additional domains to allow for CORS
    */
   cors?: Array<string>
+  /**
+   * Base URL for the web UI proxy (defaults to https://app.opencode.ai)
+   */
+  uiUrl?: string
 }
 
 export type PermissionActionConfig = "ask" | "allow" | "deny"
@@ -1576,6 +1580,86 @@ export type McpRemoteConfig = {
  */
 export type LayoutConfig = "auto" | "stretch"
 
+/**
+ * PAM-specific configuration
+ */
+export type AuthPamConfig = {
+  /**
+   * PAM service name
+   */
+  service?: string
+}
+
+/**
+ * OTP rate limit window duration
+ */
+export type DurationString = string
+
+/**
+ * Authentication configuration for multi-user access
+ */
+export type AuthConfig = {
+  /**
+   * Enable authentication
+   */
+  enabled?: boolean
+  /**
+   * Authentication method
+   */
+  method?: "pam"
+  pam?: AuthPamConfig
+  sessionTimeout?: DurationString
+  rememberMeDuration?: DurationString
+  /**
+   * HTTPS requirement mode: 'off' allows HTTP, 'warn' logs warnings, 'block' rejects HTTP
+   */
+  requireHttps?: "off" | "warn" | "block"
+  /**
+   * Enable rate limiting for login attempts
+   */
+  rateLimiting?: boolean
+  rateLimitWindow?: DurationString
+  /**
+   * Maximum login attempts per window
+   */
+  rateLimitMax?: number
+  /**
+   * Users allowed to authenticate. Empty array allows any system user
+   */
+  allowedUsers?: Array<string>
+  /**
+   * Persist sessions to disk across restarts
+   */
+  sessionPersistence?: boolean
+  /**
+   * Trust X-Forwarded-Proto header for reverse proxy detection
+   */
+  trustProxy?: boolean
+  /**
+   * Enable verbose CSRF error messages for debugging
+   */
+  csrfVerboseErrors?: boolean
+  /**
+   * Additional routes to exclude from CSRF validation
+   */
+  csrfAllowlist?: Array<string>
+  /**
+   * Enable two-factor authentication support
+   */
+  twoFactorEnabled?: boolean
+  /**
+   * Require users to set up 2FA before accessing the app (implies twoFactorEnabled)
+   */
+  twoFactorRequired?: boolean
+  twoFactorTokenTimeout?: DurationString
+  deviceTrustDuration?: DurationString
+  /**
+   * Maximum OTP attempts per rate limit window
+   */
+  otpRateLimitMax?: number
+  otpRateLimitWindow?: DurationString
+}
+
 export type Config = {
   /**
    * JSON schema reference for configuration validation
@@ -1610,6 +1694,12 @@ export type Config = {
     diff_style?: "auto" | "stacked"
   }
   server?: ServerConfig
+  workspace?: {
+    /**
+     * Workspace root for cloning repositories
+     */
+    root?: string
+  }
   /**
    * Command configuration, see https://opencode.ai/docs/commands
    */
@@ -1800,6 +1890,7 @@ export type Config = {
      */
     mcp_timeout?: number
   }
+  auth?: AuthConfig
 }
 
 export type Model = {
@@ -1973,6 +2064,88 @@ export type ProviderAuthAuthorization = {
   url: string
   method: "auto" | "code"
   instructions: string
+}
+
+export type Repo = {
+  id: string
+  path: string
+  name: string
+  time: {
+    created: number
+    updated: number
+  }
+}
+
+export type RepoError = {
+  message: string
+  help_steps?: Array<string>
+  auth_type?: "ssh" | "github_pat" | "https_basic"
+  can_retry_with_credentials?: boolean
+  code?: string
+  files?: Array<string>
+}
+
+export type RepoErrorResponse = {
+  error: RepoError
+}
+
+export type RepoCloneResult = {
+  repo: Repo
+  message: string
+}
+
+export type RepoCloneCredentials =
+  | {
+      type: "ssh_passphrase"
+      passphrase: string
+      key_path?: string
+    }
+  | {
+      type: "github_pat"
+      token: string
+    }
+  | {
+      type: "https_basic"
+      username: string
+      password: string
+    }
+
+export type RepoCloneProgress = {
+  received_objects: number
+  total_objects: number
+  received_bytes: number
+  indexed_objects: number
+  total_deltas: number
+  indexed_deltas: number
+}
+
+export type RepoCloneProgressEvent =
+  | {
+      type: "progress"
+      data: RepoCloneProgress
+    }
+  | {
+      type: "complete"
+      data: RepoCloneResult
+    }
+  | {
+      type: "error"
+      data: RepoError
+    }
+
+export type RepoBranch = {
+  name: string
+  current: boolean
+  remote: boolean
+}
+
+export type RepoBranchList = {
+  current?: string
+  branches: Array<RepoBranch>
+}
+
+export type RepoCheckoutResult = {
+  dirty: false
 }
 
 export type Symbol = {
@@ -2179,6 +2352,200 @@ export type GlobalDisposeResponses = {
 }
 
 export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
+
+export type AuthLoginData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/auth/login"
+}
+
+export type AuthLoginErrors = {
+  /**
+   * Bad request (missing fields or invalid returnUrl)
+   */
+  400: unknown
+  /**
+   * Authentication failed
+   */
+  401: unknown
+  /**
+   * Authentication disabled
+   */
+  403: unknown
+  /**
+   * Rate limit exceeded
+   */
+  429: unknown
+}
+
+export type AuthLoginResponses = {
+  /**
+   * Login successful or 2FA required
+   */
+  200:
+    | {
+        success: true
+        user: {
+          username: string
+          uid: number
+          gid: number
+          home: string
+          shell: string
+        }
+      }
+    | {
+        success: false
+        error: "2fa_required"
+        twoFactorToken: string
+        username: string
+        timeoutSeconds: number
+      }
+}
+
+export type AuthLoginResponse = AuthLoginResponses[keyof AuthLoginResponses]
+
+export type AuthLogin2FaData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/auth/login/2fa"
+}
+
+export type AuthLogin2FaErrors = {
+  /**
+   * Bad request (missing fields)
+   */
+  400: unknown
+  /**
+   * OTP validation failed or token expired
+   */
+  401: unknown
+  /**
+   * 2FA not enabled
+   */
+  403: unknown
+  /**
+   * Rate limit exceeded
+   */
+  429: unknown
+}
+
+export type AuthLogin2FaResponses = {
+  /**
+   * 2FA successful
+   */
+  200: {
+    success: true
+    user: {
+      username: string
+      uid: number
+      gid: number
+      home: string
+      shell: string
+    }
+  }
+}
+
+export type AuthLogin2FaResponse = AuthLogin2FaResponses[keyof AuthLogin2FaResponses]
+
+export type AuthStatusData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/auth/status"
+}
+
+export type AuthStatusResponses = {
+  /**
+   * Auth status
+   */
+  200: {
+    enabled: boolean
+    method?: string
+  }
+}
+
+export type AuthStatusResponse = AuthStatusResponses[keyof AuthStatusResponses]
+
+export type AuthDeviceTrustStatusData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/auth/device-trust/status"
+}
+
+export type AuthDeviceTrustStatusResponses = {
+  /**
+   * Device trust status
+   */
+  200: {
+    twoFactorEnabled: boolean
+    deviceTrusted: boolean
+  }
+}
+
+export type AuthDeviceTrustStatusResponse = AuthDeviceTrustStatusResponses[keyof AuthDeviceTrustStatusResponses]
+
+export type AuthDeviceTrustRevokeData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/auth/device-trust/revoke"
+}
+
+export type AuthDeviceTrustRevokeResponses = {
+  /**
+   * Device trust revoked
+   */
+  200: {
+    success: true
+  }
+}
+
+export type AuthDeviceTrustRevokeResponse = AuthDeviceTrustRevokeResponses[keyof AuthDeviceTrustRevokeResponses]
+
+export type AuthLogoutData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/auth/logout"
+}
+
+export type AuthLogoutAllData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/auth/logout/all"
+}
+
+export type AuthSessionData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/auth/session"
+}
+
+export type AuthSessionErrors = {
+  /**
+   * Not authenticated
+   */
+  401: unknown
+}
+
+export type AuthSessionResponses = {
+  /**
+   * Current session info
+   */
+  200: {
+    id: string
+    username: string
+    createdAt: number
+    lastAccessTime: number
+  }
+}
+
+export type AuthSessionResponse = AuthSessionResponses[keyof AuthSessionResponses]
 
 export type ProjectListData = {
   body?: never
@@ -3918,6 +4285,199 @@ export type ProviderOauthCallbackResponses = {
 }
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
+
+export type RepoListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/repo"
+}
+
+export type RepoListResponses = {
+  /**
+   * List of repositories
+   */
+  200: Array<Repo>
+}
+
+export type RepoListResponse = RepoListResponses[keyof RepoListResponses]
+
+export type RepoAddData = {
+  body?: {
+    path: string
+    name?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/repo"
+}
+
+export type RepoAddErrors = {
+  /**
+   * Invalid repository path
+   */
+  400: RepoErrorResponse
+}
+
+export type RepoAddError = RepoAddErrors[keyof RepoAddErrors]
+
+export type RepoAddResponses = {
+  /**
+   * Repository added
+   */
+  200: Repo
+}
+
+export type RepoAddResponse = RepoAddResponses[keyof RepoAddResponses]
+
+export type RepoCloneData = {
+  body?: {
+    url: string
+    branch?: string
+    credentials?: RepoCloneCredentials
+    workspaceRoot?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/repo/clone"
+}
+
+export type RepoCloneErrors = {
+  /**
+   * Clone failed
+   */
+  400: RepoErrorResponse
+}
+
+export type RepoCloneError = RepoCloneErrors[keyof RepoCloneErrors]
+
+export type RepoCloneResponses = {
+  /**
+   * Repository cloned
+   */
+  200: RepoCloneResult
+}
+
+export type RepoCloneResponse = RepoCloneResponses[keyof RepoCloneResponses]
+
+export type RepoCloneProgressData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    url: string
+    branch?: string
+  }
+  url: "/repo/clone-progress"
+}
+
+export type RepoCloneProgressResponses = {
+  /**
+   * Clone progress stream
+   */
+  200: RepoCloneProgress
+}
+
+export type RepoCloneProgressResponse = RepoCloneProgressResponses[keyof RepoCloneProgressResponses]
+
+export type RepoCloneProgressWithCredentialsData = {
+  body?: {
+    url: string
+    branch?: string
+    credentials?: RepoCloneCredentials
+    workspaceRoot?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/repo/clone-progress"
+}
+
+export type RepoCloneProgressWithCredentialsResponses = {
+  /**
+   * Clone progress stream
+   */
+  200: RepoCloneProgressEvent
+}
+
+export type RepoCloneProgressWithCredentialsResponse =
+  RepoCloneProgressWithCredentialsResponses[keyof RepoCloneProgressWithCredentialsResponses]
+
+export type RepoBranchesData = {
+  body?: never
+  path: {
+    repoID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/repo/{repoID}/branches"
+}
+
+export type RepoBranchesErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type RepoBranchesError = RepoBranchesErrors[keyof RepoBranchesErrors]
+
+export type RepoBranchesResponses = {
+  /**
+   * Branch list
+   */
+  200: RepoBranchList
+}
+
+export type RepoBranchesResponse = RepoBranchesResponses[keyof RepoBranchesResponses]
+
+export type RepoCheckoutData = {
+  body?: {
+    branch: string
+    force?: boolean
+  }
+  path: {
+    repoID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/repo/{repoID}/checkout"
+}
+
+export type RepoCheckoutErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Working tree dirty
+   */
+  409: RepoErrorResponse
+}
+
+export type RepoCheckoutError = RepoCheckoutErrors[keyof RepoCheckoutErrors]
+
+export type RepoCheckoutResponses = {
+  /**
+   * Branch switched
+   */
+  200: RepoCheckoutResult
+}
+
+export type RepoCheckoutResponse = RepoCheckoutResponses[keyof RepoCheckoutResponses]
 
 export type FindTextData = {
   body?: never

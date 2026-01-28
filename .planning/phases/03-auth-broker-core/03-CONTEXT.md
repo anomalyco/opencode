@@ -14,6 +14,7 @@ Privileged auth broker daemon that handles PAM authentication via Unix socket IP
 ## Implementation Decisions
 
 ### Broker Architecture
+
 - **Lifecycle:** Long-running daemon, started at boot (not on-demand spawning)
 - **Startup:** systemd service on Linux, launchd on macOS (research needed for exact approach)
 - **Concurrency:** Claude's discretion — research PAM threading constraints to determine fork-per-request vs thread pool
@@ -28,6 +29,7 @@ Privileged auth broker daemon that handles PAM authentication via Unix socket IP
 - **Health check:** Supports ping command via IPC
 
 ### IPC Protocol
+
 - **Format:** JSON over Unix socket (newline-delimited)
 - **Style:** Request-response only (no streaming)
 - **Multiplexing:** Request IDs for concurrent requests on single connection
@@ -38,6 +40,7 @@ Privileged auth broker daemon that handles PAM authentication via Unix socket IP
 - **Versioning:** Protocol version included in every message
 
 ### Security Model
+
 - **Socket access:** Any local user can connect (relies on PAM for actual auth)
 - **Client validation:** None — any process can send auth requests
 - **Rate limiting:** Per-username rate limiting on failed attempts (broker-side)
@@ -47,6 +50,7 @@ Privileged auth broker daemon that handles PAM authentication via Unix socket IP
 - **Privilege drop:** Stay root (simpler than capabilities approach)
 
 ### Implementation Language
+
 - **Language:** Rust (memory safe, excellent for privileged code)
 - **PAM bindings:** Use pam crate (research to verify maintenance status)
 - **Code location:** Monorepo subfolder (packages/opencode-broker)
@@ -56,6 +60,7 @@ Privileged auth broker daemon that handles PAM authentication via Unix socket IP
 - **Testing:** Mock PAM in unit tests (no real PAM calls in CI)
 
 ### Claude's Discretion
+
 - Exact concurrency model (fork vs threads) based on PAM constraints
 - macOS authentication backend (PAM vs OpenDirectory — research needed)
 - Socket path location per platform
@@ -85,5 +90,5 @@ Privileged auth broker daemon that handles PAM authentication via Unix socket IP
 
 ---
 
-*Phase: 03-auth-broker-core*
-*Context gathered: 2026-01-20*
+_Phase: 03-auth-broker-core_
+_Context gathered: 2026-01-20_

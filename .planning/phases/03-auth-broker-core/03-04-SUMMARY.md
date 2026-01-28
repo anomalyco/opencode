@@ -60,6 +60,7 @@ completed: 2026-01-20
 - **Files modified:** 8
 
 ## Accomplishments
+
 - systemd service file with Type=notify, security hardening, and auto-restart
 - launchd plist for macOS with restart on failure semantics
 - PAM service files for Linux (pam_unix.so) and macOS (pam_opendirectory.so)
@@ -74,6 +75,7 @@ Each task was committed atomically:
 3. **Task 3: Create PAM service file and platform module** - `03a2a4a68` (feat)
 
 ## Files Created/Modified
+
 - `packages/opencode-broker/service/opencode-broker.service` - systemd unit file with Type=notify
 - `packages/opencode-broker/service/com.opencode.broker.plist` - launchd plist for macOS
 - `packages/opencode-broker/service/opencode.pam` - Linux PAM configuration
@@ -84,6 +86,7 @@ Each task was committed atomically:
 - `packages/opencode-broker/src/lib.rs` - Added platform module export
 
 ## Decisions Made
+
 - **systemd Type=notify:** Broker signals readiness via sd_notify, integrates with systemd socket activation
 - **NoNewPrivileges=false:** Required because PAM may need root for reading /etc/shadow
 - **launchd KeepAlive with SuccessfulExit=false:** Restart only on crash, not clean exit
@@ -103,11 +106,13 @@ None - verification tools (systemd-analyze on macOS, plutil on Linux) gracefully
 None - service files are templates installed by setup command (Phase 6).
 
 ## Next Phase Readiness
+
 - All service files ready for installation by setup command
 - Platform module provides correct paths for socket creation
 - PAM configurations ready for both Linux and macOS
 - Ready for Phase 03-06 (Final Integration)
 
 ---
-*Phase: 03-auth-broker-core*
-*Completed: 2026-01-20*
+
+_Phase: 03-auth-broker-core_
+_Completed: 2026-01-20_

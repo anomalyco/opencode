@@ -54,16 +54,19 @@ Implemented session expiration warnings and expired session handling:
 ### Session Context Enhancements
 
 **Added warning threshold:**
+
 ```typescript
 const WARNING_THRESHOLD_MS = 15 * 60 * 1000 // 15 minutes
 ```
 
 **Warning state tracking:**
+
 - `warningShown` flag prevents duplicate toasts
 - `warningToastId` allows dismissal when session extended
 - Check runs during polling interval
 
 **Warning logic:**
+
 ```typescript
 function checkExpirationWarning() {
   const remaining = remainingMs()
@@ -83,9 +86,9 @@ function checkExpirationWarning() {
             // Reset warning state
             warningShown = false
             toaster.dismiss(warningToastId)
-          }
-        }
-      ]
+          },
+        },
+      ],
     })
   }
 
@@ -98,6 +101,7 @@ function checkExpirationWarning() {
 ```
 
 **Extend session mechanism:**
+
 - Fetches `/auth/session` endpoint
 - Triggers `UserSession.touch()` via middleware
 - Updates `lastAccessTime`
@@ -106,6 +110,7 @@ function checkExpirationWarning() {
 ### Session Expired Overlay
 
 **Created `SessionExpiredOverlay` component:**
+
 - Uses `@kobalte/core/dialog` for modal behavior
 - Opens when `isExpired()` signal is true
 - Semi-transparent backdrop (rgba(0,0,0,0.8))
@@ -114,12 +119,11 @@ function checkExpirationWarning() {
 - User's work visible behind overlay
 
 **Mounted at app level:**
+
 ```tsx
 <SessionProvider>
   <SessionExpiredOverlay />
-  <GlobalSDKProvider>
-    ...
-  </GlobalSDKProvider>
+  <GlobalSDKProvider>...</GlobalSDKProvider>
 </SessionProvider>
 ```
 
@@ -130,6 +134,7 @@ Positioned inside `SessionProvider` to access session context, but before other 
 ### Created
 
 **`packages/app/src/components/session-expired-overlay.tsx`**
+
 - Modal overlay component
 - Dialog from @kobalte/core
 - Dark theme styling
@@ -138,6 +143,7 @@ Positioned inside `SessionProvider` to access session context, but before other 
 ### Modified
 
 **`packages/app/src/context/session.tsx`**
+
 - Added toast imports
 - Warning threshold constant
 - Warning state tracking
@@ -145,27 +151,32 @@ Positioned inside `SessionProvider` to access session context, but before other 
 - Warning check in polling loop
 
 **`packages/app/src/app.tsx`**
+
 - Import `SessionExpiredOverlay`
 - Mount component in app tree
 
 ## Decisions Made
 
 ### 1. No Icon for Expiration Toast
+
 **Decision:** Don't use icon in warning toast
 **Rationale:** Icon set doesn't include clock/time icons; persistent toast with clear title/description is sufficient
 **Alternatives considered:** Adding custom clock icon (unnecessary complexity)
 
 ### 2. Inline Styles for Overlay
+
 **Decision:** Use inline styles for overlay component
 **Rationale:** Simple one-off component with specific z-index requirements; easier to maintain inline than separate CSS
 **Alternatives considered:** Tailwind classes (would need arbitrary values for z-index)
 
 ### 3. Warning Shown Once Per Window
+
 **Decision:** Track warning state to show toast only once
 **Rationale:** Prevents toast spam; user can extend or dismiss once they've seen it
 **Implementation:** Reset `warningShown` flag when session extended
 
 ### 4. Persistent Toast
+
 **Decision:** Make warning toast persistent (no auto-dismiss)
 **Rationale:** Critical information requiring user action; shouldn't disappear automatically
 **User control:** User can still dismiss via close button or by extending session
@@ -173,15 +184,18 @@ Positioned inside `SessionProvider` to access session context, but before other 
 ## Next Phase Readiness
 
 **Enables:**
+
 - 08-04: Session indicator can show username/status alongside expiration warnings
 
 **Benefits:**
+
 - Users warned before session expires
 - Seamless session extension without leaving page
 - Clear expired state handling with re-login prompt
 - Work remains visible during expiration overlay
 
 **User Experience:**
+
 - Proactive warning gives users time to save work
 - One-click session extension
 - Clear call-to-action when session expires
@@ -198,6 +212,7 @@ None - plan executed exactly as written.
 ## Testing Notes
 
 **Manual verification needed:**
+
 1. Simulate short session timeout (set to < 15 min)
 2. Verify warning toast appears at 15 min mark
 3. Click "Extend session" - toast dismisses, session continues
@@ -206,6 +221,7 @@ None - plan executed exactly as written.
 6. Verify user's work visible behind overlay
 
 **Integration points:**
+
 - Toast.Region already mounted in `layout.tsx`
 - `/auth/session` endpoint exists and triggers touch
 - `isExpired` signal already implemented in session context

@@ -4,11 +4,11 @@
 
 ## Tasks Completed
 
-| Task | Name | Commit | Files |
-|------|------|--------|-------|
-| 1 | Create 2FA page HTML generator | f011eb25d | auth.ts |
-| 2 | Add GET /auth/2fa route | 6c8f63169 | auth.ts |
-| 3 | Update login page JavaScript to redirect to 2FA | f08ad1fef | auth.ts |
+| Task | Name                                            | Commit    | Files   |
+| ---- | ----------------------------------------------- | --------- | ------- |
+| 1    | Create 2FA page HTML generator                  | f011eb25d | auth.ts |
+| 2    | Add GET /auth/2fa route                         | 6c8f63169 | auth.ts |
+| 3    | Update login page JavaScript to redirect to 2FA | f08ad1fef | auth.ts |
 
 ## Implementation Details
 
@@ -51,11 +51,11 @@ None - plan executed exactly as written.
 
 ## Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| escapeHtml helper for username | XSS prevention when displaying user-provided data |
+| Decision                           | Rationale                                                     |
+| ---------------------------------- | ------------------------------------------------------------- |
+| escapeHtml helper for username     | XSS prevention when displaying user-provided data             |
 | Auto-submit only for 6-digit codes | Backup codes may be longer, user should manually submit those |
-| Timer redirects at 0, not negative | Prevents negative countdown display |
+| Timer redirects at 0, not negative | Prevents negative countdown display                           |
 
 ## Metrics
 

@@ -68,6 +68,7 @@ Each task was committed atomically:
 3. **Task 3: Add broker client tests** - `7374977` (test)
 
 Additional commits:
+
 - **Bug fix: Bun socket error handling** - `2f93426` (fix)
 
 ## Files Created/Modified
@@ -87,6 +88,7 @@ Additional commits:
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Fixed Bun socket error handling**
+
 - **Found during:** Task 3 (testing)
 - **Issue:** Test "returns error when broker not running" was failing with uncaught ENOENT error
 - **Root cause:** Bun throws sync error on createConnection to non-existent socket, Node.js would emit async error event
@@ -115,5 +117,6 @@ None - no external service configuration required.
 - Ready for Phase 4: Web server integration with login route
 
 ---
-*Phase: 03-auth-broker-core*
-*Completed: 2026-01-20*
+
+_Phase: 03-auth-broker-core_
+_Completed: 2026-01-20_

@@ -5,14 +5,17 @@
 ## Test Framework
 
 **Runner:**
+
 - Bun test runner (native to Bun)
 - Config: `packages/opencode/bunfig.toml`
 
 **Assertion Library:**
+
 - Built-in `bun:test` assertions
 - `expect()` API similar to Jest
 
 **Run Commands:**
+
 ```bash
 # Run tests for opencode package
 bun run --cwd packages/opencode test
@@ -30,15 +33,18 @@ bun turbo opencode#test
 ## Test File Organization
 
 **Location:**
+
 - Separate `test/` directory in `packages/opencode/`
 - Structure mirrors `src/` directory
 - Some co-located tests in `packages/app/src/` (e.g., `layout-scroll.test.ts`)
 
 **Naming:**
+
 - Pattern: `*.test.ts`
 - Example: `config.test.ts`, `lock.test.ts`, `transform.test.ts`
 
 **Structure:**
+
 ```
 packages/opencode/
 ├── src/
@@ -59,6 +65,7 @@ packages/opencode/
 ## Test Structure
 
 **Suite Organization:**
+
 ```typescript
 import { describe, expect, test } from "bun:test"
 import { Lock } from "../../src/util/lock"
@@ -80,12 +87,14 @@ describe("util.lock", () => {
 ```
 
 **Patterns:**
+
 - `describe()` for grouping related tests
 - `test()` for individual test cases (prefer over `it()`)
 - Descriptive test names explaining behavior being tested
 - Arrange/Act/Assert pattern (implicit, not commented)
 
 **Nested Describes:**
+
 ```typescript
 describe("ProviderTransform.maxOutputTokens", () => {
   test("returns 32k when modelLimit > 32k", () => {...})
@@ -106,6 +115,7 @@ describe("ProviderTransform.maxOutputTokens", () => {
 **Framework:** Built-in `bun:test` mock
 
 **Patterns:**
+
 ```typescript
 import { mock } from "bun:test"
 
@@ -126,12 +136,14 @@ Auth.all = mock(() => Promise.resolve({...}))
 ```
 
 **What to Mock:**
+
 - External API calls (fetch)
 - Time-dependent operations
 - File system operations (when testing logic, not I/O)
 - Module methods for isolation
 
 **What NOT to Mock:**
+
 - Internal utilities being tested
 - Zod schemas (test actual validation)
 - Pure functions
@@ -139,6 +151,7 @@ Auth.all = mock(() => Promise.resolve({...}))
 ## Fixtures and Factories
 
 **Test Data - tmpdir fixture:**
+
 ```typescript
 import { tmpdir } from "../fixture/fixture"
 
@@ -166,13 +179,15 @@ await using tmp = await tmpdir({
 ```
 
 **Location:**
+
 - `packages/opencode/test/fixture/fixture.ts` - tmpdir helper
 - `packages/opencode/test/preload.ts` - test environment setup
 
 **Preload Pattern:**
+
 ```typescript
 // packages/opencode/bunfig.toml
-[test]
+;[test]
 preload = ["./test/preload.ts"]
 timeout = 10000
 coverage = true
@@ -183,11 +198,13 @@ coverage = true
 **Requirements:** Not enforced, but coverage enabled by default
 
 **View Coverage:**
+
 ```bash
 bun run --cwd packages/opencode test --coverage
 ```
 
 **Configuration:**
+
 ```toml
 # packages/opencode/bunfig.toml
 [test]
@@ -197,22 +214,26 @@ coverage = true
 ## Test Types
 
 **Unit Tests:**
+
 - Located in `test/util/`, `test/config/`, etc.
 - Test individual functions/modules in isolation
 - Use fixtures for file system operations
 
 **Integration Tests:**
+
 - Test module interactions
 - Use `Instance.provide()` for project context
 - Example: `test/config/config.test.ts`, `test/agent/agent.test.ts`
 
 **E2E Tests:**
+
 - Not detected in current codebase
 - Manual testing via `bun dev`
 
 ## Common Patterns
 
 **Async Testing:**
+
 ```typescript
 test("loads config with defaults when no files exist", async () => {
   await using tmp = await tmpdir()
@@ -227,6 +248,7 @@ test("loads config with defaults when no files exist", async () => {
 ```
 
 **Error Testing:**
+
 ```typescript
 test("throws error for invalid JSON", async () => {
   await using tmp = await tmpdir({
@@ -244,6 +266,7 @@ test("throws error for invalid JSON", async () => {
 ```
 
 **Testing with Disposables:**
+
 ```typescript
 test("writer exclusivity", async () => {
   using writer1 = await Lock.write(key)
@@ -256,6 +279,7 @@ test("writer exclusivity", async () => {
 ```
 
 **Async Dispose Pattern:**
+
 ```typescript
 test("example with async dispose", async () => {
   await using tmp = await tmpdir()
@@ -265,6 +289,7 @@ test("example with async dispose", async () => {
 ```
 
 **Instance.provide Pattern:**
+
 ```typescript
 // Provides project context for tests
 await Instance.provide({
@@ -278,6 +303,7 @@ await Instance.provide({
 ```
 
 **Microtask Flushing:**
+
 ```typescript
 function tick() {
   return new Promise<void>((r) => queueMicrotask(r))
@@ -295,6 +321,7 @@ expect(state.writer2).toBe(false)
 ## Test Environment Setup
 
 **Preload Script (`test/preload.ts`):**
+
 - Sets XDG environment variables for isolation
 - Creates temp directories for test data
 - Clears provider API keys
@@ -302,6 +329,7 @@ expect(state.writer2).toBe(false)
 - Initializes logging in test mode
 
 **Environment Isolation:**
+
 ```typescript
 process.env["XDG_DATA_HOME"] = path.join(dir, "share")
 process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
@@ -313,6 +341,7 @@ process.env["OPENCODE_DISABLE_MODELS_FETCH"] = "true"
 ## Pre-commit Testing
 
 **Husky pre-push hook (`.husky/pre-push`):**
+
 ```bash
 # Check bun version matches package.json
 EXPECTED_VERSION=$(grep '"packageManager"' package.json | sed 's/.*"bun@\([^"]*\)".*/\1/')
@@ -327,4 +356,4 @@ bun typecheck
 
 ---
 
-*Testing analysis: 2026-01-19*
+_Testing analysis: 2026-01-19_

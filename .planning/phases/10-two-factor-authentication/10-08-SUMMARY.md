@@ -56,6 +56,7 @@ completed: 2026-01-24
 - **Files modified:** 2
 
 ## Accomplishments
+
 - POST /auth/device-trust/revoke endpoint clears device trust cookie
 - GET /auth/device-trust/status returns 2FA enabled and device trusted state
 - SessionIndicator shows "Forget this device" when device is trusted
@@ -71,10 +72,12 @@ Each task was committed atomically:
 3. **Task 3: Update SessionIndicator with device trust controls** - `7fd91d5` (feat)
 
 ## Files Created/Modified
+
 - `packages/opencode/src/server/routes/auth.ts` - Device trust endpoints and logout cookie clearing
 - `packages/app/src/components/session-indicator.tsx` - Device trust UI controls in dropdown
 
 ## Decisions Made
+
 - Device trust cookie cleared on all logout paths (both /logout and /logout/all) for consistency
 - Status endpoint verifies cookie validity before reporting deviceTrusted (prevents false positives)
 - 2FA setup link opens /auth/2fa/setup in new tab (placeholder for future setup page)
@@ -84,14 +87,17 @@ Each task was committed atomically:
 **File path correction:** Plan specified `packages/opencode/src/components/session/SessionIndicator.tsx` but actual file is at `packages/app/src/components/session-indicator.tsx`. Corrected during execution.
 
 ## Issues Encountered
+
 None - plan executed as specified once file path was corrected.
 
 ## Next Phase Readiness
+
 - Device trust management complete
 - Users can revoke trusted devices from session dropdown
 - 2FA setup link ready (needs actual setup endpoint in future plan)
 - Ready for 2FA setup flow implementation
 
 ---
-*Phase: 10-two-factor-authentication*
-*Completed: 2026-01-24*
+
+_Phase: 10-two-factor-authentication_
+_Completed: 2026-01-24_

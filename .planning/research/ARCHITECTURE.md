@@ -51,12 +51,12 @@ PAM-based web authentication requires a privileged broker architecture where a r
 
 ## Component Boundaries
 
-| Component | Responsibility | Runs As | Communicates With |
-|-----------|---------------|---------|-------------------|
-| Hono Server | HTTP handling, session cookies, route dispatch | Unprivileged user or nobody | Auth Broker via Unix socket |
-| Auth Broker | PAM authentication, session-UID mapping, process spawning | root (or setuid binary) | Hono Server, spawned User Processes |
-| Session Store | Map session tokens to authenticated UID/GID | Shared (auth broker manages) | Auth Broker reads/writes |
-| User Process | Execute commands under authenticated user's identity | Target UID/GID | Auth Broker (parent), PTY for I/O |
+| Component     | Responsibility                                            | Runs As                      | Communicates With                   |
+| ------------- | --------------------------------------------------------- | ---------------------------- | ----------------------------------- |
+| Hono Server   | HTTP handling, session cookies, route dispatch            | Unprivileged user or nobody  | Auth Broker via Unix socket         |
+| Auth Broker   | PAM authentication, session-UID mapping, process spawning | root (or setuid binary)      | Hono Server, spawned User Processes |
+| Session Store | Map session tokens to authenticated UID/GID               | Shared (auth broker manages) | Auth Broker reads/writes            |
+| User Process  | Execute commands under authenticated user's identity      | Target UID/GID               | Auth Broker (parent), PTY for I/O   |
 
 ### Component Details
 
@@ -65,6 +65,7 @@ PAM-based web authentication requires a privileged broker architecture where a r
 **Purpose:** Handle HTTP, serve static assets, manage session cookies, route API requests.
 
 **Key responsibilities:**
+
 - Accept login requests (POST /auth/login with username/password)
 - Forward credentials to Auth Broker for PAM verification
 - Set/validate session cookies
@@ -72,6 +73,7 @@ PAM-based web authentication requires a privileged broker architecture where a r
 - Stream responses (SSE) back to client
 
 **Security boundary:**
+
 - Does NOT run as root
 - Does NOT handle credentials beyond passing to broker
 - Does NOT spawn processes directly
@@ -80,25 +82,25 @@ PAM-based web authentication requires a privileged broker architecture where a r
 ```typescript
 // Conceptual structure
 interface SessionCookie {
-  sessionID: string;       // Opaque token
-  expires: number;         // Cookie expiration
+  sessionID: string // Opaque token
+  expires: number // Cookie expiration
   // UID NOT stored in cookie - broker looks up session -> UID
 }
 
 // Auth middleware pattern
 app.use(async (c, next) => {
-  const sessionID = getCookie(c, 'opencode_session');
+  const sessionID = getCookie(c, "opencode_session")
   if (!sessionID) {
-    return c.redirect('/login');
+    return c.redirect("/login")
   }
   // Ask broker to validate session and get user info
-  const userInfo = await authBroker.validateSession(sessionID);
+  const userInfo = await authBroker.validateSession(sessionID)
   if (!userInfo) {
-    return c.redirect('/login');
+    return c.redirect("/login")
   }
-  c.set('user', userInfo);
-  return next();
-});
+  c.set("user", userInfo)
+  return next()
+})
 ```
 
 #### 2. Auth Broker (Privileged Helper)
@@ -106,6 +108,7 @@ app.use(async (c, next) => {
 **Purpose:** Handle all privilege-sensitive operations - PAM auth, session-UID mapping, process spawning.
 
 **Key responsibilities:**
+
 - Receive credentials from Hono server via Unix socket
 - Call PAM for authentication (`pam_authenticate`, `pam_acct_mgmt`)
 - Create session entries mapping session token -> (UID, GID, username)
@@ -113,6 +116,7 @@ app.use(async (c, next) => {
 - Manage process lifecycle (signal forwarding, cleanup)
 
 **Security boundary:**
+
 - Runs as root OR is a setuid binary
 - ONLY accepts connections from Hono server (socket permissions)
 - Validates all inputs strictly
@@ -122,30 +126,30 @@ app.use(async (c, next) => {
 // Conceptual broker interface
 interface AuthBroker {
   // Authentication
-  authenticate(username: string, password: string): Promise<AuthResult>;
-  validateSession(sessionID: string): Promise<UserInfo | null>;
-  logout(sessionID: string): Promise<void>;
+  authenticate(username: string, password: string): Promise<AuthResult>
+  validateSession(sessionID: string): Promise<UserInfo | null>
+  logout(sessionID: string): Promise<void>
 
   // Process execution
-  spawn(sessionID: string, command: string, args: string[], options: SpawnOptions): Promise<Process>;
+  spawn(sessionID: string, command: string, args: string[], options: SpawnOptions): Promise<Process>
 
   // Session management
-  createSession(uid: number, gid: number, username: string): Promise<string>;
-  refreshSession(sessionID: string): Promise<void>;
+  createSession(uid: number, gid: number, username: string): Promise<string>
+  refreshSession(sessionID: string): Promise<void>
 }
 
 interface AuthResult {
-  success: boolean;
-  sessionID?: string;
-  error?: string;
+  success: boolean
+  sessionID?: string
+  error?: string
 }
 
 interface UserInfo {
-  uid: number;
-  gid: number;
-  username: string;
-  homeDir: string;
-  shell: string;
+  uid: number
+  gid: number
+  username: string
+  homeDir: string
+  shell: string
 }
 ```
 
@@ -154,6 +158,7 @@ interface UserInfo {
 **Purpose:** Persist session-to-user mappings across restarts.
 
 **Options:**
+
 1. **In-memory Map** - Simplest, sessions lost on restart
 2. **File-based** - JSON/SQLite in secure location (root-owned directory)
 3. **Shared memory** - Fast, survives process restart if designed carefully
@@ -162,13 +167,13 @@ interface UserInfo {
 
 ```typescript
 interface SessionEntry {
-  id: string;           // Session token (cryptographically random)
-  uid: number;          // UNIX UID
-  gid: number;          // UNIX GID
-  username: string;     // For logging/display
-  createdAt: number;    // Timestamp
-  expiresAt: number;    // Expiration timestamp
-  rememberMe: boolean;  // Longer expiration if true
+  id: string // Session token (cryptographically random)
+  uid: number // UNIX UID
+  gid: number // UNIX GID
+  username: string // For logging/display
+  createdAt: number // Timestamp
+  expiresAt: number // Expiration timestamp
+  rememberMe: boolean // Longer expiration if true
 }
 ```
 
@@ -177,6 +182,7 @@ interface SessionEntry {
 **Purpose:** Execute actual work under the authenticated user's identity.
 
 **Key behaviors:**
+
 - Runs with correct UID, GID, supplementary groups
 - Has correct HOME, USER, SHELL environment
 - Working directory set appropriately
@@ -288,12 +294,12 @@ To spawn processes as arbitrary users, you need one of:
 
 ### Security Boundaries
 
-| Boundary | Threat | Mitigation |
-|----------|--------|------------|
-| Web -> Broker | Injection of malicious commands | Strict input validation, parameterized commands |
-| Cookie theft | Session hijacking | HttpOnly, Secure, SameSite=Strict, short expiry |
-| Broker compromise | Full system access | Minimal code surface, audit logging, seccomp |
-| User process escape | Privilege escalation | Normal UNIX permissions, no setuid in spawned env |
+| Boundary            | Threat                          | Mitigation                                        |
+| ------------------- | ------------------------------- | ------------------------------------------------- |
+| Web -> Broker       | Injection of malicious commands | Strict input validation, parameterized commands   |
+| Cookie theft        | Session hijacking               | HttpOnly, Secure, SameSite=Strict, short expiry   |
+| Broker compromise   | Full system access              | Minimal code surface, audit logging, seccomp      |
+| User process escape | Privilege escalation            | Normal UNIX permissions, no setuid in spawned env |
 
 ## Patterns to Follow
 
@@ -304,6 +310,7 @@ To spawn processes as arbitrary users, you need one of:
 **When:** Always for this architecture.
 
 **Why:**
+
 - More secure than TCP (filesystem permissions control access)
 - No network exposure
 - Can pass file descriptors (useful for PTY)
@@ -312,34 +319,34 @@ To spawn processes as arbitrary users, you need one of:
 
 ```typescript
 // Broker side (listening)
-import { createServer } from 'node:net';
+import { createServer } from "node:net"
 
 const server = createServer((socket) => {
-  socket.on('data', async (data) => {
-    const message = JSON.parse(data.toString());
-    const response = await handleMessage(message);
-    socket.write(JSON.stringify(response));
-  });
-});
+  socket.on("data", async (data) => {
+    const message = JSON.parse(data.toString())
+    const response = await handleMessage(message)
+    socket.write(JSON.stringify(response))
+  })
+})
 
-server.listen('/run/opencode/auth.sock');
+server.listen("/run/opencode/auth.sock")
 // Set socket permissions: chmod 0660, chown root:opencode
 ```
 
 ```typescript
 // Hono side (connecting)
-import { createConnection } from 'node:net';
+import { createConnection } from "node:net"
 
 async function callBroker(message: object): Promise<object> {
   return new Promise((resolve, reject) => {
-    const socket = createConnection('/run/opencode/auth.sock');
-    socket.write(JSON.stringify(message));
-    socket.on('data', (data) => {
-      resolve(JSON.parse(data.toString()));
-      socket.end();
-    });
-    socket.on('error', reject);
-  });
+    const socket = createConnection("/run/opencode/auth.sock")
+    socket.write(JSON.stringify(message))
+    socket.on("data", (data) => {
+      resolve(JSON.parse(data.toString()))
+      socket.end()
+    })
+    socket.on("error", reject)
+  })
 }
 ```
 
@@ -354,10 +361,10 @@ async function callBroker(message: object): Promise<object> {
 **Example:**
 
 ```typescript
-import { randomBytes } from 'node:crypto';
+import { randomBytes } from "node:crypto"
 
 function generateSessionToken(): string {
-  return randomBytes(32).toString('base64url'); // 256 bits of entropy
+  return randomBytes(32).toString("base64url") // 256 bits of entropy
 }
 ```
 
@@ -398,17 +405,17 @@ Or to use system defaults:
 **Example:**
 
 ```typescript
-import { spawn } from 'node:child_process';
+import { spawn } from "node:child_process"
 
 const child = spawn(command, args, {
   uid: userInfo.uid,
   gid: userInfo.gid,
   detached: true, // New process group
   // ...
-});
+})
 
 // To kill entire tree:
-process.kill(-child.pid, 'SIGTERM'); // Negative PID = process group
+process.kill(-child.pid, "SIGTERM") // Negative PID = process group
 ```
 
 ## Anti-Patterns to Avoid
@@ -460,6 +467,7 @@ Based on dependencies and complexity:
 ### Phase 1: Session Middleware Foundation
 
 **Build:**
+
 - Session cookie middleware for Hono
 - In-memory session store (stub for real broker)
 - Session-aware API routes (require auth)
@@ -472,6 +480,7 @@ Based on dependencies and complexity:
 ### Phase 2: Auth Broker Core
 
 **Build:**
+
 - Auth Broker daemon structure
 - Unix socket IPC protocol
 - PAM integration (native module or FFI)
@@ -482,6 +491,7 @@ Based on dependencies and complexity:
 **Enables:** Real authentication, but not yet command execution as user
 
 **Critical decision:** How to interface with PAM from Node.js/Bun
+
 - Option A: Native addon (node-pam, etc.)
 - Option B: Shell out to `su` or helper binary
 - Option C: Rust/C helper binary that broker spawns
@@ -489,6 +499,7 @@ Based on dependencies and complexity:
 ### Phase 3: User Process Spawning
 
 **Build:**
+
 - Extend Pty.create() to accept UID/GID
 - Broker-mediated PTY spawning
 - Process I/O proxying through broker
@@ -501,6 +512,7 @@ Based on dependencies and complexity:
 ### Phase 4: Login UI & Security Hardening
 
 **Build:**
+
 - Web login form (SolidJS)
 - Insecure connection detection (HTTP without proxy)
 - Warning/blocking for insecure login
@@ -514,6 +526,7 @@ Based on dependencies and complexity:
 ### Phase 5: Multi-User Polish
 
 **Build:**
+
 - User-scoped data directories
 - Session isolation verification
 - Documentation (nginx/Caddy reverse proxy setup)
@@ -527,33 +540,33 @@ Based on dependencies and complexity:
 
 ### Changes to Existing Components
 
-| Component | Current | Changes Needed |
-|-----------|---------|----------------|
-| `Pty.create()` | Spawns as current user | Add UID/GID parameters, route through broker |
-| `server/server.ts` | No auth middleware | Add session cookie middleware, login routes |
-| `Instance` | Tied to current user's dirs | Support user-scoped paths based on session |
-| `Storage` | Writes as current user | Ensure writes happen as authenticated user |
-| `Bus` | Global events | May need user-scoped event streams |
+| Component          | Current                     | Changes Needed                               |
+| ------------------ | --------------------------- | -------------------------------------------- |
+| `Pty.create()`     | Spawns as current user      | Add UID/GID parameters, route through broker |
+| `server/server.ts` | No auth middleware          | Add session cookie middleware, login routes  |
+| `Instance`         | Tied to current user's dirs | Support user-scoped paths based on session   |
+| `Storage`          | Writes as current user      | Ensure writes happen as authenticated user   |
+| `Bus`              | Global events               | May need user-scoped event streams           |
 
 ### New Components
 
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| Auth Broker | `packages/opencode/src/auth-broker/` | Privileged PAM/spawn daemon |
-| Session Middleware | `packages/opencode/src/server/middleware/auth.ts` | Cookie validation |
-| Login Routes | `packages/opencode/src/server/routes/auth.ts` | Login/logout endpoints |
-| Login UI | `packages/app/src/routes/login.tsx` | Web login form |
+| Component          | Location                                          | Purpose                     |
+| ------------------ | ------------------------------------------------- | --------------------------- |
+| Auth Broker        | `packages/opencode/src/auth-broker/`              | Privileged PAM/spawn daemon |
+| Session Middleware | `packages/opencode/src/server/middleware/auth.ts` | Cookie validation           |
+| Login Routes       | `packages/opencode/src/server/routes/auth.ts`     | Login/logout endpoints      |
+| Login UI           | `packages/app/src/routes/login.tsx`               | Web login form              |
 
 ## Confidence Assessment
 
-| Area | Confidence | Notes |
-|------|------------|-------|
-| Overall architecture pattern | HIGH | Cockpit uses this exact model; well-established pattern |
-| Component boundaries | HIGH | Standard privilege separation principles |
-| PAM integration specifics | MEDIUM | Bun/Node PAM libraries need verification |
-| Unix socket IPC | HIGH | Standard pattern, well-supported |
-| Session cookie security | HIGH | Standard web security practices |
-| Build order | MEDIUM | May need adjustment based on PAM library availability |
+| Area                         | Confidence | Notes                                                   |
+| ---------------------------- | ---------- | ------------------------------------------------------- |
+| Overall architecture pattern | HIGH       | Cockpit uses this exact model; well-established pattern |
+| Component boundaries         | HIGH       | Standard privilege separation principles                |
+| PAM integration specifics    | MEDIUM     | Bun/Node PAM libraries need verification                |
+| Unix socket IPC              | HIGH       | Standard pattern, well-supported                        |
+| Session cookie security      | HIGH       | Standard web security practices                         |
+| Build order                  | MEDIUM     | May need adjustment based on PAM library availability   |
 
 ## Open Questions for Phase-Specific Research
 
@@ -576,4 +589,4 @@ Based on dependencies and complexity:
 
 ---
 
-*Architecture research: 2026-01-19*
+_Architecture research: 2026-01-19_

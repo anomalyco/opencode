@@ -17,24 +17,27 @@ The standard approach for "remember me" is to set a longer `maxAge` on the sessi
 The established libraries/tools for this domain:
 
 ### Core
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| Hono cookie helpers | 4.10.7 | Session cookie management | Already in use; supports maxAge, secure, httpOnly, sameSite |
-| @kobalte/core | 0.13.11 | Toast and Dialog components | Already in use; accessible, SolidJS-native |
-| ms | 2.1.3 | Duration parsing | Already in use; tiny, well-maintained by Vercel |
+
+| Library             | Version | Purpose                     | Why Standard                                                |
+| ------------------- | ------- | --------------------------- | ----------------------------------------------------------- |
+| Hono cookie helpers | 4.10.7  | Session cookie management   | Already in use; supports maxAge, secure, httpOnly, sameSite |
+| @kobalte/core       | 0.13.11 | Toast and Dialog components | Already in use; accessible, SolidJS-native                  |
+| ms                  | 2.1.3   | Duration parsing            | Already in use; tiny, well-maintained by Vercel             |
 
 ### Supporting
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| SolidJS signals | 1.9.10 | Reactive session state tracking | Frontend session timer/countdown |
-| Hono middleware | 4.10.7 | Activity detection via request interception | Silent session refresh on API calls |
+
+| Library         | Version | Purpose                                     | When to Use                         |
+| --------------- | ------- | ------------------------------------------- | ----------------------------------- |
+| SolidJS signals | 1.9.10  | Reactive session state tracking             | Frontend session timer/countdown    |
+| Hono middleware | 4.10.7  | Activity detection via request interception | Silent session refresh on API calls |
 
 ### Alternatives Considered
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| @kobalte Toast | solid-toast | solid-toast is simpler but @kobalte already in project |
-| Activity piggybacking | Dedicated /refresh endpoint | Dedicated endpoint adds extra requests; piggybacking is invisible |
-| Cookie maxAge | localStorage expiry | Cookies are HttpOnly (more secure); localStorage vulnerable to XSS |
+
+| Instead of            | Could Use                   | Tradeoff                                                           |
+| --------------------- | --------------------------- | ------------------------------------------------------------------ |
+| @kobalte Toast        | solid-toast                 | solid-toast is simpler but @kobalte already in project             |
+| Activity piggybacking | Dedicated /refresh endpoint | Dedicated endpoint adds extra requests; piggybacking is invisible  |
+| Cookie maxAge         | localStorage expiry         | Cookies are HttpOnly (more secure); localStorage vulnerable to XSS |
 
 **Installation:**
 No new dependencies required. All necessary libraries already installed.
@@ -42,6 +45,7 @@ No new dependencies required. All necessary libraries already installed.
 ## Architecture Patterns
 
 ### Recommended Project Structure
+
 ```
 packages/opencode/src/
 ├── server/
@@ -57,9 +61,11 @@ packages/app/src/
 ```
 
 ### Pattern 1: Persistent Cookie via maxAge
+
 **What:** Session cookies without `maxAge` delete on browser close. Setting `maxAge` creates a persistent cookie.
 **When to use:** When "remember me" checkbox is checked.
 **Example:**
+
 ```typescript
 // Source: https://hono.dev/docs/helpers/cookie
 import { setCookie } from "hono/cookie"
@@ -83,12 +89,15 @@ setCookie(c, "opencode_session", sessionId, {
   maxAge: rememberMeDuration / 1000, // maxAge is in SECONDS, not ms
 })
 ```
+
 **CRITICAL:** Hono's `maxAge` option is in **seconds**, not milliseconds. Divide `parseDuration()` result by 1000.
 
 ### Pattern 2: Activity-Based Session Refresh
+
 **What:** Update `lastAccessTime` on every authenticated request to extend idle timeout.
 **When to use:** For all authenticated API calls (already implemented in existing auth middleware).
 **Example:**
+
 ```typescript
 // Source: Current codebase pattern
 // packages/opencode/src/server/middleware/auth.ts lines 123-124
@@ -96,12 +105,15 @@ setCookie(c, "opencode_session", sessionId, {
 // Update lastAccessTime (sliding expiration)
 UserSession.touch(sessionId)
 ```
+
 **Current implementation:** Middleware already calls `UserSession.touch(sessionId)` on every request. This is the "piggyback" pattern - no changes needed for basic activity refresh.
 
 ### Pattern 3: Frontend Session Monitoring
+
 **What:** Track time until expiration and show warnings in the UI.
 **When to use:** When user is actively viewing the page.
 **Example:**
+
 ```typescript
 // Pattern: Poll /auth/session endpoint to get lastAccessTime
 // Calculate remaining time = (lastAccessTime + timeout) - Date.now()
@@ -119,7 +131,7 @@ function SessionMonitor() {
     if (res.ok) {
       const session = await res.json()
       const timeout = parseDuration("7d") // Or get from config
-      const remaining = (session.lastAccessTime + timeout) - Date.now()
+      const remaining = session.lastAccessTime + timeout - Date.now()
       setRemainingMs(remaining)
 
       // Warn 15 minutes before expiry
@@ -132,12 +144,15 @@ function SessionMonitor() {
   onCleanup(() => clearInterval(interval))
 }
 ```
+
 **Throttle recommendation:** Poll every 60 seconds. Less frequent polling (2-5 minutes) acceptable for low-risk applications.
 
 ### Pattern 4: Session Expiration Warning Toast
+
 **What:** Non-blocking notification 15 minutes before session expires.
 **When to use:** When countdown reaches warning threshold.
 **Example:**
+
 ```typescript
 // Source: Existing @kobalte toast pattern
 import { showToast } from "@opencode-ai/ui/components/toast"
@@ -155,17 +170,19 @@ function showSessionWarningToast() {
         onClick: async () => {
           // Trigger activity by calling any authenticated endpoint
           await fetch("/auth/session") // This refreshes lastAccessTime
-        }
-      }
-    ]
+        },
+      },
+    ],
   })
 }
 ```
 
 ### Pattern 5: Session Expired Overlay
+
 **What:** Modal overlay when session expires while user is active on the page.
 **When to use:** When poll detects session no longer exists or expired.
 **Example:**
+
 ```typescript
 // Source: @kobalte Dialog pattern
 import { Dialog } from "@kobalte/core/dialog"
@@ -197,9 +214,11 @@ function SessionExpiredOverlay() {
   )
 }
 ```
+
 **Context preservation:** Overlay appears over current page, user can see their work before being redirected.
 
 ### Anti-Patterns to Avoid
+
 - **Countdown in UI:** Showing exact seconds/minutes remaining is confusing and creates anxiety. Show warning only when close to expiry.
 - **Dedicated refresh endpoint:** Creates extra HTTP traffic. Piggyback on existing authenticated requests instead.
 - **Client-side timeout calculation only:** Must validate server-side. Client clock may be wrong or manipulated.
@@ -209,49 +228,55 @@ function SessionExpiredOverlay() {
 
 Problems that look simple but have existing solutions:
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| Cookie max-age calculation | Manual date math | Hono `maxAge` with `ms()` | Hono enforces 400-day RFC6265bis limit, handles edge cases |
-| Toast notifications | Custom positioned divs | @kobalte Toast (already installed) | Handles stacking, animations, accessibility, screen readers |
-| Modal overlays | z-index + backdrop | @kobalte Dialog (already installed) | Manages focus trapping, scroll blocking, ESC key, ARIA |
-| Duration parsing | String splitting/regex | `ms` library (already installed) | Handles "30d", "7 days", "1h" formats consistently |
-| Activity detection | Manual event listeners | Middleware-based touch on API calls | Captures all activity (not just clicks), no frontend overhead |
+| Problem                    | Don't Build            | Use Instead                         | Why                                                           |
+| -------------------------- | ---------------------- | ----------------------------------- | ------------------------------------------------------------- |
+| Cookie max-age calculation | Manual date math       | Hono `maxAge` with `ms()`           | Hono enforces 400-day RFC6265bis limit, handles edge cases    |
+| Toast notifications        | Custom positioned divs | @kobalte Toast (already installed)  | Handles stacking, animations, accessibility, screen readers   |
+| Modal overlays             | z-index + backdrop     | @kobalte Dialog (already installed) | Manages focus trapping, scroll blocking, ESC key, ARIA        |
+| Duration parsing           | String splitting/regex | `ms` library (already installed)    | Handles "30d", "7 days", "1h" formats consistently            |
+| Activity detection         | Manual event listeners | Middleware-based touch on API calls | Captures all activity (not just clicks), no frontend overhead |
 
 **Key insight:** The codebase already has all necessary primitives. Session enhancements are about **composing existing tools**, not building new infrastructure.
 
 ## Common Pitfalls
 
 ### Pitfall 1: maxAge Units Confusion
+
 **What goes wrong:** Setting `maxAge: parseDuration("30d")` results in ~2.6 billion second expiry (83 years instead of 30 days).
 **Why it happens:** Hono's `maxAge` is in **seconds**, but `parseDuration()` returns **milliseconds**.
 **How to avoid:** Always divide by 1000: `maxAge: parseDuration("30d") / 1000`
 **Warning signs:** Cookie inspector shows expiry date decades in the future.
 
 ### Pitfall 2: Remember Me Cookie Without Server Timeout Change
+
 **What goes wrong:** Cookie persists 30 days but server expires session after 7 days idle. User returns day 10, cookie exists but session is gone.
 **Why it happens:** Cookie expiry and session idle timeout are separate concerns.
 **How to avoid:** When "remember me" is checked, use longer server-side timeout too (same duration as cookie maxAge).
 **Warning signs:** Users report "remember me doesn't work" after returning from multi-day break.
 
 ### Pitfall 3: Polling During Inactivity
+
 **What goes wrong:** Session monitor polls every 60s even when user switched tabs, wasting resources and preventing idle timeout.
 **Why it happens:** `setInterval` runs regardless of page visibility.
 **How to avoid:** Use Page Visibility API or pause polling when document.hidden is true.
 **Warning signs:** Backend logs show session refreshes from "idle" users; sessions never actually time out.
 
 ### Pitfall 4: Session Warning After Expiry
+
 **What goes wrong:** Warning toast appears but session already expired, "Extend" button fails.
 **Why it happens:** Poll interval (60s) is longer than warning window (900s), so detection lags.
 **How to avoid:** Either poll more frequently as expiry approaches, or show warning with sufficient buffer (15 min before + 60s poll = 16 min warning threshold).
 **Warning signs:** Users click "Extend session" button and get "session expired" error.
 
 ### Pitfall 5: Logout Invalidates Cookie But Not Session
+
 **What goes wrong:** User clicks logout, cookie is deleted, but session persists in server memory. If attacker steals old session ID, it still works.
 **Why it happens:** Logout handler calls `clearSessionCookie()` but not `UserSession.remove()`.
 **How to avoid:** Always clear both cookie AND server-side session on logout.
 **Warning signs:** Old session IDs still valid after logout (security vulnerability).
 
 ### Pitfall 6: Missing Secure Flag on Non-Localhost
+
 **What goes wrong:** Session cookies sent over HTTP in production, vulnerable to interception.
 **Why it happens:** Conditional `secure: isHttps` doesn't account for reverse proxy headers.
 **How to avoid:** Check `X-Forwarded-Proto` header when behind proxy; require HTTPS in production.
@@ -262,6 +287,7 @@ Problems that look simple but have existing solutions:
 Verified patterns from official sources:
 
 ### Session Cookie with Conditional Persistence
+
 ```typescript
 // Source: Hono cookie docs + current codebase pattern
 import { setCookie } from "hono/cookie"
@@ -291,6 +317,7 @@ function setSessionCookie(c: Context, sessionId: string, rememberMe: boolean): v
 ```
 
 ### Login Handler with Remember Me Checkbox
+
 ```typescript
 // Source: Current /auth/login pattern, extended
 const loginRequestSchema = z.object({
@@ -312,6 +339,7 @@ app.post("/auth/login", async (c) => {
 ```
 
 ### Session Status Check Endpoint
+
 ```typescript
 // Source: Current /auth/session endpoint (already exists!)
 // packages/opencode/src/server/routes/auth.ts lines 756-803
@@ -334,9 +362,11 @@ app.get("/auth/session", async (c) => {
   })
 })
 ```
+
 **Note:** This endpoint already exists! Just use it for polling session status.
 
 ### Frontend Session Expiration Monitor
+
 ```typescript
 // Source: SolidJS reactive patterns + OWASP session timeout guidance
 import { createSignal, createEffect, onCleanup } from "solid-js"
@@ -360,7 +390,7 @@ export function useSessionMonitor() {
 
       const session = await res.json()
       const timeoutMs = parseDuration("7d")! // Get from config
-      const remainingMs = (session.lastAccessTime + timeoutMs) - Date.now()
+      const remainingMs = session.lastAccessTime + timeoutMs - Date.now()
 
       if (remainingMs < 0) {
         setSessionExpired(true)
@@ -377,9 +407,9 @@ export function useSessionMonitor() {
                 onClick: async () => {
                   await fetch("/auth/session") // Refreshes lastAccessTime
                   warningToastId = undefined
-                }
-              }
-            ]
+                },
+              },
+            ],
           })
         }
       }
@@ -405,15 +435,16 @@ export function useSessionMonitor() {
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| Expires attribute | Max-Age attribute | RFC6265bis (2021) | Max-Age has precedence; simpler relative expiry |
-| 1-year+ "remember me" | 30-400 day limit | Chrome 104 (2022) | Browsers cap cookie age at 400 days |
-| Client-side timers only | Hybrid client/server validation | OWASP 2024 | Prevents client clock manipulation attacks |
-| Dedicated refresh tokens | Activity-based sliding window | OAuth 2.1 draft | Simpler for session-based auth; tokens for stateless |
-| Alert() for session expiry | Toast/modal patterns | Modern UX (2020+) | Non-blocking, accessible, better UX |
+| Old Approach               | Current Approach                | When Changed      | Impact                                               |
+| -------------------------- | ------------------------------- | ----------------- | ---------------------------------------------------- |
+| Expires attribute          | Max-Age attribute               | RFC6265bis (2021) | Max-Age has precedence; simpler relative expiry      |
+| 1-year+ "remember me"      | 30-400 day limit                | Chrome 104 (2022) | Browsers cap cookie age at 400 days                  |
+| Client-side timers only    | Hybrid client/server validation | OWASP 2024        | Prevents client clock manipulation attacks           |
+| Dedicated refresh tokens   | Activity-based sliding window   | OAuth 2.1 draft   | Simpler for session-based auth; tokens for stateless |
+| Alert() for session expiry | Toast/modal patterns            | Modern UX (2020+) | Non-blocking, accessible, better UX                  |
 
 **Deprecated/outdated:**
+
 - **Expires-only cookies:** Max-Age is now standard and has precedence when both are set
 - **localStorage for session tokens:** Vulnerable to XSS; HttpOnly cookies are the secure standard
 - **Aggressive countdown timers:** Creates anxiety; modern UX shows warning only near expiry
@@ -440,6 +471,7 @@ Things that couldn't be fully resolved:
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - [Hono Cookie Helper Documentation](https://hono.dev/docs/helpers/cookie) - setCookie options, maxAge specification
 - [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) - Timeout durations, idle vs. absolute timeouts, security practices
 - [Kobalte Dialog Documentation](https://kobalte.dev/docs/core/components/dialog/) - Modal overlay patterns, accessibility
@@ -447,6 +479,7 @@ Things that couldn't be fully resolved:
 - Current codebase: packages/ui/src/components/toast.tsx - Existing toast implementation
 
 ### Secondary (MEDIUM confidence)
+
 - [MDN: Set-Cookie](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie) - Max-Age vs. Expires, cookie attributes
 - [Chrome Cookie Max-Age Cap](https://developer.chrome.com/blog/cookie-max-age-expires) - 400-day browser limit
 - [Auth0: Application Session Management Best Practices](https://auth0.com/blog/application-session-management-best-practices/) - Activity detection, silent refresh patterns
@@ -454,12 +487,14 @@ Things that couldn't be fully resolved:
 - [PatternFly: Session Timeout](https://pf3.patternfly.org/v3/pattern-library/communication/session-timeout/) - Modal timing, accessibility
 
 ### Tertiary (LOW confidence)
+
 - WebSearch findings on remember me durations (7 vs. 30 days) - Community practices, no single standard
 - WebSearch findings on session-based vs. token-based auth - General context, not specific to this implementation
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH - All libraries already in use, versions confirmed in package.json
 - Architecture: HIGH - Patterns verified in existing codebase and official docs
 - Pitfalls: HIGH - Based on official RFCs (RFC6265bis), browser behavior (Chrome caps), and OWASP guidelines

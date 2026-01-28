@@ -9,6 +9,7 @@
 Phase 10 adds optional TOTP-based two-factor authentication to the login flow. The implementation builds on the existing PAM authentication in Phase 3/4, adding a second authentication step after password validation. The approach uses pam_google_authenticator for TOTP validation but separates the password and OTP validation into two distinct steps to enable the "2FA required" intermediate state.
 
 Research validates that:
+
 1. **Detection of 2FA configuration:** Check for existence of `~/.google_authenticator` file for the user (or the path specified in PAM config)
 2. **Two-step authentication flow:** After password success, return `2fa_required` status; second request validates OTP via pam_google_authenticator
 3. **Device trust cookies:** Use signed JWT tokens with device fingerprint stored in secure cookie
@@ -22,31 +23,36 @@ Research validates that:
 The established libraries/tools for this domain:
 
 ### Core (Rust - Broker Extension)
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| nonstick | 0.1.x | PAM integration | Already in use, handles pam_google_authenticator |
-| totp-rs | 5.7.x | TOTP generation/validation | RFC-compliant, optional for direct validation |
-| base32 | latest | Secret encoding | Standard TOTP secret format |
+
+| Library  | Version | Purpose                    | Why Standard                                     |
+| -------- | ------- | -------------------------- | ------------------------------------------------ |
+| nonstick | 0.1.x   | PAM integration            | Already in use, handles pam_google_authenticator |
+| totp-rs  | 5.7.x   | TOTP generation/validation | RFC-compliant, optional for direct validation    |
+| base32   | latest  | Secret encoding            | Standard TOTP secret format                      |
 
 ### Core (TypeScript - Client/Server)
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| jose | catalog | JWT for device trust tokens | Already used, secure token signing |
-| qrcode | 1.5.x | QR code generation | Well-maintained, SVG output |
+
+| Library | Version | Purpose                     | Why Standard                       |
+| ------- | ------- | --------------------------- | ---------------------------------- |
+| jose    | catalog | JWT for device trust tokens | Already used, secure token signing |
+| qrcode  | 1.5.x   | QR code generation          | Well-maintained, SVG output        |
 
 ### Supporting
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| otpauth | latest | TOTP URL parsing/generation (TS) | Setup wizard URL generation |
+
+| Library | Version | Purpose                          | When to Use                 |
+| ------- | ------- | -------------------------------- | --------------------------- |
+| otpauth | latest  | TOTP URL parsing/generation (TS) | Setup wizard URL generation |
 
 ### Alternatives Considered
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| totp-rs in broker | Pure PAM for OTP | PAM approach keeps all auth in PAM; direct validation gives more control |
-| jose JWT | Simple signed cookie | JWT is more standard, better audit trail |
-| Client QR generation | Server-side QR | Client-side keeps secrets client-side during setup |
+
+| Instead of           | Could Use            | Tradeoff                                                                 |
+| -------------------- | -------------------- | ------------------------------------------------------------------------ |
+| totp-rs in broker    | Pure PAM for OTP     | PAM approach keeps all auth in PAM; direct validation gives more control |
+| jose JWT             | Simple signed cookie | JWT is more standard, better audit trail                                 |
+| Client QR generation | Server-side QR       | Client-side keeps secrets client-side during setup                       |
 
 **Installation (Rust broker):**
+
 ```toml
 [dependencies]
 # For direct TOTP validation (optional, can use PAM instead)
@@ -55,6 +61,7 @@ base32 = "0.5"
 ```
 
 **Installation (TypeScript):**
+
 ```bash
 pnpm add qrcode @types/qrcode
 # jose already in workspace
@@ -63,6 +70,7 @@ pnpm add qrcode @types/qrcode
 ## Architecture Patterns
 
 ### Recommended Project Structure (Modifications)
+
 ```
 packages/opencode-broker/src/
 |-- auth/
@@ -91,6 +99,7 @@ packages/opencode/src/
 ```
 
 ### Pattern 1: Two-Step Authentication Flow
+
 **What:** Separate password validation from OTP validation with intermediate token
 **When to use:** All 2FA-enabled logins
 **Why:** Allows UI to redirect to 2FA screen; prevents replay attacks
@@ -108,6 +117,7 @@ Response: { success: true, user: {...} }
 ```
 
 ### Pattern 2: 2FA Detection in Broker
+
 **What:** Check if user has 2FA configured before requiring OTP
 **When to use:** During password authentication step
 **Why:** Only prompt for OTP if user has set up 2FA
@@ -132,6 +142,7 @@ pub fn has_2fa_configured_pam(secret_path: &str) -> bool {
 ```
 
 ### Pattern 3: Device Trust Token
+
 **What:** Signed JWT stored in cookie to skip 2FA on trusted devices
 **When to use:** When user selects "Remember this device"
 **Why:** Balance security with convenience; revocable
@@ -141,11 +152,11 @@ pub fn has_2fa_configured_pam(secret_path: &str) -> bool {
 import { SignJWT, jwtVerify } from "jose"
 
 interface DeviceTrustPayload {
-  sub: string              // username
-  iat: number              // issued at
-  exp: number              // expiration
-  dev: string              // device fingerprint (hash of user-agent + session)
-  ver: number              // version for revocation
+  sub: string // username
+  iat: number // issued at
+  exp: number // expiration
+  dev: string // device fingerprint (hash of user-agent + session)
+  ver: number // version for revocation
 }
 
 async function createDeviceTrustToken(
@@ -159,7 +170,7 @@ async function createDeviceTrustToken(
   return new SignJWT({
     sub: username,
     dev: deviceFingerprint,
-    ver: 1,  // Increment to revoke all devices
+    ver: 1, // Increment to revoke all devices
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt(now)
@@ -183,6 +194,7 @@ async function verifyDeviceTrust(
 ```
 
 ### Pattern 4: Short-Lived 2FA Token
+
 **What:** Token issued after password success, required for OTP validation
 **When to use:** Between password and OTP steps
 **Why:** Prevents OTP-only attacks; ties OTP to recent password auth
@@ -190,10 +202,10 @@ async function verifyDeviceTrust(
 ```typescript
 // Source: Security best practices
 interface TwoFactorToken {
-  sub: string        // username
-  iat: number        // issued at
-  exp: number        // expires in 5 minutes
-  uid: number        // user's UID (for session creation after 2FA)
+  sub: string // username
+  iat: number // issued at
+  exp: number // expires in 5 minutes
+  uid: number // user's UID (for session creation after 2FA)
   gid: number
   home: string
   shell: string
@@ -207,6 +219,7 @@ function create2FAToken(username: string, userInfo: UserInfo): string {
 ```
 
 ### Pattern 5: OTP Validation via PAM
+
 **What:** Use pam_google_authenticator for OTP validation
 **When to use:** When validating user-entered OTP
 **Why:** Consistent with PAM approach; handles rate limiting, scratch codes
@@ -262,6 +275,7 @@ pub async fn validate_otp(service: &str, username: &str, code: &str) -> Result<(
 ```
 
 ### Pattern 6: QR Code Setup Wizard
+
 **What:** Generate TOTP secret and QR code for authenticator app setup
 **When to use:** User first-time 2FA setup
 **Why:** Standard TOTP provisioning flow
@@ -271,16 +285,13 @@ pub async fn validate_otp(service: &str, username: &str, code: &str) -> Result<(
 import QRCode from "qrcode"
 
 interface TotpSetupData {
-  secret: string        // Base32 encoded secret
-  otpauthUrl: string    // otpauth:// URL for QR code
-  qrCodeSvg: string     // SVG QR code
+  secret: string // Base32 encoded secret
+  otpauthUrl: string // otpauth:// URL for QR code
+  qrCodeSvg: string // SVG QR code
   backupCodes?: string[] // Scratch codes (if supported)
 }
 
-async function generateTotpSetup(
-  username: string,
-  issuer: string = "opencode",
-): Promise<TotpSetupData> {
+async function generateTotpSetup(username: string, issuer: string = "opencode"): Promise<TotpSetupData> {
   // Generate 160-bit secret (20 bytes = 32 base32 chars)
   const secretBytes = crypto.getRandomValues(new Uint8Array(20))
   const secret = base32Encode(secretBytes)
@@ -308,6 +319,7 @@ async function generateTotpSetup(
 ```
 
 ### Anti-Patterns to Avoid
+
 - **Logging OTP codes:** Never log the actual code, even in debug mode
 - **Long-lived 2FA tokens:** Keep the intermediate token short-lived (5 minutes max)
 - **Device trust without fingerprint:** Always bind device trust to browser/user-agent
@@ -318,31 +330,34 @@ async function generateTotpSetup(
 
 Problems that look simple but have existing solutions:
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| TOTP validation | Manual HMAC-SHA1 | pam_google_authenticator or totp-rs | Time skew handling, rate limiting, scratch codes |
-| Device fingerprinting | Custom hash | Standard user-agent + session ID | Consistent, debuggable |
-| QR code generation | Canvas drawing | qrcode npm package | Handles error correction, sizing |
-| Secret generation | Math.random | crypto.getRandomValues | Cryptographically secure |
-| Token signing | Custom HMAC | jose JWT library | Standard format, automatic expiration |
+| Problem               | Don't Build      | Use Instead                         | Why                                              |
+| --------------------- | ---------------- | ----------------------------------- | ------------------------------------------------ |
+| TOTP validation       | Manual HMAC-SHA1 | pam_google_authenticator or totp-rs | Time skew handling, rate limiting, scratch codes |
+| Device fingerprinting | Custom hash      | Standard user-agent + session ID    | Consistent, debuggable                           |
+| QR code generation    | Canvas drawing   | qrcode npm package                  | Handles error correction, sizing                 |
+| Secret generation     | Math.random      | crypto.getRandomValues              | Cryptographically secure                         |
+| Token signing         | Custom HMAC      | jose JWT library                    | Standard format, automatic expiration            |
 
 **Key insight:** pam_google_authenticator already handles TOTP complexity including time skew, rate limiting, and scratch codes. Leverage it rather than reimplementing.
 
 ## Common Pitfalls
 
 ### Pitfall 1: Storing Secrets Server-Side for Setup
+
 **What goes wrong:** Secret exposure if server database is compromised
 **Why it happens:** Tempting to store secrets during setup wizard
 **How to avoid:** Generate secrets client-side, only store the google_authenticator file on user's home directory after verification
 **Warning signs:** Secrets appearing in server logs or database
 
 ### Pitfall 2: 2FA Token Replay
+
 **What goes wrong:** Attacker captures 2FA token and uses it later
 **Why it happens:** No binding between token and client
 **How to avoid:** Short expiration (5 min), single-use tokens, IP binding (optional)
 **Warning signs:** Same 2FA token accepted multiple times
 
 ### Pitfall 3: User Enumeration via 2FA Required Response
+
 **What goes wrong:** Attacker learns which users have 2FA enabled
 **Why it happens:** Different responses for 2FA vs non-2FA users
 **How to avoid:** Always return `2fa_required` even for users without 2FA (prompt but accept any code)
@@ -350,18 +365,21 @@ Problems that look simple but have existing solutions:
 **Warning signs:** Can distinguish 2FA users without password
 
 ### Pitfall 4: Device Trust Cookie Theft
+
 **What goes wrong:** Stolen cookie allows 2FA bypass
 **Why it happens:** Cookie alone is sufficient
 **How to avoid:** Bind to user-agent fingerprint, use Secure + HttpOnly flags, consider IP binding
 **Warning signs:** Device trust works from different browser
 
 ### Pitfall 5: Setup Wizard Without Verification
+
 **What goes wrong:** User sets up authenticator but types code wrong
 **Why it happens:** Not requiring code verification before enabling 2FA
 **How to avoid:** Require user to enter current code before saving configuration
 **Warning signs:** Users locked out immediately after setup
 
 ### Pitfall 6: No Backup Recovery Path
+
 **What goes wrong:** User loses phone, locked out permanently
 **Why it happens:** No scratch codes or admin recovery
 **How to avoid:** Generate scratch codes during setup; document admin recovery (delete ~/.google_authenticator)
@@ -372,6 +390,7 @@ Problems that look simple but have existing solutions:
 Verified patterns from official sources and existing codebase:
 
 ### Extended Broker Protocol
+
 ```rust
 // Source: Extending existing protocol.rs
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -416,6 +435,7 @@ pub struct AuthenticateResult {
 ```
 
 ### Extended BrokerClient
+
 ```typescript
 // Source: Extending existing broker-client.ts
 
@@ -473,6 +493,7 @@ async authenticateOtp(username: string, code: string): Promise<AuthResult> {
 ```
 
 ### PAM Configuration for OTP-Only Service
+
 ```
 # /etc/pam.d/opencode-otp
 # Used for OTP validation only (after password already validated)
@@ -480,6 +501,7 @@ auth required pam_google_authenticator.so nullok
 ```
 
 ### 2FA Login Page HTML (Consistent with existing login page style)
+
 ```typescript
 // Source: Extending existing auth.ts generateLoginPageHtml pattern
 function generate2FAPageHtml(username: string, countdown: number): string {
@@ -543,20 +565,21 @@ function generate2FAPageHtml(username: string, countdown: number): string {
     }, 1000);
   </script>
 </body>
-</html>`;
+</html>`
 }
 ```
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| SMS OTP | TOTP apps | 2020+ | More secure, works offline |
-| Single input (password + OTP) | Separate screens | Current | Better UX, clearer flow |
-| Custom TOTP validation | PAM module | Always | Consistent, handles edge cases |
-| No device trust | 30-day trust cookies | Current | Balance security/convenience |
+| Old Approach                  | Current Approach     | When Changed | Impact                         |
+| ----------------------------- | -------------------- | ------------ | ------------------------------ |
+| SMS OTP                       | TOTP apps            | 2020+        | More secure, works offline     |
+| Single input (password + OTP) | Separate screens     | Current      | Better UX, clearer flow        |
+| Custom TOTP validation        | PAM module           | Always       | Consistent, handles edge cases |
+| No device trust               | 30-day trust cookies | Current      | Balance security/convenience   |
 
 **Deprecated/outdated:**
+
 - **SMS-based 2FA:** SIM swap attacks; TOTP is preferred
 - **HOTP (counter-based):** TOTP is more convenient and standard
 - **Single combined password+OTP field:** Separate screens are clearer
@@ -588,6 +611,7 @@ Things that couldn't be fully resolved:
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - [pam_google_authenticator man page](https://www.mankier.com/8/pam_google_authenticator) - PAM module configuration
 - [Google Authenticator PAM GitHub](https://github.com/google/google-authenticator-libpam) - Official module
 - [RFC 6238 TOTP](https://datatracker.ietf.org/doc/html/rfc6238) - TOTP specification
@@ -596,16 +620,19 @@ Things that couldn't be fully resolved:
 - [jose JWT library](https://github.com/panva/jose) - Token signing
 
 ### Secondary (MEDIUM confidence)
+
 - [ArchWiki Google Authenticator](https://wiki.archlinux.org/title/Google_Authenticator) - Practical setup guide
 - [Device trust patterns](https://medium.com/@guillaume.viguierjust/making-two-factor-authentication-more-user-friendly-through-trusted-devices-257acc27b24b) - Implementation guidance
 - [SSSD PAM two-factor design](https://sssd.io/design-pages/pam_conversation_for_otp.html) - Two-step PAM flow
 
 ### Tertiary (LOW confidence)
+
 - Existing codebase patterns (auth.ts, broker-client.ts) - Verified by reading files
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH - PAM module well-documented, crates verified
 - Authentication flow: HIGH - Two-step pattern is standard
 - Device trust: MEDIUM - Implementation approach clear, details to validate
@@ -617,5 +644,5 @@ Things that couldn't be fully resolved:
 
 ---
 
-*Phase: 10-two-factor-authentication*
-*Research complete: 2026-01-24*
+_Phase: 10-two-factor-authentication_
+_Research complete: 2026-01-24_

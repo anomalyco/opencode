@@ -38,11 +38,13 @@ JWT-based token modules for device trust and 2FA intermediate tokens using jose 
 ## What Was Built
 
 ### Device Trust Token Module
+
 - `createDeviceFingerprint()`: Hashes user-agent for device identification
 - `createDeviceTrustToken()`: Creates signed JWT with username, fingerprint, and version
 - `verifyDeviceTrustToken()`: Validates token and checks fingerprint match
 
 ### 2FA Token Module
+
 - `TwoFactorUserInfo` interface: Carries UNIX user info through 2FA flow
 - `create2FAToken()`: Creates short-lived JWT after password validation
 - `verify2FAToken()`: Validates token with optional IP binding
@@ -57,10 +59,10 @@ JWT-based token modules for device trust and 2FA intermediate tokens using jose 
 
 ## Commits
 
-| Hash | Type | Description |
-|------|------|-------------|
-| ff8071414 | feat | Add device trust token module |
-| 062a3b5a3 | feat | Add 2FA token module |
+| Hash      | Type | Description                          |
+| --------- | ---- | ------------------------------------ |
+| ff8071414 | feat | Add device trust token module        |
+| 062a3b5a3 | feat | Add 2FA token module                 |
 | 8ded4b622 | feat | Export token modules from auth index |
 
 ## Deviations from Plan
@@ -68,6 +70,7 @@ JWT-based token modules for device trust and 2FA intermediate tokens using jose 
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Added jose dependency to opencode package**
+
 - **Found during:** Task 1
 - **Issue:** jose library not in opencode package.json, TypeScript compilation failed
 - **Fix:** Added jose@6.1.3 to dependencies using `bun add jose`
@@ -76,12 +79,12 @@ JWT-based token modules for device trust and 2FA intermediate tokens using jose 
 
 ## Files Changed
 
-| File | Change | Purpose |
-|------|--------|---------|
-| packages/opencode/src/auth/device-trust.ts | Created | Device trust token utilities |
-| packages/opencode/src/auth/two-factor-token.ts | Created | 2FA token utilities |
-| packages/opencode/src/auth/index.ts | Modified | Export new modules |
-| packages/opencode/package.json | Modified | Add jose dependency |
+| File                                           | Change   | Purpose                      |
+| ---------------------------------------------- | -------- | ---------------------------- |
+| packages/opencode/src/auth/device-trust.ts     | Created  | Device trust token utilities |
+| packages/opencode/src/auth/two-factor-token.ts | Created  | 2FA token utilities          |
+| packages/opencode/src/auth/index.ts            | Modified | Export new modules           |
+| packages/opencode/package.json                 | Modified | Add jose dependency          |
 
 ## Verification Results
 
@@ -92,6 +95,7 @@ JWT-based token modules for device trust and 2FA intermediate tokens using jose 
 ## Next Phase Readiness
 
 Ready for 10-04 (2FA login routes) and 10-05 (device trust routes):
+
 - Token creation functions available for route handlers
 - Token verification functions available for auth middleware
 - All exports accessible via `@/auth`

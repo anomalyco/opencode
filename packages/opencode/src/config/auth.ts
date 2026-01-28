@@ -42,7 +42,11 @@ export const AuthConfig = z
       .describe("Users allowed to authenticate. Empty array allows any system user"),
     sessionPersistence: z.boolean().optional().default(true).describe("Persist sessions to disk across restarts"),
     trustProxy: z.boolean().optional().describe("Trust X-Forwarded-Proto header for reverse proxy detection"),
-    csrfVerboseErrors: z.boolean().optional().default(false).describe("Enable verbose CSRF error messages for debugging"),
+    csrfVerboseErrors: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Enable verbose CSRF error messages for debugging"),
     csrfAllowlist: z
       .array(z.string())
       .optional()

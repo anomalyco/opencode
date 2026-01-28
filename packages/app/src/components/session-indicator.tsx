@@ -133,7 +133,7 @@ export function SessionIndicator() {
 
       if (res.ok) {
         // Update local state to reflect that device is no longer trusted
-        setDeviceTrustStatus((prev) => prev ? { ...prev, deviceTrusted: false } : null)
+        setDeviceTrustStatus((prev) => (prev ? { ...prev, deviceTrusted: false } : null))
       }
     } catch (err) {
       console.error("Forget device failed:", err)

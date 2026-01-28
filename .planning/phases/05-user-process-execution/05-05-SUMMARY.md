@@ -72,10 +72,10 @@ Each task was committed atomically:
 
 ## Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
+| Decision                                             | Rationale                                                                           |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | Unregister returns success even if session not found | Idempotent operations are safer - logout can be called multiple times without error |
-| RegisterSession stores clone of user info | UserInfo is cheap to clone, avoids lifetime complexity |
+| RegisterSession stores clone of user info            | UserInfo is cheap to clone, avoids lifetime complexity                              |
 
 ## Deviations from Plan
 
@@ -96,5 +96,6 @@ None - no external service configuration required.
 - Ready for Plan 06: Window resize handling (I/O multiplexing was moved up)
 
 ---
-*Phase: 05-user-process-execution*
-*Completed: 2026-01-22*
+
+_Phase: 05-user-process-execution_
+_Completed: 2026-01-22_

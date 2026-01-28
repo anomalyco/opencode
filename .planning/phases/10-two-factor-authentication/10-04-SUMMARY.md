@@ -50,6 +50,7 @@ completed: 2026-01-24
 - **Files modified:** 1
 
 ## Accomplishments
+
 - Extended BrokerRequest interface with check2fa and authenticateotp methods
 - Implemented check2fa() to detect if user has 2FA configured
 - Implemented authenticateOtp() to validate OTP codes via broker
@@ -63,27 +64,34 @@ Each task was committed atomically:
 3. **Task 3: Implement authenticateOtp method** - `314ba01c0` (feat)
 
 ## Files Created/Modified
+
 - `packages/opencode/src/auth/broker-client.ts` - Added 2FA methods (check2fa, authenticateOtp) and updated BrokerRequest interface
 
 ## Decisions Made
+
 - **check2fa fails open:** On error, returns false (assumes no 2FA) since this is for detection, not security enforcement
 - **authenticateOtp follows authenticate() pattern:** Same error handling, response structure, and generic error messages for consistency
 
 ## Deviations from Plan
+
 None - plan executed exactly as written.
 
 ## Issues Encountered
+
 None
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - BrokerClient now has complete 2FA support
 - Ready for Plan 10-05 (login route integration) to use these methods
 - check2fa() can detect 2FA requirement before prompting user
 - authenticateOtp() validates codes after password auth succeeds
 
 ---
-*Phase: 10-two-factor-authentication*
-*Completed: 2026-01-24*
+
+_Phase: 10-two-factor-authentication_
+_Completed: 2026-01-24_

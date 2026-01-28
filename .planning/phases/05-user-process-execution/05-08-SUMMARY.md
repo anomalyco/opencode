@@ -83,13 +83,13 @@ Note: Task 3 (wire ptyWrite/ptyRead) was completed as part of Task 1 - the conne
 
 ## Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Broker relay approach | Simplest option, reuses existing IPC infrastructure |
-| Base64 encoding for data | Safe transport of binary data over JSON protocol |
-| Non-blocking read | Prevents blocking on empty PTY, returns WouldBlock gracefully |
+| Decision                  | Rationale                                                       |
+| ------------------------- | --------------------------------------------------------------- |
+| Broker relay approach     | Simplest option, reuses existing IPC infrastructure             |
+| Base64 encoding for data  | Safe transport of binary data over JSON protocol                |
+| Non-blocking read         | Prevents blocking on empty PTY, returns WouldBlock gracefully   |
 | Output streaming deferred | Polling foundation sufficient for MVP, streaming is future work |
-| Separate BrokerPty module | Clean separation from local Pty namespace |
+| Separate BrokerPty module | Clean separation from local Pty namespace                       |
 
 ## Deviations from Plan
 
@@ -114,5 +114,6 @@ None - no external service configuration required.
 **Note:** The current implementation provides polling-based read. For production efficiency, a push mechanism (broker -> web server) would be better, but the polling foundation allows basic functionality.
 
 ---
-*Phase: 05-user-process-execution*
-*Completed: 2026-01-22*
+
+_Phase: 05-user-process-execution_
+_Completed: 2026-01-22_

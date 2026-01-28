@@ -9,8 +9,17 @@ import type {
   AppLogResponses,
   AppSkillsResponses,
   Auth as Auth3,
+  AuthDeviceTrustRevokeResponses,
+  AuthDeviceTrustStatusResponses,
+  AuthLogin2FaErrors,
+  AuthLogin2FaResponses,
+  AuthLoginErrors,
+  AuthLoginResponses,
+  AuthSessionErrors,
+  AuthSessionResponses,
   AuthSetErrors,
   AuthSetResponses,
+  AuthStatusResponses,
   CommandListResponses,
   Config as Config2,
   ConfigGetResponses,
@@ -91,6 +100,18 @@ import type {
   QuestionRejectResponses,
   QuestionReplyErrors,
   QuestionReplyResponses,
+  RepoAddErrors,
+  RepoAddResponses,
+  RepoBranchesErrors,
+  RepoBranchesResponses,
+  RepoCheckoutErrors,
+  RepoCheckoutResponses,
+  RepoCloneCredentials,
+  RepoCloneErrors,
+  RepoCloneProgressResponses,
+  RepoCloneProgressWithCredentialsResponses,
+  RepoCloneResponses,
+  RepoListResponses,
   SessionAbortErrors,
   SessionAbortResponses,
   SessionChildrenErrors,
@@ -241,6 +262,138 @@ export class Global extends HeyApiClient {
     return (options?.client ?? this.client).post<GlobalDisposeResponses, unknown, ThrowOnError>({
       url: "/global/dispose",
       ...options,
+    })
+  }
+}
+
+export class Auth extends HeyApiClient {
+  /**
+   * Login with username and password
+   *
+   * Authenticate user credentials via PAM and create session. Returns 2fa_required if user has 2FA enabled.
+   */
+  public login<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<AuthLoginResponses, AuthLoginErrors, ThrowOnError>({
+      url: "/auth/login",
+      ...options,
+    })
+  }
+
+  /**
+   * Complete 2FA login
+   *
+   * Validate OTP code and complete authentication.
+   */
+  public login2Fa<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<AuthLogin2FaResponses, AuthLogin2FaErrors, ThrowOnError>({
+      url: "/auth/login/2fa",
+      ...options,
+    })
+  }
+
+  /**
+   * Get auth status
+   *
+   * Check if authentication is enabled and get configuration.
+   */
+  public status<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AuthStatusResponses, unknown, ThrowOnError>({
+      url: "/auth/status",
+      ...options,
+    })
+  }
+
+  /**
+   * Get device trust status
+   *
+   * Check if 2FA is enabled and if the current device is trusted.
+   */
+  public deviceTrustStatus<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AuthDeviceTrustStatusResponses, unknown, ThrowOnError>({
+      url: "/auth/device-trust/status",
+      ...options,
+    })
+  }
+
+  /**
+   * Revoke device trust
+   *
+   * Clear the device trust cookie to require 2FA on next login.
+   */
+  public deviceTrustRevoke<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<AuthDeviceTrustRevokeResponses, unknown, ThrowOnError>({
+      url: "/auth/device-trust/revoke",
+      ...options,
+    })
+  }
+
+  /**
+   * Logout current session
+   *
+   * Clear the current session and redirect to login page.
+   */
+  public logout<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<unknown, unknown, ThrowOnError>({ url: "/auth/logout", ...options })
+  }
+
+  /**
+   * Logout all sessions
+   *
+   * Clear all sessions for the current user and redirect to login page.
+   */
+  public logoutAll<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<unknown, unknown, ThrowOnError>({
+      url: "/auth/logout/all",
+      ...options,
+    })
+  }
+
+  /**
+   * Get current session
+   *
+   * Retrieve information about the current authenticated session.
+   */
+  public session<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AuthSessionResponses, AuthSessionErrors, ThrowOnError>({
+      url: "/auth/session",
+      ...options,
+    })
+  }
+
+  /**
+   * Set auth credentials
+   *
+   * Set authentication credentials
+   */
+  public set<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      auth?: Auth3
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { key: "auth", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<AuthSetResponses, AuthSetErrors, ThrowOnError>({
+      url: "/auth/{providerID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }
@@ -1973,6 +2126,247 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class Repo extends HeyApiClient {
+  /**
+   * List repos
+   *
+   * Get a list of tracked repositories.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<RepoListResponses, unknown, ThrowOnError>({
+      url: "/repo",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Add repo
+   *
+   * Add an existing local git repository by path.
+   */
+  public add<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      path?: string
+      name?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "path" },
+            { in: "body", key: "name" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<RepoAddResponses, RepoAddErrors, ThrowOnError>({
+      url: "/repo",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Clone repo
+   *
+   * Clone a repository into the configured workspace root.
+   */
+  public clone<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      url?: string
+      branch?: string
+      credentials?: RepoCloneCredentials
+      workspaceRoot?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "url" },
+            { in: "body", key: "branch" },
+            { in: "body", key: "credentials" },
+            { in: "body", key: "workspaceRoot" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<RepoCloneResponses, RepoCloneErrors, ThrowOnError>({
+      url: "/repo/clone",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Clone repo (progress)
+   *
+   * Clone a repository and stream progress events.
+   */
+  public cloneProgress<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      url: string
+      branch?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "url" },
+            { in: "query", key: "branch" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).sse.get<RepoCloneProgressResponses, unknown, ThrowOnError>({
+      url: "/repo/clone-progress",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Clone repo (progress via POST)
+   *
+   * Clone a repository with credentials and stream progress events.
+   */
+  public cloneProgressWithCredentials<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      url?: string
+      branch?: string
+      credentials?: RepoCloneCredentials
+      workspaceRoot?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "url" },
+            { in: "body", key: "branch" },
+            { in: "body", key: "credentials" },
+            { in: "body", key: "workspaceRoot" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).sse.post<RepoCloneProgressWithCredentialsResponses, unknown, ThrowOnError>({
+      url: "/repo/clone-progress",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List repo branches
+   *
+   * List branches for a tracked repository.
+   */
+  public branches<ThrowOnError extends boolean = false>(
+    parameters: {
+      repoID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "repoID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<RepoBranchesResponses, RepoBranchesErrors, ThrowOnError>({
+      url: "/repo/{repoID}/branches",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Checkout repo branch
+   *
+   * Switch branches for a tracked repository.
+   */
+  public checkout<ThrowOnError extends boolean = false>(
+    parameters: {
+      repoID: string
+      directory?: string
+      branch?: string
+      force?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "repoID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "branch" },
+            { in: "body", key: "force" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<RepoCheckoutResponses, RepoCheckoutErrors, ThrowOnError>({
+      url: "/repo/{repoID}/checkout",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Find extends HeyApiClient {
   /**
    * Find text
@@ -2152,7 +2546,7 @@ export class File extends HeyApiClient {
   }
 }
 
-export class Auth extends HeyApiClient {
+export class Auth2 extends HeyApiClient {
   /**
    * Remove MCP OAuth
    *
@@ -2396,9 +2790,9 @@ export class Mcp extends HeyApiClient {
     })
   }
 
-  private _auth?: Auth
-  get auth(): Auth {
-    return (this._auth ??= new Auth({ client: this.client }))
+  private _auth?: Auth2
+  get auth(): Auth2 {
+    return (this._auth ??= new Auth2({ client: this.client }))
   }
 }
 
@@ -2949,45 +3343,6 @@ export class Formatter extends HeyApiClient {
   }
 }
 
-export class Auth2 extends HeyApiClient {
-  /**
-   * Set auth credentials
-   *
-   * Set authentication credentials
-   */
-  public set<ThrowOnError extends boolean = false>(
-    parameters: {
-      providerID: string
-      directory?: string
-      auth?: Auth3
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "providerID" },
-            { in: "query", key: "directory" },
-            { key: "auth", map: "body" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).put<AuthSetResponses, AuthSetErrors, ThrowOnError>({
-      url: "/auth/{providerID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
 export class Event extends HeyApiClient {
   /**
    * Subscribe to events
@@ -3020,6 +3375,11 @@ export class OpencodeClient extends HeyApiClient {
   private _global?: Global
   get global(): Global {
     return (this._global ??= new Global({ client: this.client }))
+  }
+
+  private _auth?: Auth
+  get auth(): Auth {
+    return (this._auth ??= new Auth({ client: this.client }))
   }
 
   private _project?: Project
@@ -3077,6 +3437,11 @@ export class OpencodeClient extends HeyApiClient {
     return (this._provider ??= new Provider({ client: this.client }))
   }
 
+  private _repo?: Repo
+  get repo(): Repo {
+    return (this._repo ??= new Repo({ client: this.client }))
+  }
+
   private _find?: Find
   get find(): Find {
     return (this._find ??= new Find({ client: this.client }))
@@ -3130,11 +3495,6 @@ export class OpencodeClient extends HeyApiClient {
   private _formatter?: Formatter
   get formatter(): Formatter {
     return (this._formatter ??= new Formatter({ client: this.client }))
-  }
-
-  private _auth?: Auth2
-  get auth(): Auth2 {
-    return (this._auth ??= new Auth2({ client: this.client }))
   }
 
   private _event?: Event

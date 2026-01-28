@@ -97,5 +97,6 @@ None - no external service configuration required.
 - Plan 05-04 (Session lifecycle) can now wire these handlers to the PTY/spawn modules
 
 ---
-*Phase: 05-user-process-execution*
-*Completed: 2026-01-22*
+
+_Phase: 05-user-process-execution_
+_Completed: 2026-01-22_

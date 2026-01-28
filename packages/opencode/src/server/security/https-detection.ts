@@ -4,7 +4,7 @@ import type { Context, Env, Input } from "hono"
  * Check if the current request is from localhost.
  */
 export function isLocalhost<E extends Env = Env, P extends string = string, I extends Input = Input>(
-  c: Context<E, P, I>
+  c: Context<E, P, I>,
 ): boolean {
   const host = c.req.header("Host") ?? ""
 
@@ -25,7 +25,7 @@ export function isLocalhost<E extends Env = Env, P extends string = string, I ex
  */
 export function isSecureConnection<E extends Env = Env, P extends string = string, I extends Input = Input>(
   c: Context<E, P, I>,
-  trustProxy: boolean
+  trustProxy: boolean,
 ): boolean {
   // Check X-Forwarded-Proto when behind proxy
   if (trustProxy) {
@@ -52,7 +52,7 @@ export function isSecureConnection<E extends Env = Env, P extends string = strin
  */
 export function shouldBlockInsecureLogin<E extends Env = Env, P extends string = string, I extends Input = Input>(
   c: Context<E, P, I>,
-  config: { requireHttps: "off" | "warn" | "block"; trustProxy?: boolean }
+  config: { requireHttps: "off" | "warn" | "block"; trustProxy?: boolean },
 ): boolean {
   // Never block if requireHttps is off
   if (config.requireHttps === "off") return false
@@ -72,7 +72,7 @@ export function shouldBlockInsecureLogin<E extends Env = Env, P extends string =
  */
 export function getConnectionSecurityInfo<E extends Env = Env, P extends string = string, I extends Input = Input>(
   c: Context<E, P, I>,
-  config: { requireHttps: "off" | "warn" | "block"; trustProxy?: boolean }
+  config: { requireHttps: "off" | "warn" | "block"; trustProxy?: boolean },
 ): {
   isSecure: boolean
   isLocalhost: boolean

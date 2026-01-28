@@ -14,6 +14,7 @@ Commands and file operations execute under the authenticated user's UNIX identit
 ## Implementation Decisions
 
 ### Privilege Escalation Model
+
 - Extend existing auth broker to spawn and manage user processes (broker already runs as root)
 - Broker spawns PTY, returns file descriptor handle to web server which handles I/O
 - All file operations proxied through broker for consistent privilege model
@@ -24,6 +25,7 @@ Commands and file operations execute under the authenticated user's UNIX identit
 - Extend existing IPC protocol with new message types (spawn, kill, resize)
 
 ### Process Environment Setup
+
 - Full login shell environment sourced (/etc/profile, ~/.profile, ~/.bashrc)
 - Use user's login shell from /etc/passwd SHELL field
 - Working directory: user's home directory ($HOME)
@@ -34,17 +36,20 @@ Commands and file operations execute under the authenticated user's UNIX identit
 - Set OPENCODE=1 environment variable as marker
 
 ### PTY Ownership
+
 - chown PTY device to authenticated user's uid/gid after allocation
 - Record sessions in utmp/wtmp (sessions appear in `who` and `last`)
 - Support window resize: propagate SIGWINCH from web client to PTY
 
 ### Failure Handling
+
 - setuid failure: return error, process never starts (no fallback)
 - Broker connection failure: 503 Service Unavailable
 - Shell quick exit: return exit code and output to client
 - File operation errors: detailed errors (permission denied, not found, etc.)
 
 ### Claude's Discretion
+
 - Whether to set controlling terminal (setsid + TIOCSCTTY) for job control
 - IPC protocol message format details
 - PTY allocation mechanism (openpty, /dev/ptmx, etc.)
@@ -70,5 +75,5 @@ None — discussion stayed within phase scope
 
 ---
 
-*Phase: 05-user-process-execution*
-*Context gathered: 2026-01-22*
+_Phase: 05-user-process-execution_
+_Context gathered: 2026-01-22_

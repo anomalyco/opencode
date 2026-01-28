@@ -4,9 +4,9 @@ plan: 02
 subsystem: documentation
 tags: [pam, authentication, 2fa, ldap, broker, systemd, launchd, security]
 requires:
-  - 10-08  # Two-factor authentication complete - document 2FA setup
-  - 03-04  # Broker systemd/launchd services created
-  - 01-03  # PAM config validation established
+  - 10-08 # Two-factor authentication complete - document 2FA setup
+  - 03-04 # Broker systemd/launchd services created
+  - 01-03 # PAM config validation established
 provides:
   - Comprehensive PAM configuration documentation
   - Linux systemd setup guide
@@ -16,8 +16,8 @@ provides:
   - Broker troubleshooting guide
   - Auth config reference table
 affects:
-  - 11-04  # README may link to this PAM guide
-  - 12-01  # Server-side TOTP registration will extend this guide
+  - 11-04 # README may link to this PAM guide
+  - 12-01 # Server-side TOTP registration will extend this guide
 tech-stack:
   added: []
   patterns:
@@ -69,11 +69,13 @@ Created complete PAM configuration documentation (`docs/pam-config.md`, 1065 lin
 **Decision:** Structure documentation with "quick start" followed by detailed explanations.
 
 **Rationale:**
+
 - PAM experts need minimal steps without exposition
 - Newcomers need detailed explanation of concepts
 - Single document serves both audiences without duplication
 
 **Implementation:**
+
 - Quick start section at top (copy-paste commands)
 - Detailed sections follow with explanations
 - Cross-references link quick start to detailed sections
@@ -83,11 +85,13 @@ Created complete PAM configuration documentation (`docs/pam-config.md`, 1065 lin
 **Decision:** Document separate PAM services for password (`opencode`) and OTP (`opencode-otp`).
 
 **Rationale:**
+
 - Allows `nullok` option for gradual 2FA adoption
 - Users without 2FA configured can still authenticate
 - Independent configuration of password vs. OTP modules
 
 **Implementation:**
+
 - `/etc/pam.d/opencode` - password validation
 - `/etc/pam.d/opencode-otp` - OTP validation (with nullok)
 - Broker validates password first, then OTP if configured
@@ -97,12 +101,14 @@ Created complete PAM configuration documentation (`docs/pam-config.md`, 1065 lin
 **Decision:** Recommend SSSD + pam_sss.so for LDAP/AD integration.
 
 **Rationale:**
+
 - Modern, actively maintained
 - Better performance (caching)
 - Offline authentication support
 - Kerberos integration built-in
 
 **Documentation approach:**
+
 - Brief overview of SSSD benefits
 - Point to distribution-specific guides (don't duplicate)
 - Show PAM configuration example with pam_sss.so
@@ -112,11 +118,13 @@ Created complete PAM configuration documentation (`docs/pam-config.md`, 1065 lin
 **Decision:** Document macOS Full Disk Access requirements for broker.
 
 **Rationale:**
+
 - macOS Monterey+ enforces TCC for PAM operations
 - Undocumented requirement causes cryptic permission errors
 - Users need explicit instructions to grant access
 
 **Implementation:**
+
 - Dedicated macOS considerations section
 - Step-by-step instructions for System Settings
 - Troubleshooting section covers TCC permission errors
@@ -154,13 +162,14 @@ Platform-specific differences clearly marked with headers/tabs.
 
 Complete table of all `AuthConfig` options from `packages/opencode/src/config/auth.ts`:
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enabled` | boolean | `false` | Enable authentication |
-| `twoFactorEnabled` | boolean | `false` | Enable 2FA support |
-| ... | ... | ... | ... |
+| Option             | Type    | Default | Description           |
+| ------------------ | ------- | ------- | --------------------- |
+| `enabled`          | boolean | `false` | Enable authentication |
+| `twoFactorEnabled` | boolean | `false` | Enable 2FA support    |
+| ...                | ...     | ...     | ...                   |
 
 Includes:
+
 - All 24 configuration options
 - Types, defaults, descriptions
 - Example configurations for different use cases
@@ -175,6 +184,7 @@ Comprehensive broker troubleshooting:
 4. **Permission denied** - macOS TCC, Linux SELinux/AppArmor guidance
 
 Each issue includes:
+
 - Diagnostic commands
 - Common causes
 - Resolution steps
@@ -227,6 +237,7 @@ None - plan executed exactly as written.
 ### Documentation for Multiple Audiences Works
 
 Progressive disclosure pattern successfully serves both experts and newcomers:
+
 - Experts can skim quick start and be done in 2 minutes
 - Newcomers can read detailed explanations without overwhelm
 - Cross-references connect the two levels seamlessly
@@ -234,6 +245,7 @@ Progressive disclosure pattern successfully serves both experts and newcomers:
 ### Platform Differences Need Explicit Callouts
 
 macOS users face unique challenges (TCC, system updates resetting PAM):
+
 - Clear platform headers prevent confusion
 - macOS-specific considerations prevent support burden
 - Side-by-side comparisons show conceptual equivalence
@@ -241,6 +253,7 @@ macOS users face unique challenges (TCC, system updates resetting PAM):
 ### Copy-Paste Configuration Reduces Friction
 
 Including full configuration files inline:
+
 - Users can verify their setup matches expected
 - Reduces "what should my file look like?" questions
 - Annotated explanations teach while showing working examples
@@ -248,10 +261,12 @@ Including full configuration files inline:
 ## Next Phase Readiness
 
 **Ready for:**
+
 - Phase 12 (Server-Side TOTP Registration) - Can extend 2FA section with server-generated secrets
 - Phase 11-04 (README) - Can link to this comprehensive PAM guide
 
 **Dependencies satisfied:**
+
 - Two-factor authentication documented (phase 10 complete)
 - Broker services documented (phase 3 artifacts exist)
 - Auth config reference complete
@@ -268,7 +283,9 @@ Including full configuration files inline:
 ## Artifacts
 
 **Documentation:**
+
 - `docs/pam-config.md` - Comprehensive PAM configuration guide
 
 **Commit:**
+
 - `b85c27f33` - docs(11-02): create comprehensive PAM configuration guide

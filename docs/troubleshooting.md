@@ -27,12 +27,14 @@ For detailed PAM configuration instructions, see [pam-config.md](pam-config.md).
 ### Key Log Locations
 
 **Linux:**
+
 - `/var/log/auth.log` - PAM authentication logs (Debian/Ubuntu)
 - `/var/log/secure` - PAM authentication logs (RHEL/CentOS)
 - `journalctl -u opencode-broker` - Broker service logs
 - `journalctl -u opencode` - OpenCode server logs
 
 **macOS:**
+
 - `/var/log/system.log` - System logs including PAM
 - `log show --predicate 'process == "opencode-broker"' --last 1h` - Broker logs
 - Console.app - Unified logging viewer
@@ -120,6 +122,7 @@ PAM authentication failed. By design, OpenCode returns a generic error to preven
 1. Enable PAM debug logging (see [Enabling PAM Debug Logging](#enabling-pam-debug-logging))
 
 2. Check auth logs while attempting login:
+
    ```bash
    # Linux (Debian/Ubuntu)
    sudo tail -f /var/log/auth.log
@@ -148,6 +151,7 @@ PAM authentication failed. By design, OpenCode returns a generic error to preven
 **Solution:**
 
 Identify the specific PAM error from logs and address accordingly. Most commonly:
+
 - Typo in password → retry with correct password
 - User needs to be created → `sudo useradd username` or equivalent
 - 2FA not set up → run `google-authenticator` as the user
@@ -163,6 +167,7 @@ The `opencode-broker` service is not running or the Unix socket doesn't exist.
 **Debug Steps:**
 
 1. Check if broker is running:
+
    ```bash
    # Linux (systemd)
    systemctl status opencode-broker
@@ -172,6 +177,7 @@ The `opencode-broker` service is not running or the Unix socket doesn't exist.
    ```
 
 2. Check if socket exists:
+
    ```bash
    # Linux
    ls -l /run/opencode/auth.sock
@@ -181,6 +187,7 @@ The `opencode-broker` service is not running or the Unix socket doesn't exist.
    ```
 
 3. Check broker logs:
+
    ```bash
    # Linux
    journalctl -u opencode-broker -n 50
@@ -199,6 +206,7 @@ The `opencode-broker` service is not running or the Unix socket doesn't exist.
 **Solution:**
 
 **Linux:**
+
 ```bash
 # Start broker service
 sudo systemctl start opencode-broker
@@ -214,6 +222,7 @@ ls -l /run/opencode/auth.sock
 ```
 
 **macOS:**
+
 ```bash
 # Load broker service
 sudo launchctl load /Library/LaunchDaemons/com.opencode.broker.plist
@@ -238,6 +247,7 @@ nginx cannot reach the OpenCode backend server.
 **Debug Steps:**
 
 1. Check nginx error log:
+
    ```bash
    sudo tail -f /var/log/nginx/error.log
    ```
@@ -264,6 +274,7 @@ nginx cannot reach the OpenCode backend server.
 **Solution:**
 
 **If OpenCode not running:**
+
 ```bash
 # Start OpenCode server
 cd /path/to/opencode
@@ -271,6 +282,7 @@ bun run server
 ```
 
 **If SELinux blocking (RHEL/CentOS/Fedora):**
+
 ```bash
 # Check if SELinux is enforcing
 getenforce
@@ -286,6 +298,7 @@ sudo systemctl restart nginx
 ```
 
 **If AppArmor blocking (Ubuntu/Debian):**
+
 ```bash
 # Check AppArmor status
 sudo aa-status
@@ -316,6 +329,7 @@ nginx default `proxy_read_timeout` is 60 seconds. WebSocket connections idle lon
 **Solution:**
 
 Add to nginx server block or location:
+
 ```nginx
 location / {
     proxy_pass http://localhost:<OPENCODE_PORT>;
@@ -332,6 +346,7 @@ location / {
 ```
 
 Reload nginx:
+
 ```bash
 sudo nginx -t
 sudo systemctl reload nginx
@@ -376,12 +391,14 @@ Rate limiting is IP-based. Multiple users behind the same NAT or proxy may share
 **If behind reverse proxy:**
 
 1. Ensure nginx (or proxy) sends X-Forwarded-For:
+
    ```nginx
    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
    proxy_set_header X-Forwarded-Proto $scheme;
    ```
 
 2. Enable `trustProxy` in `opencode.json`:
+
    ```json
    {
      "auth": {
@@ -396,6 +413,7 @@ Rate limiting is IP-based. Multiple users behind the same NAT or proxy may share
 **If many users behind NAT:**
 
 1. Increase rate limits in `opencode.json`:
+
    ```json
    {
      "auth": {
@@ -409,6 +427,7 @@ Rate limiting is IP-based. Multiple users behind the same NAT or proxy may share
 2. Consider per-user rate limiting (future enhancement)
 
 **Temporary workaround - disable rate limiting:**
+
 ```json
 {
   "auth": {
@@ -445,11 +464,13 @@ CSRF cookie not set or doesn't match the form token.
 **Solution:**
 
 **Check browser settings:**
+
 - Ensure cookies enabled for the domain
 - Disable privacy extensions temporarily (Privacy Badger, uBlock Origin, etc.)
 - Try incognito/private mode
 
 **Check OpenCode configuration:**
+
 - If using HTTP locally, `requireHttps` should be `"off"`:
   ```json
   {
@@ -460,6 +481,7 @@ CSRF cookie not set or doesn't match the form token.
   ```
 
 **For reverse proxy setup:**
+
 - Ensure nginx doesn't strip cookies:
   ```nginx
   # These should be present:
@@ -468,12 +490,13 @@ CSRF cookie not set or doesn't match the form token.
   ```
 
 **Clear cookies and retry:**
+
 ```javascript
 // In browser console
-document.cookie.split(";").forEach(c => {
-  document.cookie = c.replace(/^ +/, "").replace(/=.*/, `=;expires=${new Date().toUTCString()};path=/`);
-});
-location.reload();
+document.cookie.split(";").forEach((c) => {
+  document.cookie = c.replace(/^ +/, "").replace(/=.*/, `=;expires=${new Date().toUTCString()};path=/`)
+})
+location.reload()
 ```
 
 ### 7. 2FA Code Always Invalid
@@ -487,6 +510,7 @@ Time synchronization issue, wrong PAM service configuration, or 2FA not properly
 **Debug Steps:**
 
 1. Verify time sync:
+
    ```bash
    # Check system time
    date
@@ -496,6 +520,7 @@ Time synchronization issue, wrong PAM service configuration, or 2FA not properly
    ```
 
 2. Check user's 2FA setup:
+
    ```bash
    # As the user
    ls -l ~/.google_authenticator
@@ -506,11 +531,13 @@ Time synchronization issue, wrong PAM service configuration, or 2FA not properly
    ```
 
 3. Check PAM configuration:
+
    ```bash
    cat /etc/pam.d/opencode-otp
    ```
 
 4. Test 2FA with google-authenticator PAM directly:
+
    ```bash
    # Install pamtester if not installed
    sudo apt install pamtester  # Debian/Ubuntu
@@ -529,6 +556,7 @@ Time synchronization issue, wrong PAM service configuration, or 2FA not properly
 **Solution:**
 
 **Fix time synchronization (Linux):**
+
 ```bash
 # Install NTP
 sudo apt install systemd-timesyncd  # Debian/Ubuntu
@@ -542,6 +570,7 @@ timedatectl status
 ```
 
 **Fix time synchronization (macOS):**
+
 ```bash
 # Enable automatic time
 sudo systemsetup -setusingnetworktime on
@@ -553,12 +582,14 @@ sudo sntp -sS time.apple.com
 **Verify PAM configuration:**
 
 Ensure `/etc/pam.d/opencode-otp` exists and contains:
+
 ```
 auth       required     pam_google_authenticator.so nullok
 account    required     pam_permit.so
 ```
 
 **Initialize 2FA for user:**
+
 ```bash
 # Run as the user (not root!)
 google-authenticator
@@ -572,11 +603,13 @@ google-authenticator
 ```
 
 **Set correct permissions:**
+
 ```bash
 chmod 600 ~/.google_authenticator
 ```
 
 **Verify OpenCode configuration:**
+
 ```json
 {
   "auth": {
@@ -594,6 +627,7 @@ Note: The main PAM service should be `opencode`, not `opencode-otp`. The broker 
 ### 8. SELinux Blocking nginx
 
 **Symptom:**
+
 - nginx returns `502 Bad Gateway`
 - nginx error.log shows `(13: Permission denied) while connecting to upstream`
 - Happens on RHEL/CentOS/Fedora systems
@@ -604,12 +638,14 @@ SELinux policy prevents `httpd_t` (nginx) from making network connections.
 **Debug Steps:**
 
 1. Verify SELinux is enforcing:
+
    ```bash
    getenforce
    # Output: Enforcing
    ```
 
 2. Check for SELinux denials:
+
    ```bash
    sudo ausearch -m avc -ts recent | grep httpd
    # or
@@ -626,6 +662,7 @@ SELinux policy prevents `httpd_t` (nginx) from making network connections.
 **Solution:**
 
 **Option 1: Allow httpd network connect (recommended):**
+
 ```bash
 # Allow nginx to make network connections
 sudo setsebool -P httpd_can_network_connect 1
@@ -636,6 +673,7 @@ getsebool httpd_can_network_connect
 ```
 
 **Option 2: Label OpenCode port:**
+
 ```bash
 # If OpenCode runs on non-standard port, label it as http_port_t
 sudo semanage port -a -t http_port_t -p tcp <OPENCODE_PORT>
@@ -645,6 +683,7 @@ sudo semanage port -l | grep http_port_t
 ```
 
 **Option 3: Create custom policy (advanced):**
+
 ```bash
 # Generate policy from denials
 sudo ausearch -m avc -ts recent | audit2allow -M opencode-nginx
@@ -657,6 +696,7 @@ sudo semodule -i opencode-nginx.pp
 ```
 
 **Option 4: Disable SELinux (NOT recommended for production):**
+
 ```bash
 # Temporary (until reboot)
 sudo setenforce 0
@@ -666,6 +706,7 @@ sudo sed -i 's/SELINUX=enforcing/SELINUX=permissive/' /etc/selinux/config
 ```
 
 **After applying fix:**
+
 ```bash
 # Restart nginx
 sudo systemctl restart nginx
@@ -685,12 +726,14 @@ macOS Transparency, Consent, and Control (TCC) restrictions prevent processes fr
 **Debug Steps:**
 
 1. Check macOS version:
+
    ```bash
    sw_vers
    # ProductVersion: 12.x or later = TCC restrictions apply
    ```
 
 2. Check system logs:
+
    ```bash
    log show --predicate 'eventMessage contains "pam"' --last 1h | grep denied
    ```
@@ -722,6 +765,7 @@ macOS Transparency, Consent, and Control (TCC) restrictions prevent processes fr
 **Option 2: Run broker from authorized location:**
 
 macOS allows certain system locations to access PAM. Install broker to:
+
 ```bash
 # System binary location
 sudo cp opencode-broker /usr/local/bin/
@@ -749,6 +793,7 @@ csrutil disable
 ```
 
 **After applying fix:**
+
 ```bash
 # Verify broker running
 sudo launchctl list | grep opencode
@@ -768,11 +813,13 @@ PAM debug logging reveals detailed authentication flow, including which modules 
 **1. Add debug flag to PAM configuration:**
 
 Edit `/etc/pam.d/opencode`:
+
 ```bash
 sudo nano /etc/pam.d/opencode
 ```
 
 Add `debug` parameter to relevant lines:
+
 ```
 # Before (no debug):
 auth       required     pam_unix.so
@@ -782,6 +829,7 @@ auth       required     pam_unix.so debug
 ```
 
 For 2FA debugging, edit `/etc/pam.d/opencode-otp`:
+
 ```
 auth       required     pam_google_authenticator.so nullok debug
 ```
@@ -789,11 +837,13 @@ auth       required     pam_google_authenticator.so nullok debug
 **2. Configure rsyslog for auth logging:**
 
 Edit `/etc/rsyslog.conf` or `/etc/rsyslog.d/50-default.conf`:
+
 ```bash
 sudo nano /etc/rsyslog.d/50-default.conf
 ```
 
 Ensure auth logging enabled:
+
 ```
 # Log auth messages to /var/log/auth.log
 auth,authpriv.*                 /var/log/auth.log
@@ -804,11 +854,13 @@ auth,authpriv.*                 /var/log/auth.log
 rsyslog may rate-limit repeated messages. To see all messages:
 
 Create `/etc/rsyslog.d/00-disable-ratelimit.conf`:
+
 ```bash
 sudo nano /etc/rsyslog.d/00-disable-ratelimit.conf
 ```
 
 Add:
+
 ```
 # Disable rate limiting for auth messages
 $SystemLogRateLimitInterval 0
@@ -816,11 +868,13 @@ $SystemLogRateLimitBurst 0
 ```
 
 **4. Restart services:**
+
 ```bash
 sudo systemctl restart rsyslog
 ```
 
 **5. Watch logs during login attempt:**
+
 ```bash
 # Debian/Ubuntu
 sudo tail -f /var/log/auth.log
@@ -834,11 +888,13 @@ sudo tail -f /var/log/secure
 **1. Add debug flag to PAM configuration:**
 
 Edit `/etc/pam.d/opencode`:
+
 ```bash
 sudo nano /etc/pam.d/opencode
 ```
 
 Add `debug` parameter:
+
 ```
 # Before:
 auth       required     pam_opendirectory.so
@@ -852,6 +908,7 @@ auth       required     pam_opendirectory.so debug
 macOS logs PAM messages to unified logging system. No additional configuration needed.
 
 **3. Watch logs during login attempt:**
+
 ```bash
 # Stream PAM-related logs
 log stream --predicate 'eventMessage contains "pam"' --level debug
@@ -865,6 +922,7 @@ open -a Console
 ```
 
 **4. Show recent PAM logs:**
+
 ```bash
 log show --predicate 'eventMessage contains "pam"' --last 1h --info --debug
 ```
@@ -872,28 +930,33 @@ log show --predicate 'eventMessage contains "pam"' --last 1h --info --debug
 ### Example Debug Output
 
 **Successful authentication:**
+
 ```
 pam_unix(opencode:auth): authentication success; user=johndoe
 pam_unix(opencode:account): account valid
 ```
 
 **Failed authentication (wrong password):**
+
 ```
 pam_unix(opencode:auth): authentication failure; user=johndoe
 pam_unix(opencode:auth): 1 authentication failure; user=johndoe
 ```
 
 **Failed authentication (no such user):**
+
 ```
 pam_unix(opencode:auth): check pass; user unknown
 ```
 
 **2FA failure:**
+
 ```
 pam_google_authenticator(opencode-otp:auth): Invalid verification code for johndoe
 ```
 
 **Account locked:**
+
 ```
 pam_unix(opencode:account): account johndoe has expired (account expired)
 ```
@@ -916,16 +979,19 @@ Debug logging can be verbose and may impact performance. Enable only when troubl
 ### Linux (systemd)
 
 **Check if running:**
+
 ```bash
 systemctl status opencode-broker
 ```
 
 Look for:
+
 - `Active: active (running)` - Broker is running
 - `Active: inactive (dead)` - Broker stopped
 - `Active: failed` - Broker crashed
 
 **Check logs:**
+
 ```bash
 # Recent logs
 journalctl -u opencode-broker -n 50
@@ -941,6 +1007,7 @@ journalctl -u opencode-broker -o short-precise
 ```
 
 **Verify socket:**
+
 ```bash
 # Check socket exists
 ls -l /run/opencode/auth.sock
@@ -950,6 +1017,7 @@ srw-rw-rw- 1 root root 0 Jan 25 12:00 /run/opencode/auth.sock
 ```
 
 **Start/stop broker:**
+
 ```bash
 # Start
 sudo systemctl start opencode-broker
@@ -968,6 +1036,7 @@ sudo systemctl disable opencode-broker
 ```
 
 **Check resource usage:**
+
 ```bash
 systemctl status opencode-broker | grep -E "Memory|CPU"
 ```
@@ -975,20 +1044,24 @@ systemctl status opencode-broker | grep -E "Memory|CPU"
 ### macOS (launchd)
 
 **Check if running:**
+
 ```bash
 sudo launchctl list | grep opencode
 ```
 
 Output format: `PID  Status  Label`
+
 - PID shown → Running
 - `-` for PID → Not running
 
 **Check detailed status:**
+
 ```bash
 sudo launchctl print system/com.opencode.broker
 ```
 
 **Check logs:**
+
 ```bash
 # Using log command
 log show --predicate 'process == "opencode-broker"' --last 1h
@@ -1002,6 +1075,7 @@ open -a Console
 ```
 
 **Verify socket:**
+
 ```bash
 # Check socket exists
 ls -l /var/run/opencode/auth.sock
@@ -1011,6 +1085,7 @@ srw-rw-rw-  1 root  wheel  0 Jan 25 12:00 /var/run/opencode/auth.sock
 ```
 
 **Start/stop broker:**
+
 ```bash
 # Load (start) broker
 sudo launchctl load /Library/LaunchDaemons/com.opencode.broker.plist
@@ -1024,6 +1099,7 @@ sudo launchctl load /Library/LaunchDaemons/com.opencode.broker.plist
 ```
 
 **Check resource usage:**
+
 ```bash
 ps aux | grep opencode-broker
 ```
@@ -1048,12 +1124,14 @@ If connection succeeds, broker is listening. If `Connection refused`, broker not
 **Issue: RuntimeDirectory not created**
 
 **Symptom:**
+
 ```
 Error: No such file or directory (os error 2)
 Failed to bind to /run/opencode/auth.sock
 ```
 
 **Solution (Linux):**
+
 ```bash
 # Manually create directory
 sudo mkdir -p /run/opencode
@@ -1068,6 +1146,7 @@ sudo systemctl restart opencode-broker
 ```
 
 **Solution (macOS):**
+
 ```bash
 # Manually create directory
 sudo mkdir -p /var/run/opencode
@@ -1081,11 +1160,13 @@ sudo launchctl load /Library/LaunchDaemons/com.opencode.broker.plist
 **Issue: PAM service not found**
 
 **Symptom:**
+
 ```
 Error: PAM service 'opencode' not found
 ```
 
 **Solution:**
+
 ```bash
 # Verify PAM file exists
 ls -l /etc/pam.d/opencode
@@ -1103,12 +1184,14 @@ sudo launchctl load /Library/LaunchDaemons/com.opencode.broker.plist  # macOS
 **Issue: Permission denied binding socket**
 
 **Symptom:**
+
 ```
 Error: Permission denied (os error 13)
 Failed to bind to /run/opencode/auth.sock
 ```
 
 **Solution:**
+
 ```bash
 # Ensure broker runs as root
 # Check systemd service (Linux)
@@ -1133,6 +1216,7 @@ If you've followed the troubleshooting steps and still experiencing issues, we'r
 Please gather the following information:
 
 1. **Platform details:**
+
    ```bash
    # Linux
    uname -a
@@ -1143,6 +1227,7 @@ Please gather the following information:
    ```
 
 2. **OpenCode version:**
+
    ```bash
    cd /path/to/opencode
    git describe --tags
@@ -1151,6 +1236,7 @@ Please gather the following information:
    ```
 
 3. **Broker status and logs:**
+
    ```bash
    # Linux
    systemctl status opencode-broker
@@ -1162,18 +1248,21 @@ Please gather the following information:
    ```
 
 4. **PAM configuration:**
+
    ```bash
    cat /etc/pam.d/opencode
    cat /etc/pam.d/opencode-otp
    ```
 
 5. **OpenCode configuration (REDACT SENSITIVE DATA):**
+
    ```bash
    cat opencode.json | jq '.auth'
    # Remove any sensitive values before sharing
    ```
 
 6. **Authentication logs with debug enabled:**
+
    ```bash
    # Follow steps in "Enabling PAM Debug Logging"
    # Capture output during failed login attempt
@@ -1188,17 +1277,20 @@ Please gather the following information:
 ### Where to Get Help
 
 **GitHub Issues (for bugs):**
+
 - [OpenCode Issues](https://github.com/opencode-ai/opencode/issues)
 - Search existing issues first
 - Use "auth:" prefix in issue title
 - Include all information from "Before Reporting" above
 
 **GitHub Discussions (for questions):**
+
 - [OpenCode Discussions](https://github.com/opencode-ai/opencode/discussions)
 - For configuration questions, deployment advice
 - Check Q&A category first
 
 **Related Projects:**
+
 - [opencode-cloud](https://github.com/pRizz/opencode-cloud) - For systemd service management issues
 
 ### What NOT to Share Publicly

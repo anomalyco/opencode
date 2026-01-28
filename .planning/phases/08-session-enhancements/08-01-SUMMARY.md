@@ -23,11 +23,12 @@ tech-stack:
 
 key-files:
   created: []
-  modified: [
-    packages/opencode/src/session/user-session.ts,
-    packages/opencode/src/server/middleware/auth.ts,
-    packages/opencode/src/server/routes/auth.ts
-  ]
+  modified:
+    [
+      packages/opencode/src/session/user-session.ts,
+      packages/opencode/src/server/middleware/auth.ts,
+      packages/opencode/src/server/routes/auth.ts,
+    ]
 
 key-decisions:
   - "Remember me checkbox is checked by default for user convenience"
@@ -58,6 +59,7 @@ completed: 2026-01-23
 - **Files modified:** 3
 
 ## Accomplishments
+
 - UserSession schema extended with rememberMe field for session persistence tracking
 - setSessionCookie sets persistent cookies (with maxAge) when rememberMe=true
 - Login form checkbox checked by default, sends rememberMe value to server
@@ -72,6 +74,7 @@ Each task was committed atomically:
 3. **Task 3: Wire rememberMe through login flow** - `f0012b284` (feat)
 
 ## Files Created/Modified
+
 - `packages/opencode/src/session/user-session.ts` - Added rememberMe field to Info schema and create() parameter
 - `packages/opencode/src/server/middleware/auth.ts` - Updated setSessionCookie to accept rememberMe parameter and set maxAge; authMiddleware uses correct timeout based on session.rememberMe
 - `packages/opencode/src/server/routes/auth.ts` - Login form checkbox checked by default, loginRequestSchema includes rememberMe, form submission sends rememberMe value, server passes it to session creation and cookie setting
@@ -79,15 +82,19 @@ Each task was committed atomically:
 ## Decisions Made
 
 **1. Remember me checkbox checked by default**
+
 - Rationale: Per CONTEXT.md, user explicitly wants convenience of remember-me as default
 
 **2. Cookie maxAge in seconds not milliseconds**
+
 - Rationale: Hono's setCookie maxAge parameter expects seconds; must divide parseDuration result by 1000
 
 **3. Session timeout differentiation**
+
 - Rationale: Remember-me sessions use rememberMeDuration (90d default), regular sessions use sessionTimeout (7d default) to match cookie persistence
 
 **4. rememberMe defaults to false when undefined**
+
 - Rationale: Backward compatibility and explicit opt-in semantics
 
 ## Deviations from Plan
@@ -105,6 +112,7 @@ None - no external service configuration required.
 ## Next Phase Readiness
 
 Backend "remember me" functionality is complete. Ready for:
+
 - Session indicator in UI (Phase 8 Plan 2)
 - Activity-based session refresh
 - Session expiration warnings
@@ -112,5 +120,6 @@ Backend "remember me" functionality is complete. Ready for:
 The session persistence infrastructure is now in place and working correctly.
 
 ---
-*Phase: 08-session-enhancements*
-*Completed: 2026-01-23*
+
+_Phase: 08-session-enhancements_
+_Completed: 2026-01-23_

@@ -14,6 +14,7 @@ Protect login and state-changing operations against common web attacks. Implemen
 ## Implementation Decisions
 
 ### CSRF Protection
+
 - Double-submit cookie pattern — token in cookie + request header/body, stateless
 - Validate on all state-changing requests (POST, PUT, DELETE, PATCH)
 - Accept token via both header (X-CSRF-Token) and request body field — supports forms and API calls
@@ -27,21 +28,25 @@ Protect login and state-changing operations against common web attacks. Implemen
 - Configurable verbose error setting (default false) — developers can enable detailed CSRF failure messages for debugging
 
 ### Claude's Discretion (CSRF)
+
 - Token verification method (string match vs HMAC-signed) — Claude picks appropriate security level
 
 ### Rate Limiting
+
 - Rate limit login attempts only — focused protection
 - Track by IP address only — simpler approach, blocks single-source brute force
 - Configurable limits with sensible default — admin can tune for their environment
 - On limit exceeded: 429 response with both Retry-After header and human-readable message
 
 ### HTTP Warning Behavior
+
 - Detection: Check X-Forwarded-Proto header first, fall back to direct protocol — handles both proxied and direct connections
 - Warning only by default — show warning but allow login, user decides to proceed
 - Optional `require_https` config setting — admin can enable strict mode to block HTTP login
 - Warning appears on login form only — users see it before entering credentials
 
 ### Error Messaging
+
 - Rate limit message: Claude decides on time disclosure vs generic message
 - Server-side logging: Detailed logging of security events (IP, username, failure reason, timestamp) — helps admins investigate
 - When HTTPS required but HTTP used: Show login form with disabled inputs and block message explaining HTTPS required
@@ -67,5 +72,5 @@ None — discussion stayed within phase scope
 
 ---
 
-*Phase: 07-security-hardening*
-*Context gathered: 2026-01-22*
+_Phase: 07-security-hardening_
+_Context gathered: 2026-01-22_

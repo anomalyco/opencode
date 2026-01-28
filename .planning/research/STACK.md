@@ -7,6 +7,7 @@
 ## Executive Summary
 
 Adding PAM-based system authentication to opencode requires:
+
 1. A native PAM binding for Node.js/Bun
 2. Session management via secure cookies (Hono built-in)
 3. CSRF protection (Hono built-in)
@@ -18,25 +19,26 @@ The primary challenge is PAM integration with Bun runtime. PAM libraries use nat
 
 ### Core Framework (Already Present)
 
-| Technology | Version | Purpose | Confidence |
-|------------|---------|---------|------------|
-| Hono | 4.10.7 | HTTP server, middleware | HIGH - already in codebase |
-| Bun | 1.3.5 | Runtime | HIGH - already in codebase |
-| TypeScript | 5.8.2 | Type safety | HIGH - already in codebase |
-| Zod | 4.1.8 | Schema validation | HIGH - already in codebase |
+| Technology | Version | Purpose                 | Confidence                 |
+| ---------- | ------- | ----------------------- | -------------------------- |
+| Hono       | 4.10.7  | HTTP server, middleware | HIGH - already in codebase |
+| Bun        | 1.3.5   | Runtime                 | HIGH - already in codebase |
+| TypeScript | 5.8.2   | Type safety             | HIGH - already in codebase |
+| Zod        | 4.1.8   | Schema validation       | HIGH - already in codebase |
 
 **Rationale:** No framework changes needed. Hono provides all required middleware for cookies, CSRF, and secure headers.
 
 ### PAM Integration
 
-| Technology | Version | Purpose | Confidence |
-|------------|---------|---------|------------|
-| authenticate-pam | ~1.1.1 | PAM authentication (Node.js) | LOW - needs Bun compatibility testing |
-| Custom setuid helper | N/A | PAM auth + user impersonation | MEDIUM - Cockpit-proven pattern |
+| Technology           | Version | Purpose                       | Confidence                            |
+| -------------------- | ------- | ----------------------------- | ------------------------------------- |
+| authenticate-pam     | ~1.1.1  | PAM authentication (Node.js)  | LOW - needs Bun compatibility testing |
+| Custom setuid helper | N/A     | PAM auth + user impersonation | MEDIUM - Cockpit-proven pattern       |
 
 **Recommendation:** Build a setuid helper binary approach.
 
 **Rationale:**
+
 - Direct PAM libraries (`authenticate-pam`, `node-linux-pam`) use native N-API bindings
 - Bun's native module support is improving but has edge cases
 - A setuid helper binary provides:
@@ -46,6 +48,7 @@ The primary challenge is PAM integration with Bun runtime. PAM libraries use nat
   - Matches Cockpit's battle-tested architecture
 
 **Alternative considered - direct PAM library:**
+
 ```typescript
 // authenticate-pam approach (if Bun N-API works)
 import { authenticate } from "authenticate-pam"
@@ -61,6 +64,7 @@ authenticate(username, password, (err) => {
 ```
 
 **Why NOT direct library:**
+
 - `authenticate-pam` last published ~2020 (npm), uncertain maintenance
 - `node-linux-pam` also uses native bindings, same Bun concerns
 - Direct PAM in server process requires root privileges throughout
@@ -68,10 +72,10 @@ authenticate(username, password, (err) => {
 
 ### Session Management
 
-| Technology | Version | Purpose | Confidence |
-|------------|---------|---------|------------|
+| Technology  | Version           | Purpose                | Confidence                  |
+| ----------- | ----------------- | ---------------------- | --------------------------- |
 | hono/cookie | 4.10.7 (built-in) | Signed session cookies | HIGH - verified in codebase |
-| ulid | 3.0.1 | Session ID generation | HIGH - already in codebase |
+| ulid        | 3.0.1             | Session ID generation  | HIGH - already in codebase  |
 
 **Rationale:** Hono's built-in cookie helper supports signed cookies via `setSignedCookie`/`getSignedCookie`, eliminating need for external session libraries.
 
@@ -81,7 +85,7 @@ import { setSignedCookie, getSignedCookie, deleteCookie } from "hono/cookie"
 // Set session cookie
 await setSignedCookie(c, "session", sessionId, secret, {
   httpOnly: true,
-  secure: true,  // Requires HTTPS
+  secure: true, // Requires HTTPS
   sameSite: "Lax",
   maxAge: 86400, // 24 hours
   path: "/",
@@ -96,9 +100,9 @@ if (sessionId === false) {
 
 ### Security Middleware
 
-| Technology | Version | Purpose | Confidence |
-|------------|---------|---------|------------|
-| hono/csrf | 4.10.7 (built-in) | CSRF protection | HIGH - verified in codebase |
+| Technology          | Version           | Purpose                      | Confidence                  |
+| ------------------- | ----------------- | ---------------------------- | --------------------------- |
+| hono/csrf           | 4.10.7 (built-in) | CSRF protection              | HIGH - verified in codebase |
 | hono/secure-headers | 4.10.7 (built-in) | Security headers (CSP, etc.) | HIGH - verified in codebase |
 
 **Rationale:** Hono includes modern CSRF protection using origin/Sec-Fetch-Site validation, no tokens needed.
@@ -107,27 +111,29 @@ if (sessionId === false) {
 import { csrf } from "hono/csrf"
 import { secureHeaders } from "hono/secure-headers"
 
-app.use(csrf())  // Validates origin for state-changing requests
-app.use(secureHeaders())  // Adds X-Frame-Options, CSP, etc.
+app.use(csrf()) // Validates origin for state-changing requests
+app.use(secureHeaders()) // Adds X-Frame-Options, CSP, etc.
 ```
 
 ### User Impersonation (Command Execution)
 
-| Technology | Version | Purpose | Confidence |
-|------------|---------|---------|------------|
-| Node.js child_process | N/A | Process spawning | HIGH - standard API |
-| setuid/setgid syscalls | N/A | UID switching | MEDIUM - requires root/capabilities |
+| Technology             | Version | Purpose          | Confidence                          |
+| ---------------------- | ------- | ---------------- | ----------------------------------- |
+| Node.js child_process  | N/A     | Process spawning | HIGH - standard API                 |
+| setuid/setgid syscalls | N/A     | UID switching    | MEDIUM - requires root/capabilities |
 
 **Architecture choice:** Setuid helper approach
 
 The server needs to execute commands as the authenticated user, not as root. Two approaches:
 
 **Option A: Server as root with setuid (NOT recommended)**
+
 - Server runs as root
 - Spawns processes, calls setuid before exec
 - Risk: Any server vulnerability = full root access
 
 **Option B: Setuid helper binary (Recommended - Cockpit pattern)**
+
 - Server runs as unprivileged user
 - Communicates with setuid helper over Unix socket
 - Helper handles: PAM auth, session creation, command spawning
@@ -145,12 +151,12 @@ The server needs to execute commands as the authenticated user, not as root. Two
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| PAM | Setuid helper | authenticate-pam | Bun compatibility unknown, no privilege separation |
-| Session | Hono signed cookies | iron-session, lucia | Extra dependency, Hono built-in sufficient |
-| CSRF | Hono csrf middleware | Double-submit tokens | Origin validation is modern standard, simpler |
-| Auth | PAM | OAuth/OIDC | PAM integrates with existing enterprise auth (LDAP/Kerberos) |
+| Category | Recommended          | Alternative          | Why Not                                                      |
+| -------- | -------------------- | -------------------- | ------------------------------------------------------------ |
+| PAM      | Setuid helper        | authenticate-pam     | Bun compatibility unknown, no privilege separation           |
+| Session  | Hono signed cookies  | iron-session, lucia  | Extra dependency, Hono built-in sufficient                   |
+| CSRF     | Hono csrf middleware | Double-submit tokens | Origin validation is modern standard, simpler                |
+| Auth     | PAM                  | OAuth/OIDC           | PAM integrates with existing enterprise auth (LDAP/Kerberos) |
 
 ## What NOT to Use
 
@@ -200,6 +206,7 @@ No new npm packages required for core functionality. The setuid helper is a sepa
 ### Setuid Helper (Separate Build)
 
 The helper binary should be:
+
 - Written in C or Rust for minimal dependencies
 - Statically linked where possible
 - Installed with setuid bit: `chmod u+s /usr/local/bin/opencode-auth-helper`
@@ -230,12 +237,12 @@ const AuthConfig = z.object({
 
 ## Open Questions (Need Phase-Specific Research)
 
-| Question | Impact | When to Investigate |
-|----------|--------|---------------------|
-| Bun N-API compatibility with authenticate-pam | Could simplify if works | Early prototype phase |
-| macOS PAM differences | Secondary platform support | After Linux works |
-| Setuid helper IPC protocol | Core architecture | Architecture phase |
-| PTY ownership with user impersonation | bun-pty compatibility | PTY integration phase |
+| Question                                      | Impact                     | When to Investigate   |
+| --------------------------------------------- | -------------------------- | --------------------- |
+| Bun N-API compatibility with authenticate-pam | Could simplify if works    | Early prototype phase |
+| macOS PAM differences                         | Secondary platform support | After Linux works     |
+| Setuid helper IPC protocol                    | Core architecture          | Architecture phase    |
+| PTY ownership with user impersonation         | bun-pty compatibility      | PTY integration phase |
 
 ## Sources
 
@@ -247,4 +254,5 @@ const AuthConfig = z.object({
 - Bun native module compatibility (training data - LOW confidence, evolving)
 
 ---
-*Note: WebSearch and WebFetch unavailable during research. PAM library versions and current maintenance status should be verified before implementation.*
+
+_Note: WebSearch and WebFetch unavailable during research. PAM library versions and current maintenance status should be verified before implementation._

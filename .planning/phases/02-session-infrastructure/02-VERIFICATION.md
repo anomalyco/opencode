@@ -16,50 +16,50 @@ score: 4/4 must-haves verified
 
 ### Observable Truths
 
-| # | Truth | Status | Evidence |
-|---|-------|--------|----------|
-| 1 | Session is stored as HttpOnly, Secure, SameSite=Strict cookie | VERIFIED | `middleware/auth.ts:27-31` sets `httpOnly: true`, `sameSite: "Strict"`, `secure: isHttps` |
-| 2 | User can log out and session is cleared both client-side and server-side | VERIFIED | `routes/auth.ts:31-36` calls `UserSession.remove()` AND `clearSessionCookie()` |
-| 3 | Session expires after configured idle timeout | VERIFIED | `middleware/auth.ts:73-81` parses `config.auth.sessionTimeout` via `parseDuration()`, checks elapsed time, removes expired session |
-| 4 | Expired session redirects user to login | VERIFIED | `middleware/auth.ts:81` returns `c.redirect("/login")` when timeout exceeded |
+| #   | Truth                                                                    | Status   | Evidence                                                                                                                           |
+| --- | ------------------------------------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Session is stored as HttpOnly, Secure, SameSite=Strict cookie            | VERIFIED | `middleware/auth.ts:27-31` sets `httpOnly: true`, `sameSite: "Strict"`, `secure: isHttps`                                          |
+| 2   | User can log out and session is cleared both client-side and server-side | VERIFIED | `routes/auth.ts:31-36` calls `UserSession.remove()` AND `clearSessionCookie()`                                                     |
+| 3   | Session expires after configured idle timeout                            | VERIFIED | `middleware/auth.ts:73-81` parses `config.auth.sessionTimeout` via `parseDuration()`, checks elapsed time, removes expired session |
+| 4   | Expired session redirects user to login                                  | VERIFIED | `middleware/auth.ts:81` returns `c.redirect("/login")` when timeout exceeded                                                       |
 
 **Score:** 4/4 truths verified
 
 ### Required Artifacts
 
-| Artifact | Expected | Status | Details |
-|----------|----------|--------|---------|
-| `packages/opencode/src/session/user-session.ts` | UserSession namespace with CRUD | VERIFIED | 109 lines, exports `UserSession` namespace with `create`, `get`, `touch`, `remove`, `removeAllForUser` |
-| `packages/opencode/test/session/user-session.test.ts` | Unit tests | VERIFIED | 178 lines, 18 tests passing, 100% code coverage |
-| `packages/opencode/src/server/middleware/auth.ts` | Auth middleware | VERIFIED | 92 lines, exports `authMiddleware`, `setSessionCookie`, `clearSessionCookie`, `AuthEnv` |
-| `packages/opencode/src/server/routes/auth.ts` | Auth routes | VERIFIED | 100 lines, exports `AuthRoutes` with `/logout`, `/logout/all`, `/session` endpoints |
-| `packages/opencode/src/server/server.ts` | Server integration | VERIFIED | Lines 42-43 import, line 131 uses `authMiddleware`, line 133 mounts `AuthRoutes` |
+| Artifact                                              | Expected                        | Status   | Details                                                                                                |
+| ----------------------------------------------------- | ------------------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| `packages/opencode/src/session/user-session.ts`       | UserSession namespace with CRUD | VERIFIED | 109 lines, exports `UserSession` namespace with `create`, `get`, `touch`, `remove`, `removeAllForUser` |
+| `packages/opencode/test/session/user-session.test.ts` | Unit tests                      | VERIFIED | 178 lines, 18 tests passing, 100% code coverage                                                        |
+| `packages/opencode/src/server/middleware/auth.ts`     | Auth middleware                 | VERIFIED | 92 lines, exports `authMiddleware`, `setSessionCookie`, `clearSessionCookie`, `AuthEnv`                |
+| `packages/opencode/src/server/routes/auth.ts`         | Auth routes                     | VERIFIED | 100 lines, exports `AuthRoutes` with `/logout`, `/logout/all`, `/session` endpoints                    |
+| `packages/opencode/src/server/server.ts`              | Server integration              | VERIFIED | Lines 42-43 import, line 131 uses `authMiddleware`, line 133 mounts `AuthRoutes`                       |
 
 ### Key Link Verification
 
-| From | To | Via | Status | Details |
-|------|----|-----|--------|---------|
-| `UserSession.create` | `crypto.randomUUID()` | session ID generation | VERIFIED | `user-session.ts:34` |
-| `authMiddleware` | `UserSession.get` | session validation | VERIFIED | `middleware/auth.ts:65` |
-| `authMiddleware` | `parseDuration` | timeout configuration | VERIFIED | `middleware/auth.ts:6,74` |
-| `AuthRoutes /logout` | `UserSession.remove` | session deletion | VERIFIED | `routes/auth.ts:33` |
-| `AuthRoutes /logout/all` | `UserSession.removeAllForUser` | bulk session deletion | VERIFIED | `routes/auth.ts:54` |
-| `server.ts` | `authMiddleware` | middleware chain | VERIFIED | `server.ts:131` - `.use(authMiddleware)` |
-| `server.ts` | `AuthRoutes` | route mounting | VERIFIED | `server.ts:133` - `.route("/auth", AuthRoutes())` |
+| From                     | To                             | Via                   | Status   | Details                                           |
+| ------------------------ | ------------------------------ | --------------------- | -------- | ------------------------------------------------- |
+| `UserSession.create`     | `crypto.randomUUID()`          | session ID generation | VERIFIED | `user-session.ts:34`                              |
+| `authMiddleware`         | `UserSession.get`              | session validation    | VERIFIED | `middleware/auth.ts:65`                           |
+| `authMiddleware`         | `parseDuration`                | timeout configuration | VERIFIED | `middleware/auth.ts:6,74`                         |
+| `AuthRoutes /logout`     | `UserSession.remove`           | session deletion      | VERIFIED | `routes/auth.ts:33`                               |
+| `AuthRoutes /logout/all` | `UserSession.removeAllForUser` | bulk session deletion | VERIFIED | `routes/auth.ts:54`                               |
+| `server.ts`              | `authMiddleware`               | middleware chain      | VERIFIED | `server.ts:131` - `.use(authMiddleware)`          |
+| `server.ts`              | `AuthRoutes`                   | route mounting        | VERIFIED | `server.ts:133` - `.route("/auth", AuthRoutes())` |
 
 ### Requirements Coverage
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| **SESS-01**: Session stored as secure cookie (HttpOnly, Secure, SameSite=Strict) | SATISFIED | `setSessionCookie()` sets all three attributes |
-| **SESS-02**: User can log out, clearing session cookie and server-side state | SATISFIED | `/logout` and `/logout/all` endpoints both clear cookie AND remove server-side session |
-| **SESS-03**: Session expires after configurable idle timeout | SATISFIED | Middleware reads `config.auth.sessionTimeout`, defaults to 7d, checks against `lastAccessTime` |
+| Requirement                                                                      | Status    | Evidence                                                                                       |
+| -------------------------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------- |
+| **SESS-01**: Session stored as secure cookie (HttpOnly, Secure, SameSite=Strict) | SATISFIED | `setSessionCookie()` sets all three attributes                                                 |
+| **SESS-02**: User can log out, clearing session cookie and server-side state     | SATISFIED | `/logout` and `/logout/all` endpoints both clear cookie AND remove server-side session         |
+| **SESS-03**: Session expires after configurable idle timeout                     | SATISFIED | Middleware reads `config.auth.sessionTimeout`, defaults to 7d, checks against `lastAccessTime` |
 
 ### Anti-Patterns Found
 
-| File | Line | Pattern | Severity | Impact |
-|------|------|---------|----------|--------|
-| None | - | - | - | No anti-patterns found |
+| File | Line | Pattern | Severity | Impact                 |
+| ---- | ---- | ------- | -------- | ---------------------- |
+| None | -    | -       | -        | No anti-patterns found |
 
 **Stub Pattern Scan:** No TODO, FIXME, placeholder, or stub patterns found in any Phase 2 files.
 
@@ -106,5 +106,5 @@ Phase 2 goal achieved: **Users have secure session cookies with configurable exp
 
 ---
 
-*Verified: 2026-01-20T14:30:00Z*
-*Verifier: Claude (gsd-verifier)*
+_Verified: 2026-01-20T14:30:00Z_
+_Verifier: Claude (gsd-verifier)_

@@ -14,6 +14,7 @@ Auth configuration schema integrated into opencode.json with backward-compatible
 ## Implementation Decisions
 
 ### Config Structure
+
 - Top-level `"auth"` key in opencode.json
 - Method-aware structure: `{ "auth": { "method": "pam", "pam": {...} } }` — extensible for future auth methods
 - Just "pam" method for now, add others when needed
@@ -30,6 +31,7 @@ Auth configuration schema integrated into opencode.json with backward-compatible
 - JSON Schema file + human docs for config documentation
 
 ### Validation Behavior
+
 - Validation at startup only (not on config file changes)
 - Invalid auth config = fatal error, refuse to start
 - Check PAM service file exists at startup, fail if missing with actionable guidance
@@ -39,6 +41,7 @@ Auth configuration schema integrated into opencode.json with backward-compatible
 - No duration bounds checking — trust user to set sensible values
 
 ### Default Values
+
 - sessionTimeout: "7d" (7 days)
 - rememberMeDuration: "90d" (90 days)
 - requireHttps: "warn"
@@ -48,12 +51,14 @@ Auth configuration schema integrated into opencode.json with backward-compatible
 - sessionPersistence: true (persist to disk)
 
 ### Error Messages
+
 - Detailed + suggestion format: field, issue, AND suggested fix
 - Stop at first error (not all-at-once)
 - PAM service file missing: full inline setup guide with example content
 - Auto-detect terminal for colors/formatting (plain in pipes/logs)
 
 ### Claude's Discretion
+
 - Exact internal rate limiting parameters (attempts, lockout duration, decay)
 - Session storage format/location when persistence enabled
 - Specific X-Forwarded-Proto security validation logic
@@ -79,5 +84,5 @@ None — discussion stayed within phase scope
 
 ---
 
-*Phase: 01-configuration-foundation*
-*Context gathered: 2026-01-19*
+_Phase: 01-configuration-foundation_
+_Context gathered: 2026-01-19_

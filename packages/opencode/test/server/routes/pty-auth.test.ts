@@ -40,11 +40,10 @@ describe("PTY auth enforcement logic", () => {
 
   describe("auth check pattern", () => {
     test("getAuthContext returns undefined when auth context not set", async () => {
-      const app = new Hono()
-        .get("/test", (c) => {
-          const auth = getAuthContext(c)
-          return c.json({ hasAuth: !!auth })
-        })
+      const app = new Hono().get("/test", (c) => {
+        const auth = getAuthContext(c)
+        return c.json({ hasAuth: !!auth })
+      })
 
       const res = await app.request("/test")
       expect(res.status).toBe(200)
@@ -206,7 +205,7 @@ describe("PTY auth enforcement logic", () => {
           deviceTrustDuration: "30d",
           otpRateLimitMax: 5,
           otpRateLimitWindow: "15m",
-        twoFactorRequired: false,
+          twoFactorRequired: false,
         })
       })
 
@@ -270,7 +269,7 @@ describe("PTY auth enforcement logic", () => {
           deviceTrustDuration: "30d",
           otpRateLimitMax: 5,
           otpRateLimitWindow: "15m",
-        twoFactorRequired: false,
+          twoFactorRequired: false,
         })
       })
 
@@ -333,7 +332,7 @@ describe("PTY auth enforcement logic", () => {
           deviceTrustDuration: "30d",
           otpRateLimitMax: 5,
           otpRateLimitWindow: "15m",
-        twoFactorRequired: false,
+          twoFactorRequired: false,
         })
 
         const { app, mockCreate } = createPtyRouteSimulator()
@@ -382,7 +381,7 @@ describe("PTY auth enforcement logic", () => {
           deviceTrustDuration: "30d",
           otpRateLimitMax: 5,
           otpRateLimitWindow: "15m",
-        twoFactorRequired: false,
+          twoFactorRequired: false,
         })
 
         const { app, mockCreate } = createPtyRouteSimulator()

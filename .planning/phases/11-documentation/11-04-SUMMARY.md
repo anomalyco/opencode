@@ -80,8 +80,10 @@ Created the complete documentation index system to make all authentication docum
 - **Navigation Footer** - Quick links to all documentation files
 
 **Key sections:**
+
 ```markdown
 ## Quick Start
+
 1. Install OpenCode
 2. Set up reverse proxy (see reverse-proxy.md)
 3. Configure PAM (see pam-config.md)
@@ -89,18 +91,21 @@ Created the complete documentation index system to make all authentication docum
 5. Start OpenCode
 
 ## Documentation
+
 - Reverse Proxy Setup: nginx/Caddy, HTTPS, WebSocket
 - PAM Configuration: Password auth, 2FA, LDAP/AD
 - Troubleshooting: Flowcharts, common issues, debug logging
 ```
 
 **Architecture diagram:**
+
 - Shows flow from Client Browser → Reverse Proxy → OpenCode Server → Auth Broker → System Auth → User Shell
 - Helps users understand how components interact
 
 ### 2. Main README Integration
 
 **Updated main README.md** to link to deployment documentation:
+
 ```markdown
 For deployment with authentication, see our [**deployment guides**](./docs/).
 ```
@@ -125,6 +130,7 @@ docs/
 ### Link Validation
 
 All internal links verified:
+
 - ✅ docs/README.md → reverse-proxy.md, pam-config.md, troubleshooting.md
 - ✅ docs/README.md → ../README.md, ../CONTRIBUTING.md
 - ✅ troubleshooting.md → pam-config.md
@@ -133,11 +139,13 @@ All internal links verified:
 ### Content Organization
 
 **Documentation categories:**
+
 1. **Deployment** - reverse-proxy.md, pam-config.md
 2. **Reference** - troubleshooting.md
 3. **Configuration Reference** - Example configs, service files
 
 **User paths:**
+
 - **New users** → Quick Start Guide
 - **Specific problem** → Jump to relevant section via table of contents
 - **Need example config** → Configuration Reference links
@@ -147,6 +155,7 @@ All internal links verified:
 Comprehensive verification of all documentation (Task 2):
 
 ### ✅ File Structure Complete
+
 - docs/README.md (168 lines)
 - docs/reverse-proxy.md (674 lines)
 - docs/pam-config.md (1,065 lines)
@@ -155,15 +164,20 @@ Comprehensive verification of all documentation (Task 2):
 - docs/reverse-proxy/Caddyfile-full (3,587 bytes)
 
 ### ✅ Internal Links Validated
+
 All markdown links point to existing files, no 404s.
 
 ### ✅ Placeholder Consistency
+
 All user-supplied values use consistent patterns:
+
 - `<YOUR_DOMAIN>` for domain names
 - `<OPENCODE_PORT>` for port numbers
 
 ### ✅ Mermaid Diagrams Valid
+
 5 total diagrams across documentation:
+
 - docs/README.md: 1 (Architecture overview)
 - reverse-proxy.md: 1 (Proxy flow)
 - troubleshooting.md: 3 (Login fails, Broker issues, WebSocket issues)
@@ -171,6 +185,7 @@ All user-supplied values use consistent patterns:
 All blocks properly opened/closed with valid Mermaid syntax.
 
 ### ✅ DOC-01 Requirements Met (Reverse Proxy)
+
 - nginx configuration: Complete
 - Caddy configuration: Complete
 - TLS/HTTPS setup: Complete with Let's Encrypt
@@ -179,13 +194,16 @@ All blocks properly opened/closed with valid Mermaid syntax.
 - Example configs: Included in reverse-proxy/ directory
 
 ### ✅ DOC-02 Requirements Met (PAM + Troubleshooting)
+
 **pam-config.md:**
+
 - Basic PAM setup: Complete (Quick Start + detailed)
 - Two-factor authentication: Complete
 - LDAP/AD integration: Complete
 - Platform-specific: Linux and macOS covered
 
 **troubleshooting.md:**
+
 - Diagnostic flowcharts: 3 comprehensive flowcharts
 - Common issues: 26 documented with solutions
 - PAM debug logging: Complete section
@@ -198,12 +216,14 @@ All blocks properly opened/closed with valid Mermaid syntax.
 **Decision:** Create docs/README.md as central index rather than adding links to existing README.
 
 **Rationale:**
+
 - Keeps main README focused on project overview
 - docs/ directory becomes self-contained documentation system
 - Better organization as documentation grows
 - Standard pattern (many projects have docs/README.md)
 
 **Alternatives considered:**
+
 - Add all docs to main README sections (would clutter main README)
 - No index, just individual files (harder to discover)
 
@@ -212,12 +232,14 @@ All blocks properly opened/closed with valid Mermaid syntax.
 **Decision:** Include quick start guide directly in docs/README.md.
 
 **Rationale:**
+
 - New users need immediate guidance
 - 5 steps = minimal reading to get started
 - Each step links to detailed documentation
 - Reduces time-to-first-success
 
 **User flow:**
+
 1. Land on docs/README.md
 2. See Quick Start
 3. Follow 5 steps with linked details
@@ -228,6 +250,7 @@ All blocks properly opened/closed with valid Mermaid syntax.
 **Decision:** Include Mermaid diagram showing component architecture.
 
 **Rationale:**
+
 - Visual learners grasp system design faster
 - Shows relationships: Browser → Proxy → Server → Broker → PAM
 - Helps users understand where to look for issues
@@ -240,12 +263,14 @@ All blocks properly opened/closed with valid Mermaid syntax.
 **Decision:** Add deployment docs link to main README Documentation section.
 
 **Rationale:**
+
 - GitHub landing page must lead to deployment documentation
 - Users shouldn't need to guess that docs/ exists
 - Placed after opencode.ai/docs link (usage docs first, deployment second)
 - Brief, doesn't clutter main README
 
 **Wording:** "For deployment with authentication, see our **deployment guides**"
+
 - Clear purpose (deployment)
 - "authentication" keyword for search
 - Bold "deployment guides" draws attention
@@ -253,6 +278,7 @@ All blocks properly opened/closed with valid Mermaid syntax.
 ## Testing
 
 **Manual verification:**
+
 1. ✅ All internal links valid (files exist)
 2. ✅ Mermaid diagrams render in GitHub
 3. ✅ Navigation footer works (links to all docs)
@@ -260,6 +286,7 @@ All blocks properly opened/closed with valid Mermaid syntax.
 5. ✅ Main README link points to docs/
 
 **User scenarios tested:**
+
 - New user discovers auth docs from GitHub repo → ✅ Main README has link
 - User wants quick setup → ✅ Quick Start Guide provides 5-step path
 - User needs specific info → ✅ TOC and categories make it discoverable
@@ -268,17 +295,20 @@ All blocks properly opened/closed with valid Mermaid syntax.
 ## Metrics
 
 **Documentation coverage:**
+
 - Total lines: 3,121 lines across 4 markdown files
 - Mermaid diagrams: 5 (visual troubleshooting + architecture)
 - Configuration examples: 2 full production configs
 - Common issues documented: 26 with solutions
 
 **Navigation:**
+
 - Entry points: 2 (main README.md, docs/README.md)
 - Internal links: 15+ cross-references
 - External links: 8 (GitHub resources, community)
 
 **Time to discovery:**
+
 - From GitHub landing page: 1 click (main README → docs/)
 - From docs/README.md to specific guide: 1 click
 - Quick start guide: 5 steps visible without scrolling
@@ -286,16 +316,19 @@ All blocks properly opened/closed with valid Mermaid syntax.
 ## Integration Points
 
 **Upstream (dependencies):**
+
 - 11-01: reverse-proxy.md (linked from index)
 - 11-02: pam-config.md (linked from index)
 - 11-03: troubleshooting.md (linked from index)
 
 **Downstream (affects):**
+
 - GitHub landing page visitors can discover documentation
 - New contributors know where to add documentation
 - Future phases can reference central index
 
 **Cross-project:**
+
 - opencode-cloud project can link to this documentation
 - Community Discord can reference official docs
 - Blog posts can link to deployment guides
@@ -305,6 +338,7 @@ All blocks properly opened/closed with valid Mermaid syntax.
 None - plan executed exactly as written.
 
 All requirements met:
+
 - ✅ docs/README.md created with all links
 - ✅ README.md updated with docs link
 - ✅ All internal links valid
@@ -317,6 +351,7 @@ All requirements met:
 ### Phase 11 Complete
 
 This was the final plan in Phase 11 (Documentation). All documentation is complete:
+
 - ✅ Plan 01: Reverse proxy documentation (nginx, Caddy, TLS, security headers)
 - ✅ Plan 02: PAM configuration documentation
 - ✅ Plan 03: Troubleshooting guide with flowcharts
@@ -327,6 +362,7 @@ This was the final plan in Phase 11 (Documentation). All documentation is comple
 ### Future Enhancements (Not Blocking)
 
 Potential improvements for future phases:
+
 1. **API documentation** - If exposing auth broker protocol
 2. **Video tutorials** - Screencast of setup process
 3. **Platform-specific guides** - Dedicated Ubuntu/Debian/CentOS/Arch guides
@@ -340,12 +376,14 @@ None.
 ### Recommendations
 
 For users deploying OpenCode:
+
 1. Start with Quick Start guide in docs/README.md
 2. Use production configs in docs/reverse-proxy/ as base
 3. Follow troubleshooting flowcharts for issues
 4. Enable 2FA for sensitive deployments (documented in pam-config.md)
 
 For documentation maintainers:
+
 1. Update docs/README.md when adding new documentation files
 2. Follow placeholder pattern: `<YOUR_DOMAIN>`, `<OPENCODE_PORT>`
 3. Add new issues to troubleshooting.md as they're discovered
@@ -354,10 +392,12 @@ For documentation maintainers:
 ## Related Work
 
 **Complements:**
+
 - opencode-cloud (systemd service management): Can reference these deployment docs
 - Main OpenCode documentation (opencode.ai/docs): This covers deployment, main docs cover usage
 
 **Documentation hierarchy:**
+
 ```
 opencode.ai/docs/          # Usage documentation (configuration, features)
 ├── agents

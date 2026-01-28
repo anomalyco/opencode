@@ -56,6 +56,7 @@ completed: 2026-01-22
 - **Files modified:** 5
 
 ## Accomplishments
+
 - PTY allocation via nix::pty::openpty with automatic chown of slave device
 - Platform-specific ptsname handling (thread-safe ptsname_r on Linux, ptsname on macOS)
 - Session state tracking with PtyId (UUID v4) and PtySession struct
@@ -72,6 +73,7 @@ Each task was committed atomically:
 Note: Task 3 (unit tests) was combined with Tasks 1 and 2 as tests were added alongside implementation.
 
 ## Files Created/Modified
+
 - `packages/opencode-broker/src/pty/mod.rs` - Module exports for allocator and session
 - `packages/opencode-broker/src/pty/allocator.rs` - PTY allocation with openpty and chown
 - `packages/opencode-broker/src/pty/session.rs` - Session state tracking with DashMap
@@ -80,18 +82,19 @@ Note: Task 3 (unit tests) was combined with Tasks 1 and 2 as tests were added al
 
 ## Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Platform-specific ptsname | nix 0.29 ptsname_r only on Linux; direct libc for portability |
-| DashMap over RwLock+HashMap | Lock-free concurrent access without async overhead |
-| Direct libc for ptsname | nix::pty::ptsname requires PtyMaster, openpty returns OwnedFd |
-| Tests skip on EPERM | PTY allocation tests need root for chown to different user |
+| Decision                    | Rationale                                                     |
+| --------------------------- | ------------------------------------------------------------- |
+| Platform-specific ptsname   | nix 0.29 ptsname_r only on Linux; direct libc for portability |
+| DashMap over RwLock+HashMap | Lock-free concurrent access without async overhead            |
+| Direct libc for ptsname     | nix::pty::ptsname requires PtyMaster, openpty returns OwnedFd |
+| Tests skip on EPERM         | PTY allocation tests need root for chown to different user    |
 
 ## Deviations from Plan
 
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] nix pty feature doesn't exist in 0.29**
+
 - **Found during:** Task 1 (PTY allocator implementation)
 - **Issue:** Plan specified `pty` feature but nix 0.29 uses `term` feature for PTY
 - **Fix:** Changed feature from `pty` to `term` in Cargo.toml
@@ -100,6 +103,7 @@ Note: Task 3 (unit tests) was combined with Tasks 1 and 2 as tests were added al
 - **Committed in:** 8ba6917d0
 
 **2. [Rule 3 - Blocking] nix ptsname requires PtyMaster, not OwnedFd**
+
 - **Found during:** Task 1 (PTY allocator implementation)
 - **Issue:** openpty returns OwnedFd but ptsname requires PtyMaster newtype
 - **Fix:** Added direct libc calls for ptsname/ptsname_r with platform-specific code
@@ -113,17 +117,21 @@ Note: Task 3 (unit tests) was combined with Tasks 1 and 2 as tests were added al
 **Impact on plan:** Both auto-fixes were necessary due to nix crate API structure. No scope creep.
 
 ## Issues Encountered
+
 - nix 0.29 API mismatch: openpty returns OwnedFd but ptsname functions expect PtyMaster
 - Resolved by using direct libc calls with platform-specific implementations
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - PTY allocation foundation complete
 - Ready for Plan 02 (process spawner)
 - Session state tracking ready for child process PID association
 
 ---
-*Phase: 05-user-process-execution*
-*Completed: 2026-01-22*
+
+_Phase: 05-user-process-execution_
+_Completed: 2026-01-22_

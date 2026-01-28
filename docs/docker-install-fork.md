@@ -40,12 +40,14 @@ RUN /home/opencode/.opencode/bin/opencode --version
 ```
 
 **Advantages:**
+
 - Works with any fork or branch
 - Always gets the latest code from the specified branch
 - No dependency on GitHub releases
 - Can pin to specific commit if needed
 
 **Disadvantages:**
+
 - Slower build time (clones repo, installs deps, builds)
 - Requires build tools and dependencies
 
@@ -97,6 +99,7 @@ RUN /home/opencode/.opencode/bin/opencode --version
 Here's how to replace the existing opencode installation section in the [opencode-cloud Dockerfile](https://github.com/pRizz/opencode-cloud/blob/90b3d308e8441f43a033df13939ad2451f4098cb/packages/core/src/docker/Dockerfile):
 
 **Replace this section:**
+
 ```dockerfile
 # -----------------------------------------------------------------------------
 # opencode Installation
@@ -116,6 +119,7 @@ ENV PATH="/home/opencode/.opencode/bin:${PATH}"
 ```
 
 **With this:**
+
 ```dockerfile
 # -----------------------------------------------------------------------------
 # opencode Installation (Fork from pRizz/opencode)
@@ -141,11 +145,13 @@ ENV PATH="/home/opencode/.opencode/bin:${PATH}"
 The build script automatically detects the platform and builds for the correct architecture. The `--single` flag builds only for the current platform, which is perfect for Docker images.
 
 The build output will be in:
+
 ```
 /tmp/opencode/packages/opencode/dist/opencode-<os>-<arch>/bin/opencode
 ```
 
 Where `<os>-<arch>` will be something like:
+
 - `linux-x64` (Linux x86_64)
 - `linux-arm64` (Linux ARM64)
 - `darwin-x64` (macOS Intel)
@@ -158,6 +164,7 @@ The wildcard `opencode-*/bin/opencode` will match the correct platform automatic
 To reduce Docker build time, you can:
 
 1. **Use BuildKit cache mounts** (if using Docker BuildKit):
+
 ```dockerfile
 RUN --mount=type=cache,target=/home/opencode/.bun/install/cache \
     --mount=type=cache,target=/tmp/opencode/node_modules \
@@ -172,6 +179,7 @@ RUN --mount=type=cache,target=/home/opencode/.bun/install/cache \
 ```
 
 2. **Pin to a specific commit** to avoid unnecessary rebuilds when the branch updates:
+
 ```dockerfile
 ARG OPENCODE_COMMIT=abc123def4567890abcdef1234567890abcdef12
 RUN git clone https://github.com/pRizz/opencode.git /tmp/opencode \
@@ -190,6 +198,7 @@ RUN git clone https://github.com/pRizz/opencode.git /tmp/opencode \
 ### Build Fails with "Command not found: bun"
 
 Ensure Bun is installed and in PATH before building:
+
 ```dockerfile
 # Verify bun is available
 RUN which bun && bun --version
@@ -198,6 +207,7 @@ RUN which bun && bun --version
 ### Build Fails with Missing Dependencies
 
 The fork may have additional dependencies. Check if the fork's `package.json` or `bun.lock` differs from upstream:
+
 ```dockerfile
 # Install all dependencies including dev dependencies (needed for build)
 RUN bun install --frozen-lockfile
@@ -206,6 +216,7 @@ RUN bun install --frozen-lockfile
 ### Binary Not Found After Build
 
 Check the build output location:
+
 ```dockerfile
 # Debug: List build output
 RUN ls -la /tmp/opencode/packages/opencode/dist/

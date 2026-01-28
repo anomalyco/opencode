@@ -94,11 +94,13 @@ None - no external service configuration required.
 - Ready for Phase 2 (PAM Authentication)
 
 **Phase Success Criteria Met:**
+
 1. User can add auth configuration block to opencode.json - DONE
 2. opencode starts normally when auth config is absent - VERIFIED
 3. opencode validates auth config and reports clear errors - DONE
 4. Auth is disabled by default when config section is missing - VERIFIED
 
 ---
-*Phase: 01-configuration-foundation*
-*Completed: 2026-01-20*
+
+_Phase: 01-configuration-foundation_
+_Completed: 2026-01-20_

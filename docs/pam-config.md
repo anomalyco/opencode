@@ -7,6 +7,7 @@ This guide covers PAM (Pluggable Authentication Modules) setup for OpenCode auth
 If you're already familiar with PAM, here's the minimal setup:
 
 1. **Install PAM configuration:**
+
    ```bash
    # Linux
    sudo cp packages/opencode-broker/service/opencode.pam /etc/pam.d/opencode
@@ -16,6 +17,7 @@ If you're already familiar with PAM, here's the minimal setup:
    ```
 
 2. **Build and install broker:**
+
    ```bash
    cd packages/opencode-broker
    cargo build --release
@@ -24,6 +26,7 @@ If you're already familiar with PAM, here's the minimal setup:
    ```
 
 3. **Start broker service:**
+
    ```bash
    # Linux (systemd)
    sudo cp packages/opencode-broker/service/opencode-broker.service /etc/systemd/system/
@@ -36,6 +39,7 @@ If you're already familiar with PAM, here's the minimal setup:
    ```
 
 4. **Enable authentication in opencode:**
+
    ```json
    {
      "auth": {
@@ -45,6 +49,7 @@ If you're already familiar with PAM, here's the minimal setup:
    ```
 
 5. **Verify setup:**
+
    ```bash
    # Linux
    sudo systemctl status opencode-broker
@@ -68,6 +73,7 @@ Done! For 2FA setup, skip to [Two-Factor Authentication](#two-factor-authenticat
 When an application (like OpenCode) needs to authenticate a user, it calls into PAM with a **service name** (e.g., "opencode"). PAM reads the corresponding configuration file (`/etc/pam.d/opencode`) and executes a **stack** of authentication modules in order.
 
 Each module can:
+
 - **Succeed** (user credentials valid)
 - **Fail** (credentials invalid)
 - **Be ignored** (module result doesn't affect outcome)
@@ -91,12 +97,12 @@ Most OpenCode configurations only need `auth` and `account` modules.
 
 Control flags determine what happens when a module succeeds or fails:
 
-| Flag | Behavior |
-|------|----------|
-| **`required`** | Must succeed for authentication to succeed. Continues to next module even on failure (to prevent timing attacks). |
-| **`requisite`** | Must succeed. Stops immediately on failure (early exit). |
-| **`sufficient`** | If succeeds, immediately succeeds (skip remaining modules). If fails, continues to next module. |
-| **`optional`** | Result is ignored unless it's the only module in the stack. |
+| Flag             | Behavior                                                                                                          |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **`required`**   | Must succeed for authentication to succeed. Continues to next module even on failure (to prevent timing attacks). |
+| **`requisite`**  | Must succeed. Stops immediately on failure (early exit).                                                          |
+| **`sufficient`** | If succeeds, immediately succeeds (skip remaining modules). If fails, continues to next module.                   |
+| **`optional`**   | Result is ignored unless it's the only module in the stack.                                                       |
 
 ### Example: Order Matters
 
@@ -108,6 +114,7 @@ auth    required      pam_deny.so
 ```
 
 **What happens:**
+
 1. `pam_unix.so` runs first (checks password)
 2. If password is correct, `sufficient` flag causes immediate success (skips `pam_deny.so`)
 3. If password is wrong, continues to `pam_deny.so` which always fails
@@ -121,6 +128,7 @@ auth    sufficient    pam_unix.so
 ```
 
 **What happens:**
+
 1. `pam_deny.so` runs first and always fails
 2. `required` flag means we must continue (no early exit)
 3. `pam_unix.so` runs and checks password
@@ -156,10 +164,10 @@ account    required     pam_unix.so
 
 **What each line does:**
 
-| Line | Module | Purpose |
-|------|--------|---------|
-| `auth required pam_unix.so` | `pam_unix.so` | Validates username/password against `/etc/shadow` |
-| `account required pam_unix.so` | `pam_unix.so` | Checks account status (not expired, not locked) |
+| Line                           | Module        | Purpose                                           |
+| ------------------------------ | ------------- | ------------------------------------------------- |
+| `auth required pam_unix.so`    | `pam_unix.so` | Validates username/password against `/etc/shadow` |
+| `account required pam_unix.so` | `pam_unix.so` | Checks account status (not expired, not locked)   |
 
 This is the simplest configuration - it just checks system passwords.
 
@@ -178,11 +186,13 @@ sudo cp target/release/opencode-broker /usr/local/bin/
 #### Set permissions:
 
 **Option A: setuid (recommended for single-user systems):**
+
 ```bash
 sudo chmod 4755 /usr/local/bin/opencode-broker
 ```
 
 **Option B: Run as root via systemd (recommended for multi-user systems):**
+
 ```bash
 sudo chmod 755 /usr/local/bin/opencode-broker
 # Service runs as root (see next step)
@@ -248,6 +258,7 @@ sudo systemctl status opencode-broker
 ```
 
 Expected output:
+
 ```
 ● opencode-broker.service - OpenCode Authentication Broker
      Loaded: loaded (/etc/systemd/system/opencode-broker.service; enabled)
@@ -261,6 +272,7 @@ ls -l /run/opencode/broker.sock
 ```
 
 Expected output:
+
 ```
 srw-rw-rw- 1 root root 0 Jan 25 10:00 /run/opencode/broker.sock
 ```
@@ -270,6 +282,7 @@ srw-rw-rw- 1 root root 0 Jan 25 10:00 /run/opencode/broker.sock
 Enable authentication in your `opencode.json` configuration:
 
 **Minimal configuration:**
+
 ```json
 {
   "auth": {
@@ -279,6 +292,7 @@ Enable authentication in your `opencode.json` configuration:
 ```
 
 **With options:**
+
 ```json
 {
   "auth": {
@@ -328,6 +342,7 @@ account    required     pam_opendirectory.so
 On macOS Monterey (12.0) and later, processes that access authentication may require **Full Disk Access** permission.
 
 If authentication fails with permission errors:
+
 1. Open **System Settings > Privacy & Security > Full Disk Access**
 2. Add `/usr/local/bin/opencode-broker` to the allowed list
 3. Restart the broker service
@@ -410,6 +425,7 @@ sudo launchctl list | grep opencode
 ```
 
 Expected output:
+
 ```
 -	0	com.opencode.broker
 ```
@@ -448,6 +464,7 @@ OpenCode uses a **two-step authentication flow**:
 2. **OTP validation** - Uses separate PAM service (`opencode-otp`)
 
 This separation allows:
+
 - Different PAM configurations for password vs. OTP
 - Users without 2FA can still authenticate (via `nullok` option)
 - Independent rate limiting for password and OTP attempts
@@ -455,17 +472,20 @@ This separation allows:
 ### 1. Install google-authenticator PAM Module
 
 **Linux (Debian/Ubuntu):**
+
 ```bash
 sudo apt update
 sudo apt install libpam-google-authenticator
 ```
 
 **Linux (RHEL/Fedora):**
+
 ```bash
 sudo dnf install google-authenticator
 ```
 
 **macOS (Homebrew):**
+
 ```bash
 brew install oath-toolkit google-authenticator-libpam
 ```
@@ -498,6 +518,7 @@ auth required pam_google_authenticator.so nullok
 Add 2FA configuration to `opencode.json`:
 
 **Basic 2FA (optional for users):**
+
 ```json
 {
   "auth": {
@@ -508,6 +529,7 @@ Add 2FA configuration to `opencode.json`:
 ```
 
 **Required 2FA (enforced for all users):**
+
 ```json
 {
   "auth": {
@@ -519,6 +541,7 @@ Add 2FA configuration to `opencode.json`:
 ```
 
 **With custom timeouts:**
+
 ```json
 {
   "auth": {
@@ -559,6 +582,7 @@ This creates `~/.google_authenticator` with the TOTP secret.
 #### Web UI Setup (optional)
 
 OpenCode provides a web-based 2FA setup wizard at `/auth/setup-2fa`. This:
+
 - Generates QR code in browser
 - Walks user through authenticator app setup
 - Tests OTP code before enabling
@@ -568,6 +592,7 @@ OpenCode provides a web-based 2FA setup wizard at `/auth/setup-2fa`. This:
 #### Backup Codes
 
 During `google-authenticator` setup, emergency backup codes are displayed. Users should:
+
 - **Save backup codes** in a secure location
 - Use backup codes if they lose their authenticator device
 - Regenerate codes by running `google-authenticator` again
@@ -587,6 +612,7 @@ If user does **not** have 2FA configured (and `nullok` is set), authentication s
 To require all users to set up 2FA:
 
 1. **Remove `nullok` from PAM:**
+
    ```bash
    sudo nano /etc/pam.d/opencode-otp
    # Change:
@@ -596,6 +622,7 @@ To require all users to set up 2FA:
    ```
 
 2. **Enable `twoFactorRequired` in config:**
+
    ```json
    {
      "auth": {
@@ -619,6 +646,7 @@ For enterprise environments, integrate OpenCode with LDAP or Active Directory us
 ### Why SSSD?
 
 Modern Linux distributions recommend **SSSD** over legacy `pam_ldap.so`:
+
 - Better performance (caching)
 - Offline authentication support
 - Kerberos integration
@@ -636,12 +664,15 @@ Modern Linux distributions recommend **SSSD** over legacy `pam_ldap.so`:
 SSSD configuration varies by Linux distribution and directory service. Consult your distribution's documentation:
 
 **Red Hat/Fedora:**
+
 - [RHEL - Configuring SSSD](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html/configuring_authentication_and_authorization_in_rhel/configuring-sssd-to-use-ldap-and-require-tls-authentication_configuring-authentication-and-authorization-in-rhel)
 
 **Ubuntu/Debian:**
+
 - [Ubuntu - SSSD and Active Directory](https://ubuntu.com/server/docs/service-sssd)
 
 **SUSE:**
+
 - [SUSE - Authentication with SSSD](https://documentation.suse.com/sles/15-SP4/html/SLES-all/cha-security-sssd.html)
 
 ### PAM Configuration for SSSD
@@ -677,12 +708,14 @@ Users authenticate with their Kerberos principal (e.g., `user@REALM`).
 ### Testing LDAP/AD Authentication
 
 1. **Verify SSSD is working:**
+
    ```bash
    id ldapuser
    getent passwd ldapuser
    ```
 
 2. **Test PAM authentication:**
+
    ```bash
    pamtester opencode ldapuser authenticate
    ```
@@ -705,6 +738,7 @@ The **opencode-broker** is a privileged daemon that handles authentication and u
 ### Why a Separate Process?
 
 The OpenCode web server runs as a non-root user. To:
+
 - Access PAM (requires privileged access)
 - Spawn processes as different users (requires `setuid` or root)
 - Securely isolate authentication logic
@@ -727,11 +761,13 @@ The broker follows **principle of least privilege**:
 ### Socket Location
 
 **Linux:**
+
 ```
 /run/opencode/broker.sock
 ```
 
 **macOS:**
+
 ```
 /run/opencode/broker.sock
 # or
@@ -744,12 +780,13 @@ The socket is created by the broker on startup. Default permissions: `srw-rw-rw-
 
 Configure the broker via environment variables:
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `OPENCODE_SOCKET_PATH` | `/run/opencode/broker.sock` | Unix socket path |
-| `RUST_LOG` | `info` | Log level (error, warn, info, debug, trace) |
+| Variable               | Default                     | Purpose                                     |
+| ---------------------- | --------------------------- | ------------------------------------------- |
+| `OPENCODE_SOCKET_PATH` | `/run/opencode/broker.sock` | Unix socket path                            |
+| `RUST_LOG`             | `info`                      | Log level (error, warn, info, debug, trace) |
 
 **Example (systemd):**
+
 ```ini
 [Service]
 Environment="OPENCODE_SOCKET_PATH=/custom/path/broker.sock"
@@ -761,12 +798,14 @@ Environment="RUST_LOG=debug"
 #### Broker won't start
 
 **Check systemd status:**
+
 ```bash
 sudo systemctl status opencode-broker
 sudo journalctl -u opencode-broker -n 50
 ```
 
 **Common issues:**
+
 - Socket directory doesn't exist → Check `RuntimeDirectory` in service file
 - Permission denied → Ensure broker binary is setuid or service runs as root
 - Port/socket already in use → Check for stale socket file, remove it
@@ -778,6 +817,7 @@ ls -l /run/opencode/broker.sock
 ```
 
 **If missing:**
+
 1. Check broker is running: `sudo systemctl status opencode-broker`
 2. Check logs: `sudo journalctl -u opencode-broker`
 3. Verify socket path matches config
@@ -785,12 +825,14 @@ ls -l /run/opencode/broker.sock
 #### Authentication fails
 
 **Check PAM configuration:**
+
 ```bash
 sudo ls -l /etc/pam.d/opencode
 sudo cat /etc/pam.d/opencode
 ```
 
 **Test PAM directly:**
+
 ```bash
 # Install pamtester
 sudo apt install pamtester  # Debian/Ubuntu
@@ -801,6 +843,7 @@ pamtester opencode yourusername authenticate
 ```
 
 **Check broker logs:**
+
 ```bash
 sudo journalctl -u opencode-broker -f
 ```
@@ -810,12 +853,14 @@ Look for PAM errors or authentication failures.
 #### Permission denied errors
 
 **macOS TCC (Monterey+):**
+
 1. System Settings > Privacy & Security > Full Disk Access
 2. Add `/usr/local/bin/opencode-broker`
 3. Restart broker
 
 **Linux SELinux/AppArmor:**
 Check security framework logs:
+
 ```bash
 # SELinux
 sudo ausearch -m avc -ts recent
@@ -831,32 +876,33 @@ sudo dmesg | grep apparmor
 
 All authentication options from `packages/opencode/src/config/auth.ts`:
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enabled` | boolean | `false` | Enable authentication |
-| `method` | "pam" | `"pam"` | Authentication method (currently only PAM supported) |
-| `pam.service` | string | `"opencode"` | PAM service name (corresponds to `/etc/pam.d/<service>`) |
-| `sessionTimeout` | duration | `"7d"` | Session timeout duration (e.g., "15m", "24h", "7d") |
-| `rememberMeDuration` | duration | `"90d"` | Remember me cookie duration |
-| `requireHttps` | "off" \| "warn" \| "block" | `"warn"` | HTTPS requirement: "off" allows HTTP, "warn" logs warnings, "block" rejects HTTP |
-| `rateLimiting` | boolean | `true` | Enable rate limiting for login attempts |
-| `rateLimitWindow` | duration | `"15m"` | Rate limit window duration |
-| `rateLimitMax` | number | `5` | Maximum login attempts per window |
-| `allowedUsers` | string[] | `[]` | Users allowed to authenticate. Empty array allows any system user |
-| `sessionPersistence` | boolean | `true` | Persist sessions to disk across restarts |
-| `trustProxy` | boolean | `undefined` | Trust X-Forwarded-Proto header for reverse proxy HTTPS detection |
-| `csrfVerboseErrors` | boolean | `false` | Enable verbose CSRF error messages for debugging |
-| `csrfAllowlist` | string[] | `[]` | Additional routes to exclude from CSRF validation |
-| `twoFactorEnabled` | boolean | `false` | Enable two-factor authentication support |
-| `twoFactorRequired` | boolean | `false` | Require users to set up 2FA before accessing the app |
-| `twoFactorTokenTimeout` | duration | `"5m"` | How long the 2FA token is valid after password success |
-| `deviceTrustDuration` | duration | `"30d"` | How long "remember this device" lasts for 2FA |
-| `otpRateLimitMax` | number | `5` | Maximum OTP attempts per rate limit window |
-| `otpRateLimitWindow` | duration | `"15m"` | OTP rate limit window duration |
+| Option                  | Type                       | Default      | Description                                                                      |
+| ----------------------- | -------------------------- | ------------ | -------------------------------------------------------------------------------- |
+| `enabled`               | boolean                    | `false`      | Enable authentication                                                            |
+| `method`                | "pam"                      | `"pam"`      | Authentication method (currently only PAM supported)                             |
+| `pam.service`           | string                     | `"opencode"` | PAM service name (corresponds to `/etc/pam.d/<service>`)                         |
+| `sessionTimeout`        | duration                   | `"7d"`       | Session timeout duration (e.g., "15m", "24h", "7d")                              |
+| `rememberMeDuration`    | duration                   | `"90d"`      | Remember me cookie duration                                                      |
+| `requireHttps`          | "off" \| "warn" \| "block" | `"warn"`     | HTTPS requirement: "off" allows HTTP, "warn" logs warnings, "block" rejects HTTP |
+| `rateLimiting`          | boolean                    | `true`       | Enable rate limiting for login attempts                                          |
+| `rateLimitWindow`       | duration                   | `"15m"`      | Rate limit window duration                                                       |
+| `rateLimitMax`          | number                     | `5`          | Maximum login attempts per window                                                |
+| `allowedUsers`          | string[]                   | `[]`         | Users allowed to authenticate. Empty array allows any system user                |
+| `sessionPersistence`    | boolean                    | `true`       | Persist sessions to disk across restarts                                         |
+| `trustProxy`            | boolean                    | `undefined`  | Trust X-Forwarded-Proto header for reverse proxy HTTPS detection                 |
+| `csrfVerboseErrors`     | boolean                    | `false`      | Enable verbose CSRF error messages for debugging                                 |
+| `csrfAllowlist`         | string[]                   | `[]`         | Additional routes to exclude from CSRF validation                                |
+| `twoFactorEnabled`      | boolean                    | `false`      | Enable two-factor authentication support                                         |
+| `twoFactorRequired`     | boolean                    | `false`      | Require users to set up 2FA before accessing the app                             |
+| `twoFactorTokenTimeout` | duration                   | `"5m"`       | How long the 2FA token is valid after password success                           |
+| `deviceTrustDuration`   | duration                   | `"30d"`      | How long "remember this device" lasts for 2FA                                    |
+| `otpRateLimitMax`       | number                     | `5`          | Maximum OTP attempts per rate limit window                                       |
+| `otpRateLimitWindow`    | duration                   | `"15m"`      | OTP rate limit window duration                                                   |
 
 ### Example Configurations
 
 **Minimal (password auth only):**
+
 ```json
 {
   "auth": {
@@ -866,6 +912,7 @@ All authentication options from `packages/opencode/src/config/auth.ts`:
 ```
 
 **Production (HTTPS required, 2FA optional):**
+
 ```json
 {
   "auth": {
@@ -882,6 +929,7 @@ All authentication options from `packages/opencode/src/config/auth.ts`:
 ```
 
 **High-security (2FA required, short sessions):**
+
 ```json
 {
   "auth": {
@@ -902,6 +950,7 @@ All authentication options from `packages/opencode/src/config/auth.ts`:
 ```
 
 **Behind reverse proxy (trust X-Forwarded-Proto):**
+
 ```json
 {
   "auth": {
@@ -913,6 +962,7 @@ All authentication options from `packages/opencode/src/config/auth.ts`:
 ```
 
 **Custom PAM service:**
+
 ```json
 {
   "auth": {
@@ -969,6 +1019,7 @@ OpenCode implements **IP-based rate limiting**:
 - Separate rate limits for **password** and **OTP** attempts
 
 Configure via:
+
 ```json
 {
   "auth": {
@@ -995,6 +1046,7 @@ Restrict authentication to specific users:
 ```
 
 **Use cases:**
+
 - Limit access to specific developers
 - Prevent system service accounts from authenticating
 - Implement organization-specific access control
@@ -1008,15 +1060,15 @@ Configure HTTPS requirement:
 ```json
 {
   "auth": {
-    "requireHttps": "block"  // or "warn" or "off"
+    "requireHttps": "block" // or "warn" or "off"
   }
 }
 ```
 
-| Mode | Behavior |
-|------|----------|
-| `"off"` | Allow HTTP (not recommended for production) |
-| `"warn"` | Log warnings but allow HTTP (default) |
+| Mode      | Behavior                                             |
+| --------- | ---------------------------------------------------- |
+| `"off"`   | Allow HTTP (not recommended for production)          |
+| `"warn"`  | Log warnings but allow HTTP (default)                |
 | `"block"` | Reject HTTP connections (recommended for production) |
 
 **Localhost exemption:** `localhost` and `127.0.0.1` are always allowed over HTTP (developer experience).
@@ -1048,18 +1100,22 @@ Sessions are **in-memory** by default (lost on restart). For persistent sessions
 ## Additional Resources
 
 **PAM Documentation:**
+
 - [Linux PAM Documentation](http://www.linux-pam.org/Linux-PAM-html/)
 - [Red Hat PAM Guide](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html/configuring_authentication_and_authorization_in_rhel/configuring-user-authentication-using-authconfig_configuring-authentication-and-authorization-in-rhel)
 
 **2FA Setup:**
+
 - [Google Authenticator PAM Module](https://github.com/google/google-authenticator-libpam)
 
 **OpenCode Files:**
+
 - PAM configuration: `packages/opencode-broker/service/opencode.pam`
 - Broker systemd service: `packages/opencode-broker/service/opencode-broker.service`
 - Auth config schema: `packages/opencode/src/config/auth.ts`
 
 **Troubleshooting:**
+
 - Check broker logs: `sudo journalctl -u opencode-broker -f`
 - Test PAM: `pamtester opencode <username> authenticate`
 - Verify socket: `ls -l /run/opencode/broker.sock`

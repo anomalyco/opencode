@@ -1,63 +1,74 @@
 # Architecture
 
-**Analysis Date:** 2026-01-19
+**Analysis Date:** 2026-01-27
 
 ## Pattern Overview
 
-**Overall:** Modular Monorepo with Event-Driven Backend
+**Overall:** Monorepo with multi-package architecture, client-server separation, and event-driven state management
 
 **Key Characteristics:**
-- TypeScript/Bun monorepo using Turborepo for build orchestration
-- Event-driven architecture with pub/sub Bus system for inter-component communication
-- Server-client architecture with HTTP/SSE API and SDK abstraction
-- Agent-based AI interaction model with pluggable tools and providers
-- Instance-scoped state management tied to project directories
+
+- Monorepo workspace structure using Bun workspaces
+- Core CLI/Server package (`opencode`) provides local AI agent capabilities
+- Web frontend (`app`) connects to local server via SDK
+- Console web application (`console`) provides cloud-based workspace management
+- Instance-scoped state management per project directory
+- Event bus for real-time updates via SSE streaming
+- Plugin system for extensibility
+- Multiple protocol support (ACP, MCP, custom REST API)
 
 ## Layers
 
 **CLI Layer:**
-- Purpose: Parse commands, orchestrate workflows, provide TUI interface
+
+- Purpose: Command-line interface and entry point for opencode
 - Location: `packages/opencode/src/cli/`
-- Contains: Command handlers (`cmd/*.ts`), UI utilities, bootstrap logic
-- Depends on: Session, Provider, Agent, Server
-- Used by: End users via terminal
+- Contains: Command handlers (acp, mcp, serve, web, run, etc.), bootstrap logic
+- Depends on: Server, Session, Config, Provider
+- Used by: End users via `opencode` binary
 
 **Server Layer:**
-- Purpose: HTTP API for external clients (web app, desktop, SDK consumers)
+
+- Purpose: HTTP API server built on Hono framework
 - Location: `packages/opencode/src/server/`
-- Contains: Hono routes, SSE event streaming, OpenAPI spec generation
-- Depends on: Session, Provider, Config, Bus
-- Used by: Web app, Desktop app, SDK clients, CLI run command
+- Contains: Route handlers, middleware (auth, CSRF, CORS), SSE streaming, WebSocket support
+- Depends on: Session, Project, Provider, Tool, Bus
+- Used by: Web frontend (`app`), Desktop app, CLI commands
 
 **Session Layer:**
-- Purpose: Manage AI conversation state, message processing, LLM interactions
+
+- Purpose: Manages AI conversation sessions, message history, and LLM interactions
 - Location: `packages/opencode/src/session/`
-- Contains: Message storage, prompt processing, retry logic, compaction, cost tracking
-- Depends on: Provider, Agent, Tool, Storage, Bus
+- Contains: Session creation/management, message processing, LLM streaming, prompt building, tool execution orchestration
+- Depends on: Provider, Tool, Storage, Bus, Permission
 - Used by: Server routes, CLI commands
 
 **Provider Layer:**
-- Purpose: Abstract AI model providers, handle authentication, manage SDK instances
-- Location: `packages/opencode/src/provider/`
-- Contains: Provider registry, model definitions, SDK initialization, authentication
-- Depends on: Config, Auth, Plugin
-- Used by: Session, Agent
 
-**Agent Layer:**
-- Purpose: Define AI agent personas with specific permissions and capabilities
-- Location: `packages/opencode/src/agent/`
-- Contains: Agent definitions, permission rules, specialized prompts
-- Depends on: Config, Provider, Permission
+- Purpose: Abstracts LLM provider integrations (OpenAI, Anthropic, Google, etc.)
+- Location: `packages/opencode/src/provider/`
+- Contains: Provider implementations, model management, API client wrappers
+- Depends on: Config, Auth
 - Used by: Session processor
 
 **Tool Layer:**
+
 - Purpose: Executable capabilities available to AI agents
 - Location: `packages/opencode/src/tool/`
-- Contains: Built-in tools (bash, read, write, edit, glob, grep, etc.), tool registry
+- Contains: Built-in tools (bash, read, write, edit, glob, grep, codesearch, etc.), tool registry
 - Depends on: Permission, Config, File utilities
 - Used by: Session processor (via LLM tool calls)
 
+**Project Layer:**
+
+- Purpose: Manages project context, VCS integration, and instance lifecycle
+- Location: `packages/opencode/src/project/`
+- Contains: Project detection, git integration, instance state management, directory context
+- Depends on: Global paths, Filesystem utilities
+- Used by: Server middleware, Session, Tool execution
+
 **Storage Layer:**
+
 - Purpose: Persist session data, messages, parts to filesystem
 - Location: `packages/opencode/src/storage/`
 - Contains: JSON file storage, migrations, locking
@@ -65,117 +76,172 @@
 - Used by: Session, Project
 
 **Bus Layer:**
+
 - Purpose: Event pub/sub for real-time updates across components
 - Location: `packages/opencode/src/bus/`
 - Contains: Event definitions, subscriptions, global bus relay
 - Depends on: Instance state
 - Used by: Server (SSE streaming), Session (state changes), all major components
 
-**UI Packages:**
-- Purpose: Frontend rendering for web and desktop clients
-- Location: `packages/app/`, `packages/ui/`, `packages/desktop/`
-- Contains: SolidJS components, themes, context providers
+**Frontend Layer:**
+
+- Purpose: Web UI built with SolidJS
+- Location: `packages/app/`
+- Contains: React-like components, context providers, session management UI
 - Depends on: SDK (`@opencode-ai/sdk`)
-- Used by: Web server, Desktop Tauri app
+- Used by: Web browser clients
+
+**Console Layer:**
+
+- Purpose: Cloud-based workspace management and billing
+- Location: `packages/console/`
+- Contains: SolidStart app, database models, auth flows, billing integration
+- Depends on: Database (PlanetScale), Auth API, Stripe
+- Used by: Web users managing workspaces
+
+**SDK Layer:**
+
+- Purpose: Type-safe client library for opencode API
+- Location: `packages/sdk/js/`
+- Contains: Generated OpenAPI client, server types
+- Depends on: OpenAPI spec
+- Used by: Frontend (`app`), CLI TUI, external integrations
+
+**Infrastructure Layer:**
+
+- Purpose: Cloud deployment configuration using SST
+- Location: `infra/`
+- Contains: Cloudflare Workers, PlanetScale database, S3 buckets, secrets
+- Depends on: SST framework
+- Used by: Production deployments
 
 ## Data Flow
 
 **User Prompt Flow:**
 
 1. User submits prompt via CLI/Web/Desktop client
-2. Server receives request at `/session/prompt` route
-3. Session.create or Session.get retrieves/creates session state
-4. SessionPrompt builds LLM messages from history and context
-5. LLM.stream sends request to provider SDK
-6. SessionProcessor handles stream events (text, tool calls, reasoning)
-7. Tool calls execute via ToolRegistry, results fed back to LLM
-8. Bus publishes events (message.part.updated, session.idle)
-9. Server streams events to clients via SSE
-10. Session and message parts persisted to Storage
+2. Client SDK (`@opencode-ai/sdk`) sends POST to `/session/prompt` endpoint
+3. Server middleware (`packages/opencode/src/server/server.ts`) extracts directory from query/header
+4. Instance middleware creates/retrieves project instance via `Instance.provide()`
+5. Session route handler (`packages/opencode/src/server/routes/session.ts`) receives request
+6. `Session.create()` or `Session.get()` retrieves/creates session state
+7. `SessionPrompt.build()` constructs LLM messages from history and context
+8. `LLM.stream()` sends request to provider SDK (`@ai-sdk/*`)
+9. `SessionProcessor.handleStream()` processes stream events (text, tool calls, reasoning)
+10. Tool calls execute via `ToolRegistry.execute()`, results fed back to LLM
+11. Bus publishes events (`message.part.updated`, `session.status`)
+12. Server streams events to clients via SSE (`/session/[id]/events`)
+13. Session and message parts persisted to Storage via `Storage.write()`
 
 **State Management:**
-- Instance-scoped state via `Instance.state()` factory
+
+- Instance-scoped state via `Instance.state()` factory (`packages/opencode/src/project/instance.ts`)
 - State keyed by project directory, disposed on instance cleanup
-- Global state managed separately in `Global.Path.data`
-- Configuration layered: remote -> global -> project (highest priority)
+- Global state managed separately in `Global.Path.data` (`packages/opencode/src/global/index.ts`)
+- Configuration layered: remote -> global -> project (highest priority) (`packages/opencode/src/config/config.ts`)
+
+**Event Flow:**
+
+- Components publish events via `Bus.publish()` (`packages/opencode/src/bus/`)
+- Global bus relay forwards events across instance boundaries
+- Server subscribes to bus events and streams via SSE
+- Frontend connects to SSE endpoint and updates UI reactively
+
+**Authentication Flow:**
+
+- Console: OAuth (GitHub/Google) via `packages/console/function/src/auth.ts`
+- Local server: Optional password auth via `Flag.OPENCODE_SERVER_PASSWORD`
+- User sessions: In-memory storage in `packages/opencode/src/session/user-session.ts`
+- Broker auth: Rust-based broker (`packages/opencode-broker/`) handles system-level auth
 
 ## Key Abstractions
 
 **Instance:**
-- Purpose: Scoped execution context for a project directory
+
+- Purpose: Provides project-scoped context and state isolation
 - Examples: `packages/opencode/src/project/instance.ts`
-- Pattern: AsyncLocalStorage context with state factory
+- Pattern: Context-based dependency injection per directory
 
 **Session:**
-- Purpose: Conversation container with messages, cost tracking, sharing
+
+- Purpose: Represents an AI conversation with history and state
 - Examples: `packages/opencode/src/session/index.ts`
-- Pattern: Zod schema with CRUD operations, event publishing
+- Pattern: Immutable updates via `update()` function, persisted to Storage
 
 **Provider:**
-- Purpose: AI service abstraction (Anthropic, OpenAI, etc.)
+
+- Purpose: Abstracts LLM API differences behind common interface
 - Examples: `packages/opencode/src/provider/provider.ts`
-- Pattern: Registry with lazy SDK initialization, custom loaders per provider
+- Pattern: Factory pattern with model enumeration and streaming support
 
 **Tool:**
-- Purpose: Executable agent capability with schema validation
-- Examples: `packages/opencode/src/tool/tool.ts`, `packages/opencode/src/tool/bash.ts`
-- Pattern: Factory function returning init/execute, Zod parameters
 
-**Agent:**
-- Purpose: AI persona with prompt, permissions, model selection
-- Examples: `packages/opencode/src/agent/agent.ts`
-- Pattern: Configuration-driven with merge semantics
+- Purpose: Executable function that AI can call during conversation
+- Examples: `packages/opencode/src/tool/registry.ts`
+- Pattern: Registry pattern with permission checks and result serialization
 
-**MessageV2:**
-- Purpose: Conversation message with typed parts (text, tool, reasoning)
-- Examples: `packages/opencode/src/session/message-v2.ts`
-- Pattern: Discriminated union for part types
+**Bus:**
+
+- Purpose: Decoupled event system for component communication
+- Examples: `packages/opencode/src/bus/bus.ts`
+- Pattern: Event emitter with typed events and global relay
 
 ## Entry Points
 
 **CLI Entry:**
+
 - Location: `packages/opencode/src/index.ts`
-- Triggers: `opencode` binary execution
-- Responsibilities: Parse args via yargs, dispatch to command handlers
+- Triggers: `opencode` command execution
+- Responsibilities: Parse arguments, initialize logging, route to command handlers
 
 **Server Entry:**
-- Location: `packages/opencode/src/server/server.ts`
-- Triggers: `opencode serve`, `opencode web`, direct API calls
-- Responsibilities: Route HTTP requests, stream SSE events, serve web app
+
+- Location: `packages/opencode/src/server/server.ts` (`Server.listen()`)
+- Triggers: `opencode serve` command or programmatic `Server.listen()`
+- Responsibilities: Start HTTP server, register routes, handle SSE connections
 
 **Web App Entry:**
-- Location: `packages/app/src/entry.tsx`
-- Triggers: Vite dev server, production build
-- Responsibilities: Mount SolidJS app, establish SDK connection
 
-**Desktop Entry:**
-- Location: `packages/desktop/` (Tauri app)
-- Triggers: Native app launch
-- Responsibilities: Embed web app in native window, manage local server
+- Location: `packages/app/src/entry.tsx`
+- Triggers: Browser navigation to app
+- Responsibilities: Initialize SolidJS app, setup routing, connect to local server
+
+**Console Entry:**
+
+- Location: `packages/console/app/src/entry-server.tsx`, `entry-client.tsx`
+- Triggers: HTTP request to console domain
+- Responsibilities: Server-side rendering, auth checks, route handling
+
+**ACP Server Entry:**
+
+- Location: `packages/opencode/src/cli/cmd/acp.ts`
+- Triggers: `opencode acp` command
+- Responsibilities: Start JSON-RPC server over stdio for Agent Client Protocol
 
 ## Error Handling
 
-**Strategy:** Named errors with typed data, propagation over swallowing
+**Strategy:** Named error types with structured error objects
 
 **Patterns:**
-- `NamedError.create()` for domain-specific errors with Zod schemas
-- Server catches NamedError and returns structured JSON response
-- CLI formats errors for terminal display via `FormatError`
-- Retry logic in SessionProcessor for transient failures (rate limits)
-- Session.Event.Error published for UI notification
+
+- `NamedError` base class (`@opencode-ai/util/error`) for all application errors
+- Server error middleware converts errors to JSON responses (`packages/opencode/src/server/server.ts`)
+- Storage errors (`Storage.NotFoundError`) map to 404 status codes
+- Provider errors (`Provider.ModelNotFoundError`) map to 400 status codes
+- Unknown errors wrapped in `NamedError.Unknown` with stack traces
 
 ## Cross-Cutting Concerns
 
-**Logging:** `Log.create({ service })` factory, writes to file at `Global.Path.data/logs/`
+**Logging:** Structured logging via `Log` utility (`packages/opencode/src/util/log.ts`), writes to file and optionally stderr
 
-**Validation:** Zod schemas throughout, used for config, API, storage, events
+**Validation:** Zod schemas for all API inputs (`packages/opencode/src/server/routes/`), OpenAPI spec generation via `hono-openapi`
 
-**Authentication:** `Auth` namespace manages provider credentials (API keys, OAuth tokens)
+**Authentication:** Middleware-based (`packages/opencode/src/server/middleware/auth.ts`), optional password auth for local server
 
-**Configuration:** Layered config system (remote -> global -> project) in `packages/opencode/src/config/config.ts`
+**Permission:** Permission system (`packages/opencode/src/permission/`) controls tool execution and file access
 
-**Permissions:** Rule-based permission system in `packages/opencode/src/permission/next.ts`, patterns match tool/file operations
+**Configuration:** Layered config system (`packages/opencode/src/config/config.ts`) with remote, global, and project-level overrides
 
 ---
 
-*Architecture analysis: 2026-01-19*
+_Architecture analysis: 2026-01-27_

@@ -12,6 +12,8 @@ import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
+import { RepositoryManagerDialog } from "@/components/repo/repository-manager-dialog"
+import { CloneDialog } from "@/components/repo/clone-dialog"
 
 export default function Home() {
   const sync = useGlobalSync()
@@ -53,6 +55,26 @@ export default function Home() {
     }
   }
 
+  function openRepoManager() {
+    dialog.show(() => (
+      <RepositoryManagerDialog
+        onOpenRepo={(repo) => {
+          openProject(repo.path)
+        }}
+      />
+    ))
+  }
+
+  function openCloneDialog() {
+    dialog.show(() => (
+      <CloneDialog
+        onCloneSuccess={(repo) => {
+          openProject(repo.path)
+        }}
+      />
+    ))
+  }
+
   return (
     <div class="mx-auto mt-55 w-full md:w-auto px-4">
       <Logo class="md:w-xl opacity-12" />
@@ -77,9 +99,17 @@ export default function Home() {
           <div class="mt-20 w-full flex flex-col gap-4">
             <div class="flex gap-2 items-center justify-between pl-3">
               <div class="text-14-medium text-text-strong">Recent projects</div>
-              <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
-                Open project
-              </Button>
+              <div class="flex items-center gap-2">
+                <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
+                  Open project
+                </Button>
+                <Button icon="download" size="normal" class="pl-2 pr-3" onClick={openCloneDialog}>
+                  Clone repo
+                </Button>
+                <Button icon="branch" size="normal" class="pl-2 pr-3" onClick={openRepoManager}>
+                  Manage repos
+                </Button>
+              </div>
             </div>
             <ul class="flex flex-col gap-2">
               <For
@@ -112,9 +142,17 @@ export default function Home() {
               <div class="text-12-regular text-text-weak">Get started by opening a local project</div>
             </div>
             <div />
-            <Button class="px-3" onClick={chooseProject}>
-              Open project
-            </Button>
+            <div class="flex items-center gap-2">
+              <Button class="px-3" onClick={chooseProject}>
+                Open project
+              </Button>
+              <Button class="px-3" onClick={openCloneDialog}>
+                Clone repository
+              </Button>
+              <Button class="px-3" onClick={openRepoManager}>
+                Manage repos
+              </Button>
+            </div>
           </div>
         </Match>
       </Switch>

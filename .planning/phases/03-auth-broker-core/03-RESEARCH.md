@@ -9,6 +9,7 @@
 Phase 3 implements a privileged authentication broker daemon in Rust that handles PAM authentication via Unix socket IPC. The broker runs as root and validates credentials for the unprivileged opencode web server, following the Cockpit authentication model.
 
 Research validates that:
+
 1. **Rust PAM crates exist and work** - `pam-client` is the recommended choice for cross-platform support (Linux-PAM and OpenPAM/macOS)
 2. **PAM threading model is well-defined** - Each thread needs its own PAM handle; no shared handles
 3. **macOS uses OpenPAM** - Same PAM API as Linux, with `pam_opendirectory` module for authentication
@@ -21,33 +22,37 @@ Research validates that:
 The established libraries/tools for this domain:
 
 ### Core
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| tokio | 1.x | Async runtime | De facto standard for async Rust |
-| pam-client | 0.5.x | PAM authentication | Cross-platform (Linux, macOS), well-documented API |
-| serde/serde_json | 1.x | JSON serialization | Universal Rust serialization |
-| tokio-util | 0.7.x | Framed codec for IPC | Official Tokio utility for framed streams |
-| governor | latest | Rate limiting | GCRA-based, supports keyed (per-username) limiting |
+
+| Library          | Version | Purpose              | Why Standard                                       |
+| ---------------- | ------- | -------------------- | -------------------------------------------------- |
+| tokio            | 1.x     | Async runtime        | De facto standard for async Rust                   |
+| pam-client       | 0.5.x   | PAM authentication   | Cross-platform (Linux, macOS), well-documented API |
+| serde/serde_json | 1.x     | JSON serialization   | Universal Rust serialization                       |
+| tokio-util       | 0.7.x   | Framed codec for IPC | Official Tokio utility for framed streams          |
+| governor         | latest  | Rate limiting        | GCRA-based, supports keyed (per-username) limiting |
 
 ### Supporting
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| tracing | 0.1.x | Structured logging | All logging throughout the daemon |
-| tracing-subscriber | 0.3.x | Log output formatting | Syslog and stdout output |
-| syslog | 7.x | Syslog integration | Production logging |
-| thiserror | 1.x | Error types | Library-style error definitions |
-| nix | 0.29.x | POSIX APIs | setuid/setgid, signal handling |
-| sd-notify | 0.4.x | systemd integration | Signal readiness to systemd |
+
+| Library            | Version | Purpose               | When to Use                       |
+| ------------------ | ------- | --------------------- | --------------------------------- |
+| tracing            | 0.1.x   | Structured logging    | All logging throughout the daemon |
+| tracing-subscriber | 0.3.x   | Log output formatting | Syslog and stdout output          |
+| syslog             | 7.x     | Syslog integration    | Production logging                |
+| thiserror          | 1.x     | Error types           | Library-style error definitions   |
+| nix                | 0.29.x  | POSIX APIs            | setuid/setgid, signal handling    |
+| sd-notify          | 0.4.x   | systemd integration   | Signal readiness to systemd       |
 
 ### Alternatives Considered
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| pam-client | pam (1wilkens) | pam-client has better macOS/OpenPAM support |
-| pam-client | nonstick | nonstick is newer (0.1.1), less mature but claims broad platform support |
-| LinesCodec | tokio-serde | LinesCodec simpler for newline-delimited JSON |
-| governor | Custom HashMap | governor handles cleanup, jitter, proven algorithm |
+
+| Instead of | Could Use      | Tradeoff                                                                 |
+| ---------- | -------------- | ------------------------------------------------------------------------ |
+| pam-client | pam (1wilkens) | pam-client has better macOS/OpenPAM support                              |
+| pam-client | nonstick       | nonstick is newer (0.1.1), less mature but claims broad platform support |
+| LinesCodec | tokio-serde    | LinesCodec simpler for newline-delimited JSON                            |
+| governor   | Custom HashMap | governor handles cleanup, jitter, proven algorithm                       |
 
 **Installation:**
+
 ```toml
 [dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -70,6 +75,7 @@ syslog = "7"
 ## Architecture Patterns
 
 ### Recommended Project Structure
+
 ```
 packages/opencode-broker/
 ├── Cargo.toml
@@ -95,6 +101,7 @@ packages/opencode-broker/
 ```
 
 ### Pattern 1: Thread-per-Request PAM Model
+
 **What:** Spawn a dedicated thread for each PAM authentication request
 **When to use:** Always for PAM calls
 **Why:** PAM handles are NOT thread-safe when shared; each thread needs its own handle
@@ -135,6 +142,7 @@ fn do_pam_auth(username: &str, password: &str) -> Result<bool, AuthError> {
 ```
 
 ### Pattern 2: Newline-Delimited JSON Protocol
+
 **What:** JSON messages separated by newlines over Unix socket
 **When to use:** All IPC communication
 **Why:** Simple, debuggable, multiplexing via request IDs
@@ -183,6 +191,7 @@ async fn handle_connection(stream: UnixStream) {
 ```
 
 ### Pattern 3: Keyed Rate Limiting
+
 **What:** Per-username rate limiting for failed authentication attempts
 **When to use:** Before PAM authentication
 **Why:** Prevents brute-force attacks against specific accounts
@@ -210,6 +219,7 @@ async fn check_rate_limit(limiter: &UsernameRateLimiter, username: &str) -> Resu
 ```
 
 ### Anti-Patterns to Avoid
+
 - **Shared PAM handle across threads:** Each thread MUST create its own PAM context
 - **Logging passwords:** NEVER log credentials, even in debug mode
 - **Detailed error messages:** Return generic "authentication failed" to prevent user enumeration
@@ -220,52 +230,59 @@ async fn check_rate_limit(limiter: &UsernameRateLimiter, username: &str) -> Resu
 
 Problems that look simple but have existing solutions:
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| PAM integration | Custom FFI | pam-client crate | Thread safety, error handling, platform differences |
-| Rate limiting | HashMap + timestamp | governor crate | Cleanup, fairness, proven GCRA algorithm |
-| Protocol framing | Manual buffering | tokio-util LinesCodec | Edge cases, backpressure, max length |
-| Syslog formatting | printf-style | tracing + syslog crate | Structured logging, proper facility codes |
-| Username validation | Simple regex | Strict allowlist | Security-critical, POSIX rules complex |
+| Problem             | Don't Build         | Use Instead            | Why                                                 |
+| ------------------- | ------------------- | ---------------------- | --------------------------------------------------- |
+| PAM integration     | Custom FFI          | pam-client crate       | Thread safety, error handling, platform differences |
+| Rate limiting       | HashMap + timestamp | governor crate         | Cleanup, fairness, proven GCRA algorithm            |
+| Protocol framing    | Manual buffering    | tokio-util LinesCodec  | Edge cases, backpressure, max length                |
+| Syslog formatting   | printf-style        | tracing + syslog crate | Structured logging, proper facility codes           |
+| Username validation | Simple regex        | Strict allowlist       | Security-critical, POSIX rules complex              |
 
 **Key insight:** Authentication and IPC code is security-critical. Use battle-tested libraries, not custom implementations.
 
 ## Common Pitfalls
 
 ### Pitfall 1: PAM Thread Safety Violations
+
 **What goes wrong:** Crash or undefined behavior when sharing PAM handle across threads
 **Why it happens:** PAM documentation states handles are NOT thread-safe when shared
 **How to avoid:** Create fresh PAM context for each authentication request in its own thread
 **Warning signs:** Segfaults, "double free" errors, corrupted authentication state
 
 ### Pitfall 2: Password Exposure in Logs
+
 **What goes wrong:** Passwords appear in logs, debug output, or error messages
 **Why it happens:** Default serialization includes all struct fields
 **How to avoid:**
+
 - Use `#[serde(skip_serializing)]` on password fields
 - Implement custom Debug that redacts passwords
 - Never use `{:?}` on request structs containing passwords
-**Warning signs:** Passwords in journalctl, syslog, or stdout
+  **Warning signs:** Passwords in journalctl, syslog, or stdout
 
 ### Pitfall 3: User Enumeration via Error Messages
+
 **What goes wrong:** Different errors for "user not found" vs "wrong password"
 **Why it happens:** Natural to return detailed errors for debugging
 **How to avoid:** Always return generic "authentication failed" externally; log details internally with tracing
 **Warning signs:** Client can distinguish between invalid username and invalid password
 
 ### Pitfall 4: Socket Path Length Limits
+
 **What goes wrong:** Socket creation fails on some platforms
 **Why it happens:** macOS limits sun_path to 104 bytes; Linux to 108 bytes
 **How to avoid:** Use short paths like `/run/opencode/auth.sock`
 **Warning signs:** "Address too long" errors on macOS
 
 ### Pitfall 5: Stale Socket Files
+
 **What goes wrong:** Daemon fails to start because socket file already exists
 **Why it happens:** Previous unclean shutdown left socket file
 **How to avoid:** Unlink socket path before bind(), clean up on exit/signal
 **Warning signs:** "Address already in use" on daemon restart
 
 ### Pitfall 6: Fork/Exec in Async Context
+
 **What goes wrong:** Deadlocks or undefined behavior when forking in async runtime
 **Why it happens:** Tokio runtime state doesn't survive fork()
 **How to avoid:** Use `std::thread::spawn` for PAM auth, never fork from async context
@@ -276,6 +293,7 @@ Problems that look simple but have existing solutions:
 Verified patterns from official sources:
 
 ### Unix Socket Server Setup
+
 ```rust
 // Source: tokio documentation
 use tokio::net::UnixListener;
@@ -302,6 +320,7 @@ async fn run_server(socket_path: &str) -> Result<(), Box<dyn std::error::Error>>
 ```
 
 ### PAM Authentication with pam-client
+
 ```rust
 // Source: pam-client documentation
 use pam_client::{Context, Flag};
@@ -322,6 +341,7 @@ fn authenticate_user(service: &str, username: &str, password: &str) -> Result<()
 ```
 
 ### systemd Notify Integration
+
 ```rust
 // Source: sd-notify crate
 use sd_notify::NotifyState;
@@ -337,6 +357,7 @@ fn main() {
 ```
 
 ### Username Validation
+
 ```rust
 // Source: systemd.io/USER_NAMES, POSIX standards
 fn validate_username(username: &str) -> Result<(), ValidationError> {
@@ -371,12 +392,14 @@ fn validate_username(username: &str) -> Result<(), ValidationError> {
 ## Platform-Specific Details
 
 ### Linux
+
 - **PAM config:** `/etc/pam.d/opencode`
 - **Socket path:** `/run/opencode/auth.sock`
 - **Service manager:** systemd
 - **Logging:** journald via sd-journal or syslog
 
 **systemd service file:**
+
 ```ini
 # /etc/systemd/system/opencode-broker.service
 [Unit]
@@ -394,6 +417,7 @@ WantedBy=multi-user.target
 ```
 
 ### macOS
+
 - **PAM implementation:** OpenPAM
 - **PAM module:** `pam_opendirectory.so` (authenticates via Open Directory)
 - **PAM config:** `/etc/pam.d/opencode` (same format as Linux)
@@ -401,6 +425,7 @@ WantedBy=multi-user.target
 - **Service manager:** launchd
 
 **launchd plist:**
+
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -421,6 +446,7 @@ WantedBy=multi-user.target
 ```
 
 **macOS PAM service file:**
+
 ```
 # /etc/pam.d/opencode
 auth       required       pam_opendirectory.so
@@ -434,6 +460,7 @@ account    required       pam_opendirectory.so
 Based on the CONTEXT.md decision to "compile from source, integrated into npm install process":
 
 **Option 1: postinstall script with cargo**
+
 ```json
 {
   "name": "opencode",
@@ -445,25 +472,26 @@ Based on the CONTEXT.md decision to "compile from source, integrated into npm in
 
 ```javascript
 // scripts/build-broker.js
-const { execSync } = require('child_process');
-const path = require('path');
+const { execSync } = require("child_process")
+const path = require("path")
 
-const brokerDir = path.join(__dirname, '../packages/opencode-broker');
+const brokerDir = path.join(__dirname, "../packages/opencode-broker")
 
 try {
-  execSync('cargo build --release', {
+  execSync("cargo build --release", {
     cwd: brokerDir,
-    stdio: 'inherit'
-  });
-  console.log('opencode-broker built successfully');
+    stdio: "inherit",
+  })
+  console.log("opencode-broker built successfully")
 } catch (error) {
-  console.error('Failed to build opencode-broker. Is Rust installed?');
-  console.error('Install Rust: https://rustup.rs/');
-  process.exit(1);
+  console.error("Failed to build opencode-broker. Is Rust installed?")
+  console.error("Install Rust: https://rustup.rs/")
+  process.exit(1)
 }
 ```
 
 **Tradeoffs:**
+
 - PRO: Always native, no cross-compilation needed
 - PRO: Works on any platform with Rust toolchain
 - CON: Requires Rust installed on user's machine
@@ -473,14 +501,15 @@ try {
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| Double-fork daemon | systemd Type=notify | systemd adoption | No daemonization code needed |
-| /var/run sockets | /run sockets | FHS 3.0 | /var/run is now symlink to /run |
-| pam crate | pam-client crate | 2022 | Better cross-platform, safer API |
-| Manual thread pools | Tokio spawn_blocking | Tokio 1.0 | Simpler async/sync bridge |
+| Old Approach        | Current Approach     | When Changed     | Impact                           |
+| ------------------- | -------------------- | ---------------- | -------------------------------- |
+| Double-fork daemon  | systemd Type=notify  | systemd adoption | No daemonization code needed     |
+| /var/run sockets    | /run sockets         | FHS 3.0          | /var/run is now symlink to /run  |
+| pam crate           | pam-client crate     | 2022             | Better cross-platform, safer API |
+| Manual thread pools | Tokio spawn_blocking | Tokio 1.0        | Simpler async/sync bridge        |
 
 **Deprecated/outdated:**
+
 - **Double-fork daemonization:** systemd handles this; explicit daemonization breaks Type=notify
 - **tokio-uds crate:** Merged into tokio::net, no longer separate crate
 - **pam-sys direct usage:** Use pam-client wrapper for safety
@@ -507,6 +536,7 @@ Things that couldn't be fully resolved:
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - [tokio documentation](https://docs.rs/tokio/latest/tokio/) - Unix socket, async runtime
 - [tokio-util codec](https://docs.rs/tokio-util/latest/tokio_util/codec/index.html) - LinesCodec, Framed
 - [pam-client documentation](https://docs.rs/pam-client/latest/pam_client/) - PAM API, platform support
@@ -516,18 +546,21 @@ Things that couldn't be fully resolved:
 - [Cockpit authentication](https://cockpit-project.org/guide/latest/authentication) - Reference architecture
 
 ### Secondary (MEDIUM confidence)
+
 - [Linux-PAM GitHub issues](https://github.com/linux-pam/linux-pam/issues/109) - Thread safety clarification
 - [OpenPAM Wikipedia](https://en.wikipedia.org/wiki/OpenPAM) - macOS PAM implementation
 - [Red Hat username rules](https://access.redhat.com/solutions/30164) - Username validation
 - [Unix socket permissions](https://linuxvox.com/blog/unix-socket-permissions-linux/) - Socket security
 
 ### Tertiary (LOW confidence)
+
 - [nonstick crate](https://lib.rs/crates/nonstick) - Alternative PAM library, new (0.1.1)
 - [rust-to-npm](https://github.com/a11ywatch/rust-to-npm) - npm packaging (needs validation)
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH - Tokio, serde, pam-client are well-established
 - Architecture: HIGH - Cockpit model is proven, patterns well-documented
 - PAM threading: HIGH - Official documentation confirms per-thread handles
@@ -539,5 +572,5 @@ Things that couldn't be fully resolved:
 
 ---
 
-*Phase: 03-auth-broker-core*
-*Research complete: 2026-01-20*
+_Phase: 03-auth-broker-core_
+_Research complete: 2026-01-20_

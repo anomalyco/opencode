@@ -20,18 +20,18 @@
     "github-triage": false,
     "github-pr-search": false,
   },
-  "auth": {                                                                           
+  "auth": {
     "enabled": true,
-    "pam": {                                                                        
-      "service": "opencode"                                                         
+    "pam": {
+      "service": "opencode",
     },
-    "requireHttps": "warn",      // default is "warn", use "block" for test 8
-    "rateLimiting": true,         // default is true                                                                               
-    "twoFactorRequired": false,                                                                          
+    "requireHttps": "warn", // default is "warn", use "block" for test 8
+    "rateLimiting": true, // default is true
+    "twoFactorRequired": false,
     "twoFactorEnabled": true,
     "twoFactorTokenTimeout": "5m",
     "deviceTrustDuration": "30d",
     "otpRateLimitMax": 5,
     "otpRateLimitWindow": "15m",
-  },   
+  },
 }

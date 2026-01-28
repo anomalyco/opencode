@@ -60,6 +60,7 @@ completed: 2026-01-24
 - **Files modified:** 2
 
 ## Accomplishments
+
 - Server token secret module for JWT signing across all 2FA operations
 - Login endpoint extended to check 2FA and return 2fa_required response
 - Device trust cookie verification to bypass 2FA on trusted devices
@@ -74,10 +75,12 @@ Each task was committed atomically:
 3. **Task 3: Add POST /auth/login/2fa endpoint** - `398119b61` (feat)
 
 ## Files Created/Modified
+
 - `packages/opencode/src/server/security/token-secret.ts` - Server-wide JWT signing secret
 - `packages/opencode/src/server/routes/auth.ts` - 2FA-aware login flow and /login/2fa endpoint
 
 ## Decisions Made
+
 - Token secret generated once at startup via lazy initialization (acceptable that tokens invalidate on restart, matching session design)
 - 2FA token bound to requesting IP for security
 - Device trust cookie uses httpOnly, Strict SameSite, secure on HTTPS
@@ -97,10 +100,12 @@ None.
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - Server-side 2FA flow complete
 - Ready for 2FA UI implementation (Plan 06)
 - All endpoints verified via TypeScript compilation
 
 ---
-*Phase: 10-two-factor-authentication*
-*Completed: 2026-01-24*
+
+_Phase: 10-two-factor-authentication_
+_Completed: 2026-01-24_

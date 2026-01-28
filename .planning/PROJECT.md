@@ -52,6 +52,7 @@ System authentication for the opencode web application, following the Cockpit mo
 **Cockpit as reference:** Cockpit's auth model is the gold standard here. No shadow users, no invented permissions. PAM says yes/no, session maps to UNIX user, commands run as that user. Privilege escalation via existing sudo/polkit rules.
 
 **Existing auth systems:**
+
 - Console (hosted) uses OAuth (GitHub/Google) via OpenAuth — separate system
 - CLI stores provider API keys in `~/.opencode/data/auth.json` — different concern
 - This new system auth is specifically for self-hosted web instances
@@ -67,12 +68,13 @@ System authentication for the opencode web application, following the Cockpit mo
 
 ## Key Decisions
 
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
+| Decision                         | Rationale                                                                             | Outcome   |
+| -------------------------------- | ------------------------------------------------------------------------------------- | --------- |
 | Delegate to PAM, not custom auth | Cockpit model — no shadow users, works with existing enterprise auth (LDAP, Kerberos) | — Pending |
-| TLS via reverse proxy | Don't reinvent cert management; nginx/Caddy handle this well | — Pending |
-| Config in opencode.json | Fits existing config pattern, easy for users to understand | — Pending |
-| Auth disabled by default | Don't break existing local usage; opt-in for remote access | — Pending |
+| TLS via reverse proxy            | Don't reinvent cert management; nginx/Caddy handle this well                          | — Pending |
+| Config in opencode.json          | Fits existing config pattern, easy for users to understand                            | — Pending |
+| Auth disabled by default         | Don't break existing local usage; opt-in for remote access                            | — Pending |
 
 ---
-*Last updated: 2026-01-19 after initialization*
+
+_Last updated: 2026-01-19 after initialization_

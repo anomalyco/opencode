@@ -88,6 +88,7 @@ Each task was committed atomically:
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Fixed broker binary path resolution**
+
 - **Found during:** Task 4 (human verification)
 - **Issue:** `findBrokerBinary()` and `findBrokerPackageDir()` were missing candidate paths for running from packages/opencode directory
 - **Fix:** Added `../opencode-broker` relative path and fixed script location calculation
@@ -107,6 +108,7 @@ None beyond the path resolution issue documented above.
 ## User Setup Required
 
 None for development. Production deployment requires:
+
 - Build broker: `cd packages/opencode-broker && cargo build --release`
 - Install with: `sudo opencode auth broker setup`
 
@@ -141,5 +143,6 @@ This plan completes Phase 3: Auth Broker Core. The phase delivered:
 - Broker binary builds and starts successfully
 
 ---
-*Phase: 03-auth-broker-core*
-*Completed: 2026-01-20*
+
+_Phase: 03-auth-broker-core_
+_Completed: 2026-01-20_

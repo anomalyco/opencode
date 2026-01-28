@@ -55,6 +55,7 @@ completed: 2026-01-22
 - **Files modified:** 2
 
 ## Accomplishments
+
 - Integration test file created with 9 comprehensive tests
 - Tests gracefully skip when broker unavailable
 - Capability detection for broker version compatibility
@@ -70,12 +71,14 @@ Tasks were implemented across prior commits in this session:
 3. **Task 3: Human verification** - Manual testing completed
 
 ## Files Created/Modified
+
 - `packages/opencode/test/integration/user-process.test.ts` - 247 lines, 9 tests covering broker health, session registration, PTY spawning, PTY operations
 - `packages/opencode-broker/src/pty/session.rs` - PtySession tracks home/shell fields
 
 ## Test Coverage
 
 Integration tests verify:
+
 - **Broker health**: Ping response
 - **Session registration**: Register, unregister, idempotent unregister
 - **PTY spawning**: Fails without registered session
@@ -84,6 +87,7 @@ Integration tests verify:
 ## Manual Verification Results
 
 Using `test-pty-spawn.ts`, verified:
+
 1. Broker running and responding to ping
 2. Session registration with user info succeeds
 3. PTY spawn succeeds with correct ptyId and pid
@@ -110,11 +114,13 @@ None - broker must be running for full integration test execution.
 ## Phase Completion
 
 Phase 5 success criteria verified:
+
 1. Shell commands spawn with authenticated user's UID/GID
 2. File operations respect authenticated user's permissions
 3. Process environment includes correct USER, HOME, SHELL
 4. Unauthorized users cannot execute commands (auth required)
 
 ---
-*Phase: 05-user-process-execution*
-*Completed: 2026-01-22*
+
+_Phase: 05-user-process-execution_
+_Completed: 2026-01-22_

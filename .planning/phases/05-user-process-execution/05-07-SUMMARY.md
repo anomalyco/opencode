@@ -53,6 +53,7 @@ completed: 2026-01-22
 - **Files modified:** 3
 
 ## Accomplishments
+
 - Session registration with broker after successful login
 - Session unregistration from broker on logout (single and logout-all)
 - PTY creation routing through broker when auth enabled
@@ -67,6 +68,7 @@ Each task was committed atomically:
 3. **Task 3: Route PTY creation through broker when auth enabled** - `4ac32cd44` (feat)
 
 ## Files Created/Modified
+
 - `packages/opencode/src/server/routes/auth.ts` - Added broker session registration/unregistration
 - `packages/opencode/src/pty/index.ts` - Added auth-aware PTY creation routing
 - `packages/opencode/src/session/user-session.ts` - Added getSessionIdsForUser helper
@@ -88,10 +90,12 @@ None - plan executed exactly as written.
 None.
 
 ## Next Phase Readiness
+
 - Session lifecycle integrated with broker
 - PTY routing in place, ready for I/O streaming (Plan 05-08)
 - Existing non-auth PTY behavior preserved
 
 ---
-*Phase: 05-user-process-execution*
-*Completed: 2026-01-22*
+
+_Phase: 05-user-process-execution_
+_Completed: 2026-01-22_

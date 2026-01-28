@@ -44,34 +44,40 @@ TOTP setup wizard with QR code generation for authenticator app enrollment.
 ## What Was Built
 
 ### 1. TOTP Setup Module (packages/opencode/src/auth/totp-setup.ts)
+
 - `TotpSetupData` interface with secret, otpauth URL, and SVG QR code
 - `base32Encode()` function for encoding TOTP secrets
 - `generateTotpSetup()` generates 160-bit secret, builds otpauth:// URL, creates SVG QR code
 - `getGoogleAuthenticatorSetupCommand()` returns CLI command for server-side setup
 
 ### 2. Setup Wizard UI (generate2FASetupPageHtml)
+
 - Step 1: QR code display with manual secret fallback
 - Step 2: Server command to run (google-authenticator CLI)
 - Step 3: Verification form to confirm setup works
 - Warning banner if user already has 2FA configured
 
 ### 3. Setup Wizard Endpoints
+
 - `GET /auth/2fa/setup` - Requires authenticated session, shows wizard with fresh QR code
 - `POST /auth/2fa/verify` - Validates OTP code to confirm setup is working
 
 ## Technical Details
 
 ### QR Code Generation
+
 - Uses `qrcode` npm package for SVG output
 - QR encodes otpauth:// URL per Google Authenticator spec
 - 200x200 pixels, medium error correction
 
 ### TOTP Secret
+
 - 160-bit (20 bytes) cryptographically random
 - Base32 encoded for compatibility with all authenticator apps
 - Displayed for manual entry if QR scanning not available
 
 ### Setup Flow
+
 1. User visits /auth/2fa/setup (must be logged in)
 2. Page generates fresh secret and QR code
 3. User scans QR in authenticator app
@@ -81,11 +87,11 @@ TOTP setup wizard with QR code generation for authenticator app enrollment.
 
 ## Commits
 
-| Hash | Type | Description |
-|------|------|-------------|
-| 3cfb8e7b5 | chore | Add qrcode dependency for TOTP setup |
-| d21d52986 | feat | Create TOTP setup module with QR code generation |
-| 9f3aa19b6 | feat | Add 2FA setup wizard endpoints and page |
+| Hash      | Type  | Description                                      |
+| --------- | ----- | ------------------------------------------------ |
+| 3cfb8e7b5 | chore | Add qrcode dependency for TOTP setup             |
+| d21d52986 | feat  | Create TOTP setup module with QR code generation |
+| 9f3aa19b6 | feat  | Add 2FA setup wizard endpoints and page          |
 
 ## Deviations from Plan
 
@@ -99,6 +105,7 @@ None - plan executed exactly as written.
 ## Next Phase Readiness
 
 2FA setup wizard is complete. Users can now:
+
 1. Log in with password
 2. Visit /auth/2fa/setup to see QR code
 3. Add account to their authenticator app

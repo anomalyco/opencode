@@ -14,24 +14,28 @@ Secure session cookies with configurable expiration and logout capability. Users
 ## Implementation Decisions
 
 ### Session storage
+
 - In-memory storage (Map or similar structure)
 - Sessions lost on server restart — acceptable trade-off for simplicity
 - No limit on concurrent sessions per user
 - Session IDs generated via cryptographic random (crypto.randomUUID or equivalent)
 
 ### Timeout behavior
+
 - Idle timeout only (no absolute timeout)
 - Any authenticated API request resets the idle timer
 - On session expiry, redirect to login page (silent redirect on next request)
 - Session expiry warning deferred to Phase 8 (Session Enhancements)
 
 ### Logout flow
+
 - Offer both "Logout" (current session) and "Logout everywhere" (all sessions) options
 - POST /auth/logout endpoint only — no GET to prevent CSRF logout
 - Redirect to login page after logout
 - No confirmation dialog — immediate logout
 
 ### Cookie configuration
+
 - Cookie name: `opencode_session`
 - Path: `/` (root)
 - HttpOnly: true
@@ -40,6 +44,7 @@ Secure session cookies with configurable expiration and logout capability. Users
 - Domain: not explicitly set (browser default — exact host)
 
 ### Claude's Discretion
+
 - Session store implementation details (Map vs custom class)
 - Exact middleware structure
 - Error handling for malformed session cookies
@@ -67,5 +72,5 @@ Secure session cookies with configurable expiration and logout capability. Users
 
 ---
 
-*Phase: 02-session-infrastructure*
-*Context gathered: 2026-01-20*
+_Phase: 02-session-infrastructure_
+_Context gathered: 2026-01-20_

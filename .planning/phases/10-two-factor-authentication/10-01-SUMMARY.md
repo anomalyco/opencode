@@ -48,22 +48,24 @@ metrics:
 
 Added five new 2FA-related configuration fields:
 
-| Field | Type | Default | Purpose |
-|-------|------|---------|---------|
-| `twoFactorEnabled` | boolean | false | Enable 2FA support |
-| `twoFactorTokenTimeout` | Duration | "5m" | How long 2FA token valid after password success |
-| `deviceTrustDuration` | Duration | "30d" | "Remember this device" duration |
-| `otpRateLimitMax` | number | 5 | Max OTP attempts per window |
-| `otpRateLimitWindow` | Duration | "15m" | OTP rate limit window |
+| Field                   | Type     | Default | Purpose                                         |
+| ----------------------- | -------- | ------- | ----------------------------------------------- |
+| `twoFactorEnabled`      | boolean  | false   | Enable 2FA support                              |
+| `twoFactorTokenTimeout` | Duration | "5m"    | How long 2FA token valid after password success |
+| `deviceTrustDuration`   | Duration | "30d"   | "Remember this device" duration                 |
+| `otpRateLimitMax`       | number   | 5       | Max OTP attempts per window                     |
+| `otpRateLimitWindow`    | Duration | "15m"   | OTP rate limit window                           |
 
 ### 2. Broker OTP Module (`otp.rs`)
 
 **`has_2fa_configured(home: &str) -> bool`**
+
 - Checks if `~/.google_authenticator` file exists
 - Used to determine if user has TOTP configured
 - Returns false gracefully on any file access error
 
 **`validate_otp(pam_service: &str, username: &str, code: &str) -> Result<(), AuthError>`**
+
 - Uses separate PAM service (`{service}-otp`)
 - Spawns dedicated thread for PAM (thread-safety)
 - OTP code never logged (security)
@@ -72,6 +74,7 @@ Added five new 2FA-related configuration fields:
 ### 3. PAM Service Files
 
 Created `opencode-otp.pam` and `opencode-otp.pam.macos`:
+
 - Single line: `auth required pam_google_authenticator.so nullok`
 - `nullok` allows users without 2FA to skip OTP validation
 
@@ -88,17 +91,18 @@ The plan calls for a separate PAM service (`opencode-otp`) rather than modifying
 ### Thread-per-Request Model
 
 Following the same pattern as password authentication in `pam.rs`:
+
 - Each OTP validation spawns a dedicated thread
 - PAM handles are not thread-safe when shared
 - tokio oneshot channel for async integration
 
 ## Decisions Made
 
-| ID | Decision | Rationale |
-|----|----------|-----------|
-| 10-01-01 | Reuse AuthError from pam module | Consistent error handling, no new error types |
+| ID       | Decision                             | Rationale                                              |
+| -------- | ------------------------------------ | ------------------------------------------------------ |
+| 10-01-01 | Reuse AuthError from pam module      | Consistent error handling, no new error types          |
 | 10-01-02 | Separate `{service}-otp` PAM service | Isolate OTP-only validation from password+OTP combined |
-| 10-01-03 | Use `nullok` PAM option | Graceful fallback for users without 2FA |
+| 10-01-03 | Use `nullok` PAM option              | Graceful fallback for users without 2FA                |
 
 ## Deviations from Plan
 
@@ -122,35 +126,36 @@ Following the same pattern as password authentication in `pam.rs`:
 
 ## Verification Results
 
-| Check | Result |
-|-------|--------|
-| TypeScript compiles | Pass |
-| Rust compiles | Pass |
-| Config fields present | 5 new fields verified |
+| Check                  | Result                           |
+| ---------------------- | -------------------------------- |
+| TypeScript compiles    | Pass                             |
+| Rust compiles          | Pass                             |
+| Config fields present  | 5 new fields verified            |
 | OTP functions exported | has_2fa_configured, validate_otp |
-| PAM files created | Both Linux and macOS |
+| PAM files created      | Both Linux and macOS             |
 
 ## Artifacts
 
-| Artifact | Path |
-|----------|------|
-| Config schema | packages/opencode/src/config/auth.ts |
-| OTP module | packages/opencode-broker/src/auth/otp.rs |
-| Auth module | packages/opencode-broker/src/auth/mod.rs |
-| Linux PAM | packages/opencode-broker/service/opencode-otp.pam |
-| macOS PAM | packages/opencode-broker/service/opencode-otp.pam.macos |
+| Artifact      | Path                                                    |
+| ------------- | ------------------------------------------------------- |
+| Config schema | packages/opencode/src/config/auth.ts                    |
+| OTP module    | packages/opencode-broker/src/auth/otp.rs                |
+| Auth module   | packages/opencode-broker/src/auth/mod.rs                |
+| Linux PAM     | packages/opencode-broker/service/opencode-otp.pam       |
+| macOS PAM     | packages/opencode-broker/service/opencode-otp.pam.macos |
 
 ## Commits
 
-| Hash | Description |
-|------|-------------|
-| f5a9fb21e | feat(10-01): add 2FA configuration options to AuthConfig |
+| Hash      | Description                                                         |
+| --------- | ------------------------------------------------------------------- |
+| f5a9fb21e | feat(10-01): add 2FA configuration options to AuthConfig            |
 | c32afce44 | feat(10-01): add broker OTP module for 2FA detection and validation |
-| 662ef552f | feat(10-01): add OTP PAM service files for Linux and macOS |
+| 662ef552f | feat(10-01): add OTP PAM service files for Linux and macOS          |
 
 ## Next Phase Readiness
 
 **Ready for Plan 10-02:**
+
 - 2FA configuration fields available for runtime checks
 - OTP detection function ready for auth flow integration
 - OTP validation function ready for 2FA step

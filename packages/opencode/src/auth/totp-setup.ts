@@ -48,10 +48,7 @@ function base32Encode(bytes: Uint8Array): string {
  * @param username - User setting up 2FA
  * @param issuer - Issuer name shown in authenticator app (default: "opencode")
  */
-export async function generateTotpSetup(
-  username: string,
-  issuer = "opencode",
-): Promise<TotpSetupData> {
+export async function generateTotpSetup(username: string, issuer = "opencode"): Promise<TotpSetupData> {
   // Generate 160-bit (20 byte) secret - standard for TOTP
   const secretBytes = crypto.getRandomValues(new Uint8Array(20))
   const secret = base32Encode(secretBytes)

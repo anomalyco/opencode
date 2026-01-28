@@ -10,7 +10,8 @@ describe("BrokerClient", () => {
   let testSocketPath: string
   let mockServer: Server | null = null
 
-  const createTestSocketPath = () => join(tmpdir(), `opencode-test-${Date.now()}-${Math.random().toString(36).slice(2)}.sock`)
+  const createTestSocketPath = () =>
+    join(tmpdir(), `opencode-test-${Date.now()}-${Math.random().toString(36).slice(2)}.sock`)
 
   afterEach(async () => {
     if (mockServer) {

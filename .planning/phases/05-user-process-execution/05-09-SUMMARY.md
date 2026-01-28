@@ -55,6 +55,7 @@ completed: 2026-01-22
 - **Files modified:** 2 (+ 1 created)
 
 ## Accomplishments
+
 - Auth middleware now provides structured AuthContext with sessionId
 - PTY routes (POST, PUT, DELETE) check auth when enabled
 - Routes return 401 for unauthenticated requests when auth enabled
@@ -70,6 +71,7 @@ Each task was committed atomically:
 3. **Task 3: Add tests for auth enforcement** - `6f0ee7cc4` (test)
 
 ## Files Created/Modified
+
 - `packages/opencode/src/server/middleware/auth.ts` - Added AuthContext interface, sessionId to context, getAuthContext helper
 - `packages/opencode/src/server/routes/pty.ts` - Added auth checks to POST, PUT, DELETE routes
 - `packages/opencode/test/server/routes/pty-auth.test.ts` - Auth enforcement tests (11 tests)
@@ -93,10 +95,12 @@ None.
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - Auth middleware provides complete session context
 - PTY routes enforce auth when enabled
 - Ready for Plan 10: Integration test harness
 
 ---
-*Phase: 05-user-process-execution*
-*Completed: 2026-01-22*
+
+_Phase: 05-user-process-execution_
+_Completed: 2026-01-22_

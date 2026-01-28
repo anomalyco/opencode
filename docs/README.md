@@ -7,6 +7,7 @@ Documentation for deploying OpenCode with system authentication enabled.
 New to auth-enabled OpenCode? Follow this path:
 
 1. **Install OpenCode** (if not already done)
+
    ```bash
    npm i -g opencode-ai@latest
    ```
@@ -18,6 +19,7 @@ New to auth-enabled OpenCode? Follow this path:
    - See [pam-config.md](pam-config.md) for authentication setup
 
 4. **Enable auth in OpenCode config**
+
    ```json
    {
      "auth": {
@@ -41,6 +43,7 @@ For issues, consult the [troubleshooting guide](troubleshooting.md).
 Complete guide to configuring nginx or Caddy for HTTPS/TLS termination, WebSocket support, and security headers. Includes production-ready configurations and cloud provider setup.
 
 **Topics covered:**
+
 - nginx and Caddy configuration
 - Automatic HTTPS with Let's Encrypt
 - WebSocket proxying for terminal sessions
@@ -52,6 +55,7 @@ Complete guide to configuring nginx or Caddy for HTTPS/TLS termination, WebSocke
 System authentication setup for password login, two-factor authentication (2FA), and LDAP/Active Directory integration.
 
 **Topics covered:**
+
 - Basic PAM setup (Linux and macOS)
 - Two-factor authentication with Google Authenticator
 - LDAP/Active Directory integration
@@ -65,6 +69,7 @@ System authentication setup for password login, two-factor authentication (2FA),
 Common issues and solutions for authentication problems. Includes diagnostic flowcharts and debugging procedures.
 
 **Topics covered:**
+
 - Login failures (credentials, permissions, user lookup)
 - Broker connection issues
 - WebSocket connectivity problems
@@ -75,6 +80,7 @@ Common issues and solutions for authentication problems. Includes diagnostic flo
 How to install the opencode fork (with authentication) from source in Dockerfiles.
 
 **Topics covered:**
+
 - Building opencode from source in Docker
 - Installing from GitHub fork (pRizz/opencode)
 - Integration with opencode-cloud Dockerfile
@@ -83,10 +89,12 @@ How to install the opencode fork (with authentication) from source in Dockerfile
 ### Configuration Reference
 
 **Example configurations:**
+
 - [nginx-full.conf](reverse-proxy/nginx-full.conf) - Production nginx configuration
 - [Caddyfile-full](reverse-proxy/Caddyfile-full) - Production Caddy configuration
 
 **Service files:**
+
 - `packages/opencode-broker/service/opencode.pam` - Linux PAM config
 - `packages/opencode-broker/service/opencode.pam.macos` - macOS PAM config
 - `packages/opencode-broker/service/opencode-broker.service` - systemd service
@@ -114,6 +122,7 @@ graph TB
 5. **User Shell** - PTY sessions running as authenticated user
 
 **Security model:**
+
 - Reverse proxy enforces HTTPS (production)
 - OpenCode server manages sessions, CSRF tokens, rate limiting
 - Auth broker runs as setuid root, drops privileges after user spawn
@@ -122,6 +131,7 @@ graph TB
 ## Security Features
 
 **Built-in protections:**
+
 - ✅ HTTPS enforcement with certificate validation
 - ✅ CSRF protection via double-submit cookie pattern
 - ✅ Rate limiting (5 attempts per 15 minutes)
@@ -132,6 +142,7 @@ graph TB
 - ✅ Password redaction in logs
 
 **Best practices:**
+
 - Use a reverse proxy for TLS termination
 - Configure security headers (CSP, HSTS, X-Frame-Options)
 - Enable 2FA for sensitive accounts
@@ -147,17 +158,20 @@ Systemd service manager and deployment automation for OpenCode.
 ## Getting Help
 
 **Issue checklist:**
+
 1. Check the [troubleshooting guide](troubleshooting.md)
 2. Review logs (auth.log, systemctl status, journalctl)
 3. Verify PAM configuration
 4. Test broker connectivity
 
 **Where to ask:**
+
 - [GitHub Issues](https://github.com/anomalyco/opencode/issues) - Bug reports and feature requests
 - [Discord](https://discord.gg/opencode) - Community support
 - [Discussions](https://github.com/anomalyco/opencode/discussions) - General questions
 
 When reporting issues, include:
+
 - OpenCode version (`opencode --version`)
 - Operating system and version
 - Reverse proxy type (nginx/Caddy) and version

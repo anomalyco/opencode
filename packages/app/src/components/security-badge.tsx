@@ -20,12 +20,7 @@ function getSecurityStatus(): SecurityStatus {
   const protocol = window.location.protocol
 
   // Check for localhost
-  if (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "::1" ||
-    hostname.endsWith(".localhost")
-  ) {
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname.endsWith(".localhost")) {
     return "local"
   }
 
