@@ -700,7 +700,9 @@ export function Prompt(props: PromptProps) {
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
     if (store.mode === "shell") return theme.primary
-    return local.agent.color(local.agent.current().name)
+    const current = local.agent.current()
+    if (!current) return theme.border
+    return local.agent.color(current.name)
   })
 
   const showVariant = createMemo(() => {
@@ -711,7 +713,8 @@ export function Prompt(props: PromptProps) {
   })
 
   const spinnerDef = createMemo(() => {
-    const color = local.agent.color(local.agent.current().name)
+    const current = local.agent.current()
+    const color = current ? local.agent.color(current.name) : theme.border
     return {
       frames: createFrames({
         color,
@@ -945,7 +948,7 @@ export function Prompt(props: PromptProps) {
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
               <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current()?.name ?? "")}{" "}
               </text>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
