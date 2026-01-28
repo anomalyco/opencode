@@ -137,10 +137,14 @@ If you don’t specify anything, OpenCode starts from permissive defaults:
 When OpenCode prompts for approval, the UI offers three outcomes:
 
 - `once` — approve just this request
-- `always` — approve future requests matching the suggested patterns (for the rest of the current OpenCode session)
+- `always` — approve future requests matching the suggested patterns
 - `reject` — deny the request
 
 The set of patterns that `always` would approve is provided by the tool (for example, bash approvals typically whitelist a safe command prefix like `git status*`).
+
+#### Persistent approvals
+
+When you select `always`, the approval is saved to disk and persists across sessions. Approvals are stored per-project based on the repository's root commit hash, so different projects maintain separate approval lists.
 
 ---
 
