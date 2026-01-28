@@ -34,12 +34,43 @@ import { dict as uiNo } from "@opencode-ai/ui/i18n/no"
 import { dict as uiBr } from "@opencode-ai/ui/i18n/br"
 import { dict as uiTh } from "@opencode-ai/ui/i18n/th"
 
-export type Locale = "en" | "zh" | "zht" | "ko" | "de" | "es" | "fr" | "da" | "ja" | "pl" | "ru" | "ar" | "no" | "br" | "th"
+export type Locale =
+  | "en"
+  | "zh"
+  | "zht"
+  | "ko"
+  | "de"
+  | "es"
+  | "fr"
+  | "da"
+  | "ja"
+  | "pl"
+  | "ru"
+  | "ar"
+  | "no"
+  | "br"
+  | "th"
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
 
-const LOCALES: readonly Locale[] = ["en", "zh", "zht", "ko", "de", "es", "fr", "da", "ja", "pl", "ru", "ar", "no", "br", "th"]
+const LOCALES: readonly Locale[] = [
+  "en",
+  "zh",
+  "zht",
+  "ko",
+  "de",
+  "es",
+  "fr",
+  "da",
+  "ja",
+  "pl",
+  "ru",
+  "ar",
+  "no",
+  "br",
+  "th",
+]
 
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
