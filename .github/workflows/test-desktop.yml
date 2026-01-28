@@ -60,11 +60,10 @@ jobs:
 
       - name: Build Tauri app (using Cargo)
         id: build-tauri
-        continue-on-error: true
         run: |
           cd packages/desktop
           echo "Starting Tauri build..."
-          cargo tauri build --debug --config ./src-tauri/tauri.prod.conf.json || true
+          cargo tauri build --debug --config ./src-tauri/tauri.prod.conf.json || echo "Build failed with exit code $?"
         env:
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''
