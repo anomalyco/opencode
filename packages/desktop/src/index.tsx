@@ -320,6 +320,24 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   parseMarkdown: async (markdown: string) => {
     return invoke<string>("parse_markdown_command", { markdown })
   },
+
+  getServerUrl: async () => {
+    const result = await invoke<string | null>("get_server_url").catch(() => null)
+    return result
+  },
+
+  setServerUrl: async (url: string) => {
+    await invoke("set_server_url", { url })
+  },
+
+  clearServerUrl: async () => {
+    await invoke("clear_server_url")
+  },
+
+  hasServerUrl: async () => {
+    const result = await invoke<boolean>("has_server_url").catch(() => false)
+    return result
+  },
 })
 
 createMenu()

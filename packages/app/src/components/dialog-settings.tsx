@@ -13,6 +13,7 @@ import { SettingsAgents } from "./settings-agents"
 import { SettingsCommands } from "./settings-commands"
 import { SettingsMcp } from "./settings-mcp"
 import { SettingsSkills } from "./settings-skills"
+import { SettingsBackend } from "./settings-backend"
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
@@ -31,6 +32,10 @@ export const DialogSettings: Component = () => {
                     <Tabs.Trigger value="general">
                       <Icon name="sliders" />
                       {language.t("settings.tab.general")}
+                    </Tabs.Trigger>
+                    <Tabs.Trigger value="backend">
+                      <Icon name="database" />
+                      Backend Server
                     </Tabs.Trigger>
                     <Tabs.Trigger value="shortcuts">
                       <Icon name="keyboard" />
@@ -66,6 +71,9 @@ export const DialogSettings: Component = () => {
         </Tabs.List>
         <Tabs.Content value="general" class="no-scrollbar">
           <SettingsGeneral />
+        </Tabs.Content>
+        <Tabs.Content value="backend" class="no-scrollbar">
+          <SettingsBackend />
         </Tabs.Content>
         <Tabs.Content value="shortcuts" class="no-scrollbar">
           <SettingsKeybinds />

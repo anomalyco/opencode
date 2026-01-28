@@ -47,6 +47,18 @@ export type Platform = {
   /** Set the default server URL to use on app startup (desktop only) */
   setDefaultServerUrl?(url: string | null): Promise<void>
 
+  /** Get the configured server URL (desktop only) */
+  getServerUrl?(): Promise<string | null>
+
+  /** Set the server URL (desktop only) */
+  setServerUrl?(url: string): Promise<void>
+
+  /** Clear the server URL configuration (desktop only) */
+  clearServerUrl?(): Promise<void>
+
+  /** Check if a server URL is configured (desktop only) */
+  hasServerUrl?(): Promise<boolean>
+
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>
 }

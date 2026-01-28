@@ -1,4 +1,5 @@
 mod cli;
+mod server_config;
 #[cfg(windows)]
 mod job_object;
 mod markdown;
@@ -288,6 +289,10 @@ pub fn run() {
             ensure_server_ready,
             get_default_server_url,
             set_default_server_url,
+            server_config::get_server_url,
+            server_config::set_server_url,
+            server_config::clear_server_url,
+            server_config::has_server_url,
             markdown::parse_markdown_command
         ])
         .setup(move |app| {
@@ -343,11 +348,21 @@ pub fn run() {
                 tauri::async_runtime::spawn(async move {
                     let mut custom_url = None;
 
-                    if let Some(url) = get_default_server_url(app.clone()).ok().flatten() {
+                    // Check for server URL from settings store (highest priority)
+                    if let Some(url) = server_config::get_server_url(&app) {
+                        println!("Using configured server URL from settings: {url}");
+                        custom_url = Some(url);
+                    }
+
+                    // Fall back to desktop-specific default URL
+                    if custom_url.is_none()
+                        && let Some(url) = get_default_server_url(app.clone()).ok().flatten()
+                    {
                         println!("Using desktop-specific custom URL: {url}");
                         custom_url = Some(url);
                     }
 
+                    // Fall back to CLI config
                     if custom_url.is_none()
                         && let Some(cli_config) = cli::get_config(&app).await
                         && let Some(url) = get_server_url_from_config(&cli_config)
