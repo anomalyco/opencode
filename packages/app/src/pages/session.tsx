@@ -2183,7 +2183,46 @@ export default function Page() {
                     <ConstrainDragYAxis />
                     <Tabs value={activeTab()} onChange={openTab}>
                       <div class="sticky top-0 shrink-0 flex">
-                        <Tabs.List>
+                        <Tabs.List
+                          ref={(el) => {
+                            let scrollTimeout: number | undefined
+
+                            const handler = () => {
+                              if (scrollTimeout !== undefined) clearTimeout(scrollTimeout)
+                              scrollTimeout = window.setTimeout(() => {
+                                const scrollWidth = el.scrollWidth
+                                const clientWidth = el.clientWidth
+
+                                // Only scroll if there's overflow
+                                if (scrollWidth > clientWidth) {
+                                  el.scrollTo({
+                                    left: scrollWidth - clientWidth,
+                                    behavior: "smooth",
+                                  })
+                                }
+                              }, 0)
+                            }
+
+                            const wheelHandler = (e: WheelEvent) => {
+                              // Enable horizontal scrolling with mouse wheel
+                              if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                                el.scrollLeft += e.deltaY > 0 ? 50 : -50
+                                e.preventDefault()
+                              }
+                            }
+
+                            el.addEventListener("wheel", wheelHandler, { passive: false })
+
+                            const observer = new MutationObserver(handler)
+                            observer.observe(el, { childList: true })
+
+                            onCleanup(() => {
+                              el.removeEventListener("wheel", wheelHandler)
+                              observer.disconnect()
+                              if (scrollTimeout !== undefined) clearTimeout(scrollTimeout)
+                            })
+                          }}
+                        >
                           <Show when={contextOpen()}>
                             <Tabs.Trigger
                               value="context"
