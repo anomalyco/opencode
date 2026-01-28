@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
-import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
+// TODO: Fix solidPlugin import - currently not available in @opentui/solid
+// import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
 import path from "path"
 import fs from "fs"
 import { $ } from "bun"
@@ -140,7 +141,7 @@ for (const item of targets) {
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
-    plugins: [solidPlugin],
+    plugins: [],
     sourcemap: "external",
     compile: {
       autoloadBunfig: false,
