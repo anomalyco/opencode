@@ -34,7 +34,9 @@ jobs:
     steps:
       - name: Enable Git long paths (Windows only)
         if: matrix.settings.host == 'windows-latest'
-        run: git config --global core.longpaths true
+        run: |
+          git config --global core.longpaths true
+          git config --global core.symlinks false
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -78,7 +80,7 @@ jobs:
           projectPath: packages/desktop
           target: ${{ matrix.settings.target }}
           uploadWorkflowArtifacts: true
-          args: --config ./src-tauri/tauri.conf.json --verbose
+          args: --config ./src-tauri/tauri.prod.conf.json --verbose
 
   release:
     needs: build
