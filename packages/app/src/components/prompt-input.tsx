@@ -30,6 +30,7 @@ import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
+import { useComments } from "@/context/comments"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -38,7 +39,7 @@ import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { getDirectory, getFilename, getFilenameTruncated } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
@@ -47,6 +48,7 @@ import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
 import { Identifier } from "@/utils/id"
+import { Worktree as WorktreeState } from "@/utils/worktree"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
@@ -59,6 +61,13 @@ import { base64Encode } from "@opencode-ai/util/encode"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
+
+type PendingPrompt = {
+  abort: AbortController
+  cleanup: VoidFunction
+}
+
+const pending = new Map<string, PendingPrompt>()
 
 interface PromptInputProps {
   class?: string
@@ -114,7 +123,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const local = useLocal()
   const files = useFile()
   const prompt = usePrompt()
+  const commentCount = createMemo(() => prompt.context.items().filter((item) => !!item.comment?.trim()).length)
   const layout = useLayout()
+  const comments = useComments()
   const params = useParams()
   const dialog = useDialog()
   const providers = useProviders()
@@ -125,6 +136,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let fileInputRef!: HTMLInputElement
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
+
+  const mirror = { input: false }
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -157,11 +170,55 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey()))
-  const activeFile = createMemo(() => {
-    const tab = tabs().active()
-    if (!tab) return
-    return files.pathFromTab(tab)
+  const tabs = createMemo(() => layout.tabs(sessionKey))
+
+  const commentInReview = (path: string) => {
+    const sessionID = params.id
+    if (!sessionID) return false
+
+    const diffs = sync.data.session_diff[sessionID]
+    if (!diffs) return false
+    return diffs.some((diff) => diff.file === path)
+  }
+
+  const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {
+    if (!item.commentID) return
+
+    const focus = { file: item.path, id: item.commentID }
+    comments.setActive(focus)
+
+    const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
+    if (wantsReview) {
+      layout.fileTree.open()
+      layout.fileTree.setTab("changes")
+      requestAnimationFrame(() => comments.setFocus(focus))
+      return
+    }
+
+    layout.fileTree.open()
+    layout.fileTree.setTab("all")
+    const tab = files.tab(item.path)
+    tabs().open(tab)
+    files.load(item.path)
+    requestAnimationFrame(() => comments.setFocus(focus))
+  }
+
+  const recent = createMemo(() => {
+    const all = tabs().all()
+    const active = tabs().active()
+    const order = active ? [active, ...all.filter((x) => x !== active)] : all
+    const seen = new Set<string>()
+    const paths: string[] = []
+
+    for (const tab of order) {
+      const path = files.pathFromTab(tab)
+      if (!path) continue
+      if (seen.has(path)) continue
+      seen.add(path)
+      paths.push(path)
+    }
+
+    return paths
   })
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const status = createMemo(
@@ -382,7 +439,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!isFocused()) setComposing(false)
   })
 
-  type AtOption = { type: "agent"; name: string; display: string } | { type: "file"; path: string; display: string }
+  type AtOption =
+    | { type: "agent"; name: string; display: string }
+    | { type: "file"; path: string; display: string; recent?: boolean }
 
   const agentList = createMemo(() =>
     sync.data.agent
@@ -413,12 +472,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   } = useFilteredList<AtOption>({
     items: async (query) => {
       const agents = agentList()
+      const open = recent()
+      const seen = new Set(open)
+      const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
       const paths = await files.searchFilesAndDirectories(query)
-      const fileOptions: AtOption[] = paths.map((path) => ({ type: "file", path, display: path }))
-      return [...agents, ...fileOptions]
+      const fileOptions: AtOption[] = paths
+        .filter((path) => !seen.has(path))
+        .map((path) => ({ type: "file", path, display: path }))
+      return [...agents, ...pinned, ...fileOptions]
     },
     key: atKey,
     filterKeys: ["display"],
+    groupBy: (item) => {
+      if (item.type === "agent") return "agent"
+      if (item.recent) return "recent"
+      return "file"
+    },
+    sortGroupsBy: (a, b) => {
+      const rank = (category: string) => {
+        if (category === "agent") return 0
+        if (category === "recent") return 1
+        return 2
+      }
+      return rank(a.category) - rank(b.category)
+    },
     onSelect: handleAtSelect,
   })
 
@@ -575,6 +652,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       () => prompt.current(),
       (currentParts) => {
         const inputParts = currentParts.filter((part) => part.type !== "image") as Prompt
+
+        if (mirror.input) {
+          mirror.input = false
+          if (isNormalizedEditor()) return
+
+          const selection = window.getSelection()
+          let cursorPosition: number | null = null
+          if (selection && selection.rangeCount > 0 && editorRef.contains(selection.anchorNode)) {
+            cursorPosition = getCursorPosition(editorRef)
+          }
+
+          renderEditor(inputParts)
+
+          if (cursorPosition !== null) {
+            setCursorPosition(editorRef, cursorPosition)
+          }
+          return
+        }
+
         const domParts = parseFromDOM()
         if (isNormalizedEditor() && isPromptEqual(inputParts, domParts)) return
 
@@ -689,6 +785,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         setStore("savedPrompt", null)
       }
       if (prompt.dirty()) {
+        mirror.input = true
         prompt.set(DEFAULT_PROMPT, 0)
       }
       queueScroll()
@@ -719,6 +816,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("savedPrompt", null)
     }
 
+    mirror.input = true
     prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
   }
@@ -810,12 +908,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setStore("popover", null)
   }
 
-  const abort = () =>
-    sdk.client.session
+  const abort = async () => {
+    const sessionID = params.id
+    if (!sessionID) return Promise.resolve()
+    const queued = pending.get(sessionID)
+    if (queued) {
+      queued.abort.abort()
+      queued.cleanup()
+      pending.delete(sessionID)
+      return Promise.resolve()
+    }
+    return sdk.client.session
       .abort({
-        sessionID: params.id!,
+        sessionID,
       })
       .catch(() => {})
+  }
 
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     const text = prompt
@@ -930,13 +1038,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
+    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+
     if (store.popover) {
       if (event.key === "Tab") {
         selectPopoverActive()
         event.preventDefault()
         return
       }
-      if (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter") {
+      const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
+      const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
+      if (nav || ctrlNav) {
         if (store.popover === "at") {
           atOnKeyDown(event)
           event.preventDefault()
@@ -949,8 +1061,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
     }
-
-    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
 
     if (ctrl && event.code === "KeyG") {
       if (store.popover) {
@@ -1075,6 +1185,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           })
           return
         }
+        WorktreeState.pending(createdWorktree.directory)
         sessionDirectory = createdWorktree.directory
       }
 
@@ -1231,37 +1342,69 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const usedUrls = new Set(fileAttachmentParts.map((part) => part.url))
 
-    const contextFileParts: Array<{
-      id: string
-      type: "file"
-      mime: string
-      url: string
-      filename?: string
-    }> = []
+    const context = prompt.context.items().slice()
 
-    const addContextFile = (path: string, selection?: FileSelection) => {
-      const absolute = toAbsolutePath(path)
-      const query = selection ? `?start=${selection.startLine}&end=${selection.endLine}` : ""
+    const commentItems = context.filter((item) => item.type === "file" && !!item.comment?.trim())
+
+    const contextParts: Array<
+      | {
+          id: string
+          type: "text"
+          text: string
+          synthetic?: boolean
+        }
+      | {
+          id: string
+          type: "file"
+          mime: string
+          url: string
+          filename?: string
+        }
+    > = []
+
+    const commentNote = (path: string, selection: FileSelection | undefined, comment: string) => {
+      const start = selection ? Math.min(selection.startLine, selection.endLine) : undefined
+      const end = selection ? Math.max(selection.startLine, selection.endLine) : undefined
+      const range =
+        start === undefined || end === undefined
+          ? "this file"
+          : start === end
+            ? `line ${start}`
+            : `lines ${start} through ${end}`
+
+      return `The user made the following comment regarding ${range} of ${path}: ${comment}`
+    }
+
+    const addContextFile = (input: { path: string; selection?: FileSelection; comment?: string }) => {
+      const absolute = toAbsolutePath(input.path)
+      const query = input.selection ? `?start=${input.selection.startLine}&end=${input.selection.endLine}` : ""
       const url = `file://${absolute}${query}`
-      if (usedUrls.has(url)) return
+
+      const comment = input.comment?.trim()
+      if (!comment && usedUrls.has(url)) return
       usedUrls.add(url)
-      contextFileParts.push({
+
+      if (comment) {
+        contextParts.push({
+          id: Identifier.ascending("part"),
+          type: "text",
+          text: commentNote(input.path, input.selection, comment),
+          synthetic: true,
+        })
+      }
+
+      contextParts.push({
         id: Identifier.ascending("part"),
         type: "file",
         mime: "text/plain",
         url,
-        filename: getFilename(path),
+        filename: getFilename(input.path),
       })
     }
 
-    const activePath = activeFile()
-    if (activePath && prompt.context.activeTab()) {
-      addContextFile(activePath)
-    }
-
-    for (const item of prompt.context.items()) {
+    for (const item of context) {
       if (item.type !== "file") continue
-      addContextFile(item.path, item.selection)
+      addContextFile({ path: item.path, selection: item.selection, comment: item.comment })
     }
 
     const imageAttachmentParts = images.map((attachment) => ({
@@ -1281,7 +1424,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const requestParts = [
       textPart,
       ...fileAttachmentParts,
-      ...contextFileParts,
+      ...contextParts,
       ...agentAttachmentParts,
       ...imageAttachmentParts,
     ]
@@ -1301,10 +1444,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       model,
     }
 
-    const setSyncStore = sessionDirectory === projectDirectory ? sync.set : globalSync.child(sessionDirectory)[1]
-
     const addOptimisticMessage = () => {
-      setSyncStore(
+      if (sessionDirectory === projectDirectory) {
+        sync.set(
+          produce((draft) => {
+            const messages = draft.message[session.id]
+            if (!messages) {
+              draft.message[session.id] = [optimisticMessage]
+            } else {
+              const result = Binary.search(messages, messageID, (m) => m.id)
+              messages.splice(result.index, 0, optimisticMessage)
+            }
+            draft.part[messageID] = optimisticParts
+              .filter((p) => !!p?.id)
+              .slice()
+              .sort((a, b) => a.id.localeCompare(b.id))
+          }),
+        )
+        return
+      }
+
+      globalSync.child(sessionDirectory)[1](
         produce((draft) => {
           const messages = draft.message[session.id]
           if (!messages) {
@@ -1322,7 +1482,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     const removeOptimisticMessage = () => {
-      setSyncStore(
+      if (sessionDirectory === projectDirectory) {
+        sync.set(
+          produce((draft) => {
+            const messages = draft.message[session.id]
+            if (messages) {
+              const result = Binary.search(messages, messageID, (m) => m.id)
+              if (result.found) messages.splice(result.index, 1)
+            }
+            delete draft.part[messageID]
+          }),
+        )
+        return
+      }
+
+      globalSync.child(sessionDirectory)[1](
         produce((draft) => {
           const messages = draft.message[session.id]
           if (messages) {
@@ -1334,11 +1508,80 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       )
     }
 
+    for (const item of commentItems) {
+      prompt.context.remove(item.key)
+    }
+
     clearInput()
     addOptimisticMessage()
 
-    client.session
-      .prompt({
+    const waitForWorktree = async () => {
+      const worktree = WorktreeState.get(sessionDirectory)
+      if (!worktree || worktree.status !== "pending") return true
+
+      if (sessionDirectory === projectDirectory) {
+        sync.set("session_status", session.id, { type: "busy" })
+      }
+
+      const controller = new AbortController()
+
+      const cleanup = () => {
+        if (sessionDirectory === projectDirectory) {
+          sync.set("session_status", session.id, { type: "idle" })
+        }
+        removeOptimisticMessage()
+        for (const item of commentItems) {
+          prompt.context.add({
+            type: "file",
+            path: item.path,
+            selection: item.selection,
+            comment: item.comment,
+            commentID: item.commentID,
+            commentOrigin: item.commentOrigin,
+            preview: item.preview,
+          })
+        }
+        restoreInput()
+      }
+
+      pending.set(session.id, { abort: controller, cleanup })
+
+      const abort = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
+        if (controller.signal.aborted) {
+          resolve({ status: "failed", message: "aborted" })
+          return
+        }
+        controller.signal.addEventListener(
+          "abort",
+          () => {
+            resolve({ status: "failed", message: "aborted" })
+          },
+          { once: true },
+        )
+      })
+
+      const timeoutMs = 5 * 60 * 1000
+      const timer = { id: undefined as number | undefined }
+      const timeout = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
+        timer.id = window.setTimeout(() => {
+          resolve({ status: "failed", message: language.t("workspace.error.stillPreparing") })
+        }, timeoutMs)
+      })
+
+      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abort, timeout]).finally(() => {
+        if (timer.id === undefined) return
+        clearTimeout(timer.id)
+      })
+      pending.delete(session.id)
+      if (controller.signal.aborted) return false
+      if (result.status === "failed") throw new Error(result.message)
+      return true
+    }
+
+    const send = async () => {
+      const ok = await waitForWorktree()
+      if (!ok) return
+      await client.session.prompt({
         sessionID: session.id,
         agent,
         model,
@@ -1346,14 +1589,31 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         parts: requestParts,
         variant,
       })
-      .catch((err) => {
-        showToast({
-          title: language.t("prompt.toast.promptSendFailed.title"),
-          description: errorMessage(err),
-        })
-        removeOptimisticMessage()
-        restoreInput()
+    }
+
+    void send().catch((err) => {
+      pending.delete(session.id)
+      if (sessionDirectory === projectDirectory) {
+        sync.set("session_status", session.id, { type: "idle" })
+      }
+      showToast({
+        title: language.t("prompt.toast.promptSendFailed.title"),
+        description: errorMessage(err),
       })
+      removeOptimisticMessage()
+      for (const item of commentItems) {
+        prompt.context.add({
+          type: "file",
+          path: item.path,
+          selection: item.selection,
+          comment: item.comment,
+          commentID: item.commentID,
+          commentOrigin: item.commentOrigin,
+          preview: item.preview,
+        })
+      }
+      restoreInput()
+    })
   }
 
   return (
@@ -1394,7 +1654,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             />
                             <div class="flex items-center text-14-regular min-w-0">
                               <span class="text-text-weak whitespace-nowrap truncate min-w-0">
-                                {getDirectory((item as { type: "file"; path: string }).path)}
+                                {(() => {
+                                  const path = (item as { type: "file"; path: string }).path
+                                  return path.endsWith("/") ? path : getDirectory(path)
+                                })()}
                               </span>
                               <Show when={!(item as { type: "file"; path: string }).path.endsWith("/")}>
                                 <span class="text-text-strong whitespace-nowrap">
@@ -1460,7 +1723,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         classList={{
           "group/prompt-input": true,
           "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,
-          "rounded-md overflow-clip focus-within:shadow-xs-border": true,
+          "rounded-[14px] overflow-clip focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.dragging,
           [props.class ?? ""]: !!props.class,
         }}
@@ -1473,65 +1736,75 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </div>
         </Show>
-        <Show when={false && (prompt.context.items().length > 0 || !!activeFile())}>
-          <div class="flex flex-wrap items-center gap-2 px-3 pt-3">
-            <Show when={prompt.context.activeTab() ? activeFile() : undefined}>
-              {(path) => (
-                <div class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base max-w-full">
-                  <FileIcon node={{ path: path(), type: "file" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-12-regular min-w-0">
-                    <span class="text-text-weak whitespace-nowrap truncate min-w-0">{getDirectory(path())}</span>
-                    <span class="text-text-strong whitespace-nowrap">{getFilename(path())}</span>
-                    <span class="text-text-weak whitespace-nowrap ml-1">{language.t("prompt.context.active")}</span>
-                  </div>
-                  <IconButton
-                    type="button"
-                    icon="close"
-                    variant="ghost"
-                    class="h-6 w-6"
-                    onClick={() => prompt.context.removeActive()}
-                    aria-label={language.t("prompt.context.removeActiveFile")}
-                  />
-                </div>
-              )}
-            </Show>
-            <Show when={!prompt.context.activeTab() && !!activeFile()}>
-              <button
-                type="button"
-                class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base text-12-regular text-text-weak hover:bg-surface-raised-base-hover"
-                onClick={() => prompt.context.addActive()}
-              >
-                <Icon name="plus-small" size="small" />
-                <span>{language.t("prompt.context.includeActiveFile")}</span>
-              </button>
-            </Show>
+        <Show when={prompt.context.items().length > 0}>
+          <div class="flex flex-nowrap items-start gap-2 p-2 overflow-x-auto no-scrollbar">
             <For each={prompt.context.items()}>
-              {(item) => (
-                <div class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base max-w-full">
-                  <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-12-regular min-w-0">
-                    <span class="text-text-weak whitespace-nowrap truncate min-w-0">{getDirectory(item.path)}</span>
-                    <span class="text-text-strong whitespace-nowrap">{getFilename(item.path)}</span>
-                    <Show when={item.selection}>
-                      {(sel) => (
-                        <span class="text-text-weak whitespace-nowrap ml-1">
-                          {sel().startLine === sel().endLine
-                            ? `:${sel().startLine}`
-                            : `:${sel().startLine}-${sel().endLine}`}
+              {(item) => {
+                const active = () => {
+                  const a = comments.active()
+                  return !!item.commentID && item.commentID === a?.id && item.path === a?.file
+                }
+                return (
+                  <Tooltip
+                    value={
+                      <span class="flex max-w-[300px]">
+                        <span class="text-text-invert-base truncate-start [unicode-bidi:plaintext] min-w-0">
+                          {getDirectory(item.path)}
                         </span>
-                      )}
-                    </Show>
-                  </div>
-                  <IconButton
-                    type="button"
-                    icon="close"
-                    variant="ghost"
-                    class="h-6 w-6"
-                    onClick={() => prompt.context.remove(item.key)}
-                    aria-label={language.t("prompt.context.removeFile")}
-                  />
-                </div>
-              )}
+                        <span class="shrink-0">{getFilename(item.path)}</span>
+                      </span>
+                    }
+                    placement="top"
+                    openDelay={2000}
+                  >
+                    <div
+                      classList={{
+                        "group shrink-0 flex flex-col rounded-[6px] pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all transition-transform shadow-xs-border hover:shadow-xs-border-hover": true,
+                        "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID && !active(),
+                        "cursor-pointer bg-surface-interactive-hover hover:bg-surface-interactive-hover shadow-xs-border-hover":
+                          active(),
+                        "bg-background-stronger": !active(),
+                      }}
+                      onClick={() => {
+                        openComment(item)
+                      }}
+                    >
+                      <div class="flex items-center gap-1.5">
+                        <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
+                        <div class="flex items-center text-11-regular min-w-0 font-medium">
+                          <span class="text-text-strong whitespace-nowrap">{getFilenameTruncated(item.path, 14)}</span>
+                          <Show when={item.selection}>
+                            {(sel) => (
+                              <span class="text-text-weak whitespace-nowrap shrink-0">
+                                {sel().startLine === sel().endLine
+                                  ? `:${sel().startLine}`
+                                  : `:${sel().startLine}-${sel().endLine}`}
+                              </span>
+                            )}
+                          </Show>
+                        </div>
+                        <IconButton
+                          type="button"
+                          icon="close-small"
+                          variant="ghost"
+                          class="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100 transition-all"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (item.commentID) comments.remove(item.path, item.commentID)
+                            prompt.context.remove(item.key)
+                          }}
+                          aria-label={language.t("prompt.context.removeFile")}
+                        />
+                      </div>
+                      <Show when={item.comment}>
+                        {(comment) => (
+                          <div class="text-12-regular text-text-strong ml-5 pr-1 truncate">{comment()}</div>
+                        )}
+                      </Show>
+                    </div>
+                  </Tooltip>
+                )
+              }}
             </For>
           </div>
         </Show>
@@ -1585,7 +1858,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             aria-label={
               store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
-                : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })
+                : commentCount() > 1
+                  ? language.t("prompt.placeholder.summarizeComments")
+                  : commentCount() === 1
+                    ? language.t("prompt.placeholder.summarizeComment")
+                    : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })
             }
             contenteditable="true"
             onInput={handleInput}
@@ -1595,17 +1872,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onKeyDown={handleKeyDown}
             classList={{
               "select-text": true,
-              "w-full px-5 py-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "w-full p-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&_[data-type=file]]:text-syntax-property": true,
               "[&_[data-type=agent]]:text-syntax-type": true,
               "font-mono!": store.mode === "shell",
             }}
           />
           <Show when={!prompt.dirty()}>
-            <div class="absolute top-0 inset-x-0 px-5 py-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
+            <div class="absolute top-0 inset-x-0 p-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
-                : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })}
+                : commentCount() > 1
+                  ? language.t("prompt.placeholder.summarizeComments")
+                  : commentCount() === 1
+                    ? language.t("prompt.placeholder.summarizeComment")
+                    : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })}
             </div>
           </Show>
         </div>
@@ -1712,7 +1993,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Match>
             </Switch>
           </div>
-          <div class="flex items-center gap-3 absolute right-2 bottom-2">
+          <div class="flex items-center gap-3 absolute right-3 bottom-3">
             <input
               ref={fileInputRef}
               type="file"
