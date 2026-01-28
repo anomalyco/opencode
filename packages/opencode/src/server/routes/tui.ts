@@ -273,6 +273,8 @@ export const TuiRoutes = lazy(() =>
           session_compact: "session.compact",
           messages_page_up: "session.page.up",
           messages_page_down: "session.page.down",
+          messages_line_up: "session.line.up",
+          messages_line_down: "session.line.down",
           messages_half_page_up: "session.half.page.up",
           messages_half_page_down: "session.half.page.down",
           messages_first: "session.first",
@@ -329,25 +331,21 @@ export const TuiRoutes = lazy(() =>
       }),
       validator(
         "json",
-        z.object({
-          body: z
-            .union(
-              Object.values(TuiEvent).map((def) => {
-                return z
-                  .object({
-                    type: z.literal(def.type),
-                    properties: def.properties,
-                  })
-                  .meta({
-                    ref: "Event" + "." + def.type,
-                  })
-              }),
-            )
-            .describe("TUI event body"),
-        }),
+        z.union(
+          Object.values(TuiEvent).map((def) => {
+            return z
+              .object({
+                type: z.literal(def.type),
+                properties: def.properties,
+              })
+              .meta({
+                ref: "Event" + "." + def.type,
+              })
+          }),
+        ),
       ),
       async (c) => {
-        const evt = c.req.valid("json").body
+        const evt = c.req.valid("json")
         const eventDef = Object.values(TuiEvent).find((def) => def.type === evt.type)!
         await Bus.publish(eventDef, evt.properties)
         return c.json(true)

@@ -26,10 +26,8 @@ describe("tui.publish", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            body: {
-              type: "tui.window.focus",
-              properties: { focused: false },
-            },
+            type: "tui.window.focus",
+            properties: { focused: false },
           }),
         })
 
