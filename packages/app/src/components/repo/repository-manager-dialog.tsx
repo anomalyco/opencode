@@ -13,6 +13,7 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import type { Repo } from "@opencode-ai/sdk/v2/client"
 import { CloneDialog } from "./clone-dialog"
 import { RepoSettingsDialog } from "./repo-settings-dialog"
+import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 
 interface RepositoryManagerDialogProps {
   onOpenRepo?: (repo: Repo) => void
@@ -75,6 +76,20 @@ export function RepositoryManagerDialog(props: RepositoryManagerDialogProps) {
     ))
   }
 
+  const handleSelectDirectory = () => {
+    dialog.show(() => (
+      <DialogSelectDirectory
+        title="Add local repository"
+        multiple={false}
+        onSelect={(result) => {
+          const path = Array.isArray(result) ? result[0] : result
+          if (!path) return
+          setLocalPath(path)
+        }}
+      />
+    ))
+  }
+
   const handleSettings = (repo: Repo) => {
     dialog.show(() => <RepoSettingsDialog repo={repo} />)
   }
@@ -93,6 +108,15 @@ export function RepositoryManagerDialog(props: RepositoryManagerDialogProps) {
             value={localPath()}
             onChange={setLocalPath}
           />
+          <div class="text-12-regular text-text-weak">
+            Path must exist on the host machine running opencode.
+          </div>
+          <div class="flex justify-end">
+            <Button size="normal" variant="ghost" onClick={handleSelectDirectory}>
+              <Icon name="folder" size="small" />
+              Choose folder
+            </Button>
+          </div>
           <div class="flex justify-end gap-2">
             <Button size="normal" variant="ghost" onClick={handleClone}>
               <Icon name="download" size="small" />
