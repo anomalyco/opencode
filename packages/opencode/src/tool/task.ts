@@ -159,8 +159,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
         parts: promptParts,
-      })
-      .finally(() => {
+      }).finally(() => {
         unsub()
       })
 
