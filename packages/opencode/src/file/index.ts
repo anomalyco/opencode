@@ -339,7 +339,7 @@ export namespace File {
 
     // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
     // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
-    if (!Instance.containsPath(resolved)) {
+    if (!Instance.containsPath(resolved) && !Filesystem.contains(Global.Path.home, resolved)) {
       throw new Error(`Access denied: path escapes project directory`)
     }
 

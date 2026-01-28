@@ -21,13 +21,16 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const dialog = useDialog()
   const [state, setState] = createStore({ error: "" })
 
-  const home = createMemo(() => sync.data.path.home)
-  const root = createMemo(() => sync.data.path.directory)
   const isSingleSelect = createMemo(() => !props.multiple)
+  const home = createMemo(() => sync.data.path.home)
+  const root = createMemo(() => {
+    if (isSingleSelect()) return home() ?? sync.data.path.directory
+    return sync.data.path.directory
+  })
 
   type DirectoryEntry =
-    | { kind: "parent"; name: string; path: string; absolute: string }
-    | { kind: "directory"; name: string; path: string; absolute: string }
+    | { kind: "parent"; name: string; path: string }
+    | { kind: "directory"; name: string; path: string }
 
   function join(base: string | undefined, rel: string) {
     const b = (base ?? "").replace(/[\\/]+$/, "")
@@ -53,17 +56,12 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return (value ?? "").replace(/[\\/]+$/, "")
   }
 
-  function parentRelative(value: string) {
+  function parentAbsolute(value: string) {
     const normalized = normalizePath(value)
     if (!normalized) return ""
-    const parts = normalized.split(/[\\/]+/).filter(Boolean)
-    if (parts.length <= 1) return ""
-    return parts.slice(0, -1).join("/")
-  }
-
-  function resolveAbsolute(value: string) {
-    if (value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value)) return value
-    return join(root(), value)
+    const parent = normalizePath(getDirectory(normalized))
+    if (!parent || parent === normalized) return ""
+    return parent
   }
 
   function normalizeQuery(query: string) {
@@ -139,16 +137,17 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const [currentPath, setCurrentPath] = createSignal("")
 
   createEffect(() => {
-    const base = root()
+    const base = normalizePath(root())
     if (!base) return
-    if (!currentPath()) {
-      setCurrentPath("")
+    if (!currentPath() || normalizePath(currentPath()) === "") {
+      setCurrentPath(base)
     }
   })
 
   const [directoryNodes] = createResource(
     () => (isSingleSelect() ? currentPath() : ""),
     async (path) => {
+      if (!path) return [] as { name: string; path: string; absolute: string; ignored: boolean; type: string }[]
       setState({ error: "" })
       try {
         const response = await sdk.client.file.list({ path })
@@ -164,14 +163,14 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   const directoryItems = createMemo(() => {
     const items: DirectoryEntry[] = []
+    const base = normalizePath(root())
     const current = normalizePath(currentPath())
-    const parent = parentRelative(current)
-    if (current && parent !== current) {
+    const parent = parentAbsolute(current)
+    if (parent && current !== base && parent.startsWith(base)) {
       items.push({
         kind: "parent",
         name: "..",
         path: parent,
-        absolute: resolveAbsolute(parent),
       })
     }
     const nodes = directoryNodes() ?? []
@@ -181,16 +180,19 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
       items.push({
         kind: "directory",
         name: node.name,
-        path: node.path,
-        absolute: node.absolute,
+        path: node.absolute,
       })
     }
     return items
   })
 
   const parentPath = createMemo(() => {
+    const base = normalizePath(root())
     const current = normalizePath(currentPath())
-    return parentRelative(current)
+    const parent = parentAbsolute(current)
+    if (!parent || !base || current === base) return ""
+    if (!parent.startsWith(base)) return ""
+    return parent
   })
 
   function resolve(rel: string) {
@@ -236,7 +238,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         <div class="flex flex-col gap-3">
           <div class="flex items-center justify-between gap-3">
             <div class="text-12-regular text-text-weak">
-              Current folder: <span class="text-text-strong">{display(resolveAbsolute(currentPath()))}</span>
+              Current folder: <span class="text-text-strong">{display(currentPath())}</span>
             </div>
             <Button
               size="normal"
@@ -263,7 +265,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
             }}
           >
             {(item) => {
-              const path = display(item.absolute)
+              const path = display(item.path)
               return (
                 <div class="w-full flex items-center justify-between rounded-md">
                   <div class="flex items-center gap-x-3 grow min-w-0">
@@ -290,7 +292,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
               onClick={() => {
                 const selected = currentPath()
                 if (!selected) return
-                props.onSelect(props.multiple ? [resolveAbsolute(selected)] : resolveAbsolute(selected))
+                props.onSelect(props.multiple ? [selected] : selected)
                 dialog.close()
               }}
             >
