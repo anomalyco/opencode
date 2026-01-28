@@ -624,10 +624,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
         return {
           tabs,
-          active: createMemo(() => tabs().active),
+          active: createMemo(() => (tabs().active === "review" ? undefined : tabs().active)),
           all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
           setActive(tab: string | undefined) {
             const session = key()
+            if (tab === "review") return
             if (!store.sessionTabs[session]) {
               setStore("sessionTabs", session, { all: [], active: tab })
             } else {
@@ -644,17 +645,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             }
           },
           async open(tab: string) {
+            if (tab === "review") return
             const session = key()
             const current = store.sessionTabs[session] ?? { all: [] }
-
-            if (tab === "review") {
-              if (!store.sessionTabs[session]) {
-                setStore("sessionTabs", session, { all: current.all, active: tab })
-                return
-              }
-              setStore("sessionTabs", session, "active", tab)
-              return
-            }
 
             if (tab === "context") {
               const all = [tab, ...current.all.filter((x) => x !== tab)]
